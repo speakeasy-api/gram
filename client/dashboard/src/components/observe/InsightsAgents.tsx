@@ -1,5 +1,6 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { formatPlatform } from "@/lib/formatPlatform";
+import { Card } from "@/components/ui/card";
 import { ChartCard } from "@/components/chart/ChartCard";
 import { formatChartZoomRangeLabel } from "@/components/chart/chartUtils";
 import { StackedBarChart } from "@/components/chart/StackedBarChart";
@@ -8,6 +9,8 @@ import { RankedBar, type RankedBarItem } from "@/components/chart/RankedBar";
 import { buildAgentTokenTimeSeries } from "@/components/observe/agentTokenTimeSeriesChartData";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { Heading } from "@/components/ui/heading";
+import { Progress } from "@/components/ui/progress";
+import { Type } from "@/components/ui/type";
 import { formatCompact } from "@/lib/format";
 import { MetricCard } from "@/components/chart/MetricCard";
 import { InsightsConfig } from "@/components/insights-dock";
@@ -46,8 +49,10 @@ import { Page } from "@/components/page-layout";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
   Alert,
+  Badge,
   Button,
   type Column,
+  Input,
   type SortDescriptor,
   Table,
   sortTableData,
@@ -453,10 +458,10 @@ export function InsightsAgentsContent(): JSX.Element {
                 <Heading variant="h1">AI Agent Costs</Heading>
                 <ReleaseStageBadge stage="preview" />
               </div>
-              <p className="text-muted-foreground text-sm">
+              <Type muted small>
                 Track token consumption and costs across users, clients, and
                 models over {rangeLabel}.
-              </p>
+              </Type>
             </div>
             <Page.Toolbar>
               <Page.Toolbar.Filters
@@ -519,16 +524,12 @@ export function InsightsAgentsContent(): JSX.Element {
                 <MetricCard
                   title="Total Tokens"
                   value={filteredTotalTokens}
-                  icon="gauge"
-                  accentColor="blue"
                   subtext={`${formatCompact(filteredTotalTokens)} across ${formatCompact(filteredTotalSessions)} sessions`}
                 />
                 <MetricCard
                   title="Total Cost"
                   value={filteredTotalCost}
                   format="currency"
-                  icon="credit-card"
-                  accentColor="purple"
                   subtext={
                     filteredTotalCost > 0
                       ? formatCost(filteredTotalCost)
@@ -538,15 +539,11 @@ export function InsightsAgentsContent(): JSX.Element {
                 <MetricCard
                   title="Active Users"
                   value={filteredActiveUsers}
-                  icon="user"
-                  accentColor="green"
                   subtext={`of ${(membersData?.members ?? []).length} org members`}
                 />
                 <MetricCard
                   title="AI Clients"
                   value={clientBreakdown.length}
-                  icon="terminal"
-                  accentColor="orange"
                   subtext={
                     clientBreakdown.length > 0
                       ? clientBreakdown.map((c) => c.label).join(", ")
@@ -654,7 +651,9 @@ function TokenTimeSeriesChart({
       onResetZoom={onResetZoom}
     >
       {subtitle && (
-        <p className="text-muted-foreground -mt-3 mb-2 text-xs">{subtitle}</p>
+        <Type muted small className="-mt-3 mb-2 text-xs">
+          {subtitle}
+        </Type>
       )}
       <Timeseries
         series={hasData ? series : []}
@@ -725,23 +724,27 @@ function ModelBreakdownCard({ models }: { models: ModelUsage[] }) {
   );
 
   return (
-    <section className="rounded-lg border p-4">
-      <h3 className="font-semibold">Requests by Model</h3>
-      {items.length > 0 ? (
-        <RankedBar
-          items={items}
-          formatValue={(value) =>
-            `${value.toLocaleString()} requests (${
-              total > 0 ? ((value / total) * 100).toFixed(1) : 0
-            }%)`
-          }
-        />
-      ) : (
-        <p className="text-muted-foreground mt-4 text-sm">
-          No model usage data
-        </p>
-      )}
-    </section>
+    <Card>
+      <Card.Header>
+        <Card.Title>Requests by Model</Card.Title>
+      </Card.Header>
+      <Card.Content>
+        {items.length > 0 ? (
+          <RankedBar
+            items={items}
+            formatValue={(value) =>
+              `${value.toLocaleString()} requests (${
+                total > 0 ? ((value / total) * 100).toFixed(1) : 0
+              }%)`
+            }
+          />
+        ) : (
+          <Type muted small>
+            No model usage data
+          </Type>
+        )}
+      </Card.Content>
+    </Card>
   );
 }
 
@@ -823,9 +826,9 @@ function EmployeeCostTable({
           <div className="flex items-center gap-2">
             <span className="font-medium">{role.roleName}</span>
             {role.roleId === "unassigned" && (
-              <span className="bg-muted text-muted-foreground rounded px-1.5 py-0.5 text-[10px]">
-                no role
-              </span>
+              <Badge size="sm" variant="neutral">
+                <Badge.Text>No role</Badge.Text>
+              </Badge>
             )}
           </div>
         ),
@@ -939,16 +942,21 @@ function EmployeeCostTable({
               </AvatarFallback>
             </Avatar>
             <div className="min-w-0">
-              <p className="truncate text-sm font-medium">{user.displayName}</p>
+              <Type small className="truncate font-medium">
+                {user.displayName}
+              </Type>
               {user.email ? (
-                <p className="text-muted-foreground truncate text-xs">
+                <Type muted small className="truncate text-xs">
                   {user.email}
-                </p>
+                </Type>
               ) : null}
               {clientFilter === "all" && user.clients.length > 0 && (
-                <p className="text-muted-foreground/70 mt-0.5 text-[10px]">
+                <Type
+                  small
+                  className="text-muted-foreground/70 mt-0.5 text-[10px]"
+                >
                   {user.clients.join(", ")}
-                </p>
+                </Type>
               )}
             </div>
           </div>
@@ -1040,21 +1048,17 @@ function EmployeeCostTable({
         sortable: true,
         sortValue: (user) => (isCost ? user.costShare : user.tokenShare),
         width: "1fr",
-        render: (user) => (
-          <div className="flex items-center gap-2">
-            <div className="bg-muted h-1.5 w-12 overflow-hidden rounded-full">
-              <div
-                className="bg-primary h-full rounded-full"
-                style={{
-                  width: `${Math.max(isCost ? user.costShare : user.tokenShare, 3)}%`,
-                }}
-              />
+        render: (user) => {
+          const share = isCost ? user.costShare : user.tokenShare;
+          return (
+            <div className="flex items-center gap-2">
+              <Progress value={Math.max(share, 3)} className="h-1.5 w-12" />
+              <span className="text-muted-foreground font-mono tabular-nums">
+                {share.toFixed(1)}%
+              </span>
             </div>
-            <span className="text-muted-foreground font-mono tabular-nums">
-              {(isCost ? user.costShare : user.tokenShare).toFixed(1)}%
-            </span>
-          </div>
-        ),
+          );
+        },
       },
       {
         key: "userId",
@@ -1101,94 +1105,100 @@ function EmployeeCostTable({
   );
 
   return (
-    <section className="bg-card flex flex-col gap-4">
-      <div className="flex items-center justify-between">
+    <Card>
+      <Card.Header>
         <div>
-          <h3 className="font-semibold">
+          <Card.Title>
             {isCost ? "Cost" : "Usage"} by {isRoleView ? "Role" : "Employee"}
-          </h3>
-          <p className="text-muted-foreground text-xs">
+          </Card.Title>
+          <Card.Description className="text-xs">
             {!isRoleView &&
               clientFilter !== "all" &&
               `Filtered to ${formatPlatform(clientFilter)} · `}
             {items.length} {isRoleView ? "role" : "employee"}
             {items.length !== 1 ? "s" : ""}
-          </p>
+          </Card.Description>
         </div>
-        <SegmentedControl
-          value={groupByDimension}
-          onChange={handleGroupByChange}
-          options={[
-            {
-              value: "employee",
-              label: "Employee",
-              tooltip: "Break usage down per individual employee",
-            },
-            {
-              value: "role",
-              label: "Role",
-              tooltip: "Break usage down per role",
-            },
-          ]}
-        />
-      </div>
-      {isRoleView ? (
-        roleUsageLoading ? (
-          <div className="flex items-center justify-center py-10">
-            <Skeleton className="h-4 w-32" />
-          </div>
+        <Card.Actions>
+          <SegmentedControl
+            value={groupByDimension}
+            onChange={handleGroupByChange}
+            options={[
+              {
+                value: "employee",
+                label: "Employee",
+                tooltip: "Break usage down per individual employee",
+              },
+              {
+                value: "role",
+                label: "Role",
+                tooltip: "Break usage down per role",
+              },
+            ]}
+          />
+        </Card.Actions>
+      </Card.Header>
+      <Card.Content>
+        {isRoleView ? (
+          roleUsageLoading ? (
+            <div className="flex items-center justify-center py-10">
+              <Skeleton className="h-4 w-32" />
+            </div>
+          ) : (
+            <Table
+              columns={roleColumns}
+              data={pageItems as RoleSummary[]}
+              rowKey={(role) => role.roleId}
+              sort={sort}
+              onSortChange={(nextSort) => {
+                setSort(nextSort);
+                setPage(0);
+              }}
+              noResultsMessage="No role usage data found for this time range."
+            />
+          )
         ) : (
           <Table
-            columns={roleColumns}
-            data={pageItems as RoleSummary[]}
-            rowKey={(role) => role.roleId}
+            columns={employeeColumns}
+            data={pageItems as EmployeeRow[]}
+            rowKey={(user) => user.userId}
             sort={sort}
             onSortChange={(nextSort) => {
               setSort(nextSort);
               setPage(0);
             }}
-            noResultsMessage="No role usage data found for this time range."
+            noResultsMessage="No employee activity found for this time range."
           />
-        )
-      ) : (
-        <Table
-          columns={employeeColumns}
-          data={pageItems as EmployeeRow[]}
-          rowKey={(user) => user.userId}
-          sort={sort}
-          onSortChange={(nextSort) => {
-            setSort(nextSort);
-            setPage(0);
-          }}
-          noResultsMessage="No employee activity found for this time range."
-        />
-      )}
+        )}
+      </Card.Content>
       {totalPages > 1 && (
-        <div className="flex items-center justify-between border-t px-4 py-3">
-          <p className="text-muted-foreground text-sm">
+        <Card.Footer className="border-t">
+          <Type muted small>
             {safePage * PAGE_SIZE + 1}–
             {Math.min((safePage + 1) * PAGE_SIZE, items.length)} of{" "}
             {items.length}
-          </p>
+          </Type>
           <div className="flex items-center gap-1">
-            <button
-              className="hover:bg-muted rounded p-1 text-sm disabled:opacity-40"
+            <Button
+              variant="tertiary"
+              size="sm"
               onClick={() => setPage((p) => p - 1)}
               disabled={safePage === 0}
             >
               Prev
-            </button>
-            <button
-              className="hover:bg-muted rounded p-1 text-sm disabled:opacity-40"
+            </Button>
+            <Button
+              variant="tertiary"
+              size="sm"
               onClick={() => setPage((p) => p + 1)}
               disabled={safePage >= totalPages - 1}
             >
               Next
-            </button>
+            </Button>
           </div>
-        </div>
+        </Card.Footer>
       )}
-    </section>
+    </Card>
   );
 }
 
@@ -1218,16 +1228,18 @@ function CostDisclaimer({ providers }: { providers: string[] }) {
   };
 
   return (
-    <section className="bg-muted/40 border-border rounded-xl border p-5">
-      <div className="max-w-3xl space-y-1">
-        <h2 className="text-sm font-semibold">About cost data</h2>
-        <p className="text-muted-foreground text-sm">
+    <Card>
+      <Card.Header>
+        <Card.Title>About cost data</Card.Title>
+      </Card.Header>
+      <Card.Content className="max-w-3xl space-y-1">
+        <Type muted small>
           Dollar costs are reported by the AI provider. Currently only Anthropic
           (Claude) reports cost data. For other providers, use token counts to
           estimate costs. Token counts are always available regardless of
           provider.
-        </p>
-        <p className="text-muted-foreground pt-1 text-sm">
+        </Type>
+        <Type muted small className="pt-1">
           Missing cost data for your provider?{" "}
           <button
             type="button"
@@ -1236,8 +1248,8 @@ function CostDisclaimer({ providers }: { providers: string[] }) {
           >
             Request provider support
           </button>
-        </p>
-      </div>
+        </Type>
+      </Card.Content>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <Dialog.Content className="sm:max-w-md">
@@ -1269,12 +1281,11 @@ function CostDisclaimer({ providers }: { providers: string[] }) {
           </RadioGroup>
 
           {selectedProvider === "__other__" && (
-            <input
+            <Input
               type="text"
               placeholder="Provider name"
               value={otherProvider}
               onChange={(e) => setOtherProvider(e.target.value)}
-              className="border-input bg-background ring-ring/20 focus-visible:ring-ring w-full rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:outline-none"
             />
           )}
 
@@ -1292,7 +1303,7 @@ function CostDisclaimer({ providers }: { providers: string[] }) {
           </Dialog.Footer>
         </Dialog.Content>
       </Dialog>
-    </section>
+    </Card>
   );
 }
 
@@ -1308,19 +1319,19 @@ function AgentsLoadingState({ isInsightsOpen }: { isInsightsOpen: boolean }) {
         )}
       >
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="bg-card rounded-lg border p-5">
+          <Card key={i}>
             <Skeleton className="mb-4 h-4 w-28" />
             <Skeleton className="h-9 w-20" />
             <Skeleton className="mt-3 h-3 w-36" />
-          </div>
+          </Card>
         ))}
       </section>
       <section className="grid gap-4 lg:grid-cols-2">
-        <Skeleton className="h-72 rounded-lg" />
-        <Skeleton className="h-72 rounded-lg" />
+        <Skeleton className="h-72" />
+        <Skeleton className="h-72" />
       </section>
-      <Skeleton className="h-40 rounded-lg" />
-      <Skeleton className="h-64 rounded-lg" />
+      <Skeleton className="h-40" />
+      <Skeleton className="h-64" />
     </>
   );
 }

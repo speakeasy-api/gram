@@ -59,7 +59,7 @@ export function HighlightedMessageText({
             {orphanMatches.map((m, i) => (
               <code
                 key={i}
-                className="bg-destructive/10 text-destructive rounded px-1 py-0.5 font-mono break-all"
+                className="bg-destructive/10 text-destructive px-1 py-0.5 font-mono break-all"
               >
                 {sensitive && !revealed ? maskValue(m) : m}
               </code>
@@ -108,7 +108,7 @@ function MaskedMatchInline({ value }: { value: string }): ReactNode {
   }
   return (
     <span className="mt-1 inline-flex items-center gap-1">
-      <code className="bg-destructive/10 text-destructive inline-block rounded px-1.5 py-0.5 font-mono text-xs break-all">
+      <code className="bg-destructive/10 text-destructive inline-block px-1.5 py-0.5 font-mono text-xs break-all">
         {value}
       </code>
       <button

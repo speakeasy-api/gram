@@ -50,6 +50,7 @@ export function CodeBlock({
   onCopy,
   preClassName,
   slots,
+  surface = "dark",
 }: {
   children: string;
   language?: string;
@@ -59,6 +60,15 @@ export function CodeBlock({
   onCopy?: () => void;
   preClassName?: string;
   slots?: Record<string, CodeBlockSlot>;
+  /**
+   * Fixed surface tone, independent of the app theme (matching the Shiki
+   * theme, which is always dark — see below). Default `"dark"` is the
+   * brandbook ink block. `"light"` is for small inline snippets that need to
+   * sit inside a lighter panel (e.g. a single-line URL chip in a card) — it
+   * has no syntax highlighting affordance of its own, so only use it when
+   * `language` is unset (plain-text fallback rendering).
+   */
+  surface?: "dark" | "light";
 }): React.JSX.Element {
   const hasSlots = !!slots && Object.keys(slots).length > 0;
   const accentColor = getLanguageAccentColor(language);
@@ -130,9 +140,14 @@ export function CodeBlock({
 
   // Claude Design brandbook code-block specimen: ink surface, bone text,
   // mono weight 300 at ~15px/1.6, a 4px language-accent rail on the left
-  // instead of an all-around border, ~20px/24px padding.
-  const baseClasses =
-    "rounded-md font-mono font-light text-[15px] leading-[1.6] text-wrap overflow-x-auto border-l-4 break-all whitespace-pre-wrap truncate bg-surface-secondary-fixed-dark text-default-fixed-light";
+  // instead of an all-around border, ~20px/24px padding. `surface="light"`
+  // swaps to the paired fixed-light tokens for inline chips on lighter panels.
+  const baseClasses = cn(
+    "font-mono font-light text-[15px] leading-[1.6] text-wrap overflow-x-auto border-l-4 break-all whitespace-pre-wrap truncate",
+    surface === "light"
+      ? "bg-surface-secondary-fixed-light text-default-fixed-dark"
+      : "bg-surface-secondary-fixed-dark text-default-fixed-light",
+  );
   const innerClasses = cn(baseClasses, "py-5 px-6 pr-12", innerClassName);
   // Shown until the async highlight resolves (and as the slot-path placeholder).
   const fallback = (

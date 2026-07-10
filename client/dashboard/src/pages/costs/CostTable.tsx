@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/moonshine";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import {
   Tooltip,
@@ -44,10 +45,10 @@ function costPerSession(row: QueryRow): number {
 }
 
 // Bucket the cost into three bands by its position in the column's range:
-// lowest third → emerald, middle → neutral (default text), highest → rose.
+// lowest third → success, middle → neutral (default text), highest → destructive.
 function costColor(t: number): string | undefined {
-  if (t >= 2 / 3) return "#e11d48"; // rose-600 — high cost
-  if (t <= 1 / 3) return "#059669"; // emerald-600 — low cost
+  if (t >= 2 / 3) return "var(--fill-destructive-default)"; // high cost
+  if (t <= 1 / 3) return "var(--fill-success-default)"; // low cost
   return undefined; // neutral
 }
 
@@ -296,7 +297,7 @@ export function CostTable({
 
   return (
     <div
-      className="border-border divide-border grid gap-x-3 gap-y-0 divide-y overflow-x-auto rounded-lg border"
+      className="border-border divide-border grid gap-x-3 gap-y-0 divide-y overflow-x-auto border"
       style={{ gridTemplateColumns: COLUMNS }}
     >
       <div
@@ -501,30 +502,34 @@ export function CostTable({
           className="flex items-center justify-between px-5 py-3"
           style={{ gridColumn: "1 / -1" }}
         >
-          <p className="text-muted-foreground text-sm">
+          <Type muted small>
             {safePage * PAGE_SIZE + 1}–
             {Math.min((safePage + 1) * PAGE_SIZE, sorted.length)} of{" "}
             {sorted.length.toLocaleString()}
-          </p>
+          </Type>
           <div className="flex items-center gap-1">
-            <button
-              type="button"
-              aria-label="Previous page"
+            <Button
+              variant="tertiary"
+              size="sm"
               onClick={() => setPage((p) => p - 1)}
               disabled={safePage === 0}
-              className="hover:bg-muted inline-flex size-8 items-center justify-center rounded-md transition-colors disabled:pointer-events-none disabled:opacity-40"
             >
-              <ChevronLeft className="size-4" />
-            </button>
-            <button
-              type="button"
-              aria-label="Next page"
+              <Button.LeftIcon>
+                <ChevronLeft className="size-4" />
+              </Button.LeftIcon>
+              <Button.Text className="sr-only">Previous page</Button.Text>
+            </Button>
+            <Button
+              variant="tertiary"
+              size="sm"
               onClick={() => setPage((p) => p + 1)}
               disabled={safePage >= totalPages - 1}
-              className="hover:bg-muted inline-flex size-8 items-center justify-center rounded-md transition-colors disabled:pointer-events-none disabled:opacity-40"
             >
-              <ChevronRight className="size-4" />
-            </button>
+              <Button.LeftIcon>
+                <ChevronRight className="size-4" />
+              </Button.LeftIcon>
+              <Button.Text className="sr-only">Next page</Button.Text>
+            </Button>
           </div>
         </div>
       )}

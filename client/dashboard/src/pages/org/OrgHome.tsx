@@ -5,6 +5,7 @@ import { ProjectAvatar } from "@/components/project-menu";
 import { RequireScope } from "@/components/require-scope";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Heading } from "@/components/ui/heading";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import { SearchBar } from "@/components/ui/search-bar";
 import {
   Tooltip,
@@ -32,6 +33,7 @@ import { useAuditLogs } from "@gram/client/react-query/auditLogs.js";
 import { useChallengeBuckets } from "@gram/client/react-query/challengeBuckets.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import {
+  Badge,
   Button,
   DropdownMenu,
   DropdownMenuContent,
@@ -259,23 +261,25 @@ function OrgHomeInner() {
             <Heading variant="h4">Projects</Heading>
 
             {filteredProjects.length === 0 && isSearching ? (
-              <div className="border-border bg-card flex flex-col items-center gap-3 rounded-lg border border-dashed py-12 text-center">
-                <Type muted>No projects matching &ldquo;{search}&rdquo;</Type>
-                <RequireScope scope="org:admin" level="component">
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      setNewProjectName(search);
-                      setCreateDialogOpen(true);
-                    }}
-                  >
-                    <Button.LeftIcon>
-                      <Plus className="size-4" />
-                    </Button.LeftIcon>
-                    <Button.Text>Create &ldquo;{search}&rdquo;</Button.Text>
-                  </Button>
-                </RequireScope>
-              </div>
+              <InlineEmptyState
+                title={`No projects matching “${search}”`}
+                action={
+                  <RequireScope scope="org:admin" level="component">
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setNewProjectName(search);
+                        setCreateDialogOpen(true);
+                      }}
+                    >
+                      <Button.LeftIcon>
+                        <Plus className="size-4" />
+                      </Button.LeftIcon>
+                      <Button.Text>Create &ldquo;{search}&rdquo;</Button.Text>
+                    </Button>
+                  </RequireScope>
+                }
+              />
             ) : (
               <>
                 {favoriteProjects.length > 0 && (
@@ -313,7 +317,7 @@ function OrgHomeInner() {
                   <button
                     type="button"
                     onClick={() => setExpanded((prev) => !prev)}
-                    className="text-muted-foreground hover:text-foreground border-border hover:bg-muted/40 flex items-center justify-center gap-1.5 rounded-lg border border-dashed py-3 text-sm font-medium transition-colors"
+                    className="text-muted-foreground hover:text-foreground border-border hover:bg-muted/40 flex items-center justify-center gap-1.5 border border-dashed py-3 text-sm font-medium transition-colors"
                   >
                     {expanded ? (
                       <>
@@ -331,20 +335,22 @@ function OrgHomeInner() {
 
                 {otherProjects.length === 0 &&
                   favoriteProjects.length === 0 && (
-                    <div className="border-border bg-card flex flex-col items-center gap-3 rounded-lg border border-dashed py-12 text-center">
-                      <Type muted>No projects yet</Type>
-                      <RequireScope scope="org:admin" level="component">
-                        <Button
-                          size="sm"
-                          onClick={() => setCreateDialogOpen(true)}
-                        >
-                          <Button.LeftIcon>
-                            <Plus className="size-4" />
-                          </Button.LeftIcon>
-                          <Button.Text>Create your first project</Button.Text>
-                        </Button>
-                      </RequireScope>
-                    </div>
+                    <InlineEmptyState
+                      title="No projects yet"
+                      action={
+                        <RequireScope scope="org:admin" level="component">
+                          <Button
+                            size="sm"
+                            onClick={() => setCreateDialogOpen(true)}
+                          >
+                            <Button.LeftIcon>
+                              <Plus className="size-4" />
+                            </Button.LeftIcon>
+                            <Button.Text>Create your first project</Button.Text>
+                          </Button>
+                        </RequireScope>
+                      }
+                    />
                   )}
               </>
             )}
@@ -426,7 +432,7 @@ function AddNewMenu({
 
 function ProjectList({ children }: { children: React.ReactNode }) {
   return (
-    <div className="border-border bg-card divide-border divide-y overflow-hidden rounded-lg border">
+    <div className="border-border bg-card divide-border divide-y overflow-hidden border">
       {children}
     </div>
   );
@@ -448,7 +454,7 @@ function ViewModeToggle({
   onChange: (mode: "list" | "grid") => void;
 }) {
   return (
-    <div className="border-border bg-card flex h-[42px] shrink-0 items-center gap-0.5 rounded-md border p-1">
+    <div className="border-border bg-card flex h-[42px] shrink-0 items-center gap-0.5 border p-1">
       <ViewModeButton
         active={value === "grid"}
         onClick={() => onChange("grid")}
@@ -517,7 +523,7 @@ function ProjectRow({
           Link overlay below, while the actions region opts back in. */}
       <ProjectAvatar
         project={project}
-        className="pointer-events-none h-9 w-9 shrink-0 rounded-md"
+        className="pointer-events-none h-9 w-9 shrink-0"
       />
 
       <div className="pointer-events-none flex min-w-0 flex-1 items-center gap-6">
@@ -586,10 +592,7 @@ function ProjectCard({
   return (
     <div className="group border-border bg-card hover:border-foreground/20 relative flex h-full flex-col gap-4 border p-4 transition-colors">
       <div className="pointer-events-none flex items-start gap-3">
-        <ProjectAvatar
-          project={project}
-          className="h-10 w-10 shrink-0 rounded-md"
-        />
+        <ProjectAvatar project={project} className="h-10 w-10 shrink-0" />
         <div className="min-w-0 flex-1">
           <Type
             variant="subheading"
@@ -628,7 +631,7 @@ function ProjectCard({
       <Link
         to={`/${orgSlug}/projects/${project.slug}`}
         aria-label={`Open ${project.name}`}
-        className="absolute inset-0 rounded-lg"
+        className="absolute inset-0"
       />
     </div>
   );
@@ -671,7 +674,7 @@ function ProjectRowActions({
         aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
         aria-pressed={isFavorite}
         className={cn(
-          "hover:bg-muted flex size-8 items-center justify-center rounded-md transition-colors",
+          "hover:bg-muted flex size-8 items-center justify-center transition-colors",
           isFavorite ? "text-foreground" : "text-muted-foreground",
         )}
       >
@@ -685,7 +688,7 @@ function ProjectRowActions({
           <button
             type="button"
             aria-label="More actions"
-            className="text-muted-foreground hover:bg-muted hover:text-foreground flex size-8 items-center justify-center rounded-md transition-colors"
+            className="text-muted-foreground hover:bg-muted hover:text-foreground flex size-8 items-center justify-center transition-colors"
           >
             <MoreHorizontal className="size-4" />
           </button>
@@ -793,13 +796,13 @@ function TimestampDetail({ date }: { date: Date }) {
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center gap-2">
-        <span className="bg-background/20 rounded-sm px-1 py-0.5 text-[10px] uppercase">
+        <span className="bg-background/20 px-1 py-0.5 text-[10px] uppercase">
           UTC
         </span>
         <span>{utc}</span>
       </div>
       <div className="flex items-center gap-2">
-        <span className="bg-background/20 rounded-sm px-1 py-0.5 text-[10px] uppercase">
+        <span className="bg-background/20 px-1 py-0.5 text-[10px] uppercase">
           {tzAbbr}
         </span>
         <span>{local}</span>
@@ -821,13 +824,13 @@ function RecentActivityCompact({ logs }: { logs: AuditLog[] }) {
         </orgRoutes.auditLogs.Link>
       </div>
       {preview.length === 0 ? (
-        <div className="border-border bg-card rounded-lg border border-dashed px-4 py-6 text-center">
+        <div className="border-border bg-card border border-dashed px-4 py-6 text-center">
           <Type muted small>
             Activity will appear here as your team makes changes.
           </Type>
         </div>
       ) : (
-        <ol className="border-border bg-card divide-border divide-y overflow-hidden rounded-lg border">
+        <ol className="border-border bg-card divide-border divide-y overflow-hidden border">
           {preview.map((log) => (
             <li
               key={log.id}
@@ -894,7 +897,7 @@ function RecentChallengesCompact() {
       {buckets.length === 0 ? (
         <ChallengesEmptyState outcomeFilter="deny" />
       ) : (
-        <ol className="border-border bg-card divide-border divide-y overflow-hidden rounded-lg border">
+        <ol className="border-border bg-card divide-border divide-y overflow-hidden border">
           {buckets.map((bucket) => (
             <li key={bucket.id}>
               <CompactChallengeRow bucket={bucket} />
@@ -941,9 +944,13 @@ function CompactChallengeRow({ bucket }: { bucket: ChallengeBucket }) {
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <div className="flex items-center gap-1.5">
-          <span className="bg-destructive/10 text-destructive shrink-0 rounded px-1 py-0.5 font-mono text-[10px] font-medium uppercase">
-            deny
-          </span>
+          <Badge
+            variant="destructive"
+            size="sm"
+            className="shrink-0 font-mono text-[10px] uppercase"
+          >
+            <Badge.Text>deny</Badge.Text>
+          </Badge>
           <Type
             small
             className="text-foreground truncate text-xs leading-snug font-medium"

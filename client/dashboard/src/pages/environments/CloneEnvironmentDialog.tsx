@@ -62,7 +62,7 @@ export function CloneEnvironmentDialog({
             />
           </div>
 
-          <div className="flex items-start justify-between gap-4 rounded-lg border p-3">
+          <div className="flex items-start justify-between gap-4 border p-3">
             <div className="flex flex-col gap-1">
               <Type variant="small" className="font-medium">
                 Copy stored secret values

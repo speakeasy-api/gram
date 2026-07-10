@@ -1,6 +1,7 @@
 import { ArrowRight, ExternalLink, LifeBuoy } from "lucide-react";
 import { Button } from "@/components/ui/moonshine";
 import { GramLogo } from "@/components/gram-logo";
+import { Type } from "@/components/ui/type";
 
 interface OnboardingHeaderProps {
   onLeave?: () => void;
@@ -19,9 +20,9 @@ export function OnboardingHeader({
         <div className="flex items-center gap-3">
           <GramLogo variant="horizontal" className="w-32" />
           <div className="bg-border h-5 w-px" />
-          <span className="text-foreground text-sm font-medium">
+          <Type small className="font-medium">
             Setup organization
-          </span>
+          </Type>
         </div>
         <div className="flex items-center gap-2">
           <Button

@@ -90,7 +90,7 @@ function tokenTypeRows(palette: string[]): MeasureRowSpec[] {
 
 const TOOL_MESSAGE_ROW: MeasureRowSpec = {
   label: "Tokens from tool call messages",
-  color: "#94a3b8",
+  color: OTHER_COLOR,
   field: "toolMessageTokens",
 };
 
@@ -386,7 +386,8 @@ export function TumDetailsTable({
           },
           {
             label: "Messages with risk findings",
-            color: "#e879f9",
+            // A stable palette slot distinct from the 4 token-type rows above.
+            color: palette[4]!,
             series: points.map((p) => p.riskyMessageTokens),
             total: totals?.riskyMessageTokens ?? 0,
           },
@@ -489,7 +490,7 @@ export function TumDetailsTable({
   }
 
   return (
-    <div className="border-border overflow-hidden rounded-lg border">
+    <div className="border-border overflow-hidden border">
       <div className="flex items-baseline gap-2 px-4 pt-3 pb-1">
         <span className="text-sm font-semibold">
           Token Usage Cumulative Breakdown

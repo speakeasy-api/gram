@@ -1,7 +1,9 @@
 import { Dialog } from "@/components/ui/dialog";
+import { KbdSequence } from "@/components/ui/kbd";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { TextArea } from "@/components/ui/textarea";
+import { Type } from "@/components/ui/type";
 import { TagsVariationEditor } from "@/components/tool-variation-tags-editor";
 import {
   Tool,
@@ -285,16 +287,16 @@ export function EditToolDialog({
           {hasAnnotations && (
             <div className="space-y-3">
               <Label className="text-sm font-medium">Behavior Hints</Label>
-              <p className="text-muted-foreground text-xs">
+              <Type variant="small" muted className="text-xs">
                 Override how this tool is presented to AI models.
-              </p>
+              </Type>
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm">Read-only</p>
-                    <p className="text-muted-foreground text-xs">
+                    <Type variant="small">Read-only</Type>
+                    <Type variant="small" muted className="text-xs">
                       Tool does not modify its environment
-                    </p>
+                    </Type>
                   </div>
                   <Switch
                     checked={readOnlyHint ?? false}
@@ -304,10 +306,10 @@ export function EditToolDialog({
                 </div>
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm">Destructive</p>
-                    <p className="text-muted-foreground text-xs">
+                    <Type variant="small">Destructive</Type>
+                    <Type variant="small" muted className="text-xs">
                       Tool may perform destructive updates
-                    </p>
+                    </Type>
                   </div>
                   <Switch
                     checked={destructiveHint ?? false}
@@ -317,11 +319,11 @@ export function EditToolDialog({
                 </div>
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm">Idempotent</p>
-                    <p className="text-muted-foreground text-xs">
+                    <Type variant="small">Idempotent</Type>
+                    <Type variant="small" muted className="text-xs">
                       Repeated calls with same arguments have no additional
                       effect
-                    </p>
+                    </Type>
                   </div>
                   <Switch
                     checked={idempotentHint ?? false}
@@ -331,10 +333,10 @@ export function EditToolDialog({
                 </div>
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm">Open-world</p>
-                    <p className="text-muted-foreground text-xs">
+                    <Type variant="small">Open-world</Type>
+                    <Type variant="small" muted className="text-xs">
                       Tool interacts with external entities
-                    </p>
+                    </Type>
                   </div>
                   <Switch
                     checked={openWorldHint ?? false}
@@ -362,7 +364,7 @@ export function EditToolDialog({
             >
               {saving ? "Saving..." : "Save"}
               {hasChanges && !saving && (
-                <span className="ml-2 text-xs opacity-60">⌘⏎</span>
+                <KbdSequence keys={["⌘", "⏎"]} className="ml-2" />
               )}
             </Button>
           </div>

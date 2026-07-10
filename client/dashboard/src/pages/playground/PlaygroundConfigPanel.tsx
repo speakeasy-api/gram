@@ -5,6 +5,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -15,7 +16,6 @@ import {
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
 import { AVAILABLE_MODELS } from "@/lib/models";
 import { Tool, getToolSourceLabel } from "@/lib/toolTypes";
 import {
@@ -294,7 +294,7 @@ export function PlaygroundConfigPanel({
     <div className="flex h-full flex-col overflow-y-auto border-r">
       {/* Toolset Selector - Always at top */}
       <div className="border-b px-4 py-3">
-        <Label className="text-muted-foreground mb-1.5 block text-[11px] font-medium tracking-wider uppercase">
+        <Label className="text-muted-foreground mb-1.5 block font-mono text-xs tracking-[0.08em] uppercase">
           MCP Server
         </Label>
         {toolsetSelector}
@@ -306,7 +306,7 @@ export function PlaygroundConfigPanel({
           <Collapsible open={authOpen} onOpenChange={setAuthOpen}>
             <CollapsibleTrigger className="hover:bg-muted/30 group flex w-full items-center px-4 py-2.5 transition-colors">
               <div className="flex items-center gap-1.5">
-                <span className="text-muted-foreground text-[11px] font-semibold tracking-wider uppercase">
+                <span className="text-muted-foreground font-mono text-xs tracking-[0.08em] uppercase">
                   Authentication
                 </span>
                 {authOpen ? (
@@ -328,7 +328,7 @@ export function PlaygroundConfigPanel({
         <Collapsible open={toolsOpen} onOpenChange={setToolsOpen}>
           <CollapsibleTrigger className="hover:bg-muted/30 group flex w-full items-center justify-between px-4 py-2.5 transition-colors">
             <div className="flex items-center gap-1.5">
-              <span className="text-muted-foreground text-[11px] font-semibold tracking-wider uppercase">
+              <span className="text-muted-foreground font-mono text-xs tracking-[0.08em] uppercase">
                 Tools
               </span>
               {toolsOpen ? (
@@ -418,11 +418,7 @@ export function PlaygroundConfigPanel({
                 })}
               </div>
             ) : (
-              <div className="px-4 py-6 text-center">
-                <Type variant="small" className="text-muted-foreground">
-                  No tools added
-                </Type>
-              </div>
+              <InlineEmptyState title="No tools added" className="py-6" />
             )}
           </CollapsibleContent>
         </Collapsible>
@@ -433,7 +429,7 @@ export function PlaygroundConfigPanel({
         <Collapsible open={configOpen} onOpenChange={setConfigOpen}>
           <CollapsibleTrigger className="hover:bg-muted/30 group flex w-full items-center px-4 py-2.5 transition-colors">
             <div className="flex items-center gap-1.5">
-              <span className="text-muted-foreground text-[11px] font-semibold tracking-wider uppercase">
+              <span className="text-muted-foreground font-mono text-xs tracking-[0.08em] uppercase">
                 Model Settings
               </span>
               {configOpen ? (

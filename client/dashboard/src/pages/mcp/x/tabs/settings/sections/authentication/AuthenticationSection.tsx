@@ -5,13 +5,13 @@ import {
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import { Type } from "@/components/ui/type";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { useRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { useUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
 import { useMemo, useState, type ReactNode } from "react";
-import { SettingsInlineEmptyState } from "../../SettingsInlineEmptyState";
 import { SettingsSection } from "../../SettingsSection";
 import { AttachRemoteIdentityProviderSheet } from "./AttachRemoteIdentityProviderSheet";
 import { AuthenticationSetupActions } from "./AuthenticationSetupActions";
@@ -233,7 +233,7 @@ function IdentityProviderSetupField({
   return (
     <Field>
       <FieldLabel>Identity Provider</FieldLabel>
-      <SettingsInlineEmptyState
+      <InlineEmptyState
         title="No authentication configured"
         description="Configure an upstream identity provider so MCP clients authenticate before reaching this server."
         action={

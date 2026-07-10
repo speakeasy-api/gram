@@ -100,16 +100,14 @@ export function ServerCard({
         {/* Header row with name and tool badge */}
         <div className="mb-2 flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <Type
-                variant="subheading"
-                as="div"
-                className="text-md group-hover:text-primary truncate transition-colors"
-                title={displayName}
-              >
-                {displayName}
-              </Type>
-            </div>
+            <Type
+              variant="subheading"
+              as="div"
+              className="text-md group-hover:text-primary min-w-0 truncate transition-colors"
+              title={displayName}
+            >
+              {displayName}
+            </Type>
             <Type small muted className="truncate">
               v{server.version}
             </Type>

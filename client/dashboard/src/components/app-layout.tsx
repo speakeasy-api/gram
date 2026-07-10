@@ -8,6 +8,7 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { Button } from "@/components/ui/moonshine";
 import { Heading } from "@/components/ui/heading";
+import { Type } from "@/components/ui/type";
 import { RefreshCw, ShieldAlert } from "lucide-react";
 import { useCallback, useMemo } from "react";
 import { Navigate, Outlet, useLocation } from "react-router";
@@ -69,14 +70,14 @@ const ImpersonationBanner = () => {
   const client = useSdkClient();
 
   return (
-    <div className="bg-destructive flex items-center justify-center gap-3 px-4 py-2 text-sm text-white">
+    <div className="bg-destructive text-destructive-foreground flex items-center justify-center gap-3 px-4 py-2 text-sm">
       <ShieldAlert className="h-4 w-4 shrink-0" />
       <span className="font-mono font-bold">
         Impersonating {organization.slug}
       </span>
       <button
         type="button"
-        className="ml-2 rounded bg-white/20 px-2 py-0.5 text-xs font-medium transition-colors hover:bg-white/30"
+        className="bg-destructive-foreground/20 hover:bg-destructive-foreground/30 ml-2 px-2 py-0.5 text-xs font-medium transition-colors"
         onClick={() => {
           void (async () => {
             document.cookie = "gram_admin_override=; path=/; max-age=0;";
@@ -157,10 +158,10 @@ const MembershipSyncGuard = ({ children }: { children: React.ReactNode }) => {
         <Heading variant="h2" className="normal-case">
           Organization sync required
         </Heading>
-        <p className="text-muted-foreground text-sm">
+        <Type variant="small" muted>
           Your organization membership needs to be re-synchronized. Please log
           out and log back in to refresh your session.
-        </p>
+        </Type>
         <Button
           className="mt-2"
           onClick={() => {

@@ -110,7 +110,7 @@ export function ThemeSwitcher({
             : `translateX(${posX}%)`,
         }}
         transition={{ type: "spring", duration: 0.7, bounce: 0.3 }}
-        className="absolute top-0 left-0 z-[10] size-[2.125rem] rounded-full shadow-[0px_0px_4px_0px_rgba(0,0,0,0.10),0px_2px_1px_0px_#FFF_inset,0px_-2px_1px_0px_rgba(0,0,0,0.05)_inset] dark:shadow-[0px_2px_4px_0px_rgba(0,0,0,0.60),0px_2px_1px_0px_#282828_inset,0px_-2px_1px_0px_rgba(0,0,0,0.05)_inset]"
+        className="bg-background absolute top-0 left-0 z-[10] size-[2.125rem] rounded-full border border-neutral-300 dark:border-neutral-800"
         suppressHydrationWarning
       />
     </div>

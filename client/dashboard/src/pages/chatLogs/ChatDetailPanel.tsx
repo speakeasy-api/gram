@@ -258,7 +258,7 @@ function SessionSummary({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm transition-colors"
+          className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex items-center gap-1.5 px-2 py-1 text-sm transition-colors"
         >
           {compact ? (
             <span className="inline-flex items-center gap-1.5">
@@ -456,7 +456,7 @@ function MessageFilterBar({
 
   return (
     <div className="flex items-center justify-end gap-3">
-      <div className="bg-muted/40 inline-flex items-center gap-1 rounded-lg border p-1">
+      <div className="bg-muted/40 inline-flex items-center gap-1 border p-1">
         {MESSAGE_TYPES.map(({ key, label, icon: Glyph }) => {
           const on = typeFilter.has(key);
           return (
@@ -466,9 +466,9 @@ function MessageFilterBar({
               aria-pressed={on}
               onClick={() => toggleType(key)}
               className={cn(
-                "inline-flex items-center gap-2 rounded-md border px-3 py-1 text-xs font-medium transition-colors hover:border-foreground/40",
+                "inline-flex items-center gap-2 border px-3 py-1 text-xs font-medium transition-colors hover:border-foreground/40",
                 on
-                  ? "bg-background text-foreground shadow-sm hover:bg-muted/60"
+                  ? "bg-background text-foreground hover:bg-muted/60"
                   : "text-muted-foreground hover:bg-background hover:text-foreground",
               )}
             >
@@ -486,7 +486,7 @@ function MessageFilterBar({
               checked={riskyOnly}
               onCheckedChange={onRiskyOnlyChange}
               aria-label="Show only risky messages"
-              className={riskyOnly ? "bg-red-800" : undefined}
+              className={riskyOnly ? "bg-destructive" : undefined}
             />
             <span className="text-muted-foreground text-xs font-medium">
               Risky only
@@ -525,9 +525,9 @@ function ThreadSearchBar({
   // (meaningless) prev/next nav while keeping clear available.
   const overLimit = trimmedLen > MAX_SEARCH_QUERY_LEN;
   const navBtn =
-    "text-muted-foreground hover:text-foreground hover:bg-background flex size-6 shrink-0 items-center justify-center rounded transition-colors disabled:opacity-40";
+    "text-muted-foreground hover:text-foreground hover:bg-background flex size-6 shrink-0 items-center justify-center transition-colors disabled:opacity-40";
   return (
-    <div className="bg-background focus-within:border-foreground/40 flex h-9 items-center gap-2 rounded-lg border px-2.5 transition-colors">
+    <div className="bg-background focus-within:border-foreground/40 flex h-9 items-center gap-2 border px-2.5 transition-colors">
       {overLimit ? (
         <SimpleTooltip
           tooltip={`Queries are limited to ${MAX_SEARCH_QUERY_LEN} characters`}
@@ -692,7 +692,7 @@ function ChatDetailHeader({
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm transition-colors"
+                className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex items-center gap-1.5 px-2 py-1 text-sm transition-colors"
               >
                 <SlidersHorizontal className="size-4" />
                 Actions
@@ -727,7 +727,7 @@ function ChatDetailHeader({
           </DropdownMenu>
           <button
             onClick={onClose}
-            className="hover:bg-muted rounded-md p-1 transition-colors"
+            className="hover:bg-muted p-1 transition-colors"
             aria-label="Close panel"
           >
             <X className="size-5" />

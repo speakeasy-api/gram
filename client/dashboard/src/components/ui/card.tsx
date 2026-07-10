@@ -1,4 +1,3 @@
-// oxlint-disable react/only-export-components -- compound component (Object.assign) pattern
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
@@ -13,7 +12,7 @@ import { Type } from "./type";
  * optionally `overlay`) adds the signature dot-pattern sidebar on the
  * left, the visual carried over from the legacy DotCard.
  */
-const CardComponent = ({
+function Card({
   className,
   size = "default",
   icon,
@@ -26,7 +25,7 @@ const CardComponent = ({
   icon?: React.ReactNode;
   /** Extra content layered on the dot sidebar (e.g. an "Added" badge) */
   overlay?: React.ReactNode;
-}) => {
+}): React.JSX.Element {
   const content = (
     <div
       data-slot="card-body"
@@ -73,7 +72,7 @@ const CardComponent = ({
       {icon ? content : children}
     </div>
   );
-};
+}
 
 function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
@@ -160,15 +159,18 @@ function CardFooter({ className, ...props }: React.ComponentProps<"div">) {
   );
 }
 
-export const Card = Object.assign(CardComponent, {
-  Header: CardHeader,
-  Title: CardTitle,
-  Description: CardDescription,
-  Info: CardInfo,
-  Actions: CardActions,
-  Content: CardContent,
-  Footer: CardFooter,
-});
+// Compound members are attached by mutation rather than Object.assign: the
+// react/only-export-components rule recognizes the former as a component
+// export and flags the latter.
+Card.Header = CardHeader;
+Card.Title = CardTitle;
+Card.Description = CardDescription;
+Card.Info = CardInfo;
+Card.Actions = CardActions;
+Card.Content = CardContent;
+Card.Footer = CardFooter;
+
+export { Card };
 
 export function Cards({
   className,

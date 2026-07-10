@@ -1,5 +1,6 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import { Card } from "@/components/ui/card";
 import { Heading } from "@/components/ui/heading";
 import { Switch } from "@/components/ui/switch";
 import { Type } from "@/components/ui/type";
@@ -69,7 +70,7 @@ function OrgWebhooksInner() {
       <Type muted small className="mb-6">
         Configure webhook delivery for various platform events.
       </Type>
-      <div className="border-border bg-card rounded-lg border p-4">
+      <Card>
         <Stack gap={4}>
           <Stack direction="horizontal" justify="space-between" align="center">
             <Stack gap={1}>
@@ -104,7 +105,7 @@ function OrgWebhooksInner() {
             </RequireScope>
           </Stack>
         </Stack>
-      </div>
+      </Card>
       {orgResult.data?.webhooksOnboarded && <WebhookConfigPortal />}
     </>
   );
@@ -115,7 +116,7 @@ function WebhooksDisabled() {
   const { session } = useSessionData();
 
   return (
-    <div className="border-border bg-card rounded-lg border p-4">
+    <Card>
       <Stack gap={4} align="center" justify="center">
         <Webhook className="text-muted-foreground h-10 w-10" />
         <div>
@@ -143,7 +144,7 @@ function WebhooksDisabled() {
           </a>
         </MoonshineButton>
       </Stack>
-    </div>
+    </Card>
   );
 }
 

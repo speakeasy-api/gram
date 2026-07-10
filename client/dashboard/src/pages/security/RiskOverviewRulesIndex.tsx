@@ -8,6 +8,8 @@ import { RequireScope } from "@/components/require-scope";
 import { useRoutes } from "@/routes";
 import { type DateRangePreset } from "@gram-ai/elements";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
+import { Card } from "@/components/ui/card";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
 import { Inbox, LoaderCircle } from "lucide-react";
 import { useCallback, useMemo } from "react";
@@ -118,18 +120,15 @@ function RiskOverviewRulesIndexContent() {
             <span>Loading rules...</span>
           </div>
         ) : rules.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 py-12 text-center">
-            <div className="bg-muted flex size-12 items-center justify-center rounded-full">
-              <Inbox className="text-muted-foreground size-6" />
-            </div>
-            <span className="text-foreground font-medium">
-              No rules with findings in this time range
-            </span>
-          </div>
+          <InlineEmptyState
+            className="py-12"
+            icon={<Inbox />}
+            title="No rules with findings in this time range"
+          />
         ) : (
-          <div className="border p-4">
+          <Card>
             <RankedBar items={ruleItems} formatValue={formatFindingsValue} />
-          </div>
+          </Card>
         )}
       </Page.Section.Body>
     </Page.Section>

@@ -227,11 +227,11 @@ export function AddToolsDialog({
           {/* Tool list with selection mode */}
           <div className="flex-1 overflow-auto">
             {isLoading ? (
-              <div className="py-8 text-center text-neutral-500">
+              <div className="text-muted-foreground py-8 text-center">
                 Loading tools...
               </div>
             ) : filteredTools.length === 0 ? (
-              <div className="py-8 text-center text-neutral-500">
+              <div className="text-muted-foreground py-8 text-center">
                 {noResultsMessage}
               </div>
             ) : (

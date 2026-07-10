@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import { KeyRound, ExternalLink, Loader2, ChevronDown } from "lucide-react";
-import { Input, useTheme } from "@/components/ui/moonshine";
+import { Button, Input, useTheme } from "@/components/ui/moonshine";
+import { Card } from "@/components/ui/card";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { useGenerateWorkOSAdminPortalLinkMutation } from "@gram/client/react-query/generateWorkOSAdminPortalLink.js";
 import { useOnboardingStatus } from "@gram/client/react-query/onboardingStatus";
 import { toast } from "sonner";
@@ -128,7 +130,7 @@ export function ConnectIdpStep({
   return (
     <StepContainer
       icon={
-        <div className="bg-secondary flex h-12 w-12 items-center justify-center rounded-lg">
+        <div className="bg-secondary flex h-12 w-12 items-center justify-center">
           <KeyRound className="text-foreground h-6 w-6" />
         </div>
       }
@@ -142,32 +144,32 @@ export function ConnectIdpStep({
       canContinue={!!selectedProvider}
     >
       <div className="space-y-6">
-        <div>
-          <label className="text-foreground text-sm font-medium">
+        <Field>
+          <FieldLabel htmlFor="idp-provider-search">
             Select provider<span className="text-accent">*</span>
-          </label>
+          </FieldLabel>
           <Input
+            id="idp-provider-search"
             type="search"
             icon="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search providers"
-            className="mt-3"
             disabled={generatePortalLink.isPending}
           />
           {isSearching && filteredProviders.length === 0 && (
-            <p className="text-muted-foreground mt-3 text-sm">
+            <p className="text-muted-foreground text-sm">
               No providers match &quot;{query}&quot;.
             </p>
           )}
-          <div className="mt-3 grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             {visibleProviders.map((p) => (
               <button
                 key={p.id}
                 onClick={() => setSelectedProvider(p.id)}
                 disabled={generatePortalLink.isPending}
                 className={cn(
-                  "flex items-center gap-3 rounded-lg border p-4 text-left transition-all",
+                  "flex items-center gap-3 border p-4 text-left transition-all",
                   selectedProvider === p.id
                     ? "border-foreground bg-secondary"
                     : "border-border bg-card hover:border-foreground/30",
@@ -176,7 +178,7 @@ export function ConnectIdpStep({
                     "cursor-not-allowed opacity-50",
                 )}
               >
-                <div className="bg-secondary flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg">
+                <div className="bg-secondary flex h-10 w-10 flex-shrink-0 items-center justify-center">
                   <ProviderIcon provider={p} />
                 </div>
                 <div className="min-w-0 flex-1">
@@ -199,21 +201,26 @@ export function ConnectIdpStep({
           {!isSearching &&
             !showAll &&
             IDP_PROVIDERS.length > INITIAL_VISIBLE && (
-              <button
-                type="button"
+              <Button
+                variant="tertiary"
+                size="sm"
+                className="text-muted-foreground hover:text-foreground w-full"
                 onClick={() => setShowAll(true)}
-                className="text-muted-foreground hover:text-foreground mt-2 flex w-full items-center justify-center gap-1.5 py-2 text-sm transition-colors"
               >
-                <ChevronDown className="h-4 w-4" />
-                Show {IDP_PROVIDERS.length - INITIAL_VISIBLE} more providers
-              </button>
+                <Button.LeftIcon>
+                  <ChevronDown className="h-4 w-4" />
+                </Button.LeftIcon>
+                <Button.Text>
+                  Show {IDP_PROVIDERS.length - INITIAL_VISIBLE} more providers
+                </Button.Text>
+              </Button>
             )}
-        </div>
+        </Field>
 
         {selectedProvider && !generatePortalLink.isPending && (
-          <div className="bg-card border-border rounded-lg border p-4">
+          <Card>
             <div className="flex items-start gap-3">
-              <div className="bg-secondary mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded">
+              <div className="bg-secondary mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center">
                 <ExternalLink className="text-muted-foreground h-4 w-4" />
               </div>
               <div>
@@ -227,7 +234,7 @@ export function ConnectIdpStep({
                 </p>
               </div>
             </div>
-          </div>
+          </Card>
         )}
       </div>
     </StepContainer>

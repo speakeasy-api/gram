@@ -2,6 +2,7 @@ import { DetailHero } from "@/components/detail-hero";
 import { MCPServerCard } from "@/components/mcp/MCPServerCard";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import { McpServerCardsSkeleton } from "@/components/sources/McpServerCardsSkeleton";
 import { SourceActivityPanel } from "@/components/sources/SourceActivityPanel";
 import { computeTelemetrySummary } from "@/components/sources/sourceTelemetrySummary";
 import {
@@ -252,8 +253,8 @@ function RemoteMcpHero({ server }: { server: RemoteMcpServer | undefined }) {
     <DetailHero>
       <Stack gap={2}>
         <Stack direction="horizontal" gap={3} align="center">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 dark:bg-violet-500/20">
-            <Network className="h-5 w-5 text-violet-600 dark:text-violet-400" />
+          <div className="bg-muted flex h-10 w-10 shrink-0 items-center justify-center">
+            <Network className="text-muted-foreground h-5 w-5" />
           </div>
           <Heading variant="h1" className="break-all normal-case">
             {server ? formatRemoteMcpDisplay(server) : "Remote MCP server"}
@@ -416,7 +417,7 @@ function McpServersTab({
   return (
     <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
       {isLoading ? (
-        <McpServersSkeleton />
+        <McpServerCardsSkeleton />
       ) : mcpServers.length > 0 ? (
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
           {mcpServers.map((server) => (
@@ -475,24 +476,6 @@ function McpServersEmptyState({
           </Button.Text>
         </Button>
       </RequireScope>
-    </div>
-  );
-}
-
-function McpServersSkeleton() {
-  return (
-    <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-      {[1, 2, 3].map((i) => (
-        <div key={i} className="bg-card animate-pulse rounded-xl border p-6">
-          <div className="mb-4 flex items-center gap-3">
-            <div className="bg-muted h-10 w-10 rounded-lg" />
-            <div className="flex-1">
-              <div className="bg-muted mb-2 h-4 w-24 rounded" />
-              <div className="bg-muted h-3 w-32 rounded" />
-            </div>
-          </div>
-        </div>
-      ))}
     </div>
   );
 }
@@ -568,7 +551,7 @@ function NameSection({
   };
 
   return (
-    <div className="rounded-lg border p-6">
+    <div className="border p-6">
       <Type variant="subheading" className="mb-1">
         Display Name
       </Type>
@@ -681,7 +664,7 @@ function UrlSection({
   };
 
   return (
-    <div className="rounded-lg border p-6">
+    <div className="border p-6">
       <Type variant="subheading" className="mb-1">
         Remote URL
       </Type>
@@ -765,7 +748,7 @@ function DangerZoneSection({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   return (
-    <div className="border-destructive/30 rounded-lg border p-6">
+    <div className="border-destructive/30 border p-6">
       <Type variant="subheading" className="text-destructive mb-1">
         Danger Zone
       </Type>

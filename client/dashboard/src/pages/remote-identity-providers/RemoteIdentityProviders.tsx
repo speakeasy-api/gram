@@ -3,7 +3,7 @@ import { RequireScope } from "@/components/require-scope";
 import { Dialog } from "@/components/ui/dialog";
 import { DotRow } from "@/components/ui/dot-row";
 import { DotTable } from "@/components/ui/dot-table";
-import { Label } from "@/components/ui/label";
+import { Field, FieldLabel } from "@/components/ui/field";
 import {
   Select,
   SelectContent,
@@ -32,7 +32,6 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  Stack,
 } from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Fingerprint, MoreHorizontal, Plus } from "lucide-react";
@@ -396,10 +395,10 @@ function MoveToProjectDialog({
           </Dialog.Description>
         </Dialog.Header>
 
-        <Stack gap={2}>
-          <Label className="text-muted-foreground text-xs">Scope</Label>
+        <Field>
+          <FieldLabel htmlFor="move-issuer-scope">Scope</FieldLabel>
           <Select value={projectId} onValueChange={setProjectId}>
-            <SelectTrigger>
+            <SelectTrigger id="move-issuer-scope">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -413,7 +412,7 @@ function MoveToProjectDialog({
               ))}
             </SelectContent>
           </Select>
-        </Stack>
+        </Field>
 
         {moveError && (
           <Alert variant="error" dismissible={false}>

@@ -121,7 +121,7 @@ const BrandSlot = React.forwardRef<
   const brandSpan = (
     <span
       key="brand-bg"
-      className="pointer-events-none absolute inset-0 -z-10 rounded-[inherit] bg-btn-brand hover:bg-btn-brand-hover disabled:bg-btn-brand-disabled"
+      className="pointer-events-none absolute inset-0 -z-10 bg-btn-brand hover:bg-btn-brand-hover disabled:bg-btn-brand-disabled"
     />
   );
 
@@ -177,12 +177,6 @@ const buttonVariants = cva(
         variant: "brand",
         className:
           "before:inset-[-1px] active:before:inset-[-2px] after:inset-[-1px] active:after:inset-[-2px]",
-      },
-      {
-        context: "product",
-        variant: "brand",
-        className:
-          "before:rounded-[calc(theme(borderRadius.sm)+1px)] active:before:rounded-[calc(theme(borderRadius.sm)+2px)] after:rounded-[calc(theme(borderRadius.sm)+1px)] active:after:rounded-[calc(theme(borderRadius.sm)+2px)]",
       },
       {
         context: "marketing",
@@ -498,7 +492,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         ) : (
           <>
             {isBrandVariant && (
-              <span className="pointer-events-none absolute inset-0 z-10 rounded-[inherit] bg-btn-brand hover:bg-btn-brand-hover disabled:bg-btn-brand-disabled" />
+              <span className="pointer-events-none absolute inset-0 z-10 bg-btn-brand hover:bg-btn-brand-hover disabled:bg-btn-brand-disabled" />
             )}
             <span
               className={cn(

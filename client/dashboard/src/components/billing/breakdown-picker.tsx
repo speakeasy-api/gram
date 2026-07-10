@@ -11,6 +11,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { Button } from "@/components/ui/moonshine";
 import { cn } from "@/lib/utils";
 import { Check, ChevronDown } from "lucide-react";
 import { useState } from "react";
@@ -41,15 +42,18 @@ export function BreakdownPicker({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          size="xs"
           role="combobox"
           aria-expanded={open}
-          className="border-border hover:bg-muted data-[state=open]:bg-muted inline-flex items-center gap-1 rounded border bg-transparent px-2 py-0.5 text-xs transition-colors"
+          className="data-[state=open]:bg-btn-secondary-hover"
         >
-          By {breakdownLabel(value).toLowerCase()}
-          <ChevronDown className="!size-3 opacity-50" />
-        </button>
+          <Button.Text>By {breakdownLabel(value).toLowerCase()}</Button.Text>
+          <Button.RightIcon>
+            <ChevronDown className="!size-3 opacity-50" />
+          </Button.RightIcon>
+        </Button>
       </PopoverTrigger>
       <PopoverContent className="w-56 p-0" align="end">
         <Command>

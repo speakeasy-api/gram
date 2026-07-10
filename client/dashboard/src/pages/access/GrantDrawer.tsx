@@ -1,3 +1,4 @@
+import { DetailList } from "@/components/ui/detail-list";
 import {
   Sheet,
   SheetContent,
@@ -168,9 +169,9 @@ export function GrantDrawer({
                 <button
                   type="button"
                   onClick={() => setStep("select-role")}
-                  className="border-border hover:bg-muted/50 flex w-full items-center gap-3 rounded-lg border p-4 text-left transition-colors"
+                  className="border-border hover:bg-muted/50 flex w-full items-center gap-3 border p-4 text-left transition-colors"
                 >
-                  <div className="bg-muted flex h-10 w-10 items-center justify-center rounded-lg">
+                  <div className="bg-muted flex h-10 w-10 items-center justify-center">
                     <Users className="h-5 w-5" />
                   </div>
                   <div className="flex-1">
@@ -191,8 +192,8 @@ export function GrantDrawer({
                 <SimpleTooltip
                   tooltip={`No roles have the ${challenge.scope} scope`}
                 >
-                  <div className="border-border flex w-full cursor-not-allowed items-center gap-3 rounded-lg border p-4 text-left opacity-50">
-                    <div className="bg-muted flex h-10 w-10 items-center justify-center rounded-lg">
+                  <div className="border-border flex w-full cursor-not-allowed items-center gap-3 border p-4 text-left opacity-50">
+                    <div className="bg-muted flex h-10 w-10 items-center justify-center">
                       <Users className="h-5 w-5" />
                     </div>
                     <div className="flex-1">
@@ -213,9 +214,9 @@ export function GrantDrawer({
               <button
                 type="button"
                 onClick={handleCreateNew}
-                className="border-border hover:bg-muted/50 flex w-full items-center gap-3 rounded-lg border p-4 text-left transition-colors"
+                className="border-border hover:bg-muted/50 flex w-full items-center gap-3 border p-4 text-left transition-colors"
               >
-                <div className="bg-muted flex h-10 w-10 items-center justify-center rounded-lg">
+                <div className="bg-muted flex h-10 w-10 items-center justify-center">
                   <Plus className="h-5 w-5" />
                 </div>
                 <div className="flex-1">
@@ -244,7 +245,7 @@ export function GrantDrawer({
                 Back
               </button>
 
-              <div className="border-border divide-border divide-y rounded-md border">
+              <div className="border-border divide-border divide-y border">
                 {roles.map((role) => (
                   <button
                     key={role.id}
@@ -290,60 +291,38 @@ export function GrantDrawer({
 
               {selectedRole && (
                 <div className="space-y-4">
-                  <div className="border-border rounded-md border p-4">
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <Type
-                          variant="body"
-                          className="text-muted-foreground text-sm"
-                        >
-                          Identity
-                        </Type>
-                        <Type variant="body" className="text-sm font-medium">
-                          {principalDisplay}
-                        </Type>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <Type
-                          variant="body"
-                          className="text-muted-foreground text-sm"
-                        >
-                          Role
-                        </Type>
-                        <div className="flex items-center gap-2">
-                          <Type variant="body" className="text-sm font-medium">
+                  <div className="border-border border p-4">
+                    <DetailList orientation="inline">
+                      <DetailList.Item
+                        label="Identity"
+                        value={principalDisplay}
+                      />
+                      <DetailList.Item
+                        label="Role"
+                        value={
+                          <span className="inline-flex items-center gap-2">
                             {selectedRole.name}
-                          </Type>
-                          {selectedRole.isSystem && (
-                            <Badge variant="neutral">
-                              <Badge.Text>System</Badge.Text>
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <Type
-                          variant="body"
-                          className="text-muted-foreground text-sm"
-                        >
-                          Scope
-                        </Type>
-                        <code className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs">
-                          {challenge.scope}
-                        </code>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <Type
-                          variant="body"
-                          className="text-muted-foreground text-sm"
-                        >
-                          Permissions
-                        </Type>
-                        <Type variant="body" className="text-sm">
-                          {visiblePermissionCount(selectedRole.grants)}
-                        </Type>
-                      </div>
-                    </div>
+                            {selectedRole.isSystem && (
+                              <Badge variant="neutral">
+                                <Badge.Text>System</Badge.Text>
+                              </Badge>
+                            )}
+                          </span>
+                        }
+                      />
+                      <DetailList.Item
+                        label="Scope"
+                        value={
+                          <code className="bg-muted px-1.5 py-0.5 font-mono text-xs">
+                            {challenge.scope}
+                          </code>
+                        }
+                      />
+                      <DetailList.Item
+                        label="Permissions"
+                        value={visiblePermissionCount(selectedRole.grants)}
+                      />
+                    </DetailList>
                   </div>
 
                   <Button

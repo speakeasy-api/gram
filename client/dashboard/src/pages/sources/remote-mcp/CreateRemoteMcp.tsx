@@ -103,8 +103,8 @@ function CreateRemoteMcpForm() {
     <div className="max-w-2xl">
       <Stack gap={3} className="mb-8">
         <Stack direction="horizontal" gap={3} align="center">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 dark:bg-violet-500/20">
-            <Network className="h-5 w-5 text-violet-600 dark:text-violet-400" />
+          <div className="bg-muted flex h-10 w-10 shrink-0 items-center justify-center">
+            <Network className="text-muted-foreground h-5 w-5" />
           </div>
           <Heading variant="h3">Add a custom remote MCP server</Heading>
         </Stack>

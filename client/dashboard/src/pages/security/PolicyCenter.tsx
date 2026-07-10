@@ -7,6 +7,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { SearchBar } from "@/components/ui/search-bar";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
+import { Progress } from "@/components/ui/progress";
 import { StatusDot, type StatusDotTone } from "@/components/ui/status-dot";
 import { Switch } from "@/components/ui/switch";
 import { Dialog } from "@/components/ui/dialog";
@@ -129,7 +131,7 @@ export function DetectorCard({
   return (
     <div
       className={cn(
-        "flex gap-3 rounded-lg border p-3 transition-colors",
+        "flex gap-3 border p-3 transition-colors",
         selected ? "border-foreground bg-muted/40" : "border-border",
       )}
     >
@@ -435,7 +437,7 @@ function RuleToggleRow({
   onToggle: (on: boolean) => void;
 }) {
   return (
-    <div className="hover:bg-muted flex items-center justify-between gap-3 rounded-md px-2 py-2 text-sm">
+    <div className="hover:bg-muted flex items-center justify-between gap-3 px-2 py-2 text-sm">
       <span className="min-w-0 truncate">{rule.title}</span>
       <Switch checked={checked} onCheckedChange={onToggle} />
     </div>
@@ -680,56 +682,51 @@ function PolicyCenterContent() {
   // page, otherwise the Exclusions tab (and global exclusions) would be
   // unreachable for projects that have no policies yet.
   const policiesEmptyState = (
-    <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
-      <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
-        <Shield className="text-muted-foreground h-6 w-6" />
-      </div>
-      <Type variant="subheading" className="mb-1">
-        No Risk Policies
-      </Type>
-      <Type small muted className="mb-4 max-w-md text-center">
-        Risk policies scan your chat messages for secrets and sensitive data.
-        Create your first policy to get started.
-      </Type>
-      <Button
-        onClick={() => {
-          const {
-            sources,
-            presidioEntities,
-            promptInjectionRules,
-            disabledRules: payloadDisabled,
-          } = categoriesToPayload(
-            new Set<RuleCategory>(["secrets", "pii"]),
-            new Set(),
-          );
-          createMutation.mutate({
-            request: {
-              createRiskPolicyRequestBody: {
-                autoName: true,
-                enabled: true,
-                sources,
-                presidioEntities,
-                promptInjectionRules,
-                disabledRules: payloadDisabled,
-                customRuleIds: [],
+    <InlineEmptyState
+      icon={<Shield />}
+      title="No Risk Policies"
+      description="Risk policies scan your chat messages for secrets and sensitive data. Create your first policy to get started."
+      action={
+        <Button
+          onClick={() => {
+            const {
+              sources,
+              presidioEntities,
+              promptInjectionRules,
+              disabledRules: payloadDisabled,
+            } = categoriesToPayload(
+              new Set<RuleCategory>(["secrets", "pii"]),
+              new Set(),
+            );
+            createMutation.mutate({
+              request: {
+                createRiskPolicyRequestBody: {
+                  autoName: true,
+                  enabled: true,
+                  sources,
+                  presidioEntities,
+                  promptInjectionRules,
+                  disabledRules: payloadDisabled,
+                  customRuleIds: [],
+                },
               },
-            },
-          });
-        }}
-        disabled={createMutation.isPending}
-      >
-        <Button.Text className="flex gap-2">
-          {createMutation.isPending ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Creating...
-            </>
-          ) : (
-            "Get Started"
-          )}
-        </Button.Text>
-      </Button>
-    </div>
+            });
+          }}
+          disabled={createMutation.isPending}
+        >
+          <Button.Text className="flex gap-2">
+            {createMutation.isPending ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Creating...
+              </>
+            ) : (
+              "Get Started"
+            )}
+          </Button.Text>
+        </Button>
+      }
+    />
   );
 
   const insightsContext = [
@@ -981,7 +978,7 @@ function PolicyCenterContent() {
               }
             >
               <div className="border-b">
-                <TabsList className="h-auto justify-start gap-4 rounded-none bg-transparent p-0 text-sm">
+                <TabsList className="h-auto justify-start gap-4 bg-transparent p-0 text-sm">
                   <PageTabsTrigger value="policies">Policies</PageTabsTrigger>
                   <PageTabsTrigger value="exclusions">
                     Exclusions
@@ -1027,7 +1024,7 @@ function PolicyCenterContent() {
             </Dialog.Header>
             <Stack gap={4}>
               <Type variant="body">
-                <code className="bg-muted rounded px-1 py-0.5 font-mono font-bold">
+                <code className="bg-muted px-1 py-0.5 font-mono font-bold">
                   {policyToDelete?.policy.name}
                 </code>{" "}
                 policy will be permanently deleted.
@@ -1138,7 +1135,7 @@ export function PolicyAudiencePicker({
           selectAudienceChoice(value as PolicyAudienceChoice)
         }
       >
-        <div className="border-border divide-border divide-y rounded-lg border">
+        <div className="border-border divide-border divide-y border">
           <PolicyAudienceChoiceRow
             id="policy-audience-everyone"
             value="everyone"
@@ -1171,7 +1168,7 @@ export function PolicyAudiencePicker({
       )}
 
       {audienceChoice === "roles" && (
-        <div className="border-border rounded-lg border">
+        <div className="border-border border">
           <AudiencePrincipalSection title="Roles">
             {roles.length === 0 ? (
               <p className="text-muted-foreground px-4 py-3 text-sm">
@@ -1263,7 +1260,7 @@ function SpecificUsersAudienceSection({
   const hasSearch = userSearch.trim().length > 0;
 
   return (
-    <div className="border-border rounded-lg border">
+    <div className="border-border border">
       <div className="space-y-4 p-4">
         <SearchBar
           value={userSearch}
@@ -1277,7 +1274,7 @@ function SpecificUsersAudienceSection({
             <div className="text-muted-foreground text-xs font-medium">
               Selected users
             </div>
-            <div className="border-border divide-border divide-y overflow-hidden rounded-md border">
+            <div className="border-border divide-border divide-y overflow-hidden border">
               {selectedUserOptions.map((option) => (
                 <AudiencePrincipalRow
                   key={option.principalUrn}
@@ -1351,7 +1348,7 @@ function UserSearchResults({
       <div className="text-muted-foreground text-xs font-medium">
         Search results
       </div>
-      <div className="border-border divide-border divide-y overflow-hidden rounded-md border">
+      <div className="border-border divide-border divide-y overflow-hidden border">
         {results.map((member) => {
           const principalUrn = member.principalUrn;
           return (
@@ -1531,7 +1528,7 @@ function RunPanel({ policy }: { policy: RiskPolicy }) {
           <>
             {/* Status + Version row */}
             <div className="grid grid-cols-2 gap-3">
-              <div className="border-border rounded-lg border p-3">
+              <div className="border-border border p-3">
                 <p className="text-muted-foreground mb-1 font-mono text-xs tracking-[0.08em] uppercase">
                   Status
                 </p>
@@ -1546,7 +1543,7 @@ function RunPanel({ policy }: { policy: RiskPolicy }) {
                   }
                 />
               </div>
-              <div className="border-border rounded-lg border p-3">
+              <div className="border-border border p-3">
                 <p className="text-muted-foreground mb-1 font-mono text-xs tracking-[0.08em] uppercase">
                   Version
                 </p>
@@ -1555,7 +1552,7 @@ function RunPanel({ policy }: { policy: RiskPolicy }) {
             </div>
 
             {/* Progress */}
-            <div className="border-border rounded-lg border p-4">
+            <div className="border-border border p-4">
               <div className="mb-3 flex items-center justify-between">
                 <p className="text-sm font-medium">Analysis Progress</p>
                 <div className="flex items-center gap-2">
@@ -1578,12 +1575,7 @@ function RunPanel({ policy }: { policy: RiskPolicy }) {
                   </span>
                 </div>
               </div>
-              <div className="bg-muted mb-2 h-2 overflow-hidden rounded-full">
-                <div
-                  className="bg-primary h-full rounded-full transition-all duration-500"
-                  style={{ width: `${pct}%` }}
-                />
-              </div>
+              <Progress value={pct} className="mb-2" />
               <p className="text-muted-foreground text-xs">
                 {status.analyzedMessages.toLocaleString()} of{" "}
                 {status.totalMessages.toLocaleString()} messages analyzed
@@ -1597,7 +1589,7 @@ function RunPanel({ policy }: { policy: RiskPolicy }) {
             </div>
 
             {/* Findings */}
-            <div className="border-border rounded-lg border p-4">
+            <div className="border-border border p-4">
               <p className="text-muted-foreground mb-1 font-mono text-xs tracking-[0.08em] uppercase">
                 Findings
               </p>
@@ -1650,7 +1642,7 @@ export function ScopeCard({
   return (
     <label
       className={cn(
-        "flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors",
+        "flex cursor-pointer items-start gap-3 border p-3 transition-colors",
         checked
           ? "border-foreground bg-muted/40"
           : "border-border hover:bg-muted/30",
@@ -1701,7 +1693,7 @@ export function ActionPicker({
             key={opt.value}
             htmlFor={`action-${opt.value}`}
             className={cn(
-              "flex items-start gap-3 rounded-lg border p-3.5 transition-colors",
+              "flex items-start gap-3 border p-3.5 transition-colors",
               disabled
                 ? "border-border cursor-not-allowed opacity-60"
                 : selected
@@ -1789,7 +1781,7 @@ export function RuleSelectList({
         )}
       </button>
       {expanded && (
-        <div className="border-border divide-border divide-y rounded-lg border">
+        <div className="border-border divide-border divide-y border">
           <p className="text-muted-foreground px-4 py-3 text-xs">
             {description}
           </p>

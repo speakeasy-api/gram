@@ -1,6 +1,9 @@
-import { Alert, Badge } from "@/components/ui/moonshine";
+import { Alert, Badge, Button } from "@/components/ui/moonshine";
 import { DynamicIcon, type IconName } from "@/components/ui/dynamic-icon";
+import { Card } from "@/components/ui/card";
 import { Heading } from "@/components/ui/heading";
+import { Progress } from "@/components/ui/progress";
+import { Type } from "@/components/ui/type";
 import {
   ArrowRight,
   Boxes,
@@ -12,6 +15,7 @@ import {
 } from "lucide-react";
 import { formatPlatform } from "@/lib/formatPlatform";
 import { getInitials } from "@/lib/initials";
+import { ChartButton } from "@/components/chart/ChartButton";
 import { ChartCard } from "@/components/chart/ChartCard";
 import { MetricCard } from "@/components/chart/MetricCard";
 import {
@@ -108,20 +112,28 @@ const DATA_FLOW_TIER_ICONS: Record<string, IconName> = {
   server: "server",
   tool: "wrench",
 };
+// Categorical tier identifiers, not status indicators — reuses the same
+// badge-chip tokens ServerClassBadge below already applies categorically
+// (gram/external/local), just extended to all five data-flow tiers.
 const DATA_FLOW_TIER_TONES: Record<string, string> = {
-  user: "bg-slate-500/10 text-slate-600 ring-slate-500/20",
-  origin: "bg-blue-500/10 text-blue-600 ring-blue-500/20",
-  client: "bg-purple-500/10 text-purple-600 ring-purple-500/20",
-  server: "bg-amber-500/10 text-amber-600 ring-amber-500/20",
-  tool: "bg-emerald-500/10 text-emerald-600 ring-emerald-500/20",
+  user: "bg-surface-secondary-default text-default border-neutral-softest",
+  origin:
+    "bg-information-softest text-default-information border-information-softest",
+  client:
+    "bg-destructive-softest text-default-destructive border-destructive-softest",
+  server: "bg-warning-softest text-default-warning border-warning-softest",
+  tool: "bg-success-softest text-default-success border-success-softest",
 };
 const SYNTHETIC_USER_NODE_ID = "synthetic:user";
+// Minimap swatches render into an SVG node, so (unlike the Tailwind classes
+// above) these need to be literal color values — CSS custom property
+// references resolve fine there, matching DATA_FLOW_EDGE_COLOR below.
 const DATA_FLOW_TIER_MINIMAP_COLOR: Record<string, string> = {
-  user: "#64748b",
-  origin: "#3b82f6",
-  client: "#a855f7",
-  server: "#f59e0b",
-  tool: "#10b981",
+  user: "var(--color-neutral-500)",
+  origin: "var(--fill-information-default)",
+  client: "var(--fill-destructive-default)",
+  server: "var(--fill-warning-default)",
+  tool: "var(--fill-success-default)",
 };
 const DATA_FLOW_EDGE_COLOR = "var(--color-muted-foreground)";
 const DATA_FLOW_EDGE_MARKER = {
@@ -451,9 +463,9 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
                 <Heading variant="h1" className="truncate normal-case">
                   {displayName}
                 </Heading>
-                <p className="text-muted-foreground truncate text-sm">
+                <Type muted small className="truncate">
                   {displayEmail}
-                </p>
+                </Type>
               </div>
             </div>
             <div
@@ -500,16 +512,11 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
                     : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5",
                 )}
               >
-                <MetricCard
-                  title="Total Tokens"
-                  value={totalTokens}
-                  icon="gauge"
-                />
+                <MetricCard title="Total Tokens" value={totalTokens} />
                 <MetricCard
                   title="Total Cost"
                   value={totalCost}
                   format="currency"
-                  icon="credit-card"
                   subtext={
                     totalCost > 0
                       ? `Over ${rangeLabel}`
@@ -519,14 +526,12 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
                 <MetricCard
                   title="Tool Calls"
                   value={summary?.totalToolCalls ?? 0}
-                  icon="wrench"
                   subtext={`${(summary?.toolCallSuccess ?? 0).toLocaleString()} succeeded / ${(summary?.toolCallFailure ?? 0).toLocaleString()} failed`}
                   link={toolLogsHref}
                 />
                 <MetricCard
                   title="Agent Sessions"
                   value={summary?.totalChats ?? 0}
-                  icon="message-square"
                   subtext={`Over ${rangeLabel}`}
                   link={agentSessionsHref}
                 />
@@ -538,7 +543,6 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
                       ? "-"
                       : undefined
                   }
-                  icon="flag"
                   subtext={`Over ${rangeLabel}`}
                   link={riskEventsHref}
                 />
@@ -592,7 +596,7 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
                   <div>{dataFlowQuery.error.message}</div>
                 </Alert>
               ) : dataFlowQuery.isLoading ? (
-                <Skeleton className="h-[360px] rounded-lg" />
+                <Skeleton className="h-[360px]" />
               ) : (
                 <EmployeeDataFlowGraphCard
                   graph={dataFlow ?? { nodes: [], edges: [] }}
@@ -609,7 +613,7 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
                   <div>{metricsQuery.error.message}</div>
                 </Alert>
               ) : metricsQuery.isLoading ? (
-                <Skeleton className="h-40 rounded-lg" />
+                <Skeleton className="h-40" />
               ) : (
                 <BreakdownCard
                   title="Model Usage"
@@ -633,7 +637,7 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
                   <div>{overviewQuery.error.message}</div>
                 </Alert>
               ) : overviewQuery.isLoading ? (
-                <Skeleton className="h-72 rounded-lg" />
+                <Skeleton className="h-72" />
               ) : (
                 <TokenTimeSeriesChart
                   title="Token Use Over Time"
@@ -665,46 +669,50 @@ function EmployeeSessions({ userId }: { userId: string }): JSX.Element {
   const sessions = data?.result.items ?? [];
 
   return (
-    <section className="bg-card border-border rounded-lg border p-5">
-      <div className="mb-3 flex items-center justify-between">
+    <Card>
+      <Card.Header>
         <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold">Active MCP Connections</span>
+          <Card.Title>Active MCP Connections</Card.Title>
           {!isPending && !isError && sessions.length > 0 && (
-            <span className="text-muted-foreground text-xs">
+            <Type muted small className="text-xs">
               {sessions.length}
-            </span>
+            </Type>
           )}
         </div>
-        <div className="bg-muted/50 rounded-lg p-2">
-          <KeyRound className="text-muted-foreground size-4" />
-        </div>
-      </div>
-      {isPending ? (
-        <Skeleton className="h-12 w-full" />
-      ) : isError ? (
-        <button
-          type="button"
-          onClick={() => void refetch()}
-          className="text-destructive text-sm underline-offset-2 hover:underline"
-        >
-          Couldn&apos;t load sessions — retry
-        </button>
-      ) : sessions.length === 0 ? (
-        <span className="text-muted-foreground text-sm">
-          No active sessions
-        </span>
-      ) : (
-        <ul className="divide-border max-h-80 divide-y overflow-y-auto rounded-md border">
-          {sessions.map((s) => (
-            <SessionRow
-              key={s.id}
-              session={s}
-              onRevoked={() => void refetch()}
-            />
-          ))}
-        </ul>
-      )}
-    </section>
+        <Card.Actions>
+          <div className="bg-muted/50 p-2">
+            <KeyRound className="text-muted-foreground size-4" />
+          </div>
+        </Card.Actions>
+      </Card.Header>
+      <Card.Content>
+        {isPending ? (
+          <Skeleton className="h-12 w-full" />
+        ) : isError ? (
+          <Button
+            variant="destructive-secondary"
+            size="xs"
+            onClick={() => void refetch()}
+          >
+            Couldn&apos;t load sessions — retry
+          </Button>
+        ) : sessions.length === 0 ? (
+          <Type muted small>
+            No active sessions
+          </Type>
+        ) : (
+          <ul className="divide-border max-h-80 divide-y overflow-y-auto border">
+            {sessions.map((s) => (
+              <SessionRow
+                key={s.id}
+                session={s}
+                onRevoked={() => void refetch()}
+              />
+            ))}
+          </ul>
+        )}
+      </Card.Content>
+    </Card>
   );
 }
 
@@ -720,20 +728,20 @@ function DetailLoadingState({ isInsightsOpen }: { isInsightsOpen: boolean }) {
         )}
       >
         {Array.from({ length: 5 }).map((_, index) => (
-          <div key={index} className="bg-card rounded-lg border p-5">
+          <Card key={index}>
             <Skeleton className="mb-4 h-4 w-28" />
             <Skeleton className="h-9 w-20" />
             <Skeleton className="mt-3 h-3 w-36" />
-          </div>
+          </Card>
         ))}
       </section>
       <section className="grid gap-4 lg:grid-cols-2">
-        <Skeleton className="h-48 rounded-lg" />
-        <Skeleton className="h-48 rounded-lg" />
+        <Skeleton className="h-48" />
+        <Skeleton className="h-48" />
       </section>
-      <Skeleton className="h-40 rounded-lg" />
-      <Skeleton className="h-[360px] rounded-lg" />
-      <Skeleton className="h-72 rounded-lg" />
+      <Skeleton className="h-40" />
+      <Skeleton className="h-[360px]" />
+      <Skeleton className="h-72" />
     </>
   );
 }
@@ -796,55 +804,58 @@ function EmployeeDataFlowGraphCard({
     detailLayout.nodes.length > 0 && detailLayout.edges.length > 0;
 
   return (
-    <section className="rounded-lg border p-4">
+    <>
       <DataFlowEdgeAnimationStyles />
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h3 className="font-semibold">Data Flow</h3>
-          <p className="text-muted-foreground mt-1 text-sm">
-            From devices to MCP clients, servers, and the tools they use.
-          </p>
-        </div>
-        {hasData && (
-          <button
-            type="button"
-            onClick={() => setExpandedOpen(true)}
-            className="text-muted-foreground hover:text-foreground rounded p-0.5 transition-colors"
-            aria-label="Expand graph"
-          >
-            <Maximize2 className="size-4" />
-          </button>
-        )}
-      </div>
-
-      {!hasData ? (
-        <div className="text-muted-foreground flex h-[280px] items-center justify-center text-sm">
-          No MCP tool-call flow data for selected time range
-        </div>
-      ) : (
-        <div className="bg-muted/20 mt-4 h-[240px] overflow-hidden rounded-lg border">
-          <ReactFlow<DataFlowGraphNode, DataFlowGraphEdge>
-            className="employee-data-flow-graph"
-            nodes={summaryLayout.nodes}
-            edges={summaryLayout.edges}
-            nodeTypes={DATA_FLOW_NODE_TYPES}
-            edgeTypes={DATA_FLOW_EDGE_TYPES}
-            fitView
-            fitViewOptions={{ padding: 0.3 }}
-            minZoom={0.5}
-            maxZoom={1.2}
-            zoomOnScroll={false}
-            zoomOnPinch={false}
-            panOnScroll={false}
-            panOnDrag={false}
-            nodesDraggable={false}
-            nodesConnectable={false}
-            elementsSelectable={false}
-          >
-            <Background gap={24} size={1} />
-          </ReactFlow>
-        </div>
-      )}
+      <Card>
+        <Card.Header>
+          <div>
+            <Card.Title>Data Flow</Card.Title>
+            <Card.Description>
+              From devices to MCP clients, servers, and the tools they use.
+            </Card.Description>
+          </div>
+          {hasData && (
+            <Card.Actions>
+              <ChartButton
+                onClick={() => setExpandedOpen(true)}
+                ariaLabel="Expand graph"
+              >
+                <Maximize2 className="size-4" />
+              </ChartButton>
+            </Card.Actions>
+          )}
+        </Card.Header>
+        <Card.Content>
+          {!hasData ? (
+            <div className="text-muted-foreground flex h-[280px] items-center justify-center text-sm">
+              No MCP tool-call flow data for selected time range
+            </div>
+          ) : (
+            <div className="bg-muted/20 h-[240px] overflow-hidden border">
+              <ReactFlow<DataFlowGraphNode, DataFlowGraphEdge>
+                className="employee-data-flow-graph"
+                nodes={summaryLayout.nodes}
+                edges={summaryLayout.edges}
+                nodeTypes={DATA_FLOW_NODE_TYPES}
+                edgeTypes={DATA_FLOW_EDGE_TYPES}
+                fitView
+                fitViewOptions={{ padding: 0.3 }}
+                minZoom={0.5}
+                maxZoom={1.2}
+                zoomOnScroll={false}
+                zoomOnPinch={false}
+                panOnScroll={false}
+                panOnDrag={false}
+                nodesDraggable={false}
+                nodesConnectable={false}
+                elementsSelectable={false}
+              >
+                <Background gap={24} size={1} />
+              </ReactFlow>
+            </div>
+          )}
+        </Card.Content>
+      </Card>
       <Dialog open={expandedOpen} onOpenChange={setExpandedOpen}>
         <Dialog.Content className="flex h-[90vh] max-h-[90vh] w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] flex-col gap-4 p-4 sm:max-w-[calc(100vw-2rem)]">
           <Dialog.Header>
@@ -862,7 +873,7 @@ function EmployeeDataFlowGraphCard({
               </div>
             </div>
           </Dialog.Header>
-          <div className="bg-muted/20 min-h-0 flex-1 overflow-hidden rounded-lg border">
+          <div className="bg-muted/20 min-h-0 flex-1 overflow-hidden border">
             <ReactFlow<DataFlowGraphNode, DataFlowGraphEdge>
               className="employee-data-flow-graph"
               nodes={detailLayout.nodes}
@@ -882,7 +893,7 @@ function EmployeeDataFlowGraphCard({
                 pannable
                 zoomable
                 ariaLabel="Data flow minimap"
-                className="bg-card! border-border! rounded-md border"
+                className="bg-card! border-border! border"
                 maskColor="hsl(0 0% 50% / 0.12)"
                 nodeColor={getDataFlowMiniMapColor}
                 nodeStrokeWidth={2}
@@ -892,7 +903,7 @@ function EmployeeDataFlowGraphCard({
           </div>
         </Dialog.Content>
       </Dialog>
-    </section>
+    </>
   );
 }
 
@@ -933,7 +944,7 @@ function DataFlowNodeCard({ data }: NodeProps<DataFlowGraphNode>) {
   const icon = DATA_FLOW_TIER_ICONS[node.tier] ?? "circle";
   const tone =
     DATA_FLOW_TIER_TONES[node.tier] ??
-    "bg-muted text-muted-foreground ring-border";
+    "bg-muted text-muted-foreground border-border";
   const serverClassCounts = data.serverClassCounts
     ? (Object.entries(data.serverClassCounts).filter(([, count]) =>
         Boolean(count),
@@ -943,7 +954,7 @@ function DataFlowNodeCard({ data }: NodeProps<DataFlowGraphNode>) {
   return (
     <div
       className={cn(
-        "bg-card/95 border-border rounded-lg border backdrop-blur",
+        "bg-card/95 border-border border backdrop-blur",
         isSummary ? "max-w-64 min-w-56 p-4" : "max-w-56 min-w-48 p-3",
       )}
     >
@@ -1037,7 +1048,7 @@ function DataFlowNodeVisual({
   // Individual MCP client nodes show their product logo (Cursor, Claude, etc.).
   if (node.tier === "client" && !isSummary) {
     return (
-      <span className="border-border bg-background inline-flex size-7 items-center justify-center rounded-md border">
+      <span className="border-border bg-background inline-flex size-7 items-center justify-center border">
         <HookSourceIcon source={node.label} className="size-4" />
       </span>
     );
@@ -1046,7 +1057,7 @@ function DataFlowNodeVisual({
   return (
     <span
       className={cn(
-        "inline-flex size-7 items-center justify-center rounded-md ring-1",
+        "inline-flex size-7 items-center justify-center border",
         tone,
       )}
     >
@@ -1456,7 +1467,10 @@ function buildDataFlowLayout(graph: DataFlowSourceGraph): {
 }
 
 function getDataFlowMiniMapColor(node: DataFlowGraphNode) {
-  return DATA_FLOW_TIER_MINIMAP_COLOR[node.data.node.tier] ?? "#94a3b8";
+  return (
+    DATA_FLOW_TIER_MINIMAP_COLOR[node.data.node.tier] ??
+    "var(--color-neutral-500)"
+  );
 }
 
 function getDataFlowEdgeStyle(
@@ -1590,20 +1604,22 @@ function AccountsCard({ accounts }: { accounts: UserAccount[] }) {
   ).length;
 
   return (
-    <section className="rounded-lg border p-4">
-      <div className="flex items-center justify-between gap-2">
-        <h3 className="font-semibold">AI Accounts</h3>
+    <Card>
+      <Card.Header>
+        <Card.Title>AI Accounts</Card.Title>
         {display.length > 0 && (
-          <span className="text-muted-foreground shrink-0 text-xs">
-            {display.length} total
-            {personalCount > 0 ? ` · ${personalCount} personal` : ""}
-          </span>
+          <Card.Info>
+            <Type muted small className="shrink-0 text-xs">
+              {display.length} total
+              {personalCount > 0 ? ` · ${personalCount} personal` : ""}
+            </Type>
+          </Card.Info>
         )}
-      </div>
+      </Card.Header>
       {/* Cap the height so the next row is partially visible — a deliberate cue
           that the list scrolls — without stretching the card out of line with
           the breakdown cards beside it. */}
-      <div className="mt-4 max-h-[9.5rem] space-y-3 overflow-y-auto pr-1">
+      <Card.Content className="max-h-[9.5rem] space-y-3 overflow-y-auto pr-1">
         {display.length > 0 ? (
           display.map((account, i) => (
             <AccountRow
@@ -1612,10 +1628,12 @@ function AccountsCard({ accounts }: { accounts: UserAccount[] }) {
             />
           ))
         ) : (
-          <p className="text-muted-foreground text-sm">No linked accounts</p>
+          <Type muted small>
+            No linked accounts
+          </Type>
         )}
-      </div>
-    </section>
+      </Card.Content>
+    </Card>
   );
 }
 
@@ -1631,9 +1649,11 @@ function BreakdownCard({
   const total = rows.reduce((sum, row) => sum + row.value, 0);
 
   return (
-    <section className="rounded-lg border p-4">
-      <h3 className="font-semibold">{title}</h3>
-      <div className="mt-4 space-y-3">
+    <Card>
+      <Card.Header>
+        <Card.Title>{title}</Card.Title>
+      </Card.Header>
+      <Card.Content className="space-y-3">
         {rows.length > 0 ? (
           rows.map((row) => (
             <div key={row.label} className="space-y-1.5">
@@ -1643,21 +1663,19 @@ function BreakdownCard({
                   {row.valueLabel}
                 </span>
               </div>
-              <div className="bg-muted h-2 overflow-hidden rounded-full">
-                <div
-                  className="bg-primary h-full rounded-full"
-                  style={{
-                    width: `${total > 0 ? Math.max((row.value / total) * 100, 4) : 0}%`,
-                  }}
-                />
-              </div>
+              <Progress
+                value={total > 0 ? Math.max((row.value / total) * 100, 4) : 0}
+                className="h-2"
+              />
             </div>
           ))
         ) : (
-          <p className="text-muted-foreground text-sm">{emptyLabel}</p>
+          <Type muted small>
+            {emptyLabel}
+          </Type>
         )}
-      </div>
-    </section>
+      </Card.Content>
+    </Card>
   );
 }
 

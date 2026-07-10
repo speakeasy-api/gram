@@ -3,7 +3,9 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/moonshine";
 import { Check, ChevronRight, CircleAlert, Loader2 } from "lucide-react";
 import { Suspense, useState, type JSX } from "react";
 import { useCelStatus, type CelStatus } from "./use-cel-status";
@@ -143,7 +145,7 @@ function ReferenceGroup({
   if (items.length === 0) return null;
   return (
     <div className="space-y-1">
-      <p className="text-muted-foreground text-xs font-medium uppercase">
+      <p className="text-muted-foreground font-mono text-xs tracking-[0.08em] uppercase">
         {title}
       </p>
       <ul className="space-y-1">
@@ -177,11 +179,7 @@ export function CelExpressionField({
 
   return (
     <div className="space-y-2">
-      <Suspense
-        fallback={
-          <div className="border-input bg-input/30 h-16 w-full animate-pulse rounded-md border" />
-        }
-      >
+      <Suspense fallback={<Skeleton className="h-16 w-full" />}>
         <CelMonacoEditorLazy
           value={value}
           onChange={onChange}
@@ -205,15 +203,15 @@ export function CelExpressionField({
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="text-muted-foreground text-xs">Examples:</span>
           {examples.map((ex) => (
-            <button
+            <Button
               key={ex.label}
-              type="button"
+              variant="tertiary"
+              size="xs"
               onClick={() => onChange(ex.expr)}
               disabled={disabled}
-              className="border-border text-muted-foreground hover:bg-muted hover:text-foreground rounded-full border px-2.5 py-1 text-xs transition-colors disabled:pointer-events-none disabled:opacity-50"
             >
-              {ex.label}
-            </button>
+              <Button.Text>{ex.label}</Button.Text>
+            </Button>
           ))}
         </div>
       )}

@@ -1,6 +1,7 @@
 import { slugify } from "@/lib/constants";
 import { Alert, Button, Input } from "@/components/ui/moonshine";
 import { Dialog } from "@/components/ui/dialog";
+import { Type } from "@/components/ui/type";
 import { Loader2Icon } from "lucide-react";
 import { useState } from "react";
 import { NamedAsset } from "./SourceCard";
@@ -87,9 +88,9 @@ export function RemoveSourceDialogContent({
         </Dialog.Description>
       </Dialog.Header>
       <div className="grid gap-2">
-        <span className="text-sm">
+        <Type small>
           To confirm, type "<strong>{sourceSlug}</strong>"
-        </span>
+        </Type>
 
         <Input
           onChange={(e) => setInputMatches(e.target.value === sourceSlug)}

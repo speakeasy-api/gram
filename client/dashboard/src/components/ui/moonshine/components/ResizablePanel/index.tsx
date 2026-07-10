@@ -99,7 +99,7 @@ const DefaultResizeHandle = ({
     >
       <div
         className={cn(
-          "absolute top-[50%] flex translate-x-[-50%] items-center justify-center rounded-md border bg-card text-body-muted shadow-sm shadow-zinc-400/5",
+          "absolute top-[50%] flex translate-x-[-50%] items-center justify-center rounded-md border bg-card text-body-muted",
           direction === "vertical" ? "cursor-ns-resize" : "cursor-ew-resize",
           isResizing && "text-foreground",
         )}

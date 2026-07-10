@@ -18,23 +18,14 @@ import {
   Button,
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/moonshine";
 import { Dialog } from "@/components/ui/dialog";
-import {
-  ChevronDown,
-  CircleAlert,
-  Code,
-  FileCode,
-  History,
-  Network,
-  Plus,
-  Server,
-} from "lucide-react";
+import { ChevronDown, CircleAlert, History, Plus } from "lucide-react";
 import { useMemo } from "react";
 import { toast } from "sonner";
 import { create } from "zustand";
+import { AddSourceMenuItems } from "./AddSourceMenuItems";
 import { RemoveSourceDialogContent } from "./RemoveSourceDialogContent";
 import { NamedAsset, SourceCard, SourceCardSkeleton } from "./SourceCard";
 import { SourcesEmptyState } from "./SourcesEmptyState";
@@ -85,7 +76,6 @@ function sourcesDescription(
 
 export default function Sources(): JSX.Element {
   const client = useSdkClient();
-  const routes = useRoutes();
   const telemetry = useTelemetry();
   const isFunctionsEnabled =
     telemetry.isFeatureEnabled("gram-functions") ?? false;
@@ -330,84 +320,10 @@ export default function Sources(): JSX.Element {
                 </DropdownMenuTrigger>
                 {!disabled && (
                   <DropdownMenuContent align="end" className="w-[320px] p-1">
-                    <DropdownMenuItem
-                      onSelect={() => routes.sources.addOpenAPI.goTo()}
-                      className="flex cursor-pointer items-start gap-3 rounded-md p-2"
-                    >
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 dark:bg-blue-500/20">
-                        <FileCode className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                      </div>
-                      <div className="flex flex-col gap-0.5">
-                        <span className="font-medium">From your API</span>
-                        <span className="text-muted-foreground text-xs">
-                          Upload an OpenAPI spec to generate tools
-                        </span>
-                      </div>
-                    </DropdownMenuItem>
-                    {isFunctionsEnabled && (
-                      <DropdownMenuItem
-                        onSelect={() => routes.sources.addFunction.goTo()}
-                        className="flex cursor-pointer items-start gap-3 rounded-md p-2"
-                      >
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 dark:bg-emerald-500/20">
-                          <Code className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-                        </div>
-                        <div className="flex flex-col gap-0.5">
-                          <span className="font-medium">Write custom code</span>
-                          <span className="text-muted-foreground text-xs">
-                            Create tools with TypeScript functions
-                          </span>
-                        </div>
-                      </DropdownMenuItem>
-                    )}
-                    <DropdownMenuItem
-                      onSelect={() => routes.sources.addFromCatalog.goTo()}
-                      className="flex cursor-pointer items-start gap-3 rounded-md p-2"
-                    >
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 dark:bg-violet-500/20">
-                        <Server className="h-5 w-5 text-violet-600 dark:text-violet-400" />
-                      </div>
-                      <div className="flex flex-col gap-0.5">
-                        <span className="font-medium">3rd-party server</span>
-                        <span className="text-muted-foreground text-xs">
-                          Add pre-built servers from the catalog
-                        </span>
-                      </div>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onSelect={() => routes.sources.addRemoteMcp.goTo()}
-                      className="flex cursor-pointer items-start gap-3 rounded-md p-2"
-                    >
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 dark:bg-violet-500/20">
-                        <Network className="h-5 w-5 text-violet-600 dark:text-violet-400" />
-                      </div>
-                      <div className="flex flex-col gap-0.5">
-                        <span className="font-medium">
-                          Custom remote server
-                        </span>
-                        <span className="text-muted-foreground text-xs">
-                          Add existing remote servers by URL
-                        </span>
-                      </div>
-                    </DropdownMenuItem>
-                    {isTunneledMcpEnabled && (
-                      <DropdownMenuItem
-                        onSelect={() => routes.sources.addTunneledMcp.goTo()}
-                        className="flex cursor-pointer items-start gap-3 rounded-md p-2"
-                      >
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-cyan-500/10 dark:bg-cyan-500/20">
-                          <Network className="h-5 w-5 text-cyan-700 dark:text-cyan-300" />
-                        </div>
-                        <div className="flex flex-col gap-0.5">
-                          <span className="font-medium">
-                            Tunneled MCP Server
-                          </span>
-                          <span className="text-muted-foreground text-xs">
-                            Connect private MCP servers through a tunnel
-                          </span>
-                        </div>
-                      </DropdownMenuItem>
-                    )}
+                    <AddSourceMenuItems
+                      isFunctionsEnabled={isFunctionsEnabled}
+                      isTunneledMcpEnabled={isTunneledMcpEnabled}
+                    />
                   </DropdownMenuContent>
                 )}
               </DropdownMenu>

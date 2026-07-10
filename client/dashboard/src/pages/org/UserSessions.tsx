@@ -205,7 +205,9 @@ function UserSessionsInner(): JSX.Element {
   } else if (isError && sessions.length === 0) {
     listBody = (
       <div className="flex items-center justify-between gap-3">
-        <p className="text-destructive text-sm">Couldn&apos;t load sessions.</p>
+        <Type className="text-destructive text-sm">
+          Couldn&apos;t load sessions.
+        </Type>
         <Button variant="tertiary" size="sm" onClick={() => void refetch()}>
           Retry
         </Button>
@@ -213,13 +215,13 @@ function UserSessionsInner(): JSX.Element {
     );
   } else if (sessions.length === 0) {
     listBody = (
-      <p className="text-muted-foreground text-sm">No sessions found</p>
+      <Type className="text-muted-foreground text-sm">No sessions found</Type>
     );
   } else if (filteredSessions.length === 0) {
     listBody = (
-      <p className="text-muted-foreground text-sm">
+      <Type className="text-muted-foreground text-sm">
         No sessions match your search
-      </p>
+      </Type>
     );
   } else {
     listBody = (
@@ -313,7 +315,7 @@ function UserSessionsInner(): JSX.Element {
           </Page.Toolbar>
 
           {selectionEnabled && selectedIds.length > 0 && (
-            <div className="border-border bg-muted/30 flex items-center justify-between gap-3 rounded-md border px-3 py-2">
+            <div className="border-border bg-muted/30 flex items-center justify-between gap-3 border px-3 py-2">
               <Type small>{selectedIds.length} selected</Type>
               <div className="flex items-center gap-2">
                 <Button

@@ -15,7 +15,14 @@ import {
   useListAPIKeysSuspense,
 } from "@gram/client/react-query/listAPIKeys";
 import { useRevokeAPIKeyMutation } from "@gram/client/react-query/revokeAPIKey";
-import { Button, Column, Input, Stack, Table } from "@/components/ui/moonshine";
+import {
+  Alert,
+  Button,
+  Column,
+  Input,
+  Stack,
+  Table,
+} from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Copy, KeyRound, Trash2 } from "lucide-react";
 import { useId, useMemo, useState } from "react";
@@ -249,11 +256,11 @@ function OrgApiKeysInner() {
           </Dialog.Header>
           {newlyCreatedKey ? (
             <div className="space-y-4 py-4">
-              <div className="text-foreground rounded-lg border border-yellow-500/50 bg-yellow-600/50 p-4 text-sm">
+              <Alert variant="warning" dismissible={false} className="text-sm">
                 You will not be able to see this token value again once you
                 close this dialog. Copy it now and store it securely.
-              </div>
-              <div className="bg-muted flex items-center space-x-2 rounded-md p-3">
+              </Alert>
+              <div className="bg-muted flex items-center space-x-2 p-3">
                 <code className="flex-1 break-all">{newlyCreatedKey.key}</code>
                 <Button
                   variant="tertiary"
@@ -262,7 +269,7 @@ function OrgApiKeysInner() {
                   className="shrink-0"
                 >
                   {isCopied ? (
-                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    <CheckCircle2 className="text-default-success h-4 w-4" />
                   ) : (
                     <Copy className="h-4 w-4" />
                   )}

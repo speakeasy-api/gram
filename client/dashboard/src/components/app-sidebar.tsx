@@ -424,7 +424,7 @@ const PersistentNotification = ({
   );
 
   let classes =
-    "absolute bottom-2 left-1/2 h-[180px] w-[180px] -translate-x-1/2 rounded-lg p-4 border trans overflow-clip ";
+    "absolute bottom-2 left-1/2 h-[180px] w-[180px] -translate-x-1/2 p-4 border trans overflow-clip ";
   if (isMinimized) {
     classes +=
       "h-[12px] w-[12px] left-2 translate-x-0 cursor-pointer hover:scale-110";

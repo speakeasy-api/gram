@@ -1,20 +1,9 @@
-import { useEffect, useState } from "react";
-import {
-  Terminal,
-  Check,
-  Copy,
-  ChevronRight,
-  ArrowLeft,
-  Loader2,
-  AlertCircle,
-  Ban,
-} from "lucide-react";
+import { useState } from "react";
+import { Terminal, ChevronRight, ArrowLeft, Loader2, Ban } from "lucide-react";
 import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
 import { useSlugs } from "@/contexts/Sdk";
-import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { toast } from "sonner";
-import { codeToHtml, type BundledLanguage } from "shiki";
 import {
   Sheet,
   SheetContent,
@@ -26,7 +15,13 @@ import { StepContainer } from "../step-container";
 import { AGENT_PLATFORMS } from "../../setup-data";
 import type { AgentPlatform, PlatformSetupStatus } from "../../types";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
-import { Badge, Button, Link } from "@/components/ui/moonshine";
+import {
+  Alert,
+  Badge,
+  Button,
+  CodeSnippet,
+  Link,
+} from "@/components/ui/moonshine";
 import { cn } from "@/lib/utils";
 
 const API_KEY_PLACEHOLDER = "{{GRAM_API_KEY}}";
@@ -38,55 +33,6 @@ const CODEX_PLUGIN_NAME_PLACEHOLDER = "{{GRAM_CODEX_PLUGIN_NAME}}";
 const CLAUDE_PLUGIN_NAME_PLACEHOLDER = "{{GRAM_CLAUDE_PLUGIN_NAME}}";
 const CURSOR_PLUGIN_NAME_PLACEHOLDER = "{{GRAM_CURSOR_PLUGIN_NAME}}";
 const MARKETPLACE_NAME_PLACEHOLDER = "{{GRAM_MARKETPLACE_NAME}}";
-
-function HighlightedCode({
-  code,
-  language,
-}: {
-  code: string;
-  language?: string;
-}) {
-  const [html, setHtml] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    codeToHtml(code, {
-      lang: (language as BundledLanguage) ?? "text",
-      theme: "github-dark-default",
-      transformers: [
-        {
-          pre(node) {
-            node.properties.class =
-              "px-3 pb-3 text-[13px] leading-relaxed whitespace-pre-wrap break-all max-h-[400px] overflow-y-auto !bg-transparent";
-          },
-        },
-      ],
-    })
-      .then((out) => {
-        if (!cancelled) setHtml(out);
-      })
-      .catch(() => {
-        if (!cancelled) setHtml(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [code, language]);
-
-  if (html) {
-    return (
-      <div
-        className="text-zinc-200"
-        dangerouslySetInnerHTML={{ __html: html }}
-      />
-    );
-  }
-  return (
-    <pre className="max-h-[400px] overflow-y-auto px-3 pb-3 text-[13px] leading-relaxed break-all whitespace-pre-wrap">
-      <code className="text-zinc-200">{code}</code>
-    </pre>
-  );
-}
 
 interface InstrumentAgentsStepProps {
   onComplete: () => void;
@@ -117,8 +63,6 @@ export function InstrumentAgentsStep({
   const [activeStepIndex, setActiveStepIndex] = useState<
     Record<string, number>
   >(() => Object.fromEntries(AGENT_PLATFORMS.map((p) => [p.id, 0])));
-  const { copied: codeCopied, copy: copyCodeToClipboard } =
-    useCopyToClipboard(2000);
   const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
   const [apiKeyPending, setApiKeyPending] = useState<Record<string, boolean>>(
     {},
@@ -424,7 +368,7 @@ export function InstrumentAgentsStep({
                     {step.title}
                   </h4>
                   {step.screenshot && (
-                    <figure className="border-border !my-6 overflow-hidden rounded-md border">
+                    <figure className="border-border !my-6 overflow-hidden border">
                       <img
                         src={step.screenshot.src}
                         alt={step.screenshot.alt}
@@ -465,7 +409,7 @@ export function InstrumentAgentsStep({
                     })()}
 
                   {step.eligibility && (
-                    <div className="bg-secondary/40 border-border !mt-6 space-y-4 rounded-lg border p-4">
+                    <div className="bg-secondary/40 border-border !mt-6 space-y-4 border p-4">
                       <p className="text-foreground text-sm font-medium">
                         {step.eligibility.question}
                       </p>
@@ -507,8 +451,11 @@ export function InstrumentAgentsStep({
                   )}
 
                   {needsKey && error && (
-                    <div className="text-destructive bg-destructive/5 border-destructive/20 flex items-start gap-2 rounded-md border p-2.5 text-xs">
-                      <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+                    <Alert
+                      variant="error"
+                      dismissible={false}
+                      className="text-xs"
+                    >
                       <div className="flex-1">
                         <p className="font-medium">
                           Couldn't generate an API key
@@ -522,35 +469,16 @@ export function InstrumentAgentsStep({
                           Retry
                         </button>
                       </div>
-                    </div>
+                    </Alert>
                   )}
 
                   {displayCode && codeBlockReady && (
-                    <div className="overflow-hidden rounded-md bg-zinc-950">
-                      <div className="flex items-center justify-between px-3 py-2.5">
-                        <span className="text-[10px] tracking-wider text-zinc-500 uppercase">
-                          {step.language ?? "shell"}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            void copyCodeToClipboard(displayCode);
-                          }}
-                          className="flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium tracking-wider text-zinc-300 uppercase transition-colors hover:bg-zinc-800 hover:text-zinc-100"
-                        >
-                          {codeCopied ? (
-                            <Check className="h-3 w-3" />
-                          ) : (
-                            <Copy className="h-3 w-3" />
-                          )}
-                          {codeCopied ? "Copied" : "Copy"}
-                        </button>
-                      </div>
-                      <HighlightedCode
-                        code={displayCode}
-                        language={step.language}
-                      />
-                    </div>
+                    <CodeSnippet
+                      code={displayCode}
+                      language={step.language ?? "shell"}
+                      copyable
+                      snippetClassName="max-h-[400px] overflow-y-auto whitespace-pre-wrap break-all"
+                    />
                   )}
                 </div>
               );
@@ -587,7 +515,7 @@ export function InstrumentAgentsStep({
   return (
     <StepContainer
       icon={
-        <div className="bg-secondary flex h-12 w-12 items-center justify-center rounded-lg">
+        <div className="bg-secondary flex h-12 w-12 items-center justify-center">
           <Terminal className="text-foreground h-6 w-6" />
         </div>
       }
@@ -614,7 +542,7 @@ export function InstrumentAgentsStep({
               type="button"
               onClick={() => openDrawer(platform.id)}
               className={cn(
-                "flex w-full items-center gap-4 rounded-lg border p-4 text-left transition-all",
+                "flex w-full items-center gap-4 border p-4 text-left transition-all",
                 status === "complete"
                   ? "border-foreground/10 bg-secondary/20"
                   : "border-border bg-card hover:border-foreground/20",
@@ -622,7 +550,7 @@ export function InstrumentAgentsStep({
             >
               <div
                 className={cn(
-                  "flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg",
+                  "flex h-10 w-10 flex-shrink-0 items-center justify-center",
                   status === "complete" ? "bg-foreground/10" : "bg-secondary",
                 )}
               >
@@ -667,9 +595,9 @@ export function InstrumentAgentsStep({
                 <div
                   key={platform.id}
                   aria-disabled
-                  className="border-border bg-card flex cursor-not-allowed items-center gap-3 rounded-lg border p-3 opacity-50"
+                  className="border-border bg-card flex cursor-not-allowed items-center gap-3 border p-3 opacity-50"
                 >
-                  <div className="bg-secondary flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md">
+                  <div className="bg-secondary flex h-8 w-8 flex-shrink-0 items-center justify-center">
                     <HookSourceIcon source={platform.id} className="h-4 w-4" />
                   </div>
                   <div className="min-w-0 flex-1">

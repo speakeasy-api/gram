@@ -1,5 +1,6 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import {
   Select,
   SelectContent,
@@ -7,7 +8,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Type } from "@/components/ui/type";
 import { useSdkClient } from "@/contexts/Sdk";
 import {
   useRegisterEnvironmentTelemetry,
@@ -46,28 +46,23 @@ import { ShareChatButton } from "./ShareChatButton";
 
 function PlaygroundEmptyState({ onCreate }: { onCreate: () => void }) {
   return (
-    <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
-      <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
-        <MessageCircle className="text-muted-foreground h-6 w-6" />
-      </div>
-      <Type variant="subheading" className="mb-1">
-        No MCP servers yet
-      </Type>
-      <Type small muted className="mb-4 max-w-md text-center">
-        The playground lets you chat with tools from an MCP server. Create one
-        to start testing.
-      </Type>
-      <RequireScope scope="mcp:write" level="component">
-        {({ disabled }) => (
-          <Button onClick={onCreate} disabled={disabled}>
-            <Button.LeftIcon>
-              <Plus className="h-4 w-4" />
-            </Button.LeftIcon>
-            <Button.Text>Create MCP Server</Button.Text>
-          </Button>
-        )}
-      </RequireScope>
-    </div>
+    <InlineEmptyState
+      icon={<MessageCircle />}
+      title="No MCP servers yet"
+      description="The playground lets you chat with tools from an MCP server. Create one to start testing."
+      action={
+        <RequireScope scope="mcp:write" level="component">
+          {({ disabled }) => (
+            <Button onClick={onCreate} disabled={disabled}>
+              <Button.LeftIcon>
+                <Plus className="h-4 w-4" />
+              </Button.LeftIcon>
+              <Button.Text>Create MCP Server</Button.Text>
+            </Button>
+          )}
+        </RequireScope>
+      }
+    />
   );
 }
 

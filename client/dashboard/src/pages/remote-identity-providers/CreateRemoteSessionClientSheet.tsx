@@ -1,4 +1,4 @@
-import { Label } from "@/components/ui/label";
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import {
   Select,
   SelectContent,
@@ -263,15 +263,15 @@ export function CreateRemoteSessionClientSheet({
           <Stack gap={4}>
             {isOrganizational ? (
               <Stack gap={4}>
-                <Stack gap={2}>
-                  <Label className="text-muted-foreground text-xs">Scope</Label>
+                <Field>
+                  <FieldLabel htmlFor="new-client-scope">Scope</FieldLabel>
                   <Select
                     value={scope}
                     onValueChange={(value) =>
                       setScope(value as "organization" | "project")
                     }
                   >
-                    <SelectTrigger>
+                    <SelectTrigger id="new-client-scope">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -281,19 +281,19 @@ export function CreateRemoteSessionClientSheet({
                       <SelectItem value="project">Specific project</SelectItem>
                     </SelectContent>
                   </Select>
-                  <Type muted small>
+                  <FieldDescription>
                     An organization-level client has no project and can be
                     attached by every project in the organization.
-                  </Type>
-                </Stack>
+                  </FieldDescription>
+                </Field>
 
                 {scope === "project" && (
-                  <Stack gap={2}>
-                    <Label className="text-muted-foreground text-xs">
+                  <Field>
+                    <FieldLabel htmlFor="new-client-project">
                       Project
-                    </Label>
+                    </FieldLabel>
                     <Select value={projectId} onValueChange={setProjectId}>
-                      <SelectTrigger>
+                      <SelectTrigger id="new-client-project">
                         <SelectValue placeholder="Select a project" />
                       </SelectTrigger>
                       <SelectContent>
@@ -304,11 +304,11 @@ export function CreateRemoteSessionClientSheet({
                         ))}
                       </SelectContent>
                     </Select>
-                    <Type muted small>
+                    <FieldDescription>
                       The client will be scoped to this project in the
                       organization.
-                    </Type>
-                  </Stack>
+                    </FieldDescription>
+                  </Field>
                 )}
               </Stack>
             ) : (

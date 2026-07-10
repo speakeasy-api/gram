@@ -13,7 +13,7 @@ export function ResultStep({
   return (
     <>
       <div className="flex flex-col items-center justify-center gap-4 py-8">
-        <CheckCircle2 className="h-12 w-12 text-emerald-500" />
+        <CheckCircle2 className="text-success h-12 w-12" />
         <Type className="text-center text-lg font-medium">
           OAuth Configured
         </Type>

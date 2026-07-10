@@ -1,69 +1,9 @@
-import { Card } from "@/components/ui/card";
-import { StatusDot, type StatusDotTone } from "@/components/ui/status-dot";
-import { Type } from "@/components/ui/type";
+import { MCPServerPortalCard } from "@/components/sources/MCPServerPortalCard";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import { useRoutes } from "@/routes";
 import { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
-import { Badge, Button } from "@/components/ui/moonshine";
-import { ArrowRight, Network, Server } from "lucide-react";
-
-type McpServerCardStatus = "public" | "private" | "disabled";
-
-const MCP_SERVER_STATUS_PRESENTATION: Record<
-  McpServerCardStatus,
-  { label: string; tone: StatusDotTone; pulse: boolean }
-> = {
-  public: { label: "Public", tone: "success", pulse: true },
-  private: { label: "Private", tone: "success", pulse: true },
-  disabled: { label: "Disabled", tone: "destructive", pulse: false },
-};
-
-function mcpServerCardStatus(toolset: ToolsetEntry): McpServerCardStatus {
-  if (!toolset.mcpEnabled) return "disabled";
-  return toolset.mcpIsPublic ? "public" : "private";
-}
-
-function MCPServerPortalCard({ toolset }: { toolset: ToolsetEntry }) {
-  const routes = useRoutes();
-
-  return (
-    <routes.mcp.details.Link
-      params={[toolset.slug]}
-      className="hover:no-underline"
-    >
-      <Card icon={<Network className="text-muted-foreground h-10 w-10" />}>
-        <div className="mb-1 flex items-start justify-between gap-2">
-          <Type
-            variant="subheading"
-            as="div"
-            className="text-md group-hover:text-primary truncate transition-colors"
-          >
-            {toolset.name}
-          </Type>
-          <Badge className="shrink-0">
-            {`${toolset.toolUrns?.length || 0} tool${(toolset.toolUrns?.length || 0) !== 1 ? "s" : ""}`}
-          </Badge>
-        </div>
-        <Type small muted className="truncate">
-          {toolset.slug}
-        </Type>
-        {toolset.description && (
-          <Type small muted className="mt-2 line-clamp-2">
-            {toolset.description}
-          </Type>
-        )}
-        <div className="mt-auto flex items-center justify-between gap-2 pt-2">
-          <StatusDot
-            {...MCP_SERVER_STATUS_PRESENTATION[mcpServerCardStatus(toolset)]}
-          />
-          <div className="text-muted-foreground group-hover:text-primary flex items-center gap-1 text-sm transition-colors">
-            <span>Open</span>
-            <ArrowRight className="h-3.5 w-3.5" />
-          </div>
-        </div>
-      </Card>
-    </routes.mcp.details.Link>
-  );
-}
+import { Button } from "@/components/ui/moonshine";
+import { Server } from "lucide-react";
 
 export function SourceMCPServersTab({
   associatedToolsets,
@@ -81,22 +21,22 @@ export function SourceMCPServersTab({
           ))}
         </div>
       ) : (
-        <div className="rounded-lg border p-12 text-center">
-          <Server className="text-muted-foreground mx-auto mb-3 h-10 w-10 opacity-40" />
-          <Type className="mb-1 block font-medium">No MCP servers yet</Type>
-          <Type muted small className="mx-auto mb-4 block max-w-sm">
-            Create an MCP server that includes tools from this source to expose
-            them to AI agents and clients.
-          </Type>
-          <routes.mcp.Link className="hover:no-underline">
-            <Button variant="secondary" size="sm">
-              <Button.LeftIcon>
-                <Server className="h-4 w-4" />
-              </Button.LeftIcon>
-              <Button.Text>Go to MCP Servers</Button.Text>
-            </Button>
-          </routes.mcp.Link>
-        </div>
+        <InlineEmptyState
+          className="py-12"
+          icon={<Server />}
+          title="No MCP servers yet"
+          description="Create an MCP server that includes tools from this source to expose them to AI agents and clients."
+          action={
+            <routes.mcp.Link className="hover:no-underline">
+              <Button variant="secondary" size="sm">
+                <Button.LeftIcon>
+                  <Server className="h-4 w-4" />
+                </Button.LeftIcon>
+                <Button.Text>Go to MCP Servers</Button.Text>
+              </Button>
+            </routes.mcp.Link>
+          }
+        />
       )}
     </div>
   );

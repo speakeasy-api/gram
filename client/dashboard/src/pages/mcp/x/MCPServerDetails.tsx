@@ -8,6 +8,7 @@ import {
   TabsContent,
   TabsList,
 } from "@/components/ui/tabs";
+import { Type } from "@/components/ui/type";
 import { RequireScope } from "@/components/require-scope";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -289,15 +290,15 @@ const VISIBILITY_OPTIONS: {
     value: "disabled",
     label: "Disabled",
     description: "The server is offline.",
-    dotClass: "bg-amber-400",
-    hoverDotClass: "group-hover:bg-amber-400",
+    dotClass: "bg-warning-default",
+    hoverDotClass: "group-hover:bg-warning-default",
   },
   {
     value: "private",
     label: "Private",
     description: "The server serves traffic.",
-    dotClass: "bg-blue-400",
-    hoverDotClass: "group-hover:bg-blue-400",
+    dotClass: "bg-information-default",
+    hoverDotClass: "group-hover:bg-information-default",
   },
 ];
 
@@ -370,7 +371,7 @@ function MCPServerStatusDropdown({ server }: { server: McpServer }) {
             key={option.value}
             onSelect={() => handleSelect(option.value)}
             disabled={option.value === server.visibility}
-            className="group flex cursor-pointer items-start gap-2.5 rounded-md p-2"
+            className="group flex cursor-pointer items-start gap-2.5 p-2"
           >
             <span
               className={cn(
@@ -381,12 +382,17 @@ function MCPServerStatusDropdown({ server }: { server: McpServer }) {
               )}
             />
             <div className="flex-1">
-              <span className="block font-mono text-xs font-semibold tracking-wide uppercase">
+              <Type
+                mono
+                small
+                as="span"
+                className="block font-semibold tracking-wide uppercase"
+              >
                 {option.label}
-              </span>
-              <span className="text-muted-foreground text-xs">
+              </Type>
+              <Type muted small as="span">
                 {option.description}
-              </span>
+              </Type>
             </div>
           </DropdownMenuItem>
         ))}
@@ -404,8 +410,8 @@ function MCPServerHero({ server }: { server: McpServer | undefined }) {
     <DetailHero actions={server && <MCPServerStatusDropdown server={server} />}>
       <Stack gap={2}>
         <Stack direction="horizontal" gap={3} align="center">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 dark:bg-violet-500/20">
-            <Network className="h-5 w-5 text-violet-600 dark:text-violet-400" />
+          <div className="bg-muted text-muted-foreground flex size-10 shrink-0 items-center justify-center">
+            <Network className="size-5" />
           </div>
           <Heading variant="h1" className="break-all normal-case">
             {server?.name || "MCP Server"}

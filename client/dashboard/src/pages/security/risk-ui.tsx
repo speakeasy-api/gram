@@ -10,7 +10,7 @@ import {
 import { useRiskUnmaskResultMutation } from "@gram/client/react-query/riskUnmaskResult.js";
 import { RULE_CATEGORY_META } from "./policy-data";
 import { getCategoryForFinding, getRuleTitleFallback } from "./risk-utils";
-import { Badge } from "@/components/ui/moonshine";
+import { Badge, Button } from "@/components/ui/moonshine";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import {
   RevealAllContext,
@@ -106,19 +106,23 @@ export function RevealAllToggle({
     <SimpleTooltip
       tooltip={revealAll ? "Hide all matches" : "Reveal all matches"}
     >
-      <button
-        type="button"
+      <Button
+        variant="secondary"
+        size="sm"
         onClick={() => setRevealAll(!revealAll)}
         aria-pressed={revealAll}
         aria-label={revealAll ? "Hide all matches" : "Reveal all matches"}
-        className={
-          className ??
-          "border-border hover:bg-muted text-muted-foreground inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm transition-colors"
-        }
+        className={className}
       >
-        {revealAll ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
-        <span>{revealAll ? "Hide all" : "Reveal all"}</span>
-      </button>
+        <Button.Icon>
+          {revealAll ? (
+            <Eye className="size-4" />
+          ) : (
+            <EyeOff className="size-4" />
+          )}
+        </Button.Icon>
+        <Button.Text>{revealAll ? "Hide all" : "Reveal all"}</Button.Text>
+      </Button>
     </SimpleTooltip>
   );
 }

@@ -1,4 +1,3 @@
-// oxlint-disable react/only-export-components -- compound component (Object.assign) pattern
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
@@ -80,6 +79,6 @@ function DetailListItem({
   );
 }
 
-export const DetailList = Object.assign(DetailListRoot, {
-  Item: DetailListItem,
-});
+DetailListRoot.Item = DetailListItem;
+
+export { DetailListRoot as DetailList };

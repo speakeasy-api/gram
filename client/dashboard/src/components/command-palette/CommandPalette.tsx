@@ -7,6 +7,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { Kbd } from "@/components/ui/kbd";
+import { BrandGradientLine } from "@/components/brand-gradient-line";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { useCommandPalette } from "@/contexts/CommandPalette";
 import { useSlugs } from "@/contexts/Sdk";
@@ -18,12 +19,6 @@ import { useNavigate } from "react-router";
 import { requestAskAi } from "./askAiBridge";
 import { useRecentlyVisited, useRecentsUserId } from "./recentlyVisited";
 import { ResourceResults } from "./ResourceResults";
-
-// Speakeasy brand spectrum — the same brand-language gradient the Project
-// Assistant uses. Rendered as a thin hairline at the top of the palette so the
-// surface reads as Gram without leaning on display type or heavy chrome.
-const BRAND_GRADIENT =
-  "linear-gradient(90deg, #320F1E 0%, #C83228 12.5%, #FB873F 25%, #D2DC91 37.5%, #5A8250 50%, #002314 62%, #00143C 74%, #2873D7 86%, #9BC3FF 100%)";
 
 export function CommandPalette(): JSX.Element {
   const { isOpen, close, actions, contextBadge } = useCommandPalette();
@@ -138,12 +133,7 @@ export function CommandPalette(): JSX.Element {
         if (!open) closeAndReset();
       }}
     >
-      {/* Speakeasy brand hairline */}
-      <div
-        aria-hidden
-        className="h-0.5 w-full shrink-0"
-        style={{ background: BRAND_GRADIENT }}
-      />
+      <BrandGradientLine className="h-0.5" />
       {contextBadge && (
         <div className="px-3 pt-3 pb-2">
           <Badge variant="neutral">
@@ -218,11 +208,7 @@ export function CommandPalette(): JSX.Element {
                     <ReleaseStageBadge stage={action.stage} noTooltip />
                   )}
                 </div>
-                {action.shortcut && (
-                  <span className="text-muted-foreground text-xs">
-                    {action.shortcut}
-                  </span>
-                )}
+                {action.shortcut && <Kbd>{action.shortcut}</Kbd>}
               </CommandItem>
             ))}
           </CommandGroup>

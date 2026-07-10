@@ -6,6 +6,7 @@ import {
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import {
   InputGroup,
   InputGroupAddon,
@@ -30,10 +31,8 @@ import { Plus, Trash2, XIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useMcpEndpointSlugValidation } from "../../../useMcpEndpointSlugValidation";
-import { SettingsInlineEmptyState } from "../SettingsInlineEmptyState";
 import { RowSaveButtonContent, SettingsSection } from "../SettingsSection";
 
-const ADDRESS_INPUT_GROUP_CLASSNAME = "rounded-md";
 const ADDRESS_SLUG_INPUT_CLASSNAME = "font-mono pl-0! font-bold";
 const ADDRESS_RANDOM_SUFFIX_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
 const ADDRESS_RANDOM_SUFFIX_LENGTH = 5;
@@ -96,21 +95,35 @@ export function ServerUrlSection({
       }
 
       customAddressEmptyState = (
-        <SettingsInlineEmptyState
+        <InlineEmptyState
           title="No custom domains"
           description={description}
-          actionLabel={actionLabel}
-          onAction={onAction}
+          action={
+            actionLabel && onAction ? (
+              <Button variant="secondary" onClick={onAction}>
+                <Button.LeftIcon>
+                  <Plus className="size-4" />
+                </Button.LeftIcon>
+                <Button.Text>{actionLabel}</Button.Text>
+              </Button>
+            ) : undefined
+          }
         />
       );
     } else {
       customAddressEmptyState = (
         <RequireScope scope="mcp:write" level="component">
-          <SettingsInlineEmptyState
+          <InlineEmptyState
             title="No custom address"
             description="Create an MCP URL on your verified custom domain."
-            actionLabel="Add"
-            onAction={() => setAddingCustom(true)}
+            action={
+              <Button variant="secondary" onClick={() => setAddingCustom(true)}>
+                <Button.LeftIcon>
+                  <Plus className="size-4" />
+                </Button.LeftIcon>
+                <Button.Text>Add</Button.Text>
+              </Button>
+            }
           />
         </RequireScope>
       );
@@ -148,11 +161,20 @@ export function ServerUrlSection({
                   />
                 ) : (
                   <RequireScope scope="mcp:write" level="component">
-                    <SettingsInlineEmptyState
+                    <InlineEmptyState
                       title="No hosted address"
                       description="Create the default Speakeasy-hosted URL for this server."
-                      actionLabel="Add"
-                      onAction={() => setAddingPlatform(true)}
+                      action={
+                        <Button
+                          variant="secondary"
+                          onClick={() => setAddingPlatform(true)}
+                        >
+                          <Button.LeftIcon>
+                            <Plus className="size-4" />
+                          </Button.LeftIcon>
+                          <Button.Text>Add</Button.Text>
+                        </Button>
+                      }
                     />
                   </RequireScope>
                 )}
@@ -298,7 +320,7 @@ function AddressRow({
       className="gap-2"
     >
       <Stack direction="horizontal" gap={2} align="center">
-        <InputGroup className={ADDRESS_INPUT_GROUP_CLASSNAME}>
+        <InputGroup>
           <InputGroupAddon>{`${baseUrlPrefix}${slugPrefix}`}</InputGroupAddon>
           <InputGroupInput
             value={suffix}
@@ -384,7 +406,7 @@ function NewPlatformAddressRow({
       className="gap-2"
     >
       <Stack direction="horizontal" gap={2} align="center">
-        <InputGroup className={ADDRESS_INPUT_GROUP_CLASSNAME}>
+        <InputGroup>
           <InputGroupAddon>
             {`${getServerURL()}/mcp/${slugPrefix}`}
           </InputGroupAddon>
@@ -475,7 +497,7 @@ function NewCustomAddressRow({
       className="gap-2"
     >
       <Stack direction="horizontal" gap={2} align="center">
-        <InputGroup className={ADDRESS_INPUT_GROUP_CLASSNAME}>
+        <InputGroup>
           <InputGroupAddon>{`https://${customDomain?.domain ?? "custom-domain"}/mcp/`}</InputGroupAddon>
           <InputGroupInput
             value={slug}

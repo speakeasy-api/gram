@@ -144,7 +144,7 @@ function ToolsTableHeader({
   onSearchChange: (v: string) => void;
 }) {
   const columnClass =
-    "text-xs font-medium text-muted-foreground uppercase tracking-wider";
+    "font-mono text-xs uppercase tracking-[0.08em] text-muted-foreground";
   return (
     <div className="bg-muted/50 shrink-0 border-b">
       {isOpenAPI ? (
@@ -352,7 +352,7 @@ export function SourceToolsTab({
         )}
 
         {/* Tools table */}
-        <div className="mb-4 flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border">
+        <div className="mb-4 flex min-h-0 flex-1 flex-col overflow-hidden border">
           <ToolsTableHeader
             isOpenAPI={isOpenAPI}
             searchQuery={searchQuery}

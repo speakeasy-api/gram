@@ -14,7 +14,7 @@ export function CreateThingCard({
   return (
     <Card
       className={cn(
-        "hover:border-muted-foreground/50 trans group min-h-36 cursor-pointer items-center justify-center border-2 border-dashed bg-transparent shadow-none",
+        "hover:border-muted-foreground/50 trans group min-h-36 cursor-pointer items-center justify-center border-2 border-dashed bg-transparent",
         className,
       )}
       onClick={onClick}

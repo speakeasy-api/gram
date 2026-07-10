@@ -3,6 +3,7 @@ import type { ListUserSessionsQueryParamStatus } from "@gram/client/models/opera
 import { useUserSessionsInfinite } from "@gram/client/react-query/userSessions.js";
 import { SessionRow } from "@/components/sessions/SessionRow";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Type } from "@/components/ui/type";
 import { LoadMoreButton } from "@/components/ui/load-more-footer";
 import { Button } from "@/components/ui/moonshine";
 import { SettingsSection } from "../../SettingsSection";
@@ -41,17 +42,19 @@ export function UserSessionsList({
         </div>
       ) : isError ? (
         <div className="flex items-center justify-between gap-3">
-          <p className="text-destructive text-sm">
+          <Type destructive small>
             Couldn&apos;t load sessions.
-          </p>
+          </Type>
           <Button variant="tertiary" size="sm" onClick={() => void refetch()}>
             Retry
           </Button>
         </div>
       ) : sessions.length === 0 ? (
-        <p className="text-muted-foreground text-sm">No active sessions</p>
+        <Type muted small>
+          No active sessions
+        </Type>
       ) : (
-        <ul className="divide-border divide-y rounded-md border">
+        <ul className="divide-border divide-y border">
           {sessions.map((s) => (
             <SessionRow
               key={s.id}
@@ -91,9 +94,9 @@ export function McpServerSessionsPanel({
           {issuerId ? (
             <UserSessionsList issuerId={issuerId} />
           ) : (
-            <p className="text-muted-foreground text-sm">
+            <Type muted small>
               This server isn&apos;t gated by a session issuer.
-            </p>
+            </Type>
           )}
         </SettingsSection.Body>
       </SettingsSection.Panel>

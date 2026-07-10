@@ -1,4 +1,5 @@
 import { Dialog } from "@/components/ui/dialog";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { TextArea } from "@/components/ui/textarea";
 import { Type } from "@/components/ui/type";
 import { Alert, Button, Input, Link, Stack } from "@/components/ui/moonshine";
@@ -42,28 +43,30 @@ export function ExternalOAuthForm({
           </Alert>
         )}
         {discovered && !external.prefilled && (
-          <div className="border-border bg-muted/50 mb-4 flex items-start justify-between gap-4 rounded-md border p-4">
-            <div>
-              <Type small className="font-medium">
-                OAuth detected from {discovered.name}
-              </Type>
+          <Alert variant="info" dismissible={false}>
+            <div className="flex w-full items-start justify-between gap-4">
+              <div>
+                <Type small className="font-medium">
+                  OAuth detected from {discovered.name}
+                </Type>
 
-              <Type muted small className="mt-1">
-                We discovered OAuth {discovered.version} metadata from this
-                server. You can use it to pre-fill the form below.
-              </Type>
+                <Type muted small className="mt-1">
+                  We discovered OAuth {discovered.version} metadata from this
+                  server. You can use it to pre-fill the form below.
+                </Type>
+              </div>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => send({ type: "APPLY_DISCOVERED" })}
+              >
+                Apply
+              </Button>
             </div>
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => send({ type: "APPLY_DISCOVERED" })}
-            >
-              Apply
-            </Button>
-          </div>
+          </Alert>
         )}
         {external.prefilled && (
-          <div className="border-border bg-muted/50 mb-4 rounded-md border p-4">
+          <Alert variant="info" dismissible={false}>
             <Type small className="font-medium">
               Pre-filled from detected OAuth metadata
             </Type>
@@ -73,7 +76,7 @@ export function ExternalOAuthForm({
               and refer to the MCP server or API's documentation to confirm
               these values are correct.
             </Type>
-          </div>
+          </Alert>
         )}
         <div>
           <Type className="mb-2 font-medium">
@@ -91,8 +94,8 @@ export function ExternalOAuthForm({
           </Type>
 
           <Stack gap={4}>
-            <div>
-              <Type className="mb-2 font-medium">OAuth Server Slug</Type>
+            <Field>
+              <FieldLabel>OAuth Server Slug</FieldLabel>
               <Input
                 placeholder="my-oauth-server"
                 value={external.slug}
@@ -105,17 +108,10 @@ export function ExternalOAuthForm({
                 }
                 maxLength={40}
               />
-            </div>
+            </Field>
 
-            <div>
-              <Type className="mb-2 font-medium">
-                OAuth Authorization Server Metadata
-              </Type>
-              {external.jsonError && (
-                <Type className="mt-1 text-sm text-red-500!">
-                  {external.jsonError}
-                </Type>
-              )}
+            <Field data-invalid={external.jsonError ? true : undefined}>
+              <FieldLabel>OAuth Authorization Server Metadata</FieldLabel>
               <TextArea
                 placeholder={`{
   "issuer": "https://your-oauth-server.com",
@@ -140,7 +136,10 @@ export function ExternalOAuthForm({
                 rows={12}
                 className="font-mono text-sm"
               />
-            </div>
+              {external.jsonError && (
+                <FieldError>{external.jsonError}</FieldError>
+              )}
+            </Field>
           </Stack>
         </div>
       </div>

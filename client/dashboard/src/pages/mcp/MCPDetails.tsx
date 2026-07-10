@@ -17,8 +17,11 @@ import {
 } from "@/components/route-not-found-state";
 import { useExternalMcpOAuthConfigStatus } from "@/components/sources/sources-hooks";
 import { ToolList } from "@/components/tool-list";
+import { Card } from "@/components/ui/card";
+import { CopyButton } from "@/components/ui/copy-button";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import { Label } from "@/components/ui/label";
 import { MultiSelect } from "@/components/ui/multi-select";
 import {
@@ -35,6 +38,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { RequireScope } from "@/components/require-scope";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -177,11 +181,11 @@ function MCPLoading() {
       </Page.Header>
       <Page.Body fullWidth noPadding>
         {/* Hero skeleton */}
-        <div className="bg-muted/30 relative h-64 w-full animate-pulse">
+        <div className="bg-muted/30 relative h-64 w-full">
           <div className="absolute right-0 bottom-0 left-0 mx-auto w-full max-w-[1270px] px-8 py-8">
             <Stack gap={2}>
-              <div className="bg-muted h-8 w-64 rounded" />
-              <div className="bg-muted h-4 w-96 rounded" />
+              <Skeleton className="h-8 w-64" />
+              <Skeleton className="h-4 w-96" />
             </Stack>
           </div>
         </div>
@@ -190,10 +194,10 @@ function MCPLoading() {
         <div className="border-b">
           <div className="mx-auto max-w-[1270px] px-8">
             <div className="flex h-11 gap-6">
-              <div className="bg-muted h-4 w-20 animate-pulse rounded" />
-              <div className="bg-muted h-4 w-16 animate-pulse rounded" />
-              <div className="bg-muted h-4 w-20 animate-pulse rounded" />
-              <div className="bg-muted h-4 w-28 animate-pulse rounded" />
+              <Skeleton className="h-4 w-20" />
+              <Skeleton className="h-4 w-16" />
+              <Skeleton className="h-4 w-20" />
+              <Skeleton className="h-4 w-28" />
             </div>
           </div>
         </div>
@@ -202,14 +206,14 @@ function MCPLoading() {
         <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
           <Stack gap={6}>
             <div className="space-y-4">
-              <div className="bg-muted h-6 w-48 animate-pulse rounded" />
-              <div className="bg-muted h-4 w-full max-w-2xl animate-pulse rounded" />
-              <div className="bg-muted h-32 w-full animate-pulse rounded" />
+              <Skeleton className="h-6 w-48" />
+              <Skeleton className="h-4 w-full max-w-2xl" />
+              <Skeleton className="h-32 w-full" />
             </div>
             <div className="space-y-4">
-              <div className="bg-muted h-6 w-40 animate-pulse rounded" />
-              <div className="bg-muted h-4 w-full max-w-2xl animate-pulse rounded" />
-              <div className="bg-muted h-24 w-full animate-pulse rounded" />
+              <Skeleton className="h-6 w-40" />
+              <Skeleton className="h-4 w-full max-w-2xl" />
+              <Skeleton className="h-24 w-full" />
             </div>
           </Stack>
         </div>
@@ -415,35 +419,17 @@ function MCPDetailPageContent({
                 <Type className="text-muted-foreground max-w-2xl truncate">
                   {mcpUrl}
                 </Type>
-                <Button
-                  variant="tertiary"
-                  size="sm"
-                  onClick={() => {
-                    if (mcpUrl) {
-                      void navigator.clipboard.writeText(mcpUrl);
+                {mcpUrl && (
+                  <CopyButton
+                    text={mcpUrl}
+                    tooltip="Copy URL"
+                    size="icon-sm"
+                    className="text-muted-foreground hover:text-foreground shrink-0"
+                    onCopy={() => {
                       toast.success("URL copied to clipboard");
-                    }
-                  }}
-                  className="text-muted-foreground hover:text-foreground shrink-0"
-                >
-                  <Button.LeftIcon>
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="16"
-                      height="16"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
-                      <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
-                    </svg>
-                  </Button.LeftIcon>
-                  <Button.Text className="sr-only">Copy URL</Button.Text>
-                </Button>
+                    }}
+                  />
+                )}
               </div>
             </Stack>
           </div>
@@ -688,24 +674,24 @@ const STATUS_OPTIONS: {
     value: "disabled",
     label: "Disabled",
     description: "The server is offline.",
-    dotClass: "bg-amber-400",
-    hoverDotClass: "group-hover:bg-amber-400",
+    dotClass: "bg-warning-default",
+    hoverDotClass: "group-hover:bg-warning-default",
   },
   {
     value: "private",
     label: "Private",
     description:
       "Only users with a platform API Key from this project can read the tools hosted by this server.",
-    dotClass: "bg-blue-400",
-    hoverDotClass: "group-hover:bg-blue-400",
+    dotClass: "bg-information-default",
+    hoverDotClass: "group-hover:bg-information-default",
   },
   {
     value: "public",
     label: "Public",
     description:
       "Anyone with the URL can read the tools hosted by this server. Authentication is still required to use the tools.",
-    dotClass: "bg-green-400",
-    hoverDotClass: "group-hover:bg-green-400",
+    dotClass: "bg-success-default",
+    hoverDotClass: "group-hover:bg-success-default",
   },
 ];
 
@@ -891,7 +877,7 @@ function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
                 option.value === currentStatus ||
                 (option.value === "public" && publicOptionUnavailable)
               }
-              className="group flex cursor-pointer items-start gap-2.5 rounded-md p-2"
+              className="group flex cursor-pointer items-start gap-2.5 p-2"
             >
               <span
                 className={cn(
@@ -1374,18 +1360,11 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
 
       {/* Tools list or empty state */}
       {hasOrphanedTools ? (
-        <Stack gap={4} align="center" className="py-12">
-          <div className="max-w-md text-center">
-            <AlertTriangle className="text-warning mx-auto mb-4 h-12 w-12" />
-            <Heading variant="h3" className="mb-2">
-              Tool Source Deleted
-            </Heading>
-            <Type muted>
-              This MCP server has tool references, but the underlying source has
-              been deleted. Re-adding the source will reinstate the tools.
-            </Type>
-          </div>
-        </Stack>
+        <InlineEmptyState
+          icon={<AlertTriangle />}
+          title="Tool Source Deleted"
+          description="This MCP server has tool references, but the underlying source has been deleted. Re-adding the source will reinstate the tools."
+        />
       ) : toolsToDisplay.length > 0 ? (
         <ToolList
           tools={toolsToDisplay}
@@ -1759,7 +1738,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
                 />
               ) : (
                 <Input
-                  className="w-full rounded border px-2 py-1"
+                  className="w-full border px-2 py-1"
                   placeholder="Enter MCP Slug"
                   value={mcpSlug}
                   onChange={(e) => handleMcpSlugChange(e.target.value)}
@@ -1844,7 +1823,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
       </PageSection>
 
       {/* Danger Zone */}
-      <div className="border-destructive/30 mt-8 rounded-lg border p-6">
+      <Card className="border-destructive/30 mt-8">
         <Type variant="subheading" className="text-destructive mb-1">
           Danger Zone
         </Type>
@@ -1864,7 +1843,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
             <Button.Text>Delete MCP Server</Button.Text>
           </Button>
         </RequireScope>
-      </div>
+      </Card>
 
       <Dialog
         open={isDeleteDialogOpen}
@@ -1878,7 +1857,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
           </Dialog.Header>
           <div className="space-y-4 py-4">
             <Type variant="body">
-              <code className="bg-muted rounded px-1 py-0.5 font-mono font-bold">
+              <code className="bg-muted px-1 py-0.5 font-mono font-bold">
                 {toolset.name}
               </code>{" "}
               and all its configuration will be permanently deleted. Connected

@@ -40,7 +40,7 @@ export function SegmentedControl<T extends string>({
             className={cn(
               "flex h-full items-center rounded-sm border px-3 text-sm font-medium transition-colors",
               active
-                ? "border-border bg-card text-foreground shadow-sm"
+                ? "border-border bg-card text-foreground"
                 : "text-muted-foreground hover:text-foreground border-transparent",
               disabled && "pointer-events-none",
             )}

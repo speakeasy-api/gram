@@ -1,9 +1,12 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/heading";
+import { SkeletonTable } from "@/components/ui/skeleton";
+import { Type } from "@/components/ui/type";
 import { useRoutes } from "@/routes";
 import { useListDeploymentsSuspense } from "@gram/client/react-query/listDeployments.js";
 import {
+  Alert,
   Badge,
   Button,
   DropdownMenu,
@@ -35,7 +38,7 @@ export default function DeploymentsPage(): JSX.Element {
       </Page.Header>
       <Page.Body>
         <RequireScope scope={["project:read", "project:write"]} level="page">
-          <Suspense fallback={<div>Loading...</div>}>
+          <Suspense fallback={<SkeletonTable />}>
             <DeploymentsTable />
           </Suspense>
         </RequireScope>
@@ -180,7 +183,9 @@ function DeploymentsTable({
           <div>
             <DeploymentLink id={row.id} />
             <div className="flex gap-2">
-              <p className="text-muted-foreground text-sm">{createdAt}</p>
+              <Type muted small>
+                {createdAt}
+              </Type>
               {activeDeployment === row && (
                 <Badge variant="success" className="px-1.5 py-0.25">
                   Active
@@ -244,16 +249,18 @@ function DeploymentsTable({
             )}
           </div>
 
-          <div className="bg-secondary mb-6 space-y-2 rounded-lg p-6">
-            <p className="text-muted-foreground text-sm">
-              Each time you add a new source or update an existing source a new
-              deployment is created.
-            </p>
-            <p className="text-muted-foreground text-sm">
-              For each deployment all sources are analyzed in the project to
-              generate or update the corresponding tool definitions.
-            </p>
-          </div>
+          <Alert variant="info" dismissible={false} className="mb-6">
+            <div className="space-y-2">
+              <Type small>
+                Each time you add a new source or update an existing source a
+                new deployment is created.
+              </Type>
+              <Type small>
+                For each deployment all sources are analyzed in the project to
+                generate or update the corresponding tool definitions.
+              </Type>
+            </div>
+          </Alert>
         </>
       )}
 

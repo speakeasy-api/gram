@@ -4,6 +4,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { Card } from "@/components/ui/card";
 import { Type } from "@/components/ui/type";
 import { toolVariationsGroupDisplayName } from "@/lib/toolVariationGroups";
 import { cn } from "@/lib/utils";
@@ -35,10 +36,7 @@ export function MCPToolFilterScopesPanel({
   const hasExcluded = filters.excluded.length > 0;
 
   return (
-    <Stack
-      gap={3}
-      className="border-border bg-muted/20 mb-4 rounded-lg border p-4"
-    >
+    <Card className="mb-4 gap-3">
       <Stack direction="horizontal" justify="space-between" align="center">
         <Type variant="small" className="font-medium">
           Tool filtering
@@ -121,7 +119,7 @@ export function MCPToolFilterScopesPanel({
             />
           )}
       </Accordion>
-    </Stack>
+    </Card>
   );
 }
 

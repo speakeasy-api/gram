@@ -1,5 +1,5 @@
-import { Block, BlockInner } from "@/components/block";
 import { RequireScope } from "@/components/require-scope";
+import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Type } from "@/components/ui/type";
 import {
@@ -45,8 +45,11 @@ export function MCPPublishingSection({
         heading="Publishing"
         description="Publish this server to collections so it can be discovered and installed by others in your organization."
       >
-        <Block label="Collections" className="p-0">
-          <BlockInner>
+        <Card>
+          <Card.Header>
+            <Card.Title>Collections</Card.Title>
+          </Card.Header>
+          <Card.Content>
             {!canPublish ? (
               <Type muted small>
                 {disabledMessage}
@@ -85,29 +88,27 @@ export function MCPPublishingSection({
                 ))}
               </Stack>
             )}
-          </BlockInner>
+          </Card.Content>
           {hasChanges && (
-            <BlockInner>
-              <Stack direction="horizontal" gap={2}>
-                <Button
-                  size="sm"
-                  disabled={isSaving}
-                  onClick={() => void handleSave()}
-                >
-                  <Button.Text>{isSaving ? "Saving..." : "Save"}</Button.Text>
-                </Button>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  disabled={isSaving}
-                  onClick={handleDiscard}
-                >
-                  <Button.Text>Discard</Button.Text>
-                </Button>
-              </Stack>
-            </BlockInner>
+            <Card.Footer className="border-t justify-start gap-2">
+              <Button
+                size="sm"
+                disabled={isSaving}
+                onClick={() => void handleSave()}
+              >
+                <Button.Text>{isSaving ? "Saving..." : "Save"}</Button.Text>
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={isSaving}
+                onClick={handleDiscard}
+              >
+                <Button.Text>Discard</Button.Text>
+              </Button>
+            </Card.Footer>
           )}
-        </Block>
+        </Card>
       </PageSection>
     </RequireScope>
   );

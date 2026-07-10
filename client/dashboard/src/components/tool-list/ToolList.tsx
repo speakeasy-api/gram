@@ -468,20 +468,20 @@ function ToolRow({
           )}
           <div className="flex min-w-0 flex-1 flex-col">
             <Stack direction="horizontal" gap={2} align="center">
-              <p className="text-foreground truncate text-sm leading-6">
+              <Type className="truncate text-sm leading-6">
                 {toolPrefix && (
-                  <Type small muted className="inline">
+                  <Type as="span" small muted className="inline">
                     {toolPrefix}
                   </Type>
                 )}
                 {toolNameNoPrefix}
-              </p>
+              </Type>
               <ToolVariationBadge tool={tool} />
               <AnnotationBadges tool={tool} />
             </Stack>
-            <p className="text-muted-foreground truncate text-sm leading-6">
+            <Type muted className="truncate text-sm leading-6">
               {tool.description || "No description"}
-            </p>
+            </Type>
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-4">
@@ -536,10 +536,10 @@ function ToolRow({
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm">Read-only</p>
-                        <p className="text-muted-foreground text-xs">
+                        <Type small>Read-only</Type>
+                        <Type muted className="text-xs">
                           Tool does not modify its environment
-                        </p>
+                        </Type>
                       </div>
                       <Switch
                         checked={annotReadOnly}
@@ -549,10 +549,10 @@ function ToolRow({
                     </div>
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm">Destructive</p>
-                        <p className="text-muted-foreground text-xs">
+                        <Type small>Destructive</Type>
+                        <Type muted className="text-xs">
                           Tool may perform destructive updates
-                        </p>
+                        </Type>
                       </div>
                       <Switch
                         checked={annotDestructive}
@@ -562,11 +562,11 @@ function ToolRow({
                     </div>
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm">Idempotent</p>
-                        <p className="text-muted-foreground text-xs">
+                        <Type small>Idempotent</Type>
+                        <Type muted className="text-xs">
                           Repeated calls with same arguments have no additional
                           effect
-                        </p>
+                        </Type>
                       </div>
                       <Switch
                         checked={annotIdempotent}
@@ -576,10 +576,10 @@ function ToolRow({
                     </div>
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm">Open-world</p>
-                        <p className="text-muted-foreground text-xs">
+                        <Type small>Open-world</Type>
+                        <Type muted className="text-xs">
                           Tool interacts with external entities
-                        </p>
+                        </Type>
                       </div>
                       <Switch
                         checked={annotOpenWorld}
@@ -627,7 +627,7 @@ function ToolRow({
                 {tool.variation?.description &&
                   tool.variation?.description !==
                     tool.canonical?.description && (
-                    <Stack className="border-border/70 rounded-md border p-2">
+                    <Stack className="border-border/70 border p-2">
                       <Type small muted className="inline font-medium">
                         <Layers2 className="text-muted-foreground/70 inline size-4 align-text-bottom" />{" "}
                         Original Description
@@ -639,7 +639,11 @@ function ToolRow({
                   )}
               </Stack>
             )}
-            {error && <p className="text-destructive text-sm">{error}</p>}
+            {error && (
+              <Type destructive small>
+                {error}
+              </Type>
+            )}
           </div>
           <Dialog.Footer>
             <Button
@@ -718,7 +722,9 @@ function ToolGroupHeader({
             </SimpleTooltip>
           )}
         </div>
-        <p className="text-foreground text-sm leading-6">{group.title}</p>
+        <Type as="span" className="text-sm leading-6">
+          {group.title}
+        </Type>
       </button>
       <button
         onClick={onToggle}
@@ -1064,7 +1070,7 @@ export function ToolList({
     <div className="relative w-full">
       <div
         className={cn(
-          "border-neutral-softest w-full overflow-hidden rounded-lg border",
+          "border-neutral-softest w-full overflow-hidden border",
           className,
         )}
       >
@@ -1136,10 +1142,10 @@ export function ToolList({
 
       {hasChanges && !selectionMode && (
         <div className="sticky right-0 bottom-0 left-0 mt-4 flex justify-center">
-          <div className="border-neutral-softest bg-background flex items-center gap-4 rounded-lg border px-4 py-3">
-            <p className="text-foreground text-sm">
+          <div className="border-neutral-softest bg-background flex items-center gap-4 border px-4 py-3">
+            <Type className="text-sm">
               {selectedForRemoval.size} tool(s) selected
-            </p>
+            </Type>
             <div className="flex items-center gap-2">
               <Kbd className="pointer-events-none gap-1 px-1.5 select-none">
                 <span className="text-xs">⌘</span>K

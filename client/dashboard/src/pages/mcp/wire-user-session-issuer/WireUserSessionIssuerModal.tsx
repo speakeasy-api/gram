@@ -1,3 +1,5 @@
+import { Card } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog } from "@/components/ui/dialog";
 import {
   Select,
@@ -27,7 +29,7 @@ import {
   useUserSessionIssuers,
 } from "@gram/client/react-query/userSessionIssuers.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { Button, Input, Stack } from "@/components/ui/moonshine";
+import { Alert, Button, Input, Stack, cn } from "@/components/ui/moonshine";
 import { AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -153,10 +155,10 @@ function WireUserSessionIssuerBody({
           <Dialog.Title>Wire User Session Issuer</Dialog.Title>
         </Dialog.Header>
         <div className="flex-1 overflow-y-auto px-6 py-4">
-          <Callout tone="warn">
+          <Alert variant="warning" dismissible={false}>
             This toolset doesn't have an OAuth proxy provider configured, so
             there is nothing to port.
-          </Callout>
+          </Alert>
         </div>
         <Dialog.Footer className="shrink-0 border-t px-6 py-3">
           <Button onClick={onClose}>
@@ -276,10 +278,10 @@ function WireUserSessionIssuerSteps({
             />
           )}
           {isComplete ? (
-            <Callout tone="success">
+            <Alert variant="success" dismissible={false}>
               Migration complete. Use the new user session issuer to
               authenticate MCP clients going forward.
-            </Callout>
+            </Alert>
           ) : currentStep ? (
             <CurrentStepBody
               step={currentStep}
@@ -291,7 +293,9 @@ function WireUserSessionIssuerSteps({
             />
           ) : null}
           {errorStep?.error && (
-            <Callout tone="error">{errorStep.error}</Callout>
+            <Alert variant="error" dismissible={false}>
+              {errorStep.error}
+            </Alert>
           )}
         </Stack>
       </div>
@@ -326,10 +330,7 @@ function StepHeading({
 }) {
   return (
     <Stack gap={1}>
-      <Type
-        small
-        className="text-muted-foreground text-[11px] tracking-wide uppercase"
-      >
+      <Type mono small muted className="uppercase tracking-[0.08em]">
         Step {index + 1} of {total}
       </Type>
       <Type className="text-lg font-medium">{step.resourceLabel}</Type>
@@ -368,22 +369,22 @@ function primaryActionLabel(
 function ParadigmSummary({ paradigm }: { paradigm: MigrationParadigm }) {
   if (paradigm === "gram") {
     return (
-      <Callout tone="info">
+      <Alert variant="info" dismissible={false}>
         This toolset is on the <strong>platform-managed</strong> OAuth paradigm.
         The platform is itself the upstream identity provider, so the migration
         produces a single resource: a user session issuer. No remote session
         issuer or client is created — there is no external authorization server
         to be a client of.
-      </Callout>
+      </Alert>
     );
   }
   return (
-    <Callout tone="info">
+    <Alert variant="info" dismissible={false}>
       This toolset is on the <strong>Custom</strong> OAuth Proxy paradigm. The
       migration produces three resources: a user session issuer, a remote
       session issuer (the upstream IdP identity), and a remote session client.
       You pick how the client is provisioned on the third step.
-    </Callout>
+    </Alert>
   );
 }
 
@@ -447,7 +448,7 @@ function StepDot({
   emphasized: boolean;
 }) {
   if (status === "done")
-    return <CheckCircle2 className="h-5 w-5 text-green-600" />;
+    return <CheckCircle2 className="text-success-foreground h-5 w-5" />;
   if (status === "running") return <Loader2 className="h-5 w-5 animate-spin" />;
   if (status === "error")
     return <AlertTriangle className="text-destructive h-5 w-5" />;
@@ -650,24 +651,35 @@ function ClientStrategyChooser({
       {visibleOptions.map((opt) => {
         const disabled = opt.key === "register" && !canRegister;
         return (
-          <button
+          <Card
             key={opt.key}
-            type="button"
-            disabled={disabled}
-            onClick={() => onPick(opt.key)}
-            className={`border-border w-full rounded-md border p-3 text-left transition-colors ${
-              disabled
-                ? "cursor-not-allowed opacity-50"
-                : "hover:bg-muted/60 hover:border-foreground/30"
-            }`}
+            role="button"
+            tabIndex={disabled ? -1 : 0}
+            aria-disabled={disabled}
+            onClick={() => {
+              if (!disabled) onPick(opt.key);
+            }}
+            onKeyDown={(e) => {
+              if (disabled) return;
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onPick(opt.key);
+              }
+            }}
+            className={cn(
+              "cursor-pointer",
+              disabled && "pointer-events-none cursor-not-allowed opacity-50",
+            )}
           >
             <Stack gap={1}>
               <div className="flex items-center justify-between">
                 <Type className="font-medium">{opt.title}</Type>
                 {disabled && (
                   <Type
+                    mono
                     small
-                    className="text-muted-foreground text-[10px] tracking-wide uppercase"
+                    muted
+                    className="uppercase tracking-[0.08em]"
                   >
                     No registration endpoint
                   </Type>
@@ -677,7 +689,7 @@ function ClientStrategyChooser({
                 {opt.blurb}
               </Type>
             </Stack>
-          </button>
+          </Card>
         );
       })}
     </Stack>
@@ -701,13 +713,13 @@ function ClonePane({
   return (
     <Stack gap={3}>
       <StrategyHeader title="Clone" onBack={onBack} />
-      <Callout tone="warn">
+      <Alert variant="warning" dismissible={false}>
         Before cloning, update the upstream IdP's registered redirect URIs to
         include the platform's user-session callback. The existing client_id
         stays the same, so any redirect URIs you have registered already keep
         working — but the user-session flow lands on a different callback than
         the OAuth proxy did, so the new URL has to be added.
-      </Callout>
+      </Alert>
       <Stack gap={2}>
         <FieldReadOnly
           label="Authorization server"
@@ -727,13 +739,12 @@ function ClonePane({
         and persists them on a new remote_session_client server-side. The secret
         never leaves the server.
       </Type>
-      <label className="flex items-start gap-2 text-sm">
-        <input
-          type="checkbox"
+      <label className="flex cursor-pointer items-start gap-2 text-sm">
+        <Checkbox
           className="mt-0.5"
           checked={form.cloneCallbackConfirmed}
-          onChange={(e) =>
-            setForm({ cloneCallbackConfirmed: e.target.checked })
+          onCheckedChange={(checked) =>
+            setForm({ cloneCallbackConfirmed: checked === true })
           }
         />
         <span>
@@ -841,13 +852,9 @@ function StrategyHeader({
   return (
     <div className="flex items-center justify-between">
       <Type className="font-medium">{title}</Type>
-      <button
-        type="button"
-        onClick={onBack}
-        className="text-muted-foreground hover:text-foreground text-xs underline"
-      >
-        Pick a different strategy
-      </button>
+      <Button variant="tertiary" size="xs" onClick={onBack}>
+        <Button.Text>Pick a different strategy</Button.Text>
+      </Button>
     </div>
   );
 }
@@ -886,9 +893,10 @@ function FieldReadOnly({
         {label}
       </Type>
       <div
-        className={`bg-muted/40 border-border rounded-md border px-2 py-1.5 text-sm break-all ${
-          mono ? "font-mono" : ""
-        }`}
+        className={cn(
+          "bg-muted/40 border-border border px-2 py-1.5 text-sm break-all",
+          mono && "font-mono",
+        )}
       >
         {value}
       </div>
@@ -898,30 +906,5 @@ function FieldReadOnly({
         </Type>
       )}
     </Stack>
-  );
-}
-
-function Callout({
-  tone,
-  children,
-}: {
-  tone: "warn" | "error" | "success" | "info";
-  children: React.ReactNode;
-}) {
-  const toneClasses =
-    tone === "error"
-      ? "border-destructive/40 bg-destructive/5 text-destructive"
-      : tone === "success"
-        ? "border-green-500/40 bg-green-50 text-green-900 dark:bg-green-950 dark:text-green-200"
-        : tone === "info"
-          ? "border-border bg-muted/30 text-foreground"
-          : "border-amber-500/40 bg-amber-50 text-amber-900 dark:bg-amber-950 dark:text-amber-200";
-  return (
-    <div
-      className={`rounded-md border px-3 py-2 text-sm ${toneClasses}`}
-      role={tone === "error" ? "alert" : undefined}
-    >
-      {children}
-    </div>
   );
 }

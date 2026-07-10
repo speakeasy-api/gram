@@ -9,6 +9,10 @@ import { RequireScope } from "@/components/require-scope";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
 import { type DateRangePreset } from "@gram-ai/elements";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
+import { Card } from "@/components/ui/card";
+import { Heading } from "@/components/ui/heading";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
+import { Type } from "@/components/ui/type";
 import { useListChats } from "@gram/client/react-query/listChats.js";
 import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
 import { useRiskUserBreakdown } from "@gram/client/react-query/riskUserBreakdown.js";
@@ -211,19 +215,16 @@ function ChatList({
 
   if (chats.length === 0) {
     return (
-      <div className="flex flex-col items-center gap-3 py-12 text-center">
-        <div className="bg-muted flex size-12 items-center justify-center rounded-full">
-          <Inbox className="text-muted-foreground size-6" />
-        </div>
-        <span className="text-foreground font-medium">
-          No chats in this time range
-        </span>
-      </div>
+      <InlineEmptyState
+        className="py-12"
+        icon={<Inbox />}
+        title="No chats in this time range"
+      />
     );
   }
 
   return (
-    <ul className="divide-border divide-y rounded-lg border">
+    <ul className="divide-border divide-y border">
       {chats.map((chat) => (
         <li key={chat.id}>
           <button
@@ -263,9 +264,11 @@ function CategoryBreakdown({
 }) {
   if (isLoading && categories.length === 0) {
     return (
-      <div className="text-muted-foreground rounded-lg border p-4 text-sm">
-        Loading category breakdown...
-      </div>
+      <Card size="sm">
+        <Type muted className="text-sm">
+          Loading category breakdown...
+        </Type>
+      </Card>
     );
   }
   if (categories.length === 0) return null;
@@ -276,10 +279,10 @@ function CategoryBreakdown({
   }));
 
   return (
-    <div className="space-y-3 rounded-lg border p-4">
-      <h4 className="text-sm font-medium">Findings by category</h4>
+    <Card size="sm" className="gap-3">
+      <Heading variant="h6">Findings by category</Heading>
       <RankedBar items={items} />
-    </div>
+    </Card>
   );
 }
 
@@ -292,9 +295,11 @@ function RuleBreakdown({
 }) {
   if (isLoading && rules.length === 0) {
     return (
-      <div className="text-muted-foreground rounded-lg border p-4 text-sm">
-        Loading rule breakdown...
-      </div>
+      <Card size="sm">
+        <Type muted className="text-sm">
+          Loading rule breakdown...
+        </Type>
+      </Card>
     );
   }
   if (rules.length === 0) return null;
@@ -305,9 +310,9 @@ function RuleBreakdown({
   }));
 
   return (
-    <div className="space-y-3 rounded-lg border p-4">
-      <h4 className="text-sm font-medium">Findings by rule</h4>
+    <Card size="sm" className="gap-3">
+      <Heading variant="h6">Findings by rule</Heading>
       <RankedBar items={items} />
-    </div>
+    </Card>
   );
 }

@@ -1,4 +1,5 @@
 import { Type } from "@/components/ui/type";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import { Switch } from "@/components/ui/switch";
 import {
   Badge,
@@ -222,19 +223,18 @@ function ExclusionActionsMenu({
 
 function ExclusionsEmptyState({ onCreate }: { onCreate: () => void }) {
   return (
-    <div className="bg-background flex h-[360px] w-full flex-col items-center justify-center gap-4 rounded-xl border">
-      <div className="space-y-1 text-center">
-        <Type className="font-medium">No exclusions yet</Type>
-        <Type small muted>
-          Create an exclusion to suppress false-positive findings.
-        </Type>
-      </div>
-      <Button onClick={onCreate}>
-        <Button.LeftIcon>
-          <Plus className="h-4 w-4" />
-        </Button.LeftIcon>
-        <Button.Text>Create exclusion</Button.Text>
-      </Button>
-    </div>
+    <InlineEmptyState
+      className="h-[360px] w-full justify-center"
+      title="No exclusions yet"
+      description="Create an exclusion to suppress false-positive findings."
+      action={
+        <Button onClick={onCreate}>
+          <Button.LeftIcon>
+            <Plus className="h-4 w-4" />
+          </Button.LeftIcon>
+          <Button.Text>Create exclusion</Button.Text>
+        </Button>
+      }
+    />
   );
 }

@@ -565,7 +565,7 @@ export function CreateRoleDialog({
                 <button
                   type="button"
                   onClick={saveAndCloseRuleEditor}
-                  className="text-muted-foreground hover:text-foreground -ml-1 rounded-sm p-1 transition-colors"
+                  className="text-muted-foreground hover:text-foreground -ml-1 p-1 transition-colors"
                 >
                   <ArrowLeft className="h-4 w-4" />
                 </button>
@@ -672,10 +672,7 @@ export function CreateRoleDialog({
                       const someSelected = selectedInGroup > 0 && !allSelected;
 
                       return (
-                        <div
-                          key={group.label}
-                          className="border-border rounded-md border"
-                        >
+                        <div key={group.label} className="border-border border">
                           {/* Group header */}
                           <div
                             role="button"
@@ -687,7 +684,7 @@ export function CreateRoleDialog({
                                 toggleGroup(group.label);
                               }
                             }}
-                            className="hover:bg-muted/50 flex w-full cursor-pointer items-start justify-between gap-2 rounded-t-md px-3 py-2"
+                            className="hover:bg-muted/50 flex w-full cursor-pointer items-start justify-between gap-2 px-3 py-2"
                           >
                             <div className="flex items-start gap-2">
                               <Checkbox
@@ -775,7 +772,7 @@ export function CreateRoleDialog({
 
                                       {/* Static label for org/environment */}
                                       {isChecked && !isConfigurable && (
-                                        <span className="border-input text-muted-foreground inline-flex h-7 shrink-0 items-center rounded-md border bg-transparent px-2 py-1 text-xs">
+                                        <span className="border-input text-muted-foreground inline-flex h-7 shrink-0 items-center border bg-transparent px-2 py-1 text-xs">
                                           {scopeDef.resourceType ===
                                           "environment"
                                             ? "All in project"
@@ -878,7 +875,7 @@ export function CreateRoleDialog({
                   </button>
 
                   {showMembers && (
-                    <div className="border-border divide-border mt-3 divide-y rounded-md border">
+                    <div className="border-border divide-border mt-3 divide-y border">
                       {/* Select-all header */}
                       {(() => {
                         const selectableMembers = getSelectableMembers(
@@ -1082,7 +1079,7 @@ function RuleChip({
   const chip = (
     <span
       className={cn(
-        "border-input bg-background inline-flex items-center gap-1 overflow-hidden rounded-md border px-1 py-1 text-xs",
+        "border-input bg-background inline-flex items-center gap-1 overflow-hidden border px-1 py-1 text-xs",
         isDeny && "border-destructive/30",
       )}
     >
@@ -1091,16 +1088,15 @@ function RuleChip({
         onClick={onClick}
         disabled={readOnly && !onClick}
         className={cn(
-          "hover:bg-accent inline-flex items-center gap-1 rounded-md px-2 py-1 transition-colors",
+          "hover:bg-accent inline-flex items-center gap-1 px-2 py-1 transition-colors",
           isDeny
             ? "text-destructive hover:bg-destructive/5"
             : "text-foreground",
-          readOnly && "rounded-md",
           !readOnly && onClick && "cursor-pointer",
         )}
       >
         {isAllow ? (
-          <Check className="h-3 w-3 shrink-0 text-emerald-600 dark:text-emerald-400" />
+          <Check className="text-default-success h-3 w-3 shrink-0" />
         ) : (
           <Ban className="h-3 w-3 shrink-0 opacity-70" />
         )}
@@ -1121,7 +1117,7 @@ function RuleChip({
             type="button"
             onClick={onRemove}
             className={cn(
-              "hover:bg-accent inline-flex items-center rounded-md px-1.5 py-1 transition-colors",
+              "hover:bg-accent inline-flex items-center px-1.5 py-1 transition-colors",
               isDeny
                 ? "text-destructive/60 hover:text-destructive hover:bg-destructive/5"
                 : "text-muted-foreground hover:text-foreground",

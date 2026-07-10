@@ -35,6 +35,7 @@ import {
 } from "@/components/filters";
 import { Page } from "@/components/page-layout";
 import { Heading } from "@/components/ui/heading";
+import { Type } from "@/components/ui/type";
 import { type DateRangePreset, getPresetRange } from "@gram-ai/elements";
 import { isValidPreset } from "@/components/observe/observeFilterUtils";
 
@@ -47,10 +48,10 @@ function AgentSessionsHeading() {
   return (
     <div className="flex min-w-0 flex-col gap-1">
       <Heading variant="h1">Agent Sessions</Heading>
-      <p className="text-muted-foreground text-sm">
+      <Type muted small>
         View and debug individual agent sessions captured for organization
         members in this project
-      </p>
+      </Type>
     </div>
   );
 }
@@ -697,7 +698,7 @@ function AgentSessionsPageContent({
                 type="button"
                 onClick={clearAssistantFilter}
                 aria-label="Clear assistant filter"
-                className="hover:bg-muted-foreground/20 -mr-1 ml-0.5 flex size-4 items-center justify-center rounded"
+                className="hover:bg-muted-foreground/20 -mr-1 ml-0.5 flex size-4 items-center justify-center"
               >
                 <X className="size-3" />
               </button>
@@ -803,10 +804,21 @@ function AgentSessionsPageContent({
                 >
                   Previous
                 </Button>
-                <span className="text-muted-foreground text-sm tabular-nums">
-                  Page {Math.floor(offset / limit) + 1}
-                  {total > 0 && ` of ${Math.ceil(total / limit)}`}
-                </span>
+                <Type muted small>
+                  Page{" "}
+                  <span className="tabular-nums">
+                    {Math.floor(offset / limit) + 1}
+                  </span>
+                  {total > 0 && (
+                    <>
+                      {" "}
+                      of{" "}
+                      <span className="tabular-nums">
+                        {Math.ceil(total / limit)}
+                      </span>
+                    </>
+                  )}
+                </Type>
                 <Button
                   onClick={() => setOffset(offset + limit)}
                   disabled={!hasMore}

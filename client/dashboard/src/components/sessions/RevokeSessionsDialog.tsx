@@ -3,6 +3,7 @@ import { useMutation } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/moonshine";
 import { Dialog } from "@/components/ui/dialog";
+import { Type } from "@/components/ui/type";
 import { useRevokeUserSessionMutation } from "@gram/client/react-query/revokeUserSession.js";
 
 export function RevokeSessionsDialog({
@@ -71,10 +72,10 @@ export function RevokeSessionsDialog({
           </Dialog.Description>
         </Dialog.Header>
         {failedCount > 0 && (
-          <p className="text-destructive text-sm">
+          <Type small destructive>
             {failedCount} session{failedCount === 1 ? "" : "s"} couldn&apos;t be
             revoked. Please try again.
-          </p>
+          </Type>
         )}
         <Dialog.Footer>
           <Button variant="tertiary" onClick={() => onOpenChange(false)}>

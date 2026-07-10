@@ -1,3 +1,4 @@
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import { Badge, Button } from "@/components/ui/moonshine";
 import { Type } from "@/components/ui/type";
 import { telemetrySearchLogs } from "@gram/client/funcs/telemetrySearchLogs";
@@ -129,11 +130,28 @@ export function PlaygroundLogsPanel({
   const logsDisabled =
     error instanceof ServiceError && error.statusCode === 404;
 
+  const emptyLogsState = isPending ? (
+    <div className="px-4 py-6 text-center">
+      <Type variant="small" muted>
+        Loading logs...
+      </Type>
+    </div>
+  ) : (
+    <InlineEmptyState
+      className="py-6"
+      title={
+        logsDisabled
+          ? "Logs are not enabled for this organization"
+          : "No logs yet"
+      }
+    />
+  );
+
   return (
     <div className="flex h-full flex-col border-l">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3">
-        <span className="text-muted-foreground text-[11px] font-semibold tracking-wider uppercase">
+        <span className="text-muted-foreground font-mono text-xs tracking-[0.08em] uppercase">
           Logs ({logs.length})
         </span>
         <div className="flex items-center gap-1">
@@ -166,15 +184,7 @@ export function PlaygroundLogsPanel({
       {/* Logs List */}
       <div className="flex-1 overflow-y-auto">
         {logs.length === 0 ? (
-          <div className="px-4 py-6 text-center">
-            <Type variant="small" className="text-muted-foreground">
-              {isPending
-                ? "Loading logs..."
-                : logsDisabled
-                  ? "Logs are not enabled for this organization"
-                  : "No logs yet"}
-            </Type>
-          </div>
+          emptyLogsState
         ) : (
           <div>
             {logs.map((log) => {
@@ -249,10 +259,10 @@ export function PlaygroundLogsPanel({
             <div className="space-y-3">
               {/* Log Details */}
               <div className="space-y-1.5">
-                <div className="text-muted-foreground mb-1.5 text-[11px] font-semibold tracking-wider uppercase">
+                <div className="text-muted-foreground mb-1.5 font-mono text-xs tracking-[0.08em] uppercase">
                   Details
                 </div>
-                <div className="bg-background/60 border-border/40 divide-border/40 divide-y rounded border">
+                <div className="bg-background/60 border-border/40 divide-border/40 divide-y border">
                   <div className="flex justify-between px-2.5 py-1.5 text-[11px]">
                     <span className="text-muted-foreground font-medium">
                       Service
@@ -307,10 +317,10 @@ export function PlaygroundLogsPanel({
               {/* Body */}
               {selectedLog.body && (
                 <div className="space-y-1.5">
-                  <div className="text-muted-foreground text-[11px] font-semibold tracking-wider uppercase">
+                  <div className="text-muted-foreground font-mono text-xs tracking-[0.08em] uppercase">
                     Message
                   </div>
-                  <pre className="bg-background/60 border-border/40 overflow-x-auto rounded border p-2 font-mono text-[10px] leading-relaxed whitespace-pre-wrap">
+                  <pre className="bg-background/60 border-border/40 overflow-x-auto border p-2 font-mono text-[10px] leading-relaxed whitespace-pre-wrap">
                     {selectedLog.body}
                   </pre>
                 </div>
@@ -321,10 +331,10 @@ export function PlaygroundLogsPanel({
                 typeof selectedLog.attributes === "object" &&
                 Object.keys(selectedLog.attributes).length > 0 && (
                   <div className="space-y-1.5">
-                    <div className="text-muted-foreground text-[11px] font-semibold tracking-wider uppercase">
+                    <div className="text-muted-foreground font-mono text-xs tracking-[0.08em] uppercase">
                       Attributes
                     </div>
-                    <pre className="bg-background/60 border-border/40 overflow-x-auto rounded border p-2 font-mono text-[10px] leading-relaxed">
+                    <pre className="bg-background/60 border-border/40 overflow-x-auto border p-2 font-mono text-[10px] leading-relaxed">
                       {JSON.stringify(selectedLog.attributes, null, 2)}
                     </pre>
                   </div>
@@ -335,10 +345,10 @@ export function PlaygroundLogsPanel({
                 typeof selectedLog.resourceAttributes === "object" &&
                 Object.keys(selectedLog.resourceAttributes).length > 0 && (
                   <div className="space-y-1.5">
-                    <div className="text-muted-foreground text-[11px] font-semibold tracking-wider uppercase">
+                    <div className="text-muted-foreground font-mono text-xs tracking-[0.08em] uppercase">
                       Resource Attributes
                     </div>
-                    <pre className="bg-background/60 border-border/40 overflow-x-auto rounded border p-2 font-mono text-[10px] leading-relaxed">
+                    <pre className="bg-background/60 border-border/40 overflow-x-auto border p-2 font-mono text-[10px] leading-relaxed">
                       {JSON.stringify(selectedLog.resourceAttributes, null, 2)}
                     </pre>
                   </div>

@@ -237,7 +237,7 @@ function IdentitySection({
         <Type as="div" muted small className="mb-4">
           {description}
         </Type>
-        <div className="border-border overflow-hidden rounded-lg border">
+        <div className="border-border overflow-hidden border">
           <div className="flex items-center gap-4 p-4">
             <div className="bg-muted flex h-10 w-10 shrink-0 items-center justify-center rounded-full">
               {providerIcon}

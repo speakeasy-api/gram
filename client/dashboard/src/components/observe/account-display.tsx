@@ -5,6 +5,7 @@ import {
 } from "@/components/observe/account-display-utils";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/moonshine";
+import { Type } from "@/components/ui/type";
 
 // The per-account type marker. Personal reuses the shared amber badge; team is
 // shown explicitly (this is the detailed view, so every account is labeled).
@@ -38,10 +39,12 @@ export function AccountRow({
   return (
     <div className={cn("flex items-center justify-between gap-2", className)}>
       <div className="min-w-0">
-        <p className="truncate text-sm">{account.email || "(no email)"}</p>
-        <p className="text-muted-foreground text-xs">
+        <Type small className="truncate">
+          {account.email || "(no email)"}
+        </Type>
+        <Type muted small className="text-xs">
           {providerLabel(account.provider)}
-        </p>
+        </Type>
       </div>
       <AccountTypePill accountType={account.accountType} />
     </div>

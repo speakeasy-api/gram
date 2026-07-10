@@ -1,4 +1,3 @@
-// oxlint-disable react/only-export-components -- compound component (Object.assign) pattern
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useOrganization, useProject } from "@/contexts/Auth.tsx";
@@ -19,7 +18,7 @@ function PageHeaderComponent({
 }: {
   className?: string;
   children: React.ReactNode;
-}) {
+}): React.JSX.Element {
   return (
     <>
       <header
@@ -289,8 +288,8 @@ function PageHeaderActions({
   );
 }
 
-export const PageHeader = Object.assign(PageHeaderComponent, {
-  Title: PageHeaderTitle,
-  Breadcrumbs: PageHeaderBreadcrumbs,
-  Actions: PageHeaderActions,
-});
+PageHeaderComponent.Title = PageHeaderTitle;
+PageHeaderComponent.Breadcrumbs = PageHeaderBreadcrumbs;
+PageHeaderComponent.Actions = PageHeaderActions;
+
+export { PageHeaderComponent as PageHeader };

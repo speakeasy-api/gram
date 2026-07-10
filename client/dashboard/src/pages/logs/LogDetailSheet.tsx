@@ -165,13 +165,13 @@ function LogDetailContent({
       <div className="flex flex-col gap-4">
         <div className="flex items-center gap-3">
           {blockReason ? (
-            <div className="inline-flex items-center gap-1.5 rounded bg-amber-500/10 px-2 py-1 text-xs font-semibold text-amber-700 uppercase dark:text-amber-300">
+            <div className="bg-warning/10 text-warning inline-flex items-center gap-1.5 px-2 py-1 text-xs font-semibold uppercase">
               <ShieldAlert className="size-3" />
               Blocked
             </div>
           ) : (
             <div
-              className={`rounded px-2 py-1 text-xs font-semibold uppercase ${severityClass} bg-muted`}
+              className={`px-2 py-1 text-xs font-semibold uppercase ${severityClass} bg-muted`}
             >
               {log.severityText || "INFO"}
             </div>
@@ -182,10 +182,10 @@ function LogDetailContent({
         </div>
 
         {blockReason && (
-          <div className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
-            <ShieldAlert className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+          <div className="border-warning/40 bg-warning/10 flex items-start gap-3 border p-3">
+            <ShieldAlert className="text-warning mt-0.5 size-4 shrink-0" />
             <div className="flex min-w-0 flex-1 flex-col gap-1">
-              <div className="text-xs font-semibold tracking-wide text-amber-700 uppercase dark:text-amber-300">
+              <div className="text-warning text-xs font-semibold tracking-wide uppercase">
                 Block Reason
               </div>
               <div className="text-foreground text-sm break-words">
@@ -246,10 +246,10 @@ function LogDetailContent({
         <TabsContent value="details" className="mt-5 flex flex-col gap-5">
           {/* Tool Error — destructive styling so failures pop visually */}
           {toolError && (
-            <div className="border-destructive/40 bg-destructive/10 flex items-start gap-3 rounded-lg border p-3">
-              <CircleAlert className="text-destructive-default mt-0.5 size-4 shrink-0" />
+            <div className="border-destructive/40 bg-destructive/10 flex items-start gap-3 border p-3">
+              <CircleAlert className="text-destructive mt-0.5 size-4 shrink-0" />
               <div className="flex min-w-0 flex-1 flex-col gap-1">
-                <div className="text-destructive-default text-xs font-semibold tracking-wide uppercase">
+                <div className="text-destructive text-xs font-semibold tracking-wide uppercase">
                   Tool Error
                 </div>
                 <div className="text-foreground text-sm break-words">
@@ -261,7 +261,7 @@ function LogDetailContent({
 
           {/* Highlights — prominent labeled rows pulled out of attributes */}
           {highlights.length > 0 && (
-            <div className="border-border bg-muted/40 grid grid-cols-1 gap-x-4 gap-y-2 rounded-lg border p-4 sm:grid-cols-[max-content_minmax(0,1fr)]">
+            <div className="border-border bg-muted/40 grid grid-cols-1 gap-x-4 gap-y-2 border p-4 sm:grid-cols-[max-content_minmax(0,1fr)]">
               {highlights.map((h) => (
                 <div
                   key={h.path}
@@ -281,7 +281,7 @@ function LogDetailContent({
             <CollapsibleBodySection title="Tool Input" content={toolInput} />
           )}
           {showToolIOHiddenMessage && (
-            <div className="text-muted-foreground bg-muted/30 border-border rounded-lg border px-3 py-2 text-sm">
+            <div className="text-muted-foreground bg-muted/30 border-border border px-3 py-2 text-sm">
               Tool arguments are not shown when tool_io_logs are disabled.
             </div>
           )}
@@ -329,7 +329,7 @@ function LogDetailContent({
               Full Log Record
             </div>
             <button
-              className="hover:bg-muted rounded p-1.5"
+              className="hover:bg-muted p-1.5"
               onClick={() => {
                 void navigator.clipboard.writeText(
                   JSON.stringify(log, null, 2),
@@ -339,7 +339,7 @@ function LogDetailContent({
               <Copy className="size-4" />
             </button>
           </div>
-          <div className="bg-muted/40 border-border flex-1 overflow-y-auto rounded-lg border p-4">
+          <div className="bg-muted/40 border-border flex-1 overflow-y-auto border p-4">
             <pre className="font-mono text-sm break-all whitespace-pre-wrap">
               {JSON.stringify(log, null, 2)}
             </pre>
@@ -381,7 +381,7 @@ function CollapsibleBodySection({
         </div>
         <div className="flex items-center gap-1">
           <button
-            className="hover:bg-muted rounded p-1.5"
+            className="hover:bg-muted p-1.5"
             onClick={(e) => {
               e.stopPropagation();
               void navigator.clipboard.writeText(content);
@@ -398,7 +398,7 @@ function CollapsibleBodySection({
         </div>
       </button>
       {isOpen && (
-        <div className="bg-muted/40 border-border max-h-96 overflow-y-auto rounded-lg border p-4">
+        <div className="bg-muted/40 border-border max-h-96 overflow-y-auto border p-4">
           <pre className="font-mono text-sm break-words whitespace-pre-wrap">
             {displayContent}
           </pre>
@@ -421,7 +421,7 @@ function MetadataBadge({
 }) {
   return (
     <button
-      className="bg-muted/50 hover:bg-muted flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors"
+      className="bg-muted/50 hover:bg-muted flex items-center gap-2 px-3 py-1.5 text-sm transition-colors"
       onClick={() => {
         if (copyValue) {
           void navigator.clipboard.writeText(copyValue);
@@ -533,7 +533,7 @@ function AttributesSection({
           {title}
         </div>
         <button
-          className="hover:bg-muted rounded p-1.5"
+          className="hover:bg-muted p-1.5"
           onClick={() => {
             void navigator.clipboard.writeText(JSON.stringify(data, null, 2));
           }}
@@ -541,7 +541,7 @@ function AttributesSection({
           <Copy className="size-4" />
         </button>
       </div>
-      <div className="bg-muted/40 border-border divide-border divide-y rounded-lg border">
+      <div className="bg-muted/40 border-border divide-border divide-y border">
         {flatEntries.map((entry) => {
           const isFilterable = entry.filterValue !== null;
 

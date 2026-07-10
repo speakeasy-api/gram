@@ -9,6 +9,9 @@ import {
 import { usePublishPluginsMutation } from "@gram/client/react-query/publishPlugins";
 import { StepContainer } from "../step-container";
 import { PublishDialog } from "@/pages/plugins/PublishDialog";
+import { Badge, Button } from "@/components/ui/moonshine";
+import { Card } from "@/components/ui/card";
+import { StatusDot } from "@/components/ui/status-dot";
 
 interface CreateMarketplaceStepProps {
   onComplete: () => void;
@@ -70,7 +73,7 @@ export function CreateMarketplaceStep({
   return (
     <StepContainer
       icon={
-        <div className="bg-secondary flex h-12 w-12 items-center justify-center rounded-lg">
+        <div className="bg-secondary flex h-12 w-12 items-center justify-center">
           <GitBranch className="text-foreground h-6 w-6" />
         </div>
       }
@@ -89,7 +92,7 @@ export function CreateMarketplaceStep({
             <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />
           </div>
         ) : isConnected ? (
-          <div className="bg-card border-border rounded-md border p-4">
+          <Card>
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               <Book className="text-muted-foreground h-4 w-4 flex-shrink-0" />
               <span className="min-w-0 truncate text-base">
@@ -98,7 +101,7 @@ export function CreateMarketplaceStep({
                     href={publishStatus.repoUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-sky-500 hover:text-sky-600 hover:underline"
+                    className="underline underline-offset-2 hover:text-foreground"
                   >
                     {publishStatus.repoOwner}
                   </a>
@@ -111,15 +114,13 @@ export function CreateMarketplaceStep({
                     href={publishStatus.repoUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="font-semibold text-sky-500 hover:text-sky-600 hover:underline"
+                    className="font-semibold underline underline-offset-2 hover:text-foreground"
                   >
                     {publishStatus.repoName}
                   </a>
                 )}
               </span>
-              <span className="border-border text-muted-foreground rounded-full border px-2 py-0 text-[10px] font-medium tracking-wider uppercase">
-                Private
-              </span>
+              <Badge background={false}>Private</Badge>
             </div>
             <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
               This repo is your team's plugin marketplace. The observability
@@ -127,40 +128,36 @@ export function CreateMarketplaceStep({
               later will be published here too.
             </p>
             <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-              <span className="text-muted-foreground inline-flex items-center gap-1.5 text-xs">
-                <span className="relative flex h-2 w-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-40" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-                </span>
-                <span className="font-medium text-emerald-700 dark:text-emerald-400">
+              <span className="inline-flex items-center gap-1.5 text-xs">
+                <StatusDot tone="success" pulse />
+                <span className="text-default-success font-medium">
                   Marketplace set up
                 </span>
               </span>
               <div className="flex flex-wrap items-center gap-2">
-                <a
-                  href={publishStatus.repoUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="border-border bg-background hover:bg-muted/50 inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors"
-                >
-                  <ExternalLink className="h-3 w-3" />
-                  Open
-                </a>
-                <button
-                  type="button"
-                  onClick={openManageDialog}
-                  className="border-border bg-background hover:bg-muted/50 inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors"
-                >
-                  <Users className="h-3 w-3" />
-                  Manage collaborators
-                </button>
+                <Button variant="tertiary" size="sm" asChild>
+                  <a
+                    href={publishStatus.repoUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    Open
+                  </a>
+                </Button>
+                <Button variant="tertiary" size="sm" onClick={openManageDialog}>
+                  <Button.LeftIcon>
+                    <Users className="h-3 w-3" />
+                  </Button.LeftIcon>
+                  <Button.Text>Manage collaborators</Button.Text>
+                </Button>
               </div>
             </div>
-          </div>
+          </Card>
         ) : (
-          <div className="bg-card border-border rounded-lg border p-4">
+          <Card>
             <div className="flex items-start gap-3">
-              <div className="bg-secondary mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded">
+              <div className="bg-secondary mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center">
                 <GitBranch className="text-muted-foreground h-4 w-4" />
               </div>
               <div>
@@ -175,7 +172,7 @@ export function CreateMarketplaceStep({
                 </p>
               </div>
             </div>
-          </div>
+          </Card>
         )}
         {isConnected && (
           <p className="text-muted-foreground text-sm">

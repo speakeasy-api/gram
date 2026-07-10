@@ -6,6 +6,7 @@ import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/heading";
 import { Label } from "@/components/ui/label";
+import { Type } from "@/components/ui/type";
 import {
   Select,
   SelectContent,
@@ -41,7 +42,7 @@ import {
   Search,
   Server,
 } from "lucide-react";
-import { Button, Input, useTheme } from "@/components/ui/moonshine";
+import { Badge, Button, Input, useTheme } from "@/components/ui/moonshine";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
@@ -112,9 +113,9 @@ function ConfigSection({
         onClick={onToggle}
         className="group flex w-full items-center justify-between"
       >
-        <h3 className="text-muted-foreground text-sm font-medium tracking-wide uppercase">
+        <Type as="h3" mono small muted className="uppercase tracking-[0.08em]">
           {title}
-        </h3>
+        </Type>
         <motion.div
           animate={{ rotate: isOpen ? 0 : -90 }}
           transition={{ duration: 0.2, ease: "easeInOut" }}

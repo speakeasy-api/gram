@@ -38,7 +38,7 @@ function ContentErrorFallback({ error: rawError }: ContentErrorFallbackProps) {
         <Card.Description>
           We encountered an error while loading this page.
         </Card.Description>
-        <div className="bg-muted rounded-md p-3">
+        <div className="bg-muted p-3">
           <p className="text-muted-foreground font-mono text-sm">
             {error.message}
           </p>

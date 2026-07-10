@@ -308,7 +308,7 @@ function ExclusionExamples() {
     ['entity_type == "EMAIL_ADDRESS"', "suppress by entity type"],
   ];
   return (
-    <div className="bg-muted/40 text-muted-foreground space-y-1 rounded-md p-3 text-xs">
+    <div className="bg-muted/40 text-muted-foreground space-y-1 p-3 text-xs">
       <Type className="font-medium" small>
         Examples
       </Type>

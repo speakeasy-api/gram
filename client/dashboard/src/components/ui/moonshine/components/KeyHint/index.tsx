@@ -93,7 +93,7 @@ export function KeyHint({
   return (
     <div
       className={cn(
-        "inline-flex min-w-24 flex-col items-start gap-1 rounded-lg border text-base font-semibold tracking-tight text-black shadow-sm shadow-black/5 select-none dark:text-white dark:shadow-white/10",
+        "inline-flex min-w-24 flex-col items-start gap-1 rounded-lg border text-base font-semibold tracking-tight text-black select-none dark:text-white",
         className,
       )}
       {...props}

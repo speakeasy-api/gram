@@ -6,6 +6,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { DashboardCard } from "@/components/ui/dashboard-card";
 import { Heading } from "@/components/ui/heading";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Type } from "@/components/ui/type";
 import { useSlugs } from "@/contexts/Sdk";
 import { useOrgRoutes, useRoutes } from "@/routes";
 import { useGramContext } from "@gram/client/react-query/_context.js";
@@ -383,61 +384,62 @@ export function ProjectDashboard(): JSX.Element {
 
           {logsEnabled && (
             <>
-              {/* Row 0: KPI Cards */}
-              <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+              {/* Row 0: KPI strip — one hairline-bordered band divided by
+                  thin rules, giant serif numerals (Watchdog reference). */}
+              <div className="border-neutral-softest divide-neutral-softest grid grid-cols-2 divide-x divide-y border md:grid-cols-4 md:divide-y-0">
                 {isOverviewPending ? (
-                  <Skeleton className="h-[100px] rounded-lg" />
+                  <MetricSkeleton />
                 ) : (
                   <MetricCard
+                    bordered={false}
                     title="Active Servers"
                     value={overview?.summary.activeServersCount ?? 0}
-                    icon="server"
                     tooltip="Unique MCP servers used by project members that received at least one tool call in the selected period. Servers with no activity in the window are not counted."
                   />
                 )}
                 {isOverviewPending ? (
-                  <Skeleton className="h-[100px] rounded-lg" />
+                  <MetricSkeleton />
                 ) : (
                   <MetricCard
+                    bordered={false}
                     title="Tool Calls"
                     value={overview?.summary.totalToolCalls ?? 0}
-                    icon="wrench"
                     tooltip="Total tool invocations recorded across all servers and sources in the selected period."
                   />
                 )}
                 {modePending ||
                 (hasHookData ? isSpendLoading : mcpUsersPending) ? (
-                  <Skeleton className="h-[100px] rounded-lg" />
+                  <MetricSkeleton />
                 ) : hasHookData ? (
                   <MetricCard
+                    bordered={false}
                     title="Total Spend"
                     value={totalSpend}
                     format="currency"
-                    icon="dollar-sign"
                     tooltip="Total LLM spend by project members in the selected period, summed from per-user cost. Matches the figure on the Employees page."
                   />
                 ) : (
                   <MetricCard
+                    bordered={false}
                     title="End Users"
                     value={endUsersCount}
-                    icon="users"
                     tooltip="Distinct external end users that made MCP tool calls in the selected period."
                   />
                 )}
                 {modePending || isOverviewPending ? (
-                  <Skeleton className="h-[100px] rounded-lg" />
+                  <MetricSkeleton />
                 ) : hasHookData ? (
                   <MetricCard
+                    bordered={false}
                     title="Sessions"
                     value={totalSessions}
-                    icon="message-circle"
                     tooltip="Distinct agent sessions across project members in the selected period."
                   />
                 ) : (
                   <MetricCard
+                    bordered={false}
                     title="Failed Tool Calls"
                     value={overview?.summary.failedToolCalls ?? 0}
-                    icon="circle-alert"
                     tooltip="MCP tool calls that returned an error (HTTP 4xx/5xx) in the selected period."
                   />
                 )}
@@ -570,29 +572,24 @@ export function ProjectDashboard(): JSX.Element {
                         <EmptyState message="No session activity recorded" />
                       ) : (
                         <ul className="divide-border divide-y">
-                          {topUsersBySessions.map((user, i) => (
+                          {topUsersBySessions.map((user) => (
                             <li
                               key={user.userId}
                               className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0"
                             >
                               <Avatar className="size-8 shrink-0">
-                                <AvatarFallback
-                                  className={cn(
-                                    "text-xs font-medium",
-                                    avatarColor(i),
-                                  )}
-                                >
+                                <AvatarFallback className="text-xs font-medium">
                                   {emailInitials(user.initialsSource)}
                                 </AvatarFallback>
                               </Avatar>
                               <div className="min-w-0 flex-1">
-                                <p className="truncate text-sm font-medium">
+                                <Type small className="truncate font-medium">
                                   {user.name}
-                                </p>
-                                <p className="text-muted-foreground text-xs">
+                                </Type>
+                                <Type muted className="text-xs">
                                   {user.sessions.toLocaleString()}{" "}
                                   {user.sessions === 1 ? "session" : "sessions"}
-                                </p>
+                                </Type>
                               </div>
                             </li>
                           ))}
@@ -705,6 +702,15 @@ function CardActions({ children }: { children: ReactNode }) {
   return <div className="flex items-center gap-3">{children}</div>;
 }
 
+function MetricSkeleton(): JSX.Element {
+  return (
+    <div className="flex flex-col gap-2 p-5">
+      <Skeleton className="h-3 w-20" />
+      <Skeleton className="h-10 w-24" />
+    </div>
+  );
+}
+
 function ExploreWithAIButton({ onClick }: { onClick: () => void }) {
   return (
     <button
@@ -713,7 +719,7 @@ function ExploreWithAIButton({ onClick }: { onClick: () => void }) {
       aria-label="Explore with AI"
       title="Explore with AI"
       className={cn(
-        "text-muted-foreground inline-flex items-center justify-center rounded-md p-1 transition-colors",
+        "text-muted-foreground inline-flex items-center justify-center p-1 transition-colors",
         INSIGHTS_AI_RAINBOW_CLASS,
       )}
     >
@@ -728,10 +734,10 @@ function LoggingDisabledBanner({ settingsHref }: { settingsHref: string }) {
       <Card.Content className="flex flex-col items-start gap-6">
         <div className="space-y-1">
           <Heading variant="h3">Logging is disabled</Heading>
-          <p className="text-muted-foreground text-sm">
+          <Type muted small>
             Enable logging to see an overview of your project metrics, top
             activity, and session data.
-          </p>
+          </Type>
         </div>
         <Link to={settingsHref}>
           <Button variant="secondary" size="sm">
@@ -757,19 +763,11 @@ function SkeletonList() {
 }
 
 function EmptyState({ message }: { message: string }) {
-  return <p className="text-muted-foreground text-sm">{message}</p>;
-}
-
-const AVATAR_COLORS = [
-  "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
-  "bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300",
-  "bg-teal-100 text-teal-700 dark:bg-teal-950 dark:text-teal-300",
-  "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
-  "bg-pink-100 text-pink-700 dark:bg-pink-950 dark:text-pink-300",
-] as const;
-
-function avatarColor(index: number): string {
-  return AVATAR_COLORS[index % AVATAR_COLORS.length]!;
+  return (
+    <Type muted small>
+      {message}
+    </Type>
+  );
 }
 
 // Fetch every page of telemetrySearchUsers for the given filter, following the

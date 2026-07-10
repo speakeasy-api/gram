@@ -132,12 +132,12 @@ export function EnvironmentVariableRow({
       className={cn(
         "group relative grid grid-cols-[auto_1fr_auto] items-center gap-4 px-4 py-4 transition-colors",
         index !== totalCount - 1 && "border-b",
-        hasUnsavedChanges && "bg-amber-50/50 dark:bg-amber-950/20",
+        hasUnsavedChanges && "bg-warning-softest",
       )}
     >
       {/* Unsaved changes indicator */}
       {hasUnsavedChanges && (
-        <div className="absolute top-0 bottom-0 left-0 w-0.5 bg-amber-500" />
+        <div className="absolute top-0 bottom-0 left-0 w-0.5 bg-warning-default" />
       )}
       {/* Status indicator / Delete button */}
       <div className="relative flex items-center">
@@ -172,7 +172,7 @@ export function EnvironmentVariableRow({
             }}
             placeholder={`Display name for ${envVar.key}`}
             autoFocus
-            className="border-input bg-background placeholder:text-muted-foreground focus:ring-ring h-5 w-full rounded border px-1.5 py-0 font-mono text-sm focus:ring-2 focus:outline-none"
+            className="border-input bg-background placeholder:text-muted-foreground focus:ring-ring h-5 w-full border px-1.5 py-0 font-mono text-sm focus:ring-2 focus:outline-none"
           />
         ) : (
           <div className="group/header-edit flex h-6 w-full items-center gap-2">
@@ -222,7 +222,7 @@ export function EnvironmentVariableRow({
       <div className="flex items-center">
         <div
           className={cn(
-            "border-input bg-background flex h-9 items-center overflow-hidden rounded-md border",
+            "border-input bg-background flex h-9 items-center overflow-hidden border",
             "focus-within:ring-ring focus-within:ring-2",
           )}
         >

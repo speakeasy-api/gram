@@ -1,4 +1,5 @@
 import { cn } from "@/components/ui/moonshine";
+import { Heading } from "@/components/ui/heading";
 import { Maximize2, Minimize2, RotateCcw } from "lucide-react";
 import type { ReactNode } from "react";
 import { ChartButton } from "./ChartButton";
@@ -31,12 +32,14 @@ export function ChartCard({
   return (
     <div
       className={cn(
-        "border-border bg-card rounded-lg border p-4 transition-all duration-200 ease-in-out",
+        "border-border bg-card border p-4 transition-all duration-200 ease-in-out",
         expandedChart && !isExpanded && "hidden",
       )}
     >
       <div className="mb-4 flex items-center justify-between">
-        <h3 className="text font-semibold">{title}</h3>
+        <Heading variant="h4" className="leading-none normal-case">
+          {title}
+        </Heading>
         <div className="flex items-center gap-2">
           {isZoomed && onResetZoom && (
             <ChartButton onClick={onResetZoom} ariaLabel="Reset zoom">

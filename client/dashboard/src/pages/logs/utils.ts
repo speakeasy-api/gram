@@ -16,9 +16,9 @@ export function getSeverityColorClass(severity?: string): string {
   switch (severity?.toUpperCase()) {
     case "ERROR":
     case "FATAL":
-      return "text-destructive-default";
+      return "text-destructive";
     case "WARN":
-      return "text-warning-default";
+      return "text-warning";
     case "DEBUG":
       return "text-muted-foreground";
     case "INFO":

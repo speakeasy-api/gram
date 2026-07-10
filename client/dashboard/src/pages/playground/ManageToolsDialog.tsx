@@ -7,6 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Type } from "@/components/ui/type";
 import { useLatestDeployment, useListTools } from "@/hooks/toolTypes";
 import { Tool, Toolset, getToolSourceLabel } from "@/lib/toolTypes";
 import { Button, Input } from "@/components/ui/moonshine";
@@ -204,12 +205,16 @@ export function ManageToolsDialog({
           {/* Tool list with selection mode */}
           <div className="flex-1 overflow-auto">
             {isLoading ? (
-              <div className="py-8 text-center text-neutral-500">
-                Loading tools...
+              <div className="py-8 text-center">
+                <Type variant="small" muted>
+                  Loading tools...
+                </Type>
               </div>
             ) : filteredTools.length === 0 ? (
-              <div className="py-8 text-center text-neutral-500">
-                {noResultsMessage}
+              <div className="py-8 text-center">
+                <Type variant="small" muted>
+                  {noResultsMessage}
+                </Type>
               </div>
             ) : (
               <ToolList

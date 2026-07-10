@@ -1,5 +1,6 @@
 import { Heading } from "@/components/ui/heading";
 import { Skeleton } from "@/components/ui/skeleton";
+import { StatusDot } from "@/components/ui/status-dot";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
@@ -212,11 +213,11 @@ function EssentialsReadinessSummary({
 }
 
 function readinessSegmentClassName(essential: EssentialReadiness): string {
-  let toneClass = "bg-amber-500";
+  let toneClass = "bg-warning-default";
   if (essential.loading) {
     toneClass = "bg-muted";
   } else if (essential.ready) {
-    toneClass = "bg-green-500";
+    toneClass = "bg-success-default";
   }
 
   return `h-1.5 w-8 rounded-full ${toneClass}`;
@@ -377,7 +378,7 @@ function OverviewRowSkeleton() {
           <Skeleton className="h-4 w-96 max-w-full" />
         </div>
       </div>
-      <Skeleton className="h-9 w-28 shrink-0 rounded-md sm:ml-6" />
+      <Skeleton className="h-9 w-28 shrink-0 sm:ml-6" />
     </div>
   );
 }
@@ -419,7 +420,7 @@ function ServerAddressRow({
   );
 
   if (serverAddress.loading) {
-    actions = <Skeleton className="h-9 w-28 rounded-md" />;
+    actions = <Skeleton className="h-9 w-28" />;
   } else if (serverAddress.ready) {
     actions = (
       <>
@@ -520,7 +521,7 @@ function AuthenticationOverviewRow({
       }
       actions={
         authentication.loading ? (
-          <Skeleton className="h-9 w-28 rounded-md" />
+          <Skeleton className="h-9 w-28" />
         ) : (
           <Button variant={actionVariant} onClick={onConfigure}>
             <Button.Text>{actionLabel}</Button.Text>
@@ -657,7 +658,7 @@ function OverviewRow({
   return (
     <div className="border-border flex flex-col gap-4 border-b py-6 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex min-w-0 gap-5">
-        <StatusDot status={status} loading={statusLoading} />
+        <ReadinessDot status={status} loading={statusLoading} />
         <div className="min-w-0 flex-1">
           <div className="mb-1 flex flex-wrap items-center gap-2.5">
             <Type variant="subheading" as="h3">
@@ -680,7 +681,7 @@ function OverviewRow({
   );
 }
 
-function StatusDot({
+function ReadinessDot({
   status,
   loading,
 }: {
@@ -691,54 +692,23 @@ function StatusDot({
     return <Skeleton className="mt-2 h-3 w-3 shrink-0 rounded-full" />;
   }
 
-  const colorClassName =
-    status?.tone === "ready" ? "bg-green-500" : "bg-amber-500";
-
   return (
-    <span
-      aria-hidden
-      className={`mt-2 h-3 w-3 shrink-0 rounded-full ${colorClassName}`}
+    <StatusDot
+      tone={status?.tone === "ready" ? "success" : "warning"}
+      className="mt-2 shrink-0"
     />
   );
 }
 
 function StatusBadge({ status }: { status: RowStatus }) {
   const variant = status.tone === "ready" ? "success" : "warning";
-  const toneClasses = STATUS_BADGE_TONE_CLASSES[status.tone];
 
   return (
-    <Badge
-      variant={variant}
-      size="sm"
-      background
-      className={`shrink-0 px-2 py-0.5 ${toneClasses.root}`}
-    >
-      <Badge.Text
-        className={`font-mono text-[11px] font-semibold tracking-wide uppercase ${toneClasses.text}`}
-      >
-        {status.label}
-      </Badge.Text>
+    <Badge variant={variant} size="sm" background className="shrink-0">
+      <Badge.Text>{status.label}</Badge.Text>
     </Badge>
   );
 }
-
-const STATUS_BADGE_TONE_CLASSES: Record<
-  StatusTone,
-  { root: string; text: string }
-> = {
-  ready: {
-    root: "border-green-500/20! bg-green-500/10! dark:border-green-500/30! dark:bg-green-500/15!",
-    text: "text-green-700! dark:text-green-300!",
-  },
-  "needs-setup": {
-    root: "border-amber-500/25! bg-amber-500/10! dark:border-amber-500/30! dark:bg-amber-500/15!",
-    text: "text-amber-700! dark:text-amber-300!",
-  },
-  warning: {
-    root: "border-amber-500/25! bg-amber-500/10! dark:border-amber-500/30! dark:bg-amber-500/15!",
-    text: "text-amber-700! dark:text-amber-300!",
-  },
-};
 
 function EnhanceSection() {
   return (
@@ -823,15 +793,10 @@ function EnhancementRow({
 }
 
 function EnhancementStatusDot({ configured }: { configured: boolean }) {
-  let colorClassName = "bg-muted-foreground/40";
-  if (configured) {
-    colorClassName = "bg-green-500";
-  }
-
   return (
-    <span
-      aria-hidden
-      className={`mt-2 h-3 w-3 shrink-0 rounded-full ${colorClassName}`}
+    <StatusDot
+      tone={configured ? "success" : "neutral"}
+      className="mt-2 shrink-0"
     />
   );
 }

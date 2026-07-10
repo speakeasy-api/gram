@@ -30,7 +30,7 @@ export function FullPageError({
             support if the problem persists.
           </p>
 
-          <div className="bg-muted w-full rounded-md p-3">
+          <div className="bg-muted w-full p-3">
             <p className="text-muted-foreground font-mono text-xs break-all">
               {error.message}
             </p>

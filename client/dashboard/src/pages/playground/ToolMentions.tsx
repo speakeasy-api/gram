@@ -165,7 +165,7 @@ export function ToolMentionAutocomplete({
     <div
       ref={suggestionsRef}
       className={cn(
-        "bg-popover absolute z-[100] max-w-[400px] min-w-[200px] rounded-md border shadow-md",
+        "bg-popover absolute z-[100] max-w-[400px] min-w-[200px] border",
         "max-h-[200px] overflow-auto",
       )}
       style={{
@@ -180,7 +180,7 @@ export function ToolMentionAutocomplete({
             type="button"
             key={tool.id}
             className={cn(
-              "flex w-full items-start gap-2 rounded px-2 py-1.5 text-left text-sm transition-colors",
+              "flex w-full items-start gap-2 px-2 py-1.5 text-left text-sm transition-colors",
               "hover:bg-accent hover:text-accent-foreground",
               index === selectedIndex && "bg-accent text-accent-foreground",
             )}
@@ -246,7 +246,7 @@ export function MentionedToolsBadges({
         <div
           key={tool.id}
           className={cn(
-            "inline-flex items-center gap-1 rounded-md px-2 py-0.5",
+            "inline-flex items-center gap-1 px-2 py-0.5",
             "bg-primary/10 text-primary text-xs",
           )}
         >

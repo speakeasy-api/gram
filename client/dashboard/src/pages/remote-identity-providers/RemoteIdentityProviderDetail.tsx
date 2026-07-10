@@ -69,7 +69,7 @@ export default function RemoteIdentityProviderDetail(): JSX.Element {
           <Tabs value={activeTab} className="flex w-full flex-1 flex-col">
             <div className="shrink-0 border-b">
               <div className="mx-auto max-w-[1270px] px-8">
-                <TabsList className="h-auto gap-6 rounded-none bg-transparent p-0">
+                <TabsList className="h-auto gap-6 bg-transparent p-0">
                   <PageTabsTrigger value="overview" asChild>
                     <Link to={tabHref("overview")}>Overview</Link>
                   </PageTabsTrigger>

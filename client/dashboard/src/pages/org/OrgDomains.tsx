@@ -1,7 +1,9 @@
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { Page } from "@/components/page-layout";
+import { Card } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import {
   Sheet,
   SheetContent,
@@ -339,7 +341,7 @@ function OrgDomainsInner() {
         URL instead of the default platform domain.
       </Type>
       {domain?.domain ? (
-        <div className="border-border bg-card rounded-lg border p-4">
+        <Card>
           <Stack direction="horizontal" justify="space-between" align="start">
             <Stack gap={1}>
               <Stack direction="horizontal" align="center" gap={2}>
@@ -349,15 +351,15 @@ function OrgDomainsInner() {
                 </Type>
                 {domain.isUpdating ? (
                   <SimpleTooltip tooltip="Your domain is being verified. This may take a few minutes.">
-                    <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                    <Loader2 className="text-primary h-4 w-4 animate-spin" />
                   </SimpleTooltip>
                 ) : domain.verified ? (
                   <SimpleTooltip tooltip="Domain verified and active">
-                    <Check className="h-4 w-4 stroke-3 text-green-500" />
+                    <Check className="text-default-success h-4 w-4 stroke-3" />
                   </SimpleTooltip>
                 ) : (
                   <SimpleTooltip tooltip="Domain verification failed. Ensure your DNS records are set up correctly.">
-                    <X className="h-4 w-4 stroke-3 text-red-500" />
+                    <X className="text-destructive h-4 w-4 stroke-3" />
                   </SimpleTooltip>
                 )}
               </Stack>
@@ -424,23 +426,18 @@ function OrgDomainsInner() {
               </Stack>
             </RequireScope>
           </Stack>
-        </div>
+        </Card>
       ) : (
         !domainIsLoading && (
-          <div className="border-border rounded-lg border border-dashed p-6">
-            <Stack gap={2} align="center" justify="center">
-              <Type variant="body" className="text-muted-foreground">
-                No custom domain configured
-              </Type>
-              <Type variant="body" className="text-muted-foreground text-sm">
-                You can connect one custom domain per organization for your MCP
-                servers.
-              </Type>
+          <InlineEmptyState
+            icon={<Globe />}
+            title="No custom domain configured"
+            description="You can connect one custom domain per organization for your MCP servers."
+            action={
               <RequireScope scope="org:admin" level="component">
                 <Button
                   size="sm"
                   variant="secondary"
-                  className="mt-2"
                   onClick={() => {
                     if (productTier.includes("base")) {
                       setIsCustomDomainUpgradeModalOpen(true);
@@ -455,8 +452,8 @@ function OrgDomainsInner() {
                   <Button.Text>Add Domain</Button.Text>
                 </Button>
               </RequireScope>
-            </Stack>
-          </div>
+            }
+          />
         )
       )}
 
@@ -485,7 +482,7 @@ function OrgDomainsInner() {
                     ? "1 MCP endpoint will be deactivated:"
                     : `${impactedEndpoints.length} MCP endpoints will be deactivated:`}
                 </Type>
-                <ul className="border-border max-h-48 list-disc space-y-1 overflow-y-auto rounded-md border px-6 py-2">
+                <ul className="border-border max-h-48 list-disc space-y-1 overflow-y-auto border px-6 py-2">
                   {impactedEndpoints.map((endpoint) => (
                     <li key={endpoint.id}>
                       <Type variant="small">
@@ -566,14 +563,14 @@ function OrgDomainsInner() {
                   value={domainInput}
                   onChange={(e) => handleDomainInputChange(e.target.value)}
                   className={cn(
-                    domainError && "border-red-500",
+                    domainError && "border-destructive",
                     domain?.domain &&
                       "bg-muted text-muted-foreground cursor-not-allowed",
                   )}
                   readOnly={!!domain?.domain}
                 />
                 {domainError && (
-                  <Type variant="body" className="text-sm text-red-500">
+                  <Type variant="body" className="text-destructive text-sm">
                     {domainError}
                   </Type>
                 )}
@@ -591,7 +588,7 @@ function OrgDomainsInner() {
                 <span className="font-mono break-all">{subdomain}</span>{" "}
                 pointing to the following:
               </Type>
-              <div className="bg-muted mt-2 flex items-center space-x-2 rounded-md p-3">
+              <div className="bg-muted mt-2 flex items-center space-x-2 p-3">
                 <code className="flex-1 break-all">{CNAME_VALUE}</code>
                 <Button
                   variant="tertiary"
@@ -601,7 +598,7 @@ function OrgDomainsInner() {
                   aria-label="Copy CNAME value"
                 >
                   {isCnameCopied ? (
-                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    <CheckCircle2 className="text-default-success h-4 w-4" />
                   ) : (
                     <Copy className="h-4 w-4" />
                   )}
@@ -620,7 +617,7 @@ function OrgDomainsInner() {
                 <span className="font-mono break-all">{txtName}</span> with the
                 following value:
               </Type>
-              <div className="bg-muted mt-2 flex items-center space-x-2 rounded-md p-3">
+              <div className="bg-muted mt-2 flex items-center space-x-2 p-3">
                 <code className="flex-1 break-all">{txtValue}</code>
                 <Button
                   variant="tertiary"
@@ -630,7 +627,7 @@ function OrgDomainsInner() {
                   aria-label="Copy TXT value"
                 >
                   {isTxtCopied ? (
-                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    <CheckCircle2 className="text-default-success h-4 w-4" />
                   ) : (
                     <Copy className="h-4 w-4" />
                   )}

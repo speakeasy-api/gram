@@ -12,6 +12,7 @@ import { getPresetRange } from "@gram-ai/elements";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { useRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
 import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import { LoadMoreFooter } from "@/components/ui/load-more-footer";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -299,7 +300,7 @@ function InactivePolicyNotice({
   policyName: string | undefined;
 }) {
   return (
-    <div className="flex shrink-0 items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-5 py-2 text-sm text-amber-700 dark:text-amber-400">
+    <div className="border-warning/30 bg-warning/10 text-warning flex shrink-0 items-center gap-2 border-b px-5 py-2 text-sm">
       <History className="size-4 shrink-0" />
       <span>
         {policyName ? (
@@ -321,7 +322,7 @@ function RiskEventsHeader() {
     <div
       className={cn(
         RISK_EVENTS_GRID,
-        "bg-muted/30 text-muted-foreground shrink-0 items-center border-b px-5 py-2.5 text-xs font-medium tracking-wide uppercase",
+        "bg-muted/30 text-muted-foreground shrink-0 items-center border-b px-5 py-2.5 font-mono text-xs tracking-[0.08em] uppercase",
       )}
     >
       <div className="min-w-0">Timestamp</div>
@@ -360,17 +361,12 @@ function RiskEventsRows({
 
   if (error) {
     return (
-      <div className="flex flex-col items-center gap-3 py-12">
-        <div className="bg-destructive/10 flex size-12 items-center justify-center rounded-full">
-          <CircleAlert className="text-destructive size-6" />
-        </div>
-        <span className="text-foreground font-medium">
-          Error loading risk events
-        </span>
-        <span className="text-muted-foreground max-w-sm text-center text-sm">
-          {error.message}
-        </span>
-      </div>
+      <InlineEmptyState
+        className="py-12"
+        icon={<CircleAlert className="text-destructive" />}
+        title="Error loading risk events"
+        description={error.message}
+      />
     );
   }
 
@@ -385,17 +381,12 @@ function RiskEventsRows({
 
   if (results.length === 0) {
     return (
-      <div className="flex flex-col items-center gap-3 py-12 text-center">
-        <div className="bg-muted flex size-12 items-center justify-center rounded-full">
-          <Inbox className="text-muted-foreground size-6" />
-        </div>
-        <span className="text-foreground font-medium">
-          No risk events found
-        </span>
-        <span className="text-muted-foreground max-w-sm text-sm">
-          Findings will appear here as messages are analyzed.
-        </span>
-      </div>
+      <InlineEmptyState
+        className="py-12"
+        icon={<Inbox />}
+        title="No risk events found"
+        description="Findings will appear here as messages are analyzed."
+      />
     );
   }
 

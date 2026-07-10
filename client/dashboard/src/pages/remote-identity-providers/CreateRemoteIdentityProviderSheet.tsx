@@ -1,4 +1,4 @@
-import { Label } from "@/components/ui/label";
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import {
   Select,
   SelectContent,
@@ -13,7 +13,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { Type } from "@/components/ui/type";
 import { useOrganization } from "@/contexts/Auth";
 import { useOrgRoutes } from "@/routes";
 import { useCreateOrganizationRemoteSessionIssuerMutation } from "@gram/client/react-query/createOrganizationRemoteSessionIssuer.js";
@@ -190,10 +189,10 @@ export function CreateRemoteIdentityProviderSheet({
 
         <div className="flex-1 space-y-6 overflow-y-auto px-6 py-6">
           <Stack gap={4}>
-            <Stack gap={2}>
-              <Label className="text-muted-foreground text-xs">Scope</Label>
+            <Field>
+              <FieldLabel htmlFor="new-issuer-scope">Scope</FieldLabel>
               <Select value={projectId} onValueChange={setProjectId}>
-                <SelectTrigger>
+                <SelectTrigger id="new-issuer-scope">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -207,11 +206,11 @@ export function CreateRemoteIdentityProviderSheet({
                   ))}
                 </SelectContent>
               </Select>
-              <Type muted small>
+              <FieldDescription>
                 Organizational providers are inherited by every project. Choose
                 a project to scope the provider to it.
-              </Type>
-            </Stack>
+              </FieldDescription>
+            </Field>
 
             <IssuerUrlField
               issuerUrl={issuerUrl}
@@ -237,9 +236,10 @@ export function CreateRemoteIdentityProviderSheet({
               }}
             />
 
-            <Stack gap={2}>
-              <Label className="text-muted-foreground text-xs">Slug</Label>
+            <Field>
+              <FieldLabel htmlFor="new-issuer-slug">Slug</FieldLabel>
               <Input
+                id="new-issuer-slug"
                 value={slug}
                 onChange={(e) => {
                   setSlug(e.target.value);
@@ -247,17 +247,18 @@ export function CreateRemoteIdentityProviderSheet({
                 }}
                 placeholder="my-identity-provider"
               />
-              <Type muted small>
+              <FieldDescription>
                 Identifier for this identity provider. Auto-derived from the
                 Issuer URL until you edit it.
-              </Type>
-            </Stack>
+              </FieldDescription>
+            </Field>
 
-            <Stack gap={2}>
-              <Label className="text-muted-foreground text-xs">
-                Display name (optional)
-              </Label>
+            <Field>
+              <FieldLabel htmlFor="new-issuer-name" optional>
+                Display name
+              </FieldLabel>
               <Input
+                id="new-issuer-name"
                 value={name}
                 onChange={(e) => {
                   setName(e.target.value);
@@ -265,12 +266,12 @@ export function CreateRemoteIdentityProviderSheet({
                 }}
                 placeholder="My Identity Provider"
               />
-              <Type muted small>
+              <FieldDescription>
                 Friendly label shown in the dashboard. Auto-derived from the
                 Issuer URL until you edit it; falls back to the Issuer URL when
                 left blank.
-              </Type>
-            </Stack>
+              </FieldDescription>
+            </Field>
 
             <EndpointsFields
               issuerUrl={issuerUrl}

@@ -381,7 +381,7 @@ export function CelMonacoEditor({
   return (
     <div
       className={cn(
-        "border-input dark:bg-input/30 w-full overflow-hidden rounded-md border bg-transparent py-2 shadow-xs",
+        "border-input dark:bg-input/30 w-full overflow-hidden border bg-transparent py-2",
         className,
       )}
     >

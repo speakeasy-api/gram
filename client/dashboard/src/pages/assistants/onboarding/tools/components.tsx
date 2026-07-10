@@ -6,9 +6,8 @@ import { Type } from "@/components/ui/type";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
 import { ToolCallMessagePartProps } from "@assistant-ui/react";
-import { Button, Input } from "@/components/ui/moonshine";
+import { Alert, Button, Input } from "@/components/ui/moonshine";
 import {
-  AlertTriangle,
   Bot,
   Check,
   Copy,
@@ -130,7 +129,7 @@ export function RequestEnvironmentSecretsComponent({
       <ToolCard
         title="Environment secrets saved"
         tone="success"
-        icon={<Check className="text-emerald-600" size={16} />}
+        icon={<Check className="text-success" size={16} />}
       >
         <Type small muted>
           Saved to <code>{r.environment_slug}</code>:{" "}
@@ -138,7 +137,7 @@ export function RequestEnvironmentSecretsComponent({
             <em>no values provided; keys declared as empty.</em>
           ) : (
             savedKeys.map((k) => (
-              <code key={k} className="bg-muted mr-1 rounded px-1.5 py-0.5">
+              <code key={k} className="bg-muted mr-1 px-1.5 py-0.5">
                 {k}
               </code>
             ))
@@ -282,7 +281,7 @@ export function ShowWebhookUrlComponent({
           {a.instructions}
         </Type>
       )}
-      <div className="border-border bg-muted/30 flex items-center gap-2 rounded-md border px-3 py-2">
+      <div className="border-border bg-muted/30 flex items-center gap-2 border px-3 py-2">
         <code className="flex-1 truncate font-mono text-xs">{url}</code>
         <Button
           size="sm"
@@ -360,7 +359,7 @@ export function ShowSlackAppGuideComponent({
       <ToolCard
         title="Slack connection installed"
         tone="success"
-        icon={<Check className="text-emerald-600" size={16} />}
+        icon={<Check className="text-success" size={16} />}
       >
         <Type small muted>
           Next: paste your tokens.
@@ -514,10 +513,10 @@ export function ProposeNameComponent({
       <ToolCard
         title="Name set"
         tone="success"
-        icon={<Check className="text-emerald-600" size={16} />}
+        icon={<Check className="text-success" size={16} />}
       >
         <Type small muted>
-          Name: <code className="bg-muted rounded px-1.5 py-0.5">{r.name}</code>
+          Name: <code className="bg-muted px-1.5 py-0.5">{r.name}</code>
         </Type>
       </ToolCard>
     );
@@ -634,7 +633,7 @@ export function ProposePersonalityComponent({
       <ToolCard
         title="Personality set"
         tone="success"
-        icon={<Check className="text-emerald-600" size={16} />}
+        icon={<Check className="text-success" size={16} />}
       >
         <Type small muted>
           Personality saved.
@@ -710,7 +709,7 @@ export function ProposePersonalityComponent({
           onValueChange={(v) => setMode(v as PersonalityMode)}
           className="gap-2"
         >
-          <div className="border-border rounded-md border p-3">
+          <div className="border-border border p-3">
             <div className="flex items-start gap-2">
               <RadioGroupItem
                 value="prebuilt"
@@ -744,7 +743,7 @@ export function ProposePersonalityComponent({
                         type="button"
                         onClick={() => setPrebuiltSlug(p.slug)}
                         className={cn(
-                          "border-border hover:bg-muted rounded-md border px-3 py-1.5 text-left transition-colors",
+                          "border-border hover:bg-muted border px-3 py-1.5 text-left transition-colors",
                           prebuiltSlug === p.slug &&
                             "border-primary bg-primary/5",
                         )}
@@ -773,7 +772,7 @@ export function ProposePersonalityComponent({
                       type="button"
                       onClick={() => setPrebuiltSlug(p.slug)}
                       className={cn(
-                        "border-border hover:bg-muted rounded-md border p-2 text-left transition-colors",
+                        "border-border hover:bg-muted border p-2 text-left transition-colors",
                         prebuiltSlug === p.slug &&
                           "border-primary bg-primary/5",
                       )}
@@ -791,7 +790,7 @@ export function ProposePersonalityComponent({
             )}
           </div>
 
-          <div className="border-border rounded-md border p-3">
+          <div className="border-border border p-3">
             <div className="flex items-start gap-2">
               <RadioGroupItem
                 value="generate"
@@ -821,7 +820,7 @@ export function ProposePersonalityComponent({
             )}
           </div>
 
-          <div className="border-border rounded-md border p-3">
+          <div className="border-border border p-3">
             <div className="flex items-start gap-2">
               <RadioGroupItem
                 value="custom"
@@ -851,7 +850,7 @@ export function ProposePersonalityComponent({
             )}
           </div>
 
-          <div className="border-border rounded-md border p-3">
+          <div className="border-border border p-3">
             <div className="flex items-start gap-2">
               <RadioGroupItem
                 value="random"
@@ -950,7 +949,7 @@ export function ProposeSlackSetupComponent({
       <ToolCard
         title="Slack setup saved"
         tone="success"
-        icon={<Check className="text-emerald-600" size={16} />}
+        icon={<Check className="text-success" size={16} />}
       >
         <Type small muted>
           {`Created a Slack toolset for ${assistantName} and wired up its triggers.`}
@@ -1034,7 +1033,7 @@ export function ProposeSlackSetupComponent({
                   key={g.slug}
                   htmlFor={id}
                   className={cn(
-                    "border-border hover:bg-muted/60 flex cursor-pointer items-start gap-2 rounded-md border p-2 transition-colors",
+                    "border-border hover:bg-muted/60 flex cursor-pointer items-start gap-2 border p-2 transition-colors",
                     checked && "border-primary bg-primary/5",
                   )}
                 >
@@ -1071,7 +1070,7 @@ export function ProposeSlackSetupComponent({
                   key={g.slug}
                   htmlFor={id}
                   className={cn(
-                    "border-border hover:bg-muted/60 flex cursor-pointer items-start gap-2 rounded-md border p-2 transition-colors",
+                    "border-border hover:bg-muted/60 flex cursor-pointer items-start gap-2 border p-2 transition-colors",
                     checked && "border-primary bg-primary/5",
                   )}
                 >
@@ -1096,9 +1095,8 @@ export function ProposeSlackSetupComponent({
         </section>
 
         {anyEvent && (
-          <div className="flex items-start gap-2 rounded-md border border-amber-300/40 bg-amber-50/40 px-3 py-2 dark:bg-amber-950/20">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-            <div className="flex-1">
+          <Alert variant="warning" dismissible={false}>
+            <div>
               <Type small className="font-medium">
                 Heads up: {assistantName} will be always on
               </Type>
@@ -1109,7 +1107,7 @@ export function ProposeSlackSetupComponent({
                 &ldquo;only in #support&rdquo;.
               </Type>
             </div>
-          </div>
+          </Alert>
         )}
       </div>
 

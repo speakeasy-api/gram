@@ -10,14 +10,15 @@ import {
   type TimestampMode,
 } from "@/lib/audit-log-feed";
 import { Heading } from "@/components/ui/heading";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import { LoadMoreFooter } from "@/components/ui/load-more-footer";
+import { Spinner } from "@/components/ui/spinner";
 import { Type } from "@/components/ui/type";
 import { useSlugs } from "@/contexts/Sdk";
 import { cn } from "@/lib/utils";
 import type { AuditLog } from "@gram/client/models/components/auditlog.js";
 import { useAssistantsList } from "@gram/client/react-query/assistantsList.js";
 import { useAuditLogsInfinite } from "@gram/client/react-query/auditLogs.js";
-import { LoaderCircle } from "lucide-react";
 import React, { useMemo, useState } from "react";
 import { useQueryState } from "nuqs";
 
@@ -81,7 +82,7 @@ function AssistantAuditLogRow({
           <button
             type="button"
             onClick={() => setParamsExpanded((v) => !v)}
-            className="ml-2 text-xs text-blue-500 hover:underline"
+            className="text-primary ml-2 text-xs hover:underline"
           >
             {paramsExpanded ? "Hide params ▴" : "Show params ▾"}
           </button>
@@ -98,14 +99,14 @@ function AssistantAuditLogRow({
       <div>
         <div
           className={cn(
-            "rounded-t-lg border border-b-0",
+            "border border-b-0",
             isOdd ? "bg-muted/30" : "bg-background",
           )}
         >
           {rowContent}
         </div>
-        <div className="bg-background rounded-b-lg border border-t-0 px-4 pt-2 pb-3">
-          <pre className="bg-muted/30 text-muted-foreground max-h-80 overflow-auto rounded-md p-3 font-mono text-xs whitespace-pre-wrap">
+        <div className="bg-background border border-t-0 px-4 pt-2 pb-3">
+          <pre className="bg-muted/30 text-muted-foreground max-h-80 overflow-auto p-3 font-mono text-xs whitespace-pre-wrap">
             {params}
           </pre>
           {paramsTruncated && (
@@ -121,7 +122,7 @@ function AssistantAuditLogRow({
   return (
     <div
       className={cn(
-        "rounded-none transition-colors",
+        "transition-colors",
         isOdd ? "bg-muted/30" : "bg-background",
       )}
     >
@@ -212,30 +213,26 @@ export function AssistantsAuditLog(): React.JSX.Element {
         />
       </div>
 
-      <div className="bg-background overflow-hidden rounded-lg border">
+      <div className="bg-background overflow-hidden border">
         {isLoading ? (
           <div className="text-muted-foreground flex items-center justify-center gap-2 py-12">
-            <LoaderCircle className="size-4 animate-spin" />
+            <Spinner className="mr-0 size-4" />
             <span>Loading assistant activity...</span>
           </div>
         ) : error ? (
-          <div className="flex flex-col items-center gap-2 py-12 text-center">
-            <Type className="font-medium">
-              Error loading assistant activity
-            </Type>
-            <Type muted small>
-              {error.message}
-            </Type>
-          </div>
+          <InlineEmptyState
+            title="Error loading assistant activity"
+            description={error.message}
+          />
         ) : logs.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 py-12 text-center">
-            <Type className="font-medium">No assistant activity yet</Type>
-            <Type muted small>
-              {selectedAssistant === "all"
+          <InlineEmptyState
+            title="No assistant activity yet"
+            description={
+              selectedAssistant === "all"
                 ? "Tool calls made by your assistants will appear here."
-                : "This assistant has not made any tool calls yet."}
-            </Type>
-          </div>
+                : "This assistant has not made any tool calls yet."
+            }
+          />
         ) : (
           <div>
             {dateGroups.map((group) => (

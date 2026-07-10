@@ -1,14 +1,15 @@
-// oxlint-disable react/only-export-components -- compound component (Object.assign) pattern
 import { cn } from "@/lib/utils";
 import React from "react";
 import { MoreActions } from "./more-actions";
 import { Type } from "./type";
 
-const MiniCardComponent = ({
+function MiniCard({
   className,
   size = "default",
   ...props
-}: React.ComponentProps<"div"> & { size?: "default" | "sm" }) => {
+}: React.ComponentProps<"div"> & {
+  size?: "default" | "sm";
+}): React.JSX.Element {
   const slots = {
     title: null as React.ReactElement | null,
     description: null as React.ReactElement | null,
@@ -49,7 +50,7 @@ const MiniCardComponent = ({
       {otherChildren}
     </div>
   );
-};
+}
 
 function MiniCardTitle({
   className,
@@ -78,8 +79,11 @@ function MiniCardDescription({
   );
 }
 
-export const MiniCard = Object.assign(MiniCardComponent, {
-  Title: MiniCardTitle,
-  Description: MiniCardDescription,
-  Actions: MoreActions,
-});
+// Compound members are attached by mutation rather than Object.assign: the
+// react/only-export-components rule recognizes the former as a component
+// export and flags the latter.
+MiniCard.Title = MiniCardTitle;
+MiniCard.Description = MiniCardDescription;
+MiniCard.Actions = MoreActions;
+
+export { MiniCard };

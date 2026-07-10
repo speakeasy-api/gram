@@ -42,11 +42,12 @@ function buildTraceFilters(
   return null;
 }
 
-// Uses design system tokens where available (destructive, warning, muted).
-// INFO has no semantic token — hardcoded Tailwind is intentional and matches
-// the deployment logs palette (PR #2167).
 const severityColors = {
-  INFO: { dot: "bg-blue-500", text: "text-blue-700", bg: "bg-blue-50" },
+  INFO: {
+    dot: "bg-information-default",
+    text: "text-default-information",
+    bg: "bg-information-softest",
+  },
   WARN: { dot: "bg-warning", text: "text-warning", bg: "bg-warning/10" },
   ERROR: {
     dot: "bg-destructive",
@@ -239,7 +240,7 @@ function ChildLogRow({
       {/* Severity badge inline */}
       <span
         className={cn(
-          "shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase",
+          "shrink-0 px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase",
           colors.bg,
           colors.text,
         )}

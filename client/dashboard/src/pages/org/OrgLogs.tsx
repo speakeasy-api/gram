@@ -1,5 +1,6 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import { Card } from "@/components/ui/card";
 import { Heading } from "@/components/ui/heading";
 import { Switch } from "@/components/ui/switch";
 import { Type } from "@/components/ui/type";
@@ -134,7 +135,7 @@ function OrgLogsInner() {
         enabled, tool calls and traces are recorded for debugging and analytics.
         These power the insights and logs page on the platform.
       </Type>
-      <div className="border-border bg-card rounded-lg border p-4">
+      <Card>
         <Stack gap={4}>
           <Stack direction="horizontal" justify="space-between" align="center">
             <Stack gap={1}>
@@ -254,7 +255,7 @@ function OrgLogsInner() {
             )}
           </Stack>
         </Stack>
-      </div>
+      </Card>
 
       <div className="mt-8">
         <AIIntegrationsSection />

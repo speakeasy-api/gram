@@ -2,6 +2,11 @@ import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Label } from "@/components/ui/label";
 import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group";
+import {
   Sheet,
   SheetContent,
   SheetDescription,
@@ -243,7 +248,7 @@ function CustomRulesSection({
       <Type variant="subheading" className="mb-3">
         Custom
       </Type>
-      <div className="border-border divide-border divide-y rounded-lg border">
+      <div className="border-border divide-border divide-y border">
         <CategoryHeader
           icon={meta.icon as IconName}
           label={meta.label}
@@ -287,7 +292,7 @@ function BuiltinRulesSection({
       <Type variant="subheading" className="mb-3">
         Built-in
       </Type>
-      <div className="border-border divide-border divide-y rounded-lg border">
+      <div className="border-border divide-border divide-y border">
         {BUILTIN_CATEGORY_ORDER.map((cat) => {
           const meta = RULE_CATEGORY_META[cat];
           const rules = BUILTIN_RULES_BY_CATEGORY[cat];
@@ -460,7 +465,9 @@ function BuiltinRuleDetail({ rule }: { rule: BuiltinRule }) {
         </DetailField>
 
         <DetailField label="Description">
-          <p className="text-sm leading-relaxed">{rule.description}</p>
+          <Type variant="small" className="leading-relaxed">
+            {rule.description}
+          </Type>
         </DetailField>
 
         <RulePlayground ruleId={rule.id} detectionExpr={null} />
@@ -664,14 +671,14 @@ function RulePlayground({
       >
         <label
           htmlFor={`pg-mode-sample-${ruleId}`}
-          className="hover:bg-muted/40 flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-xs"
+          className="hover:bg-muted/40 flex cursor-pointer items-center gap-2 border px-3 py-1.5 text-xs"
         >
           <RadioGroupItem value="sample" id={`pg-mode-sample-${ruleId}`} />
           Paste sample
         </label>
         <label
           htmlFor={`pg-mode-chat-${ruleId}`}
-          className="hover:bg-muted/40 flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-xs"
+          className="hover:bg-muted/40 flex cursor-pointer items-center gap-2 border px-3 py-1.5 text-xs"
         >
           <RadioGroupItem value="chat" id={`pg-mode-chat-${ruleId}`} />
           Run on a chat
@@ -757,7 +764,7 @@ function MatchList({
   reason: string | null;
 }) {
   return (
-    <div className="border-border mt-3 rounded-lg border">
+    <div className="border-border mt-3 border">
       <div className="border-border bg-muted/40 flex items-center justify-between border-b px-3 py-2 text-xs font-medium">
         <span>
           {matches.length} match{matches.length === 1 ? "" : "es"}
@@ -779,7 +786,7 @@ function MatchList({
                   {getCategoryCodeForFinding(m.source, m.ruleId)}
                 </span>
               </div>
-              <pre className="bg-muted/50 overflow-x-auto rounded px-2 py-1 font-mono text-[11px]">
+              <pre className="bg-muted/50 overflow-x-auto px-2 py-1 font-mono text-[11px]">
                 {m.match}
               </pre>
               {m.description && (
@@ -1013,7 +1020,7 @@ function ChatPlayground({
       </div>
 
       {results.length > 0 && (
-        <div className="border-border divide-border max-h-[420px] divide-y overflow-y-auto rounded-lg border">
+        <div className="border-border divide-border max-h-[420px] divide-y overflow-y-auto border">
           {results.map((r) => (
             <ChatMessageRow key={r.messageId} item={r} />
           ))}
@@ -1038,7 +1045,7 @@ function ChatPickerColumn({
 }) {
   return (
     <div>
-      <div className="text-muted-foreground mb-1 text-[11px] font-medium tracking-wide uppercase">
+      <div className="text-muted-foreground mb-1 font-mono text-[11px] tracking-[0.08em] uppercase">
         {title}
       </div>
       {items.length === 0 ? (
@@ -1047,7 +1054,7 @@ function ChatPickerColumn({
         <RadioGroup
           value={value ?? ""}
           onValueChange={onChange}
-          className="border-border divide-border max-h-48 divide-y overflow-y-auto rounded-md border"
+          className="border-border divide-border max-h-48 divide-y overflow-y-auto border"
         >
           {items.map((item) => (
             <label
@@ -1084,7 +1091,7 @@ function ChatMessageRow({ item }: { item: ChatMessageResult }) {
         onClick={() => setExpanded((e) => !e)}
         className="flex w-full items-start gap-3 text-left"
       >
-        <span className="text-muted-foreground w-6 shrink-0 text-[10px] uppercase">
+        <span className="text-muted-foreground w-6 shrink-0 font-mono text-[10px] tracking-[0.08em] uppercase">
           {item.role.slice(0, 4)}
         </span>
         <span className="min-w-0 flex-1">
@@ -1116,7 +1123,7 @@ function ChatMessageRow({ item }: { item: ChatMessageResult }) {
               Full message ({item.fullText.length} chars):
             </p>
           )}
-          <pre className="bg-muted/40 max-h-40 overflow-auto rounded px-2 py-1 font-mono text-[11px] whitespace-pre-wrap">
+          <pre className="bg-muted/40 max-h-40 overflow-auto px-2 py-1 font-mono text-[11px] whitespace-pre-wrap">
             {item.fullText || "(empty)"}
           </pre>
           {item.status === "error" && (
@@ -1196,7 +1203,7 @@ function DetailField({
 }) {
   return (
     <div>
-      <div className="text-muted-foreground mb-2 text-xs font-medium tracking-wide uppercase">
+      <div className="text-muted-foreground mb-2 font-mono text-xs tracking-[0.08em] uppercase">
         {label}
       </div>
       {children}
@@ -1392,17 +1399,17 @@ function CreateCustomRuleSheet({
             <div className="flex-1 space-y-5 px-6 py-4">
               <div className="space-y-2">
                 <Label className="text-sm font-medium">Rule ID</Label>
-                <div className="flex">
-                  <span className="border-input bg-muted text-muted-foreground inline-flex items-center rounded-l-md border border-r-0 px-3 font-mono text-xs">
+                <InputGroup>
+                  <InputGroupAddon className="font-mono text-xs">
                     {CUSTOM_RULE_ID_PREFIX}
-                  </span>
-                  <Input
+                  </InputGroupAddon>
+                  <InputGroupInput
                     value={idSuffix}
                     onChange={(e) => setIdSuffix(e.target.value)}
                     placeholder="internal_token"
-                    className="rounded-l-none font-mono text-xs"
+                    className="font-mono text-xs"
                   />
-                </div>
+                </InputGroup>
                 {idError ? (
                   <p className="text-destructive text-xs">{idError}</p>
                 ) : (

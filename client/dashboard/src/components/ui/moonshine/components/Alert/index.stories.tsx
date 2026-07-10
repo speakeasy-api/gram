@@ -1,11 +1,10 @@
 import { Alert, AlertProps } from ".";
-import type { Meta, StoryObj } from "@storybook/react-vite";
+import type { Decorator, Meta, StoryObj } from "@storybook/react-vite";
 import { variants } from "./types";
 import { fn } from "storybook/test";
 
-const defaultDecorators = [
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (Story: any) => (
+const defaultDecorators: Decorator[] = [
+  (Story) => (
     <div className="m-auto flex h-full max-w-xl flex-col gap-2">{Story()}</div>
   ),
 ];

@@ -1,4 +1,5 @@
 import { RequireScope } from "@/components/require-scope";
+import { Card } from "@/components/ui/card";
 import { useConfirm } from "@/components/ui/use-confirm";
 import { Label } from "@/components/ui/label";
 import {
@@ -47,7 +48,7 @@ export function AIIntegrationProviderCard({
   };
 
   return (
-    <div className="border-border bg-card flex flex-col gap-4 rounded-lg border p-4">
+    <Card className="gap-4">
       <Stack direction="horizontal" justify="space-between" align="center">
         <Stack gap={1}>
           <Stack direction="horizontal" align="center" gap={2}>
@@ -156,7 +157,7 @@ export function AIIntegrationProviderCard({
         </RequireScope>
       </Stack>
       {dialog}
-    </div>
+    </Card>
   );
 }
 

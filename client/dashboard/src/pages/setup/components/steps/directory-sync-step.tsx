@@ -4,6 +4,7 @@ import { useGenerateWorkOSAdminPortalLinkMutation } from "@gram/client/react-que
 import { useOnboardingStatus } from "@gram/client/react-query/onboardingStatus";
 import { toast } from "sonner";
 import { StepContainer } from "../step-container";
+import { Card } from "@/components/ui/card";
 import { toastError } from "@/lib/toast-error";
 import { getServerURL } from "@/lib/utils";
 
@@ -75,7 +76,7 @@ export function DirectorySyncStep({
   return (
     <StepContainer
       icon={
-        <div className="bg-secondary flex h-12 w-12 items-center justify-center rounded-lg">
+        <div className="bg-secondary flex h-12 w-12 items-center justify-center">
           <Users className="text-foreground h-6 w-6" />
         </div>
       }
@@ -90,9 +91,9 @@ export function DirectorySyncStep({
       skipLabel="Skip for now"
     >
       <div className="space-y-6">
-        <div className="bg-card border-border rounded-lg border p-4">
+        <Card>
           <div className="flex items-start gap-3">
-            <div className="bg-secondary mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded">
+            <div className="bg-secondary mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center">
               <ExternalLink className="text-muted-foreground h-4 w-4" />
             </div>
             <div>
@@ -106,7 +107,7 @@ export function DirectorySyncStep({
               </p>
             </div>
           </div>
-        </div>
+        </Card>
 
         {generatePortalLink.isPending && (
           <div className="flex items-center justify-center py-8">

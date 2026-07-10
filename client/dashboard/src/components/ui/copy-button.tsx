@@ -42,8 +42,7 @@ export const CopyButton = ({
       onClick={handleCopy}
       aria-label={tooltip ?? "Copy"}
       className={cn(
-        absolute &&
-          "absolute top-3 right-3 z-10 shadow-[0_2px_8px_rgba(0,0,0,0.08)]",
+        absolute && "absolute top-3 right-3 z-10",
         size === "inline" && "h-6 w-6",
         className,
       )}

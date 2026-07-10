@@ -43,7 +43,7 @@ export function FilterChip({
 }): JSX.Element {
   return (
     <span
-      className={`border-border bg-card hover:bg-muted/50 inline-flex h-10 shrink-0 items-center gap-2 rounded-md border pl-3 text-sm font-medium transition-colors ${
+      className={`border-border bg-card hover:bg-muted/50 inline-flex h-10 shrink-0 items-center gap-2 border pl-3 text-sm font-medium transition-colors ${
         onRemove ? "pr-2" : "pr-3"
       }`}
     >
@@ -105,7 +105,7 @@ export function CustomFilterChip({
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <span className="border-border bg-card hover:bg-muted/50 inline-flex h-10 shrink-0 items-center gap-2 rounded-md border pr-2 pl-3 font-mono text-xs transition-colors">
+      <span className="border-border bg-card hover:bg-muted/50 inline-flex h-10 shrink-0 items-center gap-2 border pr-2 pl-3 font-mono text-xs transition-colors">
         <PopoverTrigger asChild>
           <button
             type="button"
@@ -171,7 +171,7 @@ export function CustomFilterChip({
               }
             }}
             placeholder={valuePlaceholder}
-            className="border-border focus-visible:border-ring focus-visible:ring-ring/50 h-8 min-w-0 flex-1 rounded-md border bg-transparent px-2 font-mono text-xs outline-none focus-visible:ring-[3px]"
+            className="border-border focus-visible:border-ring focus-visible:ring-ring/50 h-8 min-w-0 flex-1 border bg-transparent px-2 font-mono text-xs outline-none focus-visible:ring-[3px]"
             autoFocus
           />
         </div>

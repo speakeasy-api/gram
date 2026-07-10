@@ -295,14 +295,12 @@ export const TumUsageSection = (): JSX.Element => {
                   onClearCustomRange={() => setCustomRange(null)}
                   className="bg-background py-1.5 text-sm"
                 />
-                <button
-                  type="button"
-                  onClick={handleReset}
-                  className="border-border hover:bg-muted text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 rounded-md border px-2.5 py-2 text-sm transition-colors"
-                >
-                  <RotateCcw className="size-3.5" />
-                  Reset
-                </button>
+                <Button variant="secondary" size="sm" onClick={handleReset}>
+                  <Button.LeftIcon>
+                    <RotateCcw className="size-3.5" />
+                  </Button.LeftIcon>
+                  <Button.Text>Reset</Button.Text>
+                </Button>
               </div>
             </Stack>
             {cardCycle && (

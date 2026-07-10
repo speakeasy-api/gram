@@ -2,6 +2,7 @@ import { Page } from "@/components/page-layout";
 import { Dialog } from "@/components/ui/dialog";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Heading } from "@/components/ui/heading";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import { ListLayout } from "@/components/layouts/list-layout";
 import {
   Select,
@@ -53,7 +54,6 @@ import {
   Ellipsis,
   FolderSync,
   RefreshCw,
-  Search,
   Shield,
   UserPlus,
   Users,
@@ -447,7 +447,7 @@ function TeamInner() {
                     <Link
                       key={roleId}
                       to={`${orgRoutes.access.roles.href()}?editRole=${roleId}`}
-                      className="text-foreground hover:text-primary rounded-sm border px-1.5 py-0.5 text-xs no-underline transition-colors"
+                      className="text-foreground hover:text-primary border px-1.5 py-0.5 text-xs no-underline transition-colors"
                     >
                       {getRoleName(roleId)}
                     </Link>
@@ -456,7 +456,7 @@ function TeamInner() {
                     <SimpleTooltip
                       tooltip={overflow.map((id) => getRoleName(id)).join(", ")}
                     >
-                      <span className="text-muted-foreground cursor-pointer rounded-sm border px-1.5 py-0.5 text-xs">
+                      <span className="text-muted-foreground cursor-pointer border px-1.5 py-0.5 text-xs">
                         +{overflow.length} more
                       </span>
                     </SimpleTooltip>
@@ -515,7 +515,7 @@ function TeamInner() {
               <button
                 type="button"
                 className={cn(
-                  "text-muted-foreground hover:bg-accent hover:text-foreground flex h-8 w-8 cursor-pointer items-center justify-center rounded-md transition-colors",
+                  "text-muted-foreground hover:bg-accent hover:text-foreground flex h-8 w-8 cursor-pointer items-center justify-center transition-colors",
                 )}
               >
                 <Ellipsis className="h-4 w-4" />
@@ -816,19 +816,16 @@ function TeamInner() {
             </Alert>
           )}
 
-          <div className="relative">
-            <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
-            <Input
-              type="text"
-              placeholder="Search members..."
+          <ListLayout.Toolbar className="mb-4">
+            <ListLayout.Toolbar.Search
               value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
+              onChange={(value) => {
+                setSearch(value);
                 setPage(0);
               }}
-              className="mb-4 w-full py-2 pl-9 text-sm"
+              placeholder="Search members..."
             />
-          </div>
+          </ListLayout.Toolbar>
 
           <Table
             columns={memberColumns}
@@ -836,19 +833,15 @@ function TeamInner() {
             rowKey={(row) => row.userId}
             className="min-h-fit"
             noResultsMessage={
-              <Stack
-                gap={2}
-                className="bg-background h-full p-8"
-                align="center"
-                justify="center"
-              >
-                <Users className="text-muted-foreground h-12 w-12" />
-                <Type variant="body" className="text-muted-foreground">
-                  {search
+              <InlineEmptyState
+                icon={<Users />}
+                title={
+                  search
                     ? "No members matching your search"
-                    : "No team members yet"}
-                </Type>
-              </Stack>
+                    : "No team members yet"
+                }
+                className="border-none"
+              />
             }
           />
           {totalPages > 1 && (
@@ -907,7 +900,7 @@ function TeamInner() {
         {/* Identity signpost */}
         <div className="border-border border-t pt-8">
           {organization.scimEnabled ? (
-            <div className="border-border bg-muted/30 flex items-start gap-3 rounded-md border px-4 py-3">
+            <div className="border-border bg-muted/30 flex items-start gap-3 border px-4 py-3">
               <FolderSync className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
               <div className="min-w-0 flex-1">
                 <Type variant="body" className="text-sm font-medium">
@@ -926,7 +919,7 @@ function TeamInner() {
               </div>
             </div>
           ) : (
-            <div className="border-border bg-muted/30 flex items-start gap-3 rounded-md border px-4 py-3">
+            <div className="border-border bg-muted/30 flex items-start gap-3 border px-4 py-3">
               <Shield className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
               <div className="min-w-0 flex-1">
                 <Type variant="body" className="text-sm font-medium">

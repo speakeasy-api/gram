@@ -7,6 +7,7 @@ import { MCPServerTableRow } from "@/components/mcp/MCPServerTableRow";
 import { MCPTableRow, MCPTableRowSkeleton } from "@/components/mcp/MCPTableRow";
 import { Page } from "@/components/page-layout";
 import { DotTable } from "@/components/ui/dot-table";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useViewMode } from "@/components/ui/use-view-mode";
@@ -224,10 +225,10 @@ function MCPOverview() {
         validate: (value) => value.length > 0 && value.length <= 40,
         hint: (value) => (
           <div className="flex w-full justify-between">
-            <p className="text-destructive">
+            <Type destructive small>
               {value.length > 40 && "Must be 40 characters or less"}
-            </p>
-            <p>{value.length}/40</p>
+            </Type>
+            <Type small>{value.length}/40</Type>
           </div>
         ),
       }}
@@ -308,11 +309,13 @@ function MCPOverview() {
             </Page.Toolbar>
           )}
           {showNoMatches ? (
-            <Type muted className="py-8 text-center">
-              {search !== ""
-                ? `No MCP servers matching “${search}”`
-                : "No MCP servers match your filters"}
-            </Type>
+            <InlineEmptyState
+              title={
+                search !== ""
+                  ? `No MCP servers matching “${search}”`
+                  : "No MCP servers match your filters"
+              }
+            />
           ) : viewMode === "grid" ? (
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
               {isLoading ? (

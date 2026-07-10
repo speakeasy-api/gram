@@ -1,6 +1,8 @@
 import { CodeBlock } from "@/components/code";
 import { DetailHero } from "@/components/detail-hero";
 import { Page } from "@/components/page-layout";
+import { Card } from "@/components/ui/card";
+import { CopyButton } from "@/components/ui/copy-button";
 import { Heading } from "@/components/ui/heading";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
@@ -91,33 +93,15 @@ export function BuiltInMCPDetailPage(): JSX.Element {
                 <Type className="text-muted-foreground max-w-2xl truncate">
                   {mcpUrl}
                 </Type>
-                <Button
-                  variant="tertiary"
-                  size="sm"
-                  onClick={() => {
-                    void navigator.clipboard.writeText(mcpUrl);
+                <CopyButton
+                  text={mcpUrl}
+                  tooltip="Copy URL"
+                  size="icon-sm"
+                  className="text-muted-foreground hover:text-foreground shrink-0"
+                  onCopy={() => {
                     toast.success("URL copied to clipboard");
                   }}
-                  className="text-muted-foreground hover:text-foreground shrink-0"
-                >
-                  <Button.LeftIcon>
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="16"
-                      height="16"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
-                      <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
-                    </svg>
-                  </Button.LeftIcon>
-                  <Button.Text className="sr-only">Copy URL</Button.Text>
-                </Button>
+                />
               </div>
             </Stack>
           </div>
@@ -170,7 +154,7 @@ function BuiltInOverviewTab({ mcpUrl }: { mcpUrl: string }) {
         heading="Install Page"
         description="Share this page to give simple instructions for getting started with this MCP server in Cursor or Claude Desktop."
       >
-        <div className="bg-muted/20 flex items-center gap-2 rounded-lg border p-2">
+        <Card className="flex-row items-center gap-2 p-2">
           <CodeBlock
             className="flex-grow overflow-hidden"
             innerClassName="!p-2 !pr-10 !bg-white dark:!bg-zinc-950"
@@ -191,7 +175,7 @@ function BuiltInOverviewTab({ mcpUrl }: { mcpUrl: string }) {
               <Button.Text>View</Button.Text>
             </a>
           </Button>
-        </div>
+        </Card>
       </PageSection>
     </Stack>
   );
@@ -209,9 +193,11 @@ function BuiltInToolsTab() {
         <Heading variant="h3">Tools</Heading>
       </Stack>
 
-      <div className="border-neutral-softest w-full overflow-hidden rounded-lg border">
+      <Card className="w-full gap-0 overflow-hidden p-0">
         <div className="bg-surface-secondary-default border-neutral-softest flex items-center border-b py-4 pr-3 pl-4">
-          <p className="text-foreground text-sm leading-6">MCP Logs</p>
+          <Type muted className="font-mono text-xs tracking-[0.08em] uppercase">
+            MCP Logs
+          </Type>
         </div>
 
         {BUILT_IN_TOOLS.map((tool) => (
@@ -220,14 +206,14 @@ function BuiltInToolsTab() {
             className="border-neutral-softest flex items-center border-b py-4 pr-3 pl-4 last:border-b-0"
           >
             <div className="flex min-w-0 flex-1 flex-col">
-              <p className="text-foreground text-sm leading-6">{tool.name}</p>
-              <p className="text-muted-foreground truncate text-sm leading-6">
+              <Type>{tool.name}</Type>
+              <Type muted small className="truncate">
                 {tool.description}
-              </p>
+              </Type>
             </div>
           </div>
         ))}
-      </div>
+      </Card>
     </Stack>
   );
 }

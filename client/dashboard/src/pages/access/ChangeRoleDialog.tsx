@@ -99,7 +99,7 @@ export function ChangeRoleDialog({
 
         {member && (
           <div className="space-y-4 py-2">
-            <div className="border-border flex items-center gap-3 rounded-md border p-3">
+            <div className="border-border flex items-center gap-3 border p-3">
               <Avatar className="h-9 w-9">
                 {member.photoUrl && (
                   <AvatarImage src={member.photoUrl} alt={member.name} />
@@ -125,7 +125,7 @@ export function ChangeRoleDialog({
 
             {/* Role typeahead */}
             <Command
-              className="border-border h-auto rounded-md border [&_[data-slot=command-input-wrapper]]:h-9 [&_[data-slot=command-input]]:h-9"
+              className="border-border h-auto border [&_[data-slot=command-input-wrapper]]:h-9 [&_[data-slot=command-input]]:h-9"
               shouldFilter
             >
               <CommandInput
@@ -167,7 +167,7 @@ export function ChangeRoleDialog({
             </Command>
 
             {/* Selected role chips */}
-            <div className="border-border flex min-h-16 flex-wrap content-start gap-1.5 rounded-md border border-dashed p-2">
+            <div className="border-border flex min-h-16 flex-wrap content-start gap-1.5 border border-dashed p-2">
               {selectedRoleIds.length > 0 ? (
                 selectedRoleIds.map((id) => {
                   const role = roleById.get(id);
@@ -185,7 +185,7 @@ export function ChangeRoleDialog({
                           type="button"
                           onClick={() => removeRole(id)}
                           disabled={selectedRoleIds.length <= 1}
-                          className="hover:bg-muted-foreground/20 ml-0.5 rounded-sm p-0.5 transition-colors disabled:cursor-not-allowed disabled:opacity-30"
+                          className="hover:bg-muted-foreground/20 ml-0.5 p-0.5 transition-colors disabled:cursor-not-allowed disabled:opacity-30"
                         >
                           <X className="h-3 w-3" />
                         </button>

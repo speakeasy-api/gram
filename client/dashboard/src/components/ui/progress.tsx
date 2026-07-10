@@ -56,7 +56,12 @@ export function Progress({
       {...props}
     >
       <div
-        className={cn("h-full", fillToneClass[tone])}
+        // The fill animates so that a refetch reads as the bar growing rather
+        // than snapping to a new length.
+        className={cn(
+          "h-full transition-[width] duration-500 ease-out motion-reduce:transition-none",
+          fillToneClass[tone],
+        )}
         style={{ width: `${percent}%` }}
       />
     </div>
@@ -132,11 +137,11 @@ export function UsageMeter({
         className="bg-muted flex h-2 w-full overflow-hidden"
       >
         <div
-          className="bg-btn-primary h-full"
+          className="bg-btn-primary h-full transition-[width] duration-500 ease-out motion-reduce:transition-none"
           style={{ width: `${includedFillPercent}%` }}
         />
         <div
-          className="bg-warning-default h-full"
+          className="bg-warning-default h-full transition-[width] duration-500 ease-out motion-reduce:transition-none"
           style={{ width: `${overageFillPercent}%` }}
         />
       </div>

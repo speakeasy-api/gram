@@ -1,4 +1,6 @@
+import { Card } from "@/components/ui/card";
 import { IdentityCell } from "@/components/ui/identity-cell";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import {
   Sheet,
   SheetContent,
@@ -7,6 +9,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Type } from "@/components/ui/type";
+import { MethodBadge } from "@/components/tool-list/MethodBadge";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { Role } from "@gram/client/models/components/role.js";
 import type { Tool } from "@/lib/toolTypes";
@@ -101,21 +104,10 @@ function bestAccessLevel(levels: AccessLevel[]): AccessLevel {
   return best;
 }
 
-const METHOD_COLORS: Record<string, string> = {
-  GET: "text-blue-600 bg-blue-50",
-  POST: "text-green-600 bg-green-50",
-  PUT: "text-amber-600 bg-amber-50",
-  PATCH: "text-orange-600 bg-orange-50",
-  DELETE: "text-red-600 bg-red-50",
-};
-
 function ToolRow({ tool }: { tool: Tool }) {
   const isHttp = tool.type === "http";
   const httpTool = isHttp ? (tool as Tool & { type: "http" }) : null;
-  const method = httpTool?.httpMethod?.toUpperCase();
-  const methodColors = method
-    ? (METHOD_COLORS[method] ?? "text-muted-foreground bg-muted")
-    : null;
+  const method = httpTool?.httpMethod;
 
   const annotations = isHttp ? httpTool?.annotations : undefined;
   const annotationTags: string[] = [];
@@ -125,15 +117,9 @@ function ToolRow({ tool }: { tool: Tool }) {
   if (annotations?.openWorldHint) annotationTags.push("Open-world");
 
   return (
-    <div className="border-border rounded-lg border p-3">
+    <Card className="gap-0 p-3">
       <div className="flex items-start gap-2">
-        {method && methodColors && (
-          <span
-            className={`mt-0.5 inline-flex shrink-0 items-center rounded px-1.5 py-0.5 font-mono text-[10px] font-bold ${methodColors}`}
-          >
-            {method}
-          </span>
-        )}
+        {method && <MethodBadge method={method} />}
         <div className="min-w-0 flex-1">
           <Type variant="body" className="font-mono text-sm font-medium">
             {"name" in tool ? tool.name : "Unknown tool"}
@@ -159,16 +145,13 @@ function ToolRow({ tool }: { tool: Tool }) {
       {annotationTags.length > 0 && (
         <div className="mt-2 flex gap-1">
           {annotationTags.map((tag) => (
-            <span
-              key={tag}
-              className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-[10px]"
-            >
+            <Badge key={tag} variant="neutral" background={false} size="sm">
               {tag}
-            </span>
+            </Badge>
           ))}
         </div>
       )}
-    </div>
+    </Card>
   );
 }
 
@@ -197,7 +180,9 @@ function AccessBadge({
       );
     case "none":
       return (
-        <span className="text-muted-foreground/50 text-sm">No access</span>
+        <Type variant="body" className="text-muted-foreground/50 text-sm">
+          No access
+        </Type>
       );
   }
 }
@@ -439,22 +424,17 @@ export function MCPTeamAccessTab({
                     // identifiers from the grant selectors so the user can
                     // at least see what they have access to.
                     sheetData.toolNames.map((name) => (
-                      <div
-                        key={name}
-                        className="border-border rounded-lg border p-3"
-                      >
+                      <Card key={name} className="p-3">
                         <Type
                           variant="body"
                           className="font-mono text-sm font-medium"
                         >
                           {name}
                         </Type>
-                      </div>
+                      </Card>
                     ))
                   ) : (
-                    <div className="text-muted-foreground py-8 text-center text-sm">
-                      Could not resolve tool names from grants.
-                    </div>
+                    <InlineEmptyState title="Could not resolve tool names from grants." />
                   )}
                 </div>
               </div>

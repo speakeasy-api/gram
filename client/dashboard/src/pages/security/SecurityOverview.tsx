@@ -8,6 +8,7 @@ import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { DashboardCard } from "@/components/ui/dashboard-card";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/moonshine";
 import { type DateRangePreset } from "@gram-ai/elements";
@@ -94,26 +95,22 @@ function NoPoliciesEmptyState() {
   const routes = useRoutes();
   return (
     <RiskOverviewShell>
-      <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
-        <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
-          <Shield className="text-muted-foreground size-6" />
-        </div>
-        <Type variant="subheading" className="mb-1">
-          Risk Analysis
-        </Type>
-        <Type small muted className="mb-4 max-w-md text-center">
-          Create a risk policy to begin scanning chat messages for leaked
-          secrets, sensitive data, and policy flags.
-        </Type>
-        <Button variant="primary" asChild>
-          <Link to={routes.policyCenter.href()}>
-            <Button.Text>Manage Policies</Button.Text>
-            <Button.RightIcon>
-              <ArrowRight />
-            </Button.RightIcon>
-          </Link>
-        </Button>
-      </div>
+      <InlineEmptyState
+        className="py-16"
+        icon={<Shield />}
+        title="Risk Analysis"
+        description="Create a risk policy to begin scanning chat messages for leaked secrets, sensitive data, and policy flags."
+        action={
+          <Button variant="primary" asChild>
+            <Link to={routes.policyCenter.href()}>
+              <Button.Text>Manage Policies</Button.Text>
+              <Button.RightIcon>
+                <ArrowRight />
+              </Button.RightIcon>
+            </Link>
+          </Button>
+        }
+      />
     </RiskOverviewShell>
   );
 }
@@ -252,17 +249,12 @@ function SecurityOverviewContent() {
   if (overviewQuery.error) {
     return (
       <RiskOverviewShell rangeLabel={rangeLabel} controls={controls}>
-        <div className="bg-muted/20 flex flex-col items-center justify-center rounded-lg border border-dashed px-8 py-16 text-center">
-          <div className="bg-muted/50 mb-4 flex size-12 items-center justify-center rounded-full">
-            <CircleAlert className="text-muted-foreground size-6" />
-          </div>
-          <p className="text-foreground text-sm font-medium">
-            Error loading risk overview
-          </p>
-          <p className="text-muted-foreground mt-1 max-w-md text-sm">
-            {overviewQuery.error.message}
-          </p>
-        </div>
+        <InlineEmptyState
+          className="py-16"
+          icon={<CircleAlert />}
+          title="Error loading risk overview"
+          description={overviewQuery.error.message}
+        />
       </RiskOverviewShell>
     );
   }
@@ -314,7 +306,7 @@ function SecurityOverviewContent() {
       )}
       <RiskOverviewShell rangeLabel={rangeLabel} controls={controls}>
         {policiesDisabledWithHistory && (
-          <div className="bg-muted/30 flex items-start gap-3 rounded-lg border border-dashed px-4 py-3">
+          <div className="bg-muted/30 flex items-start gap-3 border border-dashed px-4 py-3">
             <CircleAlert className="text-muted-foreground mt-0.5 size-4 shrink-0" />
             <div className="min-w-0 flex-1">
               <Type small className="font-medium">
@@ -337,7 +329,7 @@ function SecurityOverviewContent() {
         )}
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
           {isOverviewLoading ? (
-            <Skeleton className="h-[100px] rounded-lg" />
+            <Skeleton className="h-[100px]" />
           ) : (
             <MetricCard
               title="Events Scanned"
@@ -347,7 +339,7 @@ function SecurityOverviewContent() {
             />
           )}
           {isOverviewLoading ? (
-            <Skeleton className="h-[100px] rounded-lg" />
+            <Skeleton className="h-[100px]" />
           ) : (
             <MetricCard
               title="Findings"
@@ -357,7 +349,7 @@ function SecurityOverviewContent() {
             />
           )}
           {isOverviewLoading ? (
-            <Skeleton className="h-[100px] rounded-lg" />
+            <Skeleton className="h-[100px]" />
           ) : (
             <MetricCard
               title="Flagged Sessions"
@@ -367,7 +359,7 @@ function SecurityOverviewContent() {
             />
           )}
           {isOverviewLoading ? (
-            <Skeleton className="h-[100px] rounded-lg" />
+            <Skeleton className="h-[100px]" />
           ) : (
             <MetricCard
               title="Active Policies"
@@ -417,7 +409,7 @@ function SecurityOverviewContent() {
         </div>
 
         {isOverviewLoading || !overview ? (
-          <Skeleton className="h-[250px] w-full rounded-lg" />
+          <Skeleton className="h-[250px] w-full" />
         ) : (
           <ChartCard
             title="Risk Events over Time"

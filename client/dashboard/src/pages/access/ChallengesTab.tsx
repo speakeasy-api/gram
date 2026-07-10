@@ -1,3 +1,5 @@
+import { Card } from "@/components/ui/card";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import {
   Select,
   SelectContent,
@@ -119,7 +121,7 @@ function FilterPill({
       type="button"
       onClick={onClick}
       className={cn(
-        "inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
+        "inline-flex cursor-pointer items-center gap-1.5 border px-2.5 py-1 text-xs font-medium transition-colors",
         active
           ? "border-primary bg-primary/5 text-primary"
           : "border-border text-muted-foreground hover:bg-accent hover:text-foreground",
@@ -146,25 +148,24 @@ export function ChallengesEmptyState({
   outcomeFilter: OutcomeFilter;
 }): JSX.Element {
   return (
-    <div className="border-border/50 bg-muted/20 rounded-lg border px-6 py-16 text-center">
-      <div className="bg-primary/10 mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full">
-        <Check className="text-primary h-6 w-6" />
-      </div>
-      <Type variant="body" className="font-medium">
-        {outcomeFilter === "deny"
+    <InlineEmptyState
+      icon={<Check />}
+      title={
+        outcomeFilter === "deny"
           ? "No denied access attempts"
           : outcomeFilter === "resolved"
             ? "No resolved challenges yet"
-            : "No challenges found"}
-      </Type>
-      <Type variant="body" className="text-muted-foreground mt-1 text-sm">
-        {outcomeFilter === "deny"
+            : "No challenges found"
+      }
+      description={
+        outcomeFilter === "deny"
           ? "All authorization checks are passing. Your team's permissions look good."
           : outcomeFilter === "resolved"
             ? "Denied challenges that are resolved by granting access will appear here."
-            : "Authorization challenges will appear here as your team uses the platform."}
-      </Type>
-    </div>
+            : "Authorization challenges will appear here as your team uses the platform."
+      }
+      className="py-16"
+    />
   );
 }
 
@@ -520,7 +521,7 @@ export function ChallengesTab(): JSX.Element {
         </>
       )}
 
-      <div className="border-border/50 bg-muted/30 mt-8 rounded-md border px-4 py-3">
+      <Card className="bg-muted/30 mt-8 gap-0 p-4">
         <Type variant="subheading" className="mb-3">
           About Challenges
         </Type>
@@ -552,7 +553,7 @@ export function ChallengesTab(): JSX.Element {
             </Type>
           </div>
         </div>
-      </div>
+      </Card>
 
       {grantFlowPortals}
     </div>

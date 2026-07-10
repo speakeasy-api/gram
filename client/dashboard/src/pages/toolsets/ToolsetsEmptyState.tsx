@@ -58,7 +58,7 @@ export function ToolsetsGraphic({
         {toolsets.map((toolset, index) => (
           <motion.div
             key={toolset.id}
-            className="rounded-xl border border-neutral-200 bg-white p-4"
+            className="border-border bg-card border p-4"
             initial={{ opacity: 1, y: 0 }}
             animate={{
               opacity: 1,
@@ -70,28 +70,18 @@ export function ToolsetsGraphic({
               delay: isHovered ? index * 0.1 : 0,
               ease: [0.21, 0.47, 0.32, 0.98],
             }}
-            whileHover={{
-              scale: 1.02,
-              boxShadow: "0px 8px 16px rgba(0,0,0,0.08)",
-            }}
           >
             <div className="mb-3 flex items-center gap-3">
-              <motion.div
-                className="flex h-8 w-8 items-center justify-center rounded-lg bg-neutral-100"
-                animate={{
-                  backgroundColor: isHovered ? "#f3f4f6" : "#f5f5f5",
-                }}
-                transition={{ duration: 0.3 }}
-              >
-                <span className="text-xs font-bold text-neutral-700">
+              <div className="bg-muted flex h-8 w-8 items-center justify-center">
+                <span className="text-foreground text-xs font-bold">
                   {toolset.icon}
                 </span>
-              </motion.div>
+              </div>
               <div>
-                <div className="text-sm font-medium text-neutral-900">
+                <div className="text-foreground text-sm font-medium">
                   {toolset.name}
                 </div>
-                <div className="text-xs text-neutral-500">
+                <div className="text-muted-foreground text-xs">
                   {toolset.tools.filter((t) => t.type === "internal").length}{" "}
                   internal,{" "}
                   {toolset.tools.filter((t) => t.type === "external").length}{" "}
@@ -104,11 +94,12 @@ export function ToolsetsGraphic({
               {toolset.tools.map((tool, toolIndex) => (
                 <motion.div
                   key={tool.name}
-                  className={`rounded-md px-2.5 py-1 text-xs font-medium ${
+                  className={cn(
+                    "px-2.5 py-1 text-xs font-medium",
                     tool.type === "internal"
-                      ? "bg-neutral-100 text-neutral-900 ring-1 ring-neutral-900/10 ring-inset"
-                      : "bg-neutral-50 text-neutral-600"
-                  }`}
+                      ? "bg-muted text-foreground ring-border ring-1 ring-inset"
+                      : "bg-muted/50 text-muted-foreground",
+                  )}
                   initial={{ opacity: 1, scale: 1 }}
                   animate={{
                     opacity: 1,
@@ -118,11 +109,7 @@ export function ToolsetsGraphic({
                     delay: isHovered ? index * 0.1 + 0.2 + toolIndex * 0.05 : 0,
                     duration: 0.3,
                   }}
-                  whileHover={{
-                    scale: 1.05,
-                    backgroundColor:
-                      tool.type === "internal" ? "#e5e5e5" : "#f9f9f9",
-                  }}
+                  whileHover={{ scale: 1.05 }}
                 >
                   {tool.label}
                 </motion.div>

@@ -61,6 +61,9 @@ import { unwrapAsync } from "@gram/client/types/fp";
 import { Alert, Badge, Button } from "@/components/ui/moonshine";
 import type { BadgeProps } from "@/components/ui/moonshine";
 import { Heading } from "@/components/ui/heading";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Type } from "@/components/ui/type";
 import {
   useInfiniteQuery,
   useQuery,
@@ -87,10 +90,10 @@ function ToolLogsHeading() {
   return (
     <div className="flex min-w-0 flex-col gap-1">
       <Heading variant="h1">Tool Logs</Heading>
-      <p className="text-muted-foreground text-sm">
+      <Type muted small>
         Dive into tool traces across all tools, skills, and MCP servers used by
         organization members in this project
-      </p>
+      </Type>
     </div>
   );
 }
@@ -759,12 +762,10 @@ function LogsToolsContent({
             <div className="min-h-0 flex-1 overflow-y-auto border">
               <div className="bg-background relative flex h-full flex-col">
                 {isFetching && traces.length > 0 && (
-                  <div className="bg-primary/20 absolute top-0 right-0 left-0 z-20 h-1">
-                    <div className="bg-primary h-full animate-pulse" />
-                  </div>
+                  <Skeleton className="bg-primary/60 absolute top-0 right-0 left-0 z-20 h-1 w-full" />
                 )}
 
-                <div className="bg-muted/30 text-muted-foreground flex shrink-0 items-center gap-3 border-b px-5 py-2.5 text-xs font-medium tracking-wide uppercase">
+                <div className="bg-muted/30 text-muted-foreground flex shrink-0 items-center gap-3 border-b px-5 py-2.5 font-mono text-xs tracking-[0.08em] uppercase">
                   <div className="min-w-[150px] shrink-0">Timestamp</div>
                   <div className="w-5 shrink-0" />
                   <div className="min-w-0 flex-2">Source / Tool</div>
@@ -876,19 +877,12 @@ function LogsToolsTableContent({
     }
 
     return (
-      <div className="py-12 text-center">
-        <div className="flex flex-col items-center gap-3">
-          <div className="bg-muted flex size-12 items-center justify-center rounded-full">
-            <Inbox className="text-muted-foreground size-6" />
-          </div>
-          <span className="text-foreground font-medium">
-            No matching tool logs
-          </span>
-          <span className="text-muted-foreground max-w-sm text-sm">
-            Try adjusting your filters or time range
-          </span>
-        </div>
-      </div>
+      <InlineEmptyState
+        className="py-12"
+        icon={<Inbox />}
+        title="No matching tool logs"
+        description="Try adjusting your filters or time range"
+      />
     );
   }
 
@@ -1011,7 +1005,7 @@ function LogsToolsTraceRow({
           <div className="group/server relative flex shrink-0 items-center">
             <span
               className={cn(
-                "shrink-0 truncate rounded-xs px-2 py-1 font-mono text-xs",
+                "shrink-0 truncate px-2 py-1 font-mono text-xs",
                 targetConfig.className,
               )}
             >
@@ -1024,7 +1018,7 @@ function LogsToolsTraceRow({
                   e.stopPropagation();
                   setEditDialogOpen(true);
                 }}
-                className="text-muted-foreground hover:text-foreground bg-card hover:bg-muted border-border invisible absolute -right-6 size-6 rounded border p-1 transition-colors group-hover/server:visible"
+                className="text-muted-foreground hover:text-foreground bg-card hover:bg-muted border-border invisible absolute -right-6 size-6 border p-1 transition-colors group-hover/server:visible"
                 aria-label="Edit display name"
               >
                 <Pencil className="size-3" />
@@ -1140,14 +1134,12 @@ function getTargetConfig(targetType: ToolUsageTraceSummary["targetType"]) {
     case "shadow_mcp_server":
       return {
         label: "Shadow MCP",
-        className:
-          "bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-300",
+        className: "bg-warning/15 text-warning",
       };
     case "skill":
       return {
         label: "Skill",
-        className:
-          "bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-300",
+        className: "bg-accent text-accent-foreground",
       };
     case "local_tool":
     default:

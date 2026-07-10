@@ -1,5 +1,6 @@
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Type } from "@/components/ui/type";
 
 export interface Step {
   id: string;
@@ -53,8 +54,8 @@ export function OnboardingStepper({
             {/* Step indicator */}
             <div className="relative z-10 flex-shrink-0">
               {isCurrent ? (
-                /* Active step: dark filled rounded rectangle */
-                <div className="flex h-[28px] w-[28px] items-center justify-center rounded-[8px] bg-foreground text-sm font-semibold text-background">
+                /* Active step: dark filled square */
+                <div className="flex h-[28px] w-[28px] items-center justify-center bg-foreground text-sm font-semibold text-background">
                   {index + 1}
                 </div>
               ) : isCompleted ? (
@@ -97,12 +98,13 @@ export function OnboardingStepper({
                   : undefined
               }
             >
-              <h3
+              <Type
+                as="h3"
+                small
                 className={cn(
-                  "flex items-center gap-2 text-sm leading-tight font-semibold",
-                  isCurrent && "text-foreground",
-                  isCompleted && "text-foreground",
-                  isUpcoming && "text-muted-foreground",
+                  "flex items-center gap-2 leading-tight font-semibold",
+                  (isCurrent || isCompleted) && "text-foreground!",
+                  isUpcoming && "text-muted-foreground!",
                 )}
               >
                 {step.title}
@@ -111,17 +113,18 @@ export function OnboardingStepper({
                     {step.badge}
                   </span>
                 )}
-              </h3>
-              <p
+              </Type>
+              <Type
+                as="p"
+                small
                 className={cn(
-                  "mt-0.5 text-sm leading-snug",
-                  isCurrent && "text-muted-foreground",
-                  isCompleted && "text-muted-foreground",
-                  isUpcoming && "text-muted-foreground/60",
+                  "mt-0.5 leading-snug",
+                  (isCurrent || isCompleted) && "text-muted-foreground!",
+                  isUpcoming && "text-muted-foreground/60!",
                 )}
               >
                 {step.description}
-              </p>
+              </Type>
             </div>
           </div>
         );

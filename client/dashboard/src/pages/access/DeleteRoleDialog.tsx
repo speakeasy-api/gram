@@ -76,7 +76,7 @@ export const DeleteRoleDialog = ({
           )}
 
           {hasMembers && (
-            <div className="border-border divide-border max-h-72 divide-y overflow-y-auto rounded-md border">
+            <div className="border-border divide-border max-h-72 divide-y overflow-y-auto border">
               {members.map((member) => {
                 const isOnlyRole = member.roleIds.length === 1;
                 return (

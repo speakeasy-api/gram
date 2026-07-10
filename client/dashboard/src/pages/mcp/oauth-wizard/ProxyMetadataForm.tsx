@@ -1,6 +1,14 @@
 import { Dialog } from "@/components/ui/dialog";
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Type } from "@/components/ui/type";
-import { Button, Input, Link, Stack } from "@/components/ui/moonshine";
+import { Alert, Button, Input, Link, Stack } from "@/components/ui/moonshine";
 
 import { WizardContext } from "./machine";
 import type { ProxyFormKey } from "./machine-types";
@@ -35,27 +43,29 @@ export function ProxyMetadataForm(): JSX.Element {
           </Type>
 
           {discovered && !proxy.prefilled && (
-            <div className="border-border bg-muted/50 mb-4 flex items-start justify-between gap-4 rounded-md border p-4">
-              <div>
-                <Type small className="font-medium">
-                  OAuth detected from {discovered.name}
-                </Type>
-                <Type muted small className="mt-1">
-                  We discovered OAuth {discovered.version} metadata from this
-                  server. You can use it to pre-fill the endpoints below.
-                </Type>
+            <Alert variant="info" dismissible={false}>
+              <div className="flex w-full items-start justify-between gap-4">
+                <div>
+                  <Type small className="font-medium">
+                    OAuth detected from {discovered.name}
+                  </Type>
+                  <Type muted small className="mt-1">
+                    We discovered OAuth {discovered.version} metadata from this
+                    server. You can use it to pre-fill the endpoints below.
+                  </Type>
+                </div>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => send({ type: "APPLY_DISCOVERED" })}
+                >
+                  Apply
+                </Button>
               </div>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => send({ type: "APPLY_DISCOVERED" })}
-              >
-                Apply
-              </Button>
-            </div>
+            </Alert>
           )}
           {proxy.prefilled && (
-            <div className="border-border bg-muted/50 mb-4 rounded-md border p-4">
+            <Alert variant="info" dismissible={false}>
               <Type small className="font-medium">
                 Pre-filled from detected OAuth metadata
               </Type>
@@ -65,24 +75,28 @@ export function ProxyMetadataForm(): JSX.Element {
                 carefully and refer to the MCP server or API's documentation to
                 confirm these values are correct.
               </Type>
-            </div>
+            </Alert>
           )}
 
-          {error && <Type className="mb-4 text-sm text-red-500!">{error}</Type>}
+          {error && (
+            <Alert variant="error" dismissible={false}>
+              {error}
+            </Alert>
+          )}
 
           <Stack gap={4}>
-            <div>
-              <Type className="mb-2 font-medium">OAuth Proxy Server Slug</Type>
+            <Field>
+              <FieldLabel>OAuth Proxy Server Slug</FieldLabel>
               <Input
                 placeholder="my-oauth-proxy"
                 value={proxy.slug}
                 onChange={(e) => setField("slug", e.target.value)}
                 maxLength={40}
               />
-            </div>
+            </Field>
 
-            <div>
-              <Type className="mb-2 font-medium">Authorization Endpoint</Type>
+            <Field>
+              <FieldLabel>Authorization Endpoint</FieldLabel>
               <Input
                 placeholder="https://provider.com/oauth/authorize"
                 value={proxy.authorizationEndpoint}
@@ -90,56 +104,60 @@ export function ProxyMetadataForm(): JSX.Element {
                   setField("authorizationEndpoint", e.target.value)
                 }
               />
-            </div>
+            </Field>
 
-            <div>
-              <Type className="mb-2 font-medium">Token Endpoint</Type>
+            <Field>
+              <FieldLabel>Token Endpoint</FieldLabel>
               <Input
                 placeholder="https://provider.com/oauth/token"
                 value={proxy.tokenEndpoint}
                 onChange={(e) => setField("tokenEndpoint", e.target.value)}
               />
-            </div>
+            </Field>
 
-            <div>
-              <Type className="mb-2 font-medium">
-                Scopes (comma-separated, optional)
-              </Type>
+            <Field>
+              <FieldLabel optional>Scopes (comma-separated)</FieldLabel>
               <Input
                 placeholder="read, write, openid"
                 value={proxy.scopes}
                 onChange={(e) => setField("scopes", e.target.value)}
               />
-            </div>
+            </Field>
 
-            <div>
-              <Type className="mb-2 font-medium">Audience (optional)</Type>
+            <Field>
+              <FieldLabel optional>Audience</FieldLabel>
               <Input
                 placeholder="https://api.example.com"
                 value={proxy.audience}
                 onChange={(e) => setField("audience", e.target.value)}
               />
-              <Type muted small className="mt-1">
+              <FieldDescription>
                 The audience parameter sent to the upstream OAuth provider.
                 Required by some providers (e.g. Auth0) to return JWT access
                 tokens.
-              </Type>
-            </div>
+              </FieldDescription>
+            </Field>
 
-            <div>
-              <Type className="mb-2 font-medium">
-                Token Endpoint Auth Method
-              </Type>
-              <select
-                className="bg-background w-full rounded border px-3 py-2"
+            <Field>
+              <FieldLabel>Token Endpoint Auth Method</FieldLabel>
+              <Select
                 value={proxy.tokenAuthMethod}
-                onChange={(e) => setField("tokenAuthMethod", e.target.value)}
+                onValueChange={(value) => setField("tokenAuthMethod", value)}
               >
-                <option value="client_secret_basic">client_secret_basic</option>
-                <option value="client_secret_post">client_secret_post</option>
-                <option value="none">none</option>
-              </select>
-            </div>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="client_secret_basic">
+                    client_secret_basic
+                  </SelectItem>
+                  <SelectItem value="client_secret_post">
+                    client_secret_post
+                  </SelectItem>
+                  <SelectItem value="none">none</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
           </Stack>
         </div>
       </div>

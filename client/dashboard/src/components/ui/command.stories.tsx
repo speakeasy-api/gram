@@ -73,7 +73,7 @@ function PaletteBody() {
 
 export const Default: Story = {
   render: () => (
-    <div className="w-[400px] rounded-lg border shadow-md">
+    <div className="w-[400px] rounded-lg border">
       <Command>
         <PaletteBody />
       </Command>
@@ -119,7 +119,7 @@ export const WithTrigger: Story = {
 
 export const EmptyState: Story = {
   render: () => (
-    <div className="w-[400px] rounded-lg border shadow-md">
+    <div className="w-[400px] rounded-lg border">
       <Command>
         <CommandInput placeholder="Try typing something with no matches..." />
         <CommandList>

@@ -1,3 +1,4 @@
+import { Card } from "@/components/ui/card";
 import { Heading } from "@/components/ui/heading";
 import { Label } from "@/components/ui/label";
 import { RequireScope } from "@/components/require-scope";
@@ -144,7 +145,7 @@ export function OtelForwardingSection(): JSX.Element {
         </Type>
       </div>
 
-      <div className="border-border bg-card flex flex-col gap-4 rounded-lg border p-4">
+      <Card className="gap-4">
         <Stack direction="horizontal" justify="space-between" align="center">
           <Stack gap={1}>
             <Stack direction="horizontal" align="center" gap={2}>
@@ -251,7 +252,7 @@ export function OtelForwardingSection(): JSX.Element {
             </Button>
           </RequireScope>
         </Stack>
-      </div>
+      </Card>
     </Stack>
   );
 }

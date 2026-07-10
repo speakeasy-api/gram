@@ -255,7 +255,7 @@ function AuditLogRow({
           <button
             type="button"
             onClick={() => setDiffExpanded((v) => !v)}
-            className="ml-2 text-xs text-blue-500 hover:underline"
+            className="text-primary ml-2 text-xs hover:underline"
           >
             {diffExpanded ? "Hide diff ▴" : "Show diff ▾"}
           </button>
@@ -284,13 +284,13 @@ function AuditLogRow({
       >
         <div
           className={cn(
-            "rounded-t-lg border border-b-0",
+            "border border-b-0",
             isOdd ? "bg-muted/30" : "bg-background",
           )}
         >
           {rowContent}
         </div>
-        <div className="bg-background rounded-b-lg border border-t-0 px-4 pt-2 pb-3">
+        <div className="bg-background border border-t-0 px-4 pt-2 pb-3">
           <StructuredDiff log={log} />
         </div>
       </div>
@@ -301,7 +301,7 @@ function AuditLogRow({
     <div
       ref={rowRef}
       className={cn(
-        "rounded-none transition-colors",
+        "transition-colors",
         isOdd ? "bg-muted/30" : "bg-background",
         isHighlighted && "border-l-foreground border-l-4",
       )}
@@ -660,10 +660,7 @@ function OrgAuditLogsInner() {
         <>
           {parts.map((part, i) =>
             part.toLowerCase() === searchQuery.toLowerCase() ? (
-              <mark
-                key={i}
-                className="bg-yellow-200 text-inherit dark:bg-yellow-800"
-              >
+              <mark key={i} className="bg-warning-softest text-inherit">
                 {part}
               </mark>
             ) : (
@@ -850,7 +847,7 @@ function OrgAuditLogsInner() {
               <Type small muted>
                 Timestamp
               </Type>
-              <div className="bg-background flex h-8 items-center gap-2 rounded-md border px-3">
+              <div className="bg-background flex h-8 items-center gap-2 border px-3">
                 <Type
                   small
                   className={
@@ -882,7 +879,7 @@ function OrgAuditLogsInner() {
             </div>
           </div>
 
-          <div className="bg-background overflow-hidden rounded-lg border">
+          <div className="bg-background overflow-hidden border">
             {/* Search toolbar */}
             {!isLoading && !error && logs.length > 0 && (
               <div className="bg-surface/50 flex items-center gap-2 border-b p-2">
@@ -925,28 +922,26 @@ function OrgAuditLogsInner() {
                     onChange={(e) => handleSearchChange(e.target.value)}
                     onFocus={() => setSearchInputFocused(true)}
                     onBlur={() => setSearchInputFocused(false)}
-                    className="w-56 rounded-sm py-1 pr-16 pl-7 text-xs"
+                    className="w-56 py-1 pr-16 pl-7 text-xs"
                   />
                   {searchQuery || searchInputFocused ? (
                     searchMatchIndices.length > 0 ? (
                       <div className="absolute top-1/2 right-1 flex -translate-y-1/2 items-center gap-0.5">
-                        <span className="text-muted-foreground bg-muted rounded-sm px-1 py-0.5 text-[10px]">
-                          ESC
-                        </span>
+                        <Kbd>ESC</Kbd>
                         <span className="text-muted-foreground mx-0.5 text-[10px]">
                           {effectiveSearchIndex + 1}/{searchMatchIndices.length}
                         </span>
                         <div className="flex items-center">
                           <button
                             onClick={() => navigateToResult("prev")}
-                            className="hover:bg-muted rounded-sm p-0.5 opacity-60 transition-opacity hover:opacity-100"
+                            className="hover:bg-muted p-0.5 opacity-60 transition-opacity hover:opacity-100"
                             title="Previous (Shift+N)"
                           >
                             <ChevronUp className="size-2.5" />
                           </button>
                           <button
                             onClick={() => navigateToResult("next")}
-                            className="hover:bg-muted rounded-sm p-0.5 opacity-60 transition-opacity hover:opacity-100"
+                            className="hover:bg-muted p-0.5 opacity-60 transition-opacity hover:opacity-100"
                             title="Next (N)"
                           >
                             <ChevronDown className="size-2.5" />
@@ -955,9 +950,7 @@ function OrgAuditLogsInner() {
                       </div>
                     ) : (
                       <div className="absolute top-1/2 right-1.5 flex -translate-y-1/2 items-center gap-0.5">
-                        <span className="text-muted-foreground bg-muted rounded-sm px-1 py-0.5 text-[10px]">
-                          ESC
-                        </span>
+                        <Kbd>ESC</Kbd>
                         <span className="text-muted-foreground ml-0.5 text-[10px]">
                           0/0
                         </span>
@@ -965,9 +958,7 @@ function OrgAuditLogsInner() {
                     )
                   ) : (
                     <div className="absolute top-1/2 right-2 flex -translate-y-1/2 items-center">
-                      <span className="text-muted-foreground bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
-                        /
-                      </span>
+                      <Kbd>/</Kbd>
                     </div>
                   )}
                 </div>

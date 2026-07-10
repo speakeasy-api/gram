@@ -1,4 +1,3 @@
-// oxlint-disable react/only-export-components -- compound component (Object.assign) pattern
 import React, { Fragment, useEffect, useState, type ReactNode } from "react";
 import {
   ArrowDownIcon,
@@ -440,12 +439,12 @@ function ToolbarRefresh({
   );
 }
 
-export const Toolbar = Object.assign(ToolbarRoot, {
-  Search: ToolbarSearch,
-  Filters: ToolbarFilters,
-  SortBy: ToolbarSortBy,
-  ViewAs: ToolbarViewAs,
-  Count: ToolbarCount,
-  Actions: ToolbarActions,
-  Refresh: ToolbarRefresh,
-});
+ToolbarRoot.Search = ToolbarSearch;
+ToolbarRoot.Filters = ToolbarFilters;
+ToolbarRoot.SortBy = ToolbarSortBy;
+ToolbarRoot.ViewAs = ToolbarViewAs;
+ToolbarRoot.Count = ToolbarCount;
+ToolbarRoot.Actions = ToolbarActions;
+ToolbarRoot.Refresh = ToolbarRefresh;
+
+export { ToolbarRoot as Toolbar };

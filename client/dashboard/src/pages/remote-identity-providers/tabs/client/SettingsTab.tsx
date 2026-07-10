@@ -1,5 +1,6 @@
 import { RequireScope } from "@/components/require-scope";
-import { Label } from "@/components/ui/label";
+import { Card } from "@/components/ui/card";
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Type } from "@/components/ui/type";
 import { toastError } from "@/lib/toast-error";
 import { useOrgRoutes } from "@/routes";
@@ -70,30 +71,38 @@ export function SettingsTab({
           value={authMethod}
           onChange={setAuthMethod}
         />
-        <div className="flex flex-col gap-1.5">
-          <Label>Scopes (comma-separated)</Label>
-          <Input value={scope} onChange={(e) => setScope(e.target.value)} />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label>Audience</Label>
+        <Field>
+          <FieldLabel htmlFor="client-scopes">
+            Scopes (comma-separated)
+          </FieldLabel>
           <Input
+            id="client-scopes"
+            value={scope}
+            onChange={(e) => setScope(e.target.value)}
+          />
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="client-audience">Audience</FieldLabel>
+          <Input
+            id="client-audience"
             value={audience}
             onChange={(e) => setAudience(e.target.value)}
           />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label>Rotate client secret</Label>
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="client-secret">Rotate client secret</FieldLabel>
           <Input
+            id="client-secret"
             type="password"
             value={clientSecret}
             onChange={(e) => setClientSecret(e.target.value)}
             placeholder="Enter a new secret to rotate; leave blank to keep current"
           />
-          <Type small muted>
+          <FieldDescription>
             The secret is encrypted at rest and never displayed. Leave blank to
             keep the existing secret.
-          </Type>
-        </div>
+          </FieldDescription>
+        </Field>
         <div>
           <RequireScope scope="org:admin" level="component">
             <Button onClick={handleSave} disabled={update.isPending}>
@@ -105,7 +114,7 @@ export function SettingsTab({
         </div>
       </div>
 
-      <div className="border-destructive/30 flex flex-col gap-2 rounded-md border p-4">
+      <Card className="border-destructive/30 gap-2">
         <Type className="font-medium">Danger Zone</Type>
         <Type small muted>
           Deleting this client is permanent and revokes all of its sessions.
@@ -120,7 +129,7 @@ export function SettingsTab({
             </Button>
           </RequireScope>
         </div>
-      </div>
+      </Card>
 
       {showDelete && (
         <DeleteClientDialog

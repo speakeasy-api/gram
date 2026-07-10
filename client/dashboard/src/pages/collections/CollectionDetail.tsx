@@ -1,14 +1,18 @@
 import { Page } from "@/components/page-layout";
 import { ProjectAvatar } from "@/components/project-menu";
 import { RequireScope } from "@/components/require-scope";
+import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { DetailList } from "@/components/ui/detail-list";
 import { Dialog } from "@/components/ui/dialog";
 import { Combobox } from "@/components/ui/combobox";
 import { Heading } from "@/components/ui/heading";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
+import { Label } from "@/components/ui/label";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Type } from "@/components/ui/type";
 import { useOrganization } from "@/contexts/Auth";
 import {
-  AlertTriangle,
   Calendar,
   Download,
   FolderOpen,
@@ -20,7 +24,7 @@ import {
   Server,
   Server as ServerIcon,
 } from "lucide-react";
-import { Badge, Button, Input } from "@/components/ui/moonshine";
+import { Alert, Badge, Button, Input } from "@/components/ui/moonshine";
 import { TextArea } from "@/components/ui/textarea";
 import { useMemo, useState } from "react";
 import { useParams } from "react-router";
@@ -37,7 +41,6 @@ import {
 } from "./hooks";
 import { useOrgRoutes } from "@/routes";
 import { Pencil } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
 import type { PulseMCPServer as CatalogServer } from "@/pages/catalog/hooks";
 import { toolStats } from "@/pages/catalog/hooks/serverMetadata";
@@ -312,12 +315,11 @@ function CollectionDetailInner() {
           <Page.Header.Breadcrumbs />
         </Page.Header>
         <Page.Body>
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <SearchX className="text-muted-foreground mb-3 h-10 w-10" />
-            <p className="text-muted-foreground text-sm">
-              Collection not found.
-            </p>
-          </div>
+          <InlineEmptyState
+            size="lg"
+            icon={<SearchX />}
+            title="Collection not found"
+          />
         </Page.Body>
       </Page>
     );
@@ -338,7 +340,7 @@ function CollectionDetailInner() {
             <div className="bg-card mb-6 border p-5">
               <div className="flex flex-col gap-5 2xl:flex-row 2xl:items-start 2xl:justify-between">
                 <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start">
-                  <div className="bg-muted/60 flex h-16 w-16 shrink-0 items-center justify-center rounded-xl border">
+                  <div className="bg-muted/60 flex h-16 w-16 shrink-0 items-center justify-center border">
                     <LayoutGrid className="text-muted-foreground h-8 w-8" />
                   </div>
                   <div className="min-w-0 space-y-3">
@@ -442,150 +444,139 @@ function CollectionDetailInner() {
             </div>
 
             {!isLoading && collectionMcpJson.excludedCount > 0 && (
-              <div className="border-warning-default bg-warning-softest mb-4 flex items-start gap-3 rounded-md border p-3">
-                <AlertTriangle className="text-warning-foreground mt-0.5 h-4 w-4 shrink-0" />
+              <Alert variant="warning" dismissible={false} className="mb-4">
                 <div>
                   <Type variant="body" className="font-medium">
                     Some servers were excluded
                   </Type>
-                  <Type small className="text-warning-foreground">
-                    {excludedServersNotice}
-                  </Type>
+                  <Type small>{excludedServersNotice}</Type>
                 </div>
-              </div>
+              </Alert>
             )}
 
             {/* Edit Form */}
             {editing && (
               <RequireScope scope="org:admin" level="section">
-                <div className="mb-4 space-y-4 rounded-lg border p-5">
-                  <h2 className="text-base font-semibold">
-                    Edit collection details
-                  </h2>
-                  <div>
-                    <label className="mb-1 block text-sm font-medium">
-                      Name
-                    </label>
-                    <Input
-                      value={editName}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                        setEditName(e.target.value)
-                      }
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-sm font-medium">
-                      Description
-                    </label>
-                    <TextArea
-                      value={editDescription}
-                      onChange={setEditDescription}
-                      rows={3}
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-2 block text-sm font-medium">
-                      Visibility
-                    </label>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        className={cn(
-                          "flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition-colors",
-                          editVisibility === "public"
-                            ? "border-foreground/30 bg-accent"
-                            : "border-border hover:bg-accent/50",
-                        )}
-                        onClick={() => setEditVisibility("public")}
-                      >
-                        <Globe className="h-3.5 w-3.5" />
-                        Public
-                      </button>
-                      <button
-                        type="button"
-                        className={cn(
-                          "flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition-colors",
-                          editVisibility === "private"
-                            ? "border-foreground/30 bg-accent"
-                            : "border-border hover:bg-accent/50",
-                        )}
-                        onClick={() => setEditVisibility("private")}
-                      >
-                        <Lock className="h-3.5 w-3.5" />
-                        Private
-                      </button>
+                <Card className="mb-4">
+                  <Card.Header>
+                    <Card.Title>Edit collection details</Card.Title>
+                  </Card.Header>
+                  <Card.Content className="space-y-4">
+                    <div>
+                      <Label className="mb-1 block">Name</Label>
+                      <Input
+                        value={editName}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                          setEditName(e.target.value)
+                        }
+                      />
                     </div>
-                  </div>
+                    <div>
+                      <Label className="mb-1 block">Description</Label>
+                      <TextArea
+                        value={editDescription}
+                        onChange={setEditDescription}
+                        rows={3}
+                      />
+                    </div>
+                    <div>
+                      <Label className="mb-2 block">Visibility</Label>
+                      <SegmentedControl
+                        value={editVisibility}
+                        onChange={setEditVisibility}
+                        options={[
+                          {
+                            value: "public",
+                            label: (
+                              <span className="flex items-center gap-1.5">
+                                <Globe className="h-3.5 w-3.5" />
+                                Public
+                              </span>
+                            ),
+                          },
+                          {
+                            value: "private",
+                            label: (
+                              <span className="flex items-center gap-1.5">
+                                <Lock className="h-3.5 w-3.5" />
+                                Private
+                              </span>
+                            ),
+                          },
+                        ]}
+                      />
+                    </div>
 
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      disabled={isSaving || !editName}
-                      onClick={() => {
-                        void (async () => {
-                          setIsSaving(true);
-                          try {
-                            await updateCollection.mutateAsync({
-                              request: {
-                                updateRequestBody: {
-                                  collectionId: collection.id,
-                                  name: editName,
-                                  description: editDescription,
-                                  visibility: editVisibility,
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        disabled={isSaving || !editName}
+                        onClick={() => {
+                          void (async () => {
+                            setIsSaving(true);
+                            try {
+                              await updateCollection.mutateAsync({
+                                request: {
+                                  updateRequestBody: {
+                                    collectionId: collection.id,
+                                    name: editName,
+                                    description: editDescription,
+                                    visibility: editVisibility,
+                                  },
                                 },
-                              },
-                            });
+                              });
 
-                            setEditing(false);
-                          } finally {
-                            setIsSaving(false);
-                          }
-                        })();
-                      }}
-                    >
-                      <Button.Text>
-                        {isSaving ? "Saving..." : "Save"}
-                      </Button.Text>
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      disabled={isSaving}
-                      onClick={() => {
-                        setEditing(false);
-                      }}
-                    >
-                      <Button.Text>Cancel</Button.Text>
-                    </Button>
-                  </div>
-                </div>
+                              setEditing(false);
+                            } finally {
+                              setIsSaving(false);
+                            }
+                          })();
+                        }}
+                      >
+                        <Button.Text>
+                          {isSaving ? "Saving..." : "Save"}
+                        </Button.Text>
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        disabled={isSaving}
+                        onClick={() => {
+                          setEditing(false);
+                        }}
+                      >
+                        <Button.Text>Cancel</Button.Text>
+                      </Button>
+                    </div>
+                  </Card.Content>
+                </Card>
               </RequireScope>
             )}
 
             {/* About */}
             {!editing && (
-              <div className="mb-4 rounded-lg border p-5">
-                <h2 className="text-muted-foreground mb-2 font-mono text-xs tracking-[0.08em] uppercase">
-                  About this collection
-                </h2>
-                <p className="text-muted-foreground text-sm">
-                  {collection.description || "No description provided."}
-                </p>
-              </div>
+              <Card className="mb-4">
+                <Card.Header>
+                  <Card.Title>About this collection</Card.Title>
+                </Card.Header>
+                <Card.Content>
+                  <Type muted small>
+                    {collection.description || "No description provided."}
+                  </Type>
+                </Card.Content>
+              </Card>
             )}
 
             {/* MCP Servers */}
-            <div className="rounded-lg border p-5">
-              <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <Card>
+              <Card.Header className="flex-col items-start gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <h2 className="text-muted-foreground font-mono text-xs tracking-[0.08em] uppercase">
-                    Included servers
-                  </h2>
-                  <p className="text-muted-foreground mt-1 text-sm">
+                  <Card.Title>Included servers</Card.Title>
+                  <Type muted small className="mt-1">
                     These servers install together into the selected project.
-                  </p>
+                  </Type>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
+                <Card.Info className="flex-wrap">
                   <Badge
                     variant="neutral"
                     background={false}
@@ -613,321 +604,338 @@ function CollectionDetailInner() {
                       </Button.Text>
                     </Button>
                   </RequireScope>
-                </div>
-              </div>
-              {editingServers && (
-                <RequireScope scope="org:admin" level="section">
-                  <div className="mb-4 rounded-lg border p-4">
-                    <div className="mb-3">
-                      <h3 className="text-sm font-medium">Edit servers</h3>
-                      <p className="text-muted-foreground mt-1 text-xs">
-                        Select the MCP-enabled servers that should be included
-                        in this collection.
-                      </p>
-                    </div>
-                    <div className="rounded-md border">
-                      <div className="relative border-b">
-                        <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-                        <input
-                          type="text"
-                          placeholder="Search servers..."
-                          value={serverSearch}
-                          onChange={(e) => setServerSearch(e.target.value)}
-                          className="placeholder:text-muted-foreground w-full bg-transparent py-2.5 pr-3 pl-9 text-sm outline-none"
-                        />
+                </Card.Info>
+              </Card.Header>
+              <Card.Content>
+                {editingServers && (
+                  <RequireScope scope="org:admin" level="section">
+                    <div className="mb-4 border p-4">
+                      <div className="mb-3">
+                        <Type className="text-sm font-medium">
+                          Edit servers
+                        </Type>
+                        <Type muted small className="mt-1">
+                          Select the MCP-enabled servers that should be included
+                          in this collection.
+                        </Type>
                       </div>
-                      <div className="max-h-64 overflow-y-auto">
-                        {serversLoading ? (
-                          <div className="flex items-center justify-center p-4">
-                            <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
-                          </div>
-                        ) : filteredServers.length === 0 ? (
-                          <div className="flex flex-col items-center justify-center p-4 text-center">
-                            <ServerIcon className="text-muted-foreground mb-1 h-6 w-6" />
-                            <Type small muted>
-                              {serverSearch
-                                ? "No servers match your search."
-                                : "No MCP servers available."}
-                            </Type>
-                          </div>
-                        ) : (
-                          filteredServers.map((server) => {
-                            const key = serverOptionKey(server.kind, server.id);
-                            return (
-                              <label
-                                key={key}
-                                className="hover:bg-accent/50 flex cursor-pointer items-start gap-3 border-b px-3 py-2.5 last:border-b-0"
-                              >
-                                <Checkbox
-                                  checked={selectedServerKeys.has(key)}
-                                  disabled={isSaving}
-                                  onCheckedChange={() => toggleServerKey(key)}
-                                  className="mt-0.5"
-                                />
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex items-center gap-2">
-                                    <span className="truncate text-sm font-medium">
-                                      {server.name}
-                                    </span>
-                                    {server.kind === "mcpServer" && (
+                      <div className="border">
+                        <div className="relative border-b">
+                          <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+                          <input
+                            type="text"
+                            placeholder="Search servers..."
+                            value={serverSearch}
+                            onChange={(e) => setServerSearch(e.target.value)}
+                            className="placeholder:text-muted-foreground w-full bg-transparent py-2.5 pr-3 pl-9 text-sm outline-none"
+                          />
+                        </div>
+                        <div className="max-h-64 overflow-y-auto">
+                          {serversLoading ? (
+                            <div className="flex items-center justify-center p-4">
+                              <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
+                            </div>
+                          ) : filteredServers.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center p-4 text-center">
+                              <ServerIcon className="text-muted-foreground mb-1 h-6 w-6" />
+                              <Type small muted>
+                                {serverSearch
+                                  ? "No servers match your search."
+                                  : "No MCP servers available."}
+                              </Type>
+                            </div>
+                          ) : (
+                            filteredServers.map((server) => {
+                              const key = serverOptionKey(
+                                server.kind,
+                                server.id,
+                              );
+                              return (
+                                <label
+                                  key={key}
+                                  className="hover:bg-accent/50 flex cursor-pointer items-start gap-3 border-b px-3 py-2.5 last:border-b-0"
+                                >
+                                  <Checkbox
+                                    checked={selectedServerKeys.has(key)}
+                                    disabled={isSaving}
+                                    onCheckedChange={() => toggleServerKey(key)}
+                                    className="mt-0.5"
+                                  />
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-center gap-2">
+                                      <span className="truncate text-sm font-medium">
+                                        {server.name}
+                                      </span>
+                                      {server.kind === "mcpServer" && (
+                                        <Badge
+                                          variant="neutral"
+                                          background={false}
+                                          className="shrink-0 text-xs"
+                                        >
+                                          <Badge.Text>Remote MCP</Badge.Text>
+                                        </Badge>
+                                      )}
                                       <Badge
                                         variant="neutral"
                                         background={false}
                                         className="shrink-0 text-xs"
                                       >
-                                        <Badge.Text>Remote MCP</Badge.Text>
+                                        <Badge.Text>
+                                          {server.projectName}
+                                        </Badge.Text>
                                       </Badge>
-                                    )}
-                                    <Badge
-                                      variant="neutral"
-                                      background={false}
-                                      className="shrink-0 text-xs"
-                                    >
-                                      <Badge.Text>
-                                        {server.projectName}
-                                      </Badge.Text>
-                                    </Badge>
-                                  </div>
-                                  {server.description && (
-                                    <div className="text-muted-foreground mt-0.5 truncate text-xs">
-                                      {server.description}
                                     </div>
-                                  )}
-                                </div>
-                              </label>
-                            );
-                          })
-                        )}
-                      </div>
-                    </div>
-                    <div className="mt-3 flex gap-2">
-                      <Button
-                        size="sm"
-                        disabled={isSaving}
-                        onClick={() => {
-                          void (async () => {
-                            setIsSaving(true);
-                            try {
-                              const toAttach = [...selectedServerKeys].filter(
-                                (key) => !attachedKeys.has(key),
+                                    {server.description && (
+                                      <div className="text-muted-foreground mt-0.5 truncate text-xs">
+                                        {server.description}
+                                      </div>
+                                    )}
+                                  </div>
+                                </label>
                               );
-                              const toDetach = [...attachedKeys].filter(
-                                (key) => !selectedServerKeys.has(key),
-                              );
-
-                              await Promise.all([
-                                ...toAttach.map((key) =>
-                                  attachServer.mutateAsync({
-                                    request: {
-                                      attachServerRequestBody: attachBodyForKey(
-                                        collection.id,
-                                        key,
-                                      ),
-                                    },
-                                  }),
-                                ),
-                                ...toDetach.map((key) =>
-                                  detachServer.mutateAsync({
-                                    request: {
-                                      attachServerRequestBody: attachBodyForKey(
-                                        collection.id,
-                                        key,
-                                      ),
-                                    },
-                                  }),
-                                ),
-                              ]);
-                              setEditingServers(false);
-                              setSelectedServerKeys(new Set());
-                              setServerSearch("");
-                            } finally {
-                              setIsSaving(false);
-                            }
-                          })();
-                        }}
-                      >
-                        <Button.Text>
-                          {isSaving
-                            ? "Saving..."
-                            : `Save ${selectedServerKeys.size} ${selectedServerKeys.size === 1 ? "Server" : "Servers"}`}
-                        </Button.Text>
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        disabled={isSaving}
-                        onClick={() => {
-                          setEditingServers(false);
-                          setSelectedServerKeys(new Set());
-                          setServerSearch("");
-                        }}
-                      >
-                        <Button.Text>Cancel</Button.Text>
-                      </Button>
-                    </div>
-                  </div>
-                </RequireScope>
-              )}
-              {editingServers ? null : isLoading ? (
-                <p className="text-muted-foreground text-sm">
-                  Loading servers...
-                </p>
-              ) : servers.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <Server className="text-muted-foreground mb-2 h-8 w-8" />
-                  <p className="text-muted-foreground text-sm">
-                    No servers in this collection yet.
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {rawServers.map((server, index) => {
-                    const installableServer = installableServers[index];
-                    return (
-                      <div
-                        key={server.registrySpecifier}
-                        className="bg-card hover:bg-accent/30 flex flex-col gap-4 rounded-lg border p-4 transition-colors sm:flex-row sm:items-center"
-                      >
-                        <div className="bg-muted/60 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border">
-                          {server.iconUrl ? (
-                            <img
-                              src={server.iconUrl}
-                              alt=""
-                              className="h-6 w-6 rounded"
-                            />
-                          ) : (
-                            <ServerIcon className="text-muted-foreground h-5 w-5" />
+                            })
                           )}
                         </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="truncate text-sm font-medium">
-                              {server.title ?? server.registrySpecifier}
-                            </span>
-                          </div>
-                          <p className="text-muted-foreground mt-1 line-clamp-2 text-xs">
-                            {server.description || server.registrySpecifier}
-                          </p>
-                        </div>
-                        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-                          <RequireScope scope="project:write" level="component">
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              className="w-full sm:w-auto"
-                              disabled={
-                                !installableServer || projects.length === 0
-                              }
-                              onClick={() => {
-                                if (installableServer) {
-                                  openInstallDialog(installableServer);
-                                }
-                              }}
-                            >
-                              <Button.LeftIcon>
-                                <Download />
-                              </Button.LeftIcon>
-                              <Button.Text>Install Server</Button.Text>
-                            </Button>
-                          </RequireScope>
-                        </div>
                       </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+                      <div className="mt-3 flex gap-2">
+                        <Button
+                          size="sm"
+                          disabled={isSaving}
+                          onClick={() => {
+                            void (async () => {
+                              setIsSaving(true);
+                              try {
+                                const toAttach = [...selectedServerKeys].filter(
+                                  (key) => !attachedKeys.has(key),
+                                );
+                                const toDetach = [...attachedKeys].filter(
+                                  (key) => !selectedServerKeys.has(key),
+                                );
+
+                                await Promise.all([
+                                  ...toAttach.map((key) =>
+                                    attachServer.mutateAsync({
+                                      request: {
+                                        attachServerRequestBody:
+                                          attachBodyForKey(collection.id, key),
+                                      },
+                                    }),
+                                  ),
+                                  ...toDetach.map((key) =>
+                                    detachServer.mutateAsync({
+                                      request: {
+                                        attachServerRequestBody:
+                                          attachBodyForKey(collection.id, key),
+                                      },
+                                    }),
+                                  ),
+                                ]);
+                                setEditingServers(false);
+                                setSelectedServerKeys(new Set());
+                                setServerSearch("");
+                              } finally {
+                                setIsSaving(false);
+                              }
+                            })();
+                          }}
+                        >
+                          <Button.Text>
+                            {isSaving
+                              ? "Saving..."
+                              : `Save ${selectedServerKeys.size} ${selectedServerKeys.size === 1 ? "Server" : "Servers"}`}
+                          </Button.Text>
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          disabled={isSaving}
+                          onClick={() => {
+                            setEditingServers(false);
+                            setSelectedServerKeys(new Set());
+                            setServerSearch("");
+                          }}
+                        >
+                          <Button.Text>Cancel</Button.Text>
+                        </Button>
+                      </div>
+                    </div>
+                  </RequireScope>
+                )}
+                {editingServers ? null : isLoading ? (
+                  <Type muted small>
+                    Loading servers...
+                  </Type>
+                ) : servers.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-8 text-center">
+                    <Server className="text-muted-foreground mb-2 h-8 w-8" />
+                    <Type muted small>
+                      No servers in this collection yet.
+                    </Type>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {rawServers.map((server, index) => {
+                      const installableServer = installableServers[index];
+                      return (
+                        <div
+                          key={server.registrySpecifier}
+                          className="bg-card hover:bg-accent/30 flex flex-col gap-4 border p-4 transition-colors sm:flex-row sm:items-center"
+                        >
+                          <div className="bg-muted/60 flex h-11 w-11 shrink-0 items-center justify-center border">
+                            {server.iconUrl ? (
+                              <img
+                                src={server.iconUrl}
+                                alt=""
+                                className="h-6 w-6"
+                              />
+                            ) : (
+                              <ServerIcon className="text-muted-foreground h-5 w-5" />
+                            )}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <Type className="truncate text-sm font-medium">
+                              {server.title ?? server.registrySpecifier}
+                            </Type>
+                            <Type
+                              muted
+                              small
+                              className="mt-1 line-clamp-2 text-xs"
+                            >
+                              {server.description || server.registrySpecifier}
+                            </Type>
+                          </div>
+                          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                            <RequireScope
+                              scope="project:write"
+                              level="component"
+                            >
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                className="w-full sm:w-auto"
+                                disabled={
+                                  !installableServer || projects.length === 0
+                                }
+                                onClick={() => {
+                                  if (installableServer) {
+                                    openInstallDialog(installableServer);
+                                  }
+                                }}
+                              >
+                                <Button.LeftIcon>
+                                  <Download />
+                                </Button.LeftIcon>
+                                <Button.Text>Install Server</Button.Text>
+                              </Button>
+                            </RequireScope>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </Card.Content>
+            </Card>
           </div>
 
           {/* Sidebar */}
           <div className="w-full shrink-0 space-y-4 xl:w-72">
             {/* Stats */}
-            <div className="rounded-lg border p-5">
-              <h3 className="text-muted-foreground mb-3 font-mono text-xs tracking-[0.08em] uppercase">
-                Stats
-              </h3>
-              <div className="space-y-2.5">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Servers</span>
-                  <span className="font-medium">{servers.length}</span>
-                </div>
-              </div>
-            </div>
+            <Card>
+              <Card.Header>
+                <Card.Title>Stats</Card.Title>
+              </Card.Header>
+              <Card.Content>
+                <DetailList orientation="inline">
+                  <DetailList.Item label="Servers" value={servers.length} />
+                </DetailList>
+              </Card.Content>
+            </Card>
 
             {/* Details */}
-            <div className="rounded-lg border p-5">
-              <h3 className="text-muted-foreground mb-3 font-mono text-xs tracking-[0.08em] uppercase">
-                Details
-              </h3>
-              <div className="space-y-2.5">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Visibility</span>
-                  <span className="font-medium capitalize">
-                    {collection.visibility}
-                  </span>
-                </div>
-                {collection.createdAt && (
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Created</span>
-                    <span className="flex items-center gap-1 font-medium">
-                      <Calendar className="h-3.5 w-3.5" />
-                      {new Date(collection.createdAt).toLocaleDateString()}
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
+            <Card>
+              <Card.Header>
+                <Card.Title>Details</Card.Title>
+              </Card.Header>
+              <Card.Content>
+                <DetailList orientation="inline">
+                  <DetailList.Item
+                    label="Visibility"
+                    value={
+                      <span className="capitalize">
+                        {collection.visibility}
+                      </span>
+                    }
+                  />
+                  {collection.createdAt && (
+                    <DetailList.Item
+                      label="Created"
+                      value={
+                        <span className="inline-flex items-center gap-1">
+                          <Calendar className="h-3.5 w-3.5" />
+                          {new Date(collection.createdAt).toLocaleDateString()}
+                        </span>
+                      }
+                    />
+                  )}
+                </DetailList>
+              </Card.Content>
+            </Card>
 
             <RequireScope scope="org:admin" level="section">
-              <div className="border-destructive/30 rounded-lg border p-5">
-                <h3 className="text-destructive mb-2 text-base font-semibold">
-                  Danger Zone
-                </h3>
-                <p className="text-muted-foreground mb-3 text-sm">
-                  Permanently delete this collection. This action cannot be
-                  undone.
-                </p>
-                {confirmDelete ? (
-                  <div className="space-y-2">
+              <Card className="border-destructive/30">
+                <Card.Header>
+                  <Card.Title className="text-destructive">
+                    Danger Zone
+                  </Card.Title>
+                </Card.Header>
+                <Card.Content>
+                  <Type muted small className="mb-3">
+                    Permanently delete this collection. This action cannot be
+                    undone.
+                  </Type>
+                  {confirmDelete ? (
+                    <div className="space-y-2">
+                      <Button
+                        variant="destructive-primary"
+                        size="sm"
+                        disabled={deleteCollection.isPending}
+                        onClick={() => {
+                          void (async () => {
+                            await deleteCollection.mutateAsync({
+                              request: {
+                                collectionId: collection.id,
+                              },
+                            });
+                            orgRoutes.collections.goTo();
+                          })();
+                        }}
+                      >
+                        <Button.Text>
+                          {deleteCollection.isPending
+                            ? "Deleting..."
+                            : "Confirm Delete"}
+                        </Button.Text>
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => setConfirmDelete(false)}
+                      >
+                        <Button.Text>Cancel</Button.Text>
+                      </Button>
+                    </div>
+                  ) : (
                     <Button
                       variant="destructive-primary"
                       size="sm"
-                      disabled={deleteCollection.isPending}
-                      onClick={() => {
-                        void (async () => {
-                          await deleteCollection.mutateAsync({
-                            request: {
-                              collectionId: collection.id,
-                            },
-                          });
-                          orgRoutes.collections.goTo();
-                        })();
-                      }}
+                      onClick={() => setConfirmDelete(true)}
                     >
-                      <Button.Text>
-                        {deleteCollection.isPending
-                          ? "Deleting..."
-                          : "Confirm Delete"}
-                      </Button.Text>
+                      <Button.Text>Delete Collection</Button.Text>
                     </Button>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => setConfirmDelete(false)}
-                    >
-                      <Button.Text>Cancel</Button.Text>
-                    </Button>
-                  </div>
-                ) : (
-                  <Button
-                    variant="destructive-primary"
-                    size="sm"
-                    onClick={() => setConfirmDelete(true)}
-                  >
-                    <Button.Text>Delete Collection</Button.Text>
-                  </Button>
-                )}
-              </div>
+                  )}
+                </Card.Content>
+              </Card>
             </RequireScope>
           </div>
         </div>
@@ -953,28 +961,26 @@ function CollectionDetailInner() {
             </Dialog.Header>
             <div className="space-y-4 py-2">
               {pendingInstallServer && (
-                <div className="rounded-lg border p-3">
-                  <div className="text-sm font-medium">
+                <div className="border p-3">
+                  <Type className="text-sm font-medium">
                     {pendingInstallServer.title ??
                       pendingInstallServer.registrySpecifier}
-                  </div>
+                  </Type>
                   {pendingInstallServer.description && (
-                    <p className="text-muted-foreground mt-1 text-xs">
+                    <Type muted small className="mt-1 text-xs">
                       {pendingInstallServer.description}
-                    </p>
+                    </Type>
                   )}
                 </div>
               )}
               {projectOptions.length === 0 ? (
-                <div className="flex flex-col items-center py-6 text-center">
-                  <FolderOpen className="text-muted-foreground mb-2 h-8 w-8" />
-                  <p className="text-muted-foreground text-sm">
-                    No projects found.
-                  </p>
-                </div>
+                <InlineEmptyState
+                  icon={<FolderOpen />}
+                  title="No projects found"
+                />
               ) : (
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Project</label>
+                  <Label className="text-sm font-medium">Project</Label>
                   <Combobox
                     items={projectOptions}
                     selected={selectedProjectOption}

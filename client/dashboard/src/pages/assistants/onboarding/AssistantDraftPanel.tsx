@@ -2,6 +2,7 @@ import { AssistantOwner } from "@/components/assistants/assistant-owner";
 import { AssistantSessionsList } from "@/components/assistants/sessions-list";
 import { AssistantStatusToggle } from "@/components/assistants/status-toggle";
 import { EditInstructionsDialog } from "@/components/assistants/edit-instructions-dialog";
+import { DetailList } from "@/components/ui/detail-list";
 import { useConfirm } from "@/components/ui/use-confirm";
 import {
   PageTabsTrigger,
@@ -130,7 +131,7 @@ export function AssistantDraftPanel(): JSX.Element {
           className="flex min-h-0 flex-1 flex-col"
         >
           <div className="border-border border-b px-4">
-            <TabsList className="h-auto gap-6 rounded-none bg-transparent p-0">
+            <TabsList className="h-auto gap-6 bg-transparent p-0">
               <PageTabsTrigger value="overview">Overview</PageTabsTrigger>
               <PageTabsTrigger value="sessions">Sessions</PageTabsTrigger>
               <PageTabsTrigger value="triggers">Triggers</PageTabsTrigger>
@@ -143,27 +144,38 @@ export function AssistantDraftPanel(): JSX.Element {
           >
             <Stack gap={5}>
               <Section title="Overview">
-                <Row label="Status">
-                  <AssistantStatusToggle
-                    assistant={a}
-                    onUpdated={() => void draft.refetchAssistant()}
+                <DetailList orientation="inline" className="gap-y-2.5">
+                  <DetailList.Item
+                    label="Status"
+                    value={
+                      <AssistantStatusToggle
+                        assistant={a}
+                        onUpdated={() => void draft.refetchAssistant()}
+                      />
+                    }
                   />
-                </Row>
-                <Row label="Model">
-                  <code className="text-xs">{a.model}</code>
-                </Row>
-                <Row label="Owner">
-                  <AssistantOwner
-                    createdByUserId={a.createdByUserId}
-                    variant="row"
+                  <DetailList.Item
+                    label="Model"
+                    value={<code className="text-xs">{a.model}</code>}
                   />
-                </Row>
-                <Row label="Concurrency">
-                  <Type small>{a.maxConcurrency}</Type>
-                </Row>
-                <Row label="Warm TTL">
-                  <Type small>{a.warmTtlSeconds}s</Type>
-                </Row>
+                  <DetailList.Item
+                    label="Owner"
+                    value={
+                      <AssistantOwner
+                        createdByUserId={a.createdByUserId}
+                        variant="row"
+                      />
+                    }
+                  />
+                  <DetailList.Item
+                    label="Concurrency"
+                    value={<Type small>{a.maxConcurrency}</Type>}
+                  />
+                  <DetailList.Item
+                    label="Warm TTL"
+                    value={<Type small>{a.warmTtlSeconds}s</Type>}
+                  />
+                </DetailList>
               </Section>
 
               <Section
@@ -188,9 +200,9 @@ export function AssistantDraftPanel(): JSX.Element {
                   <button
                     type="button"
                     onClick={() => setEditingInstructions(true)}
-                    className="hover:border-border block w-full rounded-md border border-transparent text-left"
+                    className="hover:border-border block w-full border border-transparent text-left"
                   >
-                    <pre className="bg-muted/30 max-h-48 overflow-y-auto rounded-md p-3 font-mono text-[11px] whitespace-pre-wrap">
+                    <pre className="bg-muted/30 max-h-48 overflow-y-auto p-3 font-mono text-[11px] whitespace-pre-wrap">
                       {a.instructions}
                     </pre>
                   </button>
@@ -215,7 +227,7 @@ export function AssistantDraftPanel(): JSX.Element {
                     <routes.mcp.details.Link
                       key={t.toolsetSlug}
                       params={[t.toolsetSlug]}
-                      className="border-border hover:bg-surface-secondary flex items-center justify-between rounded-md border px-3 py-2 transition-colors hover:no-underline"
+                      className="border-border hover:bg-surface-secondary flex items-center justify-between border px-3 py-2 transition-colors hover:no-underline"
                     >
                       <Stack gap={0} className="min-w-0">
                         <code className="truncate text-xs">
@@ -234,7 +246,7 @@ export function AssistantDraftPanel(): JSX.Element {
                     <routes.mcp.x.Link
                       key={m.mcpServerSlug}
                       params={[m.mcpServerSlug]}
-                      className="border-border hover:bg-surface-secondary flex items-center justify-between rounded-md border px-3 py-2 transition-colors hover:no-underline"
+                      className="border-border hover:bg-surface-secondary flex items-center justify-between border px-3 py-2 transition-colors hover:no-underline"
                     >
                       <Stack gap={0} className="min-w-0">
                         <code className="truncate text-xs">
@@ -274,7 +286,7 @@ export function AssistantDraftPanel(): JSX.Element {
                 {triggers.map((t) => (
                   <div
                     key={t.id}
-                    className="border-border flex items-start justify-between gap-2 rounded-md border px-3 py-2"
+                    className="border-border flex items-start justify-between gap-2 border px-3 py-2"
                   >
                     <Stack gap={1} className="min-w-0">
                       <Stack direction="horizontal" gap={2} align="center">
@@ -343,7 +355,7 @@ function Section({
   return (
     <div>
       <div className="mb-2 flex items-center justify-between gap-2">
-        <Type variant="body" className="text-xs font-semibold uppercase">
+        <Type as="div" mono small muted className="tracking-[0.08em] uppercase">
           {title}
         </Type>
         {action}
@@ -355,23 +367,6 @@ function Section({
       ) : (
         children
       )}
-    </div>
-  );
-}
-
-function Row({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-center justify-between py-1">
-      <Type small muted>
-        {label}
-      </Type>
-      <div>{children}</div>
     </div>
   );
 }

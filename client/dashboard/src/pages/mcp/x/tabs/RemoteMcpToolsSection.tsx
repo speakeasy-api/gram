@@ -3,6 +3,7 @@ import {
   type ResolvedToolAnnotations,
 } from "@/components/tool-list/AnnotationBadges";
 import { Heading } from "@/components/ui/heading";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import {
   Sheet,
   SheetContent,
@@ -226,7 +227,7 @@ function RemoteMcpToolsList({
 
   return (
     <>
-      <div className="border-neutral-softest w-full overflow-hidden rounded-lg border">
+      <div className="border-neutral-softest w-full overflow-hidden border">
         {toolEntries.map(([name, tool]) => (
           <RemoteToolRow
             key={name}
@@ -294,12 +295,14 @@ function RemoteToolRow({
     >
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex min-w-0 items-center gap-2">
-          <p className="text-foreground truncate text-sm leading-6">{name}</p>
+          <Type small as="p" className="truncate leading-6">
+            {name}
+          </Type>
           <AnnotationBadgeIcons {...resolveAnnotations(annotations)} />
         </div>
-        <p className="text-muted-foreground truncate text-sm leading-6">
+        <Type muted small as="p" className="truncate leading-6">
           {description || "No description"}
-        </p>
+        </Type>
       </div>
     </div>
   );
@@ -386,34 +389,27 @@ function ToolParameterRow({
 function EmptyState({
   message,
   onRetry,
-  children,
 }: {
   message: string;
   onRetry?: () => void;
-  children?: ReactNode;
 }): JSX.Element {
   return (
-    <div className="border-border flex flex-col items-start gap-2 rounded-md border border-dashed px-4 py-6">
-      <Type muted small>
-        {message}
-      </Type>
-      {children}
-      {onRetry ? (
-        <button
-          type="button"
-          className="text-muted-foreground hover:text-foreground text-sm underline"
-          onClick={onRetry}
-        >
-          Try again
-        </button>
-      ) : null}
-    </div>
+    <InlineEmptyState
+      title={message}
+      action={
+        onRetry ? (
+          <Button variant="tertiary" size="sm" onClick={onRetry}>
+            <Button.Text>Try again</Button.Text>
+          </Button>
+        ) : undefined
+      }
+    />
   );
 }
 
 function ToolsListSkeleton(): JSX.Element {
   return (
-    <div className="border-neutral-softest w-full overflow-hidden rounded-lg border">
+    <div className="border-neutral-softest w-full overflow-hidden border">
       {Array.from({ length: 5 }).map((_, index) => (
         <ToolRowSkeleton key={index} />
       ))}
@@ -441,17 +437,17 @@ function RemoteMcpToolsConnectPrompt({
   onConnect?: () => void;
 }): JSX.Element {
   return (
-    <div className="border-neutral-softest flex flex-col items-center gap-3 rounded-lg border px-6 py-12 text-center">
-      <PlugZap className="text-muted-foreground/70 size-8" />
-      <Type muted small>
-        Connect to this MCP to view the tools.
-      </Type>
-      {onConnect ? (
-        <Button variant="secondary" onClick={onConnect}>
-          <Button.Text>Connect</Button.Text>
-        </Button>
-      ) : null}
-    </div>
+    <InlineEmptyState
+      icon={<PlugZap />}
+      title="Connect to this MCP to view the tools."
+      action={
+        onConnect ? (
+          <Button variant="secondary" onClick={onConnect}>
+            <Button.Text>Connect</Button.Text>
+          </Button>
+        ) : undefined
+      }
+    />
   );
 }
 

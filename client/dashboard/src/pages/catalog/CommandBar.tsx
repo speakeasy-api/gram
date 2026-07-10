@@ -1,5 +1,6 @@
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
+import { Button } from "@/components/ui/moonshine";
 import { Plus, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
@@ -113,7 +114,7 @@ export function CommandBar({
           <div
             ref={barRef}
             data-command-bar
-            className="border-primary/20 relative overflow-hidden rounded-2xl border shadow-[0_8px_32px_rgba(0,0,0,0.25),0_0_40px_rgba(59,130,246,0.2),0_0_80px_rgba(59,130,246,0.1)] dark:border-white/10 dark:shadow-none"
+            className="border-primary/20 relative overflow-hidden border"
           >
             {/* Glass effect layer - blur + distortion */}
             <div
@@ -121,42 +122,45 @@ export function CommandBar({
               style={{ filter: "url(#command-bar-glass)" }}
             />
             {/* Tint layer - opaque enough for text readability */}
-            <div className="absolute inset-0 bg-white/80 dark:bg-black/70" />
-            {/* Shine layer - light mode only */}
-            <div className="absolute inset-0 shadow-[inset_2px_2px_1px_0_rgba(255,255,255,0.5),inset_-1px_-1px_1px_1px_rgba(255,255,255,0.3)] dark:hidden" />
+            <div className="bg-background/80 absolute inset-0" />
             {/* Content layer */}
             <div className="relative z-10 flex items-center gap-4 px-4 py-3">
               {/* Clear button */}
               <SimpleTooltip tooltip="Clear selection">
-                <button
+                <Button
+                  variant="tertiary"
+                  size="sm"
                   onClick={onClear}
-                  className="rounded-full p-1.5 text-black/50 transition-colors hover:bg-black/10 hover:text-black dark:text-white/50 dark:hover:bg-white/10 dark:hover:text-white"
                   aria-label="Clear selection"
+                  className="rounded-full p-1.5"
                 >
                   <X className="h-4 w-4" />
-                </button>
+                </Button>
               </SimpleTooltip>
 
               {/* Divider */}
-              <div className="h-5 w-px bg-black/20 dark:bg-white/20" />
+              <div className="bg-border h-5 w-px" />
 
               {/* Count */}
-              <Type small className="font-medium text-black dark:text-white">
+              <Type small className="text-foreground font-medium">
                 {selectedCount} {selectedCount === 1 ? "server" : "servers"}{" "}
                 selected
               </Type>
 
               {/* Divider */}
-              <div className="h-5 w-px bg-black/20 dark:bg-white/20" />
+              <div className="bg-border h-5 w-px" />
 
               {/* Add button - min-w to prevent layout shift */}
-              <button
+              <Button
                 onClick={onAdd}
-                className="bg-foreground text-background hover:bg-foreground/90 flex min-w-[5.5rem] items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-colors"
+                size="sm"
+                className="min-w-[5.5rem] rounded-full"
               >
-                <Plus className="h-3.5 w-3.5" />
-                Add to project
-              </button>
+                <Button.LeftIcon>
+                  <Plus className="h-3.5 w-3.5" />
+                </Button.LeftIcon>
+                <Button.Text>Add to project</Button.Text>
+              </Button>
             </div>
           </div>
           <LiquidGlassFilter />

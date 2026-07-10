@@ -108,7 +108,7 @@ export function ExternalMCPIllustration({
         />
         {/* Logo overlay */}
         <div className="absolute inset-0 flex items-center justify-center">
-          <div className="bg-background/90 rounded-lg p-3 shadow-lg backdrop-blur-sm">
+          <div className="bg-background/90 border p-3 backdrop-blur-sm">
             <img
               src={logoUrl}
               alt={name || "MCP Server"}

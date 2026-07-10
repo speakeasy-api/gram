@@ -2,6 +2,13 @@ import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Button, Input } from "@/components/ui/moonshine";
 import { Dialog } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Type } from "@/components/ui/type";
 import {
   useRegisterEnvironmentTelemetry,
@@ -130,18 +137,18 @@ function ToolsetDialog({ open, onOpenChange, onSubmit }: ToolsetDialogProps) {
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">
             <Type>MCP Server</Type>
-            <select
-              value={selectedToolset}
-              onChange={(e) => setSelectedToolset(e.target.value)}
-              className="border-input placeholder:text-muted-foreground focus-visible:ring-ring flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium focus-visible:ring-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <option value="">Select an MCP server</option>
-              {options.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+            <Select value={selectedToolset} onValueChange={setSelectedToolset}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select an MCP server" />
+              </SelectTrigger>
+              <SelectContent>
+                {options.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
         <Dialog.Footer>
@@ -535,7 +542,7 @@ function EnvironmentPageInner() {
                       <label className="text-foreground text-sm font-medium">
                         {entry.name}
                         {isNew && (
-                          <span className="ml-2 text-xs font-normal text-blue-600">
+                          <span className="text-primary ml-2 text-xs font-normal">
                             (new)
                           </span>
                         )}

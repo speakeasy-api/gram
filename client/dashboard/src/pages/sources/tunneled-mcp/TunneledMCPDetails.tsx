@@ -3,6 +3,7 @@ import { DetailHero } from "@/components/detail-hero";
 import { MCPServerCard } from "@/components/mcp/MCPServerCard";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import { McpServerCardsSkeleton } from "@/components/sources/McpServerCardsSkeleton";
 import {
   SourceInfoRow,
   SourceInfoTable,
@@ -270,8 +271,8 @@ function TunneledMcpHero({
     <DetailHero>
       <Stack gap={2}>
         <Stack direction="horizontal" gap={3} align="center">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-cyan-500/10 dark:bg-cyan-500/20">
-            <Network className="h-5 w-5 text-cyan-700 dark:text-cyan-300" />
+          <div className="bg-muted flex h-10 w-10 shrink-0 items-center justify-center">
+            <Network className="text-muted-foreground h-5 w-5" />
           </div>
           <Heading variant="h1" className="break-all normal-case">
             {server ? formatTunneledMcpDisplay(server) : "Tunneled MCP server"}
@@ -419,7 +420,7 @@ function ConnectionsPanel({
     connectionResult?.activeConsumerSessionCount ?? 0;
 
   return (
-    <section className="rounded-lg border p-6">
+    <section className="border p-6">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
           <Heading variant="h4">Connections</Heading>
@@ -440,12 +441,12 @@ function ConnectionsPanel({
       </div>
 
       {isLoading ? (
-        <div className="rounded-md border border-dashed p-6 text-center">
+        <div className="border border-dashed p-6 text-center">
           <Loader2 className="text-muted-foreground mx-auto mb-2 size-4 animate-spin" />
           <Type muted>Loading live tunnel connections.</Type>
         </div>
       ) : connections.length === 0 ? (
-        <div className="rounded-md border border-dashed p-6 text-center">
+        <div className="border border-dashed p-6 text-center">
           <Type muted>No live tunnel connections.</Type>
         </div>
       ) : (
@@ -472,7 +473,7 @@ function ConnectionCard({ connection }: { connection: TunneledMcpConnection }) {
   const metadataEntries = Object.entries(connection.metadata ?? {});
 
   return (
-    <div className="rounded-md border p-4">
+    <div className="border p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
           <Type className="truncate text-sm font-medium">Tunnel agent</Type>
@@ -556,7 +557,7 @@ function McpServersTab({
   return (
     <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
       {isLoading ? (
-        <McpServersSkeleton />
+        <McpServerCardsSkeleton />
       ) : mcpServers.length > 0 ? (
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
           {mcpServers.map((server) => (
@@ -615,24 +616,6 @@ function McpServersEmptyState({
           </Button.Text>
         </Button>
       </RequireScope>
-    </div>
-  );
-}
-
-function McpServersSkeleton() {
-  return (
-    <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-      {[1, 2, 3].map((i) => (
-        <div key={i} className="bg-card animate-pulse rounded-xl border p-6">
-          <div className="mb-4 flex items-center gap-3">
-            <div className="bg-muted h-10 w-10 rounded-lg" />
-            <div className="flex-1">
-              <div className="bg-muted mb-2 h-4 w-24 rounded" />
-              <div className="bg-muted h-3 w-32 rounded" />
-            </div>
-          </div>
-        </div>
-      ))}
     </div>
   );
 }
@@ -696,7 +679,7 @@ function NameSection({
   };
 
   return (
-    <div className="rounded-lg border p-6">
+    <div className="border p-6">
       <Type variant="subheading" className="mb-1">
         Display Name
       </Type>
@@ -770,7 +753,7 @@ function TunnelKeySection({
   };
 
   return (
-    <div className="rounded-lg border p-6">
+    <div className="border p-6">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
           <Type variant="subheading" className="mb-1">
@@ -811,7 +794,7 @@ function TunnelKeySection({
               <Alert variant="warning" dismissible={false}>
                 Restart tunnel agents with the new key to reconnect this source.
               </Alert>
-              <div className="bg-muted flex items-center gap-2 rounded-md p-3">
+              <div className="bg-muted flex items-center gap-2 p-3">
                 <code className="min-w-0 flex-1 break-all text-sm">
                   {rotatedKey.tunnelKey}
                 </code>
@@ -896,7 +879,7 @@ function DangerZoneSection({
   const displayName = formatTunneledMcpDisplay(tunneledMcpServer);
 
   return (
-    <div className="border-destructive/30 rounded-lg border p-6">
+    <div className="border-destructive/30 border p-6">
       <Type variant="subheading" className="text-destructive mb-1">
         Danger Zone
       </Type>
@@ -1073,7 +1056,7 @@ TUNNEL_SERVICE_VERSION=${shellQuote(serviceVersion)} \\
 gram tunnel run`;
 
   return (
-    <div className="rounded-lg border p-6">
+    <div className="border p-6">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
           <Type variant="subheading">Connect your MCP server</Type>
@@ -1147,7 +1130,7 @@ function RequiredTunnelConfig({
   ];
 
   return (
-    <div className="bg-muted/30 mb-5 rounded-md border p-4">
+    <div className="bg-muted/30 mb-5 border p-4">
       <Type variant="subheading" className="mb-1">
         Required tunnel config
       </Type>

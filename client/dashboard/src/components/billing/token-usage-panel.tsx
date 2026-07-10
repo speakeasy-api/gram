@@ -3,11 +3,13 @@ import { type QuerySeries } from "@gram/client/models/components/queryseries.js"
 import { type RiskTokensPoint } from "@gram/client/models/components/risktokenspoint.js";
 import { Chart as ChartJS, type ChartOptions } from "chart.js";
 import {
+  chartGrid,
+  chartTicks,
   registerChartJs,
   seriesPalette,
   withAlpha,
 } from "@/components/chart/chart-theme";
-import { useTheme } from "@/components/ui/moonshine";
+import { Card } from "@/components/ui/card";
 import { Info } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Bar } from "react-chartjs-2";
@@ -245,7 +247,7 @@ function ToggleButton({
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        "rounded px-2 py-0.5 text-xs transition-colors",
+        "px-2 py-0.5 text-xs transition-colors",
         active
           ? "bg-muted text-foreground font-medium"
           : "text-muted-foreground hover:text-foreground",
@@ -477,14 +479,7 @@ export function TokenUsagePanel({
     });
   };
 
-  // Chart.js paints the canvas with static defaults that ignore the CSS
-  // theme, so axis/legend text and gridlines need explicit dark-mode colors.
-  const { theme } = useTheme();
-  const isDark = theme === "dark";
-
   const chartOptions = useMemo<ChartOptions<"bar">>(() => {
-    const textColor = isDark ? "rgba(255, 255, 255, 0.85)" : "#666";
-    const gridColor = isDark ? "#666" : "rgba(0, 0, 0, 0.08)";
     return {
       responsive: true,
       maintainAspectRatio: false,
@@ -522,23 +517,23 @@ export function TokenUsagePanel({
         x: {
           stacked: true,
           grid: { display: false },
-          ticks: { maxTicksLimit: 16, color: textColor },
+          ticks: { ...chartTicks(), maxTicksLimit: 16 },
         },
         y: {
           stacked: true,
           beginAtZero: true,
-          grid: { color: gridColor },
+          grid: chartGrid(),
           ticks: {
-            color: textColor,
+            ...chartTicks(),
             callback: (value) => compactTokens.format(Number(value)),
           },
         },
       },
     };
-  }, [isDark, chart.buckets, granularity, onSelectRange]);
+  }, [chart.buckets, granularity, onSelectRange]);
 
   return (
-    <div className="border-border rounded-lg border p-4">
+    <Card>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <div className="flex items-center gap-1.5 text-sm font-semibold">
           Token Usage Time Series
@@ -570,7 +565,7 @@ export function TokenUsagePanel({
         </div>
       </div>
 
-      <div className="mt-4">
+      <div>
         {loading && <Skeleton className="h-[280px] w-full" />}
         {!loading && hasData && (
           <>
@@ -606,17 +601,14 @@ export function TokenUsagePanel({
                     onMouseEnter={() => setFocusLabel(d.label)}
                     onMouseLeave={() => setFocusLabel(null)}
                     className={cn(
-                      "hover:bg-muted hover:text-foreground flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-0.5 text-xs transition-colors",
+                      "hover:bg-muted hover:text-foreground flex cursor-pointer items-center gap-1.5 px-2 py-0.5 text-xs transition-colors",
                       hidden
                         ? "text-muted-foreground/60 line-through"
                         : "text-muted-foreground",
                     )}
                   >
                     <span
-                      className={cn(
-                        "size-2.5 rounded-[3px]",
-                        hidden && "opacity-40",
-                      )}
+                      className={cn("size-2.5", hidden && "opacity-40")}
                       style={{
                         backgroundColor: stackColor(
                           d.label,
@@ -639,6 +631,6 @@ export function TokenUsagePanel({
           </div>
         )}
       </div>
-    </div>
+    </Card>
   );
 }

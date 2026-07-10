@@ -91,8 +91,8 @@ function CreateTunneledMcpForm() {
       <div className="max-w-4xl">
         <Stack gap={3} className="mb-8">
           <Stack direction="horizontal" gap={3} align="center">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-cyan-500/10 dark:bg-cyan-500/20">
-              <Network className="h-5 w-5 text-cyan-700 dark:text-cyan-300" />
+            <div className="bg-muted flex h-10 w-10 shrink-0 items-center justify-center">
+              <Network className="text-muted-foreground h-5 w-5" />
             </div>
             <Heading variant="h3">Tunneled MCP server added</Heading>
           </Stack>
@@ -103,7 +103,7 @@ function CreateTunneledMcpForm() {
         </Stack>
 
         <Stack gap={6}>
-          <div className="rounded-lg border p-5">
+          <div className="border p-5">
             <Type variant="subheading" className="mb-3">
               Tunnel key
             </Type>
@@ -153,8 +153,8 @@ function CreateTunneledMcpForm() {
     <div className="max-w-2xl">
       <Stack gap={3} className="mb-8">
         <Stack direction="horizontal" gap={3} align="center">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-cyan-500/10 dark:bg-cyan-500/20">
-            <Network className="h-5 w-5 text-cyan-700 dark:text-cyan-300" />
+          <div className="bg-muted flex h-10 w-10 shrink-0 items-center justify-center">
+            <Network className="text-muted-foreground h-5 w-5" />
           </div>
           <Heading variant="h3">Add a tunneled MCP server</Heading>
         </Stack>

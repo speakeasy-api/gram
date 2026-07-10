@@ -1,3 +1,4 @@
+import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { PrivateInput } from "@/components/ui/private-input";
 import { Type } from "@/components/ui/type";
@@ -171,7 +172,7 @@ function ExternalMcpOAuthConnection({
   const isConnected = oauthStatus?.status === "authenticated";
 
   return (
-    <div className="bg-muted/30 rounded-md border p-3">
+    <Card className="bg-muted/30 p-3">
       <Stack gap={2}>
         <Stack
           direction="horizontal"
@@ -221,7 +222,7 @@ function ExternalMcpOAuthConnection({
           </Button>
         )}
       </Stack>
-    </div>
+    </Card>
   );
 }
 
@@ -338,7 +339,7 @@ export function PlaygroundAuth({
   return (
     <div className="space-y-3">
       {loginSecured && (
-        <div className="border-success-softest bg-success-softest rounded-md border p-3">
+        <div className="border-success-softest bg-success-softest border p-3">
           <Stack direction="horizontal" align="center" className="gap-2">
             <Badge variant="success">
               <CheckCircle className="mr-1 size-3" />

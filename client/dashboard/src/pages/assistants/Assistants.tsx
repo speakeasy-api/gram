@@ -8,6 +8,7 @@ import { AssistantStatusToggle } from "@/components/assistants/status-toggle";
 import { CardContextMenu } from "@/components/card-context-menu";
 import { Card } from "@/components/ui/card";
 import { useConfirm } from "@/components/ui/use-confirm";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import { Action, MoreActions } from "@/components/ui/more-actions";
 import { SearchBar } from "@/components/ui/search-bar";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -59,30 +60,27 @@ export function AssistantsRoot(): JSX.Element {
 
 function AssistantsEmptyState({ onCreate }: { onCreate: () => void }) {
   return (
-    <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
-      <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
-        <Bot className="text-muted-foreground h-6 w-6" />
-      </div>
-      <Type variant="subheading" className="mb-1">
-        No assistants yet
-      </Type>
-      <Type small muted className="mb-4 max-w-md text-center">
-        Create an assistant to wire a model up to your MCP servers.
-      </Type>
-      <RequireScope
-        scope={["project:write", "mcp:write"]}
-        all
-        level="component"
-        reason="You don't have permission to create assistants."
-      >
-        <Button onClick={onCreate}>
-          <Button.LeftIcon>
-            <Plus className="h-4 w-4" />
-          </Button.LeftIcon>
-          <Button.Text>Create Assistant</Button.Text>
-        </Button>
-      </RequireScope>
-    </div>
+    <InlineEmptyState
+      className="py-16"
+      icon={<Bot />}
+      title="No assistants yet"
+      description="Create an assistant to wire a model up to your MCP servers."
+      action={
+        <RequireScope
+          scope={["project:write", "mcp:write"]}
+          all
+          level="component"
+          reason="You don't have permission to create assistants."
+        >
+          <Button onClick={onCreate}>
+            <Button.LeftIcon>
+              <Plus className="h-4 w-4" />
+            </Button.LeftIcon>
+            <Button.Text>Create Assistant</Button.Text>
+          </Button>
+        </RequireScope>
+      }
+    />
   );
 }
 
@@ -175,7 +173,7 @@ export default function AssistantsIndex(): JSX.Element {
           className="flex w-full flex-col"
         >
           <div className="border-b">
-            <TabsList className="h-auto gap-6 rounded-none bg-transparent p-0">
+            <TabsList className="h-auto gap-6 bg-transparent p-0">
               <PageTabsTrigger value="assistants">Assistants</PageTabsTrigger>
               <PageTabsTrigger value="triggers">Triggers</PageTabsTrigger>
               <PageTabsTrigger value="audit">Activity</PageTabsTrigger>
@@ -290,7 +288,7 @@ function AssistantIcon({ assistant }: { assistant: Pick<Assistant, "id"> }) {
   const colors = getGradientColors(assistant.id);
   return (
     <div
-      className="flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br"
+      className="flex h-12 w-12 items-center justify-center bg-gradient-to-br"
       style={{
         backgroundImage: `linear-gradient(${colors.angle}deg, ${colors.from}, ${colors.to})`,
       }}
@@ -379,7 +377,7 @@ function AssistantCard({ assistant }: { assistant: Assistant }) {
       <CardContextMenu actions={actions}>
         <routes.assistants.detail.Link
           params={[assistant.id]}
-          className="focus-visible:ring-ring block h-full rounded-xl no-underline focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+          className="focus-visible:ring-ring block h-full no-underline focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
         >
           <Card icon={<AssistantIcon assistant={assistant} />}>
             {/* Header row: name + actions */}

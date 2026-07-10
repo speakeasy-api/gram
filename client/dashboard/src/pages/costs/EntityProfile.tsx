@@ -414,7 +414,7 @@ export function EntityProfile({
                 type="button"
                 onClick={onHome}
                 tabIndex={entity ? 0 : -1}
-                className="text-muted-foreground hover:text-foreground border-border hover:bg-muted inline-flex items-center gap-1 rounded-md border bg-transparent py-1.5 pr-3 pl-2.5 text-sm transition-colors"
+                className="text-muted-foreground hover:text-foreground border-border hover:bg-muted inline-flex items-center gap-1 border bg-transparent py-1.5 pr-3 pl-2.5 text-sm transition-colors"
               >
                 <Home className="size-3.5 shrink-0" />
                 <span>Cost Overview</span>
@@ -424,7 +424,7 @@ export function EntityProfile({
               type="button"
               onClick={onBack}
               tabIndex={entity ? 0 : -1}
-              className="text-muted-foreground hover:text-foreground border-border hover:bg-muted inline-flex items-center gap-1 rounded-md border bg-transparent py-1.5 pr-3 pl-2.5 text-sm transition-colors"
+              className="text-muted-foreground hover:text-foreground border-border hover:bg-muted inline-flex items-center gap-1 border bg-transparent py-1.5 pr-3 pl-2.5 text-sm transition-colors"
             >
               <ChevronLeft className="size-3.5 shrink-0" />
               <span className="max-w-[220px] truncate">
@@ -442,7 +442,7 @@ export function EntityProfile({
           <div className="absolute top-5 right-8 z-10">{rangePicker}</div>
           <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex min-w-0 items-start gap-4">
-              <div className="border-border bg-background flex size-16 shrink-0 items-center justify-center rounded-2xl border">
+              <div className="border-border bg-background flex size-16 shrink-0 items-center justify-center border">
                 <Icon className="text-foreground size-7" strokeWidth={1.5} />
               </div>
               <div className="min-w-0">
@@ -502,7 +502,7 @@ export function EntityProfile({
             <h2 className="flex items-center gap-2 text-sm font-semibold">
               Breakdown by
               <Select value={axisValue} onValueChange={onAxisChange}>
-                <SelectTrigger className="border-border hover:bg-muted data-[state=open]:bg-muted !h-auto w-auto -my-1 cursor-pointer gap-1.5 rounded-md border bg-transparent py-1.5 pr-2.5 pl-3 text-sm font-semibold shadow-none transition-colors focus-visible:ring-0">
+                <SelectTrigger className="border-border hover:bg-muted data-[state=open]:bg-muted !h-auto w-auto -my-1 cursor-pointer gap-1.5 border bg-transparent py-1.5 pr-2.5 pl-3 text-sm font-semibold shadow-none transition-colors focus-visible:ring-0">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -534,7 +534,7 @@ export function EntityProfile({
                 type="button"
                 onClick={handleExportCsv}
                 disabled={rows.length === 0}
-                className="text-muted-foreground hover:text-foreground border-border hover:bg-muted inline-flex items-center gap-1.5 rounded-md border bg-transparent px-2.5 py-1.5 text-sm transition-colors disabled:pointer-events-none disabled:opacity-40"
+                className="text-muted-foreground hover:text-foreground border-border hover:bg-muted inline-flex items-center gap-1.5 border bg-transparent px-2.5 py-1.5 text-sm transition-colors disabled:pointer-events-none disabled:opacity-40"
               >
                 <Download className="size-3.5 shrink-0" />
                 Export CSV

@@ -19,6 +19,7 @@ import { resolveScopeBillingMode } from "@/components/estimated-cost-utils";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { InsightsConfig } from "@/components/insights-dock";
 import { Heading } from "@/components/ui/heading";
+import { Type } from "@/components/ui/type";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { useDateRangeFilter } from "@/components/observe/useDateRangeFilter";
 import { useProject } from "@/contexts/Auth";
@@ -946,10 +947,10 @@ export function CostsExplorer(): JSX.Element {
         <div className="min-h-0 w-full flex-1 space-y-6 overflow-y-auto p-8 pb-24">
           <div className="flex min-w-0 flex-col gap-1">
             <Heading variant="h1">Costs</Heading>
-            <p className="text-muted-foreground text-sm">
+            <Type muted small>
               Break down this project's AI spend by division, department, user,
               agent, and model.
-            </p>
+            </Type>
           </div>
           <div className="relative flex-1">
             <div

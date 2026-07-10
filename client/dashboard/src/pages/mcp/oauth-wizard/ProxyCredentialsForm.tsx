@@ -22,7 +22,11 @@ export function ProxyCredentialsForm(): JSX.Element {
             stored securely in a new environment created for this proxy.
           </Type>
 
-          {error && <Type className="mb-4 text-sm text-red-500!">{error}</Type>}
+          {error && (
+            <Type small destructive className="mb-4">
+              {error}
+            </Type>
+          )}
 
           <Stack gap={4}>
             <div>

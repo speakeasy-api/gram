@@ -108,7 +108,7 @@ function AccessInner() {
 
       <Tabs value={currentTab} onValueChange={handleTabChange}>
         <DetailLayout.Tabs>
-          <TabsList className="h-auto justify-start gap-4 rounded-none bg-transparent p-0 text-sm">
+          <TabsList className="h-auto justify-start gap-4 bg-transparent p-0 text-sm">
             <PageTabsTrigger value="roles">
               Roles{roleCount != null ? ` (${roleCount})` : ""}
             </PageTabsTrigger>

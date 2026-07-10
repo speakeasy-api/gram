@@ -134,7 +134,7 @@ export function FullWidthUpload({
         <label
           htmlFor="dropzone-file"
           className={cn(
-            "trans flex w-full flex-col items-center justify-center rounded-lg border-1 border-dashed p-10",
+            "trans flex w-full flex-col items-center justify-center border-1 border-dashed p-10",
             isLoading
               ? "border-primary/50 bg-primary/5 cursor-default"
               : !handlers.isValidFile
@@ -212,7 +212,7 @@ export function CompactUpload({
       tabIndex={0}
       className={cn(
         "inline-flex flex-col items-center justify-center gap-2",
-        "cursor-pointer rounded-lg border-1 border-dashed p-6",
+        "cursor-pointer border-1 border-dashed p-6",
         "aspect-square",
         !isValidFile
           ? "border-destructive bg-destructive/10"

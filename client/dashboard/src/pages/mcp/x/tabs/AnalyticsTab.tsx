@@ -2,7 +2,9 @@ import { MetricCard } from "@/components/chart/MetricCard";
 import { RankedBar } from "@/components/chart/RankedBar";
 import { ToolCallsTimeSeriesChart } from "@/components/chart/ToolCallsTimeSeriesChart";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
+import { Card } from "@/components/ui/card";
 import { Heading } from "@/components/ui/heading";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
@@ -144,21 +146,16 @@ export function AnalyticsTab({
       </div>
 
       {isLogsDisabled ? (
-        <div className="flex flex-col items-center justify-center rounded-lg border p-12 text-center">
-          <Type muted className="mb-1 block">
-            Observability is not enabled
-          </Type>
-          <Type muted small>
-            Enable logs for this organization to see analytics for this MCP
-            server.
-          </Type>
-        </div>
+        <InlineEmptyState
+          title="Observability is not enabled"
+          description="Enable logs for this organization to see analytics for this MCP server."
+        />
       ) : (
         <div className="flex flex-col gap-6">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {isLoadingTelemetry && !summary ? (
               Array.from({ length: 4 }).map((_, i) => (
-                <Skeleton key={i} className="h-[116px] w-full rounded-lg" />
+                <Skeleton key={i} className="h-[116px] w-full" />
               ))
             ) : (
               <>
@@ -208,7 +205,7 @@ export function AnalyticsTab({
           />
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <div className="rounded-lg border p-5">
+            <Card>
               <Heading variant="h5" className="mb-3">
                 Top tools by call count
               </Heading>
@@ -219,8 +216,8 @@ export function AnalyticsTab({
                   No tool calls in the selected range.
                 </Type>
               )}
-            </div>
-            <div className="rounded-lg border p-5">
+            </Card>
+            <Card>
               <Heading variant="h5" className="mb-3">
                 Top tools by failure rate
               </Heading>
@@ -234,7 +231,7 @@ export function AnalyticsTab({
                   No failed tool calls in the selected range.
                 </Type>
               )}
-            </div>
+            </Card>
           </div>
         </div>
       )}

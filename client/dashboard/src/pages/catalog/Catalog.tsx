@@ -301,7 +301,7 @@ function EmptySearchResult({
   onClear: () => void;
 }) {
   return (
-    <div className="bg-background flex w-full items-center justify-center rounded-xl border py-8">
+    <div className="bg-background flex w-full items-center justify-center border py-8">
       <Stack
         gap={1}
         className="m-8 w-full max-w-sm"

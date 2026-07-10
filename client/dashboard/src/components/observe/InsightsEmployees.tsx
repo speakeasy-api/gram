@@ -9,10 +9,12 @@ import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { useInsightsState } from "@/components/insights-context";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
+import { Card } from "@/components/ui/card";
 import { Heading } from "@/components/ui/heading";
 import { IdentityCell } from "@/components/ui/identity-cell";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SimpleTooltip } from "@/components/ui/tooltip";
+import { Type } from "@/components/ui/type";
 import { Page } from "@/components/page-layout";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
@@ -372,12 +374,12 @@ export function InsightsEmployeesContent(): JSX.Element {
                 <Heading variant="h1">Employee Enrollment</Heading>
                 <ReleaseStageBadge stage="preview" />
               </div>
-              <p className="text-muted-foreground text-sm">
+              <Type muted small>
                 Track platform adoption for organization members in this project
                 over {rangeLabel}. Employees with tool or agent session activity
                 are marked enrolled; employees without any activity are marked
                 not enrolled.
-              </p>
+              </Type>
             </div>
             <Page.Toolbar>
               <Page.Toolbar.Search
@@ -436,8 +438,6 @@ export function InsightsEmployeesContent(): JSX.Element {
                 <MetricCard
                   title={isUnattributedView ? "Unknown users" : "Employees"}
                   value={totalEmployees}
-                  icon="user"
-                  accentColor="blue"
                   subtext={
                     isUnattributedView
                       ? "Usage not matched to a member"
@@ -448,8 +448,6 @@ export function InsightsEmployeesContent(): JSX.Element {
                   title="Enrolled"
                   value={enrolledEmployees}
                   displayValue={isUnattributedView ? "-" : undefined}
-                  icon="circle-check"
-                  accentColor="green"
                   subtext={
                     isUnattributedView
                       ? "Not applicable to unknown users"
@@ -460,8 +458,6 @@ export function InsightsEmployeesContent(): JSX.Element {
                   title="Not Enrolled"
                   value={notEnrolledEmployees}
                   displayValue={isUnattributedView ? "-" : undefined}
-                  icon="triangle-alert"
-                  accentColor="orange"
                   subtext={
                     isUnattributedView
                       ? "Not applicable to unknown users"
@@ -471,8 +467,6 @@ export function InsightsEmployeesContent(): JSX.Element {
                 <MetricCard
                   title="Token Count"
                   value={totalTokenCount}
-                  icon="gauge"
-                  accentColor="purple"
                   subtext={
                     isUnattributedView
                       ? undefined
@@ -596,18 +590,20 @@ function EmployeeTable({
         width: "auto",
         render: (item) => (
           <div className="text-right">
-            <button
-              type="button"
-              className="flex items-center gap-1"
+            <Button
+              variant="tertiary"
+              size="xs"
               aria-label={`View ${item.name}`}
               onClick={(event) => {
                 event.stopPropagation();
                 onSelectUser(item);
               }}
             >
-              View
-              <ArrowRight />
-            </button>
+              <Button.Text>View</Button.Text>
+              <Button.RightIcon>
+                <ArrowRight />
+              </Button.RightIcon>
+            </Button>
           </div>
         ),
       },
@@ -648,11 +644,11 @@ function EmployeeTable({
   const NoResultsMessage = () => {
     return (
       <div className="flex h-full items-center justify-center">
-        <p className="text-muted-foreground text-sm">
+        <Type muted small>
           {search
             ? `No employees matching "${search}".`
             : "No organization members found."}
-        </p>
+        </Type>
       </div>
     );
   };
@@ -673,11 +669,11 @@ function EmployeeTable({
       />
       {totalPages > 1 && (
         <div className="flex items-center justify-between border-t px-4 py-3">
-          <p className="text-muted-foreground text-sm">
+          <Type muted small>
             {safePage * PAGE_SIZE + 1}–
             {Math.min((safePage + 1) * PAGE_SIZE, sortedEmployees.length)} of{" "}
             {sortedEmployees.length}
-          </p>
+          </Type>
           <div className="flex items-center gap-1">
             <Button
               variant="tertiary"
@@ -721,10 +717,10 @@ function EnrollmentLegend() {
 
   return (
     <>
-      <section className="bg-muted/40 border-border flex flex-col gap-4 rounded-xl border p-5 md:flex-row md:items-center md:justify-between">
+      <Card className="bg-muted/40 gap-4 md:flex-row md:items-center md:justify-between">
         <div className="max-w-3xl space-y-1">
-          <h2 className="text-sm font-semibold">How enrollment works</h2>
-          <p className="text-muted-foreground text-sm">
+          <Card.Title>How enrollment works</Card.Title>
+          <Type muted small>
             Employees appear as enrolled once the{" "}
             <Link
               to={routes.plugins.href()}
@@ -735,7 +731,7 @@ function EnrollmentLegend() {
             is installed in their AI agent and sends activity to this project.
             Not enrolled yet? Install the observability plugin to start tracking
             their usage.
-          </p>
+          </Type>
         </div>
         <Button
           size="sm"
@@ -744,7 +740,7 @@ function EnrollmentLegend() {
         >
           Set up hooks
         </Button>
-      </section>
+      </Card>
       <HooksSetupDialog
         open={showSetupDialog}
         onOpenChange={setShowSetupDialog}
@@ -769,14 +765,14 @@ function EmployeesLoadingState({
         )}
       >
         {Array.from({ length: 4 }).map((_, index) => (
-          <div key={index} className="bg-card rounded-lg border p-5">
+          <div key={index} className="bg-card border p-5">
             <Skeleton className="mb-4 h-4 w-28" />
             <Skeleton className="h-9 w-20" />
             <Skeleton className="mt-3 h-3 w-36" />
           </div>
         ))}
       </section>
-      <section className="bg-card rounded-xl border p-5">
+      <section className="bg-card border p-5">
         <Skeleton className="h-5 w-44" />
         <Skeleton className="mt-2 h-4 w-80" />
         <div className="mt-6 space-y-3">
@@ -816,21 +812,26 @@ function AccountsPopover({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <button
-          type="button"
+        <Button
+          variant="tertiary"
+          size="xs"
+          className="-mx-1.5 gap-1.5"
           // Don't let the row's navigate handler fire when opening the popover.
           onClick={(e) => e.stopPropagation()}
-          className="hover:bg-muted/60 -mx-1.5 flex items-center gap-1.5 rounded-md px-1.5 py-1 transition-colors"
         >
-          <span className={cn("text-muted-foreground", labelClassName)}>
+          <Button.Text className={cn("text-muted-foreground", labelClassName)}>
             {label}
-          </span>
-          <ChevronDown className="text-muted-foreground/60 size-3" />
-        </button>
+          </Button.Text>
+          <Button.RightIcon>
+            <ChevronDown className="text-muted-foreground/60 size-3" />
+          </Button.RightIcon>
+        </Button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-72 p-0">
         <div className="border-b px-3 py-2">
-          <p className="text-xs font-medium">{title}</p>
+          <Type as="p" mono small muted className="uppercase tracking-[0.08em]">
+            {title}
+          </Type>
         </div>
         <ul className="divide-border/60 max-h-64 divide-y overflow-y-auto">
           {accounts.map((a, i) => (

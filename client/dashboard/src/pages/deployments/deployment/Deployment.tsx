@@ -90,7 +90,7 @@ function DeploymentPageContent({ deploymentId }: { deploymentId: string }) {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <Suspense fallback={<div>Loading logs...</div>}>
+        <Suspense fallback={<Skeleton className="h-4 w-1/3" />}>
           <DeploymentLogs deploymentId={deploymentId} />
         </Suspense>
       </Page.Body>
@@ -167,12 +167,12 @@ function DeploymentLogs(props: { deploymentId: string }) {
           <TabsTrigger value="tools">Tools</TabsTrigger>
         </TabsList>
         <TabsContent value="logs">
-          <Suspense fallback={<div>Loading logs...</div>}>
+          <Suspense fallback={<Skeleton className="h-4 w-1/3" />}>
             <LogsTabContent />
           </Suspense>
         </TabsContent>
         <TabsContent value="assets">
-          <Suspense fallback={<div>Loading assets...</div>}>
+          <Suspense fallback={<Skeleton className="h-4 w-1/3" />}>
             <AssetsTabContent />
           </Suspense>
         </TabsContent>

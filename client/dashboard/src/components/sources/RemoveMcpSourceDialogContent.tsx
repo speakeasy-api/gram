@@ -76,7 +76,7 @@ export function RemoveMcpSourceDialogContent({
           <Type small muted>
             The following will also be removed:
           </Type>
-          <ul className="divide-border space-y-2 rounded-md border">
+          <ul className="divide-border space-y-2 border">
             {linkedMcpServers.map((server) => (
               <LinkedMcpServerRow key={server.id} server={server} />
             ))}

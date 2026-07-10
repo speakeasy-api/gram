@@ -3,6 +3,7 @@ import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { CardContextMenu } from "@/components/card-context-menu";
 import { Card } from "@/components/ui/card";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import { Action, MoreActions } from "@/components/ui/more-actions";
 import { useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
@@ -101,26 +102,21 @@ function EnvironmentsInner() {
         </Page.Section.CTA>
         <Page.Section.Body>
           {environments.length === 0 ? (
-            <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
-              <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
-                <Blocks className="text-muted-foreground h-6 w-6" />
-              </div>
-              <Type variant="subheading" className="mb-1">
-                No environments yet
-              </Type>
-              <Type small muted className="mb-4 max-w-md text-center">
-                Environments let you store configuration and secrets that can be
-                shared across multiple MCP servers.
-              </Type>
-              <RequireScope scope="environment:write" level="component">
-                <Button onClick={() => setCreateEnvironmentDialogOpen(true)}>
-                  <Button.LeftIcon>
-                    <Plus className="h-4 w-4" />
-                  </Button.LeftIcon>
-                  <Button.Text>New Environment</Button.Text>
-                </Button>
-              </RequireScope>
-            </div>
+            <InlineEmptyState
+              icon={<Blocks />}
+              title="No environments yet"
+              description="Environments let you store configuration and secrets that can be shared across multiple MCP servers."
+              action={
+                <RequireScope scope="environment:write" level="component">
+                  <Button onClick={() => setCreateEnvironmentDialogOpen(true)}>
+                    <Button.LeftIcon>
+                      <Plus className="h-4 w-4" />
+                    </Button.LeftIcon>
+                    <Button.Text>New Environment</Button.Text>
+                  </Button>
+                </RequireScope>
+              }
+            />
           ) : (
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
               {environments.map((environment) => (

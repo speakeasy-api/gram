@@ -42,6 +42,8 @@ import { useGramContext } from "@gram/client/react-query/_context.js";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { Alert, Button } from "@/components/ui/moonshine";
 import { Heading } from "@/components/ui/heading";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
+import { Type } from "@/components/ui/type";
 import { ChartCard } from "@/components/chart/ChartCard";
 import { MetricCard } from "@/components/chart/MetricCard";
 import { formatChartZoomRangeLabel } from "@/components/chart/chartUtils";
@@ -79,10 +81,10 @@ function ToolInsightsHeading() {
   return (
     <div className="flex min-w-0 flex-col gap-1">
       <Heading variant="h1">MCP Servers & Tool Insights</Heading>
-      <p className="text-muted-foreground text-sm">
+      <Type muted small>
         Monitor MCP servers and tool events across all users and agents in your
         project
-      </p>
+      </Type>
     </div>
   );
 }
@@ -468,19 +470,11 @@ function HooksInnerContent({
                 subtitle="Install Observability plugin in your AI agent to start generating tool insights"
               />
             ) : !hasSummaryData ? (
-              <div className="py-12 text-center">
-                <div className="flex flex-col items-center gap-3">
-                  <div className="bg-muted flex size-12 items-center justify-center rounded-full">
-                    <Inbox className="text-muted-foreground size-6" />
-                  </div>
-                  <span className="text-foreground font-medium">
-                    No matching tool usage
-                  </span>
-                  <span className="text-muted-foreground max-w-sm text-sm">
-                    Try adjusting your search query or time range
-                  </span>
-                </div>
-              </div>
+              <InlineEmptyState
+                icon={<Inbox />}
+                title="No matching tool usage"
+                description="Try adjusting your search query or time range"
+              />
             ) : (
               <HooksAnalytics
                 serverNameMappings={serverNameMappings}
@@ -1145,7 +1139,7 @@ function HooksAnalytics({
         ) : summaryPending || !summaryData ? (
           <>
             {Array.from({ length: compact ? 3 : 5 }).map((_, i) => (
-              <Skeleton key={i} className="h-[104px] rounded-lg" />
+              <Skeleton key={i} className="h-[104px]" />
             ))}
           </>
         ) : (
@@ -1154,33 +1148,14 @@ function HooksAnalytics({
               title="Avg Success Rate"
               value={kpis?.avgSuccessRate ?? 0}
               format="percent"
-              icon="circle-check"
-              accentColor="green"
             />
-            <MetricCard
-              title="Total Events"
-              value={kpis?.totalEvents ?? 0}
-              icon="activity"
-              accentColor="purple"
-            />
-            <MetricCard
-              title="Active Users"
-              value={kpis?.activeUsers ?? 0}
-              icon="users"
-              accentColor="yellow"
-            />
+            <MetricCard title="Total Events" value={kpis?.totalEvents ?? 0} />
+            <MetricCard title="Active Users" value={kpis?.activeUsers ?? 0} />
             <MetricCard
               title="Active Targets"
               value={kpis?.activeTargets ?? 0}
-              icon="monitor"
-              accentColor="blue"
             />
-            <MetricCard
-              title="Unique Tools"
-              value={kpis?.uniqueTools ?? 0}
-              icon="wrench"
-              accentColor="orange"
-            />
+            <MetricCard title="Unique Tools" value={kpis?.uniqueTools ?? 0} />
           </>
         )}
       </div>
