@@ -591,6 +591,8 @@ var PublishStatusResult = Type("PublishStatusResult", func() {
 	Attribute("repo_name", String, "GitHub repo name, if connected.")
 	Attribute("repo_url", String, "Full GitHub repository URL, if connected.")
 	Attribute("marketplace_url", String, "Git-based Claude Code marketplace URL — the value to pass to `/plugin marketplace add` or set as the source URL in `extraKnownMarketplaces`. Present once a marketplace token has been minted, which happens automatically on the first publish.")
+	Attribute("claude_observability_plugin", String, "Slug of the generated Claude Code observability plugin in the published marketplace — install as `<slug>@<marketplace name>`. Present when connected.")
+	Attribute("codex_observability_plugin", String, "Slug of the generated Codex observability plugin in the published marketplace — install as `<slug>@<marketplace name>`. Present when connected.")
 	Attribute("has_collaborators", Boolean, "Whether the repo has at least one directly-added GitHub collaborator (excludes access granted via org membership/teams). Absent when the project is not connected.")
 	Attribute("up_to_date", Boolean, "Whether the project's current plugin state matches what was last published to GitHub. Absent when the project is not connected, or when the connection predates content fingerprinting (freshness can't be determined).")
 	Attribute("last_published_at", String, func() {

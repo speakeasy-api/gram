@@ -1673,7 +1673,10 @@ type TopUser struct {
 
 // Per-dimension billed token breakdown for the usage details table
 type TumDetailsBreakdown struct {
-	// The breakdown dimension key (hook_source, model, email, division_name, role)
+	// The breakdown dimension key (hook_source, risk_analysis_model,
+	// completion_model, division_name, role). The two model keys partition the
+	// billed population: risk_analysis_model covers the platform's risk-policy
+	// scanning inference, completion_model covers user-facing completion surfaces.
 	Key string
 	// Top values by tokens in descending order, with the remainder rolled into
 	// 'Other'
@@ -1700,10 +1703,6 @@ type TumDetailsPoint struct {
 	OutputTokens int64
 	// Billed tokens under management
 	TotalTokens int64
-	// Tokens in messages carrying at least one active risk finding
-	RiskyMessageTokens int64
-	// Tokens in tool-call messages
-	ToolMessageTokens int64
 }
 
 // TumDetailsResult is the result type of the telemetry service queryTumDetails
@@ -1728,10 +1727,6 @@ type TumDetailsTotals struct {
 	OutputTokens int64
 	// Billed tokens under management
 	TotalTokens int64
-	// Tokens in messages carrying at least one active risk finding
-	RiskyMessageTokens int64
-	// Tokens in tool-call messages
-	ToolMessageTokens int64
 }
 
 // A linked AI account for a user. The identity is (provider, email): the same

@@ -16,7 +16,7 @@ import {
  */
 export type TumDetailsBreakdown = {
   /**
-   * The breakdown dimension key (hook_source, model, email, division_name, role)
+   * The breakdown dimension key (hook_source, risk_analysis_model, completion_model, division_name, role). The two model keys partition the billed population: risk_analysis_model covers the platform's risk-policy scanning inference, completion_model covers user-facing completion surfaces.
    */
   key: string;
   /**

@@ -37,28 +37,53 @@ func requireMapValue(t *testing.T, values map[string]any, key string) map[string
 	return value
 }
 
-// TestSharedHTTPScriptMatchesCheckedIn guards against drift between the
-// generated hooks/http.sh (renderSharedHTTPScript) and the checked-in
-// hooks/plugin-claude/hooks/http.sh sourced by the local-dev plugin. Both must
-// be identical so local-dev and generated plugins share one transport.
-func TestSharedHTTPScriptMatchesCheckedIn(t *testing.T) {
+// TestHookPayloadEscaperEscapesControlChars verifies the shared shell JSON
+// escaper handles every C0 control character — ANSI escapes in tool output or
+// prompts previously produced invalid JSON and failed the whole ingest post.
+func TestHookPayloadEscaperEscapesControlChars(t *testing.T) {
 	t.Parallel()
-	checkedIn := requireFileBytes(t, filepath.Join("..", "..", "..", "hooks", "plugin-claude", "hooks", "http.sh"))
-	// renderSharedHTTPScript() is canonical → pass it as testify's "expected".
-	require.Equal(t, string(renderSharedHTTPScript()), string(checkedIn),
-		"hooks/plugin-claude/hooks/http.sh has drifted from renderSharedHTTPScript() — keep them identical")
+
+	dir := t.TempDir()
+	snippet := filepath.Join(dir, "snippet.sh")
+	require.NoError(t, os.WriteFile(snippet, []byte(renderHookPayloadNormalizationSnippet("claude")), 0o644))
+
+	cmd := exec.Command("bash", "-c",
+		`. "$1"; printf 'a\033[31mred\033[0m\vb\tc"d\\e' | gram_hooks_json_escape_string`,
+		"escaper", snippet)
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(out))
+	escaped := string(out)
+	require.Contains(t, escaped, `\u001b`, "ANSI escape byte must be escaped")
+	require.Contains(t, escaped, `\u000b`, "vertical tab must be escaped")
+
+	var decoded string
+	require.NoError(t, json.Unmarshal([]byte(`"`+escaped+`"`), &decoded),
+		"escaper output must be a valid JSON string body: %q", escaped)
+	require.Equal(t, "a\x1b[31mred\x1b[0m\vb\tc\"d\\e", decoded)
 }
 
-// TestSharedAuthScriptMatchesCheckedIn guards against drift between the
-// generated hooks/auth.sh (renderSharedAuthScript) and the checked-in
-// hooks/plugin-claude/hooks/auth.sh sourced by the local-dev plugin. Both must
-// be identical so local-dev and generated plugins share one auth flow.
-func TestSharedAuthScriptMatchesCheckedIn(t *testing.T) {
-	t.Parallel()
-	checkedIn := requireFileBytes(t, filepath.Join("..", "..", "..", "hooks", "plugin-claude", "hooks", "auth.sh"))
-	// renderSharedAuthScript() is canonical → pass it as testify's "expected".
-	require.Equal(t, string(renderSharedAuthScript()), string(checkedIn),
-		"hooks/plugin-claude/hooks/auth.sh has drifted from renderSharedAuthScript() — keep them identical")
+// writeDogfoodPlugins renders the dogfood plugins into a temp directory and
+// returns its path, so tests exercise a freshly generated plugin instead of a
+// checked-in copy. Shell scripts are made executable, mirroring how the
+// publish path packages them.
+func writeDogfoodPlugins(t *testing.T) string {
+	t.Helper()
+
+	files, err := DogfoodPluginFiles()
+	require.NoError(t, err)
+	require.NotEmpty(t, files)
+
+	dir := t.TempDir()
+	for name, content := range files {
+		dst := filepath.Join(dir, filepath.FromSlash(name))
+		require.NoError(t, os.MkdirAll(filepath.Dir(dst), 0o755))
+		mode := os.FileMode(0o644)
+		if filepath.Ext(dst) == ".sh" {
+			mode = 0o755
+		}
+		require.NoError(t, os.WriteFile(dst, content, mode))
+	}
+	return dir
 }
 
 // authLoginHarness is a running gram_hooks_login invocation whose localhost
@@ -1960,8 +1985,8 @@ func TestRenderLoginScriptsPinOrganization(t *testing.T) {
 		ProjectSlug: "acme-prod",
 		OrgID:       "org_12345",
 	}
-	require.Contains(t, string(renderLoginScript(cfg)), `gram_hooks_org_hint="org_12345"`)
-	require.Contains(t, string(renderAuthPreflightScript(cfg)), `gram_hooks_org_hint="org_12345"`)
+	require.Contains(t, string(renderLoginScript(cfg)), `gram_hooks_org_hint='org_12345'`)
+	require.Contains(t, string(renderAuthPreflightScript(cfg)), `gram_hooks_org_hint='org_12345'`)
 	require.Contains(t, string(renderSharedAuthScript()), "organization_id=${gram_hooks_org_hint}")
 }
 
@@ -2194,14 +2219,14 @@ func TestRenderAuthPreflightScriptObservabilityModeFailsOpen(t *testing.T) {
 	require.NoFileExists(t, urlFile)
 }
 
-// checkedInSenderCapturedRequest runs a checked-in per-event sender with no
-// env credentials but a cached browser-login auth file, and returns the curl
-// config lines plus request URL captured by a stubbed curl.
-func checkedInSenderCapturedRequest(t *testing.T, plugin, payload string) string {
+// dogfoodSenderCapturedRequest renders a fresh dogfood plugin and runs its
+// per-event sender with no env credentials but a cached browser-login auth
+// file, returning the curl config lines plus request URL captured by a
+// stubbed curl.
+func dogfoodSenderCapturedRequest(t *testing.T, plugin, payload string, extraEnv ...string) string {
 	t.Helper()
 
-	senderPath, err := filepath.Abs(filepath.Join("..", "..", "..", "hooks", plugin, "hooks", "send_hook.sh"))
-	require.NoError(t, err)
+	senderPath := filepath.Join(writeDogfoodPlugins(t), plugin, "hooks", "hook.sh")
 
 	dir := t.TempDir()
 	binDir := filepath.Join(dir, "bin")
@@ -2225,10 +2250,10 @@ printf '{}\n200'
 	authFile := filepath.Join(dir, "auth.env")
 	require.NoError(t, os.WriteFile(authFile, []byte("server_url=https://app.getgram.ai\napi_key=gram_cached_browser_key\nproject=acme-prod\nemail=dev@example.com\n"), 0o600))
 
-	env := hookAuthTestEnv(dir,
-		"GRAM_CAPTURE_HEADERS="+headersPath,
-		"GRAM_HOOKS_AUTH_FILE="+authFile,
-	)
+	env := hookAuthTestEnv(dir, append([]string{
+		"GRAM_CAPTURE_HEADERS=" + headersPath,
+		"GRAM_HOOKS_AUTH_FILE=" + authFile,
+	}, extraEnv...)...)
 	for i, kv := range env {
 		if strings.HasPrefix(kv, "PATH=") {
 			env[i] = "PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH")
@@ -2244,32 +2269,49 @@ printf '{}\n200'
 	return string(requireFileBytes(t, headersPath))
 }
 
-// TestCheckedInCursorSenderUsesCachedBrowserAuth verifies the checked-in
-// Cursor plugin's per-event sender falls back to the credentials cached by
-// the browser login flow (auth_preflight.sh / login.sh) when no env key is
-// set, instead of silently skipping the send.
-func TestCheckedInCursorSenderUsesCachedBrowserAuth(t *testing.T) {
+// TestDogfoodSenderEnvProjectOverridesCachedProject verifies an explicit
+// GRAM_HOOKS_PROJECT_SLUG outranks the project the browser-login key was
+// cached with, so switching projects does not require a forced re-login.
+func TestDogfoodSenderEnvProjectOverridesCachedProject(t *testing.T) {
 	t.Parallel()
 
-	headers := checkedInSenderCapturedRequest(t, "plugin-cursor",
+	headers := dogfoodSenderCapturedRequest(t, "plugin-cursor",
+		`{"hook_event_name":"beforeSubmitPrompt","conversation_id":"sess-env-project","prompt":"hi"}`,
+		"GRAM_HOOKS_PROJECT_SLUG=acme-staging")
+	require.Contains(t, headers, "Gram-Key: gram_cached_browser_key",
+		"the cached key still authenticates the env-selected project")
+	require.Contains(t, headers, "Gram-Project: acme-staging",
+		"env-selected project must outrank the cached login project")
+	require.NotContains(t, headers, "Gram-Project: acme-prod")
+	require.Contains(t, headers, "/rpc/hooks.ingest")
+}
+
+// TestDogfoodCursorSenderUsesCachedBrowserAuth verifies the rendered Cursor
+// plugin's per-event sender falls back to the credentials cached by the
+// browser login flow (auth_preflight.sh / login.sh) when no env key is set,
+// instead of silently skipping the send.
+func TestDogfoodCursorSenderUsesCachedBrowserAuth(t *testing.T) {
+	t.Parallel()
+
+	headers := dogfoodSenderCapturedRequest(t, "plugin-cursor",
 		`{"hook_event_name":"beforeSubmitPrompt","conversation_id":"sess-cached","prompt":"hi"}`)
 	require.Contains(t, headers, "Gram-Key: gram_cached_browser_key", "sender must use the cached browser-login key")
 	require.Contains(t, headers, "Gram-Project: acme-prod")
-	require.Contains(t, headers, "/rpc/hooks.cursor")
+	require.Contains(t, headers, "/rpc/hooks.ingest")
 }
 
-// TestCheckedInClaudeSenderUsesCachedBrowserAuth verifies the checked-in
-// Claude plugin's per-event sender attaches the credentials cached by the
-// browser login flow when no env key is set, so policy enforcement that needs
-// auth context is not silently skipped on the legacy path.
-func TestCheckedInClaudeSenderUsesCachedBrowserAuth(t *testing.T) {
+// TestDogfoodClaudeSenderUsesCachedBrowserAuth verifies the rendered Claude
+// plugin's per-event sender attaches the credentials cached by the browser
+// login flow when no env key is set, so policy enforcement that needs auth
+// context is not silently skipped.
+func TestDogfoodClaudeSenderUsesCachedBrowserAuth(t *testing.T) {
 	t.Parallel()
 
-	headers := checkedInSenderCapturedRequest(t, "plugin-claude",
+	headers := dogfoodSenderCapturedRequest(t, "plugin-claude",
 		`{"hook_event_name":"UserPromptSubmit","session_id":"sess-cached-claude","prompt":"hi"}`)
 	require.Contains(t, headers, "Gram-Key: gram_cached_browser_key", "sender must use the cached browser-login key")
 	require.Contains(t, headers, "Gram-Project: acme-prod")
-	require.Contains(t, headers, "/rpc/hooks.claude")
+	require.Contains(t, headers, "/rpc/hooks.ingest")
 }
 
 // TestRenderHookScriptCursorBackfillsLaterTurnPrompts verifies the prompt
@@ -2377,6 +2419,120 @@ printf '{}\n200'
 	require.Equal(t, "second prompt", prompt2["text"])
 	typ3, _ := eventType(chunks[3])
 	require.Equal(t, "assistant.responded", typ3)
+}
+
+// TestRenderHookScriptCursorBackfillDenyStashedForNextDecisionEvent verifies
+// that a prompt deny recovered by a backfill running on a NON-decision event
+// (which cannot relay a block) is stashed and relayed on the turn's next
+// decision event, instead of being swallowed once the backfill marker is
+// written.
+func TestRenderHookScriptCursorBackfillDenyStashedForNextDecisionEvent(t *testing.T) {
+	t.Parallel()
+
+	_, err := exec.LookPath("jq")
+	require.NoError(t, err, "jq is required for Cursor transcript backfill")
+	_, err = exec.LookPath("base64")
+	require.NoError(t, err, "base64 is required for Cursor transcript backfill")
+
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	dir := t.TempDir()
+	binDir := filepath.Join(dir, "bin")
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	hookPath := filepath.Join(dir, "hook.sh")
+	capturePath := filepath.Join(dir, "payloads.jsonl")
+	transcriptPath := filepath.Join(dir, "transcript.jsonl")
+	require.NoError(t, os.WriteFile(hookPath, renderHookScript(cfg, "cursor"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "http.sh"), renderSharedHTTPScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.sh"), renderSharedAuthScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "curl"), []byte(`#!/usr/bin/env bash
+url=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -H|-w|-X|--data-binary|--max-time|--config) shift 2 ;;
+    -*) shift ;;
+    *) url="$1"; shift ;;
+  esac
+done
+payload="$(cat)"
+case "$url" in
+  */rpc/hooks.ingest)
+    printf '%s' "$payload" >> "$GRAM_CAPTURE_PAYLOADS"
+    printf '\n---GRAM---\n' >> "$GRAM_CAPTURE_PAYLOADS"
+    ;;
+esac
+case "$payload" in
+  *'"type":"prompt.submitted"'*)
+    printf '{"decision":"deny","message":"prompt blocked by policy"}\n200'
+    ;;
+  *)
+    printf '{}\n200'
+    ;;
+esac
+`), 0o755))
+
+	require.NoError(t, os.WriteFile(transcriptPath, []byte(`{"role":"user","message":{"content":[{"type":"text","text":"<user_query>\ninjected prompt\n</user_query>"}]}}
+`), 0o600))
+
+	env := hookAuthTestEnv(dir,
+		"GRAM_CAPTURE_PAYLOADS="+capturePath,
+		"GRAM_HOOKS_AUTH_FILE="+filepath.Join(dir, "auth.env"),
+		"GRAM_HOOKS_API_KEY=gram_test_hooks_key",
+		"GRAM_HOOKS_PROJECT_SLUG=acme-prod",
+		"XDG_STATE_HOME="+filepath.Join(dir, "state"),
+	)
+	for i, kv := range env {
+		if strings.HasPrefix(kv, "PATH=") {
+			env[i] = "PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH")
+		}
+	}
+
+	run := func(payload string) (string, string) {
+		t.Helper()
+		cmd := exec.Command("bash", hookPath)
+		cmd.Stdin = strings.NewReader(payload)
+		cmd.Env = env
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+		require.NoError(t, cmd.Run(), stderr.String())
+		return stdout.String(), stderr.String()
+	}
+
+	// The dropped prompt is recovered during afterAgentThought — an event with
+	// no deny channel. The invocation must not fail, and the deny must not be
+	// lost with it.
+	out, _ := run(`{"hook_event_name":"afterAgentThought","conversation_id":"sess-stash-deny","session_id":"sess-stash-deny","generation_id":"turn-1","text":"thinking","transcript_path":"` + transcriptPath + `"}`)
+	require.NotContains(t, out, `"permission":"deny"`)
+
+	// The turn's next decision event relays the stashed deny without
+	// re-sending the prompt.
+	out, _ = run(`{"hook_event_name":"preToolUse","conversation_id":"sess-stash-deny","session_id":"sess-stash-deny","generation_id":"turn-1","tool_name":"shell","tool_input":{"command":"ls"},"transcript_path":"` + transcriptPath + `"}`)
+	require.Contains(t, out, `"permission":"deny"`)
+	require.Contains(t, out, "prompt blocked by policy")
+
+	captured := string(requireFileBytes(t, capturePath))
+	require.Equal(t, 1, strings.Count(captured, `"type":"prompt.submitted"`),
+		"the recovered prompt must be posted exactly once, not re-sent while the deny is pending")
+
+	// The stash is consumed: a later decision event proceeds normally.
+	out, _ = run(`{"hook_event_name":"preToolUse","conversation_id":"sess-stash-deny","session_id":"sess-stash-deny","generation_id":"turn-2","tool_name":"shell","tool_input":{"command":"pwd"},"transcript_path":"` + transcriptPath + `"}`)
+	require.NotContains(t, out, `"permission":"deny"`, "a consumed deny must not re-fire on later turns")
+
+	// A deny stashed for a turn that ends without any decision event must not
+	// leak onto the next turn: the stash is generation-scoped, so a decision
+	// event from a different generation discards it instead of relaying it.
+	require.NoError(t, os.WriteFile(transcriptPath, []byte(`{"role":"user","message":{"content":[{"type":"text","text":"<user_query>\ninjected prompt\n</user_query>"}]}}
+{"role":"user","message":{"content":[{"type":"text","text":"<user_query>\nanother injected prompt\n</user_query>"}]}}
+`), 0o600))
+	out, _ = run(`{"hook_event_name":"afterAgentThought","conversation_id":"sess-stash-deny","session_id":"sess-stash-deny","generation_id":"turn-3","text":"thinking again","transcript_path":"` + transcriptPath + `"}`)
+	require.NotContains(t, out, `"permission":"deny"`)
+	out, _ = run(`{"hook_event_name":"preToolUse","conversation_id":"sess-stash-deny","session_id":"sess-stash-deny","generation_id":"turn-4","tool_name":"shell","tool_input":{"command":"ls"},"transcript_path":"` + transcriptPath + `"}`)
+	require.NotContains(t, out, `"permission":"deny"`,
+		"a deny stashed for an earlier generation must not block an unrelated later turn")
 }
 
 // TestRenderHookScriptCursorBackfillDenyBlocksDecisionEvent verifies that when

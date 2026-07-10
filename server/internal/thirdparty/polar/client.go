@@ -188,8 +188,13 @@ func (p *Client) InvalidateBillingCustomerCaches(ctx context.Context, orgID stri
 }
 
 func (p *Client) TrackModelUsage(ctx context.Context, event billing.ModelUsageEvent) {
-	// For now, don't bill customers on "Gram" usage. Gram source means it is internal to the platform and not customer usage.
-	if event.Source == billing.ModelUsageSourceGram {
+	// For now, don't bill customers on "Gram" usage. Gram source means it is
+	// internal to the platform and not customer usage. Risk-analysis inference
+	// carried the gram tag before it got its own source, so it inherits the
+	// same exemption: pro-plan (Polar) customers are never metered for the
+	// platform's own inference — scanning is billed only under the enterprise
+	// TUM contracts, which read ClickHouse snapshots, not Polar.
+	if event.Source == billing.ModelUsageSourceGram || event.Source == billing.ModelUsageSourceRiskAnalysis {
 		return
 	}
 

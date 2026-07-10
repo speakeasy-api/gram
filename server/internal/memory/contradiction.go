@@ -102,6 +102,7 @@ func (s *MemoryService) detectContradiction(ctx context.Context, orgID, projectI
 		UsageSource:    billing.ModelUsageSourceGram,
 		UserID:         "",
 		ExternalUserID: "",
+		UserEmail:      "",
 		HTTPMetadata:   nil,
 	}
 

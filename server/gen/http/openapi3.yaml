@@ -49558,6 +49558,12 @@ components:
         PublishStatusResult:
             type: object
             properties:
+                claude_observability_plugin:
+                    type: string
+                    description: Slug of the generated Claude Code observability plugin in the published marketplace — install as `<slug>@<marketplace name>`. Present when connected.
+                codex_observability_plugin:
+                    type: string
+                    description: Slug of the generated Codex observability plugin in the published marketplace — install as `<slug>@<marketplace name>`. Present when connected.
                 configured:
                     type: boolean
                     description: Whether GitHub publishing is configured on the server.
@@ -54710,7 +54716,7 @@ components:
             properties:
                 key:
                     type: string
-                    description: The breakdown dimension key (hook_source, model, email, division_name, role)
+                    description: 'The breakdown dimension key (hook_source, risk_analysis_model, completion_model, division_name, role). The two model keys partition the billed population: risk_analysis_model covers the platform''s risk-policy scanning inference, completion_model covers user-facing completion surfaces.'
                 rows:
                     type: array
                     items:
@@ -54755,14 +54761,6 @@ components:
                     type: integer
                     description: Billed output tokens
                     format: int64
-                risky_message_tokens:
-                    type: integer
-                    description: Tokens in messages carrying at least one active risk finding
-                    format: int64
-                tool_message_tokens:
-                    type: integer
-                    description: Tokens in tool-call messages
-                    format: int64
                 total_tokens:
                     type: integer
                     description: Billed tokens under management
@@ -54772,8 +54770,6 @@ components:
                 - input_tokens
                 - output_tokens
                 - total_tokens
-                - risky_message_tokens
-                - tool_message_tokens
                 - bucket_time_unix_nano
         TumDetailsResult:
             type: object
@@ -54811,14 +54807,6 @@ components:
                     type: integer
                     description: Billed output tokens
                     format: int64
-                risky_message_tokens:
-                    type: integer
-                    description: Tokens in messages carrying at least one active risk finding
-                    format: int64
-                tool_message_tokens:
-                    type: integer
-                    description: Tokens in tool-call messages
-                    format: int64
                 total_tokens:
                     type: integer
                     description: Billed tokens under management
@@ -54828,8 +54816,6 @@ components:
                 - input_tokens
                 - output_tokens
                 - total_tokens
-                - risky_message_tokens
-                - tool_message_tokens
         TunneledMcpConnection:
             type: object
             properties:

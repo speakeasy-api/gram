@@ -5094,7 +5094,7 @@ examples:
         application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-26T10:00:00Z"}
       responses:
         "200":
-          application/json: {"breakdowns": [{"key": "<key>", "rows": []}], "interval_seconds": 788271, "points": [], "totals": {"input_tokens": 970099, "output_tokens": 419661, "risky_message_tokens": 850464, "tool_message_tokens": 673665, "total_tokens": 804391}}
+          application/json: {"breakdowns": [{"key": "<key>", "rows": []}], "interval_seconds": 788271, "points": [], "totals": {"input_tokens": 970099, "output_tokens": 419661, "total_tokens": 804391}}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

@@ -22,7 +22,9 @@ func NewScanner(logger *slog.Logger, evaluate Evaluator) *Scanner {
 	}
 }
 
-func (s *Scanner) Scan(ctx context.Context, orgID, projectID, prompt string, cfg Config, msg judgemessage.Message) []scanners.Finding {
+// Scan evaluates one message; userID is the scanned chat's owner (empty when
+// unattributed), threaded onto the judge's completion telemetry.
+func (s *Scanner) Scan(ctx context.Context, orgID, projectID, userID, prompt string, cfg Config, msg judgemessage.Message) []scanners.Finding {
 	if s == nil || s.evaluate == nil || strings.TrimSpace(prompt) == "" {
 		return FindingsFromEvaluation(cfg, nil, nil, true)
 	}
@@ -30,6 +32,7 @@ func (s *Scanner) Scan(ctx context.Context, orgID, projectID, prompt string, cfg
 	verdict, err := s.evaluate(ctx, Input{
 		OrgID:     orgID,
 		ProjectID: projectID,
+		UserID:    userID,
 		Prompt:    prompt,
 		Message:   msg,
 		Config:    cfg,

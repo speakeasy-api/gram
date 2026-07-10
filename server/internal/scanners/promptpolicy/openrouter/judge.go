@@ -211,9 +211,10 @@ func (j *Judge) call(ctx context.Context, in promptpolicy.Input) (judgeCallResul
 		SystemPrompt:   SystemPrompt,
 		Prompt:         judgePrompt,
 		Temperature:    &temperature,
-		UsageSource:    billing.ModelUsageSourceGram,
-		UserID:         "",
+		UsageSource:    billing.ModelUsageSourceRiskAnalysis,
+		UserID:         in.UserID,
 		ExternalUserID: "",
+		UserEmail:      "",
 		HTTPMetadata:   nil,
 		JSONSchema:     &jsonSchema,
 	})

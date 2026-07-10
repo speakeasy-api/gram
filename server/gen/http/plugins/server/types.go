@@ -227,6 +227,12 @@ type GetPublishStatusResponseBody struct {
 	// Present once a marketplace token has been minted, which happens
 	// automatically on the first publish.
 	MarketplaceURL *string `form:"marketplace_url,omitempty" json:"marketplace_url,omitempty" xml:"marketplace_url,omitempty"`
+	// Slug of the generated Claude Code observability plugin in the published
+	// marketplace — install as `<slug>@<marketplace name>`. Present when connected.
+	ClaudeObservabilityPlugin *string `form:"claude_observability_plugin,omitempty" json:"claude_observability_plugin,omitempty" xml:"claude_observability_plugin,omitempty"`
+	// Slug of the generated Codex observability plugin in the published
+	// marketplace — install as `<slug>@<marketplace name>`. Present when connected.
+	CodexObservabilityPlugin *string `form:"codex_observability_plugin,omitempty" json:"codex_observability_plugin,omitempty" xml:"codex_observability_plugin,omitempty"`
 	// Whether the repo has at least one directly-added GitHub collaborator
 	// (excludes access granted via org membership/teams). Absent when the project
 	// is not connected.
@@ -3484,16 +3490,18 @@ func NewSetPluginAssignmentsResponseBody(res *plugins.SetPluginAssignmentsResult
 // result of the "getPublishStatus" endpoint of the "plugins" service.
 func NewGetPublishStatusResponseBody(res *plugins.PublishStatusResult) *GetPublishStatusResponseBody {
 	body := &GetPublishStatusResponseBody{
-		Configured:       res.Configured,
-		Connected:        res.Connected,
-		RepoOwner:        res.RepoOwner,
-		RepoName:         res.RepoName,
-		RepoURL:          res.RepoURL,
-		MarketplaceURL:   res.MarketplaceURL,
-		HasCollaborators: res.HasCollaborators,
-		UpToDate:         res.UpToDate,
-		LastPublishedAt:  res.LastPublishedAt,
-		LiveVersion:      res.LiveVersion,
+		Configured:                res.Configured,
+		Connected:                 res.Connected,
+		RepoOwner:                 res.RepoOwner,
+		RepoName:                  res.RepoName,
+		RepoURL:                   res.RepoURL,
+		MarketplaceURL:            res.MarketplaceURL,
+		ClaudeObservabilityPlugin: res.ClaudeObservabilityPlugin,
+		CodexObservabilityPlugin:  res.CodexObservabilityPlugin,
+		HasCollaborators:          res.HasCollaborators,
+		UpToDate:                  res.UpToDate,
+		LastPublishedAt:           res.LastPublishedAt,
+		LiveVersion:               res.LiveVersion,
 	}
 	return body
 }

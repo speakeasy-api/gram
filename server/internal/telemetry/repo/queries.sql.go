@@ -54,12 +54,28 @@ func withAccountTypeFilter(sb squirrel.SelectBuilder, accountType string) squirr
 
 // SearchUsers powers employee enrollment lists, so internal users are grouped by
 // email first to collapse rows that mix email-only and opaque user.id identity.
+// Rows that carry a user_id but no email resolve an email through the
+// known_emails join (see SearchUsers) so a person's email-less rows (e.g. tool
+// calls attributed by id only) merge into their email-keyed summary instead of
+// splitting into a second, token-less one.
 func searchUsersGroupExpr(groupBy string) string {
 	if groupBy == "external_user_id" {
 		return userIdentifierExpr("external_user_id")
 	}
-	return "if(telemetry_logs.user_email != '', telemetry_logs.user_email, telemetry_logs.user_id)"
+	return "multiIf(" +
+		"telemetry_logs.user_email != '', telemetry_logs.user_email, " +
+		"known_emails.known_email != '', known_emails.known_email, " +
+		"telemetry_logs.user_id)"
 }
+
+// searchUsersKnownEmailsJoin maps each user_id to an email observed alongside it
+// anywhere in the search window, for use as a LEFT JOIN on telemetry_logs. It
+// backs the email fallback in searchUsersGroupExpr and takes three args:
+// project id, time start, time end.
+const searchUsersKnownEmailsJoin = "(SELECT user_id, any(user_email) AS known_email" +
+	" FROM telemetry_logs" +
+	" WHERE gram_project_id = ? AND time_unix_nano >= ? AND time_unix_nano <= ? AND user_id != '' AND user_email != ''" +
+	" GROUP BY user_id) AS known_emails ON telemetry_logs.user_id = known_emails.user_id"
 
 // totalTokensExpr is a grouped-aggregate expression that yields a reliable total
 // token count. AI-coding providers like Claude Code report
@@ -1163,7 +1179,7 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ChatSum
 	sb = sb.GroupBy("gram_chat_id")
 
 	// HAVING clause for cursor pagination with tuple comparison for tie-breaking
-	sb = withHavingTuplePagination(sb, arg.Cursor, arg.SortOrder, arg.GramProjectID, "gram_chat_id", "min(time_unix_nano)")
+	sb = withHavingTuplePagination(sb, arg.Cursor, arg.SortOrder, arg.GramProjectID, "gram_chat_id", "min(time_unix_nano)", "", nil)
 
 	// Ordering - include gram_chat_id as secondary for stable ordering
 	sb = withOrdering(sb, arg.SortOrder, "start_time_unix_nano", "gram_chat_id")
@@ -1568,12 +1584,29 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 
 		// Distinct account types observed (powers the employees personal-account indicator)
 		"groupUniqArrayIf(account_type, account_type != '') AS account_types",
+
+		// Raw user_id values folded into this summary. The group key is email-first,
+		// so callers joining against user_id-keyed stores (user_accounts, role
+		// assignments) need these to find the summary's underlying ids.
+		"groupUniqArrayIf(telemetry_logs.user_id, telemetry_logs.user_id != '') AS raw_user_ids",
 	).
 		From("telemetry_logs").
 		Where("gram_project_id = ?", arg.GramProjectID).
 		Where("time_unix_nano >= ?", arg.TimeStart).
 		Where("time_unix_nano <= ?", arg.TimeEnd).
 		Where(groupExpr + " != ''")
+
+	// Internal grouping keys on email, so rows missing user_email look up the
+	// email observed alongside their user_id elsewhere in the window. Without
+	// this, a person's email-less rows surface as a separate summary keyed by
+	// their raw user_id that carries none of their token usage.
+	var joinClause string
+	var joinArgs []any
+	if arg.GroupBy != "external_user_id" {
+		joinClause = searchUsersKnownEmailsJoin
+		joinArgs = []any{arg.GramProjectID, arg.TimeStart, arg.TimeEnd}
+		sb = sb.LeftJoin(joinClause, joinArgs...)
+	}
 
 	// Optional deployment filter
 	if arg.GramDeploymentID != "" {
@@ -1603,7 +1636,7 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 	sb = sb.GroupBy(groupExpr)
 
 	// Cursor pagination using last_seen + group column for stable ordering
-	sb = withHavingTuplePagination(sb, arg.Cursor, arg.SortOrder, arg.GramProjectID, groupExpr, "max(time_unix_nano)")
+	sb = withHavingTuplePagination(sb, arg.Cursor, arg.SortOrder, arg.GramProjectID, groupExpr, "max(time_unix_nano)", joinClause, joinArgs)
 
 	// Order by last_seen with group column as tie-breaker
 	sb = withOrdering(sb, arg.SortOrder, "last_seen_unix_nano", "user_id")
@@ -5296,15 +5329,44 @@ func (q *Queries) GetTumBreakdownTotalsByDay(ctx context.Context, arg GetTokensU
 	return buckets, nil
 }
 
+// riskAnalysisRowPredicate classifies a billed row as the platform's own
+// risk-policy analysis inference — the metered unit of the enterprise TUM
+// contracts. Declared rows carry the dedicated source
+// (billing.ModelUsageSourceRiskAnalysis); the second clause grandfathers
+// rows emitted before that source existed, fingerprinted as internal
+// inference: gram/” source with the nil chat id (background workers run
+// completions outside any stored chat). Other internal nil-chat inference
+// (title generation, chat resolutions, memory) rides along under the same
+// clause — a deliberate simplification, it is a rounding error next to the
+// judges and is platform-side analysis either way.
+const riskAnalysisRowPredicate = "(hook_source = 'risk-analysis' OR (hook_source IN ('gram', '') AND chat_id = '00000000-0000-0000-0000-000000000000'))"
+
+// tumBreakdownDim describes one billing-page breakdown dimension: the
+// grouping expression over tum_breakdown_summaries, plus an optional row
+// filter for dimensions that slice the billed population (the two model
+// sections) rather than partition it by a column.
+type tumBreakdownDim struct {
+	expr   string
+	filter string
+}
+
 // tumBreakdownDimExprs maps the billing page's breakdown dimensions to
 // their tum_breakdown_summaries expressions. Roles are multi-valued: a
 // session's tokens count once under each held role, so role rows overlap.
-var tumBreakdownDimExprs = map[string]string{
-	"hook_source":   "hook_source",
-	"model":         "model",
-	"email":         "user_email",
-	"division_name": "division_name",
-	"role":          "arrayJoin(roles)",
+// The model dimension is split in two: risk_analysis_model covers the
+// platform's scanning inference and completion_model covers user-facing
+// completion surfaces — together they partition the billed population.
+var tumBreakdownDimExprs = map[string]tumBreakdownDim{
+	"hook_source":         {expr: "hook_source", filter: ""},
+	"risk_analysis_model": {expr: "model", filter: riskAnalysisRowPredicate},
+	"completion_model":    {expr: "model", filter: "NOT " + riskAnalysisRowPredicate},
+	// email is plumbed but NOT in the service's tumBreakdownDims: a per-user
+	// cut of billed usage (which now includes scanned-user attribution of
+	// risk-analysis inference) is deliberately not exposed on the billing
+	// page yet.
+	"email":         {expr: "user_email", filter: ""},
+	"division_name": {expr: "division_name", filter: ""},
+	"role":          {expr: "arrayJoin(roles)", filter: ""},
 }
 
 // TumBreakdownDimDayBucket is one (UTC day, dimension value) slice of
@@ -5325,18 +5387,21 @@ func (q *Queries) GetTumBreakdownDimByDay(ctx context.Context, arg GetTokensUnde
 	if len(arg.ProjectIDs) == 0 {
 		return nil, nil
 	}
-	expr, ok := tumBreakdownDimExprs[dimension]
+	dim, ok := tumBreakdownDimExprs[dimension]
 	if !ok {
 		return nil, fmt.Errorf("unsupported tum breakdown dimension: %q", dimension)
 	}
 
 	sb, err := tumBreakdownBase(sq.Select(
 		"time_bucket",
-		expr+" AS dim_value",
+		dim.expr+" AS dim_value",
 		"sum(total_tokens) AS tokens",
 	), arg)
 	if err != nil {
 		return nil, err
+	}
+	if dim.filter != "" {
+		sb = sb.Where(dim.filter)
 	}
 	sb = sb.GroupBy("time_bucket", "dim_value").OrderBy("time_bucket", "dim_value")
 

@@ -39,6 +39,15 @@ var (
 	ModelUsageSourceElements   = registerModelUsageSource("elements")
 	ModelUsageSourceGram       = registerModelUsageSource("gram")
 	ModelUsageSourceSlack      = registerModelUsageSource("slack")
+
+	// ModelUsageSourceRiskAnalysis tags the platform's own risk-policy
+	// analysis inference (risk judge, prompt-injection scanner). Scanning is
+	// the metered unit of the enterprise TUM contracts — the act of securing
+	// observed agent traffic — so this source is registered (billed) even
+	// though no end user initiates the completions. The billing page reports
+	// it as its own "Risk policy analysis model" section, separate from
+	// user-facing completion surfaces.
+	ModelUsageSourceRiskAnalysis = registerModelUsageSource("risk-analysis")
 )
 
 // ModelUsageSourceAssistants tags assistants completions in telemetry but is

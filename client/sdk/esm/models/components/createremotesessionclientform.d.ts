@@ -1,0 +1,74 @@
+import * as z from "zod/v4-mini";
+import { ClosedEnum } from "../../types/enums.js";
+/**
+ * How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
+ */
+export declare const CreateRemoteSessionClientFormTokenEndpointAuthMethod: {
+  readonly ClientSecretBasic: "client_secret_basic";
+  readonly ClientSecretPost: "client_secret_post";
+  readonly None: "none";
+};
+/**
+ * How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
+ */
+export type CreateRemoteSessionClientFormTokenEndpointAuthMethod = ClosedEnum<
+  typeof CreateRemoteSessionClientFormTokenEndpointAuthMethod
+>;
+/**
+ * Form for creating a remote_session_client. Caller supplies client_id (and optional client_secret) obtained out-of-band from the upstream issuer.
+ */
+export type CreateRemoteSessionClientForm = {
+  /**
+   * Optional upstream OAuth audience to send on the authorize redirect and token exchange.
+   */
+  audience?: string | undefined;
+  /**
+   * client_id supplied by the caller.
+   */
+  clientId: string;
+  /**
+   * client_secret supplied by the caller. Gram encrypts before persisting.
+   */
+  clientSecret?: string | undefined;
+  /**
+   * The owning remote_session_issuer id.
+   */
+  remoteSessionIssuerId: string;
+  /**
+   * Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.
+   */
+  scope?: Array<string> | undefined;
+  /**
+   * How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
+   */
+  tokenEndpointAuthMethod?:
+    | CreateRemoteSessionClientFormTokenEndpointAuthMethod
+    | undefined;
+  /**
+   * The user_session_issuers to attach this client to via the join table. Omit or pass an empty array to create a standalone client with no attachments.
+   */
+  userSessionIssuerIds?: Array<string> | undefined;
+};
+/** @internal */
+export declare const CreateRemoteSessionClientFormTokenEndpointAuthMethod$outboundSchema: z.ZodMiniEnum<
+  typeof CreateRemoteSessionClientFormTokenEndpointAuthMethod
+>;
+/** @internal */
+export type CreateRemoteSessionClientForm$Outbound = {
+  audience?: string | undefined;
+  client_id: string;
+  client_secret?: string | undefined;
+  remote_session_issuer_id: string;
+  scope?: Array<string> | undefined;
+  token_endpoint_auth_method?: string | undefined;
+  user_session_issuer_ids?: Array<string> | undefined;
+};
+/** @internal */
+export declare const CreateRemoteSessionClientForm$outboundSchema: z.ZodMiniType<
+  CreateRemoteSessionClientForm$Outbound,
+  CreateRemoteSessionClientForm
+>;
+export declare function createRemoteSessionClientFormToJSON(
+  createRemoteSessionClientForm: CreateRemoteSessionClientForm,
+): string;
+//# sourceMappingURL=createremotesessionclientform.d.ts.map

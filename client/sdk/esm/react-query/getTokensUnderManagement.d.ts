@@ -1,0 +1,107 @@
+import {
+  InvalidateQueryFilters,
+  QueryClient,
+  UseQueryResult,
+  UseSuspenseQueryResult,
+} from "@tanstack/react-query";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetTokensUnderManagementRequest,
+  GetTokensUnderManagementSecurity,
+} from "../models/operations/gettokensundermanagement.js";
+import {
+  QueryHookOptions,
+  SuspenseQueryHookOptions,
+  TupleToPrefixes,
+} from "./_types.js";
+import {
+  buildGetTokensUnderManagementQuery,
+  GetTokensUnderManagementQueryData,
+  prefetchGetTokensUnderManagement,
+  queryKeyGetTokensUnderManagement,
+} from "./getTokensUnderManagement.core.js";
+export {
+  buildGetTokensUnderManagementQuery,
+  type GetTokensUnderManagementQueryData,
+  prefetchGetTokensUnderManagement,
+  queryKeyGetTokensUnderManagement,
+};
+export type GetTokensUnderManagementQueryError =
+  | ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
+/**
+ * getTokensUnderManagement usage
+ *
+ * @remarks
+ * Get tokens under management for the active billing cycle alongside the contracted terms
+ */
+export declare function useGetTokensUnderManagement(
+  request?: GetTokensUnderManagementRequest | undefined,
+  security?: GetTokensUnderManagementSecurity | undefined,
+  options?: QueryHookOptions<
+    GetTokensUnderManagementQueryData,
+    GetTokensUnderManagementQueryError
+  >,
+): UseQueryResult<
+  GetTokensUnderManagementQueryData,
+  GetTokensUnderManagementQueryError
+>;
+/**
+ * getTokensUnderManagement usage
+ *
+ * @remarks
+ * Get tokens under management for the active billing cycle alongside the contracted terms
+ */
+export declare function useGetTokensUnderManagementSuspense(
+  request?: GetTokensUnderManagementRequest | undefined,
+  security?: GetTokensUnderManagementSecurity | undefined,
+  options?: SuspenseQueryHookOptions<
+    GetTokensUnderManagementQueryData,
+    GetTokensUnderManagementQueryError
+  >,
+): UseSuspenseQueryResult<
+  GetTokensUnderManagementQueryData,
+  GetTokensUnderManagementQueryError
+>;
+export declare function setGetTokensUnderManagementData(
+  client: QueryClient,
+  queryKeyBase: [
+    parameters: {
+      gramSession?: string | undefined;
+    },
+  ],
+  data: GetTokensUnderManagementQueryData,
+): GetTokensUnderManagementQueryData | undefined;
+export declare function invalidateGetTokensUnderManagement(
+  client: QueryClient,
+  queryKeyBase: TupleToPrefixes<
+    [
+      parameters: {
+        gramSession?: string | undefined;
+      },
+    ]
+  >,
+  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
+): Promise<void>;
+export declare function invalidateAllGetTokensUnderManagement(
+  client: QueryClient,
+  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
+): Promise<void>;
+//# sourceMappingURL=getTokensUnderManagement.d.ts.map

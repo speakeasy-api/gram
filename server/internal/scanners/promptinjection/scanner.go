@@ -24,6 +24,10 @@ type Request struct {
 	Messages  []judgemessage.Message
 	OrgID     string
 	ProjectID string
+	// UserIDs is parallel to Messages: the scanned chat's owner per message
+	// (empty string = unattributed). Rides on the judge's completion
+	// telemetry so scanning volume attributes to whose traffic was analyzed.
+	UserIDs []string
 }
 
 type Result struct {
@@ -62,7 +66,7 @@ func (s *Scanner) l1Active(l1Enabled bool) bool {
 	return l1Enabled
 }
 
-func (s *Scanner) Scan(ctx context.Context, text, orgID, projectID string, msg judgemessage.Message, l1Enabled bool) ([]scanners.Finding, error) {
+func (s *Scanner) Scan(ctx context.Context, text, orgID, projectID, userID string, msg judgemessage.Message, l1Enabled bool) ([]scanners.Finding, error) {
 	if text == "" && !msg.HasContent() {
 		return nil, nil
 	}
@@ -73,7 +77,7 @@ func (s *Scanner) Scan(ctx context.Context, text, orgID, projectID string, msg j
 		return findings, nil
 	}
 
-	results, err := s.classifier(ctx, Request{Messages: []judgemessage.Message{msg}, OrgID: orgID, ProjectID: projectID})
+	results, err := s.classifier(ctx, Request{Messages: []judgemessage.Message{msg}, OrgID: orgID, ProjectID: projectID, UserIDs: []string{userID}})
 	if err != nil {
 		s.logger.WarnContext(ctx, "pi L1 scan failed; returning L0 findings only",
 			attr.SlogError(err),
@@ -91,7 +95,7 @@ func (s *Scanner) Scan(ctx context.Context, text, orgID, projectID string, msg j
 	return findings, nil
 }
 
-func (s *Scanner) ScanBatch(ctx context.Context, texts []string, orgID, projectID string, msgs []judgemessage.Message, l1Enabled bool) ([][]scanners.Finding, error) {
+func (s *Scanner) ScanBatch(ctx context.Context, texts []string, orgID, projectID string, userIDs []string, msgs []judgemessage.Message, l1Enabled bool) ([][]scanners.Finding, error) {
 	out := make([][]scanners.Finding, len(texts))
 	for i, t := range texts {
 		if t == "" {
@@ -104,7 +108,7 @@ func (s *Scanner) ScanBatch(ctx context.Context, texts []string, orgID, projectI
 		return out, nil
 	}
 
-	results, err := s.classifier(ctx, Request{Messages: msgs, OrgID: orgID, ProjectID: projectID})
+	results, err := s.classifier(ctx, Request{Messages: msgs, OrgID: orgID, ProjectID: projectID, UserIDs: userIDs})
 	if err != nil {
 		s.logger.WarnContext(ctx, "pi L1 batch scan failed; returning L0 findings only",
 			attr.SlogError(err),

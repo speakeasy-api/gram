@@ -1,4 +1,4 @@
-h1:GG5OzyR1DMRdmTHKjfN7yboTxK1EKO4T1DNULsEkm/8=
+h1:rhBBnLnQQRLnMvp0PmOq8r9BVtpMIwkl9g3KWRUc8g4=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -258,3 +258,4 @@ h1:GG5OzyR1DMRdmTHKjfN7yboTxK1EKO4T1DNULsEkm/8=
 20260709213047_plugin-connections-split-fingerprint.sql h1:zwCQg6wRiUD27gtUHufcNFPPHRwzsL0XDM1gDGl60o0=
 20260709233126_openrouter-api-keys-key-type.sql h1:StwicFRLrgGzCpkGnK+0ta9YTOwZP7vN9yOVJIvoDhE=
 20260710091948_risk-policies-add-score.sql h1:8HQa1NIJgn9NC86OtcVbwyPoatbngUtlfHzv2+ugHs4=
+20260710142212_plugin-connections-hooks-config.sql h1:i5v1a+00vugROm0s9hoPjea9F9Mx2QvGj2gN77nhQWo=
