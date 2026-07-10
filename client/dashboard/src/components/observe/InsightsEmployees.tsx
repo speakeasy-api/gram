@@ -9,6 +9,7 @@ import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { useInsightsState } from "@/components/insights-context";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
+import { Heading } from "@/components/ui/heading";
 import { IdentityCell } from "@/components/ui/identity-cell";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SimpleTooltip } from "@/components/ui/tooltip";
@@ -368,9 +369,7 @@ export function InsightsEmployeesContent(): JSX.Element {
           <div className="flex flex-col gap-4">
             <div className="flex min-w-0 flex-col gap-1">
               <div className="flex items-center gap-2">
-                <h1 className="font-display text-2xl font-thin tracking-[-0.015em]">
-                  Employee Enrollment
-                </h1>
+                <Heading variant="h1">Employee Enrollment</Heading>
                 <ReleaseStageBadge stage="preview" />
               </div>
               <p className="text-muted-foreground text-sm">

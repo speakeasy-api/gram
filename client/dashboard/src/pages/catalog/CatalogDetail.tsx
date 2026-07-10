@@ -1,6 +1,7 @@
 import { Page } from "@/components/page-layout";
 import { Card } from "@/components/ui/card";
 import { DetailList } from "@/components/ui/detail-list";
+import { Heading } from "@/components/ui/heading";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { ManualSetupBadge } from "@/pages/catalog/ManualSetupBadge";
@@ -239,9 +240,9 @@ export default function CatalogDetail(): JSX.Element {
                   align="center"
                   className="mb-2"
                 >
-                  <h1 className="font-display text-2xl font-thin tracking-[-0.015em]">
+                  <Heading variant="h1" className="normal-case">
                     {displayName}
-                  </h1>
+                  </Heading>
                   {isOfficial && <Badge>Official</Badge>}
                   {versionMeta?.isLatest && (
                     <Badge variant="neutral">Latest</Badge>

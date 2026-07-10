@@ -1,7 +1,7 @@
 import { Page } from "@/components/page-layout";
+import { SettingsLayout } from "@/components/layouts/settings-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/heading";
-import { Type } from "@/components/ui/type";
 import {
   useIsPlatformAdmin,
   useOrganization,
@@ -24,39 +24,38 @@ export default function Settings(): JSX.Element {
       </Page.Header>
       <Page.Body>
         <RequireScope scope="project:write" level="page">
-          <Heading variant="h4" className="mb-2">
-            Project Settings
-          </Heading>
-          <Type muted small className="mb-6">
-            Manage your project configuration and perform administrative
-            actions.
-          </Type>
-          <div>
-            <SettingsDangerZone />
-          </div>
+          <SettingsLayout>
+            <SettingsLayout.Header
+              title="Project Settings"
+              subtitle="Manage your project configuration and perform administrative actions."
+            />
+            <SettingsLayout.Body>
+              <SettingsDangerZone />
 
-          {isAdmin && (
-            <div className="border-destructive-softest bg-destructive-softest mt-8 border p-4">
-              <Stack
-                direction="horizontal"
-                align="center"
-                gap={2}
-                className="mb-3"
-              >
-                <ShieldAlert className="text-default-destructive h-5 w-5" />
-                <Heading variant="h4" className="text-default-destructive">
-                  Platform Admin Only
-                </Heading>
-              </Stack>
-              <dl className="mb-4 grid grid-cols-[max-content_auto] gap-x-6 gap-y-2">
-                <dt className="text-end">Organization ID</dt>
-                <dd className="font-mono text-sm">{organization.id}</dd>
-                <dt className="text-end">Project ID</dt>
-                <dd className="font-mono text-sm">{project.id}</dd>
-              </dl>
-              <RegistryCacheSection />
-            </div>
-          )}
+              {isAdmin && (
+                <div className="border-destructive-softest bg-destructive-softest mt-8 border p-4">
+                  <Stack
+                    direction="horizontal"
+                    align="center"
+                    gap={2}
+                    className="mb-3"
+                  >
+                    <ShieldAlert className="text-default-destructive h-5 w-5" />
+                    <Heading variant="h4" className="text-default-destructive">
+                      Platform Admin Only
+                    </Heading>
+                  </Stack>
+                  <dl className="mb-4 grid grid-cols-[max-content_auto] gap-x-6 gap-y-2">
+                    <dt className="text-end">Organization ID</dt>
+                    <dd className="font-mono text-sm">{organization.id}</dd>
+                    <dt className="text-end">Project ID</dt>
+                    <dd className="font-mono text-sm">{project.id}</dd>
+                  </dl>
+                  <RegistryCacheSection />
+                </div>
+              )}
+            </SettingsLayout.Body>
+          </SettingsLayout>
         </RequireScope>
       </Page.Body>
     </Page>

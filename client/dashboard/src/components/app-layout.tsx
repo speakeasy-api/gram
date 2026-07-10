@@ -7,6 +7,7 @@ import { useSdkClient } from "@/contexts/Sdk.tsx";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { Button } from "@/components/ui/moonshine";
+import { Heading } from "@/components/ui/heading";
 import { RefreshCw, ShieldAlert } from "lucide-react";
 import { useCallback, useMemo } from "react";
 import { Navigate, Outlet, useLocation } from "react-router";
@@ -153,9 +154,9 @@ const MembershipSyncGuard = ({ children }: { children: React.ReactNode }) => {
         <div className="bg-muted flex h-12 w-12 items-center justify-center rounded-full">
           <RefreshCw className="text-muted-foreground h-5 w-5" />
         </div>
-        <h2 className="font-display text-2xl font-thin tracking-[-0.015em]">
+        <Heading variant="h2" className="normal-case">
           Organization sync required
-        </h2>
+        </Heading>
         <p className="text-muted-foreground text-sm">
           Your organization membership needs to be re-synchronized. Please log
           out and log back in to refresh your session.

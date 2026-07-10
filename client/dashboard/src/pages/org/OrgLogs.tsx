@@ -126,7 +126,7 @@ function OrgLogsInner() {
 
   return (
     <>
-      <Heading variant="h4" className="mb-2">
+      <Heading variant="h1" className="mb-2">
         Logs
       </Heading>
       <Type muted small className="mb-6">

@@ -34,11 +34,26 @@ import {
   type OptionsById,
 } from "@/components/filters";
 import { Page } from "@/components/page-layout";
+import { Heading } from "@/components/ui/heading";
 import { type DateRangePreset, getPresetRange } from "@gram-ai/elements";
 import { isValidPreset } from "@/components/observe/observeFilterUtils";
 
 type SortField = "chronological" | "messageCount";
 type SortOrder = "asc" | "desc";
+
+// Shared with both the logging-disabled empty state and the populated view
+// below so the page title only has one copy to update.
+function AgentSessionsHeading() {
+  return (
+    <div className="flex min-w-0 flex-col gap-1">
+      <Heading variant="h1">Agent Sessions</Heading>
+      <p className="text-muted-foreground text-sm">
+        View and debug individual agent sessions captured for organization
+        members in this project
+      </p>
+    </div>
+  );
+}
 
 function toApiSortBy(field: SortField): SortBy {
   switch (field) {
@@ -644,15 +659,7 @@ function AgentSessionsPageContent({
   if (isLogsDisabled) {
     return (
       <div className="min-h-0 w-full flex-1 space-y-6 overflow-y-auto p-8 pb-24">
-        <div className="flex min-w-0 flex-col gap-1">
-          <h1 className="font-display text-2xl font-thin tracking-[-0.015em]">
-            Agent Sessions
-          </h1>
-          <p className="text-muted-foreground text-sm">
-            View and debug individual agent sessions captured for organization
-            members in this project
-          </p>
-        </div>
+        <AgentSessionsHeading />
         <div className="relative flex-1">
           <div
             className="pointer-events-none h-full select-none"
@@ -670,15 +677,7 @@ function AgentSessionsPageContent({
     <>
       <div className="flex min-h-0 w-full flex-1 flex-col">
         <div className="shrink-0 space-y-4 px-8 py-4">
-          <div className="flex min-w-0 flex-col gap-1">
-            <h1 className="font-display text-2xl font-thin tracking-[-0.015em]">
-              Agent Sessions
-            </h1>
-            <p className="text-muted-foreground text-sm">
-              View and debug individual agent sessions captured for organization
-              members in this project
-            </p>
-          </div>
+          <AgentSessionsHeading />
           {hasAssistantFilter && (
             <Badge
               variant="neutral"

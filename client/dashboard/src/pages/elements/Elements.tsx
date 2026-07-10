@@ -4,6 +4,7 @@ import {
 } from "@/components/ai-elements/code-block";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import { Heading } from "@/components/ui/heading";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -779,9 +780,9 @@ function ChatElementsInner() {
                   <div className="bg-muted mb-4 flex h-16 w-16 items-center justify-center rounded-full">
                     <Server className="text-muted-foreground h-8 w-8" />
                   </div>
-                  <h3 className="font-display mb-2 text-2xl font-thin tracking-[-0.015em]">
+                  <Heading variant="h3" className="mb-2">
                     Coming Soon
-                  </h3>
+                  </Heading>
                   <p className="text-muted-foreground max-w-md">
                     Hosted Elements will allow you to deploy chat experiences
                     without any code changes. Stay tuned!

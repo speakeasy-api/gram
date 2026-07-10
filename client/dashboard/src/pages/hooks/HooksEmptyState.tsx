@@ -1,4 +1,5 @@
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
+import { Heading } from "@/components/ui/heading";
 import { cn } from "@/lib/utils";
 import { Workflow } from "lucide-react";
 import { useState } from "react";
@@ -86,9 +87,9 @@ export function HooksEmptyState({
               <Workflow className="text-muted-foreground size-8" />
             </div>
             <div>
-              <h2 className="font-display mb-2 text-2xl font-thin tracking-[-0.015em]">
+              <Heading variant="h2" className="mb-2 normal-case">
                 {title}
-              </h2>
+              </Heading>
               <p className="text-muted-foreground mx-auto max-w-md text-sm">
                 {subtitle}
               </p>

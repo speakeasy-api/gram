@@ -298,7 +298,7 @@ function OrgIdentityInner() {
 
   return (
     <div className="flex flex-col gap-6">
-      <Heading variant="h4">Identity</Heading>
+      <Heading variant="h1">Identity</Heading>
       <div className="flex flex-col gap-6">
         <IdentitySection
           sectionId="sso"

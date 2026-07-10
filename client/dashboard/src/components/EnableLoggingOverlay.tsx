@@ -1,6 +1,7 @@
 import { RequireScope } from "@/components/require-scope";
 import { useState } from "react";
 import { Button } from "@/components/ui/moonshine";
+import { Heading } from "@/components/ui/heading";
 import { Activity, Info } from "lucide-react";
 import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
 import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet.js";
@@ -51,9 +52,9 @@ export function EnableLoggingOverlay({
           <Activity className="text-muted-foreground size-7" />
         </div>
         <div>
-          <h3 className="font-display mb-1 text-2xl font-thin tracking-[-0.015em]">
+          <Heading variant="h3" className="mb-1">
             Enable Logging
-          </h3>
+          </Heading>
           <p className="text-muted-foreground text-sm">
             Turn on logging to start collecting telemetry data for your
             organization. This will record tool call traces, agent sessions, and

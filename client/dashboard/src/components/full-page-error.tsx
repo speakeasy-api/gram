@@ -1,6 +1,7 @@
 import { GramLogo } from "@/components/gram-logo/index";
 import { toError } from "@/lib/errors";
 import { Button, Stack } from "@/components/ui/moonshine";
+import { Heading } from "@/components/ui/heading";
 import { CircleAlert, RotateCcw } from "lucide-react";
 
 interface FullPageErrorProps {
@@ -19,9 +20,9 @@ export function FullPageError({
         <Stack gap={3} align="center">
           <Stack direction="horizontal" gap={2} align="center">
             <CircleAlert className="text-destructive h-5 w-5" />
-            <h2 className="font-display text-2xl font-thin tracking-[-0.015em]">
+            <Heading variant="h2" className="normal-case">
               Something went wrong
-            </h2>
+            </Heading>
           </Stack>
 
           <p className="text-muted-foreground text-sm">

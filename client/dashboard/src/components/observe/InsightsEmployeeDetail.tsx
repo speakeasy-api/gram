@@ -1,5 +1,6 @@
 import { Alert, Badge } from "@/components/ui/moonshine";
 import { DynamicIcon, type IconName } from "@/components/ui/dynamic-icon";
+import { Heading } from "@/components/ui/heading";
 import {
   ArrowRight,
   Boxes,
@@ -447,9 +448,9 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
                 </AvatarFallback>
               </Avatar>
               <div className="min-w-0">
-                <h1 className="font-display truncate text-2xl font-thin tracking-[-0.015em]">
+                <Heading variant="h1" className="truncate normal-case">
                   {displayName}
-                </h1>
+                </Heading>
                 <p className="text-muted-foreground truncate text-sm">
                   {displayEmail}
                 </p>

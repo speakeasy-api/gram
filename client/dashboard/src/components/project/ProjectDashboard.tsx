@@ -4,6 +4,7 @@ import { RankedBar } from "@/components/chart/RankedBar";
 import { Page } from "@/components/page-layout";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { DashboardCard } from "@/components/ui/dashboard-card";
+import { Heading } from "@/components/ui/heading";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSlugs } from "@/contexts/Sdk";
 import { useOrgRoutes, useRoutes } from "@/routes";
@@ -726,9 +727,7 @@ function LoggingDisabledBanner({ settingsHref }: { settingsHref: string }) {
     <Card>
       <Card.Content className="flex flex-col items-start gap-6">
         <div className="space-y-1">
-          <h3 className="font-display text-2xl font-thin tracking-[-0.015em]">
-            Logging is disabled
-          </h3>
+          <Heading variant="h3">Logging is disabled</Heading>
           <p className="text-muted-foreground text-sm">
             Enable logging to see an overview of your project metrics, top
             activity, and session data.

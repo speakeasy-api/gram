@@ -7,6 +7,7 @@ import { Timeseries } from "@/components/chart/Timeseries";
 import { RankedBar, type RankedBarItem } from "@/components/chart/RankedBar";
 import { buildAgentTokenTimeSeries } from "@/components/observe/agentTokenTimeSeriesChartData";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
+import { Heading } from "@/components/ui/heading";
 import { formatCompact } from "@/lib/format";
 import { MetricCard } from "@/components/chart/MetricCard";
 import { InsightsConfig } from "@/components/insights-dock";
@@ -449,9 +450,7 @@ export function InsightsAgentsContent(): JSX.Element {
           <div className="flex flex-col gap-4">
             <div className="flex min-w-0 flex-col gap-1">
               <div className="flex items-center gap-2">
-                <h1 className="font-display text-2xl font-thin tracking-[-0.015em]">
-                  AI Agent Costs
-                </h1>
+                <Heading variant="h1">AI Agent Costs</Heading>
                 <ReleaseStageBadge stage="preview" />
               </div>
               <p className="text-muted-foreground text-sm">

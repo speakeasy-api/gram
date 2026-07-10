@@ -1,7 +1,7 @@
 import { Page } from "@/components/page-layout";
+import { ListLayout } from "@/components/layouts/list-layout";
 import { Dialog } from "@/components/ui/dialog";
 import { Field, FieldLabel } from "@/components/ui/field";
-import { Heading } from "@/components/ui/heading";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { SearchBar } from "@/components/ui/search-bar";
@@ -186,64 +186,59 @@ function OrgApiKeysInner() {
 
   return (
     <>
-      <Heading variant="h4" className="mb-2">
-        API Keys
-      </Heading>
-      <Type muted small className="mb-6">
-        Create and manage API keys to authenticate programmatic access to
-        platform services, including MCP service deployments, tool management,
-        and other connections.
-      </Type>
-      <Stack
-        direction="horizontal"
-        justify="space-between"
-        align="center"
-        className="mb-4"
-      >
-        <SearchBar
-          value={apiKeySearch}
-          onChange={setApiKeySearch}
-          placeholder="Search by key name"
-          className="w-64"
+      <ListLayout>
+        <ListLayout.Header
+          title="API Keys"
+          subtitle="Create and manage API keys to authenticate programmatic access to platform services, including MCP service deployments, tool management, and other connections."
+          actions={
+            <RequireScope scope="org:admin" level="component">
+              <Button onClick={() => setIsCreateDialogOpen(true)}>
+                New API Key
+              </Button>
+            </RequireScope>
+          }
         />
-        <RequireScope scope="org:admin" level="component">
-          <Button onClick={() => setIsCreateDialogOpen(true)}>
-            New API Key
-          </Button>
-        </RequireScope>
-      </Stack>
-      <Table
-        columns={apiKeyColumns}
-        data={filteredKeys}
-        rowKey={(row) => row.id}
-        className="max-h-[500px] overflow-y-auto"
-        noResultsMessage={
-          <Stack
-            gap={2}
-            className="bg-background h-full gap-4 p-4 py-6"
-            align="center"
-            justify="center"
-          >
-            <Type variant="body">
-              {apiKeySearch ? "No matching API keys" : "No API keys yet"}
-            </Type>
-            {!apiKeySearch && (
-              <RequireScope scope="org:admin" level="component">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => setIsCreateDialogOpen(true)}
-                >
-                  <Button.LeftIcon>
-                    <KeyRound className="h-4 w-4" />
-                  </Button.LeftIcon>
-                  <Button.Text>Create Key</Button.Text>
-                </Button>
-              </RequireScope>
-            )}
-          </Stack>
-        }
-      />
+        <ListLayout.List>
+          <SearchBar
+            value={apiKeySearch}
+            onChange={setApiKeySearch}
+            placeholder="Search by key name"
+            className="w-64"
+          />
+          <Table
+            columns={apiKeyColumns}
+            data={filteredKeys}
+            rowKey={(row) => row.id}
+            className="max-h-[500px] overflow-y-auto"
+            noResultsMessage={
+              <Stack
+                gap={2}
+                className="bg-background h-full gap-4 p-4 py-6"
+                align="center"
+                justify="center"
+              >
+                <Type variant="body">
+                  {apiKeySearch ? "No matching API keys" : "No API keys yet"}
+                </Type>
+                {!apiKeySearch && (
+                  <RequireScope scope="org:admin" level="component">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => setIsCreateDialogOpen(true)}
+                    >
+                      <Button.LeftIcon>
+                        <KeyRound className="h-4 w-4" />
+                      </Button.LeftIcon>
+                      <Button.Text>Create Key</Button.Text>
+                    </Button>
+                  </RequireScope>
+                )}
+              </Stack>
+            }
+          />
+        </ListLayout.List>
+      </ListLayout>
 
       <Dialog open={isCreateDialogOpen} onOpenChange={handleCloseCreateDialog}>
         <Dialog.Content>

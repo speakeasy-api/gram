@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { ArrowRight, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/moonshine";
+import { Heading } from "@/components/ui/heading";
 
 interface StepContainerProps {
   icon: ReactNode;
@@ -36,9 +37,9 @@ export function StepContainer({
       {/* Header */}
       <div className="flex items-center gap-0">
         <div className="flex-shrink-0">{icon}</div>
-        <h1 className="text-foreground font-display text-2xl font-thin tracking-[-0.015em]">
+        <Heading variant="h1" className="normal-case">
           {title}
-        </h1>
+        </Heading>
       </div>
       <p className="text-muted-foreground mt-2 text-sm">{description}</p>
 

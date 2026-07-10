@@ -4,6 +4,7 @@ import { RequireScope } from "@/components/require-scope";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog } from "@/components/ui/dialog";
 import { Combobox } from "@/components/ui/combobox";
+import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
 import { useOrganization } from "@/contexts/Auth";
 import {
@@ -343,9 +344,9 @@ function CollectionDetailInner() {
                   <div className="min-w-0 space-y-3">
                     <div className="space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <h1 className="font-display truncate text-2xl font-thin tracking-[-0.015em]">
+                        <Heading variant="h1" className="truncate normal-case">
                           {collection.name}
-                        </h1>
+                        </Heading>
                         <Badge
                           variant="neutral"
                           background={false}

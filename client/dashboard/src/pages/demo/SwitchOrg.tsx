@@ -1,5 +1,6 @@
 import { useSessionData } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
+import { Heading } from "@/components/ui/heading";
 import { AuthLayout } from "@/pages/login/components/login-section";
 import { JourneyDemo } from "@/pages/login/components/journey-demo";
 import {
@@ -74,9 +75,9 @@ export default function SwitchOrg({
               <BuildingIcon className="text-muted-foreground h-6 w-6" />
             )}
           </div>
-          <h1 className="text-foreground font-display text-2xl font-thin tracking-[-0.015em]">
+          <Heading variant="h1" className="normal-case">
             {gate ? `No access for ${currentOrgName}` : "Switch organization"}
-          </h1>
+          </Heading>
           <p className="text-muted-foreground text-sm leading-relaxed">
             {gate
               ? "This organization doesn't have access to the MCP platform. Switch to another organization to continue."

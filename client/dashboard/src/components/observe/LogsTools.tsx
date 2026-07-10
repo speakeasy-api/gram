@@ -60,6 +60,7 @@ import { useListAttributeKeys } from "@gram/client/react-query/listAttributeKeys
 import { unwrapAsync } from "@gram/client/types/fp";
 import { Alert, Badge, Button } from "@/components/ui/moonshine";
 import type { BadgeProps } from "@/components/ui/moonshine";
+import { Heading } from "@/components/ui/heading";
 import {
   useInfiniteQuery,
   useQuery,
@@ -79,6 +80,20 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 
 type ToolUsageType = (typeof TOOL_USAGE_VALID_TYPES)[number];
+
+// Shared with both the logging-disabled empty state and the populated view
+// below so the page title only has one copy to update.
+function ToolLogsHeading() {
+  return (
+    <div className="flex min-w-0 flex-col gap-1">
+      <Heading variant="h1">Tool Logs</Heading>
+      <p className="text-muted-foreground text-sm">
+        Dive into tool traces across all tools, skills, and MCP servers used by
+        organization members in this project
+      </p>
+    </div>
+  );
+}
 
 function isToolUsageType(
   value: ObserveTypeFilterValue,
@@ -492,15 +507,7 @@ export function LogsTools(): JSX.Element {
       />
       {isLogsDisabled ? (
         <div className="min-h-0 w-full flex-1 space-y-6 overflow-y-auto p-8 pb-24">
-          <div className="flex min-w-0 flex-col gap-1">
-            <h1 className="font-display text-2xl font-thin tracking-[-0.015em]">
-              Tool Logs
-            </h1>
-            <p className="text-muted-foreground text-sm">
-              Dive into tool traces across all tools, skills, and MCP servers
-              used by organization members in this project
-            </p>
-          </div>
+          <ToolLogsHeading />
           <div className="relative flex-1">
             <div
               className="pointer-events-none h-full select-none"
@@ -685,15 +692,7 @@ function LogsToolsContent({
       <div className="flex min-h-0 w-full flex-1 flex-col">
         <div className="flex min-h-0 flex-1 flex-col gap-6 px-8 pt-8">
           <div className="flex shrink-0 items-start justify-between gap-4">
-            <div className="flex min-w-0 flex-col gap-1">
-              <h1 className="font-display text-2xl font-thin tracking-[-0.015em]">
-                Tool Logs
-              </h1>
-              <p className="text-muted-foreground text-sm">
-                Dive into tool traces across all tools, skills, and MCP servers
-                used by organization members in this project
-              </p>
-            </div>
+            <ToolLogsHeading />
             <div className="flex items-center gap-2">
               <HooksSetupButton />
               <Button variant="secondary" size="sm" asChild>

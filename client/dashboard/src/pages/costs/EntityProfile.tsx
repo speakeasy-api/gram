@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/moonshine";
+import { Heading } from "@/components/ui/heading";
 import {
   Select,
   SelectContent,
@@ -451,9 +452,9 @@ export function EntityProfile({
                   </div>
                 )}
                 <div className="flex items-center gap-2">
-                  <h1 className="font-display truncate text-2xl font-thin tracking-[-0.015em]">
+                  <Heading variant="h1" className="truncate normal-case">
                     {title}
-                  </h1>
+                  </Heading>
                   <Badge
                     variant="neutral"
                     background={false}
