@@ -193,8 +193,11 @@ func TestRefreshBillingUsageWorkflow_SleepCancellationFailsRun(t *testing.T) {
 		},
 		activity.RegisterOptions{Name: "SnapshotBillingCycleUsage"},
 	)
+	forwardCallCount := 0
 	env.RegisterActivityWithOptions(
 		func(_ context.Context, batch []string) error {
+			forwardCallCount++
+			require.NotEmpty(t, batch)
 			return nil
 		},
 		activity.RegisterOptions{Name: "ForwardTokenUsageToPostHog"},
@@ -213,4 +216,5 @@ func TestRefreshBillingUsageWorkflow_SleepCancellationFailsRun(t *testing.T) {
 	require.True(t, env.IsWorkflowCompleted())
 	require.Error(t, env.GetWorkflowError())
 	require.Equal(t, billingUsagePauseEveryBatches, refreshCallCount)
+	require.Equal(t, refreshCallCount, forwardCallCount, "every completed batch forwarded token usage before the cancellation")
 }

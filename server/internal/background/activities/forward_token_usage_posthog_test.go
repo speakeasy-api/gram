@@ -2,6 +2,7 @@ package activities_test
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -37,6 +38,9 @@ type capturePosthogClient struct {
 	mu         sync.Mutex
 	identifies []groupIdentifyCall
 	events     []groupEventCall
+	// failNextCaptures makes that many CaptureGroupEvent calls fail without
+	// recording, simulating transient PostHog enqueue failures.
+	failNextCaptures int
 }
 
 func (c *capturePosthogClient) GroupIdentify(_ context.Context, groupType string, groupKey string, groupProperties map[string]any) error {
@@ -49,6 +53,10 @@ func (c *capturePosthogClient) GroupIdentify(_ context.Context, groupType string
 func (c *capturePosthogClient) CaptureGroupEvent(_ context.Context, eventName string, distinctID string, groups map[string]string, eventProperties map[string]any) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.failNextCaptures > 0 {
+		c.failNextCaptures--
+		return errors.New("posthog enqueue failed")
+	}
 	c.events = append(c.events, groupEventCall{event: eventName, distinctID: distinctID, groups: groups, properties: eventProperties})
 	return nil
 }
@@ -168,6 +176,28 @@ func TestForwardTokenUsageToPostHog_EventOncePerDay(t *testing.T) {
 	require.Nil(t, props["tum_monthly_token_limit"])
 	require.Contains(t, props, "tum_allowance_used_ratio")
 	require.Nil(t, props["tum_allowance_used_ratio"])
+}
+
+// TestForwardTokenUsageToPostHog_CaptureFailureReleasesDailyClaim pins the
+// dedupe-vs-delivery ordering: a failed capture must release the day's SET NX
+// claim so a retry can still emit the point, instead of the whole day's trend
+// point silently dropping.
+func TestForwardTokenUsageToPostHog_CaptureFailureReleasesDailyClaim(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	act, conn, captured, orgID := setupForwardTokenUsageTest(t, "posthogtumretry")
+
+	now := time.Now().UTC()
+	cycleStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+	upsertCycleUsage(t, conn, orgID, cycleStart, cycleStart.AddDate(0, 1, 0), 100)
+
+	captured.failNextCaptures = 1
+	require.Error(t, act.Do(ctx, []string{orgID}), "the failed capture surfaces so the activity retries")
+	require.Empty(t, captured.events)
+
+	require.NoError(t, act.Do(ctx, []string{orgID}))
+	require.Len(t, captured.events, 1, "the retry re-claims the released marker and emits the point")
 }
 
 // TestForwardTokenUsageToPostHog_SkipsOrgsWithoutSnapshots pins that dormant

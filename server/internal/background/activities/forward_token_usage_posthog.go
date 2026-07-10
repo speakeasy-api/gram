@@ -143,6 +143,14 @@ func (f *ForwardTokenUsageToPostHog) forwardOrganization(ctx context.Context, qu
 
 	if err := f.posthog.CaptureGroupEvent(ctx, organizationTokenUsageEvent, orgID,
 		map[string]string{"organization": org.Slug}, properties); err != nil {
+		// Release the day's claim so the activity retry (or the next hourly
+		// run) can re-emit the point — otherwise a transient enqueue failure
+		// silently drops this org's trend point for the whole day. If the
+		// delete itself fails the point is lost; log so the gap is traceable.
+		if delErr := f.cache.Delete(ctx, dedupeKey); delErr != nil {
+			f.logger.ErrorContext(ctx, "failed to release token usage event dedupe claim",
+				attr.SlogOrganizationID(orgID), attr.SlogError(delErr))
+		}
 		return fmt.Errorf("capture token usage event: %w", err)
 	}
 
