@@ -315,7 +315,11 @@ func (o *OpenRouter) createAndStoreAPIKey(ctx context.Context, orgID string, key
 		return key.Key, nil
 	}
 
-	org, err := o.orgRepo.GetOrganizationMetadata(ctx, orgID)
+	// Read through the transaction: this goroutine already holds a pool
+	// connection, and under provisioning contention every waiter holds one
+	// too — acquiring a second connection here could deadlock the winner
+	// against a pool exhausted by its own waiters.
+	org, err := o.orgRepo.WithTx(dbtx).GetOrganizationMetadata(ctx, orgID)
 	if err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "failed to get organization").LogError(ctx, o.logger)
 	}
