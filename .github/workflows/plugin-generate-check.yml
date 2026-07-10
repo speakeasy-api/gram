@@ -42,6 +42,12 @@ jobs:
           BASE_OUT=$(mktemp -d)
           if [ -d "$BASE_TREE/server/cmd/export-hook-plugin" ]; then
             (cd "$BASE_TREE/server" && go run ./cmd/export-hook-plugin -out "$BASE_OUT")
+          else
+            # The merge base predates the renderer, so there is nothing to
+            # compare against. Leaving BASE_OUT empty makes the diff below
+            # report every rendered file as changed, deliberately: introducing
+            # the renderer changes what publishes, so it must ship with a bump.
+            echo "No exporter at merge base; treating all rendered output as changed."
           fi
           git worktree remove --force "$BASE_TREE"
 
