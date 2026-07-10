@@ -47,7 +47,7 @@ type SendTransactionalInput struct {
 // When apiKey is empty or the placeholder value "unset", the returned client
 // is a no-op that logs at debug level and returns nil for every send. This
 // keeps configuration-gated behavior out of every call site.
-func New(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, apiKey string) Client {
+func New(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, apiKey string, options ...Option) Client {
 	logger = logger.With(attr.SlogComponent("loops"))
 
 	if apiKey == "" || apiKey == "unset" {
@@ -55,11 +55,34 @@ func New(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Poli
 		return &noopClient{logger: logger}
 	}
 
+	opts := clientOptions{httpClient: nil}
+	for _, option := range options {
+		option(&opts)
+	}
+	transportClient := opts.httpClient
+	if transportClient == nil {
+		transportClient = guardianPolicy.PooledClient()
+	}
+
 	return &httpClient{
 		logger:     logger,
-		httpClient: guardianPolicy.PooledClient(),
+		httpClient: transportClient,
 		baseURL:    defaultBaseURL,
 		apiKey:     apiKey,
+	}
+}
+
+type clientOptions struct {
+	httpClient *guardian.HTTPClient
+}
+
+// Option configures the Loops client.
+type Option func(*clientOptions)
+
+// WithHTTPClient injects a shared transport policy for Loops requests.
+func WithHTTPClient(httpClient *guardian.HTTPClient) Option {
+	return func(opts *clientOptions) {
+		opts.httpClient = httpClient
 	}
 }
 

@@ -394,6 +394,7 @@ func newWorkerCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to connect to redis: %w", err)
 			}
+			rateLimitedClients := newRateLimitedHTTPClients(logger, meterProvider, guardianPolicy, redisClient)
 
 			encryptionClient, err := encryption.New(c.String("encryption-key"))
 			if err != nil {
@@ -444,7 +445,7 @@ func newWorkerCommand() *cli.Command {
 
 			posthogClient := posthog.New(ctx, logger, c.String("posthog-api-key"), c.String("posthog-endpoint"), c.String("posthog-personal-api-key"))
 
-			loopsClient := loops.New(ctx, logger, guardianPolicy, c.String("loops-api-key"))
+			loopsClient := loops.New(ctx, logger, guardianPolicy, c.String("loops-api-key"), loops.WithHTTPClient(rateLimitedClients.loops))
 			emailService := email.NewService(logger, loopsClient)
 			var featureFlags feature.Provider = posthogClient
 			if c.String("environment") == "local" {
@@ -496,7 +497,7 @@ func newWorkerCommand() *cli.Command {
 			if c.String("environment") == "local" {
 				openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
 			} else {
-				openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), &background.OpenRouterKeyRefresher{TemporalEnv: temporalEnv}, productFeatures, billingTracker)
+				openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), &background.OpenRouterKeyRefresher{TemporalEnv: temporalEnv}, productFeatures, billingTracker, openrouter.WithHTTPClient(rateLimitedClients.openrouterRetry))
 			}
 
 			svixClient, shutdown, err := newSvixClient(c, logger, guardianPolicy)
@@ -547,7 +548,7 @@ func newWorkerCommand() *cli.Command {
 				authz.EngineOpts{DevMode: c.String("environment") == "local"},
 			)
 
-			workosClient, workosAvailable, err := newWorkOSClient(guardianPolicy, c)
+			workosClient, workosAvailable, err := newWorkOSClient(guardianPolicy, rateLimitedClients.workos, c)
 			if err != nil {
 				return fmt.Errorf("failed to create WorkOS client: %w", err)
 			}
@@ -588,6 +589,7 @@ func newWorkerCommand() *cli.Command {
 				chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker),
 				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
 				telemetryLogger,
+				openrouter.WithHTTPClient(rateLimitedClients.openrouter),
 			)
 
 			ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, completionsClient)
@@ -612,7 +614,7 @@ func newWorkerCommand() *cli.Command {
 
 			idpClientSecret := c.String("idp-client-secret")
 
-			umClient := newIDPUserManagementClient(guardianPolicy, idpClientSecret, c)
+			umClient := newIDPUserManagementClient(rateLimitedClients.workos, idpClientSecret, c)
 			if umClient == nil {
 				return fmt.Errorf("failed to create IDP user management client: idp-client-secret is required")
 			}
@@ -723,7 +725,7 @@ func newWorkerCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
-			contextWindowResolver := openrouter.NewContextWindowResolver(logger, guardianPolicy, cache.NewRedisCacheAdapter(redisClient))
+			contextWindowResolver := openrouter.NewContextWindowResolver(logger, guardianPolicy, cache.NewRedisCacheAdapter(redisClient), openrouter.WithHTTPClient(rateLimitedClients.openrouterRetry))
 			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, meterProvider, db, guardianPolicy, encryptionClient, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemetryLogger, contextWindowResolver)
 			assistantsCore.SetWakeCanceller(triggerApp)
 			assistantsCore.SetDashboardIngestor(triggerApp)
@@ -741,7 +743,7 @@ func newWorkerCommand() *cli.Command {
 				logger.InfoContext(ctx, "presidio PII scanner enabled", attr.SlogURL(presidioURL))
 			}
 
-			piScanner := promptinjection.NewScanner(logger, piopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))).Classify)
+			piScanner := promptinjection.NewScanner(logger, piopenrouter.New(logger, tracerProvider, meterProvider, completionsClient).Classify)
 
 			customRuleScanner, err := customruleanalyzer.NewScanner(db)
 			if err != nil {

@@ -16,14 +16,12 @@ const (
 	meterClassifications = "risk.prompt_injection.classifications"
 	meterJudgeDuration   = "risk.prompt_injection.judge_duration"
 	meterJudgeConfidence = "risk.prompt_injection.judge_confidence"
-	meterRateLimited     = "risk.prompt_injection.rate_limited"
 )
 
 type metrics struct {
 	classifications metric.Int64Counter
 	duration        metric.Float64Histogram
 	confidence      metric.Float64Histogram
-	rateLimited     metric.Int64Counter
 }
 
 func newMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *metrics {
@@ -59,20 +57,10 @@ func newMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *metric
 		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterJudgeConfidence), attr.SlogError(err))
 	}
 
-	rateLimited, err := meter.Int64Counter(
-		meterRateLimited,
-		metric.WithDescription("Number of prompt-injection judge calls rejected by the per-org rate limiter"),
-		metric.WithUnit("{classification}"),
-	)
-	if err != nil {
-		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterRateLimited), attr.SlogError(err))
-	}
-
 	return &metrics{
 		classifications: classifications,
 		duration:        duration,
 		confidence:      confidence,
-		rateLimited:     rateLimited,
 	}
 }
 
@@ -102,12 +90,4 @@ func (m *metrics) RecordConfidence(ctx context.Context, orgID string, confidence
 		attr.OrganizationID(orgID),
 		attribute.String("stage", stageJudge),
 	))
-}
-
-// RecordRateLimited records a judge call rejected by the rate limiter.
-func (m *metrics) RecordRateLimited(ctx context.Context, orgID string) {
-	if m.rateLimited == nil {
-		return
-	}
-	m.rateLimited.Add(ctx, 1, metric.WithAttributes(attr.OrganizationID(orgID)))
 }

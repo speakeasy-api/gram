@@ -360,8 +360,9 @@ const (
 
 	ClickhouseQueryDurationMsKey = attribute.Key("gram.clickhouse.query_duration_ms")
 
-	RetryAttemptKey = attribute.Key("retry.attempt")
-	RetryWaitKey    = attribute.Key("retry.wait")
+	RetryAttemptKey  = attribute.Key("retry.attempt")
+	RetryWaitKey     = attribute.Key("retry.wait")
+	RateLimitNameKey = attribute.Key("ratelimit.name")
 
 	// GenAI semantic convention keys (OTel GenAI semconv - experimental)
 	// See: https://opentelemetry.io/docs/specs/semconv/gen-ai/
@@ -1526,6 +1527,9 @@ func SlogRetryAttempt(v int) slog.Attr      { return slog.Int(string(RetryAttemp
 
 func RetryWait(v time.Duration) attribute.KeyValue { return RetryWaitKey.String(v.String()) }
 func SlogRetryWait(v time.Duration) slog.Attr      { return slog.Duration(string(RetryWaitKey), v) }
+
+func RateLimitName(v string) attribute.KeyValue { return RateLimitNameKey.String(v) }
+func SlogRateLimitName(v string) slog.Attr      { return slog.String(string(RateLimitNameKey), v) }
 
 // GenAI semantic convention helpers
 

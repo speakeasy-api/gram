@@ -59,10 +59,16 @@ func NewUnifiedClient(
 	trackingStrategy UsageTrackingStrategy,
 	chatTitleGenerator ChatTitleGenerator,
 	telemetryLogger TelemetryLogger,
+	options ...ClientOption,
 ) *ChatClient {
+	opts := applyClientOptions(options)
+	httpClient := opts.httpClient
+	if httpClient == nil {
+		httpClient = guardianPolicy.PooledClient()
+	}
 	return &ChatClient{
 		logger:                 logger.With(attr.SlogComponent("openrouter_completions")),
-		httpClient:             guardianPolicy.PooledClient(),
+		httpClient:             httpClient,
 		provisioner:            provisioner,
 		messageCaptureStrategy: captureStrategy,
 		usageTrackingStrategy:  trackingStrategy,

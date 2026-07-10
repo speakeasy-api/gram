@@ -176,8 +176,12 @@ type OpenRouter struct {
 
 var _ Provisioner = (*OpenRouter)(nil)
 
-func New(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolicy *guardian.Policy, db *pgxpool.Pool, env string, provisioningKey string, refresher KeyRefresher, featureClient *productfeatures.Client, tracking billing.Tracker) *OpenRouter {
-	orClient := guardianPolicy.PooledClient(guardian.WithDefaultRetryConfig())
+func New(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolicy *guardian.Policy, db *pgxpool.Pool, env string, provisioningKey string, refresher KeyRefresher, featureClient *productfeatures.Client, tracking billing.Tracker, options ...ClientOption) *OpenRouter {
+	opts := applyClientOptions(options)
+	orClient := opts.httpClient
+	if orClient == nil {
+		orClient = guardianPolicy.PooledClient(guardian.WithDefaultRetryConfig())
+	}
 
 	return &OpenRouter{
 		provisioningKey: provisioningKey,

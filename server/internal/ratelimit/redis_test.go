@@ -117,6 +117,36 @@ func TestRedisStoreNamespaceIsolation(t *testing.T) {
 	require.True(t, res.Allowed, "limiter b shares the key but not the bucket")
 }
 
+func TestRedisStoreSameNamespaceSharesBucketAcrossLimiters(t *testing.T) {
+	t.Parallel()
+
+	first := New(newRedisStore(t), t.Name(), Rate{Tokens: 60, Interval: time.Minute, Burst: 1})
+	second := New(newRedisStore(t), t.Name(), Rate{Tokens: 60, Interval: time.Minute, Burst: 1})
+
+	res, err := first.Allow(t.Context(), "account")
+	require.NoError(t, err)
+	require.True(t, res.Allowed)
+
+	res, err = second.Allow(t.Context(), "account")
+	require.NoError(t, err)
+	require.False(t, res.Allowed, "separate clients must spend the same upstream account bucket")
+}
+
+func TestRedisStoreRetryAfterKeepsLongestCooldown(t *testing.T) {
+	t.Parallel()
+
+	store := newRedisStore(t)
+	ctx := t.Context()
+	key := t.Name()
+	require.NoError(t, store.setRetryAfter(ctx, key, 2*time.Second))
+	require.NoError(t, store.setRetryAfter(ctx, key, time.Second))
+
+	retryAfter, err := store.retryAfter(ctx, key)
+	require.NoError(t, err)
+	require.Greater(t, retryAfter, 1500*time.Millisecond)
+	require.LessOrEqual(t, retryAfter, 2*time.Second)
+}
+
 func TestRedisStoreAllowNChargesBatch(t *testing.T) {
 	t.Parallel()
 

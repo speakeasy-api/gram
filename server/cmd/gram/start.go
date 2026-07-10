@@ -518,6 +518,7 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to connect to redis: %w", err)
 			}
+			rateLimitedClients := newRateLimitedHTTPClients(logger, meterProvider, guardianPolicy, redisClient)
 
 			pylonClient, err := pylon.NewPylon(logger, c.String("pylon-verification-secret"))
 			if err != nil {
@@ -530,7 +531,7 @@ func newStartCommand() *cli.Command {
 				featureFlags = newLocalFeatureFlags(ctx, logger, c.String("local-feature-flags-csv"))
 			}
 
-			workosClient, workosAvailable, err := newWorkOSClient(guardianPolicy, c)
+			workosClient, workosAvailable, err := newWorkOSClient(guardianPolicy, rateLimitedClients.workos, c)
 			if err != nil {
 				return fmt.Errorf("failed to create WorkOS client: %w", err)
 			}
@@ -546,7 +547,7 @@ func newStartCommand() *cli.Command {
 
 			idpClientSecret := c.String("idp-client-secret")
 
-			umClient := newIDPUserManagementClient(guardianPolicy, idpClientSecret, c)
+			umClient := newIDPUserManagementClient(rateLimitedClients.workos, idpClientSecret, c)
 			if umClient == nil {
 				return fmt.Errorf("failed to create IDP user management client: idp-client-secret is required")
 			}
@@ -615,7 +616,7 @@ func newStartCommand() *cli.Command {
 
 			auditLogger := newAuditLogger()
 
-			loopsClient := loops.New(ctx, logger, guardianPolicy, c.String("loops-api-key"))
+			loopsClient := loops.New(ctx, logger, guardianPolicy, c.String("loops-api-key"), loops.WithHTTPClient(rateLimitedClients.loops))
 			emailService := email.NewService(logger, loopsClient)
 
 			var openRouter openrouter.Provisioner
@@ -632,6 +633,7 @@ func newStartCommand() *cli.Command {
 					&background.OpenRouterKeyRefresher{TemporalEnv: temporalEnv},
 					productFeatures,
 					billingTracker,
+					openrouter.WithHTTPClient(rateLimitedClients.openrouterRetry),
 				)
 			}
 
@@ -690,7 +692,7 @@ func newStartCommand() *cli.Command {
 			sessionCaptureEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureSessionCapture)
 			rbacEnabled := authz.IsRBACEnabled(newFeatureChecker(logger, productFeatures, productfeatures.FeatureRBAC))
 			challengeLoggingEnabled := authz.ChallengeLoggingEnabled(newFeatureChecker(logger, productFeatures, productfeatures.FeatureAuthzChallengeLogging))
-			roleClient, err := newAccessRoleProvider(ctx, logger, guardianPolicy, c)
+			roleClient, err := newAccessRoleProvider(ctx, logger, guardianPolicy, rateLimitedClients.workos, c)
 			if err != nil {
 				return fmt.Errorf("failed to create access role provider: %w", err)
 			}
@@ -728,6 +730,7 @@ func newStartCommand() *cli.Command {
 				chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker),
 				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
 				telemLogger,
+				openrouter.WithHTTPClient(rateLimitedClients.openrouter),
 			)
 
 			memorySvc := memory.NewMemoryService(
@@ -864,7 +867,7 @@ func newStartCommand() *cli.Command {
 				completionsClient,
 				mcpclient.NewInternalMCPClient(mcpService),
 			)
-			contextWindowResolver := openrouter.NewContextWindowResolver(logger, guardianPolicy, cache.NewRedisCacheAdapter(redisClient))
+			contextWindowResolver := openrouter.NewContextWindowResolver(logger, guardianPolicy, cache.NewRedisCacheAdapter(redisClient), openrouter.WithHTTPClient(rateLimitedClients.openrouterRetry))
 			chatService := chat.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, openRouter, chatClient, contextWindowResolver, posthogClient, telemSvc, assetStorage, authzEngine, assistantTokenManager, billingRepo, auditLogger)
 			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, meterProvider, db, guardianPolicy, encryptionClient, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemLogger, contextWindowResolver)
 			assistantsCore.SetWakeCanceller(triggerApp)
@@ -1005,10 +1008,9 @@ func newStartCommand() *cli.Command {
 
 			// L1 prompt-injection engine is the LLM judge (POC-193). A completions
 			// client is always constructed, so the judge is always available.
-			hookJudgeLimiter := openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))
-			hookPIScanner := promptinjection.NewScanner(logger, piopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, hookJudgeLimiter).Classify)
+			hookPIScanner := promptinjection.NewScanner(logger, piopenrouter.New(logger, tracerProvider, meterProvider, completionsClient).Classify)
 
-			hookPromptJudge := riskjudge.New(logger, tracerProvider, meterProvider, completionsClient, hookJudgeLimiter)
+			hookPromptJudge := riskjudge.New(logger, tracerProvider, meterProvider, completionsClient)
 			celEngine, err := celenv.New()
 			if err != nil {
 				return fmt.Errorf("create cel engine: %w", err)
@@ -1225,7 +1227,7 @@ func newStartCommand() *cli.Command {
 						piiScanner = risk_analysis.NewPresidioClient(presidioURL, tracerProvider, meterProvider, logger)
 					}
 
-					piScanner := promptinjection.NewScanner(logger, piopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))).Classify)
+					piScanner := promptinjection.NewScanner(logger, piopenrouter.New(logger, tracerProvider, meterProvider, completionsClient).Classify)
 
 					temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 						GuardianPolicy:                 guardianPolicy,

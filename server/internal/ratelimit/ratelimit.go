@@ -63,6 +63,8 @@ type Result struct {
 // seam is kept so an alternative backend can be added without touching callers.
 type Store interface {
 	take(ctx context.Context, key string, rate Rate, n int) (Result, error)
+	retryAfter(ctx context.Context, key string) (time.Duration, error)
+	setRetryAfter(ctx context.Context, key string, retryAfter time.Duration) error
 }
 
 // Limiter enforces a single Rate across many keys via a Store. It is safe for
@@ -121,4 +123,65 @@ func (l *Limiter) AllowN(ctx context.Context, key string, n int) (Result, error)
 	}
 
 	return res, nil
+}
+
+// Wait blocks until one token is available for key. It observes both the
+// configured token bucket and any shared Retry-After deadline learned from an
+// upstream response. Store failures are returned so the caller can choose a
+// fail-open or fail-closed policy.
+func (l *Limiter) Wait(ctx context.Context, key string) error {
+	if !l.rate.Valid() {
+		return fmt.Errorf("ratelimit %q: invalid rate %+v", l.name, l.rate)
+	}
+
+	cooldownKey := keyPrefix + l.name + ":" + key + ":retry-after"
+	for {
+		retryAfter, err := l.store.retryAfter(ctx, cooldownKey)
+		if err != nil {
+			return fmt.Errorf("ratelimit %q: get retry-after: %w", l.name, err)
+		}
+		if retryAfter > 0 {
+			if err := wait(ctx, retryAfter); err != nil {
+				return fmt.Errorf("ratelimit %q: wait for retry-after: %w", l.name, err)
+			}
+			continue
+		}
+
+		res, err := l.Allow(ctx, key)
+		if err != nil {
+			return err
+		}
+		if res.Allowed {
+			return nil
+		}
+		if res.RetryAfter <= 0 {
+			return fmt.Errorf("ratelimit %q: denied without a retry delay", l.name)
+		}
+		if err := wait(ctx, res.RetryAfter); err != nil {
+			return fmt.Errorf("ratelimit %q: wait for token: %w", l.name, err)
+		}
+	}
+}
+
+// SetRetryAfter publishes an upstream-requested cooldown to every caller using
+// this limiter and key. A shorter deadline never replaces a longer one.
+func (l *Limiter) SetRetryAfter(ctx context.Context, key string, retryAfter time.Duration) error {
+	if retryAfter <= 0 {
+		return nil
+	}
+	if err := l.store.setRetryAfter(ctx, keyPrefix+l.name+":"+key+":retry-after", retryAfter); err != nil {
+		return fmt.Errorf("ratelimit %q: set retry-after: %w", l.name, err)
+	}
+	return nil
+}
+
+func wait(ctx context.Context, delay time.Duration) error {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return fmt.Errorf("context ended: %w", ctx.Err())
+	case <-timer.C:
+		return nil
+	}
 }

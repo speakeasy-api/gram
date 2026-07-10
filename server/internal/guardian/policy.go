@@ -113,10 +113,11 @@ func DefaultRetryConfig() *RetryConfig {
 }
 
 type htttpClientOptions struct {
-	otelHTTPOptions   []otelhttp.Option
-	retryConfig       *RetryConfig
-	resolver          *net.Resolver
-	allowedCIDRBlocks []*net.IPNet
+	otelHTTPOptions        []otelhttp.Option
+	retryConfig            *RetryConfig
+	resolver               *net.Resolver
+	allowedCIDRBlocks      []*net.IPNet
+	roundTripperMiddleware []RoundTripperMiddleware
 }
 
 // ClientOption configures a single [Policy.Client] / [Policy.PooledClient]
@@ -124,6 +125,20 @@ type htttpClientOptions struct {
 // [WithAllowedCIDRBlocks]); callers outside the package hold and pass them
 // but cannot construct new ones.
 type ClientOption = func(*htttpClientOptions)
+
+// RoundTripperMiddleware decorates one HTTP transport. Middleware is applied
+// inside retry handling, so it observes every physical attempt rather than
+// only the caller's logical request.
+type RoundTripperMiddleware func(http.RoundTripper) http.RoundTripper
+
+// WithRoundTripperMiddleware adds per-client transport behavior such as
+// authentication, rate limiting, or response observation. Middleware is
+// nested in argument order: the first middleware is the outermost wrapper.
+func WithRoundTripperMiddleware(middleware ...RoundTripperMiddleware) ClientOption {
+	return func(o *htttpClientOptions) {
+		o.roundTripperMiddleware = append(o.roundTripperMiddleware, middleware...)
+	}
+}
 
 // WithOTelHTTPOptions appends additional [otelhttp.Option] values to the
 // OpenTelemetry transport instrumentation. Use this to configure trace
@@ -261,16 +276,19 @@ func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...f
 
 	otelOpts := []otelhttp.Option{otelhttp.WithTracerProvider(p.tracerProvider)}
 	otelOpts = append(otelOpts, opts.otelHTTPOptions...)
-	otelTransport := otelhttp.NewTransport(transport, otelOpts...)
+	var roundTripper http.RoundTripper = otelhttp.NewTransport(transport, otelOpts...)
+	for i := len(opts.roundTripperMiddleware) - 1; i >= 0; i-- {
+		roundTripper = opts.roundTripperMiddleware[i](roundTripper)
+	}
 
 	if opts.retryConfig == nil {
-		return &http.Client{Transport: otelTransport}
+		return &http.Client{Transport: roundTripper}
 	}
 
 	retryClient := retryablehttp.NewClient()
 	retryClient.Logger = nil // avoid noisy logs from retryablehttp
 	retryClient.HTTPClient = &http.Client{
-		Transport: otelTransport,
+		Transport: roundTripper,
 	}
 
 	retryClient.RetryWaitMin = opts.retryConfig.WaitMin

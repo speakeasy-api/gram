@@ -28,11 +28,16 @@ type ContextWindowResolver struct {
 	baseURL    string
 }
 
-func NewContextWindowResolver(logger *slog.Logger, guardianPolicy *guardian.Policy, cacheImpl cache.Cache) *ContextWindowResolver {
+func NewContextWindowResolver(logger *slog.Logger, guardianPolicy *guardian.Policy, cacheImpl cache.Cache, options ...ClientOption) *ContextWindowResolver {
 	component := logger.With(attr.SlogComponent("openrouter_context_window"))
+	opts := applyClientOptions(options)
+	httpClient := opts.httpClient
+	if httpClient == nil {
+		httpClient = guardianPolicy.PooledClient(guardian.WithDefaultRetryConfig())
+	}
 	return &ContextWindowResolver{
 		logger:     component,
-		httpClient: guardianPolicy.PooledClient(guardian.WithDefaultRetryConfig()),
+		httpClient: httpClient,
 		cache:      cache.NewTypedObjectCache[mv.ModelContextWindow](component.With(attr.SlogCacheNamespace("openrouter_context_window")), cacheImpl, cache.SuffixNone),
 		baseURL:    OpenRouterBaseURL,
 	}

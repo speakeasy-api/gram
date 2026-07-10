@@ -22,7 +22,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
-	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/riskjudge"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	gramopenrouter "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -104,7 +103,6 @@ type Engine struct {
 	tracer      trace.Tracer
 	metrics     *metrics
 	client      gramopenrouter.CompletionClient
-	limiter     *ratelimit.Limiter
 	model       string
 	temperature float64
 	schema      or.ChatJSONSchemaConfig // built once; the verdict shape is constant
@@ -116,7 +114,7 @@ var safeResult = promptinjection.Result{Label: promptinjection.LabelSafe, Score:
 
 // New constructs an Engine. The composition root constructs the completions
 // client unconditionally, so it is always non-nil here.
-func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, client gramopenrouter.CompletionClient, limiter *ratelimit.Limiter) *Engine {
+func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, client gramopenrouter.CompletionClient) *Engine {
 	logger = logger.With(attr.SlogComponent("pi-llm-judge"))
 	strict := true
 	return &Engine{
@@ -124,7 +122,6 @@ func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider
 		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/scanners/promptinjection/openrouter"),
 		metrics:     newMetrics(meterProvider, logger),
 		client:      client,
-		limiter:     limiter,
 		model:       defaultModel,
 		temperature: defaultTemperature,
 		schema: or.ChatJSONSchemaConfig{
@@ -183,25 +180,8 @@ func (c *Engine) Classify(ctx context.Context, req promptinjection.Request) (_ [
 
 // classifyOne returns SAFE for every fail-open path.
 func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, msg judgemessage.Message) promptinjection.Result {
-	// Bail before spending a rate-limit token (or making the call) on a context
-	// that is already canceled — otherwise a cancellation burst can drain the
-	// org's budget and throttle real requests into fail-open SAFE. (cubic)
+	// Bail before making the call when the request is already canceled.
 	if ctx.Err() != nil {
-		return safeResult
-	}
-	// A Store outage is not a throttle — proceed rather than let limiter infra
-	// silence the scanner.
-	switch res, err := c.limiter.Allow(ctx, gramopenrouter.JudgeRateLimitKey(req.OrgID, c.model)); {
-	case err != nil:
-		c.logger.WarnContext(ctx, "pi judge rate limiter unavailable, allowing call",
-			attr.SlogError(err),
-			attr.SlogOrganizationID(req.OrgID),
-		)
-	case !res.Allowed:
-		c.metrics.RecordRateLimited(ctx, req.OrgID)
-		c.logger.WarnContext(ctx, "pi judge rate limited; failing open",
-			attr.SlogOrganizationID(req.OrgID),
-		)
 		return safeResult
 	}
 

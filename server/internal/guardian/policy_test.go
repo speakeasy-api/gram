@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -16,6 +17,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
+
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
 
 func TestNewUnsafePolicy(t *testing.T) {
 	t.Parallel()
@@ -374,6 +381,45 @@ func TestPolicy_PooledHTTPClientWithFakeNetwork(t *testing.T) {
 		require.NoError(t, blockedResp.Body.Close())
 	}
 	require.Nil(t, blockedResp)
+}
+
+func TestPolicy_RoundTripperMiddlewareRunsForEveryRetry(t *testing.T) {
+	t.Parallel()
+
+	var serverCalls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if serverCalls.Add(1) == 1 {
+			http.Error(w, "try again", http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(server.Close)
+
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
+	require.NoError(t, err)
+	var middlewareCalls atomic.Int32
+	retries := guardian.DefaultRetryConfig()
+	retries.WaitMin = time.Nanosecond
+	retries.WaitMax = time.Nanosecond
+	retries.MaxAttempts = 1
+	client := policy.PooledClient(
+		guardian.WithRetryConfig(retries),
+		guardian.WithRoundTripperMiddleware(func(next http.RoundTripper) http.RoundTripper {
+			return roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+				middlewareCalls.Add(1)
+				return next.RoundTrip(req)
+			})
+		}),
+	)
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL, nil)
+	require.NoError(t, err)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	require.EqualValues(t, 2, serverCalls.Load())
+	require.EqualValues(t, 2, middlewareCalls.Load())
 }
 
 func TestPolicy_IPv4MappedIPv6Addresses(t *testing.T) {

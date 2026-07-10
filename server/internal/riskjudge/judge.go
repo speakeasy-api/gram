@@ -26,7 +26,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
-	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
@@ -99,21 +98,19 @@ type Judge struct {
 	tracer  trace.Tracer
 	metrics *judgeMetrics
 	client  openrouter.CompletionClient
-	limiter *ratelimit.Limiter
 }
 
 var _ ra.PromptJudge = (*Judge)(nil)
 
 // New constructs a Judge. A nil client yields a judge whose Evaluate always
 // returns nil, so callers can wire it unconditionally.
-func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, client openrouter.CompletionClient, limiter *ratelimit.Limiter) *Judge {
+func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, client openrouter.CompletionClient) *Judge {
 	logger = logger.With(attr.SlogComponent("risk-llm-judge"))
 	return &Judge{
 		logger:  logger,
 		tracer:  tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/riskjudge"),
 		metrics: newJudgeMetrics(meterProvider, logger),
 		client:  client,
-		limiter: limiter,
 	}
 }
 
@@ -138,39 +135,6 @@ func (j *Judge) Evaluate(ctx context.Context, in ra.JudgeInput) *ra.JudgeVerdict
 		attr.ProjectID(in.ProjectID),
 	))
 	defer span.End()
-
-	// A throttled call is treated like a judge error: the policy's fail-mode
-	// decides. A Store outage is not a throttle — proceed rather than let limiter
-	// infra disable the guardrail.
-	model := in.Config.Model
-	if model == "" {
-		model = defaultJudgeModel
-	}
-	switch res, err := j.limiter.Allow(ctx, openrouter.JudgeRateLimitKey(in.OrgID, model)); {
-	case err != nil:
-		j.logger.WarnContext(ctx, "judge rate limiter unavailable, allowing call",
-			attr.SlogError(err),
-			attr.SlogOrganizationID(in.OrgID),
-		)
-	case !res.Allowed:
-		j.metrics.RecordRateLimited(ctx, in.OrgID)
-		span.SetAttributes(attribute.Bool("risk.judge.rate_limited", true))
-		j.logger.WarnContext(ctx, "llm judge rate limited",
-			attr.SlogOrganizationID(in.OrgID),
-		)
-		if in.Config.FailOpen {
-			return nil
-		}
-		return &ra.JudgeVerdict{
-			Matched:          true,
-			Confidence:       0,
-			Rationale:        "Policy judge was rate limited; flagged by fail-closed policy.",
-			CostUSD:          0,
-			PromptTokens:     0,
-			CompletionTokens: 0,
-			TotalTokens:      0,
-		}
-	}
 
 	start := time.Now()
 	callResult, err := j.call(ctx, in)

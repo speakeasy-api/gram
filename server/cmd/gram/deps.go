@@ -71,6 +71,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
@@ -494,19 +495,64 @@ func newBillingProvider(
 	}
 }
 
+type rateLimitedHTTPClients struct {
+	workos          *guardian.HTTPClient
+	loops           *guardian.HTTPClient
+	openrouter      *guardian.HTTPClient
+	openrouterRetry *guardian.HTTPClient
+}
+
+func newRateLimitedHTTPClients(logger *slog.Logger, meterProvider metric.MeterProvider, guardianPolicy *guardian.Policy, redisClient *redis.Client) rateLimitedHTTPClients {
+	workosRetries := guardian.DefaultRetryConfig()
+	workosRetries.WaitMax = 10 * time.Second
+
+	return rateLimitedHTTPClients{
+		workos: thirdparty.NewRateLimitedHTTPClient(
+			logger.With(attr.SlogComponent("workos_http")),
+			meterProvider,
+			guardianPolicy,
+			redisClient,
+			thirdparty.WorkOSHTTPRateLimit(),
+			guardian.WithRetryConfig(workosRetries),
+		),
+		loops: thirdparty.NewRateLimitedHTTPClient(
+			logger.With(attr.SlogComponent("loops_http")),
+			meterProvider,
+			guardianPolicy,
+			redisClient,
+			thirdparty.LoopsHTTPRateLimit(),
+		),
+		openrouter: thirdparty.NewRateLimitedHTTPClient(
+			logger.With(attr.SlogComponent("openrouter_http")),
+			meterProvider,
+			guardianPolicy,
+			redisClient,
+			thirdparty.OpenRouterHTTPRateLimit(),
+		),
+		openrouterRetry: thirdparty.NewRateLimitedHTTPClient(
+			logger.With(attr.SlogComponent("openrouter_http")),
+			meterProvider,
+			guardianPolicy,
+			redisClient,
+			thirdparty.OpenRouterHTTPRateLimit(),
+			guardian.WithDefaultRetryConfig(),
+		),
+	}
+}
+
 // workosClientOpts builds the ClientOpts threaded into every workos.NewClient
 // call site below. Pulls the optional --workos-endpoint override (env:
 // WORKOS_API_URL) so local dev can point both real-WorkOS callers at
 // the dev-idp's mock-workos emulator without changing any wiring.
-func workosClientOpts(c *cli.Context) workos.ClientOpts {
+func workosClientOpts(c *cli.Context, httpClient *guardian.HTTPClient) workos.ClientOpts {
 	return workos.ClientOpts{
 		Endpoint:   c.String("workos-endpoint"),
-		HTTPClient: nil,
+		HTTPClient: httpClient,
 		ClientID:   c.String("idp-client-id"),
 	}
 }
 
-func newAccessRoleProvider(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, c *cli.Context) (access.RoleProvider, error) {
+func newAccessRoleProvider(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, httpClient *guardian.HTTPClient, c *cli.Context) (access.RoleProvider, error) {
 	apiKey := c.String("idp-client-secret")
 
 	// Local dev: when a real GRAM_IDP_CLIENT_SECRET is configured (GRAM_IDP_MODE=workos),
@@ -514,7 +560,7 @@ func newAccessRoleProvider(ctx context.Context, logger *slog.Logger, guardianPol
 	// Otherwise fall back to the mock-workos emulator or a stub.
 	if c.String("environment") == "local" {
 		haveRealKey := apiKey != "" && apiKey != "unset"
-		opts := workosClientOpts(c)
+		opts := workosClientOpts(c, httpClient)
 
 		if haveRealKey {
 			logger.InfoContext(ctx, "using real WorkOS API key as access role provider")
@@ -530,13 +576,13 @@ func newAccessRoleProvider(ctx context.Context, logger *slog.Logger, guardianPol
 
 	switch {
 	case apiKey != "" && apiKey != "unset":
-		return workos.NewClient(guardianPolicy, apiKey, workosClientOpts(c)), nil
+		return workos.NewClient(guardianPolicy, apiKey, workosClientOpts(c, httpClient)), nil
 	default:
 		return nil, errors.New("WorkOS API key not provided")
 	}
 }
 
-func newWorkOSClient(guardianPolicy *guardian.Policy, c *cli.Context) (client *workos.Client, workosAvailable bool, err error) {
+func newWorkOSClient(guardianPolicy *guardian.Policy, httpClient *guardian.HTTPClient, c *cli.Context) (client *workos.Client, workosAvailable bool, err error) {
 	env := c.String("environment")
 	apiKey := c.String("idp-client-secret")
 
@@ -545,23 +591,20 @@ func newWorkOSClient(guardianPolicy *guardian.Policy, c *cli.Context) (client *w
 		return nil, false, errors.New("WorkOS API key not provided")
 	}
 
-	return workos.NewClient(guardianPolicy, apiKey, workosClientOpts(c)), haveAPIKey, nil
+	return workos.NewClient(guardianPolicy, apiKey, workosClientOpts(c, httpClient)), haveAPIKey, nil
 }
 
 // newIDPUserManagementClient creates a WorkOS user-management SDK client
 // scoped to the IDP application key. Returns nil only when the key is empty.
 // In mock-workos mode the key can be any non-empty string (e.g. "unset") —
 // the mock endpoint accepts it.
-func newIDPUserManagementClient(guardianPolicy *guardian.Policy, apiKey string, c *cli.Context) *usermanagement.Client {
+func newIDPUserManagementClient(httpClient *guardian.HTTPClient, apiKey string, c *cli.Context) *usermanagement.Client {
 	if apiKey == "" {
 		return nil
 	}
 
-	retryCfg := guardian.DefaultRetryConfig()
-	retryCfg.WaitMax = 10 * time.Second
-
 	um := usermanagement.NewClient(apiKey)
-	um.HTTPClient = guardianPolicy.PooledClient(guardian.WithRetryConfig(retryCfg))
+	um.HTTPClient = httpClient
 	if ep := c.String("workos-endpoint"); ep != "" {
 		um.Endpoint = ep
 	}

@@ -47,44 +47,6 @@ type parsedJudgePrompt struct {
 	} `json:"message"`
 }
 
-func TestJudgeRateLimitedFailOpenReturnsNil(t *testing.T) {
-	t.Parallel()
-
-	client := &countingCompletionClient{}
-	j := newTestJudge(t, client)
-	drainLimiter(t, j, "org-a")
-
-	verdict := j.Evaluate(t.Context(), ra.JudgeInput{
-		OrgID:     "org-a",
-		ProjectID: "proj",
-		Prompt:    "flag secrets",
-		Message:   judgemessage.New(message.ToolRequest, "Bash", "{}"),
-		Config:    ra.JudgeConfig{Model: "", Temperature: nil, FailOpen: true},
-	})
-
-	require.Nil(t, verdict, "fail-open policy should allow when throttled")
-	require.Zero(t, client.calls.Load(), "throttled call must not reach the completion client")
-}
-
-func TestJudgeRateLimitedFailClosedReturnsVerdict(t *testing.T) {
-	t.Parallel()
-
-	client := &countingCompletionClient{}
-	j := newTestJudge(t, client)
-	drainLimiter(t, j, "org-a")
-
-	verdict := j.Evaluate(t.Context(), ra.JudgeInput{
-		OrgID:     "org-a",
-		ProjectID: "proj",
-		Prompt:    "flag secrets",
-		Message:   judgemessage.New(message.ToolRequest, "Bash", "{}"),
-		Config:    ra.JudgeConfig{Model: "", Temperature: nil, FailOpen: false},
-	})
-
-	require.NotNil(t, verdict, "fail-closed policy should flag when throttled")
-	require.Zero(t, client.calls.Load(), "throttled call must not reach the completion client")
-}
-
 func TestJudgeEvaluatesEmptyBodyToolCall(t *testing.T) {
 	t.Parallel()
 
@@ -184,25 +146,9 @@ func TestJudgeReturnsUsageForCleanVerdict(t *testing.T) {
 	require.Equal(t, 168, verdict.TotalTokens)
 }
 
-// newTestJudge builds a Judge with a Redis-backed judge limiter on its own
-// logical DB, isolated per test.
 func newTestJudge(t *testing.T, client openrouter.CompletionClient) *Judge {
 	t.Helper()
-	return New(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), client, testJudgeLimiter(t))
-}
-
-// drainLimiter exhausts the org+model token bucket so the next Evaluate is
-// throttled.
-func drainLimiter(t *testing.T, j *Judge, org string) {
-	t.Helper()
-	key := openrouter.JudgeRateLimitKey(org, defaultJudgeModel)
-	for {
-		res, err := j.limiter.Allow(t.Context(), key)
-		require.NoError(t, err)
-		if !res.Allowed {
-			return
-		}
-	}
+	return New(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), client)
 }
 
 // countingCompletionClient records how many times the completion path was hit,
