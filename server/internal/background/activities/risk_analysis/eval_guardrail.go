@@ -89,7 +89,7 @@ func EvalPromptGuardrail(
 		for vi, idx := range inScope {
 			verdicts[vi] = messageVerdictSkeleton(idx, built[idx])
 			if !cfg.FailOpen {
-				applyFailClosedFallback(&verdicts[vi])
+				applyFailClosedFallback(&verdicts[vi], nil)
 			}
 		}
 		return verdicts, nil
@@ -97,13 +97,13 @@ func EvalPromptGuardrail(
 
 	judgeFanout(
 		ctx, judge, orgID, projectID, prompt, cfg, built, inScope,
-		func(pos, idx int, verdict *llmjudge.Verdict, latency time.Duration) {
+		func(pos, idx int, verdict *llmjudge.Verdict, err error, latency time.Duration) {
 			out := messageVerdictSkeleton(idx, built[idx])
 			out.LatencyMs = latency.Milliseconds()
-			if verdict != nil {
+			if err != nil && !cfg.FailOpen {
+				applyFailClosedFallback(&out, err)
+			} else if verdict != nil {
 				out.Verdict = *verdict
-			} else if !cfg.FailOpen {
-				applyFailClosedFallback(&out)
 			}
 			verdicts[pos] = out
 		},
@@ -136,8 +136,6 @@ func messageVerdictSkeleton(idx int, msg batchMessage) MessageVerdict {
 	}
 }
 
-func applyFailClosedFallback(verdict *MessageVerdict) {
-	verdict.Matched = true
-	verdict.Confidence = 0
-	verdict.Rationale = "Policy judge was unavailable; flagged by fail-closed policy."
+func applyFailClosedFallback(verdict *MessageVerdict, err error) {
+	verdict.Verdict = llmjudge.FailClosedVerdict(err)
 }

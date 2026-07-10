@@ -27,17 +27,18 @@ import (
 // calls the judge for messages whose type the policy applies to.
 type fakePromptJudge struct {
 	verdict *llmjudge.Verdict
+	err     error
 	calls   atomic.Int32
 	mu      sync.Mutex
 	last    llmjudge.Input
 }
 
-func (f *fakePromptJudge) Evaluate(_ context.Context, in llmjudge.Input) *llmjudge.Verdict {
+func (f *fakePromptJudge) Evaluate(_ context.Context, in llmjudge.Input) (*llmjudge.Verdict, error) {
 	f.calls.Add(1)
 	f.mu.Lock()
 	f.last = in
 	f.mu.Unlock()
-	return f.verdict
+	return f.verdict, f.err
 }
 
 func (f *fakePromptJudge) lastInput() llmjudge.Input {

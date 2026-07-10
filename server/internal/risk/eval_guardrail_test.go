@@ -2,6 +2,7 @@ package risk_test
 
 import (
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -65,7 +66,7 @@ func TestEvaluatePromptGuardrail_FlagsAndIsolates(t *testing.T) {
 	)
 
 	// The judge flags any message whose body mentions "delete production".
-	ti.judge.evaluate = func(in llmjudge.Input) *llmjudge.Verdict {
+	ti.judge.evaluate = func(in llmjudge.Input) (*llmjudge.Verdict, error) {
 		if strings.Contains(in.Message.Body, "delete production") {
 			return &llmjudge.Verdict{
 				Matched:          true,
@@ -75,7 +76,7 @@ func TestEvaluatePromptGuardrail_FlagsAndIsolates(t *testing.T) {
 				PromptTokens:     100,
 				CompletionTokens: 20,
 				TotalTokens:      120,
-			}
+			}, nil
 		}
 		return &llmjudge.Verdict{
 			Matched:          false,
@@ -85,7 +86,7 @@ func TestEvaluatePromptGuardrail_FlagsAndIsolates(t *testing.T) {
 			PromptTokens:     80,
 			CompletionTokens: 10,
 			TotalTokens:      90,
-		}
+		}, nil
 	}
 
 	chatID, ids := seedChatTranscript(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, [][2]string{
@@ -149,9 +150,9 @@ func TestEvaluatePromptGuardrail_MessageTypeFilter(t *testing.T) {
 	)
 
 	seen := map[string]int{}
-	ti.judge.evaluate = func(in llmjudge.Input) *llmjudge.Verdict {
+	ti.judge.evaluate = func(in llmjudge.Input) (*llmjudge.Verdict, error) {
 		seen[in.Message.Type]++
-		return nil
+		return nil, nil
 	}
 
 	chatID, _ := seedChatTranscript(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, [][2]string{
@@ -184,6 +185,9 @@ func TestEvaluatePromptGuardrail_FailClosedFallback(t *testing.T) {
 	chatID, _ := seedChatTranscript(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, [][2]string{
 		{"user", "please delete production database"},
 	})
+	ti.judge.evaluate = func(in llmjudge.Input) (*llmjudge.Verdict, error) {
+		return nil, errors.New("judge unavailable")
+	}
 	failOpen := false
 	res, err := ti.service.EvaluatePromptGuardrail(ctx, &gen.EvaluatePromptGuardrailPayload{
 		ChatID: chatID.String(),
@@ -211,7 +215,7 @@ func TestEvaluatePromptGuardrail_CELScopeExemptSkipsToolCall(t *testing.T) {
 	)
 
 	seen := []judgemessage.Message{}
-	ti.judge.evaluate = func(in llmjudge.Input) *llmjudge.Verdict {
+	ti.judge.evaluate = func(in llmjudge.Input) (*llmjudge.Verdict, error) {
 		seen = append(seen, in.Message)
 		return &llmjudge.Verdict{
 			Matched:          true,
@@ -221,7 +225,7 @@ func TestEvaluatePromptGuardrail_CELScopeExemptSkipsToolCall(t *testing.T) {
 			PromptTokens:     0,
 			CompletionTokens: 0,
 			TotalTokens:      0,
-		}
+		}, nil
 	}
 
 	chatID, _ := seedChatTranscript(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, nil)
@@ -366,7 +370,7 @@ func TestEvaluatePromptGuardrail_Unauthorized(t *testing.T) {
 		{"user", "hello"},
 	})
 
-	// Enterprise account with zero grants — RBAC must deny.
+	// Enterprise account with zero grants - RBAC must deny.
 	ctx = withExactAccessGrants(t, ctx, ti.conn)
 	_, err := ti.service.EvaluatePromptGuardrail(ctx, &gen.EvaluatePromptGuardrailPayload{
 		ChatID: chatID.String(),

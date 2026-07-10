@@ -107,12 +107,12 @@ func (c *syncResultsCleaner) Clean(ctx context.Context, projectID, policyID uuid
 // is nil it never matches; otherwise it delegates so a test can flag messages by
 // content.
 type stubJudge struct {
-	evaluate func(in llmjudge.Input) *llmjudge.Verdict
+	evaluate func(in llmjudge.Input) (*llmjudge.Verdict, error)
 }
 
-func (s *stubJudge) Evaluate(_ context.Context, in llmjudge.Input) *llmjudge.Verdict {
+func (s *stubJudge) Evaluate(_ context.Context, in llmjudge.Input) (*llmjudge.Verdict, error) {
 	if s.evaluate == nil {
-		return nil
+		return nil, nil
 	}
 	return s.evaluate(in)
 }

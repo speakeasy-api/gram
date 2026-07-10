@@ -91,8 +91,8 @@ type ShadowMCPPolicy struct {
 //
 // CAVEAT: via %{match} the value does reach the agent's permission prompt
 // (Claude permissionDecisionReason/SystemMessage; Cursor/Codex UserMessage/
-// AgentMessage) and therefore the local agent transcript. That is by design —
-// the human needs to see what tripped the challenge — but it means the
+// AgentMessage) and therefore the local agent transcript. That is by design -
+// the human needs to see what tripped the challenge - but it means the
 // "never leaves the server" invariant is scoped to Gram's own persistence, not
 // the agent host. Any Gram-side ingestion that captures permission-prompt or
 // transcript content (e.g. a future session-replay path) MUST scrub %{match}
@@ -107,7 +107,7 @@ type ScanResult struct {
 	Description string
 	UserMessage *string // optional override for the rendered block/warn message
 
-	// Sensitive — see the type doc. Only for the ephemeral warn render.
+	// Sensitive - see the type doc. Only for the ephemeral warn render.
 	MatchedValue string
 	Entity       string
 
@@ -279,8 +279,8 @@ func (s *Scanner) ScanForEnforcement(
 	// Resolve the prompt-policy flag once per scan (on the parent ctx, before
 	// fan-out) so prompt_based policies don't each repeat the slug lookup and
 	// so the lookup is never cancelled by a sibling match. Gated on the exact
-	// condition under which the fan-out would run the judge — a prompt_based
-	// policy whose message_types apply to this message — so the lookup is
+	// condition under which the fan-out would run the judge - a prompt_based
+	// policy whose message_types apply to this message - so the lookup is
 	// skipped entirely for scans that can never enforce one. message_types gates
 	// candidacy; scope_include narrows further per-message in scanPolicy.
 	inMessageScope := func(p repo.RiskPolicy) bool {
@@ -309,7 +309,7 @@ func (s *Scanner) ScanForEnforcement(
 	}
 
 	// Fan out across policies. The first goroutine that finds a match returns
-	// errMatchFound, which causes errgroup to cancel its context — sibling
+	// errMatchFound, which causes errgroup to cancel its context - sibling
 	// goroutines stop their in-flight Presidio HTTP calls early instead of
 	// finishing uselessly. Gitleaks scans serialize inside s.gitleaks (the v8
 	// detector is not concurrent-safe); the real win is Presidio fan-out.
@@ -457,7 +457,7 @@ func (s *Scanner) recordScan(ctx context.Context, projectID string, outcome o11y
 // scanPolicy runs a policy's sources sequentially. Gitleaks holds a mutex
 // (the v8 detector mutates internal state), so concurrent gitleaks calls
 // serialize anyway, and PresidioClient.AnalyzeBatch is invoked with a single
-// text per call — its internal worker pool only fans out when n > 1, so
+// text per call - its internal worker pool only fans out when n > 1, so
 // per-policy parallelism over sources buys roughly nothing. The
 // across-policies fan-out in ScanForEnforcement is the real win.
 func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text string, messageType message.Type, toolName string, promptPoliciesOn bool, piEngineOn bool) (result *ScanResult, retErr error) {
@@ -638,10 +638,10 @@ func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, 
 		return nil
 	}
 	if s.judge == nil || !policy.Prompt.Valid || strings.TrimSpace(policy.Prompt.String) == "" {
-		return promptPolicyUnavailableResult(policy, messageType, cfg)
+		return promptPolicyUnavailableResult(policy, messageType, cfg, nil)
 	}
 
-	verdict := s.judge.Evaluate(ctx, llmjudge.Input{
+	verdict, err := s.judge.Evaluate(ctx, llmjudge.Input{
 		OrgID:     policy.OrganizationID,
 		ProjectID: policy.ProjectID.String(),
 		Prompt:    policy.Prompt.String,
@@ -651,6 +651,9 @@ func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, 
 		Message: judgemessage.New(messageType, toolName, text),
 		Config:  cfg,
 	})
+	if err != nil {
+		return promptPolicyUnavailableResult(policy, messageType, cfg, err)
+	}
 	if verdict == nil || !verdict.Matched {
 		return nil
 	}
@@ -676,10 +679,11 @@ func (s *Scanner) projectFlagEnabled(ctx context.Context, orgID string, projectI
 	return policyflags.ProjectFlagEnabled(ctx, s.logger, s.repo, s.flags, orgID, projectID, flag)
 }
 
-func promptPolicyUnavailableResult(policy repo.RiskPolicy, messageType message.Type, cfg llmjudge.Config) *ScanResult {
+func promptPolicyUnavailableResult(policy repo.RiskPolicy, messageType message.Type, cfg llmjudge.Config, err error) *ScanResult {
 	if cfg.FailOpen {
 		return nil
 	}
+	verdict := llmjudge.FailClosedVerdict(err)
 	return &ScanResult{
 		Action:      policy.Action,
 		PolicyID:    policy.ID.String(),
@@ -687,7 +691,7 @@ func promptPolicyUnavailableResult(policy repo.RiskPolicy, messageType message.T
 		Source:      llmjudge.Source,
 		MessageType: messageType,
 		RuleID:      llmjudge.Rule,
-		Description: "Policy judge was unavailable; flagged by fail-closed policy.",
+		Description: verdict.Rationale,
 		UserMessage: conv.FromPGText[string](policy.UserMessage),
 		// No literal match for a fail-closed judge result.
 		MatchedValue:    "",

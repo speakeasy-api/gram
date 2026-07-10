@@ -101,7 +101,7 @@ type Judge struct {
 var _ llmjudge.Evaluator = (*Judge)(nil)
 
 // New constructs a Judge. A nil client yields a judge whose Evaluate always
-// returns nil, so callers can wire it unconditionally.
+// returns (nil, nil), so callers can wire it unconditionally.
 func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, client openrouter.CompletionClient, limiter *ratelimit.Limiter) *Judge {
 	logger = logger.With(attr.SlogComponent("risk-llm-judge"))
 	return &Judge{
@@ -114,19 +114,19 @@ func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider
 }
 
 // Evaluate runs the judge and returns a non-nil verdict when the message
-// violates the policy prompt, or nil when it does not. A nil client or an empty
-// prompt/text yields nil. On judge error or timeout the configured fail-mode
-// decides: fail-open returns nil (allow), fail-closed returns a verdict.
-func (j *Judge) Evaluate(ctx context.Context, in llmjudge.Input) *llmjudge.Verdict {
+// violates the policy prompt, or a non-matching verdict when it does not. A nil
+// client or an empty prompt/text yields (nil, nil). On judge error or timeout it
+// returns a non-nil error so callers can apply policy fail-mode.
+func (j *Judge) Evaluate(ctx context.Context, in llmjudge.Input) (*llmjudge.Verdict, error) {
 	if j == nil || j.client == nil {
-		return nil
+		return nil, nil
 	}
 	// Skip only when there is nothing to judge. An empty body is NOT enough:
 	// a no-arg/no-output tool call still carries tool attribution that a
 	// tool-scoped policy ("flag any call to MCP server X") can match, so
 	// HasContent keeps those events in scope.
 	if strings.TrimSpace(in.Prompt) == "" || !in.Message.HasContent() {
-		return nil
+		return nil, nil
 	}
 
 	ctx, span := j.tracer.Start(ctx, "risk.judge.evaluate", trace.WithAttributes(
@@ -154,18 +154,7 @@ func (j *Judge) Evaluate(ctx context.Context, in llmjudge.Input) *llmjudge.Verdi
 		j.logger.WarnContext(ctx, "llm judge rate limited",
 			attr.SlogOrganizationID(in.OrgID),
 		)
-		if in.Config.FailOpen {
-			return nil
-		}
-		return &llmjudge.Verdict{
-			Matched:          true,
-			Confidence:       0,
-			Rationale:        "Policy judge was rate limited; flagged by fail-closed policy.",
-			CostUSD:          0,
-			PromptTokens:     0,
-			CompletionTokens: 0,
-			TotalTokens:      0,
-		}
+		return nil, fmt.Errorf("allow judge call: %w", llmjudge.ErrRateLimited)
 	}
 
 	start := time.Now()
@@ -177,18 +166,7 @@ func (j *Judge) Evaluate(ctx context.Context, in llmjudge.Input) *llmjudge.Verdi
 			attr.SlogError(err),
 			attr.SlogOrganizationID(in.OrgID),
 		)
-		if in.Config.FailOpen {
-			return nil
-		}
-		return &llmjudge.Verdict{
-			Matched:          true,
-			Confidence:       0,
-			Rationale:        "Policy judge was unavailable; flagged by fail-closed policy.",
-			CostUSD:          0,
-			PromptTokens:     0,
-			CompletionTokens: 0,
-			TotalTokens:      0,
-		}
+		return nil, err
 	}
 	if callResult.matched {
 		j.metrics.RecordConfidence(ctx, in.OrgID, callResult.confidence)
@@ -205,7 +183,7 @@ func (j *Judge) Evaluate(ctx context.Context, in llmjudge.Input) *llmjudge.Verdi
 		PromptTokens:     callResult.promptTokens,
 		CompletionTokens: callResult.completionTokens,
 		TotalTokens:      callResult.totalTokens,
-	}
+	}, nil
 }
 
 type judgeCallResult struct {

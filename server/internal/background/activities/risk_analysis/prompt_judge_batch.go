@@ -22,10 +22,11 @@ const judgeConcurrency = 8
 // judgeFanout evaluates the given message indices against a guardrail prompt
 // with at most judgeConcurrency calls in flight, invoking apply for each result
 // (pos is the position within indices, idx the original message index, verdict
-// nil when the judge returned none, latency the wall-clock call time). onChunk,
-// when non-nil, runs after each chunk with the exclusive end position so callers
-// can record progress heartbeats. Shared by the batch analyzer and the
-// workbench replay so both drive the judge identically.
+// nil when the judge skipped, err non-nil when it degraded, latency the
+// wall-clock call time). onChunk, when non-nil, runs after each chunk with the
+// exclusive end position so callers can record progress heartbeats. Shared by
+// the batch analyzer and the workbench replay so both drive the judge
+// identically.
 func judgeFanout(
 	ctx context.Context,
 	judge llmjudge.Evaluator,
@@ -33,7 +34,7 @@ func judgeFanout(
 	cfg llmjudge.Config,
 	msgs []batchMessage,
 	indices []int,
-	apply func(pos, idx int, verdict *llmjudge.Verdict, latency time.Duration),
+	apply func(pos, idx int, verdict *llmjudge.Verdict, err error, latency time.Duration),
 	onChunk func(end int),
 ) {
 	for start := 0; start < len(indices); start += judgeConcurrency {
@@ -45,14 +46,14 @@ func judgeFanout(
 				defer wg.Done()
 				idx := indices[pos]
 				started := time.Now()
-				verdict := judge.Evaluate(ctx, llmjudge.Input{
+				verdict, err := judge.Evaluate(ctx, llmjudge.Input{
 					OrgID:     orgID,
 					ProjectID: projectID,
 					Prompt:    prompt,
 					Message:   batchJudgeMessage(msgs[idx]),
 					Config:    cfg,
 				})
-				apply(pos, idx, verdict, time.Since(started))
+				apply(pos, idx, verdict, err, time.Since(started))
 			}(pos)
 		}
 		wg.Wait()
@@ -82,15 +83,7 @@ func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchAr
 
 	if a.judge == nil || !policy.Prompt.Valid || strings.TrimSpace(policy.Prompt.String) == "" {
 		if !cfg.FailOpen {
-			finding := llmjudge.NewFinding(llmjudge.Verdict{
-				Matched:          true,
-				Confidence:       0,
-				Rationale:        "Policy judge was unavailable; flagged by fail-closed policy.",
-				CostUSD:          0,
-				PromptTokens:     0,
-				CompletionTokens: 0,
-				TotalTokens:      0,
-			})
+			finding := llmjudge.NewFinding(llmjudge.FailClosedVerdict(nil))
 			for _, idx := range indices {
 				out[idx] = []scanners.Finding{finding}
 			}
@@ -102,8 +95,12 @@ func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchAr
 		ctx, a.judge,
 		args.OrganizationID, args.ProjectID.String(), policy.Prompt.String, cfg,
 		messages, indices,
-		func(_, idx int, verdict *llmjudge.Verdict, _ time.Duration) {
-			if verdict != nil && verdict.Matched {
+		func(_, idx int, verdict *llmjudge.Verdict, err error, _ time.Duration) {
+			if err != nil {
+				if !cfg.FailOpen {
+					out[idx] = []scanners.Finding{llmjudge.NewFinding(llmjudge.FailClosedVerdict(err))}
+				}
+			} else if verdict != nil && verdict.Matched {
 				out[idx] = []scanners.Finding{llmjudge.NewFinding(*verdict)}
 			}
 		},

@@ -47,14 +47,14 @@ type parsedJudgePrompt struct {
 	} `json:"message"`
 }
 
-func TestJudgeRateLimitedFailOpenReturnsNil(t *testing.T) {
+func TestJudgeRateLimitedReturnsError(t *testing.T) {
 	t.Parallel()
 
 	client := &countingCompletionClient{}
 	j := newTestJudge(t, client)
 	drainLimiter(t, j, "org-a")
 
-	verdict := j.Evaluate(t.Context(), llmjudge.Input{
+	verdict, err := j.Evaluate(t.Context(), llmjudge.Input{
 		OrgID:     "org-a",
 		ProjectID: "proj",
 		Prompt:    "flag secrets",
@@ -62,18 +62,19 @@ func TestJudgeRateLimitedFailOpenReturnsNil(t *testing.T) {
 		Config:    llmjudge.Config{Model: "", Temperature: nil, FailOpen: true},
 	})
 
-	require.Nil(t, verdict, "fail-open policy should allow when throttled")
+	require.ErrorIs(t, err, llmjudge.ErrRateLimited)
+	require.Nil(t, verdict)
 	require.Zero(t, client.calls.Load(), "throttled call must not reach the completion client")
 }
 
-func TestJudgeRateLimitedFailClosedReturnsVerdict(t *testing.T) {
+func TestJudgeRateLimitIgnoresFailMode(t *testing.T) {
 	t.Parallel()
 
 	client := &countingCompletionClient{}
 	j := newTestJudge(t, client)
 	drainLimiter(t, j, "org-a")
 
-	verdict := j.Evaluate(t.Context(), llmjudge.Input{
+	verdict, err := j.Evaluate(t.Context(), llmjudge.Input{
 		OrgID:     "org-a",
 		ProjectID: "proj",
 		Prompt:    "flag secrets",
@@ -81,7 +82,8 @@ func TestJudgeRateLimitedFailClosedReturnsVerdict(t *testing.T) {
 		Config:    llmjudge.Config{Model: "", Temperature: nil, FailOpen: false},
 	})
 
-	require.NotNil(t, verdict, "fail-closed policy should flag when throttled")
+	require.ErrorIs(t, err, llmjudge.ErrRateLimited)
+	require.Nil(t, verdict)
 	require.Zero(t, client.calls.Load(), "throttled call must not reach the completion client")
 }
 
@@ -94,7 +96,7 @@ func TestJudgeEvaluatesEmptyBodyToolCall(t *testing.T) {
 	// Empty arguments but real MCP attribution: a tool-scoped policy ("flag any
 	// call to the github MCP server") must still get to run, so Evaluate must
 	// reach the client instead of short-circuiting on the empty body.
-	verdict := j.Evaluate(t.Context(), llmjudge.Input{
+	verdict, err := j.Evaluate(t.Context(), llmjudge.Input{
 		OrgID:     "org-a",
 		ProjectID: "proj",
 		Prompt:    "flag any call to the github MCP server",
@@ -102,7 +104,8 @@ func TestJudgeEvaluatesEmptyBodyToolCall(t *testing.T) {
 		Config:    llmjudge.Config{Model: "", Temperature: nil, FailOpen: true},
 	})
 
-	require.Nil(t, verdict, "fail-open on the stub client's error")
+	require.Error(t, err)
+	require.Nil(t, verdict)
 	require.Equal(t, int64(1), client.calls.Load(), "empty-body tool call must still reach the judge")
 }
 
@@ -114,7 +117,7 @@ func TestJudgeEvaluatesMultiToolCall(t *testing.T) {
 
 	// A multi-call message has an empty Body but carries ToolCalls; the empty-body
 	// guard must not skip it.
-	verdict := j.Evaluate(t.Context(), llmjudge.Input{
+	verdict, err := j.Evaluate(t.Context(), llmjudge.Input{
 		OrgID:     "org-a",
 		ProjectID: "proj",
 		Prompt:    "block destructive github writes",
@@ -125,7 +128,8 @@ func TestJudgeEvaluatesMultiToolCall(t *testing.T) {
 		Config: llmjudge.Config{Model: "", Temperature: nil, FailOpen: true},
 	})
 
-	require.Nil(t, verdict, "fail-open on the stub client's error")
+	require.Error(t, err)
+	require.Nil(t, verdict)
 	require.Equal(t, int64(1), client.calls.Load(), "multi-call message must still reach the judge")
 }
 
@@ -136,7 +140,7 @@ func TestJudgeSkipsTrulyEmptyMessage(t *testing.T) {
 	j := newTestJudge(t, client)
 
 	// No body, no tool attribution: nothing to judge, so skip before the client.
-	verdict := j.Evaluate(t.Context(), llmjudge.Input{
+	verdict, err := j.Evaluate(t.Context(), llmjudge.Input{
 		OrgID:     "org-a",
 		ProjectID: "proj",
 		Prompt:    "flag secrets",
@@ -144,6 +148,7 @@ func TestJudgeSkipsTrulyEmptyMessage(t *testing.T) {
 		Config:    llmjudge.Config{Model: "", Temperature: nil, FailOpen: true},
 	})
 
+	require.NoError(t, err)
 	require.Nil(t, verdict)
 	require.Zero(t, client.calls.Load(), "a message with no content must not reach the client")
 }
@@ -166,7 +171,7 @@ func TestJudgeReturnsUsageForCleanVerdict(t *testing.T) {
 	}
 	j := newTestJudge(t, client)
 
-	verdict := j.Evaluate(t.Context(), llmjudge.Input{
+	verdict, err := j.Evaluate(t.Context(), llmjudge.Input{
 		OrgID:     "org-a",
 		ProjectID: "proj",
 		Prompt:    "flag secrets",
@@ -174,6 +179,7 @@ func TestJudgeReturnsUsageForCleanVerdict(t *testing.T) {
 		Config:    llmjudge.Config{Model: "", Temperature: nil, FailOpen: true},
 	})
 
+	require.NoError(t, err)
 	require.NotNil(t, verdict)
 	require.False(t, verdict.Matched)
 	require.InDelta(t, 0.2, verdict.Confidence, 0.001)

@@ -39,7 +39,7 @@ type recordingPromptJudge struct {
 	inputs []llmjudge.Input
 }
 
-func (j *recordingPromptJudge) Evaluate(_ context.Context, in llmjudge.Input) *llmjudge.Verdict {
+func (j *recordingPromptJudge) Evaluate(_ context.Context, in llmjudge.Input) (*llmjudge.Verdict, error) {
 	j.inputs = append(j.inputs, in)
 	return &llmjudge.Verdict{
 		Matched:          true,
@@ -49,7 +49,7 @@ func (j *recordingPromptJudge) Evaluate(_ context.Context, in llmjudge.Input) *l
 		PromptTokens:     0,
 		CompletionTokens: 0,
 		TotalTokens:      0,
-	}
+	}, nil
 }
 
 // newPresidioPub returns a mock presidio publisher that accepts any publish
@@ -126,7 +126,7 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 
 	// Point the production PresidioClient at a dead URL so the activity
 	// path mirrors what runs in the worker. After exhausting the retry
-	// budget the message dead-letters and the activity proceeds — gitleaks
+	// budget the message dead-letters and the activity proceeds - gitleaks
 	// findings on the same message survive.
 	piiScanner := risk_analysis.NewPresidioClient(
 		"http://127.0.0.1:1",
@@ -461,7 +461,7 @@ func TestAnalyzeBatch_PromptJudgeMultiToolCallAttribution(t *testing.T) {
 	require.NoError(t, val.Get(&result))
 	require.Len(t, judge.inputs, 1)
 
-	// The judge sees both calls, each with its own attribution — not an opaque blob.
+	// The judge sees both calls, each with its own attribution - not an opaque blob.
 	msg := judge.inputs[0].Message
 	require.Equal(t, message.ToolRequest, msg.Type)
 	require.Empty(t, msg.ToolName, "multi-call message carries no single tool name")
@@ -493,7 +493,7 @@ func TestAnalyzeBatch_DestructiveToolAnnotationSkipsFalseHint(t *testing.T) {
 // TestAnalyzeBatch_CLIDestructive_BashRmRf seeds a native Bash tool call
 // with `rm -rf *` and asserts the cli_destructive scanner emits a finding
 // keyed by the matched pattern. Native tools were previously skipped by the
-// MCP-only filter in scanDestructiveToolAnnotations — proving they are now
+// MCP-only filter in scanDestructiveToolAnnotations - proving they are now
 // in scope is the core of this scenario.
 func TestAnalyzeBatch_CLIDestructive_BashRmRf(t *testing.T) {
 	t.Parallel()
@@ -686,8 +686,8 @@ func TestAnalyzeBatch_CustomDetectionRuleFinding(t *testing.T) {
 // A configured exclusion must suppress a message-level content finding through
 // the full Do() path. TestAnalyzeBatch_CustomDetectionRuleFinding is the control
 // (identical setup, no exclusion -> 1 finding). The ExclusionSet predicate is
-// unit-tested in isolation; the wiring the session-level work reshaped —
-// policyExclusionSet's DB fetch and threading into scanStandardPolicy — is only
+// unit-tested in isolation; the wiring the session-level work reshaped -
+// policyExclusionSet's DB fetch and threading into scanStandardPolicy - is only
 // exercised end-to-end here.
 func TestAnalyzeBatch_ExclusionSuppressesMessageFinding(t *testing.T) {
 	t.Parallel()
@@ -719,7 +719,7 @@ func TestAnalyzeBatch_ExclusionSuppressesMessageFinding(t *testing.T) {
 
 	// No active finding remains. The scanned message still records the empty
 	// sentinel row buildRows writes, but that row is found=false, which this
-	// active-findings query filters out — so the list is empty, as in
+	// active-findings query filters out - so the list is empty, as in
 	// TestAnalyzeBatch_CustomDetectionRuleSkipsNilRegex.
 	rows, err := riskrepo.New(conn).ListRiskResultsByProjectAndPolicy(t.Context(), riskrepo.ListRiskResultsByProjectAndPolicyParams{
 		ProjectID:    td.projectID,
@@ -791,7 +791,7 @@ func TestAnalyzeBatch_CustomDetectionRuleToolServer(t *testing.T) {
 }
 
 // insertAssistantToolCallWithArgs is a sibling of insertAssistantToolCall for
-// CLI scenarios where the recorded arguments don't carry a Gram toolset id —
+// CLI scenarios where the recorded arguments don't carry a Gram toolset id -
 // the cli_destructive scanner is content-driven, so the args field is the
 // thing under test.
 func insertAssistantToolCallWithArgs(t *testing.T, conn *pgxpool.Pool, td testData, callName string, argsMap map[string]any) uuid.UUID {
