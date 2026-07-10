@@ -1,0 +1,32 @@
+server/internal/background/activities/risk_analysis/category_scopes.go
+  s_a1e983049864ec::t_77b4319cc4f8f3 29-36,98-172
+  s_7ab086c5bb6fe8::t_6c640e3346a28b 173
+server/internal/risk/scanner.go
+  s_a1e983049864ec::t_7e53dbdb9f8ed7 32,182,212-215,230,317-323,349,476,498-501,515,518-520,555-557,564,595,618
+server/internal/risk/scanner_test.go
+  s_a1e983049864ec::t_577cbaa302be85 21,26-27,51-67,164-210,519-624
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "bfc00f49b4d3d115ee73e995575d498b175ead61",
+  "prompts": {},
+  "sessions": {
+    "s_7ab086c5bb6fe8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "77cda2a5-8012-48fb-8853-f9dbae5594dc",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    },
+    "s_a1e983049864ec": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f4a4c-8a3b-73d2-8970-e371e2d28932",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
