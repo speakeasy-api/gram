@@ -433,7 +433,9 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 	}
 
 	users := make([]*telem_gen.UserSummary, len(items))
+	rawUserIDsByKey := make(map[string][]string, len(items))
 	for i, item := range items {
+		rawUserIDsByKey[item.UserID] = item.RawUserIDs
 		// Build per-tool breakdown from the 3 maps
 		tools := make([]*telem_gen.ToolUsage, 0, len(item.ToolCounts))
 		for urn, count := range item.ToolCounts {
@@ -486,7 +488,7 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 	// user_id — external ids don't map to a directory owner.
 	if payload.UserType != "external" {
 		if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
-			s.attachUserAccounts(ctx, authCtx.ActiveOrganizationID, users)
+			s.attachUserAccounts(ctx, authCtx.ActiveOrganizationID, users, rawUserIDsByKey)
 		}
 	}
 
@@ -498,13 +500,24 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 }
 
 // attachUserAccounts populates UserSummary.Accounts from the user_accounts
-// directory for the given internal user ids. Best-effort: a lookup failure
-// leaves accounts empty rather than failing the listing.
-func (s *Service) attachUserAccounts(ctx context.Context, orgID string, users []*telem_gen.UserSummary) {
+// directory. The directory is keyed by raw gram user id while summaries are
+// keyed email-first, so each summary is looked up under its group key plus every
+// raw user_id folded into it (rawUserIDsByKey, keyed by summary group key).
+// Best-effort: a lookup failure leaves accounts empty rather than failing the
+// listing.
+func (s *Service) attachUserAccounts(ctx context.Context, orgID string, users []*telem_gen.UserSummary, rawUserIDsByKey map[string][]string) {
+	summaryByID := make(map[string]*telem_gen.UserSummary, len(users))
 	userIDs := make([]string, 0, len(users))
 	for _, u := range users {
-		if u.UserID != "" {
-			userIDs = append(userIDs, u.UserID)
+		for _, id := range append([]string{u.UserID}, rawUserIDsByKey[u.UserID]...) {
+			if id == "" {
+				continue
+			}
+			if _, ok := summaryByID[id]; ok {
+				continue
+			}
+			summaryByID[id] = u
+			userIDs = append(userIDs, id)
 		}
 	}
 	if len(userIDs) == 0 {
@@ -520,9 +533,12 @@ func (s *Service) attachUserAccounts(ctx context.Context, orgID string, users []
 		return
 	}
 
-	byUser := make(map[string][]*telem_gen.UserAccount, len(rows))
 	for _, row := range rows {
 		if !row.UserID.Valid || row.UserID.String == "" {
+			continue
+		}
+		summary, ok := summaryByID[row.UserID.String]
+		if !ok {
 			continue
 		}
 		var lastSeen *string
@@ -531,7 +547,7 @@ func (s *Service) attachUserAccounts(ctx context.Context, orgID string, users []
 			lastSeen = &ns
 		}
 		idStr := row.ID.String()
-		byUser[row.UserID.String] = append(byUser[row.UserID.String], &telem_gen.UserAccount{
+		summary.Accounts = append(summary.Accounts, &telem_gen.UserAccount{
 			ID:               &idStr,
 			Provider:         row.Provider,
 			Email:            conv.FromPGText[string](row.Email),
@@ -539,12 +555,6 @@ func (s *Service) attachUserAccounts(ctx context.Context, orgID string, users []
 			ExternalOrgID:    conv.FromPGText[string](row.ExternalOrgID),
 			LastSeenUnixNano: lastSeen,
 		})
-	}
-
-	for _, u := range users {
-		if accts, ok := byUser[u.UserID]; ok {
-			u.Accounts = accts
-		}
 	}
 }
 
@@ -641,9 +651,18 @@ func (s *Service) searchUsersByRole(ctx context.Context, payload *telem_gen.Sear
 
 	const unassignedRoleID = "unassigned"
 	for _, item := range items {
+		// Role assignments are keyed by raw gram user id while summaries are keyed
+		// email-first, so fall back to the raw ids folded into the summary.
 		ri := roleInfo{id: unassignedRoleID, name: "Unassigned"}
 		if r, ok := userToRole[item.UserID]; ok {
 			ri = r
+		} else {
+			for _, rawID := range item.RawUserIDs {
+				if r, ok := userToRole[rawID]; ok {
+					ri = r
+					break
+				}
+			}
 		}
 		agg, exists := aggByRole[ri.id]
 		if !exists {

@@ -3,12 +3,15 @@ package telemetry_test
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	hooksRepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -389,6 +392,128 @@ func TestSearchUsers_MergesInternalUsersByEmail(t *testing.T) {
 	require.Len(t, filtered.Users, 1)
 	require.Equal(t, email, filtered.Users[0].UserID)
 	require.Equal(t, int64(450), filtered.Users[0].TotalTokens)
+}
+
+// TestSearchUsers_MergesEmaillessRowsByKnownUserID guards the enrollment page
+// token counts: a person's rows that carry a user_id but no email (e.g. tool
+// calls attributed by id only) must fold into their email-keyed summary instead
+// of surfacing as a separate zero-token summary keyed by the raw user_id.
+func TestSearchUsers_MergesEmaillessRowsByKnownUserID(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+
+	now := time.Now().UTC()
+	userID := "gram-user-" + uuid.New().String()
+	email := "merged-emailless-" + uuid.New().String() + "@example.com"
+
+	// Token usage reported with both id and email; a later tool call carries the
+	// id only.
+	insertPollingLogWithUserAndEmail(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), userID, email, 200, 100, 2.5)
+	toolCallAt := now.Add(-5 * time.Minute)
+	insertToolCallLogWithUser(t, ctx, projectID, deploymentID, toolCallAt, "tools:http:petstore:listPets", 200, 0.5, userID, "")
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+			Filter: &gen.SearchUsersFilter{
+				From: from,
+				To:   to,
+			},
+			UserType: "internal",
+			Limit:    100,
+			Sort:     "desc",
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) || !assert.Len(c, res.Users, 1) {
+			return
+		}
+
+		user := res.Users[0]
+		assert.Equal(c, email, user.UserID)
+		assert.Equal(c, email, user.UserEmail)
+		assert.Equal(c, int64(200), user.TotalInputTokens)
+		assert.Equal(c, int64(100), user.TotalOutputTokens)
+		assert.Equal(c, int64(1), user.TotalToolCalls)
+		assert.Equal(c, strconv.FormatInt(toolCallAt.UnixNano(), 10), user.LastSeenUnixNano)
+	}, 10*time.Second, 200*time.Millisecond)
+}
+
+// TestSearchUsers_AttachesAccountsToEmailKeyedSummary guards the accounts
+// breakdown on the employees list: the user_accounts directory is keyed by raw
+// gram user id while summaries are keyed email-first, so a summary must pick up
+// accounts through the user_id values folded into it.
+func TestSearchUsers_AttachesAccountsToEmailKeyedSummary(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+
+	now := time.Now().UTC()
+	// user_accounts.user_id has a FK to users, so reuse the seeded session user.
+	userID := authCtx.UserID
+	email := "account-holder-" + uuid.New().String() + "@example.com"
+
+	hooksQueries := hooksRepo.New(ti.conn)
+	_, err := hooksQueries.UpsertUserAccount(ctx, hooksRepo.UpsertUserAccountParams{
+		OrganizationID:      authCtx.ActiveOrganizationID,
+		Provider:            "anthropic",
+		ExternalAccountUuid: uuid.New().String(),
+		UserID:              conv.ToPGTextEmpty(userID),
+		ExternalOrgID:       conv.ToPGTextEmpty("ext-org-" + uuid.New().String()),
+		ExternalAccountID:   conv.ToPGTextEmpty(""),
+		Email:               conv.ToPGTextEmpty(email),
+		AccountType:         conv.ToPGTextEmpty("team"),
+	})
+	require.NoError(t, err)
+
+	insertPollingLogWithUserAndEmail(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), userID, email, 100, 50, 1.0)
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+			Filter: &gen.SearchUsersFilter{
+				From: from,
+				To:   to,
+			},
+			UserType: "internal",
+			Limit:    100,
+			Sort:     "desc",
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) || !assert.Len(c, res.Users, 1) {
+			return
+		}
+
+		user := res.Users[0]
+		assert.Equal(c, email, user.UserID)
+		if !assert.Len(c, user.Accounts, 1) {
+			return
+		}
+		account := user.Accounts[0]
+		assert.Equal(c, "anthropic", account.Provider)
+		if assert.NotNil(c, account.AccountType) {
+			assert.Equal(c, "team", *account.AccountType)
+		}
+		if assert.NotNil(c, account.Email) {
+			assert.Equal(c, email, *account.Email)
+		}
+	}, 10*time.Second, 200*time.Millisecond)
 }
 
 func TestSearchUsers_Pagination(t *testing.T) {
