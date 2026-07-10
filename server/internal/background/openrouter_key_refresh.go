@@ -36,18 +36,6 @@ func (w *OpenRouterKeyRefresher) ScheduleOpenRouterKeyRefresh(ctx context.Contex
 	return err
 }
 
-// CancelOpenRouterKeyRefreshWorkflow cancels an existing openrouter key refresh workflow for the given orgID
-func (w *OpenRouterKeyRefresher) CancelOpenRouterKeyRefreshWorkflow(ctx context.Context, orgID string) error {
-	id := fmt.Sprintf("v1:openrouter-key-refresh:%s", orgID)
-	err := w.TemporalEnv.Client().CancelWorkflow(ctx, id, "")
-	if err != nil {
-		// If workflow doesn't exist, that's fine - it may have already completed or never started
-		return nil
-	}
-
-	return nil
-}
-
 // Called by your service to start (or restart) the workflow
 func ExecuteOpenrouterKeyRefreshWorkflow(ctx context.Context, temporalEnv *tenv.Environment, params OpenRouterKeyRefreshParams) (client.WorkflowRun, error) {
 	// A typoed key type must fail here, before the terminate-if-running id

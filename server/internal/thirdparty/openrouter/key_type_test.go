@@ -1,7 +1,6 @@
 package openrouter
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -11,8 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/billing"
-	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestKeyTypeOrDefault(t *testing.T) {
@@ -47,7 +44,8 @@ func TestUpstreamKeyIdentity(t *testing.T) {
 }
 
 // newKeyTypeTestClient builds a unified client whose completion calls hit a
-// minimal mock OpenRouter server, with a recording provisioner.
+// minimal mock OpenRouter server, with a recording provisioner swapped in so
+// tests can assert which of the org's keys paid for a request.
 func newKeyTypeTestClient(t *testing.T) (*ChatClient, *mockProvisioner) {
 	t.Helper()
 
@@ -63,21 +61,8 @@ func newKeyTypeTestClient(t *testing.T) (*ChatClient, *mockProvisioner) {
 	t.Cleanup(server.Close)
 
 	provisioner := &mockProvisioner{apiKey: "test-api-key"}
-	guardianPolicy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
-	require.NoError(t, err)
-
-	client := NewUnifiedClient(
-		testenv.NewLogger(t),
-		guardianPolicy,
-		provisioner,
-		&mockMessageCaptureStrategy{},
-		&mockUsageTrackingStrategy{},
-		&mockChatTitleGenerator{},
-		&mockTelemetryLogger{},
-	)
-	client.httpClient = &http.Client{
-		Transport: &testTransport{server: server},
-	}
+	client := newTestClientForServer(t, server)
+	client.provisioner = provisioner
 	return client, provisioner
 }
 
@@ -86,7 +71,7 @@ func TestChatClient_GetCompletion_DefaultKeyTypeIsChat(t *testing.T) {
 
 	client, provisioner := newKeyTypeTestClient(t)
 
-	_, err := client.GetCompletion(context.Background(), CompletionRequest{
+	_, err := client.GetCompletion(t.Context(), CompletionRequest{
 		OrgID:       "org-kt",
 		ProjectID:   uuid.NewString(),
 		Messages:    []or.ChatMessages{CreateMessageUser("hi")},
@@ -104,7 +89,7 @@ func TestChatClient_GetCompletion_ExplicitInternalKeyType(t *testing.T) {
 
 	client, provisioner := newKeyTypeTestClient(t)
 
-	_, err := client.GetCompletion(context.Background(), CompletionRequest{
+	_, err := client.GetCompletion(t.Context(), CompletionRequest{
 		OrgID:       "org-kt",
 		ProjectID:   uuid.NewString(),
 		Messages:    []or.ChatMessages{CreateMessageUser("hi")},
@@ -117,12 +102,32 @@ func TestChatClient_GetCompletion_ExplicitInternalKeyType(t *testing.T) {
 	require.Equal(t, []KeyType{KeyTypeInternal}, provisioner.ProvisionedKeyTypes())
 }
 
+// TestChatClient_GetCompletion_RiskAnalysisRequiresInternalKey pins the
+// pairing guard: risk-analysis inference never legitimately bills the chat
+// key, so a caller that forgets KeyType must fail fast rather than silently
+// drain the customer's chat cap.
+func TestChatClient_GetCompletion_RiskAnalysisRequiresInternalKey(t *testing.T) {
+	t.Parallel()
+
+	client, provisioner := newKeyTypeTestClient(t)
+
+	_, err := client.GetCompletion(t.Context(), CompletionRequest{
+		OrgID:       "org-kt",
+		ProjectID:   uuid.NewString(),
+		Messages:    []or.ChatMessages{CreateMessageUser("hi")},
+		ChatID:      uuid.Nil,
+		UsageSource: billing.ModelUsageSourceRiskAnalysis,
+	})
+	require.ErrorContains(t, err, "requires KeyTypeInternal")
+	require.Empty(t, provisioner.ProvisionedKeyTypes(), "no key may be provisioned for a rejected pairing")
+}
+
 func TestChatClient_GetObjectCompletion_PropagatesKeyType(t *testing.T) {
 	t.Parallel()
 
 	client, provisioner := newKeyTypeTestClient(t)
 
-	_, err := client.GetObjectCompletion(context.Background(), ObjectCompletionRequest{
+	_, err := client.GetObjectCompletion(t.Context(), ObjectCompletionRequest{
 		OrgID:       "org-kt",
 		ProjectID:   uuid.NewString(),
 		Model:       "openai/gpt-5.4",
@@ -143,7 +148,7 @@ func TestChatClient_CreateEmbeddings_UsesChatKey(t *testing.T) {
 	// The embeddings path calls the vendor SDK against the real base URL, so
 	// the call itself fails in tests — but the key is provisioned first, and
 	// that is the behavior under test.
-	_, _ = client.CreateEmbeddings(context.Background(), "org-kt", "openai/text-embedding-3-small", []string{"hello"})
+	_, _ = client.CreateEmbeddings(t.Context(), "org-kt", "openai/text-embedding-3-small", []string{"hello"})
 
 	require.Equal(t, []KeyType{KeyTypeChat}, provisioner.ProvisionedKeyTypes(),
 		"embeddings must always bill the chat key")

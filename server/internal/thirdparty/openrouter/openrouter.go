@@ -47,6 +47,16 @@ const (
 	KeyTypeInternal KeyType = "internal"
 )
 
+// AllKeyTypes is the single definition of the valid key-type set. Validate
+// and any caller that fans out across an org's keys (e.g. account-type
+// limit refreshes) consume it, so adding a key type here propagates without
+// hunting call sites.
+var AllKeyTypes = []KeyType{KeyTypeChat, KeyTypeInternal}
+
+// upstreamKeyCreateTimeout bounds the POST /v1/keys call made while holding
+// the per-(org, key type) provisioning advisory lock.
+const upstreamKeyCreateTimeout = 15 * time.Second
+
 // OrDefault resolves the zero value to the chat key, so existing callers
 // that never set a key type keep their behavior.
 func (k KeyType) OrDefault() KeyType {
@@ -63,12 +73,10 @@ func (k KeyType) OrDefault() KeyType {
 // key type under the chat naming pattern or clobber the chat refresh
 // workflow id.
 func (k KeyType) Validate() error {
-	switch k.OrDefault() {
-	case KeyTypeChat, KeyTypeInternal:
+	if slices.Contains(AllKeyTypes, k.OrDefault()) {
 		return nil
-	default:
-		return fmt.Errorf("invalid openrouter key type %q", string(k))
 	}
+	return fmt.Errorf("invalid openrouter key type %q", string(k))
 }
 
 // Just a general allowlist for models we allow to proxy through us for playground usage, chat, or agentic usecases
@@ -275,7 +283,9 @@ func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string, keyType 
 // row, both create upstream keys, and the loser's insert would fail on the
 // composite primary key, leaving an orphaned upstream key. Contention only
 // happens on an org's first completion per key type, so holding the
-// transaction across one HTTP round trip is acceptable.
+// transaction across one HTTP round trip is acceptable — but the round trip
+// is time-boxed below, because the lock and a pooled DB connection are held
+// across it and every waiter pins its own pool connection.
 func (o *OpenRouter) createAndStoreAPIKey(ctx context.Context, orgID string, keyType KeyType) (string, error) {
 	dbtx, err := o.db.Begin(ctx)
 	if err != nil {
@@ -312,7 +322,12 @@ func (o *OpenRouter) createAndStoreAPIKey(ctx context.Context, orgID string, key
 
 	creditAmount := o.getLimitForOrg(org)
 
-	keyResponse, err := o.createOpenRouterAPIKey(ctx, orgID, org.Slug, keyType, creditAmount)
+	// Cap the upstream call so guardian's retry backoff cannot stretch the
+	// advisory-lock hold to minutes during an OpenRouter outage; a burst of
+	// waiters would otherwise exhaust the DB pool.
+	createCtx, cancel := context.WithTimeout(ctx, upstreamKeyCreateTimeout)
+	defer cancel()
+	keyResponse, err := o.createOpenRouterAPIKey(createCtx, orgID, org.Slug, keyType, creditAmount)
 	if err != nil {
 		return "", err
 	}
