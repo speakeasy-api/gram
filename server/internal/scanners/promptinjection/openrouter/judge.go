@@ -23,7 +23,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
-	"github.com/speakeasy-api/gram/server/internal/riskjudge"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	gramopenrouter "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
@@ -38,7 +37,7 @@ const (
 	// production form factors it had the cleanest false-positive profile of the
 	// models tested — the only one that stops over-flagging the agent's own
 	// tool-call XML, with no flip-flopping — AND the highest recall on the
-	// PromptIntel attack feed. It is also riskjudge's default, so both judges
+	// PromptIntel attack feed. It is also the promptpolicy evaluator's default, so both judges
 	// share one model. Paired with the machinery-aware clause in SystemPrompt
 	// below, the adversarial benchmark measured false positives dropping 6.9% ->
 	// 2.6% at unchanged recall. Every error path fails open (SAFE), so this stays
@@ -110,7 +109,7 @@ type Engine struct {
 	schema      or.ChatJSONSchemaConfig // built once; the verdict shape is constant
 }
 
-var _ promptinjection.Engine = (*Engine)(nil).Classify
+var _ promptinjection.Classifier = (*Engine)(nil).Classify
 
 var safeResult = promptinjection.Result{Label: promptinjection.LabelSafe, Score: 0, Rationale: ""}
 
@@ -229,12 +228,12 @@ func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, m
 }
 
 // judgePayload is the user turn: the captured event rendered as a structured
-// "message" object (produced_by, tool, body_kind, body / tool_calls) — the same
-// shape riskjudge feeds its policy judge, reused here. Structured JSON means a
+// "message" object (produced_by, tool, body_kind, body / tool_calls), matching
+// the policy judge payload shape. Structured JSON means a
 // hostile body can never spoof a field or instruction line: it is always a
 // quoted value in a known field the system prompt tells the judge to evaluate.
 type judgePayload struct {
-	Message riskjudge.MessagePayload `json:"message"`
+	Message judgemessage.Payload `json:"message"`
 }
 
 // judgeVerdict is the judge's structured-output response: the model's call plus
@@ -261,7 +260,7 @@ func cachedSystemMessage() or.ChatMessages {
 }
 
 func (c *Engine) call(ctx context.Context, req promptinjection.Request, msg judgemessage.Message) (judgeVerdict, error) {
-	payload, err := json.Marshal(judgePayload{Message: riskjudge.RenderMessage(msg)})
+	payload, err := json.Marshal(judgePayload{Message: judgemessage.RenderPayload(msg)})
 	if err != nil {
 		// Unreachable: the payload is strings, bools, and slices. Fall back to the
 		// raw body so a marshaling regression can't silently drop the event.

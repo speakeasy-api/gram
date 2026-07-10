@@ -1,4 +1,4 @@
-package riskjudge
+package openrouter
 
 import (
 	"context"

@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/policyflags"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 )
 
 // judgeConcurrency bounds the number of in-flight judge calls per batch.
@@ -21,18 +22,19 @@ const judgeConcurrency = 8
 // judgeFanout evaluates the given message indices against a guardrail prompt
 // with at most judgeConcurrency calls in flight, invoking apply for each result
 // (pos is the position within indices, idx the original message index, verdict
-// nil when the judge returned none, latency the wall-clock call time). onChunk,
-// when non-nil, runs after each chunk with the exclusive end position so callers
-// can record progress heartbeats. Shared by the batch analyzer and the
-// workbench replay so both drive the judge identically.
+// nil when the judge skipped, err non-nil when it degraded, latency the
+// wall-clock call time). onChunk, when non-nil, runs after each chunk with the
+// exclusive end position so callers can record progress heartbeats. Shared by
+// the batch analyzer and the workbench replay so both drive the judge
+// identically.
 func judgeFanout(
 	ctx context.Context,
-	judge PromptJudge,
+	judge promptpolicy.Evaluator,
 	orgID, projectID, prompt string,
-	cfg JudgeConfig,
+	cfg promptpolicy.Config,
 	msgs []batchMessage,
 	indices []int,
-	apply func(pos, idx int, verdict *JudgeVerdict, latency time.Duration),
+	apply func(pos, idx int, verdict *promptpolicy.Verdict, err error, latency time.Duration),
 	onChunk func(end int),
 ) {
 	for start := 0; start < len(indices); start += judgeConcurrency {
@@ -44,14 +46,14 @@ func judgeFanout(
 				defer wg.Done()
 				idx := indices[pos]
 				started := time.Now()
-				verdict := judge.Evaluate(ctx, JudgeInput{
+				verdict, err := judge(ctx, promptpolicy.Input{
 					OrgID:     orgID,
 					ProjectID: projectID,
 					Prompt:    prompt,
 					Message:   batchJudgeMessage(msgs[idx]),
 					Config:    cfg,
 				})
-				apply(pos, idx, verdict, time.Since(started))
+				apply(pos, idx, verdict, err, time.Since(started))
 			}(pos)
 		}
 		wg.Wait()
@@ -63,7 +65,7 @@ func judgeFanout(
 
 func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []batchMessage, outOfPolicyScope []bool) [][]scanners.Finding {
 	out := make([][]scanners.Finding, len(messages))
-	cfg := ParseJudgeConfig(policy.ModelConfig)
+	cfg := promptpolicy.ParseConfig(policy.ModelConfig)
 	if !a.projectFlagEnabled(ctx, args.OrganizationID, args.ProjectID, feature.FlagPromptPolicies) {
 		return out
 	}
@@ -80,19 +82,9 @@ func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchAr
 	}
 
 	if a.judge == nil || !policy.Prompt.Valid || strings.TrimSpace(policy.Prompt.String) == "" {
-		if !cfg.FailOpen {
-			finding := JudgeFinding(JudgeVerdict{
-				Matched:          true,
-				Confidence:       0,
-				Rationale:        "Policy judge was unavailable; flagged by fail-closed policy.",
-				CostUSD:          0,
-				PromptTokens:     0,
-				CompletionTokens: 0,
-				TotalTokens:      0,
-			})
-			for _, idx := range indices {
-				out[idx] = []scanners.Finding{finding}
-			}
+		findings := promptpolicy.FindingsFromEvaluation(cfg, nil, nil, true)
+		for _, idx := range indices {
+			out[idx] = findings
 		}
 		return out
 	}
@@ -101,12 +93,10 @@ func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchAr
 		ctx, a.judge,
 		args.OrganizationID, args.ProjectID.String(), policy.Prompt.String, cfg,
 		messages, indices,
-		func(_, idx int, verdict *JudgeVerdict, _ time.Duration) {
-			if verdict != nil && verdict.Matched {
-				out[idx] = []scanners.Finding{JudgeFinding(*verdict)}
-			}
+		func(_, idx int, verdict *promptpolicy.Verdict, err error, _ time.Duration) {
+			out[idx] = promptpolicy.FindingsFromEvaluation(cfg, verdict, err, false)
 		},
-		func(end int) { activity.RecordHeartbeat(ctx, SourceLLMJudge, end) },
+		func(end int) { activity.RecordHeartbeat(ctx, promptpolicy.Source, end) },
 	)
 	return out
 }
