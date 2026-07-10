@@ -145,10 +145,16 @@ func (f *ForwardTokenUsageToPostHog) forwardOrganization(ctx context.Context, qu
 		map[string]string{"organization": org.Slug}, properties); err != nil {
 		// Release the day's claim so the activity retry (or the next hourly
 		// run) can re-emit the point — otherwise a transient enqueue failure
-		// silently drops this org's trend point for the whole day. If the
-		// delete itself fails the point is lost; log so the gap is traceable.
-		if delErr := f.cache.Delete(ctx, dedupeKey); delErr != nil {
-			f.logger.ErrorContext(ctx, "failed to release token usage event dedupe claim",
+		// silently drops this org's trend point for the whole day. The
+		// release runs on a bounded non-cancelable context (same pattern as
+		// tum_usage_alerts.go): the capture may have failed BECAUSE the
+		// parent ctx was cancelled, and a release on that same ctx would fail
+		// with it, stranding the marker. If the delete still fails the point
+		// is lost; log so the gap is traceable.
+		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		defer cancel()
+		if delErr := f.cache.Delete(releaseCtx, dedupeKey); delErr != nil {
+			f.logger.ErrorContext(releaseCtx, "failed to release token usage event dedupe claim",
 				attr.SlogOrganizationID(orgID), attr.SlogError(delErr))
 		}
 		return fmt.Errorf("capture token usage event: %w", err)
