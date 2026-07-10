@@ -56,16 +56,19 @@ var (
 	// convention-only because the completions proxy legitimately accepts a
 	// client-supplied gram source on the chat key (Elements).
 	ModelUsageSourceRiskAnalysis = registerModelUsageSource("risk-analysis")
-)
 
-// ModelUsageSourceAssistants tags assistants completions in telemetry but is
-// deliberately NOT registered above: Speakeasy covers assistants inference
-// today, so it must not count toward the billed population. Keeping the tag
-// (instead of dropping the constant) is what keeps those completions OUT —
-// an untagged completion normalizes to "gram" and would re-enter the billed
-// scope. Move it into the registered block when customers can BYOK
-// (see the "BYOK for Assistants" Linear project).
-const ModelUsageSourceAssistants ModelUsageSource = "assistants"
+	// ModelUsageSourceAssistants tags assistant-runtime completions (the
+	// runner sends X-Gram-Source: assistant on every /chat/completions call).
+	// Registered per AGE-2850: assistant inference runs on the org's
+	// OpenRouter chat key, so leaving it out of the billed population let
+	// orgs draw down their monthly key cap with usage TUM never captured.
+	// Polar ingestion and the completions credit gate always covered this
+	// source — registration is what scopes it into the TUM cycle snapshots
+	// and the billing page reads. If the Polar credits meter filters events
+	// by source metadata, "assistants" must be included there as well (Polar
+	// dashboard config, not in this repo).
+	ModelUsageSourceAssistants = registerModelUsageSource("assistants")
+)
 
 // ModelUsageSources lists every registered completion surface.
 func ModelUsageSources() []ModelUsageSource {

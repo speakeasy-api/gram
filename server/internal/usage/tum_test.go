@@ -540,24 +540,31 @@ func TestGetTokensUnderManagementQuery_ExcludesUnregisteredSources(t *testing.T)
 
 	playgroundChat := uuid.New().String()
 	assistantsChat := uuid.New().String()
+	fleetChat := uuid.New().String()
 	untaggedChat := uuid.New().String()
 
 	// A registered billed surface: counted.
 	insertSourcedCompletionRow(t, chConn, projectID.String(), now, playgroundChat, 100, "playground")
 	insertToolCallRow(t, chConn, projectID.String(), now, playgroundChat)
 
-	// An unregistered surface (Speakeasy covers assistants inference until
-	// BYOK): excluded from the billed sum even though the chat qualifies.
+	// Assistant-runtime inference: registered per AGE-2850, counted toward
+	// the billed sum like any other completion surface.
 	insertSourcedCompletionRow(t, chConn, projectID.String(), now, assistantsChat, 5000, "assistants")
 	insertToolCallRow(t, chConn, projectID.String(), now, assistantsChat)
+
+	// An unregistered surface (fleet OTEL agents are analytics-only, never
+	// registered): excluded from the billed sum even though the chat
+	// qualifies.
+	insertSourcedCompletionRow(t, chConn, projectID.String(), now, fleetChat, 70000, "claude-code")
+	insertToolCallRow(t, chConn, projectID.String(), now, fleetChat)
 
 	// Rows without a hook source ('' — the shape of aggregates from before
 	// the dimension existed): grandfathered as billed.
 	insertTokenUsageRow(t, chConn, projectID.String(), now, untaggedChat, 40)
 	insertToolCallRow(t, chConn, projectID.String(), now, untaggedChat)
 
-	// Confirm all three chats materialized (unscoped read sees 5140), THEN
-	// assert the scoped read excludes exactly the assistants tokens — the
+	// Confirm all four chats materialized (unscoped read sees 75140), THEN
+	// assert the scoped read excludes exactly the fleet tokens — the
 	// exclusion cannot pass vacuously against a half-ingested view.
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		res, err := telemetryrepo.New(chConn).GetTokensUnderManagementByDay(t.Context(), telemetryrepo.GetTokensUnderManagementParams{
@@ -569,7 +576,7 @@ func TestGetTokensUnderManagementQuery_ExcludesUnregisteredSources(t *testing.T)
 		if !assert.NoError(c, err) {
 			return
 		}
-		assert.Equal(c, int64(5140), sumTumBuckets(res))
+		assert.Equal(c, int64(75140), sumTumBuckets(res))
 	}, 10*time.Second, 200*time.Millisecond)
 
 	buckets, err := telemetryrepo.New(chConn).GetTokensUnderManagementByDay(t.Context(), telemetryrepo.GetTokensUnderManagementParams{
@@ -579,6 +586,6 @@ func TestGetTokensUnderManagementQuery_ExcludesUnregisteredSources(t *testing.T)
 		BilledHookSources: billing.ModelUsageSourceStrings(),
 	})
 	require.NoError(t, err)
-	require.Equal(t, int64(140), sumTumBuckets(buckets),
-		"billed sum counts registered sources plus grandfathered '' rows, never assistants")
+	require.Equal(t, int64(5140), sumTumBuckets(buckets),
+		"billed sum counts registered sources (assistants included) plus grandfathered '' rows, never fleet agents")
 }

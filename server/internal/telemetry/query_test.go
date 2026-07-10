@@ -823,11 +823,10 @@ func TestQueryTumDetails_CountsOnlyBilledCompletions(t *testing.T) {
 	now := time.Date(2026, time.June, 20, 1, 0, 0, 0, time.UTC)
 	ts := now.Add(-10 * time.Minute)
 
-	// A billed completion (playground, a registered usage source) with stored
-	// evidence, next to two populations that must not appear anywhere in the
-	// billing details: an assistants completion (Speakeasy covers assistants
-	// inference until BYOK, so the surface is deliberately unregistered) and
-	// a Claude Code fleet api_request observed via OTEL (agent-native token
+	// Two billed completions with stored evidence — playground and an
+	// assistants-runtime completion (registered per AGE-2850) — next to a
+	// population that must not appear anywhere in the billing details: a
+	// Claude Code fleet api_request observed via OTEL (agent-native token
 	// attributes, never part of the billed population).
 	playgroundChat := uuid.NewString()
 	assistantsChat := uuid.NewString()
@@ -852,9 +851,9 @@ func TestQueryTumDetails_CountsOnlyBilledCompletions(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	// Wait until BOTH gram completions materialized in the billing aggregate
-	// (the assistants chat included) so the exclusion assertions below cannot
-	// pass vacuously against a half-ingested view.
+	// Wait until all gram completions materialized in the billing aggregate
+	// so the exclusion assertions below cannot pass vacuously against a
+	// half-ingested view.
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 	require.Eventually(t, func() bool {
@@ -881,17 +880,17 @@ func TestQueryTumDetails_CountsOnlyBilledCompletions(t *testing.T) {
 		}
 		result = res
 		// The stored-evidence rows qualify the chats asynchronously too.
-		return res.Totals.TotalTokens == 1370
+		return res.Totals.TotalTokens == 1925
 	}, 10*time.Second, 200*time.Millisecond)
 
-	require.Equal(t, int64(1370), result.Totals.InputTokens, "the fixture reports all tokens as input")
+	require.Equal(t, int64(1925), result.Totals.InputTokens, "the fixture reports all tokens as input")
 	require.Equal(t, int64(0), result.Totals.OutputTokens)
 
 	var pointSum int64
 	for _, p := range result.Points {
 		pointSum += p.TotalTokens
 	}
-	require.Equal(t, int64(1370), pointSum, "daily points must only count the billed completions")
+	require.Equal(t, int64(1925), pointSum, "daily points must only count the billed completions")
 
 	rowsByKey := map[string]map[string]int64{}
 	for _, b := range result.Breakdowns {
@@ -900,12 +899,12 @@ func TestQueryTumDetails_CountsOnlyBilledCompletions(t *testing.T) {
 			rowsByKey[b.Key][row.Value] = row.TotalTokens
 		}
 	}
-	require.Equal(t, map[string]int64{"playground": 1000, "risk-analysis": 300, "gram": 70}, rowsByKey["hook_source"],
+	require.Equal(t, map[string]int64{"playground": 1000, "assistants": 555, "risk-analysis": 300, "gram": 70}, rowsByKey["hook_source"],
 		"the source breakdown holds exactly the billed surfaces")
 	// The two model sections partition the billed population: user-facing
-	// completions vs the platform's scanning inference (declared tag and the
-	// grandfathered nil-chat gram row alike).
-	require.Equal(t, map[string]int64{"anthropic/claude-4.6": 1000}, rowsByKey["completion_model"])
+	// completions (assistants included) vs the platform's scanning inference
+	// (declared tag and the grandfathered nil-chat gram row alike).
+	require.Equal(t, map[string]int64{"anthropic/claude-4.6": 1000, "openai/gpt-5.4": 555}, rowsByKey["completion_model"])
 	require.Equal(t, map[string]int64{"google/gemini-3.1-flash-lite": 370}, rowsByKey["risk_analysis_model"])
 	// Scanned-user attribution flows into the billed rows, but a per-user
 	// (email) cut is deliberately not served to the billing page yet.
@@ -913,7 +912,7 @@ func TestQueryTumDetails_CountsOnlyBilledCompletions(t *testing.T) {
 	require.Equal(t, map[string]int64{"dev": 1000}, rowsByKey["role"])
 	// The fixture carries no division attribute; the tokens land on the ''
 	// row (labeled by the frontend).
-	require.Equal(t, map[string]int64{"": 1370}, rowsByKey["division_name"])
+	require.Equal(t, map[string]int64{"": 1925}, rowsByKey["division_name"])
 }
 
 func TestQueryTumDetails_IncludesDeletedProjects(t *testing.T) {
