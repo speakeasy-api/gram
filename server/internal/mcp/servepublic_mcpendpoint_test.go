@@ -278,10 +278,7 @@ func TestServePublic_NoMcpEndpoint_FallsBackToLegacyToolset(t *testing.T) {
 }
 
 // mintIssuerBearerForEndpoint drives ServeToken with a synthesised
-// UserSessionGrant for the (mcp_endpoint, mcp_server) pair behind slug and
-// returns the minted JWT. Mirrors the xmcp suite's helper so /mcp tests can
-// authenticate past the issuer gate without driving register → authorize →
-// consent over real HTTP.
+// UserSessionGrant and returns the minted JWT.
 func mintIssuerBearerForEndpoint(
 	t *testing.T,
 	ctx context.Context,

@@ -621,10 +621,6 @@ func TestServeMCP_IssuerGatedRemoteBackend_HappyPath(t *testing.T) {
 	require.Empty(t, gotAuth, "remote proxy strips inbound Authorization; no upstream remote_session is configured")
 }
 
-// mintAccessTokenForSeededEndpoint resolves the (mcp_endpoint, mcp_server)
-// pair produced by seedRemoteMCPEndpoint into a ResolvedMcpEndpoint and mints
-// an issuer-gated bearer for it, letting proxy-mechanics tests get past the
-// gate and reach the upstream stub.
 func mintAccessTokenForSeededEndpoint(
 	t *testing.T,
 	ctx context.Context,
