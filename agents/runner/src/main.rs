@@ -5,12 +5,14 @@ mod gram_client;
 mod http_layer;
 mod runtime;
 mod server;
+mod telemetry;
 mod tools;
 mod wire;
 mod workdir;
 
 use std::net::SocketAddr;
 use std::process::ExitCode;
+use std::sync::Arc;
 
 use clap::{Parser, Subcommand, ValueEnum};
 use opentelemetry::trace::TracerProvider as _;
@@ -22,6 +24,7 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
 use crate::server::ServeConfig;
+use crate::telemetry::{IdentityStampProcessor, SpanIdentity};
 
 #[derive(Parser, Debug)]
 #[command(name = "gram-assistant-runner", version)]
@@ -96,12 +99,17 @@ async fn main() -> ExitCode {
             with_otel_tracing,
             otel_protocol,
         } => {
-            let tracer_provider = init_tracing(with_otel_tracing.then_some(otel_protocol));
+            let identity = Arc::new(SpanIdentity::default());
+            SpanIdentity::bind(&identity.assistant_id, assistant_id.as_deref());
+            let tracer_provider = init_tracing(
+                with_otel_tracing.then_some(otel_protocol),
+                Arc::clone(&identity),
+            );
             let result = server::serve(ServeConfig {
                 addr,
-                assistant_id,
                 server_url,
                 initial_token,
+                identity,
             })
             .await
             .map_err(|e| e.to_string());
@@ -130,7 +138,13 @@ async fn main() -> ExitCode {
 /// An exporter that fails to build degrades to log-only tracing rather than
 /// failing the process: the runner serves user traffic and a misconfigured
 /// collector endpoint should not take it down.
-fn init_tracing(otel_protocol: Option<OtlpProtocol>) -> Option<SdkTracerProvider> {
+///
+/// `identity` feeds an [`IdentityStampProcessor`] that stamps gram identity
+/// onto every exported span; the same cells are shared with the runtime host.
+fn init_tracing(
+    otel_protocol: Option<OtlpProtocol>,
+    identity: Arc<SpanIdentity>,
+) -> Option<SdkTracerProvider> {
     let filter = tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
         tracing_subscriber::EnvFilter::new(
             "info,agentkit=trace,agentkit_loop=trace,agentkit_reporting=trace,agentkit_mcp=trace",
@@ -153,6 +167,7 @@ fn init_tracing(otel_protocol: Option<OtlpProtocol>) -> Option<SdkTracerProvider
             Some(
                 SdkTracerProvider::builder()
                     .with_resource(resource)
+                    .with_span_processor(IdentityStampProcessor::new(identity))
                     .with_batch_exporter(exporter)
                     .build(),
             )

@@ -11,21 +11,24 @@ use tokio::sync::{Mutex, Notify};
 use crate::runtime::{
     AppState, DEFAULT_THREAD_IDLE_TTL, McpCmd, build_host, ensure_thread, snapshot_threads,
 };
+use crate::telemetry::SpanIdentity;
 
 const IDEMPOTENCY_HEADER: &str = "x-idempotency-key";
 use crate::wire::{RunnerStateResponse, ThreadStateView, ThreadTurnRequest, ThreadTurnResponse};
 
 pub struct ServeConfig {
     pub addr: SocketAddr,
-    pub assistant_id: Option<String>,
     pub server_url: String,
     pub initial_token: String,
+    /// Shared with the span processor registered in `init_tracing` so spans
+    /// pick up the identity as soon as the host learns it.
+    pub identity: Arc<SpanIdentity>,
 }
 
 pub async fn serve(config: ServeConfig) -> Result<(), std::io::Error> {
     let shutdown = Arc::new(Notify::new());
     let host = build_host(
-        config.assistant_id,
+        config.identity,
         config.server_url,
         config.initial_token,
         DEFAULT_THREAD_IDLE_TTL,
@@ -57,7 +60,12 @@ async fn healthz() -> &'static str {
 async fn state_handler(State(host): State<AppState>) -> Json<RunnerStateResponse> {
     let snapshot = snapshot_threads(&host);
     Json(RunnerStateResponse {
-        assistant_id: host.assistant_id.get().cloned().unwrap_or_default(),
+        assistant_id: host
+            .identity
+            .assistant_id
+            .get()
+            .cloned()
+            .unwrap_or_default(),
         uptime_seconds: host.started_at.elapsed().as_secs(),
         threads: snapshot
             .into_iter()
@@ -70,15 +78,7 @@ async fn state_handler(State(host): State<AppState>) -> Json<RunnerStateResponse
     })
 }
 
-#[tracing::instrument(
-    name = "thread_turn",
-    skip_all,
-    fields(
-        thread_id = %thread_id,
-        gram.assistant.id = tracing::field::Empty,
-        gram.project.id = tracing::field::Empty,
-    )
-)]
+#[tracing::instrument(name = "thread_turn", skip_all, fields(thread_id = %thread_id))]
 async fn thread_turn(
     State(host): State<AppState>,
     Path(thread_id): Path<String>,
@@ -123,35 +123,10 @@ async fn thread_turn(
         .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))?;
 
     // A warm-pool sandbox boots without GRAM_ASSISTANT_ID and learns its
-    // assistant from the first turn that carries one. Bind it only after
-    // bootstrap succeeds (so a failed turn can't poison the pod's identity) and
-    // never from an empty/whitespace id. Set-once: a boot env value wins.
-    if let Some(assistant_id) = request
-        .assistant_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|id| !id.is_empty())
-    {
-        let _ = host.assistant_id.set(assistant_id.to_string());
-    }
-    // Same set-once discipline for the project id; it only feeds trace
-    // attributes, so a turn that omits it just leaves the cell for the next.
-    if let Some(project_id) = request
-        .project_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|id| !id.is_empty())
-    {
-        let _ = host.project_id.set(project_id.to_string());
-    }
-
-    let span = tracing::Span::current();
-    if let Some(id) = host.assistant_id.get() {
-        span.record("gram.assistant.id", tracing::field::display(id));
-    }
-    if let Some(id) = host.project_id.get() {
-        span.record("gram.project.id", tracing::field::display(id));
-    }
+    // identity from the first turn that carries it. Bind only after bootstrap
+    // succeeds so a failed turn can't poison the pod's identity.
+    SpanIdentity::bind(&host.identity.assistant_id, request.assistant_id.as_deref());
+    SpanIdentity::bind(&host.identity.project_id, request.project_id.as_deref());
 
     // Hand reconcile to the actor and proceed to enqueue. The actor runs
     // concurrently with the agent loop, so a server added by this /turn
