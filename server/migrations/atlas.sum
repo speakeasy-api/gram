@@ -1,4 +1,4 @@
-h1:8ARJrIxiZeoNMNHEEAH3DwOyqJPccITyaGZqbgnVjq8=
+h1:GG5OzyR1DMRdmTHKjfN7yboTxK1EKO4T1DNULsEkm/8=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -253,4 +253,8 @@ h1:8ARJrIxiZeoNMNHEEAH3DwOyqJPccITyaGZqbgnVjq8=
 20260708221138_comment-users-admin-platform-admin.sql h1:OWKP0Byie6YS9Ji7I3NlK7ik2b6NF6C9T2HyUH/5p7k=
 20260708232901_add-user-session-issuer-classification.sql h1:vs+5d/Qj35hGa90mEysuL1tFakAUOWmuqTUDUVuz118=
 20260709083351_risk-policy-challenge-call-fingerprint.sql h1:jIIXDWLontE+WT4GeA17OSO3rojBf76ZLETT9i2bubA=
-20260709123439_risk-policies-add-score.sql h1:qpzdDDBmU9lq6KEsNGNppJWuD6YcrOZdu7rKNgTKAec=
+20260709124627_add-remote-session-issuer-documentation-urls.sql h1:xnKvDYXMQkyBCJIRGe+XZHJfq8sI1y+EgQfHsea3zO4=
+20260709172736_device-agent-syncs.sql h1:GZQ/O5LcdX5dtVYE4ADV6y4pOFGoaTYv4maGmzw1mUw=
+20260709213047_plugin-connections-split-fingerprint.sql h1:zwCQg6wRiUD27gtUHufcNFPPHRwzsL0XDM1gDGl60o0=
+20260709233126_openrouter-api-keys-key-type.sql h1:StwicFRLrgGzCpkGnK+0ta9YTOwZP7vN9yOVJIvoDhE=
+20260710091948_risk-policies-add-score.sql h1:8HQa1NIJgn9NC86OtcVbwyPoatbngUtlfHzv2+ugHs4=

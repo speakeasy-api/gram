@@ -30,3 +30,18 @@ func BuildGetPluginsPayload(agentGetPluginsEmail string, agentGetPluginsApikeyTo
 
 	return v, nil
 }
+
+// BuildListSyncedUsersPayload builds the payload for the agent listSyncedUsers
+// endpoint from CLI flags.
+func BuildListSyncedUsersPayload(agentListSyncedUsersSessionToken string) (*agent.ListSyncedUsersPayload, error) {
+	var sessionToken *string
+	{
+		if agentListSyncedUsersSessionToken != "" {
+			sessionToken = &agentListSyncedUsersSessionToken
+		}
+	}
+	v := &agent.ListSyncedUsersPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}

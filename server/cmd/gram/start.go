@@ -453,8 +453,6 @@ func newStartCommand() *cli.Command {
 				attr.SlogServiceVersion(shortGitSHA()),
 				attr.SlogServiceEnv(serviceEnv),
 			)
-			tracerProvider := otel.GetTracerProvider()
-			meterProvider := otel.GetMeterProvider()
 			slog.SetDefault(logger)
 
 			if serviceEnv == "local" {
@@ -475,6 +473,9 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("setup opentelemetry sdk: %w", err)
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
+
+			tracerProvider := otel.GetTracerProvider()
+			meterProvider := otel.GetMeterProvider()
 
 			guardianPolicy, err := newGuardianPolicy(c, tracerProvider)
 			if err != nil {
@@ -596,7 +597,7 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("failed to create kubernetes client: %w", err)
 			}
 
-			temporalEnv, shutdown, err := newTemporalClient(logger, temporalClientOptions{
+			temporalEnv, shutdown, err := newTemporalClient(logger, meterProvider, temporalClientOptions{
 				address:      c.String("temporal-address"),
 				namespace:    c.String("temporal-namespace"),
 				taskQueue:    c.String("temporal-task-queue"),
@@ -1252,6 +1253,7 @@ func newStartCommand() *cli.Command {
 						TelemetryRepo:                  telemetryrepo.New(chDB),
 						TriggersApp:                    triggerApp,
 						CacheAdapter:                   cache.NewRedisCacheAdapter(redisClient),
+						EmailService:                   emailService,
 						AssistantsCore:                 assistantsCore,
 						TemporalEnv:                    temporalEnv,
 						PIIScanner:                     piiScanner,

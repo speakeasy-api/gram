@@ -11,3 +11,8 @@ package server
 func GetPluginsAgentPath() string {
 	return "/rpc/agent.getPlugins"
 }
+
+// ListSyncedUsersAgentPath returns the URL path to the agent service listSyncedUsers HTTP endpoint.
+func ListSyncedUsersAgentPath() string {
+	return "/rpc/agent.listSyncedUsers"
+}

@@ -195,17 +195,22 @@ func (c *fakeCompletionClient) lastPrompt() string {
 	return c.prompts[len(c.prompts)-1]
 }
 
-func (c *fakeCompletionClient) GetObjectCompletion(_ context.Context, request openrouter.ObjectCompletionRequest) (*openrouter.CompletionResponse, error) {
+func (c *fakeCompletionClient) GetCompletion(_ context.Context, request openrouter.CompletionRequest) (*openrouter.CompletionResponse, error) {
 	c.calls.Add(1)
+	// The judge sends [system, user]; the user message carries the payload JSON.
+	prompt := ""
+	if n := len(request.Messages); n > 0 {
+		prompt = openrouter.GetText(request.Messages[n-1])
+	}
 	c.mu.Lock()
-	c.prompts = append(c.prompts, request.Prompt)
+	c.prompts = append(c.prompts, prompt)
 	c.mu.Unlock()
 	if c.err != nil {
 		return nil, c.err
 	}
 
 	var p judgePayload
-	_ = json.Unmarshal([]byte(request.Prompt), &p)
+	_ = json.Unmarshal([]byte(prompt), &p)
 	resp := `{"is_attack":false,"confidence":0,"rationale":"ok"}`
 	if c.responder != nil {
 		resp = c.responder(p.Message.Body)
@@ -218,7 +223,7 @@ func (c *fakeCompletionClient) GetObjectCompletion(_ context.Context, request op
 	return &openrouter.CompletionResponse{Message: &msg}, nil
 }
 
-func (c *fakeCompletionClient) GetCompletion(_ context.Context, _ openrouter.CompletionRequest) (*openrouter.CompletionResponse, error) {
+func (c *fakeCompletionClient) GetObjectCompletion(_ context.Context, _ openrouter.ObjectCompletionRequest) (*openrouter.CompletionResponse, error) {
 	return nil, errors.New("not implemented")
 }
 

@@ -28,26 +28,30 @@ name: Review Bypass
 # that window fires no run. Running the same reconciliation on
 # `synchronize` (the push that resolves the conflict) repairs any state
 # that drifted while runs were suppressed.
+#
+# When a PR merges with the bypass label still applied, the notify job
+# posts an audit notification to the #github-prs Slack channel.
 
 on:
   pull_request:
-    types: [labeled, unlabeled, synchronize]
+    types: [labeled, unlabeled, synchronize, closed]
 
 permissions: {}
-
-# Serialize runs per PR so rapid label churn can't interleave; each run
-# reconciles from freshly-read state, so the last run always converges.
-concurrency:
-  group: review-bypass-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
 
 jobs:
   reconcile:
     name: Reconcile bypass approval with label
     if: >
+      github.event.action != 'closed' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       (github.event.action == 'synchronize' || github.event.label.name == 'review:bypass')
     runs-on: blacksmith-2vcpu-ubuntu-2404
+    # Serialize runs per PR so rapid label churn can't interleave; each run
+    # reconciles from freshly-read state, so the last run always converges.
+    # Job-level (not workflow-level) so notify runs are never cancelled.
+    concurrency:
+      group: review-bypass-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
     steps:
       - name: Generate gram-bot token
         id: generate-token
@@ -99,3 +103,58 @@ jobs:
           else
             echo "State already consistent (label present: ${has_label}); nothing to do."
           fi
+
+  notify:
+    name: Notify Slack of bypass merge
+    if: >
+      github.event.action == 'closed' &&
+      github.event.pull_request.merged == true &&
+      contains(github.event.pull_request.labels.*.name, 'review:bypass') &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    permissions:
+      issues: read # timeline lookup of who applied the bypass label
+    steps:
+      - name: Post to #github-prs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_GITHUB_PRS_WEBHOOK_URL }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "$SLACK_WEBHOOK_URL" ]]; then
+            echo "SLACK_GITHUB_PRS_WEBHOOK_URL secret is not set; skipping notification."
+            exit 0
+          fi
+
+          labeled_by=$(gh api "repos/${REPO}/issues/${PR_NUMBER}/events" --paginate \
+            --jq '[.[] | select(.event == "labeled" and .label.name == "review:bypass") | .actor.login] | last // empty' \
+            | tail -1)
+          labeled_by="${labeled_by:-unknown}"
+
+          # Escape Slack mrkdwn control characters so PR metadata (title,
+          # branch name) can't inject formatting or special mentions like
+          # <!channel> into the audit post. The title also stays outside the
+          # <url|label> link so a literal "|" can't corrupt the link syntax.
+          escape_mrkdwn() {
+            local s=$1
+            s=${s//&/&amp;}
+            s=${s//</&lt;}
+            s=${s//>/&gt;}
+            printf '%s' "$s"
+          }
+          title_esc=$(escape_mrkdwn "$PR_TITLE")
+          branch_esc=$(escape_mrkdwn "$BASE_BRANCH")
+
+          payload=$(jq -n \
+            --arg text ":warning: *Review bypass merge* — <${PR_URL}|#${PR_NUMBER}> ${title_esc} by \`${PR_AUTHOR}\` merged to \`${branch_esc}\` without independent review. Bypass authorized by \`${labeled_by}\` via the \`review:bypass\` label. All required status checks passed." \
+            '{text: $text}')
+
+          curl -sf -X POST -H 'Content-Type: application/json' -d "$payload" "$SLACK_WEBHOOK_URL"
+          echo "Posted bypass-merge notification for PR #${PR_NUMBER} (authorized by ${labeled_by})."

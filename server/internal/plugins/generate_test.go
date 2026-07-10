@@ -4206,26 +4206,37 @@ func TestGeneratePluginPackagesStampsConfigVersionIntoEveryManifest(t *testing.T
 	files, err := GeneratePluginPackages(plugins, cfg)
 	require.NoError(t, err)
 
-	// Every plugin.json the publisher writes — both per-plugin and the
-	// per-org observability bundle, across all three platforms — must carry
-	// the supplied version.
-	manifestPaths := []string{
-		"engineering-tools/.claude-plugin/plugin.json",
-		"cursor-plugins/engineering-tools-cursor/.cursor-plugin/plugin.json",
-		"engineering-tools-codex/.codex-plugin/plugin.json",
-		"acme-observability/.claude-plugin/plugin.json",
-		"cursor-plugins/acme-observability-cursor/.cursor-plugin/plugin.json",
-		"acme-observability-codex/.codex-plugin/plugin.json",
-	}
-	for _, p := range manifestPaths {
+	readVersion := func(p string) string {
 		raw, ok := files[p]
 		require.True(t, ok, "missing manifest: %s", p)
-
 		var meta struct {
 			Version string `json:"version"`
 		}
 		require.NoError(t, json.Unmarshal(raw, &meta), "parse %s", p)
-		require.Equal(t, "0.1.1747087200", meta.Version, "%s did not pick up cfg.Version", p)
+		return meta.Version
+	}
+
+	// Every per-plugin (MCP) plugin.json across all three platforms carries the
+	// per-publish cfg.Version so platform marketplaces refresh on republish.
+	mcpManifestPaths := []string{
+		"engineering-tools/.claude-plugin/plugin.json",
+		"cursor-plugins/engineering-tools-cursor/.cursor-plugin/plugin.json",
+		"engineering-tools-codex/.codex-plugin/plugin.json",
+	}
+	for _, p := range mcpManifestPaths {
+		require.Equal(t, "0.1.1747087200", readVersion(p), "%s did not pick up cfg.Version", p)
+	}
+
+	// The observability (hooks) plugin.json is versioned deterministically off
+	// hooksGeneratorVersion instead, so it stays stable across MCP publishes and
+	// changes only on a manual bump.
+	observabilityManifestPaths := []string{
+		"acme-observability/.claude-plugin/plugin.json",
+		"cursor-plugins/acme-observability-cursor/.cursor-plugin/plugin.json",
+		"acme-observability-codex/.codex-plugin/plugin.json",
+	}
+	for _, p := range observabilityManifestPaths {
+		require.Equal(t, hooksManifestVersion(), readVersion(p), "%s must use the hooks generator version", p)
 	}
 }
 
@@ -4296,33 +4307,36 @@ func fingerprintTestPlugins() []PluginInfo {
 	}
 }
 
-func TestPluginFingerprintIsStableAcrossCalls(t *testing.T) {
+func TestMCPFingerprintsIsStableAcrossCalls(t *testing.T) {
 	t.Parallel()
 	cfg := GenerateConfig{OrgName: "Acme Corp", ServerURL: "https://app.getgram.ai", ProjectSlug: "acme"}
 
-	first, err := PluginFingerprint(fingerprintTestPlugins(), cfg)
+	first, err := MCPFingerprints(fingerprintTestPlugins(), cfg)
 	require.NoError(t, err)
-	require.True(t, strings.HasPrefix(first, "sha256:"))
+	// One entry per plugin plus the reserved shared entry.
+	require.Contains(t, first, "engineering-tools")
+	require.Contains(t, first, mcpSharedFingerprintKey)
+	require.True(t, strings.HasPrefix(first["engineering-tools"], "sha256:"))
 
-	second, err := PluginFingerprint(fingerprintTestPlugins(), cfg)
+	second, err := MCPFingerprints(fingerprintTestPlugins(), cfg)
 	require.NoError(t, err)
 
-	require.Equal(t, first, second, "same plugins + config must produce the same fingerprint")
+	require.Equal(t, first, second, "same plugins + config must produce the same fingerprints")
 }
 
-func TestPluginFingerprintIgnoresPerPublishFields(t *testing.T) {
+func TestMCPFingerprintsIgnoresPerPublishFields(t *testing.T) {
 	t.Parallel()
 	plugins := fingerprintTestPlugins()
 
-	base, err := PluginFingerprint(plugins, GenerateConfig{
+	base, err := MCPFingerprints(plugins, GenerateConfig{
 		OrgName:   "Acme Corp",
 		ServerURL: "https://app.getgram.ai",
 	})
 	require.NoError(t, err)
 
-	// Version and the injected API keys vary on every publish; the fingerprint
-	// normalizes them so they must not change the result.
-	withNoise, err := PluginFingerprint(plugins, GenerateConfig{
+	// Version and the injected API keys vary on every publish; the fingerprints
+	// normalize them so they must not change the result.
+	withNoise, err := MCPFingerprints(plugins, GenerateConfig{
 		OrgName:     "Acme Corp",
 		ServerURL:   "https://app.getgram.ai",
 		Version:     "0.1.1750000000",
@@ -4331,45 +4345,34 @@ func TestPluginFingerprintIgnoresPerPublishFields(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	require.Equal(t, base, withNoise, "manifest version and API keys must not affect the fingerprint")
+	require.Equal(t, base, withNoise, "manifest version and API keys must not affect the fingerprints")
 }
 
-func TestPluginFingerprintChangesWithPluginConfig(t *testing.T) {
+// A change to one plugin must change only that plugin's fingerprint, leaving the
+// others untouched — the property a per-plugin publish flow relies on.
+func TestMCPFingerprintsIsolatesChangePerPlugin(t *testing.T) {
 	t.Parallel()
 	cfg := GenerateConfig{OrgName: "Acme Corp", ServerURL: "https://app.getgram.ai"}
 
-	base, err := PluginFingerprint(fingerprintTestPlugins(), cfg)
+	plugins := []PluginInfo{
+		{Name: "Plugin A", Slug: "plugin-a", Description: "A", Servers: []PluginServerInfo{{DisplayName: "a1", MCPURL: "https://app.getgram.ai/mcp/a1"}}},
+		{Name: "Plugin B", Slug: "plugin-b", Description: "B", Servers: []PluginServerInfo{{DisplayName: "b1", MCPURL: "https://app.getgram.ai/mcp/b1"}}},
+	}
+
+	base, err := MCPFingerprints(plugins, cfg)
 	require.NoError(t, err)
 
-	changed := fingerprintTestPlugins()
-	changed[0].Servers = append(changed[0].Servers, PluginServerInfo{
-		DisplayName: "analytics",
-		Policy:      "optional",
-		MCPURL:      "https://app.getgram.ai/mcp/analytics-xyz",
-	})
-	changedFP, err := PluginFingerprint(changed, cfg)
+	// Add a server to plugin A only.
+	changed := []PluginInfo{
+		{Name: "Plugin A", Slug: "plugin-a", Description: "A", Servers: []PluginServerInfo{
+			{DisplayName: "a1", MCPURL: "https://app.getgram.ai/mcp/a1"},
+			{DisplayName: "a2", MCPURL: "https://app.getgram.ai/mcp/a2"},
+		}},
+		{Name: "Plugin B", Slug: "plugin-b", Description: "B", Servers: []PluginServerInfo{{DisplayName: "b1", MCPURL: "https://app.getgram.ai/mcp/b1"}}},
+	}
+	changedFP, err := MCPFingerprints(changed, cfg)
 	require.NoError(t, err)
 
-	require.NotEqual(t, base, changedFP, "adding a server must change the fingerprint")
-}
-
-func TestPluginFingerprintChangesWithGeneratorVersion(t *testing.T) {
-	t.Parallel()
-	// The generator version is mixed into the hash so a deliberate bump forces
-	// every project to be seen as changed.
-	cfg := GenerateConfig{OrgName: "Acme Corp", ServerURL: "https://app.getgram.ai"}
-	plugins := fingerprintTestPlugins()
-
-	files, err := GeneratePluginPackages(plugins, GenerateConfig{
-		OrgName:     cfg.OrgName,
-		ServerURL:   cfg.ServerURL,
-		APIKey:      fingerprintAPIKeySentinel,
-		HooksAPIKey: fingerprintHooksKeySentinel,
-	})
-	require.NoError(t, err)
-	require.NotEmpty(t, files)
-
-	fp, err := PluginFingerprint(plugins, cfg)
-	require.NoError(t, err)
-	require.NotEmpty(t, fp)
+	require.NotEqual(t, base["plugin-a"], changedFP["plugin-a"], "changed plugin's fingerprint must differ")
+	require.Equal(t, base["plugin-b"], changedFP["plugin-b"], "untouched plugin's fingerprint must be stable")
 }

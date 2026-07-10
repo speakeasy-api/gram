@@ -3,7 +3,9 @@ package github
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,6 +18,11 @@ import (
 )
 
 const apiBase = "https://api.github.com"
+
+// ErrRepoNotFound is returned by GetRepoFiles when the repository or the
+// requested branch does not exist yet, so callers can treat a never-published
+// project as a first publish rather than an error.
+var ErrRepoNotFound = errors.New("github repo or branch not found")
 
 // validGitHubUsername matches GitHub's username rules: 1-39 chars, starting
 // with an alphanumeric, alphanumeric or hyphen thereafter. Enforced before
@@ -132,6 +139,93 @@ func (c *Client) PushFiles(ctx context.Context, installationID int64, owner, rep
 	}
 
 	return newCommitSHA, nil
+}
+
+// GetRepoFiles returns every file on the given branch as a path->content map,
+// using the Git Trees API (recursive) plus one blob fetch per file. Returns
+// ErrRepoNotFound if the repo or branch does not exist yet. The publish path
+// uses this to carry an unchanged plugin component (hooks or MCP) verbatim from
+// the existing repo into a fresh push, so publishing one component leaves the
+// other's files — including their embedded API keys — untouched.
+func (c *Client) GetRepoFiles(ctx context.Context, installationID int64, owner, repo, branch string) (map[string][]byte, error) {
+	treeURL, _ := url.JoinPath(apiBase, "repos", owner, repo, "git", "trees", branch)
+	treeURL += "?recursive=1"
+	resp, err := c.doAPI(ctx, installationID, http.MethodGet, treeURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("get tree: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
+
+	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusConflict {
+		// 404: repo/branch absent. 409: repo exists but is empty (no commits on
+		// the branch yet). Both mean "nothing published to carry forward".
+		return nil, ErrRepoNotFound
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("get tree: status %d: %s", resp.StatusCode, truncatedBody(resp))
+	}
+
+	var tree struct {
+		Entries []struct {
+			Path string `json:"path"`
+			Type string `json:"type"`
+			SHA  string `json:"sha"`
+		} `json:"tree"`
+		Truncated bool `json:"truncated"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&tree); err != nil {
+		return nil, fmt.Errorf("decode tree: %w", err)
+	}
+	if tree.Truncated {
+		// Our plugin repos are far below GitHub's recursive listing limits;
+		// a truncated response would silently drop files and corrupt a carry.
+		return nil, fmt.Errorf("get tree: response truncated (repo too large)")
+	}
+
+	files := make(map[string][]byte, len(tree.Entries))
+	for _, entry := range tree.Entries {
+		if entry.Type != "blob" {
+			continue
+		}
+		content, err := c.getBlob(ctx, installationID, owner, repo, entry.SHA)
+		if err != nil {
+			return nil, fmt.Errorf("get blob %s: %w", entry.Path, err)
+		}
+		files[entry.Path] = content
+	}
+
+	return files, nil
+}
+
+func (c *Client) getBlob(ctx context.Context, installationID int64, owner, repo, sha string) ([]byte, error) {
+	blobURL, _ := url.JoinPath(apiBase, "repos", owner, repo, "git", "blobs", sha)
+	resp, err := c.doAPI(ctx, installationID, http.MethodGet, blobURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("status %d: %s", resp.StatusCode, truncatedBody(resp))
+	}
+
+	var blob struct {
+		Content  string `json:"content"`
+		Encoding string `json:"encoding"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&blob); err != nil {
+		return nil, fmt.Errorf("decode blob: %w", err)
+	}
+	if blob.Encoding != "base64" {
+		return nil, fmt.Errorf("unexpected blob encoding %q", blob.Encoding)
+	}
+	// The Blobs API wraps base64 content at column 76 with newlines, which the
+	// standard decoder rejects; strip them before decoding.
+	decoded, err := base64.StdEncoding.DecodeString(strings.ReplaceAll(blob.Content, "\n", ""))
+	if err != nil {
+		return nil, fmt.Errorf("decode base64 blob: %w", err)
+	}
+	return decoded, nil
 }
 
 func (c *Client) getRef(ctx context.Context, installationID int64, owner, repo, branch string) (string, error) {

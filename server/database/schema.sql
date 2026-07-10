@@ -352,6 +352,26 @@ CREATE UNIQUE INDEX IF NOT EXISTS api_keys_organization_id_name_key
 ON api_keys (organization_id, name)
 WHERE deleted IS FALSE;
 
+-- Tracks which users are actively running the Speakeasy device agent. The agent
+-- polls agent.getPlugins every ~60s carrying the enrolled user's email; that
+-- email is the only per-user signal (the org-scoped API key is shared across the
+-- fleet), so we key last-seen on (organization_id, email).
+CREATE TABLE IF NOT EXISTS device_agent_syncs (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+
+  organization_id TEXT NOT NULL,
+  email TEXT NOT NULL,
+
+  first_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  last_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT device_agent_syncs_pkey PRIMARY KEY (id),
+  CONSTRAINT device_agent_syncs_org_email_key UNIQUE (organization_id, email),
+  CONSTRAINT device_agent_syncs_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS deployments_openapiv3_assets (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   deployment_id uuid NOT NULL,
@@ -925,6 +945,9 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
   token_endpoint TEXT,
   registration_endpoint TEXT,
   jwks_uri TEXT,
+  service_documentation TEXT,
+  op_policy_uri TEXT,
+  op_tos_uri TEXT,
 
   scopes_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   grant_types_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
@@ -941,6 +964,10 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
 
   name TEXT CHECK (name IS NULL OR name <> ''),
   logo_asset_id uuid,
+
+  -- Manually set (not RFC 8414) link to instructions for setting up an OAuth
+  -- client with this issuer's provider, surfaced to customers.
+  client_setup_documentation_url TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1227,6 +1254,14 @@ ON http_security (type, scheme);
 CREATE TABLE IF NOT EXISTS openrouter_api_keys (
   organization_id TEXT NOT NULL,
 
+  -- Which upstream OpenRouter key this row provisions: 'chat' pays for
+  -- customer-facing completion surfaces (playground, elements, assistants,
+  -- /chat/completions proxy); 'internal' pays for platform-initiated LLM
+  -- usage (risk judges, title generation, chat resolutions, memory), so a
+  -- burst of scanning inference can never exhaust the chat key's monthly cap
+  -- and 402 the customer's chat surface.
+  key_type TEXT NOT NULL DEFAULT 'chat',
+
   key TEXT NOT NULL,
   key_hash TEXT NOT NULL,
   monthly_credits BIGINT NOT NULL DEFAULT 0,
@@ -1237,7 +1272,7 @@ CREATE TABLE IF NOT EXISTS openrouter_api_keys (
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
-  CONSTRAINT openrouter_api_keys_pkey PRIMARY KEY (organization_id)
+  CONSTRAINT openrouter_api_keys_pkey PRIMARY KEY (organization_id, key_type)
 );
 
 
@@ -3239,13 +3274,27 @@ CREATE TABLE IF NOT EXISTS plugin_github_connections (
   -- existing connections (and any future connection without the marketplace
   -- surface enabled) are unconstrained.
   marketplace_token TEXT,
-  -- Stable content hash of the plugin packages last published to this repo,
-  -- independent of per-publish values (manifest version, injected API keys).
-  -- The automated generator rollout compares the current fingerprint against
-  -- this value and skips republishing when nothing has changed. Nullable so
-  -- connections published before fingerprinting existed re-publish once to
-  -- backfill it.
+  -- DEPRECATED: superseded by published_mcp_fingerprint + published_hooks_version
+  -- when hooks and MCP plugin generation were decoupled. No longer written or
+  -- read; retained per expand-contract and dropped in a later contract migration.
   published_fingerprint TEXT,
+  -- Per-plugin content fingerprints of the MCP (feature) plugins last published
+  -- to this repo: a JSON object mapping plugin slug -> stable hash (plus a
+  -- reserved "__shared__" key for the marketplace/README files), independent of
+  -- per-publish values (manifest version, injected API key). The automated
+  -- rollout compares the current fingerprints against this value to skip no-op
+  -- MCP republishes. JSON (rather than a single hash) so a future per-plugin
+  -- publish flow can decide independently which plugins have unpublished changes
+  -- without another migration. Excludes the hooks subtree, which rolls out on
+  -- published_hooks_version instead. Nullable so connections predating the split
+  -- republish once to backfill it.
+  published_mcp_fingerprints JSONB,
+  -- The hooksGeneratorVersion stamped into the observability (hooks) plugin last
+  -- published to this repo. The rollout regenerates the hooks subtree only when
+  -- the current hooksGeneratorVersion differs from this value, so an MCP-only
+  -- publish leaves the hooks plugin untouched. Nullable so connections predating
+  -- the split republish the hooks plugin once to backfill it.
+  published_hooks_version TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),

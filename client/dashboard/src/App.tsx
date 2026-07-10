@@ -39,6 +39,7 @@ import { usePageTitle } from "./hooks/use-page-title";
 import { PREFERRED_THEME_STORAGE_KEY } from "./lib/local-storage-keys";
 import CliCallback from "./pages/cli/CliCallback";
 import ShadowMCPRequestAccess from "./pages/shadow-mcp/RequestAccess";
+import RiskPolicyChallengeAcknowledge from "./pages/risk-policy-challenge/Acknowledge";
 import { BlockPage } from "./pages/blocks/BlockDetail";
 import SwitchOrg from "./pages/demo/SwitchOrg";
 import { AppRoute, useRoutes, useOrgRoutes } from "./routes";
@@ -310,6 +311,10 @@ const RouteProvider = () => {
         <Route
           path="/risk-policy-bypass/request"
           element={<ShadowMCPRequestAccess />}
+        />
+        <Route
+          path="/risk-policy-challenge/acknowledge"
+          element={<RiskPolicyChallengeAcknowledge />}
         />
         <Route path="/blocks/:id" element={<BlockPage />} />
         <Route path="/" element={<LoginCheck />}>

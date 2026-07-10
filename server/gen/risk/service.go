@@ -70,6 +70,17 @@ type Service interface {
 	// Create or refresh a risk policy bypass request from a signed request URL
 	// token.
 	CreateRiskPolicyBypassRequest(context.Context, *CreateRiskPolicyBypassRequestPayload) (res *RiskPolicyBypassRequest, err error)
+	// Acknowledge a risk policy warn/challenge from a warning-link token. Records
+	// the acknowledgement so the user's retried action proceeds; self-service (no
+	// admin approval).
+	AcknowledgeRiskPolicyChallenge(context.Context, *AcknowledgeRiskPolicyChallengePayload) (res *AcknowledgeRiskPolicyChallengeResult, err error)
+	// Fetch the details of a risk policy warn/challenge from a warning-link token,
+	// WITHOUT acknowledging it. Powers the approval page (shows what was flagged
+	// and Approve/Deny actions).
+	GetRiskPolicyChallenge(context.Context, *GetRiskPolicyChallengePayload) (res *GetRiskPolicyChallengeResult, err error)
+	// Decline a risk policy warn/challenge from a warning-link token: invalidate
+	// the link and mark the challenge declined. The blocked action stays blocked.
+	DeclineRiskPolicyChallenge(context.Context, *DeclineRiskPolicyChallengePayload) (res *DeclineRiskPolicyChallengeResult, err error)
 	// Get a tool call block by its risk result ID for the durable block page.
 	GetRiskBlock(context.Context, *GetRiskBlockPayload) (res *RiskBlock, err error)
 	// Record thumbs-up/thumbs-down feedback for a tool call block from the block
@@ -159,7 +170,26 @@ const ServiceName = "risk"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [39]string{"createRiskPolicy", "listRiskPolicies", "listBuiltinExclusions", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "unmaskRiskResult", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "compileExpr", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "getRiskBlock", "submitRiskBlockFeedback", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "testDetectionRule", "evaluatePromptGuardrail", "saveRiskEvalReview", "listRiskEvalReviews", "deleteRiskEvalReview"}
+var MethodNames = [42]string{"createRiskPolicy", "listRiskPolicies", "listBuiltinExclusions", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "unmaskRiskResult", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "compileExpr", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "acknowledgeRiskPolicyChallenge", "getRiskPolicyChallenge", "declineRiskPolicyChallenge", "getRiskBlock", "submitRiskBlockFeedback", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "testDetectionRule", "evaluatePromptGuardrail", "saveRiskEvalReview", "listRiskEvalReviews", "deleteRiskEvalReview"}
+
+// AcknowledgeRiskPolicyChallengePayload is the payload type of the risk
+// service acknowledgeRiskPolicyChallenge method.
+type AcknowledgeRiskPolicyChallengePayload struct {
+	SessionToken *string
+	// Acknowledgement token generated when a warn policy challenged the action.
+	AckToken string
+}
+
+// AcknowledgeRiskPolicyChallengeResult is the result type of the risk service
+// acknowledgeRiskPolicyChallenge method.
+type AcknowledgeRiskPolicyChallengeResult struct {
+	// Whether the challenge is now acknowledged.
+	Acknowledged bool
+	// The policy that issued the warning.
+	PolicyName *string
+	// RFC3339 time until which the acknowledgement suppresses re-challenge.
+	ExpiresAt *string
+}
 
 // ApproveRiskPolicyBypassRequestPayload is the payload type of the risk
 // service approveRiskPolicyBypassRequest method.
@@ -299,7 +329,7 @@ type CreateRiskPolicyPayload struct {
 	ScopeExempt *string
 	// Whether the policy is active.
 	Enabled *bool
-	// Policy action: flag or block.
+	// Policy action: flag, warn (challenge), or block.
 	Action string
 	// Policy audience type: everyone or targeted.
 	AudienceType string
@@ -319,6 +349,21 @@ type CreateRiskPolicyPayload struct {
 	// CVSS-style severity (0.1-10) assigned to findings this policy produces. Omit
 	// to apply the default (5).
 	Score float64
+}
+
+// DeclineRiskPolicyChallengePayload is the payload type of the risk service
+// declineRiskPolicyChallenge method.
+type DeclineRiskPolicyChallengePayload struct {
+	SessionToken *string
+	// Acknowledgement token generated when a warn policy challenged the action.
+	AckToken string
+}
+
+// DeclineRiskPolicyChallengeResult is the result type of the risk service
+// declineRiskPolicyChallenge method.
+type DeclineRiskPolicyChallengeResult struct {
+	// Whether the challenge is now declined.
+	Declined bool
 }
 
 // DeleteCustomDetectionRulePayload is the payload type of the risk service
@@ -436,6 +481,29 @@ type GetRiskOverviewPayload struct {
 	From *string
 	// Exclusive end of the overview window. Defaults to now.
 	To *string
+}
+
+// GetRiskPolicyChallengePayload is the payload type of the risk service
+// getRiskPolicyChallenge method.
+type GetRiskPolicyChallengePayload struct {
+	SessionToken *string
+	// Acknowledgement token generated when a warn policy challenged the action.
+	AckToken string
+}
+
+// GetRiskPolicyChallengeResult is the result type of the risk service
+// getRiskPolicyChallenge method.
+type GetRiskPolicyChallengeResult struct {
+	// The policy that issued the warning.
+	PolicyName *string
+	// The tool the challenge applies to, if any.
+	ToolName *string
+	// Human-facing challenge message describing what was flagged.
+	Message string
+	// RFC3339 time the acknowledgement link expires.
+	ExpiresAt *string
+	// Whether this challenge has already been acknowledged.
+	Acknowledged bool
 }
 
 // GetRiskPolicyPayload is the payload type of the risk service getRiskPolicy
@@ -1160,7 +1228,7 @@ type UpdateRiskPolicyPayload struct {
 	ScopeExempt *string
 	// Whether the policy is active.
 	Enabled *bool
-	// Policy action: flag or block.
+	// Policy action: flag, warn (challenge), or block.
 	Action *string
 	// Policy audience type: everyone or targeted. Omit to preserve the current
 	// audience type.

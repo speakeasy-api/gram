@@ -781,12 +781,17 @@ func (c *ChatClient) emitGenAITelemetry(
 	})
 }
 
+// completionTelemetryIdentity resolves a completion's usage source into its
+// telemetry identity. Every completion gets a non-empty hook source: the
+// billing page scopes its reads to billing.ModelUsageSources, so an untagged
+// completion would be billed yet invisible there. A NEW source value must be
+// registered in that slice.
 func completionTelemetryIdentity(source string) (resourceURN, normalizedSource string) {
 	switch source {
 	case "assistant", "assistants":
 		return "assistants:chat:completion", "assistants"
 	case "":
-		return "chat:completion", ""
+		return "chat:completion", "gram"
 	default:
 		return "chat:completion", source
 	}

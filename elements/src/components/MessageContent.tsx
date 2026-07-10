@@ -3,7 +3,12 @@
 import { FC, useMemo } from "react";
 import { ElementsContext } from "@/contexts/contexts";
 import { ToolExecutionProvider } from "@/contexts/ToolExecutionContext";
-import type { ElementsContextType, Model } from "@/types";
+import type {
+  ElementsContextType,
+  LinkResolver,
+  MarkdownLinkComponent,
+  Model,
+} from "@/types";
 import { recommended } from "@/plugins";
 import { chart } from "@/plugins/chart";
 import { generativeUI } from "@/plugins/generative-ui";
@@ -40,6 +45,10 @@ export interface MessageContentProps {
    * instead of preformatted text. Fenced `chart`/`ui` blocks still render as
    * widgets either way. */
   markdown?: boolean;
+  /** Resolver that rewrites link hrefs (only applies when `markdown` is true). */
+  resolveLink?: LinkResolver;
+  /** Host link component used to render links (only applies when `markdown`). */
+  linkComponent?: MarkdownLinkComponent;
 }
 
 /**
@@ -57,6 +66,8 @@ export const MessageContent: FC<MessageContentProps> = ({
   content,
   className,
   markdown = false,
+  resolveLink,
+  linkComponent,
 }) => {
   const segments = useMemo(() => parseSegments(content), [content]);
 
@@ -69,7 +80,15 @@ export const MessageContent: FC<MessageContentProps> = ({
             if (seg.type === "text") {
               if (seg.text.trim() === "") return null;
               if (markdown) {
-                return <Markdown key={i}>{seg.text}</Markdown>;
+                return (
+                  <Markdown
+                    key={i}
+                    resolveLink={resolveLink}
+                    linkComponent={linkComponent}
+                  >
+                    {seg.text}
+                  </Markdown>
+                );
               }
               return (
                 <div key={i} className="whitespace-pre-wrap">
