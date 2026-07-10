@@ -176,7 +176,7 @@
     "@radix-ui/react-dialog": "^1.1.17",
     "@radix-ui/react-popover": "^1.1.17",
     "@radix-ui/react-slot": "^1.3.0",
-    "@radix-ui/react-tooltip": "^1.2.10",
+    "@radix-ui/react-tooltip": "^1.2.11",
     "@storybook/addon-themes": "^10.4.6",
     "@tanstack/react-query": "^5.101.2",
     "ai": "catalog:",
