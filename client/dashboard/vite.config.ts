@@ -2,7 +2,7 @@ import path from "node:path";
 import fs from "node:fs";
 import process from "node:process";
 
-import { defineConfig } from "vite";
+import { defaultClientConditions, defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
@@ -177,6 +177,7 @@ export default defineConfig(({ command }) => {
     },
     plugins: [react(), tailwindcss()],
     resolve: {
+      conditions: ["gram-source", ...defaultClientConditions],
       alias: {
         "@": path.resolve(__dirname, "./src"),
         "@gram/client": path.resolve(__dirname, "./src/sdk/src"),

@@ -1,17 +1,76 @@
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
-import { dirname, resolve } from "node:path";
+import { readFileSync } from "node:fs";
+import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import dts from "vite-plugin-dts";
 import { externalizeDeps } from "vite-plugin-externalize-deps";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const declarationOutputDir = resolve(__dirname, "dist");
+const packageImports = (
+  JSON.parse(readFileSync(resolve(__dirname, "package.json"), "utf8")) as {
+    imports: Record<string, string>;
+  }
+).imports;
+
+function resolvePackageImport(specifier: string): string {
+  const exactTarget = packageImports[specifier];
+  if (exactTarget) {
+    return exactTarget;
+  }
+
+  for (const [pattern, target] of Object.entries(packageImports)) {
+    const wildcardIndex = pattern.indexOf("*");
+    if (wildcardIndex === -1) {
+      continue;
+    }
+
+    const prefix = pattern.slice(0, wildcardIndex);
+    const suffix = pattern.slice(wildcardIndex + 1);
+    if (specifier.startsWith(prefix) && specifier.endsWith(suffix)) {
+      const wildcard = specifier.slice(
+        prefix.length,
+        -suffix.length || undefined,
+      );
+      return target.replace("*", wildcard);
+    }
+  }
+
+  throw new Error(`Unknown package import in declaration output: ${specifier}`);
+}
+
+function rewritePackageImports(filePath: string, content: string): string {
+  return content.replace(
+    /(['"])(#elements\/[^'"]+)\1/g,
+    (_match, quote: string, specifier: string) => {
+      const sourceTarget = resolvePackageImport(specifier);
+      const declarationTarget = resolve(
+        declarationOutputDir,
+        sourceTarget.replace(/^\.\/src\//, "").replace(/\.(?:ts|tsx|css)$/, ""),
+      );
+      let relativeTarget = relative(
+        dirname(filePath),
+        declarationTarget,
+      ).replaceAll("\\", "/");
+      if (!relativeTarget.startsWith(".")) {
+        relativeTarget = `./${relativeTarget}`;
+      }
+
+      return `${quote}${relativeTarget}${quote}`;
+    },
+  );
+}
 
 export default defineConfig({
   plugins: [
     react(),
-    dts(),
+    dts({
+      beforeWriteFile(filePath, content) {
+        return { content: rewritePackageImports(filePath, content) };
+      },
+    }),
     tailwindcss(),
 
     // Automatically keep peerDependencies as they are defined in the package.json in sync
@@ -30,10 +89,12 @@ export default defineConfig({
     }),
   ],
   build: {
+    cssCodeSplit: true,
     sourcemap: true,
     lib: {
       entry: {
         elements: resolve(__dirname, "src/index.ts"),
+        "elements.css": resolve(__dirname, "src/global.css"),
         server: resolve(__dirname, "src/server.ts"),
         "server/core": resolve(__dirname, "src/server/core.ts"),
         "server/express": resolve(__dirname, "src/server/express.ts"),
@@ -68,11 +129,6 @@ export default defineConfig({
 
         sourcemapExcludeSources: true,
       },
-    },
-  },
-  resolve: {
-    alias: {
-      "@": resolve(__dirname, "src"),
     },
   },
   define: {

@@ -11,12 +11,12 @@ import { type FC, memo, useCallback, useState } from "react";
 import { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
-import { MarkdownAnchor } from "@/components/markdown-anchor";
-import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
-import { useMarkdownLink } from "@/contexts/MarkdownLinkContext";
-import { cn } from "@/lib/utils";
-import { useElements } from "@/hooks/useElements";
-import { useComponentsByLanguage } from "@/hooks/usePluginComponents";
+import { MarkdownAnchor } from "#elements/components/markdown-anchor";
+import { TooltipIconButton } from "#elements/components/assistant-ui/tooltip-icon-button";
+import { useMarkdownLink } from "#elements/contexts/MarkdownLinkContext";
+import { cn } from "#elements/lib/utils";
+import { useElements } from "#elements/hooks/useElements";
+import { useComponentsByLanguage } from "#elements/hooks/usePluginComponents";
 import { useAssistantState } from "@assistant-ui/react";
 
 const MarkdownTextImpl = () => {

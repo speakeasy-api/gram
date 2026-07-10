@@ -2,17 +2,17 @@
 
 import { type FC } from "react";
 import { Loader, PanelRightClose, PanelRightOpen } from "lucide-react";
-import { ErrorBoundary } from "@/components/assistant-ui/error-boundary";
-import { Thread } from "@/components/assistant-ui/thread";
-import { ThreadList } from "@/components/assistant-ui/thread-list";
-import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
-import { useThemeProps } from "@/hooks/useThemeProps";
-import { useElements } from "@/hooks/useElements";
-import { cn } from "@/lib/utils";
-import { useExpanded } from "@/hooks/useExpanded";
+import { ErrorBoundary } from "#elements/components/assistant-ui/error-boundary";
+import { Thread } from "#elements/components/assistant-ui/thread";
+import { ThreadList } from "#elements/components/assistant-ui/thread-list";
+import { TooltipIconButton } from "#elements/components/assistant-ui/tooltip-icon-button";
+import { useThemeProps } from "#elements/hooks/useThemeProps";
+import { useElements } from "#elements/hooks/useElements";
+import { cn } from "#elements/lib/utils";
+import { useExpanded } from "#elements/hooks/useExpanded";
 import { LazyMotion, domMax } from "motion/react";
 import * as m from "motion/react-m";
-import { EASE_OUT_QUINT } from "@/lib/easing";
+import { EASE_OUT_QUINT } from "#elements/lib/easing";
 import { useAssistantState } from "@assistant-ui/react";
 
 interface AssistantSidecarProps {

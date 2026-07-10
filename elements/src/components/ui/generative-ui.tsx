@@ -1,10 +1,13 @@
 "use client";
 
-import { useDensity } from "@/hooks/useDensity";
-import { cn } from "@/lib/utils";
-import { isJsonRenderTree, type JsonRenderNode } from "@/lib/generative-ui";
+import { useDensity } from "#elements/hooks/useDensity";
+import { cn } from "#elements/lib/utils";
+import {
+  isJsonRenderTree,
+  type JsonRenderNode,
+} from "#elements/lib/generative-ui";
 import { AlertCircleIcon } from "lucide-react";
-import { ElementType, FC, useMemo } from "react";
+import { type ComponentType, type FC, type ReactNode, useMemo } from "react";
 
 // Import all components from the generative-ui plugin ui directory
 import {
@@ -30,7 +33,7 @@ import {
   TabsWrapper,
   TabContentWrapper,
   Text,
-} from "@/plugins/generative-ui/ui";
+} from "#elements/plugins/generative-ui/ui";
 
 interface GenerativeUIProps {
   /** The JSON content to render - can be a json-render tree or raw object */
@@ -43,9 +46,13 @@ interface GenerativeUIProps {
  * Built-in components for rendering json-render trees.
  * These provide a default set of UI primitives for tool results.
  * Each entry has its own prop shape; the registry erases those generics via
- * `ElementType` so heterogeneous components can coexist under one map.
+ * `ComponentType` so heterogeneous components can coexist under one map.
  */
-const components: Record<string, ElementType> = {
+type DynamicComponentProps = Record<string, unknown> & {
+  children?: ReactNode;
+};
+
+const components = {
   // Layout
   Card: CardWrapper,
   Grid,
@@ -77,7 +84,7 @@ const components: Record<string, ElementType> = {
   Input: InputWrapper,
   Checkbox: CheckboxWrapper,
   Select: SelectWrapper,
-};
+} as unknown as Record<string, ComponentType<DynamicComponentProps>>;
 
 /**
  * Recursively render a json-render tree node

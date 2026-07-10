@@ -1,9 +1,6 @@
 // Polyfill React 18 APIs for older React versions — must be the first import
 import "./compat";
 
-// Side-effect import to include CSS in build (consumers import via @gram-ai/elements/elements.css)
-import "./global.css";
-
 // Context Providers
 export { ElementsProvider as GramElementsProvider } from "./contexts/ElementsProvider";
 export { ElementsProvider } from "./contexts/ElementsProvider";
@@ -18,16 +15,16 @@ export {
 export type { MarkdownLinkValue } from "./contexts/MarkdownLinkContext";
 
 // Core Components
-export { Chat } from "@/components/Chat";
-export { ChatHistory } from "@/components/ChatHistory";
-export { ActiveChatTitle } from "@/components/ActiveChatTitle";
-export { ShareButton } from "@/components/ShareButton";
-export type { ShareButtonProps } from "@/components/ShareButton";
-export { ToolFallback } from "@/components/assistant-ui/tool-fallback";
-export { MessageContent } from "@/components/MessageContent";
-export type { MessageContentProps } from "@/components/MessageContent";
-export { Markdown } from "@/components/Markdown";
-export type { MarkdownProps } from "@/components/Markdown";
+export { Chat } from "#elements/components/Chat";
+export { ChatHistory } from "#elements/components/ChatHistory";
+export { ActiveChatTitle } from "#elements/components/ActiveChatTitle";
+export { ShareButton } from "#elements/components/ShareButton";
+export type { ShareButtonProps } from "#elements/components/ShareButton";
+export { ToolFallback } from "#elements/components/assistant-ui/tool-fallback";
+export { MessageContent } from "#elements/components/MessageContent";
+export type { MessageContentProps } from "#elements/components/MessageContent";
+export { Markdown } from "#elements/components/Markdown";
+export type { MarkdownProps } from "#elements/components/Markdown";
 
 // Static presentation primitives — render with no ElementsProvider/runtime, so
 // the dashboard's chat detail panel can reuse the elements tool UI directly.
@@ -35,7 +32,7 @@ export {
   ToolUI,
   ToolUISection,
   SyntaxHighlightedCode,
-} from "@/components/ui/tool-ui";
+} from "#elements/components/ui/tool-ui";
 export type {
   ToolUIProps,
   ToolUISectionProps,
@@ -43,17 +40,17 @@ export type {
   ContentItem,
   SectionHighlight,
   SectionMatch,
-} from "@/components/ui/tool-ui";
+} from "#elements/components/ui/tool-ui";
 
 // Replay
-export { Replay } from "@/components/Replay";
-export { useRecordCassette } from "@/hooks/useRecordCassette";
+export { Replay } from "#elements/components/Replay";
+export { useRecordCassette } from "#elements/hooks/useRecordCassette";
 export type {
   Cassette,
   CassetteMessage,
   CassettePart,
   ReplayOptions,
-} from "@/lib/cassette";
+} from "#elements/lib/cassette";
 
 // Frontend Tools
 export { defineFrontendTool } from "./lib/tools";
@@ -114,14 +111,14 @@ export { MODELS } from "./lib/models";
 export {
   convertGramMessagesToUIMessages,
   convertGramMessagesToExported,
-} from "@/lib/messageConverter";
+} from "#elements/lib/messageConverter";
 
-export { sleep } from "@/lib/utils";
+export { sleep } from "#elements/lib/utils";
 export type {
   GramChat,
   GramChatMessage,
   GramChatOverview,
-} from "@/lib/messageConverter";
+} from "#elements/lib/messageConverter";
 
 export type { Plugin } from "./types/plugins";
 
@@ -130,12 +127,12 @@ export {
   TimeRangePicker,
   getPresetRange,
   PRESETS,
-} from "@/components/ui/time-range-picker";
+} from "#elements/components/ui/time-range-picker";
 export type {
   TimeRange,
   TimeRangePreset,
   TimeRangePickerProps,
   DateRangePreset,
-} from "@/components/ui/time-range-picker";
-export { Calendar } from "@/components/ui/calendar";
-export type { CalendarProps } from "@/components/ui/calendar";
+} from "#elements/components/ui/time-range-picker";
+export { Calendar } from "#elements/components/ui/calendar";
+export type { CalendarProps } from "#elements/components/ui/calendar";

@@ -9,8 +9,8 @@ import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import { cn } from "@/lib/utils";
+} from "#elements/components/ui/collapsible";
+import { cn } from "#elements/lib/utils";
 
 import {
   splitContextBlocks,

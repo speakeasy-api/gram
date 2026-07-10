@@ -49,38 +49,46 @@ import {
   ComposerAddAttachment,
   ComposerAttachments,
   UserMessageAttachments,
-} from "@/components/assistant-ui/attachment";
-import { FollowOnSuggestions } from "@/components/assistant-ui/follow-on-suggestions";
-import { MarkdownText } from "@/components/assistant-ui/markdown-text";
-import { MentionedToolsBadges } from "@/components/assistant-ui/mentioned-tools-badges";
-import { MessageFeedback } from "@/components/assistant-ui/message-feedback";
-import { Reasoning, ReasoningGroup } from "@/components/assistant-ui/reasoning";
-import { ThinkingIndicator } from "@/components/assistant-ui/thinking-indicator";
-import { ToolFallback } from "@/components/assistant-ui/tool-fallback";
-import { UserMessageText } from "@/components/assistant-ui/user-message-text";
-import { ToolMentionAutocomplete } from "@/components/assistant-ui/tool-mention-autocomplete";
-import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
-import { useChatId } from "@/contexts/ChatIdContext";
-import { useReplayContext } from "@/contexts/ReplayContext";
-import { useThreadMeta } from "@/contexts/ThreadMetaContext";
-import { useAuth } from "@/hooks/useAuth";
-import { useDensity } from "@/hooks/useDensity";
-import { useElements } from "@/hooks/useElements";
-import { isLocalThreadId } from "@/hooks/useGramThreadListAdapter";
-import { useRadius } from "@/hooks/useRadius";
-import { useRecordCassette } from "@/hooks/useRecordCassette";
-import { useThemeProps } from "@/hooks/useThemeProps";
-import { useToolMentions } from "@/hooks/useToolMentions";
-import { getApiUrl } from "@/lib/api";
-import { EASE_OUT_QUINT } from "@/lib/easing";
-import { MODELS } from "@/lib/models";
+} from "#elements/components/assistant-ui/attachment";
+import { FollowOnSuggestions } from "#elements/components/assistant-ui/follow-on-suggestions";
+import { MarkdownText } from "#elements/components/assistant-ui/markdown-text";
+import { MentionedToolsBadges } from "#elements/components/assistant-ui/mentioned-tools-badges";
+import { MessageFeedback } from "#elements/components/assistant-ui/message-feedback";
+import {
+  Reasoning,
+  ReasoningGroup,
+} from "#elements/components/assistant-ui/reasoning";
+import { ThinkingIndicator } from "#elements/components/assistant-ui/thinking-indicator";
+import { ToolFallback } from "#elements/components/assistant-ui/tool-fallback";
+import { UserMessageText } from "#elements/components/assistant-ui/user-message-text";
+import { ToolMentionAutocomplete } from "#elements/components/assistant-ui/tool-mention-autocomplete";
+import { TooltipIconButton } from "#elements/components/assistant-ui/tooltip-icon-button";
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+} from "#elements/components/ui/avatar";
+import { Button } from "#elements/components/ui/button";
+import { useChatId } from "#elements/contexts/ChatIdContext";
+import { useReplayContext } from "#elements/contexts/ReplayContext";
+import { useThreadMeta } from "#elements/contexts/ThreadMetaContext";
+import { useAuth } from "#elements/hooks/useAuth";
+import { useDensity } from "#elements/hooks/useDensity";
+import { useElements } from "#elements/hooks/useElements";
+import { isLocalThreadId } from "#elements/hooks/useGramThreadListAdapter";
+import { useRadius } from "#elements/hooks/useRadius";
+import { useRecordCassette } from "#elements/hooks/useRecordCassette";
+import { useThemeProps } from "#elements/hooks/useThemeProps";
+import { useToolMentions } from "#elements/hooks/useToolMentions";
+import { getApiUrl } from "#elements/lib/api";
+import { EASE_OUT_QUINT } from "#elements/lib/easing";
+import { MODELS } from "#elements/lib/models";
 import {
   type MentionableTool,
   toolSetToMentionableTools,
-} from "@/lib/tool-mentions";
-import { cn, initialsOf } from "@/lib/utils";
+} from "#elements/lib/tool-mentions";
+import { cn, initialsOf } from "#elements/lib/utils";
+import type { ElementsImportMetaEnv } from "#elements/types/env";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import {
   Tooltip,
@@ -749,7 +757,8 @@ const ComposerModelPicker: FC = () => {
 };
 
 const CASSETTE_RECORDING_ENABLED =
-  import.meta.env.VITE_ELEMENTS_ENABLE_CASSETTE_RECORDING === "true";
+  (import.meta.env as ElementsImportMetaEnv)
+    .VITE_ELEMENTS_ENABLE_CASSETTE_RECORDING === "true";
 
 const ComposerCassetteRecorder: FC = () => {
   const [popoverOpen, setPopoverOpen] = useState(false);

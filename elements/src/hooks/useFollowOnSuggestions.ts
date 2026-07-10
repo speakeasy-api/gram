@@ -1,4 +1,4 @@
-import { useReplayContext } from "@/contexts/ReplayContext";
+import { useReplayContext } from "#elements/contexts/ReplayContext";
 import { useAssistantState } from "@assistant-ui/react";
 import { generateObject } from "ai";
 import { useCallback, useEffect, useRef, useState } from "react";

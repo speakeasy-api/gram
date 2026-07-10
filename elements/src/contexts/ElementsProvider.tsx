@@ -1,14 +1,14 @@
-import { FrontendTools } from "@/components/FrontendTools";
-import { ROOT_SELECTOR } from "@/constants/tailwind";
+import { FrontendTools } from "#elements/components/FrontendTools";
+import { ROOT_SELECTOR } from "#elements/constants/tailwind";
 import {
   isLocalThreadId,
   useGramThreadListAdapter,
-} from "@/hooks/useGramThreadListAdapter";
-import { useMCPTools } from "@/hooks/useMCPTools";
-import { useToolApproval } from "@/hooks/useToolApproval";
-import { getApiUrl } from "@/lib/api";
-import { initErrorTracking, trackError } from "@/lib/errorTracking";
-import { MODELS } from "@/lib/models";
+} from "#elements/hooks/useGramThreadListAdapter";
+import { useMCPTools } from "#elements/hooks/useMCPTools";
+import { useToolApproval } from "#elements/hooks/useToolApproval";
+import { getApiUrl } from "#elements/lib/api";
+import { initErrorTracking, trackError } from "#elements/lib/errorTracking";
+import { MODELS } from "#elements/lib/models";
 import {
   clearFrontendToolApprovalConfig,
   getEnabledTools,
@@ -17,13 +17,13 @@ import {
   wrapToolsWithApproval,
   wrapToolsWithByteCap,
   type ApprovalHelpers,
-} from "@/lib/tools";
-import { compactForModel } from "@/lib/contextCompaction";
-import { describeStreamError } from "@/lib/streamErrorMessage";
-import { cn } from "@/lib/utils";
-import { recommended } from "@/plugins";
-import { ElementsConfig, Model } from "@/types";
-import { Plugin } from "@/types/plugins";
+} from "#elements/lib/tools";
+import { compactForModel } from "#elements/lib/contextCompaction";
+import { describeStreamError } from "#elements/lib/streamErrorMessage";
+import { cn } from "#elements/lib/utils";
+import { recommended } from "#elements/plugins";
+import { ElementsConfig, Model } from "#elements/types";
+import { Plugin } from "#elements/types/plugins";
 import {
   AssistantRuntimeProvider,
   AssistantTool,

@@ -10,6 +10,7 @@
 
     /* Bundler mode */
     "moduleResolution": "bundler",
+    "customConditions": ["gram-source"],
     "allowImportingTsExtensions": true,
     "isolatedModules": true,
     "moduleDetection": "force",

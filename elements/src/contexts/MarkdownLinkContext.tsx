@@ -5,7 +5,7 @@ import {
   useContext,
 } from "react";
 
-import type { LinkResolver, MarkdownLinkComponent } from "@/types";
+import type { LinkResolver, MarkdownLinkComponent } from "#elements/types";
 
 /**
  * Host-supplied hooks for rendering links inside assistant markdown.

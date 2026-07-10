@@ -1,7 +1,7 @@
 import type { Meta, StoryFn } from "@storybook/react-vite";
-import { Chat } from "@/components/Chat";
-import { Replay } from "@/components/Replay";
-import type { Cassette } from "@/lib/cassette";
+import { Chat } from "#elements/components/Chat";
+import { Replay } from "#elements/components/Replay";
+import type { Cassette } from "#elements/lib/cassette";
 
 const meta: Meta<typeof Replay> = {
   title: "Misc/Replay",

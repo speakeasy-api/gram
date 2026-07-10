@@ -1,8 +1,8 @@
 import { useAssistantState } from "@assistant-ui/react";
 import { useMemo, type FC, type PropsWithChildren } from "react";
-import { useElements } from "@/hooks/useElements";
-import { humanizeToolName } from "@/lib/humanize";
-import { ToolUIGroup } from "@/components/ui/tool-ui";
+import { useElements } from "#elements/hooks/useElements";
+import { humanizeToolName } from "#elements/lib/humanize";
+import { ToolUIGroup } from "#elements/components/ui/tool-ui";
 
 export const ToolGroup: FC<
   PropsWithChildren<{ startIndex: number; endIndex: number }>

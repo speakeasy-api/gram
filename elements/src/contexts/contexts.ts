@@ -1,5 +1,5 @@
 import { createContext } from "react";
-import type { ElementsContextType } from "@/types";
+import type { ElementsContextType } from "#elements/types";
 import { ToolApprovalContextType } from "./ToolApprovalContext";
 
 export const ElementsContext = createContext<ElementsContextType | undefined>(

@@ -13,13 +13,13 @@ import {
   GramChatMessage,
   convertGramMessagesToExported,
   convertGramMessagesToUIMessages,
-} from "@/lib/messageConverter";
-import { sleep } from "@/lib/utils";
-import { trackError } from "@/lib/errorTracking";
+} from "#elements/lib/messageConverter";
+import { sleep } from "#elements/lib/utils";
+import { trackError } from "#elements/lib/errorTracking";
 import {
   ThreadMetaContext,
   type ThreadMeta,
-} from "@/contexts/ThreadMetaContext";
+} from "#elements/contexts/ThreadMetaContext";
 import {
   useCallback,
   useEffect,

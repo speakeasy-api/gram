@@ -22,7 +22,7 @@ vi.mock("ai", () => ({
 }));
 
 // Avoid pulling Datadog RUM (and its window access) into the Node test env.
-vi.mock("@/lib/errorTracking", () => ({ trackError: vi.fn() }));
+vi.mock("#elements/lib/errorTracking", () => ({ trackError: vi.fn() }));
 
 import { parseWithAI } from "./time-range-picker";
 

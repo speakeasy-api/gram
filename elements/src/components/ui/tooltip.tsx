@@ -3,8 +3,8 @@
 import * as React from "react";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 
-import { cn } from "@/lib/utils";
-import { usePortalContainer } from "@/hooks/usePortalContainer";
+import { cn } from "#elements/lib/utils";
+import { usePortalContainer } from "#elements/hooks/usePortalContainer";
 
 function TooltipProvider({
   delayDuration = 0,

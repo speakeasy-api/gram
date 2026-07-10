@@ -1,7 +1,7 @@
 "use client";
 
 import { useContext } from "react";
-import { PortalContainerContext } from "@/contexts/portal-container-context";
+import { PortalContainerContext } from "#elements/contexts/portal-container-context";
 
 /**
  * Because we do not want Tailwind to leak from the Elements library, and

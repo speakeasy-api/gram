@@ -5,7 +5,7 @@ import {
   parseMentionedTools,
   removeToolMention,
   toolSetToMentionableTools,
-} from "@/lib/tool-mentions";
+} from "#elements/lib/tool-mentions";
 
 export interface UseToolMentionsOptions {
   tools: Record<string, unknown> | undefined;

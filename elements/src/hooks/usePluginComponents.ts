@@ -3,7 +3,7 @@ import {
   SyntaxHighlighterProps,
 } from "@assistant-ui/react-markdown";
 import { ComponentType, useMemo } from "react";
-import { Plugin } from "@/types/plugins";
+import { Plugin } from "#elements/types/plugins";
 
 type ComponentsByLanguage =
   | Record<

@@ -1,4 +1,4 @@
-import { useReplayContext } from "@/contexts/ReplayContext";
+import { useReplayContext } from "#elements/contexts/ReplayContext";
 import {
   hasExplicitSessionAuth,
   isAnyStaticSession,
@@ -6,8 +6,8 @@ import {
   isStaticSessionAuth,
   isUnifiedFunctionSession,
   isUnifiedStaticSession,
-} from "@/lib/auth";
-import { getTokenExpiry } from "@/lib/token";
+} from "#elements/lib/auth";
+import { getTokenExpiry } from "#elements/lib/token";
 import { useCallback, useMemo } from "react";
 import { ApiConfig, GetSessionFn } from "../types";
 import { getChatSessionQueryKey, useSession } from "./useSession";

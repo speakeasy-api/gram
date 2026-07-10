@@ -1,4 +1,5 @@
-import { GetSessionFn } from "@/types";
+import { GetSessionFn } from "#elements/types";
+import type { ElementsImportMetaEnv } from "#elements/types/env";
 import { google } from "@ai-sdk/google";
 import type { Meta, StoryFn } from "@storybook/react-vite";
 import { Chat } from "..";
@@ -42,7 +43,8 @@ const session: GetSessionFn = async () => {
     method: "POST",
     headers: {
       "Gram-Project":
-        import.meta.env.VITE_GRAM_ELEMENTS_STORYBOOK_PROJECT_SLUG ?? "",
+        (import.meta.env as ElementsImportMetaEnv)
+          .VITE_GRAM_ELEMENTS_STORYBOOK_PROJECT_SLUG ?? "",
     },
   });
   const data = await response.json();

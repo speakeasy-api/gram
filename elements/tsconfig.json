@@ -16,9 +16,6 @@
     "forceConsistentCasingInFileNames": true,
     "incremental": true,
     "tsBuildInfoFile": "./dist/.tsbuildinfo",
-    "paths": {
-      "@/*": ["./src/*"]
-    },
     "types": ["node", "vite/client"]
   },
   "include": ["src"],

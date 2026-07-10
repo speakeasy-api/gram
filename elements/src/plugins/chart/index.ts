@@ -1,4 +1,4 @@
-import { Plugin } from "@/types/plugins";
+import { Plugin } from "#elements/types/plugins";
 import { ChartRenderer } from "./component";
 
 /**

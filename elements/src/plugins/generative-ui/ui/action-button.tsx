@@ -3,8 +3,8 @@
 import * as React from "react";
 import { Button, buttonVariants } from "./button";
 import type { VariantProps } from "class-variance-authority";
-import { cn } from "@/lib/utils";
-import { useToolExecution } from "@/contexts/ToolExecutionContext";
+import { cn } from "#elements/lib/utils";
+import { useToolExecution } from "#elements/contexts/ToolExecutionContext";
 
 export interface ActionButtonProps
   extends

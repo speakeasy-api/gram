@@ -1,7 +1,7 @@
 "use client";
 
-import { useRadius } from "@/hooks/useRadius";
-import { cn } from "@/lib/utils";
+import { useRadius } from "#elements/hooks/useRadius";
+import { cn } from "#elements/lib/utils";
 import { FC, ReactNode } from "react";
 
 interface MacOSWindowFrameProps {

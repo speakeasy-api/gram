@@ -1,4 +1,4 @@
-import type { ElementsConfig } from "@/types";
+import type { ElementsConfig } from "#elements/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 describe("getApiUrl", () => {

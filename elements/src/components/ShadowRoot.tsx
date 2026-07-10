@@ -9,12 +9,12 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { PortalContainerProvider } from "@/contexts/portal-container";
-import { useElements } from "@/hooks/useElements";
-import { useThemeProps } from "@/hooks/useThemeProps";
-import { cn } from "@/lib/utils";
-import { ROOT_SELECTOR } from "@/constants/tailwind";
-import elementsStyles from "@/global.css?inline";
+import { PortalContainerProvider } from "#elements/contexts/portal-container";
+import { useElements } from "#elements/hooks/useElements";
+import { useThemeProps } from "#elements/hooks/useThemeProps";
+import { cn } from "#elements/lib/utils";
+import { ROOT_SELECTOR } from "#elements/constants/tailwind";
+import elementsStyles from "#elements/global.css?inline";
 
 interface ShadowRootProps {
   children: ReactNode;

@@ -4,52 +4,91 @@
   "type": "module",
   "version": "1.42.0",
   "main": "dist/index.js",
+  "imports": {
+    "#elements/components/activeChatTitle.helpers": "./src/components/activeChatTitle.helpers.ts",
+    "#elements/components/Chat": "./src/components/Chat/index.tsx",
+    "#elements/components/FrontendTools": "./src/components/FrontendTools/index.tsx",
+    "#elements/components/ShareButton": "./src/components/ShareButton/index.tsx",
+    "#elements/components/*": "./src/components/*.tsx",
+    "#elements/constants/*": "./src/constants/*.ts",
+    "#elements/contexts/contexts": "./src/contexts/contexts.ts",
+    "#elements/contexts/ReplayContext": "./src/contexts/ReplayContext.ts",
+    "#elements/contexts/ThreadMetaContext": "./src/contexts/ThreadMetaContext.ts",
+    "#elements/contexts/portal-container-context": "./src/contexts/portal-container-context.ts",
+    "#elements/contexts/*": "./src/contexts/*.tsx",
+    "#elements/hooks/useGramThreadListAdapter": "./src/hooks/useGramThreadListAdapter.tsx",
+    "#elements/hooks/*": "./src/hooks/*.ts",
+    "#elements/lib/*": "./src/lib/*.ts",
+    "#elements/plugins": "./src/plugins/index.ts",
+    "#elements/plugins/chart": "./src/plugins/chart/index.ts",
+    "#elements/plugins/chart/ui": "./src/plugins/chart/ui/index.ts",
+    "#elements/plugins/generative-ui": "./src/plugins/generative-ui/index.ts",
+    "#elements/plugins/generative-ui/ui": "./src/plugins/generative-ui/ui/index.ts",
+    "#elements/types": "./src/types/index.ts",
+    "#elements/types/*": "./src/types/*.ts",
+    "#elements/index": "./src/index.ts",
+    "#elements/global.css": "./src/global.css"
+  },
   "exports": {
     ".": {
+      "gram-source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/elements.js"
     },
     "./server": {
+      "gram-source": "./src/server.ts",
       "types": "./dist/server.d.ts",
       "default": "./dist/server.js"
     },
     "./server/core": {
+      "gram-source": "./src/server/core.ts",
       "types": "./dist/server/core.d.ts",
       "default": "./dist/server/core.js"
     },
     "./server/express": {
+      "gram-source": "./src/server/express.ts",
       "types": "./dist/server/express.d.ts",
       "default": "./dist/server/express.js"
     },
     "./server/nextjs": {
+      "gram-source": "./src/server/nextjs.ts",
       "types": "./dist/server/nextjs.d.ts",
       "default": "./dist/server/nextjs.js"
     },
     "./server/fastify": {
+      "gram-source": "./src/server/fastify.ts",
       "types": "./dist/server/fastify.d.ts",
       "default": "./dist/server/fastify.js"
     },
     "./server/hono": {
+      "gram-source": "./src/server/hono.ts",
       "types": "./dist/server/hono.d.ts",
       "default": "./dist/server/hono.js"
     },
     "./server/bun": {
+      "gram-source": "./src/server/bun.ts",
       "types": "./dist/server/bun.d.ts",
       "default": "./dist/server/bun.js"
     },
     "./server/tanstack-start": {
+      "gram-source": "./src/server/tanstack-start.ts",
       "types": "./dist/server/tanstack-start.d.ts",
       "default": "./dist/server/tanstack-start.js"
     },
     "./plugins": {
+      "gram-source": "./src/plugins/index.ts",
       "types": "./dist/plugins/index.d.ts",
       "default": "./dist/plugins.js"
     },
     "./compat": {
+      "gram-source": "./src/compat-plugin.ts",
       "types": "./dist/compat-plugin.d.ts",
       "default": "./dist/compat-plugin.js"
     },
-    "./elements.css": "./dist/elements.css"
+    "./elements.css": {
+      "gram-source": "./src/global.css",
+      "default": "./dist/elements.css"
+    }
   },
   "bin": {
     "elements": "./bin/cli.js"
@@ -69,6 +108,7 @@
   "scripts": {
     "build": "vite build",
     "test": "vitest run",
+    "test:package": "node scripts/check-package-contract.mjs",
     "test:watch": "vitest",
     "lint": "pnpm lint:format && pnpm lint:no-barrels && pnpm lint:oxlint && pnpm type-check",
     "lint:oxlint": "oxlint --type-aware",

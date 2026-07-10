@@ -1,14 +1,14 @@
-import { cn } from "@/lib/utils";
+import { cn } from "#elements/lib/utils";
 import {
   useAssistantState,
   type ToolCallMessagePartComponent,
 } from "@assistant-ui/react";
-import { useToolApproval } from "@/hooks/useToolApproval";
+import { useToolApproval } from "#elements/hooks/useToolApproval";
 import {
   ToolUI,
   type ToolStatus,
   type ContentItem,
-} from "@/components/ui/tool-ui";
+} from "#elements/components/ui/tool-ui";
 
 export const ToolFallback: ToolCallMessagePartComponent = ({
   toolName,

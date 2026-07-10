@@ -1,13 +1,9 @@
 import { defineConfig, loadEnv, Plugin, ViteDevServer } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { createServer as createHttpServer } from "node:http";
 import { createServer as createNetServer, Socket } from "node:net";
 import { createElementsServerHandlers } from "../src/server";
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /**
  * Protocol-sniffing proxy that detects HTTP vs HTTPS and routes accordingly.
@@ -131,11 +127,6 @@ export default defineConfig(({ mode }) => {
         parseInt(process.env.ELEMENTS_STORYBOOK_PORT ?? "6007") - 1,
       ),
     ],
-    resolve: {
-      alias: {
-        "@": resolve(__dirname, "../src"),
-      },
-    },
     // define the process.env variable for the browser env and attach the .env values (used for storybook stories that rely on external provider keys, namely google)
     define: {
       __GRAM_API_URL__: JSON.stringify(process.env["GRAM_API_URL"] || ""),

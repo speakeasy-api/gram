@@ -1,4 +1,4 @@
-import { Chat, ComponentOverrides } from "@/index";
+import { Chat, ComponentOverrides } from "#elements/index";
 import { useAssistantState } from "@assistant-ui/react";
 import { Meta, StoryFn } from "@storybook/react-vite";
 

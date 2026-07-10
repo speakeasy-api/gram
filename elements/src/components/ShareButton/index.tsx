@@ -3,14 +3,14 @@
 import { Link } from "lucide-react";
 import { useCallback } from "react";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "#elements/components/ui/button";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { useThreadId } from "@/hooks/useThreadId";
-import { cn } from "@/lib/utils";
+} from "#elements/components/ui/tooltip";
+import { useThreadId } from "#elements/hooks/useThreadId";
+import { cn } from "#elements/lib/utils";
 
 export interface ShareButtonProps {
   /**

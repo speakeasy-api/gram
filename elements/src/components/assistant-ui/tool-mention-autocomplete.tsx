@@ -2,16 +2,16 @@ import { FC, useCallback, useEffect, useRef, useState } from "react";
 import { Wrench } from "lucide-react";
 import * as m from "motion/react-m";
 
-import { cn } from "@/lib/utils";
-import { useDensity } from "@/hooks/useDensity";
-import { useRadius } from "@/hooks/useRadius";
-import { EASE_OUT_QUINT } from "@/lib/easing";
+import { cn } from "#elements/lib/utils";
+import { useDensity } from "#elements/hooks/useDensity";
+import { useRadius } from "#elements/hooks/useRadius";
+import { EASE_OUT_QUINT } from "#elements/lib/easing";
 import {
   MentionableTool,
   detectMentionContext,
   filterToolsByQuery,
   insertToolMention,
-} from "@/lib/tool-mentions";
+} from "#elements/lib/tool-mentions";
 
 export interface ToolMentionAutocompleteProps {
   tools: MentionableTool[];

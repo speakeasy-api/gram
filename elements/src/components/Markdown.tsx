@@ -5,10 +5,10 @@ import ReactMarkdown, {
 } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
-import { MarkdownLinkProvider } from "@/contexts/MarkdownLinkContext";
-import { MarkdownAnchor } from "@/components/markdown-anchor";
-import { cn } from "@/lib/utils";
-import type { LinkResolver, MarkdownLinkComponent } from "@/types";
+import { MarkdownLinkProvider } from "#elements/contexts/MarkdownLinkContext";
+import { MarkdownAnchor } from "#elements/components/markdown-anchor";
+import { cn } from "#elements/lib/utils";
+import type { LinkResolver, MarkdownLinkComponent } from "#elements/types";
 
 export interface MarkdownProps {
   /** Raw markdown text. */

@@ -9,7 +9,7 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
       "@gram/client": path.resolve(__dirname, "./src/sdk/src"),
     },
-    conditions: ["source"],
+    conditions: ["gram-source", "source"],
   },
   define: {
     __GRAM_SERVER_URL__: JSON.stringify(""),

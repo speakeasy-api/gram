@@ -7,7 +7,7 @@ import {
   DonutChart,
   RadarChart,
   ScatterChart,
-} from "@/plugins/chart/ui";
+} from "#elements/plugins/chart/ui";
 
 // Wrapper component to render different chart types
 const ChartWrapper = ({ children }: { children: React.ReactNode }) => (

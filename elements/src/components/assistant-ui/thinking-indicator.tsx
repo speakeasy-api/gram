@@ -3,7 +3,7 @@
 import { useAssistantState } from "@assistant-ui/react";
 import { type FC, useEffect, useMemo, useState } from "react";
 
-import { cn } from "@/lib/utils";
+import { cn } from "#elements/lib/utils";
 
 /**
  * Whimsical verbs cycled while the assistant is "thinking" — i.e. the message

@@ -12,11 +12,11 @@
   },
   "iconLibrary": "lucide",
   "aliases": {
-    "components": "@/components",
-    "utils": "@/lib/utils",
-    "ui": "@/components/ui",
-    "lib": "@/lib",
-    "hooks": "@/hooks"
+    "components": "#elements/components",
+    "utils": "#elements/lib/utils",
+    "ui": "#elements/components/ui",
+    "lib": "#elements/lib",
+    "hooks": "#elements/hooks"
   },
   "registries": {
     "@assistant-ui": "https://r.assistant-ui.com/{name}.json"

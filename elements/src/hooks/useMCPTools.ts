@@ -1,10 +1,10 @@
-import { assert } from "@/lib/utils";
-import type { MCPServerEntry } from "@/types";
-import { ToolsFilter } from "@/types";
+import { assert } from "#elements/lib/utils";
+import type { MCPServerEntry } from "#elements/types";
+import { ToolsFilter } from "#elements/types";
 import { createMCPClient } from "@ai-sdk/mcp";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { useMemo, useRef } from "react";
-import { trackError } from "@/lib/errorTracking";
+import { trackError } from "#elements/lib/errorTracking";
 import { Auth } from "./useAuth";
 
 type MCPToolsResult = Awaited<

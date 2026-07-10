@@ -4,8 +4,8 @@ import {
   useConnectionStatus,
   useConnectionStatusOptional,
   type ConnectionState,
-} from "@/contexts/ConnectionStatusContext";
-import { cn } from "@/lib/utils";
+} from "#elements/contexts/ConnectionStatusContext";
+import { cn } from "#elements/lib/utils";
 import { Loader2Icon, WifiOffIcon } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { FC } from "react";

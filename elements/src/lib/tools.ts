@@ -1,4 +1,4 @@
-import type { ToolsFilter } from "@/types";
+import type { ToolsFilter } from "#elements/types";
 import {
   AssistantToolProps,
   Tool,

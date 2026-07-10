@@ -1,17 +1,17 @@
 "use client";
 
 import { FC, useMemo } from "react";
-import { ElementsContext } from "@/contexts/contexts";
-import { ToolExecutionProvider } from "@/contexts/ToolExecutionContext";
+import { ElementsContext } from "#elements/contexts/contexts";
+import { ToolExecutionProvider } from "#elements/contexts/ToolExecutionContext";
 import type {
   ElementsContextType,
   LinkResolver,
   MarkdownLinkComponent,
   Model,
-} from "@/types";
-import { recommended } from "@/plugins";
-import { chart } from "@/plugins/chart";
-import { generativeUI } from "@/plugins/generative-ui";
+} from "#elements/types";
+import { recommended } from "#elements/plugins";
+import { chart } from "#elements/plugins/chart";
+import { generativeUI } from "#elements/plugins/generative-ui";
 import { parseSegments } from "./MessageContent.parser";
 import { Markdown } from "./Markdown";
 

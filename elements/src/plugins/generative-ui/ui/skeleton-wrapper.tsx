@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { Skeleton } from "./skeleton";
-import { cn } from "@/lib/utils";
+import { cn } from "#elements/lib/utils";
 
 export interface SkeletonWrapperProps {
   width?: string;

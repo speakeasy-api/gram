@@ -1,12 +1,12 @@
 "use client";
 
 import * as React from "react";
-import { useElements } from "@/hooks/useElements";
+import { useElements } from "#elements/hooks/useElements";
 import { AssistantModal } from "../assistant-ui/assistant-modal";
 import { AssistantSidecar } from "../assistant-ui/assistant-sidecar";
 import { ErrorBoundary } from "../assistant-ui/error-boundary";
 import { Thread } from "../assistant-ui/thread";
-import { ShadowRoot } from "@/components/ShadowRoot";
+import { ShadowRoot } from "#elements/components/ShadowRoot";
 
 interface ChatProps {
   className?: string;

@@ -3,12 +3,12 @@ import { AnimatePresence } from "motion/react";
 import * as m from "motion/react-m";
 import { FC } from "react";
 
-import { Button } from "@/components/ui/button";
-import { useDensity } from "@/hooks/useDensity";
-import { useFollowOnSuggestions } from "@/hooks/useFollowOnSuggestions";
-import { useRadius } from "@/hooks/useRadius";
-import { EASE_OUT_QUINT } from "@/lib/easing";
-import { cn } from "@/lib/utils";
+import { Button } from "#elements/components/ui/button";
+import { useDensity } from "#elements/hooks/useDensity";
+import { useFollowOnSuggestions } from "#elements/hooks/useFollowOnSuggestions";
+import { useRadius } from "#elements/hooks/useRadius";
+import { EASE_OUT_QUINT } from "#elements/lib/easing";
+import { cn } from "#elements/lib/utils";
 
 const suggestionVariants = {
   hidden: {

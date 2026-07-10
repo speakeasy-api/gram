@@ -3,11 +3,11 @@ import { Wrench, X } from "lucide-react";
 import { AnimatePresence } from "motion/react";
 import * as m from "motion/react-m";
 
-import { cn } from "@/lib/utils";
-import { useDensity } from "@/hooks/useDensity";
-import { useRadius } from "@/hooks/useRadius";
-import { EASE_OUT_QUINT } from "@/lib/easing";
-import { MentionableTool } from "@/lib/tool-mentions";
+import { cn } from "#elements/lib/utils";
+import { useDensity } from "#elements/hooks/useDensity";
+import { useRadius } from "#elements/hooks/useRadius";
+import { EASE_OUT_QUINT } from "#elements/lib/easing";
+import { MentionableTool } from "#elements/lib/tool-mentions";
 
 export interface MentionedToolsBadgesProps {
   mentionedToolIds: string[];

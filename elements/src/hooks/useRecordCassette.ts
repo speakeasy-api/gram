@@ -21,7 +21,7 @@
 
 import { useThreadRuntime } from "@assistant-ui/react";
 import { useCallback, useRef, useState, useSyncExternalStore } from "react";
-import { recordCassette } from "@/lib/cassette";
+import { recordCassette } from "#elements/lib/cassette";
 
 export function useRecordCassette(): {
   /** Whether recording is currently active. */

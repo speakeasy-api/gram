@@ -1,7 +1,7 @@
 import { Chat } from "..";
 import type { Meta, StoryFn, StoryObj } from "@storybook/react-vite";
-import { ThreadList } from "@/components/assistant-ui/thread-list";
-import { ROOT_SELECTOR } from "@/constants/tailwind";
+import { ThreadList } from "#elements/components/assistant-ui/thread-list";
+import { ROOT_SELECTOR } from "#elements/constants/tailwind";
 
 const meta: Meta<typeof Chat> = {
   title: "Chat/Variants",

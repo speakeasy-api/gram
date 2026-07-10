@@ -1,4 +1,4 @@
-import { MessageFeedback } from "@/components/assistant-ui/message-feedback";
+import { MessageFeedback } from "#elements/components/assistant-ui/message-feedback";
 import type { Meta, StoryFn } from "@storybook/react-vite";
 import { LazyMotion, domAnimation } from "motion/react";
 import { Chat } from "..";

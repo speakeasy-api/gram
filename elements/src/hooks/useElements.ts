@@ -1,6 +1,6 @@
 import { useContext } from "react";
-import { ElementsContext } from "@/contexts/contexts";
-import type { ElementsContextType } from "@/types";
+import { ElementsContext } from "#elements/contexts/contexts";
+import type { ElementsContextType } from "#elements/types";
 
 /**
  * @private Internal hook to access the ElementsContext

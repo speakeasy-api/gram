@@ -19,20 +19,20 @@
  * ```
  */
 
-import { ROOT_SELECTOR } from "@/constants/tailwind";
-import { ChatIdContext } from "@/contexts/ChatIdContext";
-import { ElementsContext } from "@/contexts/contexts";
-import { ReplayContext } from "@/contexts/ReplayContext";
-import { ToolApprovalProvider } from "@/contexts/ToolApprovalContext";
+import { ROOT_SELECTOR } from "#elements/constants/tailwind";
+import { ChatIdContext } from "#elements/contexts/ChatIdContext";
+import { ElementsContext } from "#elements/contexts/contexts";
+import { ReplayContext } from "#elements/contexts/ReplayContext";
+import { ToolApprovalProvider } from "#elements/contexts/ToolApprovalContext";
 import {
   createReplayTransport,
   type Cassette,
   type ReplayOptions,
-} from "@/lib/cassette";
-import { MODELS } from "@/lib/models";
-import { cn } from "@/lib/utils";
-import { recommended } from "@/plugins";
-import type { ElementsConfig } from "@/types";
+} from "#elements/lib/cassette";
+import { MODELS } from "#elements/lib/models";
+import { cn } from "#elements/lib/utils";
+import { recommended } from "#elements/plugins";
+import type { ElementsConfig } from "#elements/types";
 import {
   AssistantRuntimeProvider,
   useThreadRuntime,

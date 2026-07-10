@@ -6,7 +6,7 @@ import {
   SessionAuthConfig,
   StaticSessionAuthConfig,
   UnifiedSessionAuthConfig,
-} from "@/types";
+} from "#elements/types";
 
 export function isDangerousApiKeyAuth(
   auth: ApiConfig | undefined,

@@ -1325,7 +1325,7 @@ jobs:
       - name: Build
         env:
           NODE_ENV: production
-        run: mise exec --env viteprod -- pnpm build
+        run: mise exec --env viteprod -- pnpm -F dashboard build
 
       - name: Upload source maps to DataDog
         env:
@@ -1412,7 +1412,7 @@ jobs:
       - name: Build
         env:
           NODE_ENV: production
-        run: mise exec --env viteprod -- pnpm build
+        run: mise exec --env viteprod -- pnpm -F dashboard build
 
       - name: Lint
         run: pnpm lint
@@ -1799,6 +1799,10 @@ jobs:
 
       - name: Build
         run: pnpm build
+        working-directory: elements
+
+      - name: Check package contracts
+        run: pnpm test:package
         working-directory: elements
 
       - name: Lint

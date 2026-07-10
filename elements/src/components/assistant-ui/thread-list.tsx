@@ -6,13 +6,17 @@ import {
 } from "@assistant-ui/react";
 import { MessageSquareTextIcon, PlusIcon } from "lucide-react";
 
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { useRadius } from "@/hooks/useRadius";
-import { cn, initialsOf } from "@/lib/utils";
-import { useDensity } from "@/hooks/useDensity";
-import { useThreadMeta } from "@/contexts/ThreadMetaContext";
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+} from "#elements/components/ui/avatar";
+import { Button } from "#elements/components/ui/button";
+import { Skeleton } from "#elements/components/ui/skeleton";
+import { useRadius } from "#elements/hooks/useRadius";
+import { cn, initialsOf } from "#elements/lib/utils";
+import { useDensity } from "#elements/hooks/useDensity";
+import { useThreadMeta } from "#elements/contexts/ThreadMetaContext";
 
 /**
  * Formats a chat's creation date for the list row: "Jun 14" within the current

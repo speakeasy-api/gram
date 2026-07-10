@@ -1,5 +1,5 @@
-import type { GramChatMessage } from "@/lib/messageConverter";
-import { MODELS } from "@/lib/models";
+import type { GramChatMessage } from "#elements/lib/messageConverter";
+import { MODELS } from "#elements/lib/models";
 import {
   AssistantTool,
   ImageMessagePartComponent,
@@ -1014,12 +1014,11 @@ export interface ModalConfig extends ExpandableConfig {
    * @example
    * ```ts
    * import { MessageCircleIcon } from 'lucide-react'
-   * import { cn } from '@/lib/utils'
    *
    * const config: ElementsConfig = {
    *   modal: {
    *     icon: (state) => {
-   *       return <div className={cn('size-6', state === 'open' ? 'rotate-90' : 'rotate-0')}>
+   *       return <div className={`size-6 ${state === 'open' ? 'rotate-90' : 'rotate-0'}`}>
    *         <MessageCircleIcon className="size-6" />
    *       </div>
    *     },

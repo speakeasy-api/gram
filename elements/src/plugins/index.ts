@@ -1,4 +1,4 @@
-import type { Plugin } from "@/types/plugins";
+import type { Plugin } from "#elements/types/plugins";
 import { chart } from "./chart";
 import { generativeUI } from "./generative-ui";
 
@@ -19,4 +19,4 @@ export const recommended: PluginList = createPluginList([chart, generativeUI]);
 export { chart } from "./chart";
 export { generativeUI } from "./generative-ui";
 
-export type { Plugin } from "@/types/plugins";
+export type { Plugin } from "#elements/types/plugins";

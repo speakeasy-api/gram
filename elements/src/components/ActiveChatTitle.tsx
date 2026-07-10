@@ -1,12 +1,12 @@
 import { useAssistantApi, useAssistantState } from "@assistant-ui/react";
 import { PencilIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "#elements/lib/utils";
 import {
   FALLBACK_TITLE,
   MAX_TITLE_LENGTH,
   resolveTitleEdit,
-} from "@/components/activeChatTitle.helpers";
+} from "#elements/components/activeChatTitle.helpers";
 
 export interface ActiveChatTitleProps {
   className?: string;

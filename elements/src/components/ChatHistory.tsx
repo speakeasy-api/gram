@@ -1,7 +1,7 @@
 "use client";
 
-import { ThreadList } from "@/components/assistant-ui/thread-list";
-import { ShadowRoot } from "@/components/ShadowRoot";
+import { ThreadList } from "#elements/components/assistant-ui/thread-list";
+import { ShadowRoot } from "#elements/components/ShadowRoot";
 
 interface ChatHistoryProps {
   className?: string;

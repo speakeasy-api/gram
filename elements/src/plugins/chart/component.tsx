@@ -1,11 +1,14 @@
 "use client";
 
-import { useDensity } from "@/hooks/useDensity";
-import { cn } from "@/lib/utils";
-import { isJsonRenderTree, type JsonRenderNode } from "@/lib/generative-ui";
+import { useDensity } from "#elements/hooks/useDensity";
+import { cn } from "#elements/lib/utils";
+import {
+  isJsonRenderTree,
+  type JsonRenderNode,
+} from "#elements/lib/generative-ui";
 import { SyntaxHighlighterProps } from "@assistant-ui/react-markdown";
 import { AlertCircleIcon } from "lucide-react";
-import { ElementType, FC, useMemo } from "react";
+import { type ComponentType, type FC, useMemo } from "react";
 import { MacOSWindowFrame } from "../components/MacOSWindowFrame";
 import { PluginLoadingState } from "../components/PluginLoadingState";
 
@@ -33,10 +36,10 @@ function getRandomLoadingMessage(): string {
 
 /**
  * Chart components registry. Each entry accepts the chart-specific prop shape
- * declared in `./ui`, but the registry erases those generics via `ElementType`
+ * declared in `./ui`, but the registry erases those generics via `ComponentType`
  * so heterogeneous components can coexist under one key-indexed map.
  */
-const chartComponents: Record<string, ElementType> = {
+const chartComponents = {
   BarChart,
   LineChart,
   AreaChart,
@@ -44,7 +47,7 @@ const chartComponents: Record<string, ElementType> = {
   DonutChart,
   ScatterChart,
   RadarChart,
-};
+} as unknown as Record<string, ComponentType<Record<string, unknown>>>;
 
 /**
  * Render a chart node from json-render tree
