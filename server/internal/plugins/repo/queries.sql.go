@@ -892,34 +892,37 @@ func (q *Queries) UpdatePluginServer(ctx context.Context, arg UpdatePluginServer
 }
 
 const upsertGitHubConnection = `-- name: UpsertGitHubConnection :one
-INSERT INTO plugin_github_connections (project_id, installation_id, repo_owner, repo_name, marketplace_token, published_fingerprint)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO plugin_github_connections (project_id, installation_id, repo_owner, repo_name, marketplace_token, published_mcp_fingerprints, published_hooks_version)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 ON CONFLICT (project_id) DO UPDATE
   SET installation_id = EXCLUDED.installation_id,
       repo_owner = EXCLUDED.repo_owner,
       repo_name = EXCLUDED.repo_name,
       marketplace_token = COALESCE(plugin_github_connections.marketplace_token, EXCLUDED.marketplace_token),
-      published_fingerprint = EXCLUDED.published_fingerprint,
+      published_mcp_fingerprints = EXCLUDED.published_mcp_fingerprints,
+      published_hooks_version = EXCLUDED.published_hooks_version,
       updated_at = clock_timestamp()
 RETURNING id, project_id, installation_id, repo_owner, repo_name, marketplace_token, published_fingerprint, published_mcp_fingerprints, published_hooks_version, created_at, updated_at
 `
 
 type UpsertGitHubConnectionParams struct {
-	ProjectID            uuid.UUID
-	InstallationID       int64
-	RepoOwner            string
-	RepoName             string
-	MarketplaceToken     pgtype.Text
-	PublishedFingerprint pgtype.Text
+	ProjectID                uuid.UUID
+	InstallationID           int64
+	RepoOwner                string
+	RepoName                 string
+	MarketplaceToken         pgtype.Text
+	PublishedMcpFingerprints []byte
+	PublishedHooksVersion    pgtype.Text
 }
 
 // Inserts or refreshes a project's GitHub connection. The marketplace_token
 // argument is the candidate token to use if no token is currently set; on
 // conflict the existing token is preserved via COALESCE so callers can pass a
 // freshly-generated token on every publish without overwriting prior state.
-// Token rotation goes through a separate query. published_fingerprint is the
-// content hash of the packages just published and is always overwritten, so
-// subsequent rollout runs can detect when nothing changed.
+// Token rotation goes through a separate query. published_mcp_fingerprints and
+// published_hooks_version record the per-plugin MCP content hashes and hooks
+// generator version just published; both are always overwritten so subsequent
+// rollout runs can detect independently whether the MCP or hooks component changed.
 func (q *Queries) UpsertGitHubConnection(ctx context.Context, arg UpsertGitHubConnectionParams) (PluginGithubConnection, error) {
 	row := q.db.QueryRow(ctx, upsertGitHubConnection,
 		arg.ProjectID,
@@ -927,7 +930,8 @@ func (q *Queries) UpsertGitHubConnection(ctx context.Context, arg UpsertGitHubCo
 		arg.RepoOwner,
 		arg.RepoName,
 		arg.MarketplaceToken,
-		arg.PublishedFingerprint,
+		arg.PublishedMcpFingerprints,
+		arg.PublishedHooksVersion,
 	)
 	var i PluginGithubConnection
 	err := row.Scan(

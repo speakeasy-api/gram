@@ -6,10 +6,12 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"os"
 	"regexp"
 	"sort"
@@ -59,6 +61,11 @@ type GitHubPublisher interface {
 	CreateRepo(ctx context.Context, installationID int64, org, name string, private bool) error
 	PushFiles(ctx context.Context, installationID int64, owner, repo, branch, commitMsg string, files map[string][]byte) (string, error)
 	AddCollaborator(ctx context.Context, installationID int64, owner, repo, username, permission string) error
+	// GetRepoFiles returns the current published files so a publish can carry an
+	// unchanged plugin component (hooks or MCP) verbatim into a fresh push,
+	// leaving the other component's files and embedded key untouched. Returns
+	// ghclient.ErrRepoNotFound when nothing has been published yet.
+	GetRepoFiles(ctx context.Context, installationID int64, owner, repo, branch string) (map[string][]byte, error)
 }
 
 // GitHubConfig holds the configured GitHub client and the Gram-owned org
@@ -1240,15 +1247,16 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 }
 
 // publishUpToDate reports whether the project's current plugin state matches
-// what was last published, by recomputing the live content fingerprint the same
-// way publishProject does and comparing it to the stored published_fingerprint.
-// It returns nil ("unknown") when freshness can't be determined — the
-// connection predates fingerprinting, or recomputing the fingerprint fails — so
-// a transient compute error degrades the status read rather than failing it.
+// what was last published, by recomputing the live MCP fingerprint the same way
+// publishProject does and comparing both it and the current hooks generator
+// version to what the connection last recorded. It returns nil ("unknown") when
+// freshness can't be determined — the connection predates the hooks/MCP split,
+// or recomputing the fingerprint fails — so a transient compute error degrades
+// the status read rather than failing it.
 func (s *Service) publishUpToDate(ctx context.Context, ac *contextvalues.AuthContext, conn repo.PluginGithubConnection) *bool {
-	// Connections published before fingerprinting existed carry no stored hash,
-	// so there's nothing to compare against.
-	if !conn.PublishedFingerprint.Valid {
+	// Connections published before the hooks/MCP split carry no stored MCP
+	// fingerprints, so there's nothing to compare against.
+	if len(conn.PublishedMcpFingerprints) == 0 {
 		return nil
 	}
 
@@ -1271,14 +1279,32 @@ func (s *Service) publishUpToDate(ctx context.Context, ac *contextvalues.AuthCon
 	}
 
 	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, projectSlug, *ac.ProjectID)
-	fingerprint, err := PluginFingerprint(pluginInfos, cfg)
+	mcpFingerprints, err := MCPFingerprints(pluginInfos, cfg)
 	if err != nil {
-		s.logger.WarnContext(ctx, "publish freshness: compute fingerprint", attr.SlogError(err))
+		s.logger.WarnContext(ctx, "publish freshness: compute mcp fingerprints", attr.SlogError(err))
 		return nil
 	}
 
-	upToDate := conn.PublishedFingerprint.String == fingerprint
+	// Up to date only when both components match what was last published: the MCP
+	// per-plugin fingerprints and the hooks generator version.
+	upToDate := maps.Equal(mcpFingerprints, decodeMCPFingerprints(conn.PublishedMcpFingerprints)) &&
+		conv.FromPGTextOrEmpty[string](conn.PublishedHooksVersion) == hooksGeneratorVersion
 	return &upToDate
+}
+
+// decodeMCPFingerprints parses the JSON per-plugin fingerprint map stored on a
+// connection. It returns nil on empty or malformed input, so a decode failure is
+// treated as "nothing matches" — the safe direction, forcing a republish that
+// backfills a valid value.
+func decodeMCPFingerprints(raw []byte) map[string]string {
+	if len(raw) == 0 {
+		return nil
+	}
+	m := make(map[string]string)
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return nil
+	}
+	return m
 }
 
 func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPluginsPayload) (*gen.PublishPluginsResult, error) {
@@ -1432,12 +1458,17 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 
 	cfg := s.generateConfig(ctx, input.OrganizationID, input.OrganizationSlug, input.ProjectSlug, input.ProjectID)
 
-	// Compute the fingerprint up front from the resolved config so we can both
-	// short-circuit unchanged publishes (before minting keys or touching
-	// GitHub) and persist it after a successful push.
-	fingerprint, err := PluginFingerprint(pluginInfos, cfg)
+	// The per-plugin MCP fingerprints and the hooks generator version are the two
+	// independent rollout signals. Compute both up front so we can short-circuit
+	// unchanged publishes before touching GitHub and persist them after a
+	// successful push.
+	mcpFingerprints, err := MCPFingerprints(pluginInfos, cfg)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "compute plugin fingerprint").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "compute mcp fingerprints").LogError(ctx, s.logger)
+	}
+	mcpFingerprintsJSON, err := json.Marshal(mcpFingerprints)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "marshal mcp fingerprints").LogError(ctx, s.logger)
 	}
 
 	// GitHub repo owner/name are case-insensitive. Normalize at the boundary
@@ -1447,34 +1478,126 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	repoName := strings.ToLower(input.OrganizationSlug + "-" + input.ProjectSlug + "-plugins")
 	repoURL := fmt.Sprintf("https://github.com/%s/%s", repoOwner, repoName)
 
-	if input.SkipIfUnchanged {
-		existing, err := s.repo.GetGitHubConnection(ctx, input.ProjectID)
-		switch {
-		case errors.Is(err, pgx.ErrNoRows):
-			// Never published — fall through and publish for the first time.
-		case err != nil:
-			return nil, oops.E(oops.CodeUnexpected, err, "get github connection").LogError(ctx, s.logger)
-		case conv.FromPGTextOrEmpty[string](existing.PublishedFingerprint) == fingerprint:
-			return &publishOutcome{RepoURL: repoURL, Skipped: true}, nil
+	existing, connErr := s.repo.GetGitHubConnection(ctx, input.ProjectID)
+	if connErr != nil && !errors.Is(connErr, pgx.ErrNoRows) {
+		return nil, oops.E(oops.CodeUnexpected, connErr, "get github connection").LogError(ctx, s.logger)
+	}
+	firstPublish := errors.Is(connErr, pgx.ErrNoRows)
+
+	// Decide which components to (re)generate. The hooks subtree changes only on
+	// a hooksGeneratorVersion bump, so an MCP publish never touches it. A human
+	// publish (SkipIfUnchanged == false) always refreshes MCP so installed copies
+	// pick up a new manifest version, but still leaves hooks alone unless its
+	// version bumped.
+	mcpChanged := firstPublish || !input.SkipIfUnchanged ||
+		!maps.Equal(mcpFingerprints, decodeMCPFingerprints(existing.PublishedMcpFingerprints))
+	hooksChanged := firstPublish ||
+		conv.FromPGTextOrEmpty[string](existing.PublishedHooksVersion) != hooksGeneratorVersion
+
+	if input.SkipIfUnchanged && !mcpChanged && !hooksChanged {
+		return &publishOutcome{RepoURL: repoURL, Skipped: true}, nil
+	}
+
+	// When exactly one component changed, carry the other verbatim from the
+	// existing repo so its files (and their embedded API key) are untouched.
+	// Fetch the repo only in that case; a first publish or a both-components
+	// change regenerates everything and needs no fetch.
+	var existingFiles map[string][]byte
+	if !firstPublish && (!mcpChanged || !hooksChanged) {
+		existingFiles, err = s.github.Client.GetRepoFiles(ctx, s.github.InstallationID, repoOwner, repoName, "main")
+		if err != nil {
+			if !errors.Is(err, ghclient.ErrRepoNotFound) {
+				return nil, oops.E(oops.CodeGatewayError, err, "get existing repo files").LogError(ctx, s.logger)
+			}
+			// The connection row exists but the repo is gone or empty; regenerate
+			// both components rather than carrying stale files.
+			existingFiles = nil
 		}
 	}
 
-	mcpCandidate, err := s.buildPluginAPIKeyCandidate(auth.APIKeyScopeConsumer, "mcp")
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "build plugin mcp api key").LogError(ctx, s.logger)
-	}
-	hooksCandidate, err := s.buildPluginAPIKeyCandidate(auth.APIKeyScopeHooks, "hooks")
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "build plugin hooks api key").LogError(ctx, s.logger)
+	// carry copies the given paths from the existing repo into dst; it reports
+	// false when the fetch failed or any expected file is missing, so the caller
+	// falls back to regenerating that component.
+	carry := func(dst map[string][]byte, paths []string) bool {
+		if existingFiles == nil {
+			return false
+		}
+		staged := make(map[string][]byte, len(paths))
+		for _, p := range paths {
+			content, ok := existingFiles[p]
+			if !ok {
+				return false
+			}
+			staged[p] = content
+		}
+		maps.Copy(dst, staged)
+		return true
 	}
 
-	cfg.APIKey = mcpCandidate.fullKey
-	cfg.HooksAPIKey = hooksCandidate.fullKey
+	files := make(map[string][]byte)
+	var candidates []pluginAPIKeyCandidate
 
-	files, err := GeneratePluginPackages(pluginInfos, cfg)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "generate plugin packages").LogError(ctx, s.logger)
+	// MCP component: carry when unchanged, otherwise regenerate with a fresh key.
+	carriedMCP := false
+	if !mcpChanged {
+		paths, err := mcpFilePaths(pluginInfos, cfg)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "enumerate mcp files").LogError(ctx, s.logger)
+		}
+		carriedMCP = carry(files, paths)
 	}
+	if !carriedMCP {
+		mcpCandidate, err := s.buildPluginAPIKeyCandidate(auth.APIKeyScopeConsumer, "mcp")
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "build plugin mcp api key").LogError(ctx, s.logger)
+		}
+		cfg.APIKey = mcpCandidate.fullKey
+		mcpFiles, err := generateMCPFiles(pluginInfos, cfg)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "generate mcp files").LogError(ctx, s.logger)
+		}
+		maps.Copy(files, mcpFiles)
+		candidates = append(candidates, mcpCandidate)
+	}
+
+	// Hooks component: carry when the generator version is unchanged, otherwise
+	// regenerate with a fresh hooks key.
+	carriedHooks := false
+	if !hooksChanged {
+		paths, err := hooksFilePaths(cfg)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "enumerate hooks files").LogError(ctx, s.logger)
+		}
+		carriedHooks = carry(files, paths)
+	}
+	if !carriedHooks {
+		hooksCandidate, err := s.buildPluginAPIKeyCandidate(auth.APIKeyScopeHooks, "hooks")
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "build plugin hooks api key").LogError(ctx, s.logger)
+		}
+		cfg.HooksAPIKey = hooksCandidate.fullKey
+		hooksFiles, err := generateHooksFiles(cfg)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "generate hooks files").LogError(ctx, s.logger)
+		}
+		maps.Copy(files, hooksFiles)
+		candidates = append(candidates, hooksCandidate)
+	}
+
+	// Shared files (marketplace manifests + README) reference both components but
+	// embed no per-publish secret or version, so they're always regenerated from
+	// a config with non-empty key sentinels: only key presence matters here (it
+	// selects the codex auth policy and lists the observability entry), and a
+	// published repo always has both keys. Using sentinels keeps these files
+	// byte-identical to what MCPFingerprint hashed.
+	sharedCfg := cfg
+	sharedCfg.APIKey = fingerprintAPIKeySentinel
+	sharedCfg.HooksAPIKey = fingerprintHooksKeySentinel
+	sharedFiles, err := generateSharedFiles(pluginInfos, sharedCfg)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "generate shared files").LogError(ctx, s.logger)
+	}
+	maps.Copy(files, sharedFiles)
 
 	if err := s.github.Client.CreateRepo(ctx, s.github.InstallationID, repoOwner, repoName, true); err != nil {
 		return nil, oops.E(oops.CodeGatewayError, err, "create github repo").LogError(ctx, s.logger)
@@ -1513,7 +1636,7 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	// credentials when GitHub fails. If this transaction itself fails, the
 	// published repo contains key strings with no DB records — re-publish
 	// overwrites them with fresh valid keys.
-	if err := s.persistPluginAPIKeys(ctx, input, []pluginAPIKeyCandidate{mcpCandidate, hooksCandidate}, projectName, repoOwner, repoName, pluginSlugs, fingerprint); err != nil {
+	if err := s.persistPluginAPIKeys(ctx, input, candidates, projectName, repoOwner, repoName, pluginSlugs, mcpFingerprintsJSON, hooksGeneratorVersion); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "persist plugin api keys").LogError(ctx, s.logger)
 	}
 
@@ -1720,7 +1843,8 @@ func (s *Service) persistPluginAPIKeys(
 	projectName string,
 	repoOwner, repoName string,
 	pluginSlugs []string,
-	fingerprint string,
+	mcpFingerprintsJSON []byte,
+	hooksVersion string,
 ) error {
 	projectID := uuid.NullUUID{UUID: input.ProjectID, Valid: true}
 
@@ -1769,12 +1893,13 @@ func (s *Service) persistPluginAPIKeys(
 		return fmt.Errorf("generate marketplace token: %w", err)
 	}
 	if _, err := s.repo.WithTx(tx).UpsertGitHubConnection(ctx, repo.UpsertGitHubConnectionParams{
-		ProjectID:            input.ProjectID,
-		InstallationID:       s.github.InstallationID,
-		RepoOwner:            repoOwner,
-		RepoName:             repoName,
-		MarketplaceToken:     pgtype.Text{String: candidateToken, Valid: true},
-		PublishedFingerprint: conv.ToPGText(fingerprint),
+		ProjectID:                input.ProjectID,
+		InstallationID:           s.github.InstallationID,
+		RepoOwner:                repoOwner,
+		RepoName:                 repoName,
+		MarketplaceToken:         pgtype.Text{String: candidateToken, Valid: true},
+		PublishedMcpFingerprints: mcpFingerprintsJSON,
+		PublishedHooksVersion:    conv.ToPGText(hooksVersion),
 	}); err != nil {
 		return fmt.Errorf("upsert github connection: %w", err)
 	}
