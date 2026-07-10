@@ -1,0 +1,32 @@
+server/internal/background/activities/risk_analysis/prompt_judge_batch.go
+  s_89752e5bcbf473::t_3eefa64f4eb407 85-87,97
+server/cmd/gram/start.go
+  s_89752e5bcbf473::t_f28e108da3ae74 1013,1026
+  s_89752e5bcbf473::t_2fe46f6a117c44 102
+  s_89752e5bcbf473::t_9abd9726ffe1d5 917,931,1201,1300
+server/internal/scanners/promptpolicy/scanner_test.go
+  s_89752e5bcbf473::t_369c65f605f71d 17,39,58,69,81
+  s_89752e5bcbf473::t_7af7418c89d9c5 1-16,18-38,40-57,59-68,70-80,82-86
+server/internal/risk/prompt_policy_scanner_test.go
+  s_89752e5bcbf473::t_e8602ee60c259c 116,139,164,183,202,219
+server/internal/risk/scanner.go
+  s_89752e5bcbf473::t_b61e3f62b8968d 177,198,220,639-641,643-647,649,653
+server/internal/scanners/promptpolicy/scanner.go
+  s_89752e5bcbf473::t_64a991e0a8f9d4 1-57
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "d8551bdfce3b2e2780be9de033524d356f170aab",
+  "prompts": {},
+  "sessions": {
+    "s_89752e5bcbf473": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f4a84-bb70-7a53-b9b6-eb0949a88bf3",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
