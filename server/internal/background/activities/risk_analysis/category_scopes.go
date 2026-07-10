@@ -26,6 +26,14 @@ var sourceCategories = map[string][]categories.Category{
 	SourceLLMJudge:                  {categories.CategoryPromptPolicy},
 }
 
+// SourceCategories returns the categories a detector source can emit.
+func SourceCategories(source string) []categories.Category {
+	cats := sourceCategories[source]
+	out := make([]categories.Category, len(cats))
+	copy(out, cats)
+	return out
+}
+
 // RecommendedSet holds the registry's scopes compiled once against the shared
 // celenv engine. Built in the AnalyzeBatch constructor; a bad registry entry
 // fails fast at worker boot.
@@ -85,6 +93,82 @@ func NewCategoryScopes(policy CompiledScope, rec RecommendedSet, disabled []stri
 		enabled:  enabled,
 		metrics:  metrics,
 	}
+}
+
+// CategoryScope is the single-message composition used by realtime
+// enforcement: policy scope ∩ (recommended scopes − policy opt-outs).
+type CategoryScope struct {
+	policy   CompiledScope
+	rec      RecommendedSet
+	disabled map[categories.Category]bool
+	enabled  bool
+}
+
+// NewCategoryScope builds a single-message category scope. Its zero value is
+// policy scope only.
+func NewCategoryScope(policy CompiledScope, rec RecommendedSet, disabled []string, enabled bool) CategoryScope {
+	disabledSet := make(map[categories.Category]bool, len(disabled))
+	for _, cat := range disabled {
+		disabledSet[categories.Category(cat)] = true
+	}
+	return CategoryScope{
+		policy:   policy,
+		rec:      rec,
+		disabled: disabledSet,
+		enabled:  enabled,
+	}
+}
+
+// InScope reports whether view is in scope for cat.
+func (s CategoryScope) InScope(view MessageView, cat categories.Category) bool {
+	if !s.policyIncludes(view) {
+		return false
+	}
+	if !s.enabled || s.disabled[cat] {
+		return true
+	}
+	scope, ok := s.rec.scope(cat)
+	if !ok {
+		return true
+	}
+	return scope.Includes(view) && !scope.Exempts(view)
+}
+
+// SourceInScope reports whether view is in scope for at least one category the
+// source can emit. Unknown sources are admitted so new scanner sources do not
+// fail closed before they are added to sourceCategories.
+func (s CategoryScope) SourceInScope(view MessageView, source string) bool {
+	cats := SourceCategories(source)
+	if len(cats) == 0 {
+		return s.policyIncludes(view)
+	}
+	for _, cat := range cats {
+		if s.InScope(view, cat) {
+			return true
+		}
+	}
+	return false
+}
+
+// FilterFindings drops findings whose classified category is out of scope.
+func (s CategoryScope) FilterFindings(view MessageView, findings []scanners.Finding) []scanners.Finding {
+	if len(findings) == 0 {
+		return findings
+	}
+	out := make([]scanners.Finding, 0, len(findings))
+	for _, finding := range findings {
+		if s.InScope(view, categoryForFinding(finding)) {
+			out = append(out, finding)
+		}
+	}
+	return out
+}
+
+func (s CategoryScope) policyIncludes(view MessageView) bool {
+	if !s.policy.Active() {
+		return true
+	}
+	return s.policy.Includes(view) && !s.policy.Exempts(view)
 }
 
 // Masks computes the policy-scope mask and category-specific recommended-scope
