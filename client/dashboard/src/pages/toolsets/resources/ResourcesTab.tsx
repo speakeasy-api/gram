@@ -25,13 +25,6 @@ import { Newspaper } from "lucide-react";
 import { useMemo, useState } from "react";
 import { GettingStartedInstructions } from "@/components/functions/GettingStartedInstructions";
 import { ResourcesEmptyState } from "./ResourcesEmptyState";
-import { Page } from "@/components/page-layout";
-import {
-  RESOURCE_FILTERS,
-  RESOURCE_FILTER_OPTIONS,
-  resourceMatchesFilters,
-} from "./resource-filter-schema";
-import { useFilterState, type FilterValue } from "@/components/filters";
 
 export function ResourcesTabContent({
   toolset,
@@ -59,7 +52,6 @@ export function ResourcesTabContent({
 
   const toolsetResources = toolset.resources ?? [];
   const currentResourceUrns = toolset.resourceUrns ?? [];
-  const filters = useFilterState(RESOURCE_FILTERS);
 
   const addResourceToToolset = (resourceUrn: string) => {
     if (currentResourceUrns.includes(resourceUrn)) {
@@ -110,51 +102,30 @@ export function ResourcesTabContent({
   }
 
   return (
-    <>
-      <Page.Toolbar>
-        <Page.Toolbar.Filters
-          schema={RESOURCE_FILTERS}
-          optionsById={RESOURCE_FILTER_OPTIONS}
-          values={filters.values}
-          onChange={
-            filters.setValue as (id: string, value: FilterValue) => void
-          }
-          onClear={filters.clearValue as (id: string) => void}
-          onClearAll={filters.clearAll}
-        />
-      </Page.Toolbar>
-      <Cards>
-        {toolsetResources
-          .filter((resource) => resource.type === "function")
-          .filter((resource) =>
-            resourceMatchesFilters(
-              resource,
-              filters.values,
-              currentResourceUrns.includes(resource.resourceUrn),
-            ),
-          )
-          .map((resource) => {
-            const functionName = functionIdToName?.[resource.functionId];
-            return (
-              <ResourceCard
-                key={resource.resourceUrn}
-                resource={resource}
-                functionName={functionName}
-                onDelete={() => removeResourceFromToolset(resource.resourceUrn)}
-              />
-            );
-          })}
-        {allResources && allResources.length > 0 && (
-          <RequireScope scope="mcp:write" level="section">
-            <ResourceSelectPopover
-              allResources={allResources}
-              currentResourceUrns={currentResourceUrns}
-              onSelect={(resourceUrn) => addResourceToToolset(resourceUrn)}
+    <Cards>
+      {toolsetResources
+        .filter((resource) => resource.type === "function")
+        .map((resource) => {
+          const functionName = functionIdToName?.[resource.functionId];
+          return (
+            <ResourceCard
+              key={resource.resourceUrn}
+              resource={resource}
+              functionName={functionName}
+              onDelete={() => removeResourceFromToolset(resource.resourceUrn)}
             />
-          </RequireScope>
-        )}
-      </Cards>
-    </>
+          );
+        })}
+      {allResources && allResources.length > 0 && (
+        <RequireScope scope="mcp:write" level="section">
+          <ResourceSelectPopover
+            allResources={allResources}
+            currentResourceUrns={currentResourceUrns}
+            onSelect={(resourceUrn) => addResourceToToolset(resourceUrn)}
+          />
+        </RequireScope>
+      )}
+    </Cards>
   );
 }
 

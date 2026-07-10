@@ -53,14 +53,29 @@ export function visibleSourceFilters(
   return SOURCE_FILTERS.filter((dim) => isDimensionVisible(dim.id, values));
 }
 
+const SOURCE_TYPE_OPTIONS: FilterOption[] = [
+  { value: "openapi", label: "OpenAPI" },
+  { value: "function", label: "Function" },
+  { value: "externalmcp", label: "Catalog" },
+  { value: "remotemcp", label: "Remote MCP" },
+  { value: "tunneledmcp", label: "Tunneled MCP" },
+];
+
+/**
+ * The Type options, minus `tunneledmcp` when the tunneled-MCP feature flag is
+ * off — those sources aren't fetched, so offering the option would just filter
+ * to an empty list.
+ */
+export function sourceTypeFilterOptions(
+  includeTunneled: boolean,
+): FilterOption[] {
+  return includeTunneled
+    ? SOURCE_TYPE_OPTIONS
+    : SOURCE_TYPE_OPTIONS.filter((o) => o.value !== "tunneledmcp");
+}
+
 export const SOURCE_FILTER_OPTIONS: OptionsById = {
-  type: [
-    { value: "openapi", label: "OpenAPI" },
-    { value: "function", label: "Function" },
-    { value: "externalmcp", label: "Catalog" },
-    { value: "remotemcp", label: "Remote MCP" },
-    { value: "tunneledmcp", label: "Tunneled MCP" },
-  ],
+  type: SOURCE_TYPE_OPTIONS,
   usedInMcp: [
     { value: "yes", label: "Used in an MCP server" },
     { value: "no", label: "Not used in any MCP server" },
@@ -124,7 +139,9 @@ export function matchesSourceFilters(
     return false;
   }
 
-  if (values.usedInMcp !== null) {
+  // Only the declared "yes"/"no" values filter; a stale or malformed URL param
+  // (e.g. ?usedInMcp=maybe) is ignored rather than silently treated as "no".
+  if (values.usedInMcp === "yes" || values.usedInMcp === "no") {
     const wantUsed = values.usedInMcp === "yes";
     if (facets.usedInMcp !== wantUsed) return false;
   }

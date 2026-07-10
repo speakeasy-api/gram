@@ -27,6 +27,7 @@ import {
   matchesSourceFilters,
   SOURCE_FILTERS,
   SOURCE_FILTER_OPTIONS,
+  sourceTypeFilterOptions,
   transportFilterOptions,
   visibleSourceFilters,
   type SourceFacets,
@@ -267,6 +268,7 @@ export default function Sources(): JSX.Element {
   const filterOptions = useMemo(
     () => ({
       ...SOURCE_FILTER_OPTIONS,
+      type: sourceTypeFilterOptions(isTunneledMcpEnabled),
       transport: transportFilterOptions(
         allSources.flatMap((asset) =>
           asset.type === "remotemcp" && asset.transportType
@@ -275,7 +277,7 @@ export default function Sources(): JSX.Element {
         ),
       ),
     }),
-    [allSources],
+    [allSources, isTunneledMcpEnabled],
   );
 
   const showNoMatches =
