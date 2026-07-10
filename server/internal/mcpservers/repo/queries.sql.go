@@ -347,8 +347,6 @@ SET
     name = $1,
     slug = $2,
     environment_id = $3,
-    -- The issuer is attached at create time for the server's lifetime; updates
-    -- can never change or clear it (NULL here always preserves the stored value).
     user_session_issuer_id = COALESCE($4, user_session_issuer_id),
     remote_mcp_server_id = $5,
     tunneled_mcp_server_id = $6,

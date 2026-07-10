@@ -5,13 +5,18 @@ package mcp_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -20,10 +25,12 @@ import (
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -270,11 +277,118 @@ func TestServePublic_NoMcpEndpoint_FallsBackToLegacyToolset(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
 }
 
-// Remote-backed mcp_servers are always issuer-gated (the issuer is mandatory
-// at create), so an unauthenticated /mcp/{slug} request never reaches the
-// proxy — TestServePublic_McpEndpoint_IssuerGated_NoAuth_EmitsChallenge below
-// covers that rejection, and the xmcp suite covers the authenticated
-// pass-through via the shared serveResolvedMCPEndpoint dispatch.
+// mintIssuerBearerForEndpoint drives ServeToken with a synthesised
+// UserSessionGrant for the (mcp_endpoint, mcp_server) pair behind slug and
+// returns the minted JWT. Mirrors the xmcp suite's helper so /mcp tests can
+// authenticate past the issuer gate without driving register → authorize →
+// consent over real HTTP.
+func mintIssuerBearerForEndpoint(
+	t *testing.T,
+	ctx context.Context,
+	ti *testInstance,
+	slug string,
+	mcpServer mcpserversrepo.McpServer,
+	organizationID string,
+) string {
+	t.Helper()
+
+	require.True(t, mcpServer.UserSessionIssuerID.Valid, "remote-backed seeds always carry an issuer")
+	mcpEndpoint, err := mcpendpointsrepo.New(ti.conn).GetMCPEndpointByCustomDomainAndSlug(ctx, mcpendpointsrepo.GetMCPEndpointByCustomDomainAndSlugParams{
+		Slug:           slug,
+		CustomDomainID: uuid.NullUUID{},
+	})
+	require.NoError(t, err)
+	endpoint := mcp.NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, organizationID)
+
+	clientID := "test-client-" + uuid.NewString()
+	redirectURI := "http://localhost:3000/callback"
+	_, err = usersessionsrepo.New(ti.conn).CreateUserSessionClient(ctx, usersessionsrepo.CreateUserSessionClientParams{
+		UserSessionIssuerID: mcpServer.UserSessionIssuerID.UUID,
+		ClientID:            clientID,
+		ClientName:          "servepublic test client",
+		RedirectUris:        []string{redirectURI},
+	})
+	require.NoError(t, err)
+
+	verifier := "verifier-" + uuid.NewString()
+	sum := sha256.Sum256([]byte(verifier))
+	codeChallenge := base64.RawURLEncoding.EncodeToString(sum[:])
+	code := "auth-code-" + uuid.NewString()
+	grantCache := cache.NewTypedObjectCache[mcp.UserSessionGrant](ti.logger, ti.cacheAdapter, cache.SuffixNone)
+	require.NoError(t, grantCache.Store(ctx, mcp.UserSessionGrant{
+		Code:                code,
+		UserSessionIssuerID: mcpServer.UserSessionIssuerID.UUID,
+		UserSessionClientID: uuid.Nil,
+		ClientID:            clientID,
+		RedirectURI:         redirectURI,
+		CodeChallenge:       codeChallenge,
+		CodeChallengeMethod: "S256",
+		Subject:             urn.NewAnonymousSubject(uuid.NewString()),
+		CreatedAt:           time.Now(),
+	}))
+
+	form := url.Values{}
+	form.Set("grant_type", "authorization_code")
+	form.Set("code", code)
+	form.Set("redirect_uri", redirectURI)
+	form.Set("client_id", clientID)
+	form.Set("code_verifier", verifier)
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/mcp/"+slug+"/token", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", slug)
+	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
+
+	w := httptest.NewRecorder()
+	require.NoError(t, ti.service.ServeToken(w, req, endpoint))
+	require.Equal(t, http.StatusOK, w.Code, "token endpoint should mint an access token: %s", w.Body.String())
+
+	var resp struct {
+		AccessToken string `json:"access_token"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.NotEmpty(t, resp.AccessToken)
+	return resp.AccessToken
+}
+
+// TestServePublic_McpEndpoint_RemoteBacked_Proxies confirms /mcp/{slug}
+// dispatches to the remote MCP proxy when the resolved mcp_server is
+// backed by a remote_mcp_server. Remote-backed servers are issuer-gated,
+// so the request authenticates with a minted user-session bearer; the
+// proxy is exercised end-to-end: the test's httptest server captures the
+// relayed initialize body.
+func TestServePublic_McpEndpoint_RemoteBacked_Proxies(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	done := make(chan struct{}, 1)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-03-26","capabilities":{},"serverInfo":{"name":"upstream","version":"1.0"}}}`))
+		done <- struct{}{}
+	}))
+	t.Cleanup(upstream.Close)
+
+	endpointSlug := "endpoint-" + uuid.NewString()
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
+	mcpServer, _ := createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, upstream.URL, endpointSlug, "public", issuerID)
+	token := mintIssuerBearerForEndpoint(t, ctx, ti, endpointSlug, mcpServer, authCtx.ActiveOrganizationID)
+
+	w, err := servePublicHTTP(t, ctx, ti, endpointSlug, makeInitializeBody(), token, nil)
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatalf("upstream not invoked within 5s; status=%d body=%s", w.Code, w.Body.String())
+	}
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
+	require.Contains(t, w.Body.String(), "upstream", "upstream initialize response must be relayed back")
+}
 
 // TestServePublic_McpEndpoint_PrivateRemoteBacked_NoAuth_Returns401
 // confirms private-visibility remote-backed mcp_endpoints reject an
