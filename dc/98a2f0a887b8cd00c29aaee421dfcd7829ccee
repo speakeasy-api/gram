@@ -1,0 +1,53 @@
+server/internal/background/activities.go
+  s_89752e5bcbf473::t_84fee079a2c8f4 196
+server/internal/scanners/promptpolicy/openrouter/judge.go
+  s_89752e5bcbf473::t_d6a04c2b70ecbd 289-290,300
+  s_89752e5bcbf473::t_eff7263ec6d8b4 294
+server/internal/risk/scanner.go
+  s_89752e5bcbf473::t_73680938c5ce51 644
+server/internal/risk/setup_test.go
+  s_89752e5bcbf473::t_be9a378db172ec 165
+server/cmd/gram/worker.go
+  s_89752e5bcbf473::t_c32804a7ce5482 744
+server/internal/scanners/promptinjection/openrouter/judge.go
+  s_89752e5bcbf473::t_7f0b1a541bce51 236,263
+  s_89752e5bcbf473::t_65f237e27e230b 112
+server/internal/judgemessage/payload.go
+  s_89752e5bcbf473::t_8513ad4895e837 1-11,20-127
+  s_89752e5bcbf473::t_6cd3f3bdbda849 12-19
+server/internal/scanners/promptpolicy/openrouter/judge_test.go
+  s_89752e5bcbf473::t_afdfd7cde99422 373,390,393-405
+server/internal/background/activities/risk_analysis/prompt_judge_batch.go
+  s_89752e5bcbf473::t_74867c7bd1b1ba 49
+server/cmd/gram/start.go
+  s_89752e5bcbf473::t_fab1c735b7746c 1009,1228
+  s_89752e5bcbf473::t_84fee079a2c8f4 1011
+server/internal/scanners/promptinjection/scanner.go
+  s_89752e5bcbf473::t_2f0b75fe109a36 35,37,76,107
+server/internal/risk/prompt_policy_scanner_test.go
+  s_89752e5bcbf473::t_20ff0ebf48b846 116,139,164,183,202,219
+server/internal/scanners/promptinjection/scanner_test.go
+  s_89752e5bcbf473::t_43dad5d29f5556 49
+server/internal/background/activities/risk_analysis/analyze_batch_test.go
+  s_89752e5bcbf473::t_43c512ae75da82 347,433
+server/cmd/risk-pi-report/main.go
+  s_89752e5bcbf473::t_ed1f60b7057743 626-628,631-632
+server/internal/scanners/promptpolicy/judge.go
+  s_89752e5bcbf473::t_6a7ab15c4f6fed 24-27
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "dc98a2f0a887b8cd00c29aaee421dfcd7829ccee",
+  "prompts": {},
+  "sessions": {
+    "s_89752e5bcbf473": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f4a84-bb70-7a53-b9b6-eb0949a88bf3",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
