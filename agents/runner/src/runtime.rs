@@ -25,6 +25,7 @@ use futures::FutureExt;
 use serde_json::Value;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::sync::{OnceCell, oneshot};
+use tracing::Instrument;
 
 use agentkit_compaction::{AgentBuilderCompactorExt, CompactionReason, Compactor};
 
@@ -64,6 +65,10 @@ pub struct RuntimeHost {
     /// stamped by the first turn that carries one (GKE warm-pool sandbox).
     /// Set-once: boot env wins.
     pub assistant_id: OnceLock<String>,
+    /// Project the assistant belongs to, stamped by the first turn that
+    /// carries one (same set-once discipline as assistant_id). Only used to
+    /// tag exported trace spans; never drives behavior.
+    pub project_id: OnceLock<String>,
     pub started_at: Instant,
     /// Per-idempotency-key admission slot. The bool tracks whether the
     /// keyed turn has actually been enqueued: holding the mutex covers
@@ -156,6 +161,7 @@ pub async fn build_host(
     }
     let host = Arc::new(RuntimeHost {
         assistant_id: assistant_id_cell,
+        project_id: OnceLock::new(),
         started_at: Instant::now(),
         seen: DashMap::new(),
         threads: DashMap::new(),
@@ -452,11 +458,20 @@ async fn spawn_thread(
     let log_thread_id = thread_id.clone();
     let host_for_eviction = Arc::clone(host);
     let evict_thread_id = thread_id.clone();
+    let loop_host = Arc::clone(host);
+    let loop_thread_id = thread_id.clone();
 
     let task_handle = tokio::spawn(async move {
-        let outcome = AssertUnwindSafe(run_loop(driver, inbox_rx, loop_idle, turn_end_compactor))
-            .catch_unwind()
-            .await;
+        let outcome = AssertUnwindSafe(run_loop(
+            driver,
+            inbox_rx,
+            loop_idle,
+            turn_end_compactor,
+            loop_host,
+            loop_thread_id,
+        ))
+        .catch_unwind()
+        .await;
         match outcome {
             Ok(Ok(reason)) => {
                 tracing::info!(thread_id = %log_thread_id, reason = %reason, "thread loop exited")
@@ -809,12 +824,32 @@ async fn run_loop<S>(
     mut inbox: UnboundedReceiver<String>,
     idle_since: Arc<Mutex<Option<Instant>>>,
     turn_end_compactor: Option<PersistingCompactor>,
+    host: Arc<RuntimeHost>,
+    thread_id: String,
 ) -> Result<&'static str, RunnerError>
 where
     S: ModelSession,
 {
     loop {
-        match driver.next().await? {
+        // A fresh root span per driver step (one model call plus its tool
+        // executions) keeps traces bounded while stamping every agentkit span
+        // exported underneath it with gram identity — the attributes the fly
+        // adapter used to bake into OTEL_RESOURCE_ATTRIBUTES per machine.
+        // Identity is re-read each step because a warm-pool runner learns its
+        // assistant from the first /turn, after this loop is already running.
+        let step_span = tracing::info_span!(
+            "agent.step",
+            thread_id = %thread_id,
+            gram.assistant.id = tracing::field::Empty,
+            gram.project.id = tracing::field::Empty,
+        );
+        if let Some(id) = host.assistant_id.get() {
+            step_span.record("gram.assistant.id", tracing::field::display(id));
+        }
+        if let Some(id) = host.project_id.get() {
+            step_span.record("gram.project.id", tracing::field::display(id));
+        }
+        match driver.next().instrument(step_span).await? {
             LoopStep::Finished(_turn) => {
                 if let Some(compactor) = &turn_end_compactor {
                     compact_at_turn_end(compactor, &driver).await;
@@ -970,6 +1005,7 @@ mod tests {
         let _ = assistant_id.set("asst".to_string());
         Arc::new(RuntimeHost {
             assistant_id,
+            project_id: OnceLock::new(),
             started_at: Instant::now(),
             seen: DashMap::new(),
             threads: DashMap::new(),

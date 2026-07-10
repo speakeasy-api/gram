@@ -70,6 +70,15 @@ async fn state_handler(State(host): State<AppState>) -> Json<RunnerStateResponse
     })
 }
 
+#[tracing::instrument(
+    name = "thread_turn",
+    skip_all,
+    fields(
+        thread_id = %thread_id,
+        gram.assistant.id = tracing::field::Empty,
+        gram.project.id = tracing::field::Empty,
+    )
+)]
 async fn thread_turn(
     State(host): State<AppState>,
     Path(thread_id): Path<String>,
@@ -124,6 +133,24 @@ async fn thread_turn(
         .filter(|id| !id.is_empty())
     {
         let _ = host.assistant_id.set(assistant_id.to_string());
+    }
+    // Same set-once discipline for the project id; it only feeds trace
+    // attributes, so a turn that omits it just leaves the cell for the next.
+    if let Some(project_id) = request
+        .project_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|id| !id.is_empty())
+    {
+        let _ = host.project_id.set(project_id.to_string());
+    }
+
+    let span = tracing::Span::current();
+    if let Some(id) = host.assistant_id.get() {
+        span.record("gram.assistant.id", tracing::field::display(id));
+    }
+    if let Some(id) = host.project_id.get() {
+        span.record("gram.project.id", tracing::field::display(id));
     }
 
     // Hand reconcile to the actor and proceed to enqueue. The actor runs
