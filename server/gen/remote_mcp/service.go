@@ -39,6 +39,16 @@ type Service interface {
 	VerifyURL(context.Context, *VerifyURLPayload) (res *VerifyURLResult, err error)
 	// Delete a remote MCP server
 	DeleteServer(context.Context, *DeleteServerPayload) (err error)
+	// List the headers configured for a remote MCP server
+	ListServerHeaders(context.Context, *ListServerHeadersPayload) (res *ListServerHeadersResult, err error)
+	// Get a remote MCP server header by ID
+	GetServerHeader(context.Context, *GetServerHeaderPayload) (res *types.RemoteMcpServerHeader, err error)
+	// Create a header on a remote MCP server
+	CreateServerHeader(context.Context, *CreateServerHeaderPayload) (res *types.RemoteMcpServerHeader, err error)
+	// Update a remote MCP server header
+	UpdateServerHeader(context.Context, *UpdateServerHeaderPayload) (res *types.RemoteMcpServerHeader, err error)
+	// Delete a remote MCP server header
+	DeleteServerHeader(context.Context, *DeleteServerHeaderPayload) (err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -61,7 +71,31 @@ const ServiceName = "remoteMcp"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"createServer", "listServers", "getServer", "updateServer", "discoverProtectedResourceMetadata", "verifyURL", "deleteServer"}
+var MethodNames = [12]string{"createServer", "listServers", "getServer", "updateServer", "discoverProtectedResourceMetadata", "verifyURL", "deleteServer", "listServerHeaders", "getServerHeader", "createServerHeader", "updateServerHeader", "deleteServerHeader"}
+
+// CreateServerHeaderPayload is the payload type of the remoteMcp service
+// createServerHeader method.
+type CreateServerHeaderPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// The ID of the remote MCP server to add the header to
+	RemoteMcpServerID string
+	// The header name
+	Name string
+	// Description of the header
+	Description *string
+	// Whether the header is required. Defaults to false.
+	IsRequired *bool
+	// Whether the header value is a secret. Defaults to false. Incompatible with
+	// value_from_request_header.
+	IsSecret *bool
+	// Static header value (mutually exclusive with value_from_request_header)
+	Value *string
+	// Name of the inbound request header to pass through (mutually exclusive with
+	// value)
+	ValueFromRequestHeader *string
+}
 
 // CreateServerPayload is the payload type of the remoteMcp service
 // createServer method.
@@ -76,8 +110,16 @@ type CreateServerPayload struct {
 	URL string
 	// The transport type for the remote MCP server (e.g. streamable-http)
 	TransportType string
-	// Headers to send when proxying requests to the remote server
-	Headers []*HeaderInput
+}
+
+// DeleteServerHeaderPayload is the payload type of the remoteMcp service
+// deleteServerHeader method.
+type DeleteServerHeaderPayload struct {
+	// The ID of the header to delete
+	ID               string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
 }
 
 // DeleteServerPayload is the payload type of the remoteMcp service
@@ -100,6 +142,16 @@ type DiscoverProtectedResourceMetadataPayload struct {
 	ProjectSlugInput  *string
 }
 
+// GetServerHeaderPayload is the payload type of the remoteMcp service
+// getServerHeader method.
+type GetServerHeaderPayload struct {
+	// The ID of the header
+	ID               string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
 // GetServerPayload is the payload type of the remoteMcp service getServer
 // method.
 type GetServerPayload struct {
@@ -112,21 +164,20 @@ type GetServerPayload struct {
 	ProjectSlugInput *string
 }
 
-// Input for a remote MCP server header
-type HeaderInput struct {
-	// The header name
-	Name string
-	// Description of the header
-	Description *string
-	// Whether the header is required
-	IsRequired *bool
-	// Whether the header value is a secret
-	IsSecret *bool
-	// Static header value (mutually exclusive with value_from_request_header)
-	Value *string
-	// Name of the inbound request header to pass through (mutually exclusive with
-	// value)
-	ValueFromRequestHeader *string
+// ListServerHeadersPayload is the payload type of the remoteMcp service
+// listServerHeaders method.
+type ListServerHeadersPayload struct {
+	// The ID of the remote MCP server
+	RemoteMcpServerID string
+	SessionToken      *string
+	ApikeyToken       *string
+	ProjectSlugInput  *string
+}
+
+// ListServerHeadersResult is the result type of the remoteMcp service
+// listServerHeaders method.
+type ListServerHeadersResult struct {
+	Headers []*types.RemoteMcpServerHeader
 }
 
 // ListServersPayload is the payload type of the remoteMcp service listServers
@@ -187,6 +238,31 @@ type ProtectedResourceMetadataUnavailable struct {
 	Message string
 }
 
+// UpdateServerHeaderPayload is the payload type of the remoteMcp service
+// updateServerHeader method.
+type UpdateServerHeaderPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// The ID of the header to update
+	ID string
+	// The header name
+	Name string
+	// Description of the header
+	Description *string
+	// Whether the header is required. Defaults to false.
+	IsRequired *bool
+	// Whether the header value is a secret. Defaults to false. Incompatible with
+	// value_from_request_header.
+	IsSecret *bool
+	// Static header value (mutually exclusive with value_from_request_header).
+	// Omit on an existing secret header to preserve its stored value.
+	Value *string
+	// Name of the inbound request header to pass through (mutually exclusive with
+	// value)
+	ValueFromRequestHeader *string
+}
+
 // UpdateServerPayload is the payload type of the remoteMcp service
 // updateServer method.
 type UpdateServerPayload struct {
@@ -202,9 +278,6 @@ type UpdateServerPayload struct {
 	URL *string
 	// The transport type for the remote MCP server
 	TransportType *string
-	// The complete desired set of headers. Omit to leave headers unchanged.
-	// Provide an empty array to remove all headers.
-	Headers []*HeaderInput
 }
 
 // VerifyURLPayload is the payload type of the remoteMcp service verifyURL

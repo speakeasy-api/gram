@@ -32,6 +32,7 @@ var All = []outbox.EventRegistration{
 	OtelForwardingV1,
 	PluginV1,
 	ProjectV1,
+	RemoteMcpServerHeaderV1,
 	RemoteMcpServerV1,
 	RemoteSessionClientV1,
 	RemoteSessionIssuerV1,
