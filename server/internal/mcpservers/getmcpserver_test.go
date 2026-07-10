@@ -21,18 +21,16 @@ func TestGetMcpServer(t *testing.T) {
 	require.True(t, ok)
 
 	serverID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
-	issuerID := seedUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID).String()
 
 	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
-		SessionToken:        nil,
-		ApikeyToken:         nil,
-		ProjectSlugInput:    nil,
-		Name:                "test mcp server",
-		EnvironmentID:       nil,
-		UserSessionIssuerID: &issuerID,
-		RemoteMcpServerID:   &serverID,
-		ToolsetID:           nil,
-		Visibility:          types.McpServerVisibility("private"),
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		Name:              "test mcp server",
+		EnvironmentID:     nil,
+		RemoteMcpServerID: &serverID,
+		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("private"),
 	})
 	require.NoError(t, err)
 
@@ -57,18 +55,16 @@ func TestGetMcpServer_BySlug(t *testing.T) {
 	require.True(t, ok)
 
 	serverID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
-	issuerID := seedUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID).String()
 
 	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
-		SessionToken:        nil,
-		ApikeyToken:         nil,
-		ProjectSlugInput:    nil,
-		Name:                "fetch by slug",
-		EnvironmentID:       nil,
-		UserSessionIssuerID: &issuerID,
-		RemoteMcpServerID:   &serverID,
-		ToolsetID:           nil,
-		Visibility:          types.McpServerVisibility("disabled"),
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		Name:              "fetch by slug",
+		EnvironmentID:     nil,
+		RemoteMcpServerID: &serverID,
+		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("disabled"),
 	})
 	require.NoError(t, err)
 	require.NotNil(t, created.Slug)

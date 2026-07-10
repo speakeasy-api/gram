@@ -49,17 +49,15 @@ func TestListToolFilters_RemoteBackedReturnsDisabled(t *testing.T) {
 	require.True(t, ok)
 
 	remoteID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
-	issuerID := seedUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID).String()
 	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
-		SessionToken:        nil,
-		ApikeyToken:         nil,
-		ProjectSlugInput:    nil,
-		Name:                "remote backed server",
-		EnvironmentID:       nil,
-		UserSessionIssuerID: &issuerID,
-		RemoteMcpServerID:   &remoteID,
-		ToolsetID:           nil,
-		Visibility:          types.McpServerVisibility("disabled"),
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		Name:              "remote backed server",
+		EnvironmentID:     nil,
+		RemoteMcpServerID: &remoteID,
+		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("disabled"),
 	})
 	require.NoError(t, err)
 
@@ -143,7 +141,6 @@ func TestListToolFilters_ToolsetBackedResolvesServerGroup(t *testing.T) {
 		ProjectSlugInput:      nil,
 		Name:                  "toolset backed server",
 		EnvironmentID:         nil,
-		UserSessionIssuerID:   nil,
 		RemoteMcpServerID:     nil,
 		ToolsetID:             &toolsetID,
 		ToolVariationsGroupID: &groupIDStr,
@@ -198,7 +195,6 @@ func TestListToolFilters_ToolsetBackedFallsBackToToolsetGroup(t *testing.T) {
 		ProjectSlugInput:      nil,
 		Name:                  "toolset backed server fallback",
 		EnvironmentID:         nil,
-		UserSessionIssuerID:   nil,
 		RemoteMcpServerID:     nil,
 		ToolsetID:             &toolsetID,
 		ToolVariationsGroupID: nil,
@@ -263,17 +259,15 @@ func TestListToolFilters_RBAC_AllowedWithProjectGrant(t *testing.T) {
 	require.True(t, ok)
 
 	remoteID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
-	issuerID := seedUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID).String()
 	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
-		SessionToken:        nil,
-		ApikeyToken:         nil,
-		ProjectSlugInput:    nil,
-		Name:                "rbac allowed server",
-		EnvironmentID:       nil,
-		UserSessionIssuerID: &issuerID,
-		RemoteMcpServerID:   &remoteID,
-		ToolsetID:           nil,
-		Visibility:          types.McpServerVisibility("disabled"),
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		Name:              "rbac allowed server",
+		EnvironmentID:     nil,
+		RemoteMcpServerID: &remoteID,
+		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("disabled"),
 	})
 	require.NoError(t, err)
 

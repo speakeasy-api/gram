@@ -41,7 +41,6 @@ import (
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
-	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 	variationsrepo "github.com/speakeasy-api/gram/server/internal/variations/repo"
 )
 
@@ -116,7 +115,6 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 
 	ids, err := parseServerIDs(
 		payload.EnvironmentID,
-		payload.UserSessionIssuerID,
 		payload.RemoteMcpServerID,
 		payload.TunneledMcpServerID,
 		payload.ToolsetID,
@@ -157,10 +155,10 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 	}
 
 	// Remote- and tunneled-backed servers carry a user_session_issuer for
-	// their lifetime (mcp_servers_issuer_required_check). When the caller
-	// didn't supply one, mint it here in the same transaction as the server
-	// row so a failed create can never leak an orphan issuer.
-	if (ids.RemoteMcpServerID.Valid || ids.TunneledMcpServerID.Valid) && !ids.UserSessionIssuerID.Valid {
+	// their lifetime (mcp_servers_issuer_required_check). Mint it here in the
+	// same transaction as the server row so a failed create can never leak an
+	// orphan issuer.
+	if ids.RemoteMcpServerID.Valid || ids.TunneledMcpServerID.Valid {
 		ids.UserSessionIssuerID, err = mintServerUserSessionIssuer(ctx, dbtx, *authCtx.ProjectID, slug)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "mint mcp server issuer").LogError(ctx, logger)
@@ -409,7 +407,6 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 
 	ids, err := parseServerIDs(
 		payload.EnvironmentID,
-		nil, // The issuer is attached at create time and cannot be changed here.
 		payload.RemoteMcpServerID,
 		payload.TunneledMcpServerID,
 		payload.ToolsetID,
@@ -690,7 +687,8 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 // create/update payloads so they can be passed around without a long
 // positional argument list.
 type serverIDs struct {
-	EnvironmentID         uuid.NullUUID
+	EnvironmentID uuid.NullUUID
+	// Set by mintServerUserSessionIssuer during create, never parsed from a payload.
 	UserSessionIssuerID   uuid.NullUUID
 	RemoteMcpServerID     uuid.NullUUID
 	TunneledMcpServerID   uuid.NullUUID
@@ -702,7 +700,6 @@ type serverIDs struct {
 // serverIDs struct. Any malformed UUID surfaces with a field-specific error.
 func parseServerIDs(
 	environmentIDStr *string,
-	userSessionIssuerIDStr *string,
 	remoteMcpServerIDStr *string,
 	tunneledMcpServerIDStr *string,
 	toolsetIDStr *string,
@@ -715,9 +712,6 @@ func parseServerIDs(
 
 	if ids.EnvironmentID, err = conv.PtrToNullUUID(environmentIDStr); err != nil {
 		return serverIDs{}, fmt.Errorf("invalid environment_id: %w", err)
-	}
-	if ids.UserSessionIssuerID, err = conv.PtrToNullUUID(userSessionIssuerIDStr); err != nil {
-		return serverIDs{}, fmt.Errorf("invalid user_session_issuer_id: %w", err)
 	}
 	if ids.RemoteMcpServerID, err = conv.PtrToNullUUID(remoteMcpServerIDStr); err != nil {
 		return serverIDs{}, fmt.Errorf("invalid remote_mcp_server_id: %w", err)
@@ -781,18 +775,6 @@ func verifyServerReferenceOwnership(
 				return fmt.Errorf("environment_id does not reference a resource in this project")
 			}
 			return fmt.Errorf("check environment ownership: %w", err)
-		}
-	}
-
-	if ids.UserSessionIssuerID.Valid {
-		if _, err := usersessionsrepo.New(dbtx).GetUserSessionIssuerByID(ctx, usersessionsrepo.GetUserSessionIssuerByIDParams{
-			ID:        ids.UserSessionIssuerID.UUID,
-			ProjectID: projectID,
-		}); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return fmt.Errorf("user_session_issuer_id does not reference a resource in this project")
-			}
-			return fmt.Errorf("check user session issuer ownership: %w", err)
 		}
 	}
 

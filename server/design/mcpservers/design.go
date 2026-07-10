@@ -202,9 +202,6 @@ var CreateMcpServerForm = Type("CreateMcpServerForm", func() {
 	Attribute("environment_id", String, "The ID of the environment to associate with the server", func() {
 		Format(FormatUUID)
 	})
-	Attribute("user_session_issuer_id", String, "The ID of the user session issuer that gates OAuth-based MCP client authentication. Omit to have one created automatically.", func() {
-		Format(FormatUUID)
-	})
 	Attribute("remote_mcp_server_id", String, "The ID of the remote MCP server to use as the backend", func() {
 		Format(FormatUUID)
 	})

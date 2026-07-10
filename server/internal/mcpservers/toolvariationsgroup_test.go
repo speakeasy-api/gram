@@ -58,17 +58,15 @@ func TestUpdateMcpServer_SetsAndClearsToolVariationsGroup(t *testing.T) {
 	require.True(t, ok)
 
 	ownServerID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
-	issuerID := seedUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID).String()
 	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
-		SessionToken:        nil,
-		ApikeyToken:         nil,
-		ProjectSlugInput:    nil,
-		Name:                "test mcp server",
-		EnvironmentID:       nil,
-		UserSessionIssuerID: &issuerID,
-		RemoteMcpServerID:   &ownServerID,
-		ToolsetID:           nil,
-		Visibility:          types.McpServerVisibility("disabled"),
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		Name:              "test mcp server",
+		EnvironmentID:     nil,
+		RemoteMcpServerID: &ownServerID,
+		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("disabled"),
 	})
 	require.NoError(t, err)
 	require.Nil(t, created.ToolVariationsGroupID, "new servers default to disabled filtering")
@@ -116,7 +114,6 @@ func TestCreateMcpServer_WithToolVariationsGroup(t *testing.T) {
 
 	ownServerID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
 	groupID := seedToolVariationsGroup(t, ctx, ti.conn, *authCtx.ProjectID).String()
-	issuerID := seedUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID).String()
 
 	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
 		SessionToken:          nil,
@@ -124,7 +121,6 @@ func TestCreateMcpServer_WithToolVariationsGroup(t *testing.T) {
 		ProjectSlugInput:      nil,
 		Name:                  "test mcp server",
 		EnvironmentID:         nil,
-		UserSessionIssuerID:   &issuerID,
 		RemoteMcpServerID:     &ownServerID,
 		ToolsetID:             nil,
 		ToolVariationsGroupID: &groupID,
@@ -144,17 +140,15 @@ func TestUpdateMcpServer_RejectsCrossTenantToolVariationsGroup(t *testing.T) {
 	require.True(t, ok)
 
 	ownServerID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
-	issuerID := seedUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID).String()
 	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
-		SessionToken:        nil,
-		ApikeyToken:         nil,
-		ProjectSlugInput:    nil,
-		Name:                "test mcp server",
-		EnvironmentID:       nil,
-		UserSessionIssuerID: &issuerID,
-		RemoteMcpServerID:   &ownServerID,
-		ToolsetID:           nil,
-		Visibility:          types.McpServerVisibility("disabled"),
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		Name:              "test mcp server",
+		EnvironmentID:     nil,
+		RemoteMcpServerID: &ownServerID,
+		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("disabled"),
 	})
 	require.NoError(t, err)
 

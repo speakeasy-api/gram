@@ -42089,10 +42089,6 @@ components:
                     type: string
                     description: The ID of the tunneled MCP server to use as the backend
                     format: uuid
-                user_session_issuer_id:
-                    type: string
-                    description: The ID of the user session issuer that gates OAuth-based MCP client authentication. Omit to have one created automatically.
-                    format: uuid
                 visibility:
                     type: string
                     description: The visibility of an MCP server

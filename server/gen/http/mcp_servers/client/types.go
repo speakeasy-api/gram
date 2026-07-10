@@ -20,9 +20,6 @@ type CreateMcpServerRequestBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The ID of the environment to associate with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
-	// The ID of the user session issuer that gates OAuth-based MCP client
-	// authentication. Omit to have one created automatically.
-	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The ID of the remote MCP server to use as the backend
 	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
 	// The ID of the tunneled MCP server to use as the backend
@@ -1352,7 +1349,6 @@ func NewCreateMcpServerRequestBody(p *mcpservers.CreateMcpServerPayload) *Create
 	body := &CreateMcpServerRequestBody{
 		Name:                  p.Name,
 		EnvironmentID:         p.EnvironmentID,
-		UserSessionIssuerID:   p.UserSessionIssuerID,
 		RemoteMcpServerID:     p.RemoteMcpServerID,
 		TunneledMcpServerID:   p.TunneledMcpServerID,
 		ToolsetID:             p.ToolsetID,
