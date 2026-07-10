@@ -40,7 +40,9 @@ jobs:
           BASE_TREE=$(mktemp -d)
           git worktree add --detach "$BASE_TREE" "$BASE"
           BASE_OUT=$(mktemp -d)
-          (cd "$BASE_TREE/server" && go run ./cmd/export-hook-plugin -out "$BASE_OUT")
+          if [ -d "$BASE_TREE/server/cmd/export-hook-plugin" ]; then
+            (cd "$BASE_TREE/server" && go run ./cmd/export-hook-plugin -out "$BASE_OUT")
+          fi
           git worktree remove --force "$BASE_TREE"
 
           hooks_version() {
