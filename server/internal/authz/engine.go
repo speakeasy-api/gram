@@ -350,6 +350,52 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 	return e.mapError(ctx, Denied(checks[0].Scope, checks[0].selector()))
 }
 
+// Allowed reports whether the caller satisfies every check, WITHOUT recording an
+// authz challenge. Unlike Require, a negative result is not a denial to surface
+// in the challenges/diagnostics UI — it is a routine branch used by handlers
+// that gracefully degrade rather than reject. The canonical case is chat session
+// listing: members legitimately hold no chat:read grant and simply see only
+// their own sessions, so probing that grant with Require would stamp an expected
+// "denial" on every members' page load and mislead admins into granting a scope
+// that was never actually required.
+//
+// Returns true when RBAC is not enforced for the request (matching Require's
+// short-circuit). A non-nil error is returned only for genuine evaluation
+// failures (missing prepared grants, invalid check); a merely unsatisfied check
+// yields (false, nil).
+func (e *Engine) Allowed(ctx context.Context, checks ...Check) (bool, error) {
+	enforce, err := e.ShouldEnforce(ctx)
+	if err != nil {
+		return false, err
+	}
+	if !enforce {
+		return true, nil
+	}
+	if len(checks) == 0 {
+		return false, e.mapError(ctx, ErrNoChecks)
+	}
+
+	grants, ok := GrantsFromContext(ctx)
+	if !ok {
+		return false, e.mapError(ctx, ErrMissingGrants)
+	}
+
+	for _, check := range checks {
+		if err := validateInput(check); err != nil {
+			return false, e.mapError(ctx, err)
+		}
+		evaluation, err := evaluateGrantCheck(grants, check)
+		if err != nil {
+			return false, e.mapError(ctx, err)
+		}
+		if evaluation.Grant == nil {
+			return false, nil
+		}
+	}
+
+	return true, nil
+}
+
 // Filter evaluates each check and returns the resource IDs of those the caller
 // is authorized for. When RBAC is not enforced all resource IDs are returned.
 func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
