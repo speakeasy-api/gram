@@ -1166,6 +1166,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		Model:          chatRequest.Model,
 		Stream:         false,
 		UsageSource:    source,
+		KeyType:        openrouter.KeyTypeChat,
 		ChatID:         completionChatID,
 		UserID:         userID,
 		ExternalUserID: authCtx.ExternalUserID,
@@ -1411,7 +1412,9 @@ func (s *Service) CreditUsage(ctx context.Context, payload *gen.CreditUsagePaylo
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	creditsUsed, creditLimit, err := s.openRouter.GetCreditsUsed(ctx, authCtx.ActiveOrganizationID)
+	// The dashboard's credit meter reports the chat key only; the internal
+	// key's budget is an operational concern, not a customer-facing one.
+	creditsUsed, creditLimit, err := s.openRouter.GetCreditsUsed(ctx, authCtx.ActiveOrganizationID, openrouter.KeyTypeChat)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get credit usage").LogError(ctx, s.logger)
 	}

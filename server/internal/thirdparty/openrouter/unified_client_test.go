@@ -35,22 +35,38 @@ type mockProvisioner struct {
 	modelUsageErr       error
 	getModelUsageCalled bool
 	generationID        string
+	// provisionKeyTypes records the key type of every ProvisionAPIKey call,
+	// so tests can assert which of the org's keys paid for a request.
+	provisionKeyTypes []KeyType
+	// modelUsageKeyType records the key type of the last GetModelUsage call.
+	modelUsageKeyType KeyType
 }
 
 var _ Provisioner = (*mockProvisioner)(nil)
 
-func (m *mockProvisioner) ProvisionAPIKey(ctx context.Context, orgID string) (string, error) {
+func (m *mockProvisioner) ProvisionAPIKey(ctx context.Context, orgID string, keyType KeyType) (string, error) {
+	m.mu.Lock()
+	m.provisionKeyTypes = append(m.provisionKeyTypes, keyType)
+	m.mu.Unlock()
 	if m.err != nil {
 		return "", m.err
 	}
 	return m.apiKey, nil
 }
 
-func (m *mockProvisioner) RefreshAPIKeyLimit(ctx context.Context, orgID string, limit *int) (int, error) {
+func (m *mockProvisioner) ProvisionedKeyTypes() []KeyType {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]KeyType, len(m.provisionKeyTypes))
+	copy(out, m.provisionKeyTypes)
+	return out
+}
+
+func (m *mockProvisioner) RefreshAPIKeyLimit(ctx context.Context, orgID string, keyType KeyType, limit *int) (int, error) {
 	return 0, nil
 }
 
-func (m *mockProvisioner) GetCreditsUsed(ctx context.Context, orgID string) (float64, int, error) {
+func (m *mockProvisioner) GetCreditsUsed(ctx context.Context, orgID string, keyType KeyType) (float64, int, error) {
 	return 0, 0, nil
 }
 
@@ -58,15 +74,16 @@ func (m *mockProvisioner) GetKeyUsage(ctx context.Context, apiKey string) (float
 	return 0, nil, nil
 }
 
-func (m *mockProvisioner) ReconcileMonthlyCredits(ctx context.Context, orgID string, currentLimit int64, upstreamLimit *int64) (int64, error) {
+func (m *mockProvisioner) ReconcileMonthlyCredits(ctx context.Context, orgID string, keyType KeyType, currentLimit int64, upstreamLimit *int64) (int64, error) {
 	return currentLimit, nil
 }
 
-func (m *mockProvisioner) GetModelUsage(ctx context.Context, generationID string, orgID string) (*ModelUsage, error) {
+func (m *mockProvisioner) GetModelUsage(ctx context.Context, generationID string, orgID string, keyType KeyType) (*ModelUsage, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.getModelUsageCalled = true
 	m.generationID = generationID
+	m.modelUsageKeyType = keyType
 	return m.modelUsage, m.modelUsageErr
 }
 

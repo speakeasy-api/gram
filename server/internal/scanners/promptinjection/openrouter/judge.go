@@ -306,6 +306,7 @@ func (c *Engine) call(ctx context.Context, req promptinjection.Request, msg judg
 		Model:                     c.model,
 		Stream:                    false,
 		UsageSource:               billing.ModelUsageSourceRiskAnalysis,
+		KeyType:                   gramopenrouter.KeyTypeInternal,
 		ChatID:                    uuid.Nil,
 		UserID:                    userID,
 		ExternalUserID:            "",
