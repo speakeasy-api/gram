@@ -596,7 +596,9 @@ describe("ShadowMCPInventoryTable", () => {
       <QueryClientProvider client={queryClient}>
         <ShadowMCPInventoryTable
           members={[]}
-          onOpenServer={onOpenServer}
+          onOpenServer={(server) => {
+            onOpenServer(server);
+          }}
           policyState="blocking"
           projectID="project-id-1"
           roles={[]}
@@ -636,7 +638,9 @@ describe("ShadowMCPInventoryTable", () => {
       <QueryClientProvider client={queryClient}>
         <ShadowMCPInventoryTable
           members={[]}
-          onOpenServer={onOpenServer}
+          onOpenServer={(server) => {
+            onOpenServer(server);
+          }}
           policyState="blocking"
           projectID="project-id-1"
           roles={[]}
