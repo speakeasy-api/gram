@@ -2,6 +2,7 @@ package assistants
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 
@@ -11,6 +12,8 @@ import (
 const (
 	runtimeBackendFlyIO = "flyio"
 )
+
+var ErrWorkspaceGrowthUnsupported = errors.New("assistant runtime workspace growth is not supported")
 
 type RuntimeBackend interface {
 	Backend() string
@@ -48,6 +51,10 @@ type RuntimeBackend interface {
 	// can reconcile newly attached or detached servers into a live
 	// thread without re-running the full thread bootstrap.
 	RunTurn(ctx context.Context, runtime assistantRuntimeRecord, threadID uuid.UUID, idempotencyKey string, authToken string, prompt string, mcpServers []runtimeMCPServer) error
+	// GrowWorkspace advances the runtime's workspace storage request by one
+	// backend-configured increment. Callers never select an absolute size; the
+	// backend enforces its own maximum.
+	GrowWorkspace(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendGrowWorkspaceResult, error)
 	Status(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendStatus, error)
 	// Stop halts the active runtime so it can be re-admitted later. Backends
 	// may keep persisted state (e.g. Fly app + IP) intact for warm reuse.
@@ -87,6 +94,12 @@ type RuntimeBackendRecycleResult struct {
 type RuntimeBackendStatus struct {
 	Configured  bool
 	IdleSeconds *uint64
+}
+
+type RuntimeBackendGrowWorkspaceResult struct {
+	CurrentBytes   int64 `json:"current_bytes"`
+	RequestedBytes int64 `json:"requested_bytes"`
+	Expanded       bool  `json:"expanded"`
 }
 
 func validateRuntimeBackend(runtime RuntimeBackend, backend string) error {

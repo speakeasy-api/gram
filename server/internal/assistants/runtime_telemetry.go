@@ -153,6 +153,18 @@ func (t *telemetryRuntimeBackend) RunTurn(
 	return nil
 }
 
+func (t *telemetryRuntimeBackend) GrowWorkspace(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendGrowWorkspaceResult, error) {
+	result, err := t.inner.GrowWorkspace(ctx, runtime)
+	if err != nil {
+		t.emit(ctx, runtime, "runtime_workspace_grow", "runtime workspace growth failed", "ERROR", err)
+		return result, fmt.Errorf("runtime workspace growth: %w", err)
+	}
+	if result.Expanded {
+		t.emit(ctx, runtime, "runtime_workspace_grow", "runtime workspace growth requested", "INFO", nil)
+	}
+	return result, nil
+}
+
 func (t *telemetryRuntimeBackend) Status(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendStatus, error) {
 	status, err := t.inner.Status(ctx, runtime)
 	if err != nil {

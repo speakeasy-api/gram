@@ -14,12 +14,14 @@ use crate::runtime::{
 
 const IDEMPOTENCY_HEADER: &str = "x-idempotency-key";
 use crate::wire::{RunnerStateResponse, ThreadStateView, ThreadTurnRequest, ThreadTurnResponse};
+use crate::workspace::{self, WorkspaceMonitorConfig};
 
 pub struct ServeConfig {
     pub addr: SocketAddr,
     pub assistant_id: Option<String>,
     pub server_url: String,
     pub initial_token: String,
+    pub workspace_monitor: Option<WorkspaceMonitorConfig>,
 }
 
 pub async fn serve(config: ServeConfig) -> Result<(), std::io::Error> {
@@ -32,6 +34,13 @@ pub async fn serve(config: ServeConfig) -> Result<(), std::io::Error> {
     )
     .await
     .map_err(std::io::Error::other)?;
+    if let Some(workspace_config) = config.workspace_monitor {
+        workspace::spawn_monitor(
+            workspace_config,
+            host.gram_client.clone(),
+            host.workspace_tokens.clone(),
+        );
+    }
 
     let app = Router::new()
         .route("/healthz", get(healthz))

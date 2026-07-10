@@ -8,9 +8,12 @@ mod server;
 mod tools;
 mod wire;
 mod workdir;
+mod workspace;
 
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::process::ExitCode;
+use std::time::Duration;
 
 use clap::{Parser, Subcommand, ValueEnum};
 use opentelemetry::trace::TracerProvider as _;
@@ -57,6 +60,27 @@ enum Mode {
         #[arg(long, env = "GRAM_INITIAL_TOKEN", default_value = "")]
         initial_token: String,
 
+        /// GKE disk-backed workspace mount to monitor. Unset on Fly and other
+        /// runtimes, which disables automatic storage growth.
+        #[arg(long, env = "GRAM_ASSISTANT_RUNTIME_GKE_WORKSPACE_PATH")]
+        workspace_path: Option<PathBuf>,
+
+        #[arg(
+            long,
+            env = "GRAM_ASSISTANT_RUNTIME_GKE_WORKSPACE_GROWTH_THRESHOLD_PERCENT",
+            default_value_t = 80,
+            value_parser = clap::value_parser!(u8).range(1..=100)
+        )]
+        workspace_growth_threshold_percent: u8,
+
+        #[arg(
+            long,
+            env = "GRAM_ASSISTANT_RUNTIME_GKE_WORKSPACE_CHECK_INTERVAL_SECONDS",
+            default_value_t = 30,
+            value_parser = clap::value_parser!(u64).range(1..)
+        )]
+        workspace_check_interval_seconds: u64,
+
         /// Export spans over OTLP. The exporter reads the standard
         /// OTEL_EXPORTER_OTLP_* environment variables (ENDPOINT, HEADERS,
         /// TIMEOUT, ...) for everything except transport selection, which
@@ -93,6 +117,9 @@ async fn main() -> ExitCode {
             assistant_id,
             server_url,
             initial_token,
+            workspace_path,
+            workspace_growth_threshold_percent,
+            workspace_check_interval_seconds,
             with_otel_tracing,
             otel_protocol,
         } => {
@@ -102,6 +129,11 @@ async fn main() -> ExitCode {
                 assistant_id,
                 server_url,
                 initial_token,
+                workspace_monitor: workspace_path.map(|path| workspace::WorkspaceMonitorConfig {
+                    path,
+                    threshold_percent: workspace_growth_threshold_percent,
+                    check_interval: Duration::from_secs(workspace_check_interval_seconds),
+                }),
             })
             .await
             .map_err(|e| e.to_string());

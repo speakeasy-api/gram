@@ -7,8 +7,9 @@ sandbox_src=/usr/share/gram/sandbox
 mkdir -p "$workdir"
 
 # Size-capped tmpfs + read-only bind-mounted deps where mount(2) is permitted;
-# symlink the deps where it is not (the platform supplies the writable workdir).
-if mount -t tmpfs -o size=256m,mode=0755 tmpfs "$workdir" 2>/dev/null; then
+# symlink the deps where it is not or when GKE supplies a persistent workspace.
+# Never cover the generic-ephemeral PVC with the legacy tmpfs mount.
+if [[ -z "${GRAM_ASSISTANT_RUNTIME_GKE_WORKSPACE_PATH:-}" ]] && mount -t tmpfs -o size=256m,mode=0755 tmpfs "$workdir" 2>/dev/null; then
   for dep in browser.ts package.json node_modules; do
     src="$sandbox_src/$dep"
     dst="$workdir/$dep"

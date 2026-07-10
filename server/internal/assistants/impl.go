@@ -31,13 +31,14 @@ import (
 )
 
 type Service struct {
-	tracer           trace.Tracer
-	logger           *slog.Logger
-	auth             *auth.Auth
-	authz            *authz.Engine
-	core             *ServiceCore
-	signaler         WorkflowSignaler
-	bootstrapLimiter *ratelimit.Limiter
+	tracer                 trace.Tracer
+	logger                 *slog.Logger
+	auth                   *auth.Auth
+	authz                  *authz.Engine
+	core                   *ServiceCore
+	signaler               WorkflowSignaler
+	bootstrapLimiter       *ratelimit.Limiter
+	workspaceGrowthLimiter *ratelimit.Limiter
 }
 
 var (
@@ -68,6 +69,9 @@ func NewService(
 		bootstrapLimiter: ratelimit.New(bootstrapStore, "assistant-bootstrap",
 			ratelimit.PerMinute(bootstrapRatePerMin).WithBurst(bootstrapRateBurst),
 			ratelimit.WithMetrics(meterProvider)),
+		workspaceGrowthLimiter: ratelimit.New(bootstrapStore, "assistant-workspace-growth",
+			ratelimit.PerMinute(workspaceGrowthRatePerMin).WithBurst(workspaceGrowthRateBurst),
+			ratelimit.WithMetrics(meterProvider)),
 	}
 }
 
@@ -81,6 +85,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	)
 	o11y.AttachHandler(mux, "POST", "/rpc/assistants.getThreadBootstrap", oops.ErrHandle(service.logger, service.handleGetThreadBootstrap).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", "/rpc/assistants.recordCompactedGeneration", oops.ErrHandle(service.logger, service.handleRecordCompactedGeneration).ServeHTTP)
+	o11y.AttachHandler(mux, "POST", "/rpc/assistants.growWorkspace", oops.ErrHandle(service.logger, service.handleGrowWorkspace).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", "/rpc/assistantMcpAuth.create", oops.ErrHandle(service.logger, service.handleCreateMCPAuthFlow).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/rpc/assistantMcpAuth/{id}/oauth/callback", oops.ErrHandle(service.logger, service.handleMCPAuthCallback).ServeHTTP)
 }

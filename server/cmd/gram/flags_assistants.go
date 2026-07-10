@@ -58,6 +58,24 @@ var assistantRuntimeFlags = []cli.Flag{
 		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_GKE_RUNNER_CIDR"},
 	},
 	&cli.StringFlag{
+		Name:    "assistant-runtime-gke-workspace-volume-name",
+		Usage:   "Generic ephemeral volume name mounted as the GKE assistant workspace.",
+		Value:   "workspace",
+		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_GKE_WORKSPACE_VOLUME_NAME"},
+	},
+	&cli.Int64Flag{
+		Name:    "assistant-runtime-gke-workspace-growth-increment-gib",
+		Usage:   "GiB added to a GKE assistant workspace for each authorized growth request.",
+		Value:   10,
+		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_GKE_WORKSPACE_GROWTH_INCREMENT_GIB"},
+	},
+	&cli.Int64Flag{
+		Name:    "assistant-runtime-gke-workspace-max-size-gib",
+		Usage:   "Maximum requested size in GiB for one GKE assistant workspace.",
+		Value:   60,
+		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_GKE_WORKSPACE_MAX_SIZE_GIB"},
+	},
+	&cli.StringFlag{
 		Name:    "assistant-runtime-server-url",
 		Usage:   "Optional host-reachable server base URL for assistant runtimes. Defaults to --server-url.",
 		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_SERVER_URL"},
@@ -168,14 +186,17 @@ func assistantRuntimeConfigFromCLI(c *cli.Context, serverURL *url.URL) (assistan
 		// assistant cluster (k8s.NewRemoteDynamicClient); the egress-controlled
 		// HTTP client is built from the guardian policy in NewRuntimeBackend.
 		GKE: assistants.GKERuntimeConfig{
-			Dynamic:          nil,
-			Namespace:        gkeNamespace,
-			SandboxTemplate:  c.String("assistant-runtime-gke-sandbox-template"),
-			GuestPort:        0,
-			OCIImage:         c.String("assistant-runtime-oci-image"),
-			ImageTag:         AssistantRuntimeImageHash,
-			ServerURL:        resolvedServerURL,
-			RunnerCIDRBlocks: c.StringSlice("assistant-runtime-gke-runner-cidr"),
+			Dynamic:                     nil,
+			Namespace:                   gkeNamespace,
+			SandboxTemplate:             c.String("assistant-runtime-gke-sandbox-template"),
+			GuestPort:                   0,
+			OCIImage:                    c.String("assistant-runtime-oci-image"),
+			ImageTag:                    AssistantRuntimeImageHash,
+			ServerURL:                   resolvedServerURL,
+			RunnerCIDRBlocks:            c.StringSlice("assistant-runtime-gke-runner-cidr"),
+			WorkspaceVolumeName:         c.String("assistant-runtime-gke-workspace-volume-name"),
+			WorkspaceGrowthIncrementGiB: c.Int64("assistant-runtime-gke-workspace-growth-increment-gib"),
+			WorkspaceMaxSizeGiB:         c.Int64("assistant-runtime-gke-workspace-max-size-gib"),
 		},
 	}, nil
 }

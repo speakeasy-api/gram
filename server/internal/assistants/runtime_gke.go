@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"net"
 	"net/http"
 	"net/url"
@@ -17,10 +18,12 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/util/retry"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 )
@@ -45,10 +48,14 @@ const (
 
 	gkeSandboxReadyConditionType = "Ready"
 
-	gkeMetadataAssistantID = "gram.speakeasy.com/assistant-id"
-	gkeMetadataProjectID   = "gram.speakeasy.com/project-id"
-	gkeMetadataRole        = "gram.speakeasy.com/role"
-	gkeMetadataRoleValue   = "assistant_runtime"
+	gkeMetadataAssistantID                      = "gram.speakeasy.com/assistant-id"
+	gkeMetadataProjectID                        = "gram.speakeasy.com/project-id"
+	gkeMetadataRole                             = "gram.speakeasy.com/role"
+	gkeMetadataRoleValue                        = "assistant_runtime"
+	gkeDefaultWorkspaceVolumeName               = "workspace"
+	gkeDefaultWorkspaceGrowthIncrementGiB int64 = 10
+	gkeDefaultWorkspaceMaxSizeGiB         int64 = 60
+	gkeBytesPerGiB                        int64 = 1024 * 1024 * 1024
 
 	// gkeClaimUIDLabel is injected by the SandboxClaim controller onto the pod,
 	// carrying the owning claim's UID. We resolve the runner pod (for its IP) by
@@ -62,6 +69,7 @@ var (
 	gkeSandboxClaimGVR = schema.GroupVersionResource{Group: "extensions.agents.x-k8s.io", Version: "v1alpha1", Resource: "sandboxclaims"}
 	gkeSandboxGVR      = schema.GroupVersionResource{Group: "agents.x-k8s.io", Version: "v1alpha1", Resource: "sandboxes"}
 	gkePodGVR          = schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"}
+	gkePVCGVR          = schema.GroupVersionResource{Group: "", Version: "v1", Resource: "persistentvolumeclaims"}
 )
 
 // GKERuntimeConfig configures the GKE Agent Sandbox runtime backend. The dynamic
@@ -93,6 +101,11 @@ type GKERuntimeConfig struct {
 	// addresses the guardian egress policy blocks by default — so these blocks
 	// are allowlisted for the runner HTTP client only.
 	RunnerCIDRBlocks []string
+	// WorkspaceVolumeName is the generic ephemeral volume in the runner pod.
+	// Kubernetes names its generated PVC <pod-name>-<volume-name>.
+	WorkspaceVolumeName         string
+	WorkspaceGrowthIncrementGiB int64
+	WorkspaceMaxSizeGiB         int64
 }
 
 func (c GKERuntimeConfig) Validate() error {
@@ -119,6 +132,18 @@ func (c GKERuntimeConfig) Validate() error {
 			return fmt.Errorf("invalid --assistant-runtime-gke-runner-cidr %q: %w", cidr, err)
 		}
 	}
+	if c.WorkspaceVolumeName == "" {
+		return fmt.Errorf("--assistant-runtime-gke-workspace-volume-name is required")
+	}
+	if c.WorkspaceGrowthIncrementGiB <= 0 {
+		return fmt.Errorf("--assistant-runtime-gke-workspace-growth-increment-gib must be positive")
+	}
+	if c.WorkspaceMaxSizeGiB < c.WorkspaceGrowthIncrementGiB {
+		return fmt.Errorf("--assistant-runtime-gke-workspace-max-size-gib must be at least the growth increment")
+	}
+	if c.WorkspaceMaxSizeGiB > math.MaxInt64/gkeBytesPerGiB {
+		return fmt.Errorf("--assistant-runtime-gke-workspace-max-size-gib is too large")
+	}
 	return nil
 }
 
@@ -130,6 +155,7 @@ type gkeRuntimeMetadata struct {
 	Namespace   string `json:"namespace"`
 	ClaimName   string `json:"claim_name"`
 	SandboxName string `json:"sandbox_name"`
+	PodName     string `json:"pod_name,omitempty"`
 	PodIP       string `json:"pod_ip"`
 	Image       string `json:"image,omitempty"`
 }
@@ -144,6 +170,15 @@ type GKERuntimeBackend struct {
 func NewGKERuntimeBackend(logger *slog.Logger, tracerProvider trace.TracerProvider, httpClient runtimeHTTPDoer, config GKERuntimeConfig) *GKERuntimeBackend {
 	if config.GuestPort == 0 {
 		config.GuestPort = defaultRuntimeGuestPort
+	}
+	if config.WorkspaceVolumeName == "" {
+		config.WorkspaceVolumeName = gkeDefaultWorkspaceVolumeName
+	}
+	if config.WorkspaceGrowthIncrementGiB == 0 {
+		config.WorkspaceGrowthIncrementGiB = gkeDefaultWorkspaceGrowthIncrementGiB
+	}
+	if config.WorkspaceMaxSizeGiB == 0 {
+		config.WorkspaceMaxSizeGiB = gkeDefaultWorkspaceMaxSizeGiB
 	}
 	return &GKERuntimeBackend{
 		logger:     logger.With(attr.SlogComponent("assistants_gke")),
@@ -295,7 +330,7 @@ func (g *GKERuntimeBackend) waitForSandbox(ctx context.Context, claimName string
 				return gkeRuntimeMetadata{}, fmt.Errorf("get sandbox %s: %w", sandboxName, err)
 			}
 			if err == nil && sandboxReady(sandbox) {
-				podIP, err := g.resolvePodIP(ctx, string(claim.GetUID()))
+				podName, podIP, err := g.resolvePod(ctx, string(claim.GetUID()))
 				if err != nil {
 					return gkeRuntimeMetadata{}, err
 				}
@@ -304,6 +339,7 @@ func (g *GKERuntimeBackend) waitForSandbox(ctx context.Context, claimName string
 						Namespace:   g.config.Namespace,
 						ClaimName:   claimName,
 						SandboxName: sandboxName,
+						PodName:     podName,
 						PodIP:       podIP,
 						Image:       "",
 					}, nil
@@ -338,24 +374,24 @@ func sandboxReady(sandbox *unstructured.Unstructured) bool {
 	return false
 }
 
-// resolvePodIP finds the runner pod for a claim (by the controller-injected
-// claim-uid label) and returns its IP once the pod is Running. An empty string
-// means the pod is not scheduled/running yet, so the caller keeps polling.
-func (g *GKERuntimeBackend) resolvePodIP(ctx context.Context, claimUID string) (string, error) {
+// resolvePod finds the runner pod for a claim (by the controller-injected
+// claim-uid label) and returns its name and IP once the pod is Running. Empty
+// values mean the pod is not scheduled/running yet, so the caller keeps polling.
+func (g *GKERuntimeBackend) resolvePod(ctx context.Context, claimUID string) (string, string, error) {
 	pods, err := g.config.Dynamic.Resource(gkePodGVR).Namespace(g.config.Namespace).List(ctx, metav1.ListOptions{
 		LabelSelector: gkeClaimUIDLabel + "=" + claimUID,
 	})
 	if err != nil {
-		return "", fmt.Errorf("list runner pods for claim %s: %w", claimUID, err)
+		return "", "", fmt.Errorf("list runner pods for claim %s: %w", claimUID, err)
 	}
 	for i := range pods.Items {
 		phase, _, _ := unstructured.NestedString(pods.Items[i].Object, "status", "phase")
 		ip, _, _ := unstructured.NestedString(pods.Items[i].Object, "status", "podIP")
 		if phase == "Running" && ip != "" {
-			return ip, nil
+			return pods.Items[i].GetName(), ip, nil
 		}
 	}
-	return "", nil
+	return "", "", nil
 }
 
 func (g *GKERuntimeBackend) endpoint(metadata gkeRuntimeMetadata) string {
@@ -404,6 +440,92 @@ func (g *GKERuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntim
 		return fmt.Errorf("%w: execute gke turn request: %w", classifyTurnError(err), err)
 	}
 	return nil
+}
+
+func (g *GKERuntimeBackend) GrowWorkspace(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendGrowWorkspaceResult, error) {
+	if err := validateRuntimeBackend(g, runtime.Backend); err != nil {
+		return RuntimeBackendGrowWorkspaceResult{}, err
+	}
+	metadata, err := decodeGKERuntimeMetadata(runtime.BackendMetadataJSON)
+	if err != nil {
+		return RuntimeBackendGrowWorkspaceResult{}, err
+	}
+
+	podName := metadata.PodName
+	if podName == "" {
+		claimName := metadata.ClaimName
+		if claimName == "" {
+			claimName = g.claimName(runtime)
+		}
+		claim, err := g.claims().Get(ctx, claimName, metav1.GetOptions{})
+		if err != nil {
+			return RuntimeBackendGrowWorkspaceResult{}, fmt.Errorf("get sandbox claim %s for workspace growth: %w", claimName, err)
+		}
+		podName, _, err = g.resolvePod(ctx, string(claim.GetUID()))
+		if err != nil {
+			return RuntimeBackendGrowWorkspaceResult{}, err
+		}
+		if podName == "" {
+			return RuntimeBackendGrowWorkspaceResult{}, fmt.Errorf("%w: gke runtime pod is not available", ErrRuntimeUnhealthy)
+		}
+	}
+
+	pvcName := podName + "-" + g.config.WorkspaceVolumeName
+	pvcs := g.config.Dynamic.Resource(gkePVCGVR).Namespace(g.config.Namespace)
+	incrementBytes := g.config.WorkspaceGrowthIncrementGiB * gkeBytesPerGiB
+	maxBytes := g.config.WorkspaceMaxSizeGiB * gkeBytesPerGiB
+	result := RuntimeBackendGrowWorkspaceResult{
+		CurrentBytes:   0,
+		RequestedBytes: 0,
+		Expanded:       false,
+	}
+	err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		pvc, err := pvcs.Get(ctx, pvcName, metav1.GetOptions{})
+		if err != nil {
+			return fmt.Errorf("get workspace pvc %s: %w", pvcName, err)
+		}
+		rawSize, found, err := unstructured.NestedString(pvc.Object, "spec", "resources", "requests", "storage")
+		if err != nil {
+			return fmt.Errorf("read workspace pvc %s storage request: %w", pvcName, err)
+		}
+		if !found || rawSize == "" {
+			return fmt.Errorf("workspace pvc %s has no storage request", pvcName)
+		}
+		current, err := resource.ParseQuantity(rawSize)
+		if err != nil {
+			return fmt.Errorf("parse workspace pvc %s storage request %q: %w", pvcName, rawSize, err)
+		}
+		currentBytes := current.Value()
+		requestedBytes := currentBytes
+		if currentBytes < maxBytes {
+			requestedBytes = maxBytes
+			if incrementBytes < maxBytes-currentBytes {
+				requestedBytes = currentBytes + incrementBytes
+			}
+		}
+		result = RuntimeBackendGrowWorkspaceResult{
+			CurrentBytes:   currentBytes,
+			RequestedBytes: requestedBytes,
+			Expanded:       requestedBytes > currentBytes,
+		}
+		if !result.Expanded {
+			return nil
+		}
+
+		requested := resource.NewQuantity(requestedBytes, resource.BinarySI)
+		if err := unstructured.SetNestedField(pvc.Object, requested.String(), "spec", "resources", "requests", "storage"); err != nil {
+			return fmt.Errorf("set workspace pvc %s storage request: %w", pvcName, err)
+		}
+		_, err = pvcs.Update(ctx, pvc, metav1.UpdateOptions{})
+		if err != nil {
+			return fmt.Errorf("update pvc resource: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return RuntimeBackendGrowWorkspaceResult{}, fmt.Errorf("update workspace pvc %s: %w", pvcName, err)
+	}
+	return result, nil
 }
 
 func (g *GKERuntimeBackend) Status(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendStatus, error) {
