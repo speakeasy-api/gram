@@ -4918,7 +4918,7 @@ func TestGeneratePluginPackagesStampsConfigVersionIntoEveryManifest(t *testing.T
 		ServerURL:   "https://app.getgram.ai",
 		HooksAPIKey: "gram_test_hooks_key",
 		ProjectSlug: "acme-prod",
-		Version:     "0.1.1747087200",
+		Version:     "1747087200",
 	}
 
 	files, err := GeneratePluginPackages(plugins, cfg)
@@ -4945,16 +4945,19 @@ func TestGeneratePluginPackagesStampsConfigVersionIntoEveryManifest(t *testing.T
 		require.Equal(t, "0.1.1747087200", readVersion(p), "%s did not pick up cfg.Version", p)
 	}
 
-	// The observability (hooks) plugin.json is versioned deterministically off
-	// hooksGeneratorVersion instead, so it stays stable across MCP publishes and
-	// changes only on a manual bump.
+	// The observability (hooks) plugin.json carries the hooks generator version
+	// as its minor component and the same publish epoch as its patch. Stability
+	// across MCP-only publishes comes from the publish path carrying the hooks
+	// subtree verbatim, not from deterministic rendering.
 	observabilityManifestPaths := []string{
 		"acme-observability/.claude-plugin/plugin.json",
 		"cursor-plugins/acme-observability-cursor/.cursor-plugin/plugin.json",
 		"acme-observability-codex/.codex-plugin/plugin.json",
 	}
 	for _, p := range observabilityManifestPaths {
-		require.Equal(t, hooksManifestVersion(), readVersion(p), "%s must use the hooks generator version", p)
+		require.Equal(t, hooksManifestVersion(cfg), readVersion(p), "%s must use the hooks manifest version", p)
+		require.Equal(t, "0."+hooksGeneratorVersion+".1747087200", readVersion(p),
+			"%s must carry the generator version and the publish epoch", p)
 	}
 }
 
@@ -4980,12 +4983,12 @@ func TestGeneratePluginPackagesRepublishWithBumpedVersionRefreshesManifest(t *te
 	}
 
 	first := base
-	first.Version = "0.1.100"
+	first.Version = "100"
 	firstFiles, err := GeneratePluginPackages(plugins, first)
 	require.NoError(t, err)
 
 	second := base
-	second.Version = "0.1.200"
+	second.Version = "200"
 	secondFiles, err := GeneratePluginPackages(plugins, second)
 	require.NoError(t, err)
 
@@ -5003,7 +5006,7 @@ func TestGeneratePluginPackagesRepublishWithBumpedVersionRefreshesManifest(t *te
 func TestPluginManifestVersionFallsBackTo010WhenUnset(t *testing.T) {
 	t.Parallel()
 	require.Equal(t, "0.1.0", pluginManifestVersion(GenerateConfig{}))
-	require.Equal(t, "0.1.42", pluginManifestVersion(GenerateConfig{Version: "0.1.42"}))
+	require.Equal(t, "0.1.42", pluginManifestVersion(GenerateConfig{Version: "42"}))
 }
 
 // fingerprintTestPlugins is a representative plugin set reused across the
@@ -5057,7 +5060,7 @@ func TestMCPFingerprintsIgnoresPerPublishFields(t *testing.T) {
 	withNoise, err := MCPFingerprints(plugins, GenerateConfig{
 		OrgName:     "Acme Corp",
 		ServerURL:   "https://app.getgram.ai",
-		Version:     "0.1.1750000000",
+		Version:     "1750000000",
 		APIKey:      "gram_live_realkey",
 		HooksAPIKey: "gram_live_realhookskey",
 	})

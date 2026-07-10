@@ -1855,6 +1855,25 @@ func hooksFilesOf(files map[string][]byte) map[string]string {
 	return out
 }
 
+// observabilityManifestVersion extracts the version stamped into the pushed
+// Claude observability plugin.json — the value platform marketplaces compare
+// to decide whether installed copies refresh.
+func observabilityManifestVersion(t *testing.T, files map[string][]byte) string {
+	t.Helper()
+	for p, c := range files {
+		if strings.Contains(p, "observability") && strings.HasSuffix(p, ".claude-plugin/plugin.json") {
+			var meta struct {
+				Version string `json:"version"`
+			}
+			require.NoError(t, json.Unmarshal(c, &meta), "parse %s", p)
+			require.NotEmpty(t, meta.Version)
+			return meta.Version
+		}
+	}
+	t.Fatal("no claude observability plugin.json among pushed files")
+	return ""
+}
+
 // An MCP-only republish must carry the observability (hooks) plugin verbatim —
 // the whole point of decoupling the two components. The hooks files (including
 // their embedded hooks API key) must be byte-identical across a publish driven
@@ -1952,6 +1971,7 @@ func TestPluginsService_PublishProject_RegeneratesHooksOnBrowserLoginFlip(t *tes
 	require.False(t, first.Skipped)
 	hooksBefore := hooksFilesOf(mock.lastPushedFiles)
 	require.NotEmpty(t, hooksBefore)
+	versionBefore := observabilityManifestVersion(t, mock.lastPushedFiles)
 
 	require.NoError(t, productfeaturesrepo.New(ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
@@ -1964,6 +1984,8 @@ func TestPluginsService_PublishProject_RegeneratesHooksOnBrowserLoginFlip(t *tes
 	hooksAfter := hooksFilesOf(mock.lastPushedFiles)
 	require.NotEqual(t, hooksBefore, hooksAfter,
 		"hooks subtree must be regenerated, not carried, after a settings flip")
+	require.NotEqual(t, versionBefore, observabilityManifestVersion(t, mock.lastPushedFiles),
+		"the observability plugin.json version must move on a settings flip, or installed copies never refresh")
 
 	// The regenerated config is persisted, so the next unchanged rollout skips.
 	third, err := ti.service.PublishProject(ctx, input)

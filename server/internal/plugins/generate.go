@@ -71,10 +71,11 @@ type GenerateConfig struct {
 	// marketplace name; non-default projects get a project-scoped one. Must be
 	// resolved identically to the device-agent endpoint (see naming.MarketplaceName).
 	IsDefaultProject bool
-	// Version is stamped into every plugin.json. Callers should bump this on
-	// every publish so platform marketplaces (Claude Code, Cursor, Codex) treat
-	// the manifest as new and refresh installed copies. Empty falls back to
-	// the static default, preserving test ergonomics.
+	// Version is the per-publish epoch (unix seconds) mixed into generated
+	// plugin.json versions (see pluginManifestVersion and hooksManifestVersion)
+	// so platform marketplaces (Claude Code, Cursor, Codex) treat regenerated
+	// manifests as new and refresh installed copies. Empty pins deterministic
+	// defaults for tests, fingerprints, and the CI render diff.
 	Version string
 	// MarketplaceName is the identifier users type into Claude Code or Codex
 	// (e.g. `<plugin>@<marketplace>`) and the `name` field in the generated
@@ -208,24 +209,32 @@ func resolveMarketplaceName(cfg GenerateConfig) string {
 	return conv.Default(cfg.MarketplaceName, DefaultMarketplaceName(cfg.OrgName, cfg.ProjectSlug, cfg.IsDefaultProject))
 }
 
-// pluginManifestVersion returns the version to stamp into generated
-// plugin.json files. Callers set cfg.Version to a per-publish value; the
-// "0.1.0" fallback exists so package tests don't need to construct a version
-// just to exercise unrelated assertions.
+// pluginManifestVersion returns the version to stamp into generated MCP
+// plugin.json files: 0.1.<publish epoch>, which stays strictly above the
+// historical 0.1.0 manifests already in users' caches so a re-publish is
+// always seen as newer and triggers a refresh. The "0.1.0" fallback exists so
+// package tests don't need to construct a version just to exercise unrelated
+// assertions.
 func pluginManifestVersion(cfg GenerateConfig) string {
-	return conv.Default(cfg.Version, "0.1.0")
+	if cfg.Version == "" {
+		return "0.1.0"
+	}
+	return "0.1." + cfg.Version
 }
 
-// hooksManifestVersion is the version stamped into the observability plugin.json
-// on all three platforms. Unlike the MCP manifest version (a per-publish epoch),
-// it is derived deterministically from hooksGeneratorVersion so it changes only
-// on a manual bump — the single signal that publishes a new hooks plugin.
-// Rendered as 0.<hooksGeneratorVersion>.0, which sorts strictly above the
-// historical epoch-based 0.1.<epoch> hooks manifests already in users' caches
-// (minor component 9+ beats 1), so a bump is always seen as newer and triggers a
-// refresh.
-func hooksManifestVersion() string {
-	return "0." + hooksGeneratorVersion + ".0"
+// hooksManifestVersion is the version stamped into the observability
+// plugin.json on all three platforms: 0.<hooksGeneratorVersion>.<publish
+// epoch>. The hooks subtree is only regenerated when its content changes — a
+// hooksGeneratorVersion bump or an org-level hooks settings flip — and carried
+// byte-identical otherwise, so the epoch patch component moves exactly when
+// new hooks content publishes and installed copies refresh on settings-only
+// republishes too. The minor component (9+) sorts strictly above the
+// historical epoch-based 0.1.<epoch> hooks manifests already in users'
+// caches, so any regenerated manifest is always seen as newer. Empty
+// cfg.Version pins the deterministic 0.<hooksGeneratorVersion>.0 for tests
+// and the CI render diff.
+func hooksManifestVersion(cfg GenerateConfig) string {
+	return "0." + hooksGeneratorVersion + "." + conv.Default(cfg.Version, "0")
 }
 
 // mcpGeneratorVersion is mixed into the MCP fingerprint (see MCPFingerprint).
@@ -897,7 +906,7 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 		Name:        name,
 		DisplayName: cfg.OrgName + " Observability",
 		Description: "Speakeasy observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Speakeasy dashboard.",
-		Version:     hooksManifestVersion(),
+		Version:     hooksManifestVersion(cfg),
 		Author:      pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
 		Homepage:    "https://getgram.ai",
 		UserConfig:  nil,
@@ -967,7 +976,7 @@ func generateCursorObservabilityPluginInDir(files map[string][]byte, subdir, nam
 		Name:        name,
 		DisplayName: "Observability (Cursor)",
 		Description: "Speakeasy observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Speakeasy dashboard.",
-		Version:     hooksManifestVersion(),
+		Version:     hooksManifestVersion(cfg),
 		Author:      cursorAuthor{Name: cfg.OrgName, Email: cfg.OrgEmail},
 		Homepage:    "https://getgram.ai",
 	})
@@ -1096,7 +1105,7 @@ func generateCodexObservabilityPluginInDir(files map[string][]byte, subdir strin
 	}
 	pluginJSON, err := marshalJSON(codexPluginMeta{
 		Name:        name,
-		Version:     hooksManifestVersion(),
+		Version:     hooksManifestVersion(cfg),
 		Description: "Speakeasy observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Speakeasy dashboard.",
 		MCPServers:  "",
 		Hooks:       "./hooks/hooks.json",
