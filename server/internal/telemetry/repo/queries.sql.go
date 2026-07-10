@@ -54,12 +54,28 @@ func withAccountTypeFilter(sb squirrel.SelectBuilder, accountType string) squirr
 
 // SearchUsers powers employee enrollment lists, so internal users are grouped by
 // email first to collapse rows that mix email-only and opaque user.id identity.
+// Rows that carry a user_id but no email resolve an email through the
+// known_emails join (see SearchUsers) so a person's email-less rows (e.g. tool
+// calls attributed by id only) merge into their email-keyed summary instead of
+// splitting into a second, token-less one.
 func searchUsersGroupExpr(groupBy string) string {
 	if groupBy == "external_user_id" {
 		return userIdentifierExpr("external_user_id")
 	}
-	return "if(telemetry_logs.user_email != '', telemetry_logs.user_email, telemetry_logs.user_id)"
+	return "multiIf(" +
+		"telemetry_logs.user_email != '', telemetry_logs.user_email, " +
+		"known_emails.known_email != '', known_emails.known_email, " +
+		"telemetry_logs.user_id)"
 }
+
+// searchUsersKnownEmailsJoin maps each user_id to an email observed alongside it
+// anywhere in the search window, for use as a LEFT JOIN on telemetry_logs. It
+// backs the email fallback in searchUsersGroupExpr and takes three args:
+// project id, time start, time end.
+const searchUsersKnownEmailsJoin = "(SELECT user_id, any(user_email) AS known_email" +
+	" FROM telemetry_logs" +
+	" WHERE gram_project_id = ? AND time_unix_nano >= ? AND time_unix_nano <= ? AND user_id != '' AND user_email != ''" +
+	" GROUP BY user_id) AS known_emails ON telemetry_logs.user_id = known_emails.user_id"
 
 // totalTokensExpr is a grouped-aggregate expression that yields a reliable total
 // token count. AI-coding providers like Claude Code report
@@ -1163,7 +1179,7 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ChatSum
 	sb = sb.GroupBy("gram_chat_id")
 
 	// HAVING clause for cursor pagination with tuple comparison for tie-breaking
-	sb = withHavingTuplePagination(sb, arg.Cursor, arg.SortOrder, arg.GramProjectID, "gram_chat_id", "min(time_unix_nano)")
+	sb = withHavingTuplePagination(sb, arg.Cursor, arg.SortOrder, arg.GramProjectID, "gram_chat_id", "min(time_unix_nano)", "", nil)
 
 	// Ordering - include gram_chat_id as secondary for stable ordering
 	sb = withOrdering(sb, arg.SortOrder, "start_time_unix_nano", "gram_chat_id")
@@ -1568,12 +1584,29 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 
 		// Distinct account types observed (powers the employees personal-account indicator)
 		"groupUniqArrayIf(account_type, account_type != '') AS account_types",
+
+		// Raw user_id values folded into this summary. The group key is email-first,
+		// so callers joining against user_id-keyed stores (user_accounts, role
+		// assignments) need these to find the summary's underlying ids.
+		"groupUniqArrayIf(telemetry_logs.user_id, telemetry_logs.user_id != '') AS raw_user_ids",
 	).
 		From("telemetry_logs").
 		Where("gram_project_id = ?", arg.GramProjectID).
 		Where("time_unix_nano >= ?", arg.TimeStart).
 		Where("time_unix_nano <= ?", arg.TimeEnd).
 		Where(groupExpr + " != ''")
+
+	// Internal grouping keys on email, so rows missing user_email look up the
+	// email observed alongside their user_id elsewhere in the window. Without
+	// this, a person's email-less rows surface as a separate summary keyed by
+	// their raw user_id that carries none of their token usage.
+	var joinClause string
+	var joinArgs []any
+	if arg.GroupBy != "external_user_id" {
+		joinClause = searchUsersKnownEmailsJoin
+		joinArgs = []any{arg.GramProjectID, arg.TimeStart, arg.TimeEnd}
+		sb = sb.LeftJoin(joinClause, joinArgs...)
+	}
 
 	// Optional deployment filter
 	if arg.GramDeploymentID != "" {
@@ -1603,7 +1636,7 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 	sb = sb.GroupBy(groupExpr)
 
 	// Cursor pagination using last_seen + group column for stable ordering
-	sb = withHavingTuplePagination(sb, arg.Cursor, arg.SortOrder, arg.GramProjectID, groupExpr, "max(time_unix_nano)")
+	sb = withHavingTuplePagination(sb, arg.Cursor, arg.SortOrder, arg.GramProjectID, groupExpr, "max(time_unix_nano)", joinClause, joinArgs)
 
 	// Order by last_seen with group column as tie-breaker
 	sb = withOrdering(sb, arg.SortOrder, "last_seen_unix_nano", "user_id")
