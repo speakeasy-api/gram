@@ -1,14 +1,19 @@
 import { Dimension } from "@gram/client/models/components/queryfilter.js";
 import {
   Bot,
+  CircleUser,
+  Cloud,
   Cpu,
   Layers,
   type LucideIcon,
   Network,
+  Server,
   Shield,
   ShieldAlert,
   Sigma,
+  Sparkles,
   UserRound,
+  Wrench,
 } from "lucide-react";
 
 // The token-usage panel's breakdown catalog: every group-by dimension plus the
@@ -23,9 +28,7 @@ export type StackMode = "group" | "tokenType" | "risk" | "total";
 
 // Sentinel values for the non-dimension modes. Dimension values are
 // snake_case attribute keys, so these can't collide.
-// Exported as the picker's default: the total view plots the billed per-day
-// series, so the billing page opens on the number that matches the usage card.
-export const BREAKDOWN_TOTAL = "total";
+const BREAKDOWN_TOTAL = "total";
 const BREAKDOWN_TOKEN_TYPE = "tokenType";
 export const BREAKDOWN_RISK = "risk";
 
@@ -58,11 +61,6 @@ export type BreakdownGroup = {
   options: BreakdownOption[];
 };
 
-// Only dimensions billed completion rows genuinely carry: the model, the
-// user identity snapshot hydrated at emit time (user, division, roles), and
-// the consuming surface. Fleet-only concepts (provider, account type, skill,
-// MCP server/tool, cache token types) live on the costs/insights pages,
-// whose analytics aggregate is scoped to agent-fleet provenance.
 export const BREAKDOWN_GROUPS: BreakdownGroup[] = [
   {
     // Ungrouped: the no-breakdown view leads the list, above every category.
@@ -70,8 +68,16 @@ export const BREAKDOWN_GROUPS: BreakdownGroup[] = [
     options: [{ value: BREAKDOWN_TOTAL, label: "Total", icon: Sigma }],
   },
   {
-    heading: "Model",
-    options: [{ value: Dimension.Model, label: "Model", icon: Cpu }],
+    heading: "Model & account",
+    options: [
+      { value: Dimension.Model, label: "Model", icon: Cpu },
+      { value: Dimension.Provider, label: "Provider", icon: Cloud },
+      {
+        value: Dimension.AccountType,
+        label: "Account type",
+        icon: CircleUser,
+      },
+    ],
   },
   {
     heading: "Usage",
@@ -94,11 +100,12 @@ export const BREAKDOWN_GROUPS: BreakdownGroup[] = [
     ],
   },
   {
-    heading: "Surfaces",
+    heading: "Agents & tools",
     options: [
-      // hook_source: for billed completions this is the Gram surface the
-      // request ran through (playground, MCP chat, …).
-      { value: Dimension.HookSource, label: "Source", icon: Bot },
+      { value: Dimension.HookSource, label: "Agent", icon: Bot },
+      { value: Dimension.SkillName, label: "Skill", icon: Sparkles },
+      { value: Dimension.McpServerName, label: "MCP server", icon: Server },
+      { value: Dimension.McpToolName, label: "MCP tool", icon: Wrench },
     ],
   },
 ];

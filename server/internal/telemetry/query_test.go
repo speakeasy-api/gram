@@ -13,8 +13,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -132,9 +130,7 @@ func insertAttributeClaudeAPIRequestLog(t *testing.T, ctx context.Context, proje
 	require.NoError(t, err)
 }
 
-// insertAttributeGramCompletionLog inserts a gram-server LLM completion row
-// tagged with the given usage source (e.g. "playground", "assistants").
-func insertAttributeGramCompletionLog(t *testing.T, ctx context.Context, projectID string, timestamp time.Time, chatID string, cost float64, totalTokens int, model, hookSource, email, department string, roles []string) {
+func insertAttributeAssistantChatCompletionLog(t *testing.T, ctx context.Context, projectID string, timestamp time.Time, chatID string, cost float64, totalTokens int, model, email, department string, roles []string) {
 	t.Helper()
 
 	conn, err := infra.NewClickhouseClient(t)
@@ -143,10 +139,6 @@ func insertAttributeGramCompletionLog(t *testing.T, ctx context.Context, project
 	id, err := uuid.NewV7()
 	require.NoError(t, err)
 
-	urn := "chat:completion"
-	if hookSource == "assistants" {
-		urn = "assistants:chat:completion"
-	}
 	attributes := map[string]any{
 		"gen_ai.conversation.id":          chatID,
 		"gen_ai.operation.name":           "chat",
@@ -154,8 +146,8 @@ func insertAttributeGramCompletionLog(t *testing.T, ctx context.Context, project
 		"gen_ai.usage.total_tokens":       totalTokens,
 		"gen_ai.usage.cost":               cost,
 		"gen_ai.response.model":           model,
-		"gram.hook.source":                hookSource,
-		"gram.resource.urn":               urn,
+		"gram.hook.source":                "assistants",
+		"gram.resource.urn":               "assistants:chat:completion",
 		"user.email":                      email,
 		"user.attributes.department_name": department,
 	}
@@ -172,9 +164,9 @@ func insertAttributeGramCompletionLog(t *testing.T, ctx context.Context, project
 			trace_id, span_id, attributes, resource_attributes,
 			gram_project_id, gram_urn, service_name
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), "INFO", "gram chat completion",
+	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), "INFO", "assistant chat completion",
 		nil, nil, string(attrsJSON), "{}",
-		projectID, urn, "gram-server")
+		projectID, "assistants:chat:completion", "gram-server")
 	require.NoError(t, err)
 }
 
@@ -624,7 +616,7 @@ func TestQuery_ExcludesAssistantChatCompletions(t *testing.T) {
 
 	now := time.Date(2026, time.June, 20, 1, 0, 0, 0, time.UTC)
 	ts := now.Add(-10 * time.Minute)
-	insertAttributeGramCompletionLog(t, ctx, projectID, ts, uuid.NewString(), 0.42, 25, "openai/gpt-5.4", "assistants", "assistant@example.com", "Engineering", []string{"dev"})
+	insertAttributeAssistantChatCompletionLog(t, ctx, projectID, ts, uuid.NewString(), 0.42, 25, "openai/gpt-5.4", "assistant@example.com", "Engineering", []string{"dev"})
 	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, ts, uuid.NewString(), 0.25, 15, 0, 0, 0, "opus", "claude@example.com", "Engineering", nil, "main", "", "", "", "")
 
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
@@ -777,178 +769,4 @@ func TestQuery_TopNRollupIntoOther(t *testing.T) {
 		}
 	}
 	require.True(t, hasOther)
-}
-
-// insertChatEvidenceRow inserts a chat event row without token attributes —
-// the stored-session evidence the billed queries qualify chats on.
-func insertChatEvidenceRow(t *testing.T, ctx context.Context, projectID string, timestamp time.Time, chatID string) {
-	t.Helper()
-
-	conn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
-	id, err := uuid.NewV7()
-	require.NoError(t, err)
-
-	attributes := map[string]any{"gen_ai.conversation.id": chatID}
-	attrsJSON, err := json.Marshal(attributes)
-	require.NoError(t, err)
-
-	err = conn.Exec(ctx, `
-		INSERT INTO telemetry_logs (
-			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
-			trace_id, span_id, attributes, resource_attributes,
-			gram_project_id, gram_urn, service_name
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), "INFO", "chat message",
-		nil, nil, string(attrsJSON), "{}",
-		projectID, "chat:message", "gram-server")
-	require.NoError(t, err)
-}
-
-func TestQueryTumDetails_CountsOnlyBilledCompletions(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestLogsService(t)
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	projectID := authCtx.ProjectID.String()
-
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
-
-	now := time.Date(2026, time.June, 20, 1, 0, 0, 0, time.UTC)
-	ts := now.Add(-10 * time.Minute)
-
-	// A billed completion (playground, a registered usage source) with stored
-	// evidence, next to two populations that must not appear anywhere in the
-	// billing details: an assistants completion (Speakeasy covers assistants
-	// inference until BYOK, so the surface is deliberately unregistered) and
-	// a Claude Code fleet api_request observed via OTEL (agent-native token
-	// attributes, never part of the billed population).
-	playgroundChat := uuid.NewString()
-	assistantsChat := uuid.NewString()
-	insertAttributeGramCompletionLog(t, ctx, projectID, ts, playgroundChat, 0.42, 1000, "anthropic/claude-4.6", "playground", "user@example.com", "Engineering", []string{"dev"})
-	insertChatEvidenceRow(t, ctx, projectID, ts, playgroundChat)
-	insertAttributeGramCompletionLog(t, ctx, projectID, ts, assistantsChat, 0.13, 555, "openai/gpt-5.4", "assistants", "assistant@example.com", "Engineering", nil)
-	insertChatEvidenceRow(t, ctx, projectID, ts, assistantsChat)
-	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, ts, uuid.NewString(), 1.5, 999999, 0, 0, 0, "claude-4.6", "fleet@example.com", "Engineering", nil, "main", "", "", "", "")
-
-	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
-	to := now.Add(1 * time.Hour).Format(time.RFC3339)
-
-	// Wait until BOTH gram completions materialized in the billing aggregate
-	// (the assistants chat included) so the exclusion assertions below cannot
-	// pass vacuously against a half-ingested view.
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-	require.Eventually(t, func() bool {
-		row := chConn.QueryRow(ctx,
-			"SELECT count(DISTINCT chat_id) FROM tum_breakdown_summaries WHERE gram_project_id = ? AND chat_id IN (?, ?)",
-			projectID, playgroundChat, assistantsChat)
-		var chats uint64
-		if err := row.Scan(&chats); err != nil {
-			return false
-		}
-		return chats == 2
-	}, 10*time.Second, 200*time.Millisecond)
-
-	var result *gen.TumDetailsResult
-	require.Eventually(t, func() bool {
-		res, resErr := ti.service.QueryTumDetails(ctx, &gen.QueryTumDetailsPayload{
-			SessionToken: nil,
-			From:         from,
-			To:           to,
-			ProjectID:    nil,
-		})
-		if resErr != nil || res.Totals == nil {
-			return false
-		}
-		result = res
-		// The stored-evidence rows qualify the chats asynchronously too.
-		return res.Totals.TotalTokens == 1000
-	}, 10*time.Second, 200*time.Millisecond)
-
-	require.Equal(t, int64(1000), result.Totals.InputTokens, "the fixture reports all tokens as input")
-	require.Equal(t, int64(0), result.Totals.OutputTokens)
-
-	var pointSum int64
-	for _, p := range result.Points {
-		pointSum += p.TotalTokens
-	}
-	require.Equal(t, int64(1000), pointSum, "daily points must only count the billed completion")
-
-	rowsByKey := map[string]map[string]int64{}
-	for _, b := range result.Breakdowns {
-		rowsByKey[b.Key] = map[string]int64{}
-		for _, row := range b.Rows {
-			rowsByKey[b.Key][row.Value] = row.TotalTokens
-		}
-	}
-	require.Equal(t, map[string]int64{"playground": 1000}, rowsByKey["hook_source"],
-		"the source breakdown holds exactly the billed surface")
-	require.Equal(t, map[string]int64{"anthropic/claude-4.6": 1000}, rowsByKey["model"])
-	require.Equal(t, map[string]int64{"user@example.com": 1000}, rowsByKey["email"])
-	require.Equal(t, map[string]int64{"dev": 1000}, rowsByKey["role"])
-	// The fixture carries no division attribute; the tokens land on the ''
-	// row (labeled by the frontend).
-	require.Equal(t, map[string]int64{"": 1000}, rowsByKey["division_name"])
-}
-
-func TestQueryTumDetails_IncludesDeletedProjects(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestLogsService(t)
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	projectID := authCtx.ProjectID.String()
-
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
-
-	// A second project that gets soft-deleted after recording usage: the
-	// tokens were consumed while it was live, so billing — the card AND the
-	// breakdowns — must keep counting them.
-	doomed, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
-		Name:           "Doomed Project",
-		Slug:           "doomed-" + uuid.NewString()[:8],
-		OrganizationID: authCtx.ActiveOrganizationID,
-	})
-	require.NoError(t, err)
-
-	now := time.Date(2026, time.June, 20, 1, 0, 0, 0, time.UTC)
-	ts := now.Add(-10 * time.Minute)
-
-	liveChat := uuid.NewString()
-	doomedChat := uuid.NewString()
-	insertAttributeGramCompletionLog(t, ctx, projectID, ts, liveChat, 0.42, 1000, "anthropic/claude-4.6", "playground", "user@example.com", "Engineering", nil)
-	insertChatEvidenceRow(t, ctx, projectID, ts, liveChat)
-	insertAttributeGramCompletionLog(t, ctx, doomed.ID.String(), ts, doomedChat, 0.2, 250, "anthropic/claude-4.6", "playground", "user@example.com", "Engineering", nil)
-	insertChatEvidenceRow(t, ctx, doomed.ID.String(), ts, doomedChat)
-
-	_, err = projectsrepo.New(ti.conn).DeleteProject(ctx, doomed.ID)
-	require.NoError(t, err)
-
-	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
-	to := now.Add(1 * time.Hour).Format(time.RFC3339)
-
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, resErr := ti.service.QueryTumDetails(ctx, &gen.QueryTumDetailsPayload{
-			SessionToken: nil,
-			From:         from,
-			To:           to,
-			ProjectID:    nil,
-		})
-		if !assert.NoError(c, resErr) || !assert.NotNil(c, res.Totals) {
-			return
-		}
-		assert.Equal(c, int64(1250), res.Totals.TotalTokens,
-			"the deleted project's usage must still count toward the billing breakdowns")
-	}, 10*time.Second, 200*time.Millisecond)
 }

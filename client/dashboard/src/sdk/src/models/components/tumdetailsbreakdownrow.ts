@@ -9,7 +9,7 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * One value of a breakdown dimension with its billed token usage over the range
+ * One value of a breakdown dimension with its token usage over the range
  */
 export type TumDetailsBreakdownRow = {
   /**
@@ -17,11 +17,11 @@ export type TumDetailsBreakdownRow = {
    */
   series: Array<number>;
   /**
-   * Billed tokens for this value over the range
+   * Tokens for this value over the range
    */
   totalTokens: number;
   /**
-   * The dimension value; empty for rows recorded before the dimension existed
+   * The dimension value; empty for rows without the attribute, 'Other' for the top-N remainder rollup
    */
   value: string;
 };

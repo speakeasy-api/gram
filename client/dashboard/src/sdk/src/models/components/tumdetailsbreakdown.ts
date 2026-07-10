@@ -12,11 +12,11 @@ import {
 } from "./tumdetailsbreakdownrow.js";
 
 /**
- * Per-dimension billed token breakdown for the usage details table
+ * Per-dimension token breakdown for the usage details table
  */
 export type TumDetailsBreakdown = {
   /**
-   * The breakdown dimension key (hook_source, model, email, division_name, role)
+   * The breakdown dimension key (matches telemetry.query group_by)
    */
   key: string;
   /**

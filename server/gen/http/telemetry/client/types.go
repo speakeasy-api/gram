@@ -496,7 +496,7 @@ type QueryTumDetailsResponseBody struct {
 	Points []*TumDetailsPointResponseBody `form:"points,omitempty" json:"points,omitempty" xml:"points,omitempty"`
 	// Whole-range totals
 	Totals *TumDetailsTotalsResponseBody `form:"totals,omitempty" json:"totals,omitempty" xml:"totals,omitempty"`
-	// Billed token usage per breakdown dimension
+	// Token usage per breakdown dimension, one entry per supported dimension
 	Breakdowns []*TumDetailsBreakdownResponseBody `form:"breakdowns,omitempty" json:"breakdowns,omitempty" xml:"breakdowns,omitempty"`
 }
 
@@ -5103,12 +5103,28 @@ type RiskTokensPointResponseBody struct {
 type TumDetailsPointResponseBody struct {
 	// Bucket start time in Unix nanoseconds (string for JS precision)
 	BucketTimeUnixNano *string `form:"bucket_time_unix_nano,omitempty" json:"bucket_time_unix_nano,omitempty" xml:"bucket_time_unix_nano,omitempty"`
-	// Billed input tokens
+	// Input tokens
 	InputTokens *int64 `form:"input_tokens,omitempty" json:"input_tokens,omitempty" xml:"input_tokens,omitempty"`
-	// Billed output tokens
+	// Output tokens
 	OutputTokens *int64 `form:"output_tokens,omitempty" json:"output_tokens,omitempty" xml:"output_tokens,omitempty"`
-	// Billed tokens under management
+	// Cache read input tokens
+	CacheReadTokens *int64 `form:"cache_read_tokens,omitempty" json:"cache_read_tokens,omitempty" xml:"cache_read_tokens,omitempty"`
+	// Cache creation input tokens
+	CacheWriteTokens *int64 `form:"cache_write_tokens,omitempty" json:"cache_write_tokens,omitempty" xml:"cache_write_tokens,omitempty"`
+	// All tokens
 	TotalTokens *int64 `form:"total_tokens,omitempty" json:"total_tokens,omitempty" xml:"total_tokens,omitempty"`
+	// Distinct chat sessions
+	AgentSessions *int64 `form:"agent_sessions,omitempty" json:"agent_sessions,omitempty" xml:"agent_sessions,omitempty"`
+	// Completed tool calls
+	ToolCalls *int64 `form:"tool_calls,omitempty" json:"tool_calls,omitempty" xml:"tool_calls,omitempty"`
+	// Distinct attributed users with usage
+	ActiveUsers *int64 `form:"active_users,omitempty" json:"active_users,omitempty" xml:"active_users,omitempty"`
+	// Tokens attributed to MCP tool usage
+	McpToolTokens *int64 `form:"mcp_tool_tokens,omitempty" json:"mcp_tool_tokens,omitempty" xml:"mcp_tool_tokens,omitempty"`
+	// Tokens attributed to skill usage
+	SkillTokens *int64 `form:"skill_tokens,omitempty" json:"skill_tokens,omitempty" xml:"skill_tokens,omitempty"`
+	// Tokens without user attribution
+	UnattributedTokens *int64 `form:"unattributed_tokens,omitempty" json:"unattributed_tokens,omitempty" xml:"unattributed_tokens,omitempty"`
 	// Tokens in messages carrying at least one active risk finding
 	RiskyMessageTokens *int64 `form:"risky_message_tokens,omitempty" json:"risky_message_tokens,omitempty" xml:"risky_message_tokens,omitempty"`
 	// Tokens in tool-call messages
@@ -5117,12 +5133,28 @@ type TumDetailsPointResponseBody struct {
 
 // TumDetailsTotalsResponseBody is used to define fields on response body types.
 type TumDetailsTotalsResponseBody struct {
-	// Billed input tokens
+	// Input tokens
 	InputTokens *int64 `form:"input_tokens,omitempty" json:"input_tokens,omitempty" xml:"input_tokens,omitempty"`
-	// Billed output tokens
+	// Output tokens
 	OutputTokens *int64 `form:"output_tokens,omitempty" json:"output_tokens,omitempty" xml:"output_tokens,omitempty"`
-	// Billed tokens under management
+	// Cache read input tokens
+	CacheReadTokens *int64 `form:"cache_read_tokens,omitempty" json:"cache_read_tokens,omitempty" xml:"cache_read_tokens,omitempty"`
+	// Cache creation input tokens
+	CacheWriteTokens *int64 `form:"cache_write_tokens,omitempty" json:"cache_write_tokens,omitempty" xml:"cache_write_tokens,omitempty"`
+	// All tokens
 	TotalTokens *int64 `form:"total_tokens,omitempty" json:"total_tokens,omitempty" xml:"total_tokens,omitempty"`
+	// Distinct chat sessions
+	AgentSessions *int64 `form:"agent_sessions,omitempty" json:"agent_sessions,omitempty" xml:"agent_sessions,omitempty"`
+	// Completed tool calls
+	ToolCalls *int64 `form:"tool_calls,omitempty" json:"tool_calls,omitempty" xml:"tool_calls,omitempty"`
+	// Distinct attributed users with usage
+	ActiveUsers *int64 `form:"active_users,omitempty" json:"active_users,omitempty" xml:"active_users,omitempty"`
+	// Tokens attributed to MCP tool usage
+	McpToolTokens *int64 `form:"mcp_tool_tokens,omitempty" json:"mcp_tool_tokens,omitempty" xml:"mcp_tool_tokens,omitempty"`
+	// Tokens attributed to skill usage
+	SkillTokens *int64 `form:"skill_tokens,omitempty" json:"skill_tokens,omitempty" xml:"skill_tokens,omitempty"`
+	// Tokens without user attribution
+	UnattributedTokens *int64 `form:"unattributed_tokens,omitempty" json:"unattributed_tokens,omitempty" xml:"unattributed_tokens,omitempty"`
 	// Tokens in messages carrying at least one active risk finding
 	RiskyMessageTokens *int64 `form:"risky_message_tokens,omitempty" json:"risky_message_tokens,omitempty" xml:"risky_message_tokens,omitempty"`
 	// Tokens in tool-call messages
@@ -5132,7 +5164,7 @@ type TumDetailsTotalsResponseBody struct {
 // TumDetailsBreakdownResponseBody is used to define fields on response body
 // types.
 type TumDetailsBreakdownResponseBody struct {
-	// The breakdown dimension key (hook_source, model, email, division_name, role)
+	// The breakdown dimension key (matches telemetry.query group_by)
 	Key *string `form:"key,omitempty" json:"key,omitempty" xml:"key,omitempty"`
 	// Top values by tokens in descending order, with the remainder rolled into
 	// 'Other'
@@ -5142,9 +5174,10 @@ type TumDetailsBreakdownResponseBody struct {
 // TumDetailsBreakdownRowResponseBody is used to define fields on response body
 // types.
 type TumDetailsBreakdownRowResponseBody struct {
-	// The dimension value; empty for rows recorded before the dimension existed
+	// The dimension value; empty for rows without the attribute, 'Other' for the
+	// top-N remainder rollup
 	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
-	// Billed tokens for this value over the range
+	// Tokens for this value over the range
 	TotalTokens *int64 `form:"total_tokens,omitempty" json:"total_tokens,omitempty" xml:"total_tokens,omitempty"`
 	// Daily tokens aligned to the result's points buckets
 	Series []int64 `form:"series,omitempty" json:"series,omitempty" xml:"series,omitempty"`
@@ -16239,8 +16272,32 @@ func ValidateTumDetailsPointResponseBody(body *TumDetailsPointResponseBody) (err
 	if body.OutputTokens == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("output_tokens", "body"))
 	}
+	if body.CacheReadTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cache_read_tokens", "body"))
+	}
+	if body.CacheWriteTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cache_write_tokens", "body"))
+	}
 	if body.TotalTokens == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("total_tokens", "body"))
+	}
+	if body.AgentSessions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("agent_sessions", "body"))
+	}
+	if body.ToolCalls == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_calls", "body"))
+	}
+	if body.ActiveUsers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("active_users", "body"))
+	}
+	if body.McpToolTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_tool_tokens", "body"))
+	}
+	if body.SkillTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("skill_tokens", "body"))
+	}
+	if body.UnattributedTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("unattributed_tokens", "body"))
 	}
 	if body.RiskyMessageTokens == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("risky_message_tokens", "body"))
@@ -16263,8 +16320,32 @@ func ValidateTumDetailsTotalsResponseBody(body *TumDetailsTotalsResponseBody) (e
 	if body.OutputTokens == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("output_tokens", "body"))
 	}
+	if body.CacheReadTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cache_read_tokens", "body"))
+	}
+	if body.CacheWriteTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cache_write_tokens", "body"))
+	}
 	if body.TotalTokens == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("total_tokens", "body"))
+	}
+	if body.AgentSessions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("agent_sessions", "body"))
+	}
+	if body.ToolCalls == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_calls", "body"))
+	}
+	if body.ActiveUsers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("active_users", "body"))
+	}
+	if body.McpToolTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_tool_tokens", "body"))
+	}
+	if body.SkillTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("skill_tokens", "body"))
+	}
+	if body.UnattributedTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("unattributed_tokens", "body"))
 	}
 	if body.RiskyMessageTokens == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("risky_message_tokens", "body"))

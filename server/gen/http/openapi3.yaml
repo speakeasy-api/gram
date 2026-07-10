@@ -54193,13 +54193,13 @@ components:
             properties:
                 key:
                     type: string
-                    description: The breakdown dimension key (hook_source, model, email, division_name, role)
+                    description: The breakdown dimension key (matches telemetry.query group_by)
                 rows:
                     type: array
                     items:
                         $ref: '#/components/schemas/TumDetailsBreakdownRow'
                     description: Top values by tokens in descending order, with the remainder rolled into 'Other'
-            description: Per-dimension billed token breakdown for the usage details table
+            description: Per-dimension token breakdown for the usage details table
             required:
                 - key
                 - rows
@@ -54214,12 +54214,12 @@ components:
                     description: Daily tokens aligned to the result's points buckets
                 total_tokens:
                     type: integer
-                    description: Billed tokens for this value over the range
+                    description: Tokens for this value over the range
                     format: int64
                 value:
                     type: string
-                    description: The dimension value; empty for rows recorded before the dimension existed
-            description: One value of a breakdown dimension with its billed token usage over the range
+                    description: The dimension value; empty for rows without the attribute, 'Other' for the top-N remainder rollup
+            description: One value of a breakdown dimension with its token usage over the range
             required:
                 - value
                 - total_tokens
@@ -54227,20 +54227,48 @@ components:
         TumDetailsPoint:
             type: object
             properties:
+                active_users:
+                    type: integer
+                    description: Distinct attributed users with usage
+                    format: int64
+                agent_sessions:
+                    type: integer
+                    description: Distinct chat sessions
+                    format: int64
                 bucket_time_unix_nano:
                     type: string
                     description: Bucket start time in Unix nanoseconds (string for JS precision)
+                cache_read_tokens:
+                    type: integer
+                    description: Cache read input tokens
+                    format: int64
+                cache_write_tokens:
+                    type: integer
+                    description: Cache creation input tokens
+                    format: int64
                 input_tokens:
                     type: integer
-                    description: Billed input tokens
+                    description: Input tokens
+                    format: int64
+                mcp_tool_tokens:
+                    type: integer
+                    description: Tokens attributed to MCP tool usage
                     format: int64
                 output_tokens:
                     type: integer
-                    description: Billed output tokens
+                    description: Output tokens
                     format: int64
                 risky_message_tokens:
                     type: integer
                     description: Tokens in messages carrying at least one active risk finding
+                    format: int64
+                skill_tokens:
+                    type: integer
+                    description: Tokens attributed to skill usage
+                    format: int64
+                tool_calls:
+                    type: integer
+                    description: Completed tool calls
                     format: int64
                 tool_message_tokens:
                     type: integer
@@ -54248,13 +54276,25 @@ components:
                     format: int64
                 total_tokens:
                     type: integer
-                    description: Billed tokens under management
+                    description: All tokens
+                    format: int64
+                unattributed_tokens:
+                    type: integer
+                    description: Tokens without user attribution
                     format: int64
             description: One UTC day of billing usage details
             required:
                 - input_tokens
                 - output_tokens
+                - cache_read_tokens
+                - cache_write_tokens
                 - total_tokens
+                - agent_sessions
+                - tool_calls
+                - active_users
+                - mcp_tool_tokens
+                - skill_tokens
+                - unattributed_tokens
                 - risky_message_tokens
                 - tool_message_tokens
                 - bucket_time_unix_nano
@@ -54265,7 +54305,7 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/TumDetailsBreakdown'
-                    description: Billed token usage per breakdown dimension
+                    description: Token usage per breakdown dimension, one entry per supported dimension
                 interval_seconds:
                     type: integer
                     description: Timeseries bucket width in seconds. Always 86400 — the details are bucketed daily.
@@ -54277,7 +54317,7 @@ components:
                     description: Gap-filled daily buckets in ascending time order
                 totals:
                     $ref: '#/components/schemas/TumDetailsTotals'
-            description: Result of the billing usage details query. Everything derives from the billed population (registered completion surfaces), matching the invoiced totals exactly.
+            description: Result of the billing usage details query
             required:
                 - interval_seconds
                 - points
@@ -54286,17 +54326,45 @@ components:
         TumDetailsTotals:
             type: object
             properties:
+                active_users:
+                    type: integer
+                    description: Distinct attributed users with usage
+                    format: int64
+                agent_sessions:
+                    type: integer
+                    description: Distinct chat sessions
+                    format: int64
+                cache_read_tokens:
+                    type: integer
+                    description: Cache read input tokens
+                    format: int64
+                cache_write_tokens:
+                    type: integer
+                    description: Cache creation input tokens
+                    format: int64
                 input_tokens:
                     type: integer
-                    description: Billed input tokens
+                    description: Input tokens
+                    format: int64
+                mcp_tool_tokens:
+                    type: integer
+                    description: Tokens attributed to MCP tool usage
                     format: int64
                 output_tokens:
                     type: integer
-                    description: Billed output tokens
+                    description: Output tokens
                     format: int64
                 risky_message_tokens:
                     type: integer
                     description: Tokens in messages carrying at least one active risk finding
+                    format: int64
+                skill_tokens:
+                    type: integer
+                    description: Tokens attributed to skill usage
+                    format: int64
+                tool_calls:
+                    type: integer
+                    description: Completed tool calls
                     format: int64
                 tool_message_tokens:
                     type: integer
@@ -54304,13 +54372,25 @@ components:
                     format: int64
                 total_tokens:
                     type: integer
-                    description: Billed tokens under management
+                    description: All tokens
                     format: int64
-            description: Whole-range totals for the billing usage details
+                unattributed_tokens:
+                    type: integer
+                    description: Tokens without user attribution
+                    format: int64
+            description: Whole-range totals for the billing usage details. Distinct counts (sessions, active users) are computed over the full range and cannot be derived by summing the daily points.
             required:
                 - input_tokens
                 - output_tokens
+                - cache_read_tokens
+                - cache_write_tokens
                 - total_tokens
+                - agent_sessions
+                - tool_calls
+                - active_users
+                - mcp_tool_tokens
+                - skill_tokens
+                - unattributed_tokens
                 - risky_message_tokens
                 - tool_message_tokens
         TunneledMcpConnection:

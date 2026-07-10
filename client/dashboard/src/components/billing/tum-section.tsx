@@ -28,95 +28,62 @@ import { useEffect, useMemo, useState } from "react";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { BillingCyclePicker } from "./billing-cycle-picker";
 import {
-  type BilledDays,
   type BillingPeriod,
-  bucketDateKey,
   cycleKey,
   cyclesFromTum,
   formatCycleName,
   periodDisplayRange,
   periodFromCycle,
 } from "./billing-cycles";
-import { BREAKDOWN_TOTAL, stackModeFor } from "./breakdown-options";
+import { stackModeFor } from "./breakdown-options";
 import { BreakdownPicker } from "./breakdown-picker";
-import { type GroupSeries, TokenUsagePanel } from "./token-usage-panel";
+import { TokenUsagePanel } from "./token-usage-panel";
 import { TumDetailsTable } from "./tum-details-table";
-import { riskPointsQuery, tumDetailsQuery } from "./tum-queries";
+import { riskPointsQuery, tumBreakdownQuery } from "./tum-queries";
 import { TumUsageCard } from "./tum-usage-card";
 
 // Org-wide token breakdown for one billing cycle: stacked daily tokens by a
 // selectable dimension, by token type, or by risk involvement — one unified
-// picker drives all three. Everything renders from the billing details
-// request shared with the details table (the server scopes it to the billed
-// completion population), except the headline total, which prefers the
-// billed per-day series the usage endpoint returns — the exact numbers on
-// the usage card. No data-availability pruning of the dimension list:
-// dimensions without data simply chart as "(unset)".
+// picker drives all three. Reads the same analytics aggregates as the costs
+// explorer (telemetry.query), scoped to the cycle. No data-availability
+// pruning of the dimension list: the availability probe
+// (telemetry.listAttributeKeys) is project-scoped and this page is org-level,
+// so it would filter against the wrong project — dimensions without data
+// simply chart as "(unset)".
 function TumTokenBreakdown({
   period,
   projectId,
-  billedDays,
   onSelectRange,
 }: {
   period: BillingPeriod;
   projectId: string | null;
-  // The billed per-day series and the cycle windows it fully describes.
-  // Org-wide — unusable under a project filter.
-  billedDays: BilledDays;
   // Bar-click drill-down: narrows the page's period to the clicked bucket.
   onSelectRange: (start: Date, end: Date) => void;
 }): JSX.Element {
   const client = useGramContext();
   const organization = useOrganization();
   // The picker's selection, plus the last-picked dimension so switching to
-  // token type or risk and back doesn't lose the grouping. Opens on the
-  // total view — the billed series that matches the usage card exactly.
-  const [breakdown, setBreakdown] = useState<string>(BREAKDOWN_TOTAL);
+  // token type or risk and back doesn't lose the grouping.
+  const [breakdown, setBreakdown] = useState<string>(Dimension.DivisionName);
   const [dimension, setDimension] = useState<Dimension>(Dimension.DivisionName);
   const stackBy = stackModeFor(breakdown);
 
   const scope = { client, orgId: organization.id, period, projectId };
-  // Shared with the details table (same keys — one request each).
-  const { data, isFetching } = useQuery(tumDetailsQuery(scope));
+  const { data, isFetching } = useQuery(tumBreakdownQuery(scope, dimension));
+  // Shared with the details table's risk rows (same key — one request).
   const { data: riskData } = useQuery(riskPointsQuery(scope));
 
-  const points = useMemo(() => data?.points ?? [], [data]);
-
-  // The selected dimension's rows. Attribution cuts hide the ""
-  // (not-applicable) row, same as the details table below.
-  const groups = useMemo<GroupSeries[]>(() => {
-    const rows = data?.breakdowns.find((b) => b.key === dimension)?.rows ?? [];
-    const visible = isAttributionDim(dimension)
-      ? rows.filter((r) => r.value !== "")
-      : rows;
-    return visible.map((r) => ({
-      label: r.value === "" ? "(unset)" : r.value,
-      series: r.series,
-    }));
-  }, [data, dimension]);
-
-  // The billed series aligned to the points grid, used only when the billed
-  // data COVERS every charted day — coverage, not positivity: a sealed
-  // zero-token cycle is fully known (all zeros beat late-recomputed
-  // telemetry), while a day outside every covered cycle window (e.g. a
-  // synthesized active cycle without history) makes the whole view fall
-  // back to the details totals rather than charting misleading zeros.
-  const billedSeries = useMemo(() => {
-    if (projectId != null || points.length === 0) return null;
-    const series: number[] = [];
-    for (const p of points) {
-      const key = bucketDateKey(p.bucketTimeUnixNano);
-      // Bucket dates are UTC midnights, so the key parses back to the
-      // bucket's exact start instant.
-      const ms = Date.parse(key);
-      const coveredDay = billedDays.covered.some(
-        (r) => ms >= r.start && ms < r.end,
-      );
-      if (!coveredDay) return null;
-      series.push(billedDays.byDate.get(key) ?? 0);
-    }
-    return series;
-  }, [points, billedDays, projectId]);
+  // Attribution cuts hide the "" (not-applicable) group, same as the costs
+  // page — but only in the grouped view. The total / token-type / risk
+  // stackings sum the whole series and must keep the unattributed slice, or
+  // they'd undercount whenever the last-picked dimension was an attribution
+  // cut.
+  const series = useMemo(() => {
+    const ts = data?.timeseries ?? [];
+    return stackBy === "group" && isAttributionDim(dimension)
+      ? ts.filter((s) => s.groupValue !== "")
+      : ts;
+  }, [data, dimension, stackBy]);
 
   const riskPoints = riskData?.points ?? null;
 
@@ -126,7 +93,7 @@ function TumTokenBreakdown({
       showRisk={riskPoints != null}
       onChange={(value) => {
         setBreakdown(value);
-        // Only actual dimensions pick a breakdown; the special modes
+        // Only actual dimensions feed the query's group_by; the special modes
         // (total / token type / risk) keep the last-picked dimension.
         if (stackModeFor(value) === "group") {
           setDimension(value as Dimension);
@@ -137,9 +104,7 @@ function TumTokenBreakdown({
 
   return (
     <TokenUsagePanel
-      points={points}
-      groups={groups}
-      billedSeries={billedSeries}
+      series={series}
       stackBy={stackBy}
       breakdownPicker={breakdownPicker}
       riskPoints={riskPoints}
@@ -221,44 +186,6 @@ export const TumUsageSection = (): JSX.Element => {
   };
 
   const monthlyLimit = tum?.monthlyTokenLimit ?? null;
-
-  // Billed tokens per UTC day across every known cycle, for the chart's
-  // headline total. The daily series is advisory — a finalized cycle serves
-  // its sealed snapshot total while the days recompute live and can drift
-  // (late telemetry) or expire (aggregate TTL) — so each cycle's days are
-  // scaled to sum to its billed total, the number on the usage card. Same
-  // normalization as the details table; cumulative rounding keeps the series
-  // integral without losing the exact sum.
-  //
-  // `covered` records the cycle windows the billed data fully describes —
-  // including zero-token cycles, where every day is a known zero (a sealed
-  // zero total beats whatever late telemetry recomputed). A cycle with a
-  // nonzero total but no daily shape (the synthesized active-cycle fallback)
-  // stays uncovered, and the chart falls back to the details totals there.
-  const billedDays = useMemo<BilledDays>(() => {
-    const byDate = new Map<string, number>();
-    const covered: { start: number; end: number }[] = [];
-    for (const c of cycles) {
-      const daysSum = c.days.reduce((sum, d) => sum + d.tokens, 0);
-      if (daysSum === 0) {
-        if (c.tokens === 0) {
-          covered.push({ start: c.start.getTime(), end: c.end.getTime() });
-        }
-        continue;
-      }
-      covered.push({ start: c.start.getTime(), end: c.end.getTime() });
-      const scale = c.tokens / daysSum;
-      let acc = 0;
-      let prevRounded = 0;
-      for (const d of c.days) {
-        acc += d.tokens * scale;
-        const rounded = Math.round(acc);
-        byDate.set(d.date, rounded - prevRounded);
-        prevRounded = rounded;
-      }
-    }
-    return { byDate, covered };
-  }, [cycles]);
 
   // The effective period. A custom range that happens to match a cycle's
   // exact boundaries IS that cycle (billed normalization applies).
@@ -398,7 +325,6 @@ export const TumUsageSection = (): JSX.Element => {
                 key={viewNonce}
                 period={period}
                 projectId={projectId}
-                billedDays={billedDays}
                 onSelectRange={handleBarSelect}
               />
             </div>

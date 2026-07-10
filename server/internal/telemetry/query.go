@@ -1,12 +1,10 @@
 package telemetry
 
 import (
-	"cmp"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"slices"
 	"sort"
 	"strconv"
 	"time"
@@ -18,13 +16,11 @@ import (
 	telem_gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/billing"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/telemetryerrs"
-	usagerepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
 
 // minIntervalSeconds is the finest timeseries bucket telemetry.query supports.
@@ -211,14 +207,11 @@ func (s *Service) QueryRiskTokens(ctx context.Context, payload *telem_gen.QueryR
 		riskyChatIDs = append(riskyChatIDs, id.String())
 	}
 
-	// Scoped to the billed completion surfaces so the risk split describes
-	// the same population as the billed totals it renders against.
 	buckets, err := s.chRepo.GetRiskTokensByDay(ctx, repo.GetRiskTokensParams{
 		ProjectIDs:    scope.projectIDs,
 		RiskyChatIDs:  riskyChatIDs,
 		StartUnixNano: timeStart,
 		EndUnixNano:   timeEnd,
-		HookSources:   billing.ModelUsageSourceStrings(),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error running risk tokens query").LogError(ctx, s.logger)
@@ -250,22 +243,11 @@ func (s *Service) QueryRiskTokens(ctx context.Context, payload *telem_gen.QueryR
 	}, nil
 }
 
-// tumBreakdownDims are the billing page's breakdown dimensions, in display
-// order. Each maps to a tum_breakdown_summaries expression (see
-// tumBreakdownDimExprs in the repo); the values match the telemetry
-// dimension identifiers the frontend picker uses.
-var tumBreakdownDims = []string{"hook_source", "model", "email", "division_name", "role"}
-
-// QueryTumDetails computes the billing page's usage details for a time range
-// in one request: the billed per-day token split, per-dimension breakdowns,
-// and message-level stats (risk findings, tool-call messages) from Postgres
-// per-message token counts. The backing queries run concurrently.
-//
-// Everything derives from billing-native sources — the dimensioned billing
-// aggregate (tum_breakdown_summaries) qualified and scoped exactly like
-// the billed totals (billing.ModelUsageSources), and chat message stats —
-// never the analytics aggregates, so the page reports the billed population
-// exactly.
+// QueryTumDetails computes every measure of the billing page's usage details
+// table for a time range in one request: token type sums, session/tool-call/
+// active-user counts, and attribution slices from the ClickHouse aggregates,
+// plus message-level stats (risk findings, tool-call messages) from Postgres
+// per-message token counts. The three backing queries run concurrently.
 func (s *Service) QueryTumDetails(ctx context.Context, payload *telem_gen.QueryTumDetailsPayload) (*telem_gen.TumDetailsResult, error) {
 	scope, err := s.resolveOrgQueryScope(ctx, payload.From, payload.To, payload.ProjectID)
 	if err != nil {
@@ -273,53 +255,53 @@ func (s *Service) QueryTumDetails(ctx context.Context, payload *telem_gen.QueryT
 	}
 	timeStart, timeEnd := scope.timeStart, scope.timeEnd
 
-	// Billing counts usage recorded while a project was live even if the
-	// project has since been soft-deleted — the card's totals do (see
-	// ListBillingProjectIDsByOrganization) — while resolveOrgQueryScope lists
-	// active projects only. Org-wide reads swap in the billing-aware list so
-	// a deleted project's usage cannot show on the card yet vanish from the
-	// breakdowns; an explicit project filter keeps the caller's choice.
-	billedProjectUUIDs := scope.projectUUIDs
-	billedProjectIDs := scope.projectIDs
-	if payload.ProjectID == nil || *payload.ProjectID == "" {
-		authCtx, _ := contextvalues.GetAuthContext(ctx)
-		billingIDs, err := usagerepo.New(s.db).ListBillingProjectIDsByOrganization(ctx, authCtx.ActiveOrganizationID)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to list billing projects").LogError(ctx, s.logger)
-		}
-		billedProjectUUIDs = billingIDs
-		billedProjectIDs = make([]string, 0, len(billingIDs))
-		for _, id := range billingIDs {
-			billedProjectIDs = append(billedProjectIDs, id.String())
-		}
+	chParams := repo.GetRiskTokensParams{
+		ProjectIDs:    scope.projectIDs,
+		RiskyChatIDs:  nil,
+		StartUnixNano: timeStart,
+		EndUnixNano:   timeEnd,
 	}
 
-	billedParams := repo.GetTokensUnderManagementParams{
-		ProjectIDs:        billedProjectIDs,
-		StartUnixNano:     timeStart,
-		EndUnixNano:       timeEnd,
-		BilledHookSources: billing.ModelUsageSourceStrings(),
+	// Every dimension the chart's breakdown picker offers, so the details
+	// table can mirror it. Each needs a grouped totals + timeseries pair; all
+	// of them run concurrently below alongside the headline queries.
+	breakdownDims := []string{
+		"division_name", "email", "role", "hook_source", "skill_name",
+		"mcp_server_name", "mcp_tool_name", "model", "provider", "account_type",
 	}
+	type breakdownData struct {
+		table []repo.AttributeMetricsRow
+		ts    []repo.AttributeMetricsTimePoint
+	}
+	breakdownResults := make([]breakdownData, len(breakdownDims))
 
 	var (
-		dayRows []repo.TumBreakdownDayBucket
-		dimRows = make([][]repo.TumBreakdownDimDayBucket, len(tumBreakdownDims))
-		msgRows []chatRepo.SumMessageTokenStatsByDayRow
+		dayRows   []repo.TumDetailsRow
+		totalsRow repo.TumDetailsRow
+		msgRows   []chatRepo.SumMessageTokenStatsByDayRow
 	)
 	eg, egCtx := errgroup.WithContext(ctx)
-	eg.SetLimit(4)
+	eg.SetLimit(8)
 	eg.Go(func() error {
 		var egErr error
-		dayRows, egErr = s.chRepo.GetTumBreakdownTotalsByDay(egCtx, billedParams)
+		dayRows, egErr = s.chRepo.GetTumDetailsByDay(egCtx, chParams)
 		if egErr != nil {
-			return fmt.Errorf("tum breakdown totals: %w", egErr)
+			return fmt.Errorf("tum details by day: %w", egErr)
+		}
+		return nil
+	})
+	eg.Go(func() error {
+		var egErr error
+		totalsRow, egErr = s.chRepo.GetTumDetailsTotals(egCtx, chParams)
+		if egErr != nil {
+			return fmt.Errorf("tum details totals: %w", egErr)
 		}
 		return nil
 	})
 	eg.Go(func() error {
 		var egErr error
 		msgRows, egErr = s.chatRepo.SumMessageTokenStatsByDay(egCtx, chatRepo.SumMessageTokenStatsByDayParams{
-			ProjectIds: billedProjectUUIDs,
+			ProjectIds: scope.projectUUIDs,
 			FromTime:   pgtype.Timestamptz{Time: time.Unix(0, timeStart).UTC(), InfinityModifier: pgtype.Finite, Valid: true},
 			ToTime:     pgtype.Timestamptz{Time: time.Unix(0, timeEnd).UTC(), InfinityModifier: pgtype.Finite, Valid: true},
 		})
@@ -328,12 +310,32 @@ func (s *Service) QueryTumDetails(ctx context.Context, payload *telem_gen.QueryT
 		}
 		return nil
 	})
-	for i, dim := range tumBreakdownDims {
+	for i, dim := range breakdownDims {
+		params := repo.AttributeMetricsQueryParams{
+			ProjectIDs: scope.projectIDs,
+			TimeStart:  timeStart,
+			// The attribute-metrics reads treat TimeEnd as inclusive, unlike
+			// the details/risk reads (<) — step inside the exclusive boundary
+			// so the next cycle's first hour stays out and rows match Totals.
+			TimeEnd:         timeEnd - 1,
+			GroupBy:         dim,
+			SortBy:          "total_tokens",
+			Filters:         nil,
+			IntervalSeconds: riskTokensIntervalSeconds,
+		}
 		eg.Go(func() error {
 			var egErr error
-			dimRows[i], egErr = s.chRepo.GetTumBreakdownDimByDay(egCtx, billedParams, dim)
+			breakdownResults[i].table, egErr = s.chRepo.QueryAttributeMetricsTable(egCtx, params)
 			if egErr != nil {
-				return fmt.Errorf("tum breakdown dimension query (%s): %w", dim, egErr)
+				return fmt.Errorf("breakdown table query (%s): %w", dim, egErr)
+			}
+			return nil
+		})
+		eg.Go(func() error {
+			var egErr error
+			breakdownResults[i].ts, egErr = s.chRepo.QueryAttributeMetricsTimeseries(egCtx, params)
+			if egErr != nil {
+				return fmt.Errorf("breakdown timeseries query (%s): %w", dim, egErr)
 			}
 			return nil
 		})
@@ -342,6 +344,10 @@ func (s *Service) QueryTumDetails(ctx context.Context, payload *telem_gen.QueryT
 		return nil, oops.E(oops.CodeUnexpected, err, "error running usage details queries").LogError(ctx, s.logger)
 	}
 
+	chByBucket := make(map[int64]repo.TumDetailsRow, len(dayRows))
+	for _, row := range dayRows {
+		chByBucket[row.Day.UTC().UnixNano()] = row
+	}
 	msgByBucket := make(map[int64]chatRepo.SumMessageTokenStatsByDayRow, len(msgRows))
 	var riskyMessageTotal, toolMessageTotal int64
 	for _, row := range msgRows {
@@ -361,71 +367,53 @@ func (s *Service) QueryTumDetails(ctx context.Context, payload *telem_gen.QueryT
 		bucketIndex[start] = i
 	}
 
-	dayByBucket := make(map[int64]repo.TumBreakdownDayBucket, len(dayRows))
-	var totalInput, totalOutput, totalTokens int64
-	for _, row := range dayRows {
-		dayByBucket[row.Day.UTC().UnixNano()] = row
-		totalInput += row.InputTokens
-		totalOutput += row.OutputTokens
-		totalTokens += row.TotalTokens
-	}
-
 	// Assemble each dimension's top rows plus an "Other" remainder, with the
-	// daily token series aligned to the shared bucket grid. Rows recorded
-	// before a dimension existed carry '' — the frontend labels them.
+	// daily token series aligned to the shared bucket grid.
 	const breakdownTopN = 6
-	breakdowns := make([]*telem_gen.TumDetailsBreakdown, 0, len(tumBreakdownDims))
-	for i, dim := range tumBreakdownDims {
-		seriesByValue := make(map[string][]int64)
-		totalByValue := make(map[string]int64)
-		for _, row := range dimRows[i] {
-			idx, ok := bucketIndex[row.Day.UTC().UnixNano()]
+	breakdowns := make([]*telem_gen.TumDetailsBreakdown, 0, len(breakdownDims))
+	for i, dim := range breakdownDims {
+		data := breakdownResults[i]
+		seriesByGroup := make(map[string][]int64, len(data.table))
+		for _, p := range data.ts {
+			idx, ok := bucketIndex[p.BucketTimeUnixNano]
 			if !ok {
 				continue
 			}
-			series := seriesByValue[row.Value]
+			series := seriesByGroup[p.GroupValue]
 			if series == nil {
 				series = make([]int64, len(starts))
-				seriesByValue[row.Value] = series
+				seriesByGroup[p.GroupValue] = series
 			}
-			series[idx] += row.Tokens
-			totalByValue[row.Value] += row.Tokens
+			series[idx] += p.Measures().TotalTokens
 		}
-
-		values := make([]string, 0, len(seriesByValue))
-		for value := range seriesByValue {
-			values = append(values, value)
-		}
-		slices.SortStableFunc(values, func(a, b string) int {
-			return cmp.Compare(totalByValue[b], totalByValue[a])
-		})
 
 		rows := make([]*telem_gen.TumDetailsBreakdownRow, 0, breakdownTopN+1)
-		otherSeries := make([]int64, len(starts))
 		var otherTotal int64
-		for j, value := range values {
+		otherSeries := make([]int64, len(starts))
+		for j, row := range data.table {
+			total := row.Measures().TotalTokens
 			if j < breakdownTopN {
+				series := seriesByGroup[row.GroupValue]
+				if series == nil {
+					series = make([]int64, len(starts))
+				}
 				rows = append(rows, &telem_gen.TumDetailsBreakdownRow{
-					Value:       value,
-					TotalTokens: totalByValue[value],
-					Series:      seriesByValue[value],
+					Value:       row.GroupValue,
+					TotalTokens: total,
+					Series:      series,
 				})
 				continue
 			}
-			otherTotal += totalByValue[value]
-			for k, v := range seriesByValue[value] {
+			otherTotal += total
+			for k, v := range seriesByGroup[row.GroupValue] {
 				otherSeries[k] += v
 			}
 		}
-		if len(values) > breakdownTopN {
-			// Suffixed when a real value is already "Other", same as
-			// telemetry.query's rollup row.
-			label := otherGroupLabel
-			for slices.Contains(values[:breakdownTopN], label) {
-				label += " (other)"
-			}
+		if len(data.table) > breakdownTopN {
 			rows = append(rows, &telem_gen.TumDetailsBreakdownRow{
-				Value:       label,
+				// Suffixed when a real group value is already "Other", same as
+				// telemetry.query's rollup row.
+				Value:       uniqueOtherGroupLabel(data.table),
 				TotalTokens: otherTotal,
 				Series:      otherSeries,
 			})
@@ -438,13 +426,21 @@ func (s *Service) QueryTumDetails(ctx context.Context, payload *telem_gen.QueryT
 
 	points := make([]*telem_gen.TumDetailsPoint, 0, len(starts))
 	for _, start := range starts {
-		day := dayByBucket[start]
+		ch := chByBucket[start]
 		msg := msgByBucket[start]
 		points = append(points, &telem_gen.TumDetailsPoint{
 			BucketTimeUnixNano: strconv.FormatInt(start, 10),
-			InputTokens:        day.InputTokens,
-			OutputTokens:       day.OutputTokens,
-			TotalTokens:        day.TotalTokens,
+			InputTokens:        ch.InputTokens,
+			OutputTokens:       ch.OutputTokens,
+			CacheReadTokens:    ch.CacheReadTokens,
+			CacheWriteTokens:   ch.CacheWriteTokens,
+			TotalTokens:        ch.TotalTokens,
+			AgentSessions:      int64(ch.AgentSessions), //nolint:gosec // bounded count
+			ToolCalls:          int64(ch.ToolCalls),     //nolint:gosec // bounded count
+			ActiveUsers:        int64(ch.ActiveUsers),   //nolint:gosec // bounded count
+			McpToolTokens:      ch.McpToolTokens,
+			SkillTokens:        ch.SkillTokens,
+			UnattributedTokens: ch.UnattributedTokens,
 			RiskyMessageTokens: msg.RiskyMessageTokens,
 			ToolMessageTokens:  msg.ToolMessageTokens,
 		})
@@ -455,9 +451,17 @@ func (s *Service) QueryTumDetails(ctx context.Context, payload *telem_gen.QueryT
 		Points:          points,
 		Breakdowns:      breakdowns,
 		Totals: &telem_gen.TumDetailsTotals{
-			InputTokens:        totalInput,
-			OutputTokens:       totalOutput,
-			TotalTokens:        totalTokens,
+			InputTokens:        totalsRow.InputTokens,
+			OutputTokens:       totalsRow.OutputTokens,
+			CacheReadTokens:    totalsRow.CacheReadTokens,
+			CacheWriteTokens:   totalsRow.CacheWriteTokens,
+			TotalTokens:        totalsRow.TotalTokens,
+			AgentSessions:      int64(totalsRow.AgentSessions), //nolint:gosec // bounded count
+			ToolCalls:          int64(totalsRow.ToolCalls),     //nolint:gosec // bounded count
+			ActiveUsers:        int64(totalsRow.ActiveUsers),   //nolint:gosec // bounded count
+			McpToolTokens:      totalsRow.McpToolTokens,
+			SkillTokens:        totalsRow.SkillTokens,
+			UnattributedTokens: totalsRow.UnattributedTokens,
 			RiskyMessageTokens: riskyMessageTotal,
 			ToolMessageTokens:  toolMessageTotal,
 		},

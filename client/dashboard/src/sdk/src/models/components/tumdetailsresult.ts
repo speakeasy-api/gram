@@ -21,11 +21,11 @@ import {
 } from "./tumdetailstotals.js";
 
 /**
- * Result of the billing usage details query. Everything derives from the billed population (registered completion surfaces), matching the invoiced totals exactly.
+ * Result of the billing usage details query
  */
 export type TumDetailsResult = {
   /**
-   * Billed token usage per breakdown dimension
+   * Token usage per breakdown dimension, one entry per supported dimension
    */
   breakdowns: Array<TumDetailsBreakdown>;
   /**
@@ -37,7 +37,7 @@ export type TumDetailsResult = {
    */
   points: Array<TumDetailsPoint>;
   /**
-   * Whole-range totals for the billing usage details
+   * Whole-range totals for the billing usage details. Distinct counts (sessions, active users) are computed over the full range and cannot be derived by summing the daily points.
    */
   totals: TumDetailsTotals;
 };
