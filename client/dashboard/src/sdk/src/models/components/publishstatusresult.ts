@@ -26,6 +26,10 @@ export type PublishStatusResult = {
    */
   lastPublishedAt?: Date | undefined;
   /**
+   * Version stamped into the currently published plugin.json manifests (e.g. 0.1.1783692954) — the version plugin clients such as Claude Code report for installed plugins. Absent when the project is not connected or the live version could not be determined.
+   */
+  liveVersion?: string | undefined;
+  /**
    * Git-based Claude Code marketplace URL — the value to pass to `/plugin marketplace add` or set as the source URL in `extraKnownMarketplaces`. Present once a marketplace token has been minted, which happens automatically on the first publish.
    */
   marketplaceUrl?: string | undefined;
@@ -59,6 +63,7 @@ export const PublishStatusResult$inboundSchema: z.ZodMiniType<
     last_published_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
+    live_version: z.optional(z.string()),
     marketplace_url: z.optional(z.string()),
     repo_name: z.optional(z.string()),
     repo_owner: z.optional(z.string()),
@@ -69,6 +74,7 @@ export const PublishStatusResult$inboundSchema: z.ZodMiniType<
     return remap$(v, {
       "has_collaborators": "hasCollaborators",
       "last_published_at": "lastPublishedAt",
+      "live_version": "liveVersion",
       "marketplace_url": "marketplaceUrl",
       "repo_name": "repoName",
       "repo_owner": "repoOwner",

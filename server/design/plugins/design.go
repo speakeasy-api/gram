@@ -597,6 +597,7 @@ var PublishStatusResult = Type("PublishStatusResult", func() {
 		Description("When the project was last published to GitHub. Absent when the project is not connected.")
 		Format(FormatDateTime)
 	})
+	Attribute("live_version", String, "Version stamped into the currently published plugin.json manifests (e.g. 0.1.1783692954) — the version plugin clients such as Claude Code report for installed plugins. Absent when the project is not connected or the live version could not be determined.")
 })
 
 var PublishPluginsResult = Type("PublishPluginsResult", func() {

@@ -781,10 +781,13 @@ function PublishStatusControl({
 
 // Shows the published freshness of a connected project under the plugin
 // metadata: an explicit "Unpublished changes" vs "Up to date" badge, paired
-// with the last-published time. The timestamp shows in both states (it's still
-// useful to know when the last publish happened while there are pending
-// changes). Renders nothing when not connected, or when freshness is unknown
-// and there's no publish timestamp to show.
+// with the last-published time and the manifest version currently live in the
+// published repo. The timestamp shows in both states (it's still useful to
+// know when the last publish happened while there are pending changes), and
+// the live version is what plugin clients report for installed plugins (e.g.
+// Claude Code's /plugin listing), so it's the value to compare against when
+// debugging sync lag. Renders nothing when not connected, or when freshness
+// is unknown and there's nothing published to show.
 function PublishFreshnessIndicator({
   publishStatus,
 }: {
@@ -806,8 +809,17 @@ function PublishFreshnessIndicator({
     </Type>
   ) : null;
 
+  // Absent when the live version can't be determined (e.g. nothing published
+  // yet, or a transient GitHub read failure) — omit rather than guess.
+  const liveVersion = publishStatus.liveVersion ? (
+    <Type muted small className="font-mono">
+      Current version {publishStatus.liveVersion}
+    </Type>
+  ) : null;
+
   // Freshness unknown and nothing published yet — nothing meaningful to show.
-  if (!hasUnpublishedChanges && !isUpToDate && !lastPublished) return null;
+  if (!hasUnpublishedChanges && !isUpToDate && !lastPublished && !liveVersion)
+    return null;
 
   return (
     <Stack direction="horizontal" gap={2} align="center" className="mt-4">
@@ -817,6 +829,7 @@ function PublishFreshnessIndicator({
         <Badge variant="success">Up to date</Badge>
       ) : null}
       {lastPublished}
+      {liveVersion}
     </Stack>
   );
 }
