@@ -88,6 +88,45 @@ type GenerateConfig struct {
 	ObservabilityMode bool
 }
 
+// PublishedHooksFiles renders the complete hooks (observability) subtree the
+// publish path rolls out — the Claude, Cursor, and Codex plugins with their
+// manifests — under a pinned configuration, in both hook modes. CI compares
+// this output between a PR's merge base and head to decide whether a
+// hooksGeneratorVersion bump is required, so it must cover everything a
+// publish emits: a Codex-only or manifest-only generator change has to
+// surface here or it would never roll out to connected repos. Org-derived
+// fields are fixed sentinels so only generator changes register, never data.
+func PublishedHooksFiles() (map[string][]byte, error) {
+	cfg := GenerateConfig{
+		OrgName:           "Hooks Check",
+		OrgEmail:          "hooks-check@example.com",
+		OrgID:             "org-hooks-check",
+		ServerURL:         "https://app.getgram.ai",
+		APIKey:            fingerprintAPIKeySentinel,
+		HooksAPIKey:       fingerprintHooksKeySentinel,
+		ProjectSlug:       "hooks-check",
+		IsDefaultProject:  true,
+		Version:           "",
+		MarketplaceName:   "",
+		ObservabilityMode: false,
+	}
+	out := make(map[string][]byte)
+	for _, mode := range []struct {
+		prefix        string
+		observability bool
+	}{{"default", false}, {"observability-mode", true}} {
+		cfg.ObservabilityMode = mode.observability
+		files, err := generateHooksFiles(cfg)
+		if err != nil {
+			return nil, fmt.Errorf("generate hooks files (%s): %w", mode.prefix, err)
+		}
+		for p, b := range files {
+			out[path.Join(mode.prefix, p)] = b
+		}
+	}
+	return out, nil
+}
+
 // DogfoodPluginFiles renders the dogfood plugins (plugin-claude,
 // plugin-cursor) from the same generators that publish customer plugins, so
 // dogfood senders exercise the exact scripts -- canonical payloads,

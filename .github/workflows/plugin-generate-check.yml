@@ -27,7 +27,8 @@ jobs:
         run: |
           # The observability (hooks) plugin has no content fingerprint: the
           # rollout republishes it ONLY when hooksGeneratorVersion is bumped.
-          # Nothing is checked in to diff anymore, so render the hook plugins
+          # Nothing is checked in to diff anymore, so render the published
+          # hooks subtree (Claude, Cursor, Codex, manifests, both hook modes)
           # from both the merge base and this PR and compare the trees — any
           # output change MUST come with a bump or it would never roll out to
           # connected repos. Blocking.
@@ -35,13 +36,13 @@ jobs:
           BASE=$(git merge-base "origin/$BASE_REF" HEAD)
 
           HEAD_OUT=$(mktemp -d)
-          (cd server && go run ./cmd/export-hook-plugin -out "$HEAD_OUT")
+          (cd server && go run ./cmd/export-hook-plugin -published -out "$HEAD_OUT")
 
           BASE_TREE=$(mktemp -d)
           git worktree add --detach "$BASE_TREE" "$BASE"
           BASE_OUT=$(mktemp -d)
           if [ -d "$BASE_TREE/server/cmd/export-hook-plugin" ]; then
-            (cd "$BASE_TREE/server" && go run ./cmd/export-hook-plugin -out "$BASE_OUT")
+            (cd "$BASE_TREE/server" && go run ./cmd/export-hook-plugin -published -out "$BASE_OUT")
           else
             # The merge base predates the renderer, so there is nothing to
             # compare against. Leaving BASE_OUT empty makes the diff below

@@ -35,18 +35,27 @@ const localClaudeManifest = `{
 
 func main() {
 	out := flag.String("out", "", "directory to render the plugin-claude and plugin-cursor trees into (required)")
+	published := flag.Bool("published", false, "render the full published hooks subtree (Claude, Cursor, Codex, manifests) under a pinned config instead of the dogfood plugins — what CI diffs to require hooksGeneratorVersion bumps")
 	flag.Parse()
 	if *out == "" {
 		fmt.Fprintln(os.Stderr, "export-hook-plugin: -out is required")
 		os.Exit(1)
 	}
 
-	files, err := plugins.DogfoodPluginFiles()
+	var files map[string][]byte
+	var err error
+	if *published {
+		files, err = plugins.PublishedHooksFiles()
+	} else {
+		files, err = plugins.DogfoodPluginFiles()
+	}
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "render dogfood plugins: %v\n", err)
+		fmt.Fprintf(os.Stderr, "render hook plugins: %v\n", err)
 		os.Exit(1)
 	}
-	files["plugin-claude/.claude-plugin/plugin.json"] = []byte(localClaudeManifest)
+	if !*published {
+		files["plugin-claude/.claude-plugin/plugin.json"] = []byte(localClaudeManifest)
+	}
 	for name, content := range files {
 		dst := filepath.Join(*out, filepath.FromSlash(name))
 		if err := os.MkdirAll(filepath.Dir(dst), 0o750); err != nil {
