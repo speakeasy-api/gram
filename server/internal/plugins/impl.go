@@ -28,6 +28,8 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
+	redisCache "github.com/go-redis/cache/v9"
+
 	srv "github.com/speakeasy-api/gram/server/gen/http/plugins/server"
 	gen "github.com/speakeasy-api/gram/server/gen/plugins"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -35,12 +37,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/marketplace"
 	mcpmetarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -61,6 +64,7 @@ type GitHubPublisher interface {
 	CreateRepo(ctx context.Context, installationID int64, org, name string, private bool) error
 	PushFiles(ctx context.Context, installationID int64, owner, repo, branch, commitMsg string, files map[string][]byte) (string, error)
 	AddCollaborator(ctx context.Context, installationID int64, owner, repo, username, permission string) error
+	HasDirectCollaborator(ctx context.Context, installationID int64, owner, repo string) (bool, error)
 	// GetRepoFiles returns the current published files so a publish can carry an
 	// unchanged plugin component (hooks or MCP) verbatim into a fresh push,
 	// leaving the other component's files and embedded key untouched. Returns
@@ -138,6 +142,7 @@ type Service struct {
 	auth      *auth.Auth
 	authz     *authz.Engine
 	audit     *audit.Logger
+	cache     cache.Cache
 	github    *GitHubConfig
 	serverURL string
 	keyPrefix string
@@ -151,6 +156,7 @@ func NewService(
 	tracerProvider trace.TracerProvider,
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
+	cacheImpl cache.Cache,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
 	github *GitHubConfig,
@@ -167,6 +173,7 @@ func NewService(
 		auth:      auth.New(logger, db, sessions, authzEngine),
 		authz:     authzEngine,
 		audit:     auditLogger,
+		cache:     cacheImpl,
 		github:    github,
 		serverURL: serverURL,
 		keyPrefix: auth.APIKeyPrefix(env),
@@ -191,6 +198,7 @@ func NewPublisher(
 		auth:      nil,
 		authz:     nil,
 		audit:     auditLogger,
+		cache:     nil,
 		github:    github,
 		serverURL: serverURL,
 		keyPrefix: auth.APIKeyPrefix(env),
@@ -223,6 +231,14 @@ func (s *Service) ListPlugins(ctx context.Context, payload *gen.ListPluginsPaylo
 		return nil, err
 	}
 
+	// Projects created before the Default plugin existed never got one
+	// provisioned. Heal that lazily here so the dashboard always has a
+	// plugin to publish to, mirroring the AttachToDefaultPlugin callers in
+	// toolsets/mcpendpoints.
+	if err := s.ensureDefaultPlugin(ctx, ac); err != nil {
+		return nil, err
+	}
+
 	rows, err := s.repo.ListPlugins(ctx, repo.ListPluginsParams{
 		OrganizationID: ac.ActiveOrganizationID,
 		ProjectID:      *ac.ProjectID,
@@ -231,8 +247,30 @@ func (s *Service) ListPlugins(ctx context.Context, payload *gen.ListPluginsPaylo
 		return nil, oops.E(oops.CodeUnexpected, err, "list plugins").LogError(ctx, s.logger)
 	}
 
+	pluginIDs := make([]uuid.UUID, len(rows))
+	for i, r := range rows {
+		pluginIDs[i] = r.ID
+	}
+	allServers, err := s.repo.ListPluginServersByPluginIDs(ctx, repo.ListPluginServersByPluginIDsParams{
+		PluginIds: pluginIDs,
+		ProjectID: *ac.ProjectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list plugin servers").LogError(ctx, s.logger)
+	}
+	serversByPlugin := make(map[uuid.UUID][]repo.PluginServer, len(rows))
+	for _, srv := range allServers {
+		serversByPlugin[srv.PluginID] = append(serversByPlugin[srv.PluginID], srv)
+	}
+
 	plugins := make([]*gen.Plugin, 0, len(rows))
 	for _, r := range rows {
+		servers := serversByPlugin[r.ID]
+		genServers := make([]*gen.PluginServer, 0, len(servers))
+		for _, srv := range servers {
+			genServers = append(genServers, pluginServerToGen(srv))
+		}
+
 		plugins = append(plugins, &gen.Plugin{
 			ID:              r.ID.String(),
 			Name:            r.Name,
@@ -240,7 +278,7 @@ func (s *Service) ListPlugins(ctx context.Context, payload *gen.ListPluginsPaylo
 			Description:     conv.FromPGText[string](r.Description),
 			ServerCount:     &r.ServerCount,
 			AssignmentCount: &r.AssignmentCount,
-			Servers:         nil,
+			Servers:         genServers,
 			Assignments:     nil,
 			CreatedAt:       formatTime(r.CreatedAt),
 			UpdatedAt:       formatTime(r.UpdatedAt),
@@ -248,6 +286,50 @@ func (s *Service) ListPlugins(ctx context.Context, payload *gen.ListPluginsPaylo
 	}
 
 	return &gen.ListPluginsResult{Plugins: plugins}, nil
+}
+
+// ensureDefaultPlugin provisions the project's Default plugin if it doesn't
+// exist yet, covering projects created before CreateProject started
+// provisioning one. No-ops (no audit event, no error) when the plugin
+// already exists, or when the caller lacks the admin scope that plugin
+// creation normally requires (CreatePlugin/AddPluginServer) — a read-only
+// viewer loading the dashboard shouldn't be able to trigger a write.
+func (s *Service) ensureDefaultPlugin(ctx context.Context, ac *contextvalues.AuthContext) error {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil
+	}
+
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	ensured, err := EnsureDefaultPlugin(ctx, tx, ac.ActiveOrganizationID, *ac.ProjectID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "ensure default plugin").LogError(ctx, s.logger)
+	}
+	if !ensured.Created {
+		return nil
+	}
+
+	if err := s.audit.LogPluginCreate(ctx, tx, audit.LogPluginCreateEvent{
+		OrganizationID:   ac.ActiveOrganizationID,
+		ProjectID:        *ac.ProjectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		ActorDisplayName: ac.Email,
+		ActorSlug:        nil,
+		PluginID:         ensured.Plugin.ID,
+		PluginName:       ensured.Plugin.Name,
+		PluginSlug:       ensured.Plugin.Slug,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "audit log default plugin create").LogError(ctx, s.logger)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, s.logger)
+	}
+	return nil
 }
 
 func (s *Service) GetPlugin(ctx context.Context, payload *gen.GetPluginPayload) (*gen.Plugin, error) {
@@ -568,7 +650,7 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 			}
 			return nil, oops.E(oops.CodeUnexpected, mcpErr, "verify mcp server").LogError(ctx, s.logger)
 		}
-		if server.Visibility == mcpservers.VisibilityDisabled || !server.HasEndpoint {
+		if server.Visibility == visibility.Disabled || !server.HasEndpoint {
 			return nil, oops.E(oops.CodeBadRequest, nil, "mcp server is disabled or has no published endpoint")
 		}
 		if displayName == "" {
@@ -1208,14 +1290,15 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 	}
 
 	result := &gen.PublishStatusResult{
-		Configured:      s.github != nil,
-		Connected:       false,
-		RepoOwner:       nil,
-		RepoName:        nil,
-		RepoURL:         nil,
-		MarketplaceURL:  nil,
-		UpToDate:        nil,
-		LastPublishedAt: nil,
+		Configured:       s.github != nil,
+		Connected:        false,
+		RepoOwner:        nil,
+		RepoName:         nil,
+		RepoURL:          nil,
+		MarketplaceURL:   nil,
+		HasCollaborators: nil,
+		UpToDate:         nil,
+		LastPublishedAt:  nil,
 	}
 
 	if s.github != nil {
@@ -1240,10 +1323,68 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 				result.LastPublishedAt = &lastPublishedAt
 			}
 			result.UpToDate = s.publishUpToDate(ctx, ac, conn)
+
+			hasCollaborators, err := s.cachedHasDirectCollaborator(ctx, conn.RepoOwner, conn.RepoName)
+			if err != nil {
+				// Degrade rather than fail the whole status read — the
+				// dashboard treats a missing value as "unknown", not "false".
+				s.logger.WarnContext(ctx, "check repo collaborators", attr.SlogError(err))
+			} else {
+				result.HasCollaborators = &hasCollaborators
+			}
 		}
 	}
 
 	return result, nil
+}
+
+// hasCollaboratorsCacheTTL bounds how stale the collaborator flag can be.
+// GetPublishStatus is polled by the dashboard on every page load/refetch, so
+// checking GitHub live on each call burns installation rate limits for data
+// that only changes on publish or (async, outside our control) invitation
+// acceptance — a short cache absorbs that traffic while staying close enough
+// to real-time for the UI to reflect a just-added collaborator promptly.
+const hasCollaboratorsCacheTTL = 60 * time.Second
+
+func collaboratorCacheKey(owner, repo string) string {
+	return fmt.Sprintf("plugins:has-collaborator:%s/%s", owner, repo)
+}
+
+// cachedHasDirectCollaborator wraps GitHubPublisher.HasDirectCollaborator
+// with a short-lived cache. Falls back to an uncached live call when no
+// cache is configured (e.g. the publish-only worker instance from
+// NewPublisher, which never serves GetPublishStatus).
+func (s *Service) cachedHasDirectCollaborator(ctx context.Context, owner, repo string) (bool, error) {
+	if s.cache == nil {
+		hasCollaborators, err := s.github.Client.HasDirectCollaborator(ctx, s.github.InstallationID, owner, repo)
+		if err != nil {
+			return false, fmt.Errorf("check repo collaborators: %w", err)
+		}
+		return hasCollaborators, nil
+	}
+
+	key := collaboratorCacheKey(owner, repo)
+
+	var cached bool
+	switch err := s.cache.Get(ctx, key, &cached); {
+	case err == nil:
+		return cached, nil
+	case errors.Is(err, redisCache.ErrCacheMiss):
+		// Fall through to the live check below.
+	default:
+		s.logger.WarnContext(ctx, "read collaborator cache", attr.SlogError(err))
+	}
+
+	hasCollaborators, err := s.github.Client.HasDirectCollaborator(ctx, s.github.InstallationID, owner, repo)
+	if err != nil {
+		return false, fmt.Errorf("check repo collaborators: %w", err)
+	}
+
+	if err := s.cache.Set(ctx, key, &hasCollaborators, hasCollaboratorsCacheTTL); err != nil {
+		s.logger.WarnContext(ctx, "write collaborator cache", attr.SlogError(err))
+	}
+
+	return hasCollaborators, nil
 }
 
 // publishUpToDate reports whether the project's current plugin state matches
@@ -1626,6 +1767,15 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		}
 	}
 
+	// Bust the short-lived HasDirectCollaborator cache so the next
+	// GetPublishStatus read reflects a just-added collaborator immediately
+	// instead of the stale cached value for up to hasCollaboratorsCacheTTL.
+	if len(input.GitHubUsernames) > 0 && s.cache != nil {
+		if err := s.cache.Delete(ctx, collaboratorCacheKey(repoOwner, repoName)); err != nil {
+			s.logger.WarnContext(ctx, "invalidate collaborator cache", attr.SlogError(err))
+		}
+	}
+
 	pluginSlugs := make([]string, 0, len(pluginInfos))
 	for _, p := range pluginInfos {
 		pluginSlugs = append(pluginSlugs, p.Slug)
@@ -1637,6 +1787,9 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	// published repo contains key strings with no DB records — re-publish
 	// overwrites them with fresh valid keys.
 	if err := s.persistPluginAPIKeys(ctx, input, candidates, projectName, repoOwner, repoName, pluginSlugs, mcpFingerprintsJSON, hooksGeneratorVersion); err != nil {
+		if errors.Is(err, ErrGitHubRepoConflict) {
+			return nil, oops.E(oops.CodeConflict, err, "persist plugin api keys").LogWarn(ctx, s.logger)
+		}
 		return nil, oops.E(oops.CodeUnexpected, err, "persist plugin api keys").LogError(ctx, s.logger)
 	}
 
@@ -1832,6 +1985,81 @@ func (s *Service) buildPluginAPIKeyCandidate(scope auth.APIKeyScope, purpose str
 	}, nil
 }
 
+// ErrGitHubRepoConflict indicates the computed repo_owner/repo_name for this
+// project's publish already belongs to a different, still-active project's
+// GitHub connection (plugin_github_connections_installation_repo_key) — see
+// upsertGitHubConnection, which self-heals the far more common case of a
+// stale row from a soft-deleted project and only returns this when the
+// blocking project is genuinely still active. Callers should treat this as a
+// non-retryable, human-actionable condition rather than a transient failure.
+var ErrGitHubRepoConflict = errors.New("github repo already connected to a different active project")
+
+// upsertGitHubConnection wraps UpsertGitHubConnection with a SAVEPOINT so a
+// plugin_github_connections_installation_repo_key conflict can self-heal in
+// band instead of always surfacing to the caller. repoName is derived from
+// org/project slugs (see publishProject), and projects_organization_id_slug_key
+// is a partial unique index scoped to non-deleted projects — so a
+// soft-deleted project's slug can be reused, but its plugin_github_connections
+// row is never cleaned up (soft deletes don't cascade). When that's the
+// blocking row, it's safe to reclaim: delete the stale connection and retry
+// once. A conflict against a still-active project's connection can't be
+// resolved here (its slug is legitimately still in use) and surfaces as
+// ErrGitHubRepoConflict — this should be rare to impossible given active
+// slugs are unique, but is not provably unreachable (e.g. two installations
+// mapping to the same org externally), so it's handled rather than assumed
+// away.
+//
+// Takes the raw transaction for the same reason as EnsureDefaultPlugin: a
+// Postgres transaction aborts after any failed statement, so recovering from
+// the expected unique-violation to run the reclaim + retry needs a savepoint.
+func (s *Service) upsertGitHubConnection(ctx context.Context, tx pgx.Tx, params repo.UpsertGitHubConnectionParams) (repo.PluginGithubConnection, error) {
+	q := repo.New(tx)
+
+	const savepoint = "upsert_github_connection"
+	if _, err := tx.Exec(ctx, "SAVEPOINT "+savepoint); err != nil {
+		return repo.PluginGithubConnection{}, fmt.Errorf("begin savepoint: %w", err)
+	}
+
+	conn, err := q.UpsertGitHubConnection(ctx, params)
+	if err == nil {
+		if _, err := tx.Exec(ctx, "RELEASE SAVEPOINT "+savepoint); err != nil {
+			return repo.PluginGithubConnection{}, fmt.Errorf("release savepoint: %w", err)
+		}
+		return conn, nil
+	}
+
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) || pgErr.Code != pgerrcode.UniqueViolation || pgErr.ConstraintName != "plugin_github_connections_installation_repo_key" {
+		return repo.PluginGithubConnection{}, fmt.Errorf("upsert github connection: %w", err)
+	}
+
+	if _, err := tx.Exec(ctx, "ROLLBACK TO SAVEPOINT "+savepoint); err != nil {
+		return repo.PluginGithubConnection{}, fmt.Errorf("rollback savepoint after repo conflict: %w", err)
+	}
+
+	owner, err := q.GetGitHubConnectionOwner(ctx, repo.GetGitHubConnectionOwnerParams{
+		InstallationID: params.InstallationID,
+		RepoOwner:      params.RepoOwner,
+		RepoName:       params.RepoName,
+	})
+	if err != nil {
+		return repo.PluginGithubConnection{}, fmt.Errorf("%w: %s/%s (owner lookup failed: %w)", ErrGitHubRepoConflict, params.RepoOwner, params.RepoName, err)
+	}
+	if !owner.ProjectDeleted {
+		return repo.PluginGithubConnection{}, fmt.Errorf("%w: %s/%s", ErrGitHubRepoConflict, params.RepoOwner, params.RepoName)
+	}
+
+	if err := q.DeleteGitHubConnection(ctx, owner.ProjectID); err != nil {
+		return repo.PluginGithubConnection{}, fmt.Errorf("reclaim stale github connection: %w", err)
+	}
+
+	conn, err = q.UpsertGitHubConnection(ctx, params)
+	if err != nil {
+		return repo.PluginGithubConnection{}, fmt.Errorf("upsert github connection after reclaiming stale connection: %w", err)
+	}
+	return conn, nil
+}
+
 // persistPluginAPIKeys atomically writes one or more API keys, their audit
 // log entries, the plugin publish audit log entry, and the GitHub
 // connection record in a single transaction. All-or-nothing: if any
@@ -1892,7 +2120,7 @@ func (s *Service) persistPluginAPIKeys(
 	if err != nil {
 		return fmt.Errorf("generate marketplace token: %w", err)
 	}
-	if _, err := s.repo.WithTx(tx).UpsertGitHubConnection(ctx, repo.UpsertGitHubConnectionParams{
+	if _, err := s.upsertGitHubConnection(ctx, tx, repo.UpsertGitHubConnectionParams{
 		ProjectID:                input.ProjectID,
 		InstallationID:           s.github.InstallationID,
 		RepoOwner:                repoOwner,
@@ -1901,7 +2129,7 @@ func (s *Service) persistPluginAPIKeys(
 		PublishedMcpFingerprints: mcpFingerprintsJSON,
 		PublishedHooksVersion:    conv.ToPGText(hooksVersion),
 	}); err != nil {
-		return fmt.Errorf("upsert github connection: %w", err)
+		return err
 	}
 
 	if err := s.audit.LogPluginPublish(ctx, tx, audit.LogPluginPublishEvent{

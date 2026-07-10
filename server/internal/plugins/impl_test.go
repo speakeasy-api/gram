@@ -20,6 +20,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
@@ -59,6 +61,10 @@ func (m *mockGitHubPublisher) AddCollaborator(_ context.Context, _ int64, _, _, 
 	m.addCollaboratorCalled = true
 	m.collaborators = append(m.collaborators, username)
 	return nil
+}
+
+func (m *mockGitHubPublisher) HasDirectCollaborator(_ context.Context, _ int64, _, _ string) (bool, error) {
+	return len(m.collaborators) > 0, nil
 }
 
 func (m *mockGitHubPublisher) GetRepoFiles(_ context.Context, _ int64, _, _, _ string) (map[string][]byte, error) {
@@ -777,6 +783,76 @@ func TestPluginsService_PublishPlugins_HappyPath(t *testing.T) {
 	require.NotNil(t, status.UpToDate)
 	require.True(t, *status.UpToDate)
 	require.NotNil(t, status.LastPublishedAt)
+}
+
+// Reproduces the plugin_github_connections_installation_repo_key conflict:
+// project A publishes, gets soft-deleted (freeing its slug under the
+// partial projects_organization_id_slug_key index), and project B reuses
+// that slug — so both compute the identical repo_owner/repo_name. Since
+// soft-deletes never clean up plugin_github_connections, A's row is still
+// there when B tries to upsert its own. Publishing as B must succeed by
+// reclaiming A's stale row in band, not surface ErrGitHubRepoConflict.
+func TestPluginsService_PublishPlugins_ReclaimsStaleConnectionFromDeletedProject(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectAID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	projectA, err := projectsrepo.New(ti.conn).GetProjectByID(ctx, projectAID)
+	require.NoError(t, err)
+	sharedSlug := projectA.Slug
+
+	pluginA, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Project A Plugin"})
+	require.NoError(t, err)
+	toolsetA := createTestToolset(t, ctx, ti.conn, "reclaim-toolset-a")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    pluginA.ID,
+		ToolsetID:   conv.PtrEmpty(toolsetA.ID.String()),
+		DisplayName: conv.PtrEmpty("Server A"),
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+
+	_, err = projectsrepo.New(ti.conn).DeleteProject(ctx, projectAID)
+	require.NoError(t, err)
+
+	projectB, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           sharedSlug,
+		Slug:           sharedSlug,
+		OrganizationID: orgID,
+	})
+	require.NoError(t, err)
+
+	authCtx.ProjectID = &projectB.ID
+	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+
+	pluginB, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Project B Plugin"})
+	require.NoError(t, err)
+	toolsetB := createTestToolset(t, ctx, ti.conn, "reclaim-toolset-b")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    pluginB.ID,
+		ToolsetID:   conv.PtrEmpty(toolsetB.ID.String()),
+		DisplayName: conv.PtrEmpty("Server B"),
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	result, err := ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+	require.Contains(t, result.RepoURL, sharedSlug)
+
+	conn, err := pluginsrepo.New(ti.conn).GetGitHubConnection(ctx, projectB.ID)
+	require.NoError(t, err)
+	require.Equal(t, projectB.ID, conn.ProjectID)
 }
 
 // After a publish, mutating the plugin set (here: adding another server) must
