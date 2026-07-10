@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node
+#!/usr/bin/env -S node --import tsx
 
 //MISE description="Seed the local database with data"
 
@@ -9,26 +9,25 @@ import os from "node:os";
 import path from "node:path";
 
 import { intro, log as clackLog, outro } from "@clack/prompts";
-import { GramCore } from "@gram/client/core.js";
-import { accessEnableRBAC } from "@gram/client/funcs/accessEnableRBAC.js";
-import { assetsUploadFunctions } from "@gram/client/funcs/assetsUploadFunctions.js";
-import { assetsUploadOpenAPIv3 } from "@gram/client/funcs/assetsUploadOpenAPIv3.js";
-import { authInfo } from "@gram/client/funcs/authInfo.js";
-import { deploymentsEvolveDeployment } from "@gram/client/funcs/deploymentsEvolveDeployment.js";
-import { deploymentsGetById } from "@gram/client/funcs/deploymentsGetById.js";
-import { keysCreate } from "@gram/client/funcs/keysCreate.js";
-import { keysList } from "@gram/client/funcs/keysList.js";
-import { keysRevokeById } from "@gram/client/funcs/keysRevokeById.js";
-import { keysValidate } from "@gram/client/funcs/keysValidate.js";
-import { projectsCreate } from "@gram/client/funcs/projectsCreate.js";
-import { projectsRead } from "@gram/client/funcs/projectsRead.js";
-import { resourcesList } from "@gram/client/funcs/resourcesList.js";
-import { toolsList } from "@gram/client/funcs/toolsList.js";
-import { toolsetsCreate } from "@gram/client/funcs/toolsetsCreate.js";
-import { toolsetsUpdateBySlug } from "@gram/client/funcs/toolsetsUpdateBySlug.js";
-import { environmentsCreate } from "@gram/client/funcs/environmentsCreate.js";
-import { environmentsList } from "@gram/client/funcs/environmentsList.js";
-import { ServiceError } from "@gram/client/models/errors/index.js";
+import { GramCore } from "#gram/client/core.js";
+import { accessEnableRBAC } from "#gram/client/funcs/accessEnableRBAC.js";
+import { assetsUploadFunctions } from "#gram/client/funcs/assetsUploadFunctions.js";
+import { assetsUploadOpenAPIv3 } from "#gram/client/funcs/assetsUploadOpenAPIv3.js";
+import { authInfo } from "#gram/client/funcs/authInfo.js";
+import { deploymentsEvolveDeployment } from "#gram/client/funcs/deploymentsEvolveDeployment.js";
+import { deploymentsGetById } from "#gram/client/funcs/deploymentsGetById.js";
+import { keysCreate } from "#gram/client/funcs/keysCreate.js";
+import { keysList } from "#gram/client/funcs/keysList.js";
+import { keysRevokeById } from "#gram/client/funcs/keysRevokeById.js";
+import { keysValidate } from "#gram/client/funcs/keysValidate.js";
+import { projectsCreate } from "#gram/client/funcs/projectsCreate.js";
+import { projectsRead } from "#gram/client/funcs/projectsRead.js";
+import { resourcesList } from "#gram/client/funcs/resourcesList.js";
+import { toolsList } from "#gram/client/funcs/toolsList.js";
+import { toolsetsCreate } from "#gram/client/funcs/toolsetsCreate.js";
+import { toolsetsUpdateBySlug } from "#gram/client/funcs/toolsetsUpdateBySlug.js";
+import { environmentsCreate } from "#gram/client/funcs/environmentsCreate.js";
+import { environmentsList } from "#gram/client/funcs/environmentsList.js";
 import { $, chalk } from "zx";
 import { seedTunnel } from "./seed/tunnel.mts";
 
@@ -2795,8 +2794,22 @@ async function seedObservabilityData(init: {
   const GROUP_POOL = ["platform", "growth", "enterprise", "core"];
   // The consuming surface (gram.hook.source) for chat rows — the hook_source
   // dimension on telemetry.query. (The hooks seeding block below has its own
-  // HOOK_SOURCES list for hook events.)
-  const CHAT_HOOK_SOURCES = ["claude-code", "cursor", "cowork", "codex"];
+  // HOOK_SOURCES list for hook events.) Mixes agent-fleet surfaces with
+  // billed gram surfaces (playground/gram) so the billing page — which
+  // scopes to registered billing.ModelUsageSources — has data locally.
+  // "assistants" is deliberately absent from the billed slots: it is
+  // unregistered (Speakeasy covers assistants inference until BYOK). Known
+  // seed gap vs prod: fleet sessions here emit gen_ai.usage rows (billed),
+  // while prod fleet telemetry reports tokens in agent-native namespaces
+  // only.
+  const CHAT_HOOK_SOURCES = [
+    "claude-code",
+    "cursor",
+    "playground",
+    "cowork",
+    "gram",
+    "codex",
+  ];
 
   // AI-account provider per consuming surface, used to stamp the gram.provider
   // attribute (the `provider` dimension) together with a deterministic
@@ -2813,6 +2826,9 @@ async function seedObservabilityData(init: {
     vscode: "openai",
     cursor: "cursor",
     cli: "cursor",
+    // Gram-managed surfaces (billed completions through gram-server).
+    playground: "anthropic",
+    gram: "anthropic",
   };
   function classifyAccount(
     surface: string,

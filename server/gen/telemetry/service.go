@@ -1671,21 +1671,20 @@ type TopUser struct {
 	ActivityCount int64
 }
 
-// Per-dimension token breakdown for the usage details table
+// Per-dimension billed token breakdown for the usage details table
 type TumDetailsBreakdown struct {
-	// The breakdown dimension key (matches telemetry.query group_by)
+	// The breakdown dimension key (hook_source, model, email, division_name, role)
 	Key string
 	// Top values by tokens in descending order, with the remainder rolled into
 	// 'Other'
 	Rows []*TumDetailsBreakdownRow
 }
 
-// One value of a breakdown dimension with its token usage over the range
+// One value of a breakdown dimension with its billed token usage over the range
 type TumDetailsBreakdownRow struct {
-	// The dimension value; empty for rows without the attribute, 'Other' for the
-	// top-N remainder rollup
+	// The dimension value; empty for rows recorded before the dimension existed
 	Value string
-	// Tokens for this value over the range
+	// Billed tokens for this value over the range
 	TotalTokens int64
 	// Daily tokens aligned to the result's points buckets
 	Series []int64
@@ -1695,28 +1694,12 @@ type TumDetailsBreakdownRow struct {
 type TumDetailsPoint struct {
 	// Bucket start time in Unix nanoseconds (string for JS precision)
 	BucketTimeUnixNano string
-	// Input tokens
+	// Billed input tokens
 	InputTokens int64
-	// Output tokens
+	// Billed output tokens
 	OutputTokens int64
-	// Cache read input tokens
-	CacheReadTokens int64
-	// Cache creation input tokens
-	CacheWriteTokens int64
-	// All tokens
+	// Billed tokens under management
 	TotalTokens int64
-	// Distinct chat sessions
-	AgentSessions int64
-	// Completed tool calls
-	ToolCalls int64
-	// Distinct attributed users with usage
-	ActiveUsers int64
-	// Tokens attributed to MCP tool usage
-	McpToolTokens int64
-	// Tokens attributed to skill usage
-	SkillTokens int64
-	// Tokens without user attribution
-	UnattributedTokens int64
 	// Tokens in messages carrying at least one active risk finding
 	RiskyMessageTokens int64
 	// Tokens in tool-call messages
@@ -1733,36 +1716,18 @@ type TumDetailsResult struct {
 	Points []*TumDetailsPoint
 	// Whole-range totals
 	Totals *TumDetailsTotals
-	// Token usage per breakdown dimension, one entry per supported dimension
+	// Billed token usage per breakdown dimension
 	Breakdowns []*TumDetailsBreakdown
 }
 
-// Whole-range totals for the billing usage details. Distinct counts (sessions,
-// active users) are computed over the full range and cannot be derived by
-// summing the daily points.
+// Whole-range totals for the billing usage details
 type TumDetailsTotals struct {
-	// Input tokens
+	// Billed input tokens
 	InputTokens int64
-	// Output tokens
+	// Billed output tokens
 	OutputTokens int64
-	// Cache read input tokens
-	CacheReadTokens int64
-	// Cache creation input tokens
-	CacheWriteTokens int64
-	// All tokens
+	// Billed tokens under management
 	TotalTokens int64
-	// Distinct chat sessions
-	AgentSessions int64
-	// Completed tool calls
-	ToolCalls int64
-	// Distinct attributed users with usage
-	ActiveUsers int64
-	// Tokens attributed to MCP tool usage
-	McpToolTokens int64
-	// Tokens attributed to skill usage
-	SkillTokens int64
-	// Tokens without user attribution
-	UnattributedTokens int64
 	// Tokens in messages carrying at least one active risk finding
 	RiskyMessageTokens int64
 	// Tokens in tool-call messages

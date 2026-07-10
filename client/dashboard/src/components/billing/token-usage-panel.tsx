@@ -1,6 +1,5 @@
-import { type QueryMeasures } from "@gram/client/models/components/querymeasures.js";
-import { type QuerySeries } from "@gram/client/models/components/queryseries.js";
 import { type RiskTokensPoint } from "@gram/client/models/components/risktokenspoint.js";
+import { type TumDetailsPoint } from "@gram/client/models/components/tumdetailspoint.js";
 import {
   BarElement,
   CategoryScale,
@@ -30,11 +29,11 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, ChartTooltip, Legend);
 // Vercel-style consumption breakdown for tokens under management: a stacked
 // bar chart of tokens over the selected billing cycle, stacked by a chosen
 // dimension, by token type, or by risk involvement, with client-side
-// granularity roll-up (the caller fetches daily buckets) and a cumulative view.
-
-// Beyond this many stacks the legend and colors stop being readable; the
-// remainder rolls into a client-side "Other" series.
-const MAX_STACKS = 8;
+// granularity roll-up (the caller fetches daily buckets) and a cumulative
+// view. Everything renders from the billing details response (points +
+// per-dimension rows, both scoped server-side to the billed completion
+// population) — plus, for the headline total, the billed per-day series the
+// usage endpoint already returns.
 
 // Pointer movement under this many pixels counts as a click, not a drag.
 const DRAG_THRESHOLD_PX = 5;
@@ -47,11 +46,14 @@ const GRANULARITIES: { value: Granularity; label: string }[] = [
   { value: "month", label: "Monthly" },
 ];
 
-const TOKEN_TYPES: { label: string; value: (m: QueryMeasures) => number }[] = [
-  { label: "Input", value: (m) => m.totalInputTokens },
-  { label: "Output", value: (m) => m.totalOutputTokens },
-  { label: "Cache read", value: (m) => m.cacheReadInputTokens },
-  { label: "Cache write", value: (m) => m.cacheCreationInputTokens },
+// Billed completions carry no cache attributes (input + output = total), so
+// the token-type view has exactly these two series.
+const TOKEN_TYPES: {
+  label: string;
+  value: (p: TumDetailsPoint) => number;
+}[] = [
+  { label: "Input", value: (p) => p.inputTokens },
+  { label: "Output", value: (p) => p.outputTokens },
 ];
 
 const compactTokens = new Intl.NumberFormat("en-US", {
@@ -117,82 +119,61 @@ function bucketLabel(ms: number, granularity: Granularity): string {
 
 type Stack = { label: string; byBucket: Map<number, number> };
 
+// A daily series from the details response's dimension rows, aligned to the
+// points grid by index.
+export type GroupSeries = { label: string; series: number[] };
+
 function addTo(map: Map<number, number>, bucket: number, value: number): void {
   if (value === 0) return;
   map.set(bucket, (map.get(bucket) ?? 0) + value);
 }
 
-// One measure of the given series, summed into granularity buckets.
-function bucketTotals(
-  series: QuerySeries[],
+// One measure of the daily points, summed into granularity buckets.
+function bucketPointValues(
+  points: TumDetailsPoint[],
   granularity: Granularity,
-  value: (m: QueryMeasures) => number,
+  value: (p: TumDetailsPoint, index: number) => number,
 ): Map<number, number> {
   const byBucket = new Map<number, number>();
-  for (const s of series) {
-    for (const p of s.points) {
-      addTo(
-        byBucket,
-        floorBucket(bucketMs(p.bucketTimeUnixNano), granularity),
-        value(p.measures),
-      );
-    }
-  }
+  points.forEach((p, i) => {
+    addTo(
+      byBucket,
+      floorBucket(bucketMs(p.bucketTimeUnixNano), granularity),
+      value(p, i),
+    );
+  });
   return byBucket;
 }
 
-// One stack per group value, ranked by total tokens; groups beyond MAX_STACKS
-// merge into "Other" (alongside any server-side "Other" roll-up row).
+// One stack per dimension value. The server already ranks rows and rolls the
+// remainder into "Other", so the rows map straight to stacks.
 function stacksByGroup(
-  series: QuerySeries[],
+  points: TumDetailsPoint[],
+  groups: GroupSeries[],
   granularity: Granularity,
 ): Stack[] {
-  const ranked = series
-    .map((s) => ({
-      series: s,
-      total: s.points.reduce((sum, p) => sum + p.measures.totalTokens, 0),
+  return groups
+    .map((g) => ({
+      label: g.label,
+      byBucket: bucketPointValues(
+        points,
+        granularity,
+        (_, i) => g.series[i] ?? 0,
+      ),
     }))
-    .filter((s) => s.total > 0)
-    .sort((a, b) => b.total - a.total);
-
-  const stacks: Stack[] = ranked.slice(0, MAX_STACKS).map(({ series: s }) => ({
-    label: s.groupValue === "" ? "(unset)" : s.groupValue,
-    byBucket: bucketTotals([s], granularity, (m) => m.totalTokens),
-  }));
-
-  const rest = ranked.slice(MAX_STACKS);
-  if (rest.length > 0) {
-    const byBucket = bucketTotals(
-      rest.map((r) => r.series),
-      granularity,
-      (m) => m.totalTokens,
-    );
-    // Fold into an existing "Other" stack (the server's top-N remainder row)
-    // rather than showing two.
-    const existing = stacks.find((s) => s.label === "Other");
-    if (existing) {
-      for (const [bucket, value] of byBucket) {
-        addTo(existing.byBucket, bucket, value);
-      }
-    } else {
-      stacks.push({ label: "Other", byBucket });
-    }
-  }
-  return stacks;
+    .filter((s) => [...s.byBucket.values()].some((v) => v > 0));
 }
 
-// Two stacks — tokens from sessions with risk findings vs the remainder. The
-// risky side comes from the dedicated risk endpoint; the remainder is taken
-// against the same analytics totals every other stacking mode uses, so the
-// stacked height matches across modes (the risk endpoint's own session
-// aggregate includes forwarded tokens the analytics aggregate excludes).
+// Two stacks — tokens from sessions with risk findings vs the remainder,
+// taken against the same details totals the other stackings use so the
+// stacked height matches across modes.
 function stacksByRisk(
-  points: RiskTokensPoint[],
-  series: QuerySeries[],
+  riskPoints: RiskTokensPoint[],
+  points: TumDetailsPoint[],
   granularity: Granularity,
 ): Stack[] {
   const risky = new Map<number, number>();
-  for (const p of points) {
+  for (const p of riskPoints) {
     addTo(
       risky,
       floorBucket(bucketMs(p.bucketTimeUnixNano), granularity),
@@ -200,10 +181,10 @@ function stacksByRisk(
     );
   }
   const clean = new Map<number, number>();
-  for (const [bucket, total] of bucketTotals(
-    series,
+  for (const [bucket, total] of bucketPointValues(
+    points,
     granularity,
-    (m) => m.totalTokens,
+    (p) => p.totalTokens,
   )) {
     addTo(clean, bucket, Math.max(0, total - (risky.get(bucket) ?? 0)));
   }
@@ -213,24 +194,30 @@ function stacksByRisk(
   ].filter((s) => s.byBucket.size > 0);
 }
 
-// A single stack of all tokens per bucket — the no-breakdown view.
+// A single stack of all tokens per bucket — the no-breakdown view. Prefers
+// the BILLED per-day series (the exact numbers on the usage card) when the
+// caller has it; the details totals stand in otherwise.
 function stacksByTotal(
-  series: QuerySeries[],
+  points: TumDetailsPoint[],
+  billedSeries: number[] | null,
   granularity: Granularity,
 ): Stack[] {
-  const byBucket = bucketTotals(series, granularity, (m) => m.totalTokens);
-  if (byBucket.size === 0) return [];
+  const byBucket = bucketPointValues(points, granularity, (p, i) =>
+    billedSeries ? (billedSeries[i] ?? 0) : p.totalTokens,
+  );
+  if ([...byBucket.values()].every((v) => v === 0)) return [];
   return [{ label: "Total tokens", byBucket }];
 }
 
-// One stack per token type, summed across every group.
+// One stack per token type. For billed completions the cache series are
+// zero (cache traffic is an agent-fleet concept) and drop out naturally.
 function stacksByTokenType(
-  series: QuerySeries[],
+  points: TumDetailsPoint[],
   granularity: Granularity,
 ): Stack[] {
   return TOKEN_TYPES.map((t) => ({
     label: t.label,
-    byBucket: bucketTotals(series, granularity, t.value),
+    byBucket: bucketPointValues(points, granularity, t.value),
   })).filter((s) => [...s.byBucket.values()].some((v) => v > 0));
 }
 
@@ -265,24 +252,26 @@ function headerHint(stackBy: StackMode): string {
   if (stackBy === "risk") {
     return "Tokens split by whether the session had at least one active risk finding (see Secure → Risk) during the period. Computed from per-session token totals, so numbers can differ slightly from the dimension views.";
   }
-  return "Token usage from your organization's analytics aggregates. Numbers can differ slightly from billed tokens under management, which only counts sessions Gram stored data for.";
+  return "Tokens from LLM completions that run through the platform — the usage billed as tokens under management. Agent telemetry observed via OTEL (Claude Code, Cursor, Codex) is not billed and not included here; see the Insights pages for it.";
 }
 
-// The stacks for the modes fed by the main grouped series (risk mode reads the
+// The stacks for the modes fed by the details points (risk mode reads the
 // dedicated risk endpoint's points instead).
-function seriesStacks(
+function pointStacks(
   mode: StackMode,
-  series: QuerySeries[],
+  points: TumDetailsPoint[],
+  groups: GroupSeries[],
+  billedSeries: number[] | null,
   granularity: Granularity,
 ): Stack[] {
   switch (mode) {
     case "total":
-      return stacksByTotal(series, granularity);
+      return stacksByTotal(points, billedSeries, granularity);
     case "tokenType":
-      return stacksByTokenType(series, granularity);
+      return stacksByTokenType(points, granularity);
     case "group":
     case "risk": // unreachable — risk is handled by the caller
-      return stacksByGroup(series, granularity);
+      return stacksByGroup(points, groups, granularity);
   }
 }
 
@@ -302,15 +291,24 @@ function dimmed(hex: string): string {
 }
 
 export function TokenUsagePanel({
-  series,
+  points,
+  groups,
+  billedSeries,
   stackBy,
   breakdownPicker,
   riskPoints,
   loading,
   onSelectRange,
 }: {
-  // Per-group daily timeseries for the selected slice.
-  series: QuerySeries[];
+  // Gap-filled daily buckets from the billing details response — the axis
+  // grid plus the total/token-type measures.
+  points: TumDetailsPoint[];
+  // The selected dimension's rows, with daily series aligned to points.
+  groups: GroupSeries[];
+  // The billed per-day token series aligned to points, when the caller has
+  // it (org scope with known cycle days); the total view plots it so the
+  // chart matches the usage card exactly.
+  billedSeries: number[] | null;
   // How the bars stack — controlled by the caller's breakdown picker.
   stackBy: StackMode;
   // The unified breakdown selector (dimensions + token type + risk), rendered
@@ -349,15 +347,19 @@ export function TokenUsagePanel({
   const chart = useMemo(() => {
     const stacks =
       effectiveStackBy === "risk"
-        ? stacksByRisk(riskPoints ?? [], series, granularity)
-        : seriesStacks(effectiveStackBy, series, granularity);
+        ? stacksByRisk(riskPoints ?? [], points, granularity)
+        : pointStacks(
+            effectiveStackBy,
+            points,
+            groups,
+            billedSeries,
+            granularity,
+          );
     // The time axis comes from every bucket the server returned (gap-filled
     // with zeros), not just buckets with usage — zero days must keep their
     // slot so the axis stays continuous.
-    const axisSource = series.flatMap((s) =>
-      s.points.map((p) =>
-        floorBucket(bucketMs(p.bucketTimeUnixNano), granularity),
-      ),
+    const axisSource = points.map((p) =>
+      floorBucket(bucketMs(p.bucketTimeUnixNano), granularity),
     );
     const buckets = [...new Set(axisSource)].sort((a, b) => a - b);
 
@@ -391,7 +393,9 @@ export function TokenUsagePanel({
       buckets,
     };
   }, [
-    series,
+    points,
+    groups,
+    billedSeries,
     riskPoints,
     granularity,
     effectiveStackBy,

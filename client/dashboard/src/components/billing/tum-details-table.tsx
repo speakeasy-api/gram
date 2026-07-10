@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { isAttributionDim } from "@/pages/costs/taxonomy";
-import { type BillingPeriod } from "./billing-cycles";
+import { type BillingPeriod, bucketDateKey } from "./billing-cycles";
 import {
   breakdownLabel,
   CHART_COLORS,
@@ -44,30 +44,21 @@ type DetailGroup = {
   rows: DetailRow[];
 };
 
-// The dimension sections, split so the headline cuts (model, provider, MCP
-// server) sit directly under Total and the rest follow the token/risk groups.
-const LEAD_DIMENSION_SECTIONS: string[] = [
-  Dimension.Model,
-  Dimension.Provider,
-  Dimension.McpServerName,
-];
+// The dimension sections, split so the headline model cut sits directly
+// under Total and the rest follow the token/risk groups. Only dimensions
+// billed completion rows genuinely carry: the model, the user identity
+// snapshot hydrated at emit time (user, division, roles), and the consuming
+// surface.
+const LEAD_DIMENSION_SECTIONS: string[] = [Dimension.Model];
 const TAIL_DIMENSION_SECTIONS: string[] = [
-  Dimension.AccountType,
   Dimension.DivisionName,
   Dimension.Email,
   Dimension.Role,
   Dimension.HookSource,
-  Dimension.SkillName,
-  Dimension.McpToolName,
 ];
 
 // A measure carried by both the daily points and the whole-range totals.
-type MeasureField =
-  | "inputTokens"
-  | "outputTokens"
-  | "cacheReadTokens"
-  | "cacheWriteTokens"
-  | "toolMessageTokens";
+type MeasureField = "inputTokens" | "outputTokens" | "toolMessageTokens";
 
 type MeasureRowSpec = {
   label: string;
@@ -75,11 +66,10 @@ type MeasureRowSpec = {
   field: MeasureField;
 };
 
+// Billed completions carry no cache attributes (input + output = total).
 const TOKEN_TYPE_ROWS: MeasureRowSpec[] = [
   { label: "Input", color: CHART_COLORS[0]!, field: "inputTokens" },
   { label: "Output", color: CHART_COLORS[1]!, field: "outputTokens" },
-  { label: "Cache read", color: CHART_COLORS[2]!, field: "cacheReadTokens" },
-  { label: "Cache write", color: CHART_COLORS[3]!, field: "cacheWriteTokens" },
 ];
 
 const TOOL_MESSAGE_ROW: MeasureRowSpec = {
@@ -87,19 +77,6 @@ const TOOL_MESSAGE_ROW: MeasureRowSpec = {
   color: "#94a3b8",
   field: "toolMessageTokens",
 };
-
-// The UTC calendar day of a daily bucket, as "YYYY-MM-DD" — the key the
-// billed per-day series (BillingCycle.days) aligns on. Bucket timestamps are
-// unix-nano strings that exceed Number precision; divide as BigInt first.
-function bucketDate(nano: string): string {
-  try {
-    return new Date(Number(BigInt(nano) / 1_000_000n))
-      .toISOString()
-      .slice(0, 10);
-  } catch {
-    return "";
-  }
-}
 
 // Row color for a dimension value — same palette walk as the chart's stacks,
 // so a value's dot matches its chart series color.
@@ -455,9 +432,19 @@ export function TumDetailsTable({
     // filtered series can't locate the org-wide crossing).
     let billed: number[];
     if (cycle.days.length > 0) {
-      const billedByDate = new Map(cycle.days.map((d) => [d.date, d.tokens]));
+      // The daily series is advisory: it recomputes live under the CURRENT
+      // billing scope, while a sealed cycle's total is the invoiced record
+      // and can describe a larger (or drifted) population. Walking the raw
+      // days against the allowance would then never reach the crossing the
+      // card reports — scale the series to the cycle's billed total first,
+      // the same normalization the chart's billed series applies.
+      const daysSum = cycle.days.reduce((sum, d) => sum + d.tokens, 0);
+      const daysScale = daysSum > 0 ? cycle.tokens / daysSum : 0;
+      const billedByDate = new Map(
+        cycle.days.map((d) => [d.date, d.tokens * daysScale]),
+      );
       billed = points.map(
-        (p) => billedByDate.get(bucketDate(p.bucketTimeUnixNano)) ?? 0,
+        (p) => billedByDate.get(bucketDateKey(p.bucketTimeUnixNano)) ?? 0,
       );
     } else if (billedCycle) {
       billed = points.map((p) => p.totalTokens * billedScale);
