@@ -255,9 +255,6 @@ func seedRemoteMCPEndpoint(t *testing.T, ctx context.Context, ti *testInstance, 
 	remoteServer = seedRemoteMCPServer(t, ctx, ti, projectID, upstreamURL, headers...)
 	mcpServerID, err := uuid.NewV7()
 	require.NoError(t, err)
-	// Remote-backed servers always carry a user_session_issuer per the
-	// mcp_servers_issuer_required_check constraint, so every seed is
-	// issuer-gated at serve time regardless of visibility.
 	issuerID := seedUserSessionIssuer(t, ctx, ti, projectID)
 	mcpServer, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
 		ID:                  mcpServerID,

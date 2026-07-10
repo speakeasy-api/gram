@@ -196,11 +196,8 @@ func TestServeMCP_PublicRemoteBackend_IssuerTokenForwardsUpstream(t *testing.T) 
 	require.NotEmpty(t, sessionID, "proxy must relay Mcp-Session-Id from upstream")
 }
 
-// Private remote servers always carry a user_session_issuer
-// (mcp_servers_private_remote_requires_issuer_check), which makes them
-// issuer-gated: the gate accepts only user-session JWTs, so a Gram API
-// key — even one in the server's own org — is rejected with an OAuth
-// challenge rather than falling through to the legacy identity-auth path.
+// The issuer gate accepts only user-session JWTs, so a Gram API key — even
+// one in the server's own org — is rejected with an OAuth challenge.
 func TestServeMCP_PrivateRemoteBackend_APIKeyRejectedWithChallenge(t *testing.T) {
 	t.Parallel()
 
@@ -626,9 +623,8 @@ func TestServeMCP_IssuerGatedRemoteBackend_HappyPath(t *testing.T) {
 
 // mintAccessTokenForSeededEndpoint resolves the (mcp_endpoint, mcp_server)
 // pair produced by seedRemoteMCPEndpoint into a ResolvedMcpEndpoint and mints
-// an issuer-gated bearer for it. Every remote-backed seed carries an issuer
-// (mcp_servers_issuer_required_check), so proxy-mechanics tests authenticate
-// with this token to get past the gate and reach the upstream stub.
+// an issuer-gated bearer for it, letting proxy-mechanics tests get past the
+// gate and reach the upstream stub.
 func mintAccessTokenForSeededEndpoint(
 	t *testing.T,
 	ctx context.Context,

@@ -50,8 +50,6 @@ func seedMcpServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projec
 		Url:           "https://test.example.com/mcp/" + uuid.NewString(),
 	})
 
-	// Remote-backed mcp_servers require a user_session_issuer in the same
-	// project (DB CHECK constraint), regardless of visibility.
 	issuer, err := usersessionsrepo.New(conn).CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{
 		ProjectID:          projectID,
 		Slug:               "usi-" + uuid.NewString()[:8],

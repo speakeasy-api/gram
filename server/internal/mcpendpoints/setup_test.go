@@ -226,8 +226,7 @@ func requireOopsCode(t *testing.T, err error, code oops.Code) {
 }
 
 // seedUserSessionIssuer inserts a user_session_issuers row in the given
-// project. Remote-backed mcp_servers require one (DB CHECK constraint)
-// regardless of visibility.
+// project.
 func seedUserSessionIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID) uuid.UUID {
 	t.Helper()
 

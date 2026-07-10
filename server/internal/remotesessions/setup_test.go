@@ -378,8 +378,6 @@ func seedMCPServerInOrg(t *testing.T, ctx context.Context, conn *pgxpool.Pool, o
 	})
 	require.NoError(t, err)
 
-	// A private remote MCP server requires a user_session_issuer (DB CHECK
-	// constraint); mint one owned by the same project.
 	issuerID := createUserSessionIssuerInProject(t, ctx, conn, project.ID, "usi-"+uuid.NewString()[:8])
 
 	server, err := mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
