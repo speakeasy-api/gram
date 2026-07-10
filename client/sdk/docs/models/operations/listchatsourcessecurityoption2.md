@@ -1,0 +1,17 @@
+# ListChatSourcesSecurityOption2
+
+## Example Usage
+
+```typescript
+import { ListChatSourcesSecurityOption2 } from "@gram/client/models/operations/listchatsources.js";
+
+let value: ListChatSourcesSecurityOption2 = {
+  chatSessionsTokenHeaderGramChatSession: "<value>",
+};
+```
+
+## Fields
+
+| Field                                    | Type     | Required           | Description |
+| ---------------------------------------- | -------- | ------------------ | ----------- |
+| `chatSessionsTokenHeaderGramChatSession` | _string_ | :heavy_check_mark: | N/A         |

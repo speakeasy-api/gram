@@ -1,3 +1,4 @@
+import { Page } from "@/components/page-layout";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Sheet,
@@ -14,11 +15,9 @@ import { resourceKindForScope, selectorMatches } from "@/hooks/useRBAC";
 import { useOrgRoutes } from "@/routes";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
-import { Column, Table } from "@speakeasy-api/moonshine";
+import { Badge, Button, Column, Table } from "@speakeasy-api/moonshine";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { useMemo, useState, ReactElement } from "react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@speakeasy-api/moonshine";
 
 function getInitials(name: string) {
   return name
@@ -192,17 +191,25 @@ function AccessBadge({
 }) {
   switch (level) {
     case "full":
-      return <Badge variant="default">All servers</Badge>;
+      return (
+        <Badge variant="neutral">
+          <Badge.Text>All servers</Badge.Text>
+        </Badge>
+      );
     case "server":
-      return <Badge variant="secondary">This server</Badge>;
+      return (
+        <Badge variant="neutral">
+          <Badge.Text>This server</Badge.Text>
+        </Badge>
+      );
     case "tools":
       return (
         <button type="button" onClick={onClick} className="cursor-pointer">
           <Badge
-            variant="outline"
+            variant="neutral"
             className="hover:bg-accent transition-colors"
           >
-            Specific tools &ensp;&rsaquo;
+            <Badge.Text>Specific tools &ensp;&rsaquo;</Badge.Text>
           </Badge>
         </button>
       );
@@ -398,97 +405,102 @@ export function MCPTeamAccessTab({
   ];
 
   return (
-    <div>
-      <div className="mb-4">
-        <Type variant="body" className="text-muted-foreground text-sm">
-          {memberAccess.length} team member
-          {memberAccess.length !== 1 ? "s" : ""} with access to this server
-        </Type>
-      </div>
-      <Table columns={columns}>
-        <Table.Header columns={columns} />
-        {memberAccess.length === 0 ? (
-          <Table.NoResultsMessage>
-            No team members have access to this server.
-          </Table.NoResultsMessage>
-        ) : (
-          <Table.Body
-            columns={columns}
-            data={memberAccess}
-            rowKey={(row) => row.member.id}
-          />
-        )}
-        <Table.Row>
-          <div className="border-border bg-muted/20 col-span-full border-t py-5 text-center">
-            <Type variant="body" className="text-muted-foreground text-sm">
-              Want to grant new members access?
-            </Type>
-            <div className="mt-2">
-              <orgRoutes.access.roles.Link>
-                <Button variant="tertiary" size="sm">
-                  <Button.Text>Configure Roles</Button.Text>
-                </Button>
-              </orgRoutes.access.roles.Link>
-            </div>
-          </div>
-        </Table.Row>
-      </Table>
-
-      <Sheet open={!!sheetData} onOpenChange={() => setSheetData(null)}>
-        <SheetContent className="sm:max-w-md">
-          {sheetData && (
-            <>
-              <SheetHeader>
-                <SheetTitle>{sheetData.scopeLabel} access</SheetTitle>
-                <SheetDescription>
-                  <span className="text-foreground font-medium">
-                    {sheetData.member.name}
-                  </span>{" "}
-                  can {sheetData.scopeLabel.toLowerCase()}{" "}
-                  {sheetData.toolNames.length} tool
-                  {sheetData.toolNames.length !== 1 ? "s" : ""} on this server
-                  via the{" "}
-                  <span className="text-foreground font-medium">
-                    {sheetData.roles.map((r) => r.name).join(", ")}
-                  </span>{" "}
-                  {sheetData.roles.length === 1 ? "role" : "roles"}.
-                </SheetDescription>
-              </SheetHeader>
-              <div className="flex-1 overflow-y-auto px-4 pb-4">
-                <div className="space-y-2">
-                  {sheetData.tools.length > 0 ? (
-                    sheetData.tools.map((tool, i) => (
-                      <ToolRow key={i} tool={tool} />
-                    ))
-                  ) : sheetData.toolNames.length > 0 ? (
-                    // No catalog available (mcp_servers-backed servers don't
-                    // expose tools through Gram). Surface the raw tool
-                    // identifiers from the grant selectors so the user can
-                    // at least see what they have access to.
-                    sheetData.toolNames.map((name) => (
-                      <div
-                        key={name}
-                        className="border-border rounded-lg border p-3"
-                      >
-                        <Type
-                          variant="body"
-                          className="font-mono text-sm font-medium"
-                        >
-                          {name}
-                        </Type>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="text-muted-foreground py-8 text-center text-sm">
-                      Could not resolve tool names from grants.
-                    </div>
-                  )}
-                </div>
+    <Page.Section>
+      <Page.Section.Title>Team access</Page.Section.Title>
+      <Page.Section.Body>
+        <div className="mb-4">
+          <Type variant="body" className="text-muted-foreground text-sm">
+            {memberAccess.length} team member
+            {memberAccess.length !== 1 ? "s" : ""} with access to this server
+          </Type>
+        </div>
+        <Table columns={columns}>
+          <Table.Header columns={columns} />
+          {memberAccess.length === 0 ? (
+            <Table.NoResultsMessage>
+              <div className="px-4 py-6 text-center">
+                No team members have access to this server.
               </div>
-            </>
+            </Table.NoResultsMessage>
+          ) : (
+            <Table.Body
+              columns={columns}
+              data={memberAccess}
+              rowKey={(row) => row.member.id}
+            />
           )}
-        </SheetContent>
-      </Sheet>
-    </div>
+          <Table.Row>
+            <div className="border-border bg-muted/20 col-span-full border-t py-5 text-center">
+              <Type variant="body" className="text-muted-foreground text-sm">
+                Want to grant new members access?
+              </Type>
+              <div className="mt-2">
+                <orgRoutes.access.roles.Link>
+                  <Button variant="primary" size="sm">
+                    <Button.Text>Configure Roles</Button.Text>
+                  </Button>
+                </orgRoutes.access.roles.Link>
+              </div>
+            </div>
+          </Table.Row>
+        </Table>
+
+        <Sheet open={!!sheetData} onOpenChange={() => setSheetData(null)}>
+          <SheetContent className="sm:max-w-md">
+            {sheetData && (
+              <>
+                <SheetHeader>
+                  <SheetTitle>{sheetData.scopeLabel} access</SheetTitle>
+                  <SheetDescription>
+                    <span className="text-foreground font-medium">
+                      {sheetData.member.name}
+                    </span>{" "}
+                    can {sheetData.scopeLabel.toLowerCase()}{" "}
+                    {sheetData.toolNames.length} tool
+                    {sheetData.toolNames.length !== 1 ? "s" : ""} on this server
+                    via the{" "}
+                    <span className="text-foreground font-medium">
+                      {sheetData.roles.map((r) => r.name).join(", ")}
+                    </span>{" "}
+                    {sheetData.roles.length === 1 ? "role" : "roles"}.
+                  </SheetDescription>
+                </SheetHeader>
+                <div className="flex-1 overflow-y-auto px-4 pb-4">
+                  <div className="space-y-2">
+                    {sheetData.tools.length > 0 ? (
+                      sheetData.tools.map((tool, i) => (
+                        <ToolRow key={i} tool={tool} />
+                      ))
+                    ) : sheetData.toolNames.length > 0 ? (
+                      // No catalog available (mcp_servers-backed servers don't
+                      // expose tools through Gram). Surface the raw tool
+                      // identifiers from the grant selectors so the user can
+                      // at least see what they have access to.
+                      sheetData.toolNames.map((name) => (
+                        <div
+                          key={name}
+                          className="border-border rounded-lg border p-3"
+                        >
+                          <Type
+                            variant="body"
+                            className="font-mono text-sm font-medium"
+                          >
+                            {name}
+                          </Type>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-muted-foreground py-8 text-center text-sm">
+                        Could not resolve tool names from grants.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+          </SheetContent>
+        </Sheet>
+      </Page.Section.Body>
+    </Page.Section>
   );
 }

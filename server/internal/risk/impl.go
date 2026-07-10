@@ -55,6 +55,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -117,7 +118,7 @@ type Service struct {
 	// policy-eval workbench (EvaluatePromptGuardrail). It is the same LLM judge
 	// the realtime scanner uses. Optional: when nil the eval endpoint returns
 	// un-matched verdicts (judge unavailable).
-	promptJudge ra.PromptJudge
+	promptJudge promptpolicy.Evaluator
 }
 
 var _ chat.MessageObserver = (*Service)(nil)
@@ -177,7 +178,7 @@ func NewService(
 	flags feature.Provider,
 	celEng *celenv.Engine,
 	builtinPresets *presetlib.Library,
-	promptJudge ra.PromptJudge,
+	promptJudge promptpolicy.Evaluator,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("risk"))
 
@@ -1060,11 +1061,18 @@ func (s *Service) listRiskResultsRaw(ctx context.Context, payload *gen.ListRiskR
 		}
 		return s.listResultsByChat(ctx, *authCtx.ProjectID, *payload.ChatID, cursor, pageSize, totalCount)
 	}
-	// The by-policy listing includes disabled policies (historical findings),
-	// so its count is computed inside listResultsByPolicy with the same
-	// semantics rather than from the enabled-only project aggregate.
+	// A policy filter is applied alongside the other filters rather than
+	// short-circuiting to a separate listing, so combinations like
+	// policy_id + rule_id are honored. When set, the count is scoped to that
+	// policy (and includes disabled policies for historical findings) to match
+	// the list query's semantics.
+	var policyIDInput *string
 	if payload.PolicyID != nil && *payload.PolicyID != "" {
-		return s.listResultsByPolicy(ctx, *authCtx.ProjectID, *payload.PolicyID, cursor, pageSize)
+		policyIDInput = payload.PolicyID
+	}
+	policyID, err := conv.PtrToNullUUID(policyIDInput)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid policy ID")
 	}
 
 	category := ""
@@ -1091,11 +1099,20 @@ func (s *Service) listRiskResultsRaw(ctx context.Context, payload *gen.ListRiskR
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid to").LogError(ctx, s.logger)
 	}
-	totalCount, err := s.repo.CountAllFindings(ctx, *authCtx.ProjectID)
+
+	var totalCount int64
+	if policyID.Valid {
+		totalCount, err = s.repo.CountRiskResultsByProjectAndPolicy(ctx, repo.CountRiskResultsByProjectAndPolicyParams{
+			ProjectID:    *authCtx.ProjectID,
+			RiskPolicyID: policyID.UUID,
+		})
+	} else {
+		totalCount, err = s.repo.CountAllFindings(ctx, *authCtx.ProjectID)
+	}
 	if err != nil {
 		totalCount = 0
 	}
-	return s.listResultsByProject(ctx, *authCtx.ProjectID, cursor, pageSize, totalCount, category, ruleID, userID, uniqueMatch, fromTime, toTime)
+	return s.listResultsByProject(ctx, *authCtx.ProjectID, cursor, pageSize, totalCount, policyID, category, ruleID, userID, uniqueMatch, fromTime, toTime)
 }
 
 func parseOptionalTimestamptz(raw *string) (pgtype.Timestamptz, error) {
@@ -1549,45 +1566,11 @@ func (s *Service) listResultsByChat(ctx context.Context, projectID uuid.UUID, ra
 	return s.paginateResults(results, nextCursor, pageSize, totalCount), nil
 }
 
-func (s *Service) listResultsByPolicy(ctx context.Context, projectID uuid.UUID, rawPolicyID string, cursor *riskResultsCursor, pageSize int) (*gen.ListRiskResultsResult, error) {
-	policyID, err := uuid.Parse(rawPolicyID)
-	if err != nil {
-		return nil, oops.C(oops.CodeInvalid)
-	}
-	totalCount, err := s.repo.CountRiskResultsByProjectAndPolicy(ctx, repo.CountRiskResultsByProjectAndPolicyParams{
-		ProjectID:    projectID,
-		RiskPolicyID: policyID,
-	})
-	if err != nil {
-		totalCount = 0
-	}
-	cursorCreatedAt, cursorID := cursorToParams(cursor)
-	rows, err := s.repo.ListRiskResultsByProjectAndPolicy(ctx, repo.ListRiskResultsByProjectAndPolicyParams{
-		ProjectID:              projectID,
-		RiskPolicyID:           policyID,
-		CursorMessageCreatedAt: cursorCreatedAt,
-		CursorID:               cursorID,
-		PageLimit:              conv.SafeInt32(pageSize + 1),
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list risk results by policy").LogError(ctx, s.logger)
-	}
-	results := make([]*types.RiskResult, 0, len(rows))
-	var nextCursor *riskResultsCursor
-	for i, row := range rows {
-		chatID := row.ChatID.String()
-		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.BlockID, row.ChatMessageID, &chatID, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.Spans, row.MessageCreatedAt))
-		if i == pageSize {
-			nextCursor = &riskResultsCursor{MessageCreatedAt: row.MessageCreatedAt.Time, ID: row.ID}
-		}
-	}
-	return s.paginateResults(results, nextCursor, pageSize, totalCount), nil
-}
-
-func (s *Service) listResultsByProject(ctx context.Context, projectID uuid.UUID, cursor *riskResultsCursor, pageSize int, totalCount int64, category string, ruleID string, userID string, uniqueMatch bool, fromTime, toTime pgtype.Timestamptz) (*gen.ListRiskResultsResult, error) {
+func (s *Service) listResultsByProject(ctx context.Context, projectID uuid.UUID, cursor *riskResultsCursor, pageSize int, totalCount int64, policyID uuid.NullUUID, category string, ruleID string, userID string, uniqueMatch bool, fromTime, toTime pgtype.Timestamptz) (*gen.ListRiskResultsResult, error) {
 	cursorCreatedAt, cursorID := cursorToParams(cursor)
 	rows, err := s.repo.ListRiskResultsByProjectFound(ctx, repo.ListRiskResultsByProjectFoundParams{
 		ProjectID:              projectID,
+		PolicyID:               policyID,
 		FromTime:               fromTime,
 		ToTime:                 toTime,
 		Category:               category,
@@ -2063,7 +2046,7 @@ func (s *Service) SuggestCustomDetectionRule(ctx context.Context, payload *gen.S
 		return heuristicCustomRuleSuggestion(prompt, payload.ExistingRuleIds), nil
 	}
 
-	suggestion, err := s.suggestCustomRuleViaLLM(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), prompt, payload.ExistingRuleIds)
+	suggestion, err := s.suggestCustomRuleViaLLM(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID, conv.PtrValOr(authCtx.Email, ""), prompt, payload.ExistingRuleIds)
 	if err != nil {
 		s.logger.WarnContext(ctx, "openrouter suggestion failed; returning heuristic suggestion", attr.SlogError(err))
 		return heuristicCustomRuleSuggestion(prompt, payload.ExistingRuleIds), nil
@@ -2215,7 +2198,7 @@ func validateScopeExpr(eng *celenv.Engine, expr *string) error {
 	return validateExpr(eng, *expr)
 }
 
-func (s *Service) suggestCustomRuleViaLLM(ctx context.Context, orgID, projectID, userPrompt string, existingIDs []string) (*gen.SuggestCustomDetectionRuleResult, error) {
+func (s *Service) suggestCustomRuleViaLLM(ctx context.Context, orgID, projectID, userID, userEmail, userPrompt string, existingIDs []string) (*gen.SuggestCustomDetectionRuleResult, error) {
 	systemPrompt := `You are a security-rules assistant for a runtime risk detection product.
 
 Given a single natural-language description of what an operator wants to detect, return a JSON object the dashboard uses to prefill a "create custom detection rule" form. The rule matches an agent message via a CEL (Common Expression Language) boolean expression in "detection_expr".
@@ -2289,15 +2272,18 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 
 	temperature := 0.2
 	response, err := s.completionClient.GetObjectCompletion(suggestCtx, openrouter.ObjectCompletionRequest{
-		OrgID:          orgID,
-		ProjectID:      projectID,
-		Model:          "",
-		SystemPrompt:   systemPrompt,
-		Prompt:         userMessage,
-		Temperature:    &temperature,
-		UsageSource:    billing.ModelUsageSourceGram,
-		UserID:         "",
+		OrgID:        orgID,
+		ProjectID:    projectID,
+		Model:        "",
+		SystemPrompt: systemPrompt,
+		Prompt:       userMessage,
+		Temperature:  &temperature,
+		UsageSource:  billing.ModelUsageSourceGram,
+		// The admin who asked for the suggestion — this completion is
+		// user-initiated, so usage attributes to them, not "(unset)". (cubic)
+		UserID:         userID,
 		ExternalUserID: "",
+		UserEmail:      userEmail,
 		HTTPMetadata:   nil,
 		JSONSchema:     &jsonSchema,
 	})
@@ -2423,7 +2409,7 @@ func (s *Service) EvaluatePromptGuardrail(ctx context.Context, payload *gen.Eval
 	if err != nil {
 		return nil, err
 	}
-	cfg := ra.ParseJudgeConfig(modelConfig)
+	cfg := promptpolicy.ParseConfig(modelConfig)
 
 	return s.evaluateGuardrailForChat(
 		ctx,
@@ -2444,7 +2430,7 @@ func (s *Service) evaluateGuardrailForChat(
 	orgID string,
 	chatID uuid.UUID,
 	prompt string,
-	cfg ra.JudgeConfig,
+	cfg promptpolicy.Config,
 	messageTypes []string,
 	includeCEL string,
 	exemptCEL string,
@@ -2802,7 +2788,7 @@ func (s *Service) testPromptInjectionRule(ctx context.Context, orgID, projectID,
 	// A rule-test preview runs the deterministic, free L0 heuristics only; the
 	// billable LLM-judge L1 engine is not invoked on a test click (l1Enabled=false),
 	// so the structured message is unused here and carries just the sample text.
-	findings, err := s.piScanner.Scan(ctx, text, orgID, projectID, judgemessage.New(message.User, "", text), false)
+	findings, err := s.piScanner.Scan(ctx, text, orgID, projectID, "", judgemessage.New(message.User, "", text), false)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "run prompt-injection scanner").LogError(ctx, s.logger)
 	}
@@ -3124,8 +3110,11 @@ func (s *Service) fallbackPolicyName(sources, customRuleTitles []string, action 
 	}
 
 	actionLabel := "Scanner"
-	if action == "block" {
+	switch action {
+	case "block":
 		actionLabel = "Blocker"
+	case "warn":
+		actionLabel = "Warner"
 	}
 
 	return strings.Join(parts, " & ") + " " + actionLabel
@@ -3191,10 +3180,10 @@ func (s *Service) generatePromptPolicyName(ctx context.Context, orgID, projectID
 
 func validateAction(action string) error {
 	switch action {
-	case "flag", "block":
+	case "flag", "block", "warn":
 		return nil
 	default:
-		return oops.E(oops.CodeInvalid, nil, "action must be one of: flag, block")
+		return oops.E(oops.CodeInvalid, nil, "action must be one of: flag, warn, block")
 	}
 }
 
@@ -3210,7 +3199,9 @@ func validateSources(sources []string) error {
 }
 
 func validateSourceAction(sources []string, action string) error {
-	if action != "block" {
+	// warn (challenge) can end in a block, so it is subject to the same
+	// flag-only-source constraint as block: only "flag" is unconstrained.
+	if action == "flag" {
 		return nil
 	}
 	for _, src := range []string{shadowmcp.SourceDestructiveTool, ra.SourceCLIDestructive, ra.SourceAccountIdentity} {

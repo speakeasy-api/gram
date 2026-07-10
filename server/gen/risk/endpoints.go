@@ -33,6 +33,9 @@ type Endpoints struct {
 	GetRiskRuleBreakdown           goa.Endpoint
 	GetRiskPolicyStatus            goa.Endpoint
 	CreateRiskPolicyBypassRequest  goa.Endpoint
+	AcknowledgeRiskPolicyChallenge goa.Endpoint
+	GetRiskPolicyChallenge         goa.Endpoint
+	DeclineRiskPolicyChallenge     goa.Endpoint
 	GetRiskBlock                   goa.Endpoint
 	SubmitRiskBlockFeedback        goa.Endpoint
 	ListRiskPolicyBypassRequests   goa.Endpoint
@@ -79,6 +82,9 @@ func NewEndpoints(s Service) *Endpoints {
 		GetRiskRuleBreakdown:           NewGetRiskRuleBreakdownEndpoint(s, a.APIKeyAuth),
 		GetRiskPolicyStatus:            NewGetRiskPolicyStatusEndpoint(s, a.APIKeyAuth),
 		CreateRiskPolicyBypassRequest:  NewCreateRiskPolicyBypassRequestEndpoint(s, a.APIKeyAuth),
+		AcknowledgeRiskPolicyChallenge: NewAcknowledgeRiskPolicyChallengeEndpoint(s, a.APIKeyAuth),
+		GetRiskPolicyChallenge:         NewGetRiskPolicyChallengeEndpoint(s, a.APIKeyAuth),
+		DeclineRiskPolicyChallenge:     NewDeclineRiskPolicyChallengeEndpoint(s, a.APIKeyAuth),
 		GetRiskBlock:                   NewGetRiskBlockEndpoint(s, a.APIKeyAuth),
 		SubmitRiskBlockFeedback:        NewSubmitRiskBlockFeedbackEndpoint(s, a.APIKeyAuth),
 		ListRiskPolicyBypassRequests:   NewListRiskPolicyBypassRequestsEndpoint(s, a.APIKeyAuth),
@@ -123,6 +129,9 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetRiskRuleBreakdown = m(e.GetRiskRuleBreakdown)
 	e.GetRiskPolicyStatus = m(e.GetRiskPolicyStatus)
 	e.CreateRiskPolicyBypassRequest = m(e.CreateRiskPolicyBypassRequest)
+	e.AcknowledgeRiskPolicyChallenge = m(e.AcknowledgeRiskPolicyChallenge)
+	e.GetRiskPolicyChallenge = m(e.GetRiskPolicyChallenge)
+	e.DeclineRiskPolicyChallenge = m(e.DeclineRiskPolicyChallenge)
 	e.GetRiskBlock = m(e.GetRiskBlock)
 	e.SubmitRiskBlockFeedback = m(e.SubmitRiskBlockFeedback)
 	e.ListRiskPolicyBypassRequests = m(e.ListRiskPolicyBypassRequests)
@@ -1111,6 +1120,75 @@ func NewCreateRiskPolicyBypassRequestEndpoint(s Service, authAPIKeyFn security.A
 			return nil, err
 		}
 		return s.CreateRiskPolicyBypassRequest(ctx, p)
+	}
+}
+
+// NewAcknowledgeRiskPolicyChallengeEndpoint returns an endpoint function that
+// calls the method "acknowledgeRiskPolicyChallenge" of service "risk".
+func NewAcknowledgeRiskPolicyChallengeEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*AcknowledgeRiskPolicyChallengePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.AcknowledgeRiskPolicyChallenge(ctx, p)
+	}
+}
+
+// NewGetRiskPolicyChallengeEndpoint returns an endpoint function that calls
+// the method "getRiskPolicyChallenge" of service "risk".
+func NewGetRiskPolicyChallengeEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetRiskPolicyChallengePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetRiskPolicyChallenge(ctx, p)
+	}
+}
+
+// NewDeclineRiskPolicyChallengeEndpoint returns an endpoint function that
+// calls the method "declineRiskPolicyChallenge" of service "risk".
+func NewDeclineRiskPolicyChallengeEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DeclineRiskPolicyChallengePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.DeclineRiskPolicyChallenge(ctx, p)
 	}
 }
 

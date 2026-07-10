@@ -13,6 +13,7 @@ const config: KnipConfig = {
     // Global ambient declarations (FIXME<M> escape-hatch + JSX namespace
     // re-export). No import sites by design.
     "src/lib.d.ts",
+    "src/sdk/**/*",
   ],
   ignoreDependencies: [
     // Consumed via CSS @import inside @speakeasy-api/moonshine; knip's

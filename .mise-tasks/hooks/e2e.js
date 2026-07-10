@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node
+#!/usr/bin/env -S node --import tsx
 //MISE description="Run provider hook E2E checks against a local Gram server"
 //MISE dir="{{ config_root }}"
 //USAGE flag "--project <slug>" default="default" help="Project slug to test against."
@@ -15,9 +15,9 @@ import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { intro, log, outro } from "@clack/prompts";
-import { GramCore } from "@gram/client/core.js";
-import { authInfo } from "@gram/client/funcs/authInfo.js";
-import { keysCreate } from "@gram/client/funcs/keysCreate.js";
+import { GramCore } from "#gram/client/core.js";
+import { authInfo } from "#gram/client/funcs/authInfo.js";
+import { keysCreate } from "#gram/client/funcs/keysCreate.js";
 const VALID_PROVIDERS = new Set(["claude", "cursor", "codex"]);
 const VALID_SUITES = new Set(["capture", "shadow-mcp", "ratchet"]);
 const SOURCE_ALIASES = {

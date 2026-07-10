@@ -27,6 +27,8 @@ import (
 // Rejects: "1bad", ".leading.dot", "path with spaces", "semi;colon", "@@double", "trailing.", "double..dot"
 var validJSONPath = regexp.MustCompile(`^@?[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)*$`)
 
+const MaxClaudePromptCorrelationEditDistanceBytes = 65536
+
 func userIdentifierExpr(col string) string {
 	return "if(telemetry_logs." + col + " != '', telemetry_logs." + col + ", telemetry_logs.user_email)"
 }
@@ -118,6 +120,85 @@ func resolveAttributeColumn(path string) string {
 	default:
 		return fmt.Sprintf("toString(attributes.%s)", path)
 	}
+}
+
+// toolUsageHTTPStatusPath is the attribute path the Tool Logs UI uses to filter by
+// HTTP response status ("Non-2xx responses" etc.). A trace's status is a per-trace
+// aggregate (the max status code across all of the trace's rows), so this filter must
+// be applied to the aggregated normalized_traces column rather than pushed down to
+// individual telemetry_logs rows. Pushed down, a "!= 200" predicate is satisfied by any
+// status-less row of an otherwise-successful trace (e.g. a hook row that carries no
+// http.response.status_code, whose stringified attribute is empty and so is trivially
+// unequal to "200"), leaking the whole trace back into the result set after grouping
+// where it shows up as a success/200. See DNO-447.
+const toolUsageHTTPStatusPath = "http.response.status_code"
+
+// toolUsageStatusPredicate builds a trace-level predicate on the aggregated
+// http_status_code column (Nullable(Int32)) for an http.response.status_code filter.
+// Comparisons are numeric so they match the max-status-code aggregation the query uses
+// for the trace's status. Returns nil when the filter carries no usable value (numeric
+// ops whose values don't parse as integers are skipped rather than erroring the query).
+func toolUsageStatusPredicate(f AttributeFilter) squirrel.Sqlizer {
+	const col = "http_status_code"
+	switch f.Op {
+	case "exists":
+		return squirrel.Expr(col + " IS NOT NULL")
+	case "not_exists":
+		return squirrel.Expr(col + " IS NULL")
+	case "contains":
+		if len(f.Values) == 0 {
+			return nil
+		}
+		return squirrel.Expr("position(toString("+col+"), ?) > 0", f.Values[0])
+	}
+
+	// Remaining ops (eq, not_eq, in, and the default) compare numerically.
+	codes := make([]int32, 0, len(f.Values))
+	for _, v := range f.Values {
+		n, err := strconv.Atoi(strings.TrimSpace(v))
+		if err != nil {
+			continue
+		}
+		codes = append(codes, int32(n)) //nolint:gosec // HTTP status codes are small
+	}
+	if len(codes) == 0 {
+		return nil
+	}
+	switch f.Op {
+	case "not_eq":
+		return squirrel.Expr(col+" != ?", codes[0])
+	case "in":
+		return squirrel.Eq{col: codes}
+	default: // eq and fallback
+		return squirrel.Expr(col+" = ?", codes[0])
+	}
+}
+
+// toolUsageOutcomePredicate builds a trace-level predicate for the first-class Tool Logs
+// "Status" filter. It ORs together the selected outcomes, evaluated against the
+// aggregated per-trace hook_status (Nullable String) and http_status_code (Nullable
+// Int32) columns projected by both normalized_traces paths. The mapping mirrors the
+// dashboard badge logic (getStatusConfig): hook_status wins when present, otherwise the
+// HTTP status code decides. Unknown/empty selections yield nil so the query is
+// unaffected.
+func toolUsageOutcomePredicate(statuses []string) squirrel.Sqlizer {
+	or := squirrel.Or{}
+	for _, status := range statuses {
+		switch status {
+		case "blocked":
+			or = append(or, squirrel.Expr("hook_status = 'blocked'"))
+		case "failure", "error":
+			or = append(or, squirrel.Expr("(hook_status = 'failure' OR (hook_status IS NULL AND http_status_code >= 400))"))
+		case "success":
+			or = append(or, squirrel.Expr("(hook_status = 'success' OR (hook_status IS NULL AND http_status_code >= 200 AND http_status_code < 400))"))
+		case "pending":
+			or = append(or, squirrel.Expr("hook_status = 'pending'"))
+		}
+	}
+	if len(or) == 0 {
+		return nil
+	}
+	return or
 }
 
 // sq is the squirrel statement builder pre-configured for ClickHouse (uses ? placeholders).
@@ -2071,7 +2152,8 @@ type ListToolUsageTracesParams struct {
 	ShadowServerNames  []string
 	UserFilters        []ToolUsageUserFilter
 	HookSources        []string
-	AccountType        string // Optional filter - personal = exactly personal; team = not personal (includes unclassified)
+	AccountType        string   // Optional filter - personal = exactly personal; team = not personal (includes unclassified)
+	Statuses           []string // Optional trace-outcome filter: error, success, blocked, pending. Empty means all.
 	Query              string
 	Filters            []AttributeFilter
 	SortOrder          string
@@ -2389,6 +2471,23 @@ func (q *Queries) ListToolUsageTraces(ctx context.Context, arg ListToolUsageTrac
 			})
 		}
 		sb = sb.Where(userFilters)
+	}
+
+	// http.response.status_code filters are applied here, against the aggregated
+	// per-trace http_status_code column, instead of being pushed down to raw rows in
+	// toolUsageTraceRowsCTE. See toolUsageHTTPStatusPath for why.
+	for _, filter := range arg.Filters {
+		if filter.Path != toolUsageHTTPStatusPath || !validJSONPath.MatchString(filter.Path) {
+			continue
+		}
+		if pred := toolUsageStatusPredicate(filter); pred != nil {
+			sb = sb.Where(pred)
+		}
+	}
+
+	// First-class Status filter, applied to the aggregated per-trace outcome columns.
+	if pred := toolUsageOutcomePredicate(arg.Statuses); pred != nil {
+		sb = sb.Where(pred)
 	}
 
 	if arg.CursorID != "" {
@@ -3274,6 +3373,12 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 
 	for _, filter := range arg.Filters {
 		if !validJSONPath.MatchString(filter.Path) {
+			continue
+		}
+		// http.response.status_code is a per-trace status, applied at the aggregated
+		// trace level in ListToolUsageTraces — never pushed down to raw rows here. See
+		// toolUsageHTTPStatusPath.
+		if filter.Path == toolUsageHTTPStatusPath {
 			continue
 		}
 		pred := filter.Predicate(resolveAttributeColumn(filter.Path))
@@ -4834,12 +4939,16 @@ func (q *Queries) ListClaudeUserPromptCandidatesForCorrelation(ctx context.Conte
 	if arg.MessagePrompt == "" {
 		return nil, nil
 	}
+	if len(arg.MessagePrompt) > MaxClaudePromptCorrelationEditDistanceBytes {
+		return nil, nil
+	}
 
 	ctx = clickhouse.Context(ctx, clickhouse.WithParameters(clickhouse.Parameters{
 		"gram_project_id":               arg.GramProjectID,
 		"gram_chat_id":                  arg.GramChatID,
 		"session_id":                    arg.SessionID,
 		"message_prompt_b64":            base64.StdEncoding.EncodeToString([]byte(arg.MessagePrompt)),
+		"max_edit_distance_bytes":       strconv.Itoa(MaxClaudePromptCorrelationEditDistanceBytes),
 		"message_time_unix_nano":        strconv.FormatInt(arg.MessageTimeUnixNano, 10),
 		"after_event_sequence":          strconv.FormatInt(arg.AfterEventSequence, 10),
 		"after_event_time_unix_nano":    strconv.FormatInt(arg.AfterEventTimeUnixNano, 10),
@@ -4848,9 +4957,10 @@ func (q *Queries) ListClaudeUserPromptCandidatesForCorrelation(ctx context.Conte
 		"negative_max_time_delta_nanos": strconv.FormatInt(-arg.MaxTimeDeltaNanos, 10),
 	}))
 
+	normalizedPromptExpr := "replaceRegexpAll(trimBoth(toString(attributes.prompt)), '\\\\s+', ' ')"
 	rawEvents := sq.Select(
 		"toString(attributes.prompt.id) AS prompt_id",
-		"replaceRegexpAll(trimBoth(toString(attributes.prompt)), '\\\\s+', ' ') AS prompt",
+		normalizedPromptExpr+" AS prompt",
 		"toInt64OrZero(toString(attributes.event.sequence)) AS event_sequence",
 		"time_unix_nano",
 	).
@@ -4861,6 +4971,7 @@ func (q *Queries) ListClaudeUserPromptCandidatesForCorrelation(ctx context.Conte
 		Where("toString(attributes.event.name) = 'user_prompt'").
 		Where("toString(attributes.prompt.id) != ''").
 		Where("toString(attributes.prompt) != ''").
+		Where("length(" + normalizedPromptExpr + ") <= {max_edit_distance_bytes:UInt64}").
 		Where(squirrel.Or{
 			squirrel.Expr("event_sequence > {after_event_sequence:Int64}"),
 			squirrel.Expr(`(
@@ -4993,6 +5104,24 @@ type GetTokensUnderManagementParams struct {
 	ProjectIDs    []string
 	StartUnixNano int64
 	EndUnixNano   int64
+	// BilledHookSources restricts the token sums to chats consumed through
+	// these surfaces (billing.ModelUsageSources). Rows aggregated before the
+	// hook_source dimension existed carry '' and are grandfathered as billed
+	// — sealed cycles beyond the migration's rewrite window keep their
+	// invoiced totals. Empty means no source scoping.
+	BilledHookSources []string
+}
+
+// billedHookSourceFilter scopes a chat_token_summaries read to the billed
+// completion surfaces, grandfathering pre-dimension rows (”).
+func billedHookSourceFilter(sb squirrel.SelectBuilder, sources []string) squirrel.SelectBuilder {
+	if len(sources) == 0 {
+		return sb
+	}
+	return sb.Where(squirrel.Or{
+		squirrel.Eq{"hook_source": sources},
+		squirrel.Eq{"hook_source": ""},
+	})
 }
 
 // TumDayBucket is one UTC day's worth of tokens under management.
@@ -5045,6 +5174,9 @@ func (q *Queries) GetTokensUnderManagementByDay(ctx context.Context, arg GetToke
 		Where(squirrel.Expr("chat_id IN ("+storedChatsSQL+")", storedChatsArgs...)).
 		GroupBy("time_bucket").
 		OrderBy("time_bucket")
+	// The token sum is source-scoped; the stored-chats qualification above is
+	// not — stored evidence is chat-level, whatever surface recorded it.
+	sb = billedHookSourceFilter(sb, arg.BilledHookSources)
 
 	query, args, err := sb.ToSql()
 	if err != nil {
@@ -5062,6 +5194,287 @@ func (q *Queries) GetTokensUnderManagementByDay(ctx context.Context, arg GetToke
 		var bucket TumDayBucket
 		if err := rows.ScanStruct(&bucket); err != nil {
 			return nil, fmt.Errorf("scanning tokens under management day row: %w", err)
+		}
+		buckets = append(buckets, bucket)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return buckets, nil
+}
+
+// billedStoredChatsSubquery builds the stored-session qualification subquery
+// on chat_token_summaries — the same rule the billed totals apply, so every
+// dimensioned read below describes exactly the billed population.
+func billedStoredChatsSubquery(arg GetTokensUnderManagementParams) (string, []any, error) {
+	sb := sq.Select("DISTINCT chat_id").
+		From("chat_token_summaries").
+		Where(squirrel.Eq{"gram_project_id": arg.ProjectIDs}).
+		Where("time_bucket >= toStartOfDay(fromUnixTimestamp64Nano(?))", arg.StartUnixNano).
+		Where("time_bucket < fromUnixTimestamp64Nano(?)", arg.EndUnixNano).
+		Where("chat_id != ''").
+		Where("stored_event_count > 0")
+	sql, args, err := sb.ToSql()
+	if err != nil {
+		return "", nil, fmt.Errorf("building tum stored chats subquery: %w", err)
+	}
+	return sql, args, nil
+}
+
+// tumBreakdownBase applies the shared window, qualification, and source
+// scoping for reads over tum_breakdown_summaries.
+func tumBreakdownBase(sb squirrel.SelectBuilder, arg GetTokensUnderManagementParams) (squirrel.SelectBuilder, error) {
+	storedChatsSQL, storedChatsArgs, err := billedStoredChatsSubquery(arg)
+	if err != nil {
+		return sb, err
+	}
+	sb = sb.
+		From("tum_breakdown_summaries").
+		Where(squirrel.Eq{"gram_project_id": arg.ProjectIDs}).
+		Where("time_bucket >= toStartOfDay(fromUnixTimestamp64Nano(?))", arg.StartUnixNano).
+		Where("time_bucket < fromUnixTimestamp64Nano(?)", arg.EndUnixNano).
+		Where(squirrel.Expr("chat_id IN ("+storedChatsSQL+")", storedChatsArgs...))
+	return billedHookSourceFilter(sb, arg.BilledHookSources), nil
+}
+
+// TumBreakdownDayBucket is one UTC day of billed tokens split
+// by type.
+type TumBreakdownDayBucket struct {
+	Day          time.Time `ch:"time_bucket"`
+	InputTokens  int64     `ch:"input_tokens"`
+	OutputTokens int64     `ch:"output_tokens"`
+	TotalTokens  int64     `ch:"sum_total_tokens"`
+}
+
+// GetTumBreakdownTotalsByDay sums the billed completion token split per
+// UTC day, qualified and source-scoped identically to the billed totals.
+// Days without usage are omitted (callers gap-fill).
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) GetTumBreakdownTotalsByDay(ctx context.Context, arg GetTokensUnderManagementParams) ([]TumBreakdownDayBucket, error) {
+	if len(arg.ProjectIDs) == 0 {
+		return nil, nil
+	}
+
+	// The total alias must NOT be "total_tokens": ClickHouse lets a SELECT
+	// alias shadow the source column (ILLEGAL_AGGREGATION).
+	sb, err := tumBreakdownBase(sq.Select(
+		"time_bucket",
+		"sum(input_tokens) AS input_tokens",
+		"sum(output_tokens) AS output_tokens",
+		"sum(total_tokens) AS sum_total_tokens",
+	), arg)
+	if err != nil {
+		return nil, err
+	}
+	sb = sb.GroupBy("time_bucket").OrderBy("time_bucket")
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building tum breakdown totals query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var buckets []TumBreakdownDayBucket
+	for rows.Next() {
+		var bucket TumBreakdownDayBucket
+		if err := rows.ScanStruct(&bucket); err != nil {
+			return nil, fmt.Errorf("scanning tum breakdown totals row: %w", err)
+		}
+		buckets = append(buckets, bucket)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return buckets, nil
+}
+
+// riskAnalysisRowPredicate classifies a billed row as the platform's own
+// risk-policy analysis inference — the metered unit of the enterprise TUM
+// contracts. Declared rows carry the dedicated source
+// (billing.ModelUsageSourceRiskAnalysis); the second clause grandfathers
+// rows emitted before that source existed, fingerprinted as internal
+// inference: gram/” source with the nil chat id (background workers run
+// completions outside any stored chat). Other internal nil-chat inference
+// (title generation, chat resolutions, memory) rides along under the same
+// clause — a deliberate simplification, it is a rounding error next to the
+// judges and is platform-side analysis either way.
+const riskAnalysisRowPredicate = "(hook_source = 'risk-analysis' OR (hook_source IN ('gram', '') AND chat_id = '00000000-0000-0000-0000-000000000000'))"
+
+// tumBreakdownDim describes one billing-page breakdown dimension: the
+// grouping expression over tum_breakdown_summaries, plus an optional row
+// filter for dimensions that slice the billed population (the two model
+// sections) rather than partition it by a column.
+type tumBreakdownDim struct {
+	expr   string
+	filter string
+}
+
+// tumBreakdownDimExprs maps the billing page's breakdown dimensions to
+// their tum_breakdown_summaries expressions. Roles are multi-valued: a
+// session's tokens count once under each held role, so role rows overlap.
+// The model dimension is split in two: risk_analysis_model covers the
+// platform's scanning inference and completion_model covers user-facing
+// completion surfaces — together they partition the billed population.
+var tumBreakdownDimExprs = map[string]tumBreakdownDim{
+	"hook_source":         {expr: "hook_source", filter: ""},
+	"risk_analysis_model": {expr: "model", filter: riskAnalysisRowPredicate},
+	"completion_model":    {expr: "model", filter: "NOT " + riskAnalysisRowPredicate},
+	// email is plumbed but NOT in the service's tumBreakdownDims: a per-user
+	// cut of billed usage (which now includes scanned-user attribution of
+	// risk-analysis inference) is deliberately not exposed on the billing
+	// page yet.
+	"email":         {expr: "user_email", filter: ""},
+	"division_name": {expr: "division_name", filter: ""},
+	"role":          {expr: "arrayJoin(roles)", filter: ""},
+}
+
+// TumBreakdownDimDayBucket is one (UTC day, dimension value) slice of
+// billed tokens.
+type TumBreakdownDimDayBucket struct {
+	Day    time.Time `ch:"time_bucket"`
+	Value  string    `ch:"dim_value"`
+	Tokens int64     `ch:"tokens"`
+}
+
+// GetTumBreakdownDimByDay returns the billed daily token series per value
+// of one breakdown dimension, qualified and source-scoped identically to the
+// billed totals so the slices sum to them exactly (except the multi-valued
+// role dimension, whose rows overlap).
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) GetTumBreakdownDimByDay(ctx context.Context, arg GetTokensUnderManagementParams, dimension string) ([]TumBreakdownDimDayBucket, error) {
+	if len(arg.ProjectIDs) == 0 {
+		return nil, nil
+	}
+	dim, ok := tumBreakdownDimExprs[dimension]
+	if !ok {
+		return nil, fmt.Errorf("unsupported tum breakdown dimension: %q", dimension)
+	}
+
+	sb, err := tumBreakdownBase(sq.Select(
+		"time_bucket",
+		dim.expr+" AS dim_value",
+		"sum(total_tokens) AS tokens",
+	), arg)
+	if err != nil {
+		return nil, err
+	}
+	if dim.filter != "" {
+		sb = sb.Where(dim.filter)
+	}
+	sb = sb.GroupBy("time_bucket", "dim_value").OrderBy("time_bucket", "dim_value")
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building tum breakdown dimension query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var buckets []TumBreakdownDimDayBucket
+	for rows.Next() {
+		var bucket TumBreakdownDimDayBucket
+		if err := rows.ScanStruct(&bucket); err != nil {
+			return nil, fmt.Errorf("scanning tum breakdown dimension row: %w", err)
+		}
+		buckets = append(buckets, bucket)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return buckets, nil
+}
+
+// GetRiskTokensParams contains the parameters for the per-day token split by
+// risk involvement. RiskyChatIDs is the set of chats (resolved from Postgres
+// risk findings) whose tokens count as risky.
+type GetRiskTokensParams struct {
+	ProjectIDs    []string
+	RiskyChatIDs  []string
+	StartUnixNano int64
+	EndUnixNano   int64
+	// HookSources restricts the risk-token reads to chats from these sources
+	// (billing.ModelUsageSources), grandfathering '' rows aggregated before
+	// chat_token_summaries had a hook_source dimension — matching
+	// GetTokensUnderManagementByDay so the risk split and the billed totals
+	// describe the same population. Empty means no source scoping.
+	HookSources []string
+}
+
+// RiskTokensDayBucket is one UTC day of token usage split into risky vs total.
+type RiskTokensDayBucket struct {
+	Day         time.Time `ch:"time_bucket"`
+	TotalTokens int64     `ch:"tokens"`
+	RiskyTokens int64     `ch:"risky_tokens"`
+}
+
+// GetRiskTokensByDay sums token usage per UTC day, alongside the subset from
+// chats in RiskyChatIDs. Reads the chat_token_summaries daily aggregate — the
+// same source as tokens under management — but without the stored-session
+// qualification, so the totals line up with the costs page's token charts.
+// Days without usage are omitted (callers gap-fill).
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) GetRiskTokensByDay(ctx context.Context, arg GetRiskTokensParams) ([]RiskTokensDayBucket, error) {
+	if len(arg.ProjectIDs) == 0 {
+		return nil, nil
+	}
+
+	// The total alias must NOT be "total_tokens": ClickHouse lets a SELECT
+	// alias shadow the source column, which would turn the sumIf's column
+	// reference into a nested aggregate (ILLEGAL_AGGREGATION).
+	sb := sq.Select(
+		"time_bucket",
+		"sum(total_tokens) AS tokens",
+	).
+		From("chat_token_summaries").
+		Where(squirrel.Eq{"gram_project_id": arg.ProjectIDs}).
+		Where("time_bucket >= toStartOfDay(fromUnixTimestamp64Nano(?))", arg.StartUnixNano).
+		Where("time_bucket < fromUnixTimestamp64Nano(?)", arg.EndUnixNano).
+		Where("chat_id != ''").
+		GroupBy("time_bucket").
+		OrderBy("time_bucket")
+	sb = billedHookSourceFilter(sb, arg.HookSources)
+
+	// clickhouse-go expands a Go slice bound to a single placeholder into a
+	// comma-joined value list, which only parses inside IN (...) — so the risky
+	// set rides in one parameter there. An empty set short-circuits to a
+	// constant zero instead of binding an empty list (invalid SQL).
+	if len(arg.RiskyChatIDs) > 0 {
+		sb = sb.Column(squirrel.Expr("sumIf(total_tokens, chat_id IN (?)) AS risky_tokens", arg.RiskyChatIDs))
+	} else {
+		sb = sb.Column("toInt64(0) AS risky_tokens")
+	}
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building risk tokens by day query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var buckets []RiskTokensDayBucket
+	for rows.Next() {
+		var bucket RiskTokensDayBucket
+		if err := rows.ScanStruct(&bucket); err != nil {
+			return nil, fmt.Errorf("scanning risk tokens day row: %w", err)
 		}
 		buckets = append(buckets, bucket)
 	}

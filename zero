@@ -119,9 +119,6 @@ interactive_only mise run zero:fly
 mise run zero:encryption
 mise run zero:tls
 
-echo -e "\n⏳ Building internal SDK"
-mise run build:internal-sdk
-
 echo -e "\n⏳ Building elements"
 mise run build:elements
 

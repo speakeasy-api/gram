@@ -43,6 +43,8 @@ import { cn } from "@/lib/utils";
 
 /** Display name of the shared plugin bundle catalog servers are added to. */
 const DEFAULT_PLUGIN_NAME = "Default";
+/** Server always provisions the Default plugin with this exact slug. */
+const DEFAULT_PLUGIN_SLUG = "default";
 /** Max catalog servers shown before the user expands the list. */
 const INITIAL_VISIBLE = 10;
 
@@ -79,6 +81,11 @@ export function DistributeServersStep({
   const [drawerError, setDrawerError] = useState<string | null>(null);
   // Servers handed to the release workflow once the user hits Distribute.
   const [serversToDeploy, setServersToDeploy] = useState<PulseMCPServer[]>([]);
+  // Slug of the Default plugin found/created during this run — captured so
+  // the install-instructions step below can address it precisely.
+  const [distributedPluginSlug, setDistributedPluginSlug] = useState<
+    string | null
+  >(null);
 
   // The catalog is small and returned in a single response, so we fetch the
   // whole list once and search/filter it client-side (no cursor pagination).
@@ -214,6 +221,8 @@ export function DistributeServersStep({
         (await client.plugins.createPlugin({
           createPluginForm: { name: DEFAULT_PLUGIN_NAME },
         }));
+
+      setDistributedPluginSlug(plugin.slug);
 
       const full = await client.plugins.getPlugin({ id: plugin.id });
       const alreadyBundled = new Set(
@@ -611,6 +620,12 @@ export function DistributeServersStep({
                       repoOwner={publishStatus.repoOwner}
                       repoName={publishStatus.repoName}
                       marketplaceUrl={publishStatus.marketplaceUrl}
+                      candidatePlugins={[
+                        {
+                          name: DEFAULT_PLUGIN_NAME,
+                          slug: distributedPluginSlug ?? DEFAULT_PLUGIN_SLUG,
+                        },
+                      ]}
                     />
                   </div>
                 )}

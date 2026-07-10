@@ -49,7 +49,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useGramContext } from "@gram/client/react-query/_context.js";
-import { useListChats } from "@gram/client/react-query/listChats.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useUserSessions } from "@gram/client/react-query/userSessions.js";
 import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
@@ -230,19 +229,6 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
     }
     return `${routes.logs.href()}?${params.toString()}`;
   }, [customRange, dateRange, employeeEmailFilter, from, routes.logs, to]);
-  const agentSessionsQuery = useListChats(
-    {
-      search: employeeEmailFilter ?? undefined,
-      from,
-      to,
-      limit: 1,
-    },
-    undefined,
-    {
-      enabled: employeeEmailFilter != null,
-      throwOnError: false,
-    },
-  );
   const riskEventsHref = useMemo(() => {
     const params = new URLSearchParams();
     if (employeeEmailFilter) {
@@ -556,12 +542,7 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
                 />
                 <MetricCard
                   title="Agent Sessions"
-                  value={agentSessionsQuery.data?.total ?? 0}
-                  displayValue={
-                    agentSessionsQuery.isLoading || agentSessionsQuery.isError
-                      ? "-"
-                      : undefined
-                  }
+                  value={summary?.totalChats ?? 0}
                   icon="message-square"
                   subtext={`Over ${rangeLabel}`}
                   link={agentSessionsHref}

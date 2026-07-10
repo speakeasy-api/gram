@@ -30,7 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -789,7 +789,7 @@ func (s *ServiceCore) resolveMcpServerRefsForWrite(
 		switch {
 		case row.Tunneled:
 			return nil, assistantValidationError("mcp server %q is tunnel-backed and cannot be attached to an assistant", row.Slug.String)
-		case row.Visibility == mcpservers.VisibilityDisabled:
+		case row.Visibility == visibility.Disabled:
 			return nil, assistantValidationError("mcp server %q is disabled", row.Slug.String)
 		case !row.HasGramEndpoint:
 			return nil, assistantValidationError("mcp server %q has no Gram-hosted MCP endpoint", row.Slug.String)
@@ -2876,7 +2876,7 @@ func resolveAssistantMCPServers(ctx context.Context, logger *slog.Logger, server
 		if m.EndpointSlug == "" {
 			continue
 		}
-		if m.Visibility == mcpservers.VisibilityDisabled {
+		if m.Visibility == visibility.Disabled {
 			logger.WarnContext(ctx, "skipping disabled assistant mcp server",
 				attr.SlogMcpServerID(m.MCPServerID.String()),
 			)

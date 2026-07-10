@@ -21,6 +21,9 @@ type batchMessage struct {
 	Content      string
 	RawToolCalls []byte
 	ToolCalls    []recordedToolCall
+	// UserID is the scanned chat's owner (empty for unattributed sessions),
+	// carried onto judge completions for scanning-volume attribution.
+	UserID string
 }
 
 type recordedToolCall struct {
@@ -40,6 +43,7 @@ func newBatchMessages(ctx context.Context, logger *slog.Logger, rows []repo.GetM
 		if !ok {
 			continue
 		}
+		msg.UserID = row.ChatUserID
 		messages = append(messages, msg)
 	}
 	return messages
@@ -62,6 +66,7 @@ func newBatchMessage(ctx context.Context, logger *slog.Logger, id uuid.UUID, rol
 		Content:      content,
 		RawToolCalls: toolCalls,
 		ToolCalls:    []recordedToolCall{},
+		UserID:       "",
 	}
 	if messageType == message.ToolRequest && len(toolCalls) > 0 {
 		msg.ToolCalls = parseRecordedToolCalls(ctx, logger, toolCalls)

@@ -227,6 +227,10 @@ type GetPublishStatusResponseBody struct {
 	// Present once a marketplace token has been minted, which happens
 	// automatically on the first publish.
 	MarketplaceURL *string `form:"marketplace_url,omitempty" json:"marketplace_url,omitempty" xml:"marketplace_url,omitempty"`
+	// Whether the repo has at least one directly-added GitHub collaborator
+	// (excludes access granted via org membership/teams). Absent when the project
+	// is not connected.
+	HasCollaborators *bool `form:"has_collaborators,omitempty" json:"has_collaborators,omitempty" xml:"has_collaborators,omitempty"`
 	// Whether the project's current plugin state matches what was last published
 	// to GitHub. Absent when the project is not connected, or when the connection
 	// predates content fingerprinting (freshness can't be determined).
@@ -3480,14 +3484,15 @@ func NewSetPluginAssignmentsResponseBody(res *plugins.SetPluginAssignmentsResult
 // result of the "getPublishStatus" endpoint of the "plugins" service.
 func NewGetPublishStatusResponseBody(res *plugins.PublishStatusResult) *GetPublishStatusResponseBody {
 	body := &GetPublishStatusResponseBody{
-		Configured:      res.Configured,
-		Connected:       res.Connected,
-		RepoOwner:       res.RepoOwner,
-		RepoName:        res.RepoName,
-		RepoURL:         res.RepoURL,
-		MarketplaceURL:  res.MarketplaceURL,
-		UpToDate:        res.UpToDate,
-		LastPublishedAt: res.LastPublishedAt,
+		Configured:       res.Configured,
+		Connected:        res.Connected,
+		RepoOwner:        res.RepoOwner,
+		RepoName:         res.RepoName,
+		RepoURL:          res.RepoURL,
+		MarketplaceURL:   res.MarketplaceURL,
+		HasCollaborators: res.HasCollaborators,
+		UpToDate:         res.UpToDate,
+		LastPublishedAt:  res.LastPublishedAt,
 	}
 	return body
 }

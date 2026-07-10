@@ -15,6 +15,7 @@ import { SettingsInlineEmptyState } from "../../SettingsInlineEmptyState";
 import { SettingsSection } from "../../SettingsSection";
 import { AttachRemoteIdentityProviderSheet } from "./AttachRemoteIdentityProviderSheet";
 import { AuthenticationSetupActions } from "./AuthenticationSetupActions";
+import { type AuthTarget, useMcpServerAuthTarget } from "./authTarget";
 import { DeleteRemoteIdentityProviderDialog } from "./DeleteRemoteIdentityProviderDialog";
 import { McpServerSessionsPanel } from "./McpServerSessionsPanel";
 import { ModifyRemoteIdentityProviderSheet } from "./ModifyRemoteIdentityProviderSheet";
@@ -28,12 +29,55 @@ import {
 
 export const MCP_AUTHENTICATION_SECTION_ID = "authentication";
 
+/**
+ * Chrome wrapper for the remote/tunneled MCP server settings tab. The
+ * target-agnostic body below also mounts on the toolset detail page inside
+ * that page's own section chrome.
+ */
 export function AuthenticationSection({
   mcpServer,
 }: {
   mcpServer: McpServer;
 }): JSX.Element {
-  const userSessionIssuerId = mcpServer.userSessionIssuerId;
+  const target = useMcpServerAuthTarget(mcpServer);
+
+  return (
+    <>
+      <SettingsSection id={MCP_AUTHENTICATION_SECTION_ID}>
+        <SettingsSection.Header>
+          <SettingsSection.Title>Authentication</SettingsSection.Title>
+          <SettingsSection.Description>
+            Configure the upstream identity provider and user session settings
+            for clients connecting to this server.
+          </SettingsSection.Description>
+        </SettingsSection.Header>
+        <SettingsSection.Panel>
+          <SettingsSection.Body>
+            <AuthenticationSectionBody target={target} />
+          </SettingsSection.Body>
+          <SettingsSection.Footer>
+            <SettingsSection.FooterHint>
+              Authentication changes apply to new client connections.
+            </SettingsSection.FooterHint>
+          </SettingsSection.Footer>
+        </SettingsSection.Panel>
+      </SettingsSection>
+      <McpServerSessionsPanel mcpServer={mcpServer} />
+    </>
+  );
+}
+
+/**
+ * The auth configuration surface: identity-provider setup or the manage
+ * fields, plus the attach/modify/delete overlays. Chrome-free so both the
+ * remote server settings tab and the toolset detail page can mount it.
+ */
+export function AuthenticationSectionBody({
+  target,
+}: {
+  target: AuthTarget;
+}): JSX.Element {
+  const userSessionIssuerId = target.userSessionIssuerId ?? undefined;
   const issuerConfigured = !!userSessionIssuerId;
 
   const {
@@ -44,13 +88,11 @@ export function AuthenticationSection({
     enabled: issuerConfigured,
   });
 
-  // Probe the remote MCP server's protected-resource metadata so setup can
-  // offer discovery when the server advertises OAuth metadata.
+  // Probe protected-resource metadata so setup can offer discovery when the
+  // server advertises OAuth metadata. Idle for targets with no probeable
+  // upstream (tunneled, toolset-backed).
   const { status: probeStatus, metadata: protectedResourceMetadata } =
-    useProtectedResourceMetadata(
-      mcpServer.remoteMcpServerId,
-      !issuerConfigured,
-    );
+    useProtectedResourceMetadata(target.remoteMcpServerId, !issuerConfigured);
   const authorizationServer =
     protectedResourceMetadata?.authorizationServers?.[0];
 
@@ -145,53 +187,34 @@ export function AuthenticationSection({
 
   return (
     <>
-      <SettingsSection id={MCP_AUTHENTICATION_SECTION_ID}>
-        <SettingsSection.Header>
-          <SettingsSection.Title>Authentication</SettingsSection.Title>
-          <SettingsSection.Description>
-            Configure the upstream identity provider and user session settings
-            for clients connecting to this server.
-          </SettingsSection.Description>
-        </SettingsSection.Header>
-        <SettingsSection.Panel>
-          <SettingsSection.Body>
-            <FieldGroup className="gap-6">{authenticationFields}</FieldGroup>
-          </SettingsSection.Body>
-          <SettingsSection.Footer>
-            <SettingsSection.FooterHint>
-              Authentication changes apply to new client connections.
-            </SettingsSection.FooterHint>
-          </SettingsSection.Footer>
-        </SettingsSection.Panel>
+      <FieldGroup className="gap-6">{authenticationFields}</FieldGroup>
 
-        <AttachRemoteIdentityProviderSheet
-          open={sheetOpen}
-          onOpenChange={setSheetOpen}
-          mcpServer={mcpServer}
-          userSessionIssuer={userSessionIssuer ?? null}
-          selectableIssuers={selectableIssuers}
-          initialIssuerUrl={sheetInitialUrl}
+      <AttachRemoteIdentityProviderSheet
+        open={sheetOpen}
+        onOpenChange={setSheetOpen}
+        target={target}
+        userSessionIssuer={userSessionIssuer ?? null}
+        selectableIssuers={selectableIssuers}
+        initialIssuerUrl={sheetInitialUrl}
+      />
+
+      {deleteTarget && userSessionIssuerId && (
+        <DeleteRemoteIdentityProviderDialog
+          open={deleteOpen}
+          onOpenChange={setDeleteOpen}
+          userSessionIssuerId={userSessionIssuerId}
+          issuer={deleteTarget}
         />
+      )}
 
-        {deleteTarget && userSessionIssuerId && (
-          <DeleteRemoteIdentityProviderDialog
-            open={deleteOpen}
-            onOpenChange={setDeleteOpen}
-            userSessionIssuerId={userSessionIssuerId}
-            issuer={deleteTarget}
-          />
-        )}
-
-        {modifyTarget && userSessionIssuer && (
-          <ModifyRemoteIdentityProviderSheet
-            open={modifyOpen}
-            onOpenChange={setModifyOpen}
-            userSessionIssuer={userSessionIssuer}
-            issuer={modifyTarget}
-          />
-        )}
-      </SettingsSection>
-      <McpServerSessionsPanel mcpServer={mcpServer} />
+      {modifyTarget && userSessionIssuer && (
+        <ModifyRemoteIdentityProviderSheet
+          open={modifyOpen}
+          onOpenChange={setModifyOpen}
+          userSessionIssuer={userSessionIssuer}
+          issuer={modifyTarget}
+        />
+      )}
     </>
   );
 }

@@ -1,14 +1,31 @@
 import { type FC, memo, type ReactNode } from "react";
-import ReactMarkdown, { type Components } from "react-markdown";
+import ReactMarkdown, {
+  defaultUrlTransform,
+  type Components,
+} from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+import { MarkdownLinkProvider } from "@/contexts/MarkdownLinkContext";
+import { MarkdownAnchor } from "@/components/markdown-anchor";
 import { cn } from "@/lib/utils";
+import type { LinkResolver, MarkdownLinkComponent } from "@/types";
 
 export interface MarkdownProps {
   /** Raw markdown text. */
   children: string;
   /** Optional className applied to the `.aui-md` root wrapper. */
   className?: string;
+  /**
+   * Optional resolver that rewrites link hrefs (e.g. turning inline entity
+   * references into links into the host app). Static viewers render outside an
+   * `ElementsProvider`, so they pass the link hooks here instead of via config.
+   */
+  resolveLink?: LinkResolver;
+  /**
+   * Optional `<a>`-shaped component used to render links with the host's design
+   * system (e.g. a Moonshine `Link`). Falls back to a plain `<a>` when omitted.
+   */
+  linkComponent?: MarkdownLinkComponent;
 }
 
 /**
@@ -21,16 +38,29 @@ export interface MarkdownProps {
  * code blocks are styled but not syntax-highlighted — the heavier shiki path
  * stays reserved for tool output via `<ToolUI />`.
  */
-const MarkdownImpl: FC<MarkdownProps> = ({ children, className }) => {
+const MarkdownImpl: FC<MarkdownProps> = ({
+  children,
+  className,
+  resolveLink,
+  linkComponent,
+}) => {
+  // Preserve hrefs the resolver claims (e.g. a `gram:…` entity scheme) that
+  // react-markdown would otherwise strip as an unknown protocol; sanitize the
+  // rest with the default transform.
+  const urlTransform = (url: string) =>
+    resolveLink && resolveLink(url) !== null ? url : defaultUrlTransform(url);
   return (
-    <div className={cn("aui-md", className)}>
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={markdownComponents}
-      >
-        {children}
-      </ReactMarkdown>
-    </div>
+    <MarkdownLinkProvider value={{ resolveLink, LinkComponent: linkComponent }}>
+      <div className={cn("aui-md", className)}>
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          urlTransform={urlTransform}
+          components={markdownComponents}
+        >
+          {children}
+        </ReactMarkdown>
+      </div>
+    </MarkdownLinkProvider>
   );
 };
 
@@ -117,15 +147,7 @@ const markdownComponents: Components = {
       {...props}
     />
   ),
-  a: ({ className, ...props }) => (
-    <a
-      className={cn(
-        "aui-md-a font-medium text-primary underline underline-offset-4",
-        className,
-      )}
-      {...props}
-    />
-  ),
+  a: MarkdownAnchor,
   blockquote: ({ className, ...props }) => (
     <blockquote
       className={cn("aui-md-blockquote border-l-2 pl-6 italic", className)}

@@ -1702,53 +1702,1201 @@ func DecodeDeleteServerResponse(decoder func(*http.Response) goahttp.Decoder, re
 	}
 }
 
-// marshalRemotemcpHeaderInputToHeaderInputRequestBody builds a value of type
-// *HeaderInputRequestBody from a value of type *remotemcp.HeaderInput.
-func marshalRemotemcpHeaderInputToHeaderInputRequestBody(v *remotemcp.HeaderInput) *HeaderInputRequestBody {
-	res := &HeaderInputRequestBody{
-		Name:                   v.Name,
-		Description:            v.Description,
-		IsRequired:             v.IsRequired,
-		IsSecret:               v.IsSecret,
-		Value:                  v.Value,
-		ValueFromRequestHeader: v.ValueFromRequestHeader,
+// BuildListServerHeadersRequest instantiates a HTTP request object with method
+// and path set to call the "remoteMcp" service "listServerHeaders" endpoint
+func (c *Client) BuildListServerHeadersRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListServerHeadersRemoteMcpPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("remoteMcp", "listServerHeaders", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
 	}
 
-	return res
+	return req, nil
 }
 
-// marshalHeaderInputRequestBodyToRemotemcpHeaderInput builds a value of type
-// *remotemcp.HeaderInput from a value of type *HeaderInputRequestBody.
-func marshalHeaderInputRequestBodyToRemotemcpHeaderInput(v *HeaderInputRequestBody) *remotemcp.HeaderInput {
-	res := &remotemcp.HeaderInput{
-		Name:                   v.Name,
-		Description:            v.Description,
-		IsRequired:             v.IsRequired,
-		IsSecret:               v.IsSecret,
-		Value:                  v.Value,
-		ValueFromRequestHeader: v.ValueFromRequestHeader,
+// EncodeListServerHeadersRequest returns an encoder for requests sent to the
+// remoteMcp listServerHeaders server.
+func EncodeListServerHeadersRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*remotemcp.ListServerHeadersPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("remoteMcp", "listServerHeaders", "*remotemcp.ListServerHeadersPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("remote_mcp_server_id", p.RemoteMcpServerID)
+		req.URL.RawQuery = values.Encode()
+		return nil
 	}
-
-	return res
 }
 
-// unmarshalRemoteMcpServerHeaderResponseBodyToTypesRemoteMcpServerHeader
-// builds a value of type *types.RemoteMcpServerHeader from a value of type
-// *RemoteMcpServerHeaderResponseBody.
-func unmarshalRemoteMcpServerHeaderResponseBodyToTypesRemoteMcpServerHeader(v *RemoteMcpServerHeaderResponseBody) *types.RemoteMcpServerHeader {
-	res := &types.RemoteMcpServerHeader{
-		ID:                     *v.ID,
-		Name:                   *v.Name,
-		Description:            v.Description,
-		IsRequired:             *v.IsRequired,
-		IsSecret:               *v.IsSecret,
-		Value:                  v.Value,
-		ValueFromRequestHeader: v.ValueFromRequestHeader,
-		CreatedAt:              *v.CreatedAt,
-		UpdatedAt:              *v.UpdatedAt,
+// DecodeListServerHeadersResponse returns a decoder for responses returned by
+// the remoteMcp listServerHeaders endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeListServerHeadersResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListServerHeadersResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListServerHeadersResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "listServerHeaders", err)
+			}
+			err = ValidateListServerHeadersResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "listServerHeaders", err)
+			}
+			res := NewListServerHeadersResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListServerHeadersUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "listServerHeaders", err)
+			}
+			err = ValidateListServerHeadersUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "listServerHeaders", err)
+			}
+			return nil, NewListServerHeadersUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListServerHeadersForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "listServerHeaders", err)
+			}
+			err = ValidateListServerHeadersForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "listServerHeaders", err)
+			}
+			return nil, NewListServerHeadersForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListServerHeadersBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "listServerHeaders", err)
+			}
+			err = ValidateListServerHeadersBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "listServerHeaders", err)
+			}
+			return nil, NewListServerHeadersBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListServerHeadersNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "listServerHeaders", err)
+			}
+			err = ValidateListServerHeadersNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "listServerHeaders", err)
+			}
+			return nil, NewListServerHeadersNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListServerHeadersConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "listServerHeaders", err)
+			}
+			err = ValidateListServerHeadersConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "listServerHeaders", err)
+			}
+			return nil, NewListServerHeadersConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListServerHeadersUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "listServerHeaders", err)
+			}
+			err = ValidateListServerHeadersUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "listServerHeaders", err)
+			}
+			return nil, NewListServerHeadersUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListServerHeadersInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "listServerHeaders", err)
+			}
+			err = ValidateListServerHeadersInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "listServerHeaders", err)
+			}
+			return nil, NewListServerHeadersInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListServerHeadersInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteMcp", "listServerHeaders", err)
+				}
+				err = ValidateListServerHeadersInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteMcp", "listServerHeaders", err)
+				}
+				return nil, NewListServerHeadersInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListServerHeadersUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteMcp", "listServerHeaders", err)
+				}
+				err = ValidateListServerHeadersUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteMcp", "listServerHeaders", err)
+				}
+				return nil, NewListServerHeadersUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("remoteMcp", "listServerHeaders", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListServerHeadersGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "listServerHeaders", err)
+			}
+			err = ValidateListServerHeadersGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "listServerHeaders", err)
+			}
+			return nil, NewListServerHeadersGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("remoteMcp", "listServerHeaders", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildGetServerHeaderRequest instantiates a HTTP request object with method
+// and path set to call the "remoteMcp" service "getServerHeader" endpoint
+func (c *Client) BuildGetServerHeaderRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetServerHeaderRemoteMcpPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("remoteMcp", "getServerHeader", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
 	}
 
-	return res
+	return req, nil
+}
+
+// EncodeGetServerHeaderRequest returns an encoder for requests sent to the
+// remoteMcp getServerHeader server.
+func EncodeGetServerHeaderRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*remotemcp.GetServerHeaderPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("remoteMcp", "getServerHeader", "*remotemcp.GetServerHeaderPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetServerHeaderResponse returns a decoder for responses returned by
+// the remoteMcp getServerHeader endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeGetServerHeaderResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetServerHeaderResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetServerHeaderResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "getServerHeader", err)
+			}
+			err = ValidateGetServerHeaderResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "getServerHeader", err)
+			}
+			res := NewGetServerHeaderRemoteMcpServerHeaderOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetServerHeaderUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "getServerHeader", err)
+			}
+			err = ValidateGetServerHeaderUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "getServerHeader", err)
+			}
+			return nil, NewGetServerHeaderUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetServerHeaderForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "getServerHeader", err)
+			}
+			err = ValidateGetServerHeaderForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "getServerHeader", err)
+			}
+			return nil, NewGetServerHeaderForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetServerHeaderBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "getServerHeader", err)
+			}
+			err = ValidateGetServerHeaderBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "getServerHeader", err)
+			}
+			return nil, NewGetServerHeaderBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetServerHeaderNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "getServerHeader", err)
+			}
+			err = ValidateGetServerHeaderNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "getServerHeader", err)
+			}
+			return nil, NewGetServerHeaderNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetServerHeaderConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "getServerHeader", err)
+			}
+			err = ValidateGetServerHeaderConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "getServerHeader", err)
+			}
+			return nil, NewGetServerHeaderConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetServerHeaderUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "getServerHeader", err)
+			}
+			err = ValidateGetServerHeaderUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "getServerHeader", err)
+			}
+			return nil, NewGetServerHeaderUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetServerHeaderInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "getServerHeader", err)
+			}
+			err = ValidateGetServerHeaderInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "getServerHeader", err)
+			}
+			return nil, NewGetServerHeaderInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetServerHeaderInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteMcp", "getServerHeader", err)
+				}
+				err = ValidateGetServerHeaderInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteMcp", "getServerHeader", err)
+				}
+				return nil, NewGetServerHeaderInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetServerHeaderUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteMcp", "getServerHeader", err)
+				}
+				err = ValidateGetServerHeaderUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteMcp", "getServerHeader", err)
+				}
+				return nil, NewGetServerHeaderUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("remoteMcp", "getServerHeader", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetServerHeaderGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "getServerHeader", err)
+			}
+			err = ValidateGetServerHeaderGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "getServerHeader", err)
+			}
+			return nil, NewGetServerHeaderGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("remoteMcp", "getServerHeader", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildCreateServerHeaderRequest instantiates a HTTP request object with
+// method and path set to call the "remoteMcp" service "createServerHeader"
+// endpoint
+func (c *Client) BuildCreateServerHeaderRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CreateServerHeaderRemoteMcpPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("remoteMcp", "createServerHeader", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCreateServerHeaderRequest returns an encoder for requests sent to the
+// remoteMcp createServerHeader server.
+func EncodeCreateServerHeaderRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*remotemcp.CreateServerHeaderPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("remoteMcp", "createServerHeader", "*remotemcp.CreateServerHeaderPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewCreateServerHeaderRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("remoteMcp", "createServerHeader", err)
+		}
+		return nil
+	}
+}
+
+// DecodeCreateServerHeaderResponse returns a decoder for responses returned by
+// the remoteMcp createServerHeader endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeCreateServerHeaderResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCreateServerHeaderResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body CreateServerHeaderResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "createServerHeader", err)
+			}
+			err = ValidateCreateServerHeaderResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "createServerHeader", err)
+			}
+			res := NewCreateServerHeaderRemoteMcpServerHeaderOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CreateServerHeaderUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "createServerHeader", err)
+			}
+			err = ValidateCreateServerHeaderUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "createServerHeader", err)
+			}
+			return nil, NewCreateServerHeaderUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CreateServerHeaderForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "createServerHeader", err)
+			}
+			err = ValidateCreateServerHeaderForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "createServerHeader", err)
+			}
+			return nil, NewCreateServerHeaderForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CreateServerHeaderBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "createServerHeader", err)
+			}
+			err = ValidateCreateServerHeaderBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "createServerHeader", err)
+			}
+			return nil, NewCreateServerHeaderBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CreateServerHeaderNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "createServerHeader", err)
+			}
+			err = ValidateCreateServerHeaderNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "createServerHeader", err)
+			}
+			return nil, NewCreateServerHeaderNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CreateServerHeaderConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "createServerHeader", err)
+			}
+			err = ValidateCreateServerHeaderConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "createServerHeader", err)
+			}
+			return nil, NewCreateServerHeaderConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CreateServerHeaderUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "createServerHeader", err)
+			}
+			err = ValidateCreateServerHeaderUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "createServerHeader", err)
+			}
+			return nil, NewCreateServerHeaderUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CreateServerHeaderInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "createServerHeader", err)
+			}
+			err = ValidateCreateServerHeaderInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "createServerHeader", err)
+			}
+			return nil, NewCreateServerHeaderInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CreateServerHeaderInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteMcp", "createServerHeader", err)
+				}
+				err = ValidateCreateServerHeaderInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteMcp", "createServerHeader", err)
+				}
+				return nil, NewCreateServerHeaderInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CreateServerHeaderUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteMcp", "createServerHeader", err)
+				}
+				err = ValidateCreateServerHeaderUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteMcp", "createServerHeader", err)
+				}
+				return nil, NewCreateServerHeaderUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("remoteMcp", "createServerHeader", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CreateServerHeaderGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "createServerHeader", err)
+			}
+			err = ValidateCreateServerHeaderGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "createServerHeader", err)
+			}
+			return nil, NewCreateServerHeaderGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("remoteMcp", "createServerHeader", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildUpdateServerHeaderRequest instantiates a HTTP request object with
+// method and path set to call the "remoteMcp" service "updateServerHeader"
+// endpoint
+func (c *Client) BuildUpdateServerHeaderRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpdateServerHeaderRemoteMcpPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("remoteMcp", "updateServerHeader", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeUpdateServerHeaderRequest returns an encoder for requests sent to the
+// remoteMcp updateServerHeader server.
+func EncodeUpdateServerHeaderRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*remotemcp.UpdateServerHeaderPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("remoteMcp", "updateServerHeader", "*remotemcp.UpdateServerHeaderPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewUpdateServerHeaderRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("remoteMcp", "updateServerHeader", err)
+		}
+		return nil
+	}
+}
+
+// DecodeUpdateServerHeaderResponse returns a decoder for responses returned by
+// the remoteMcp updateServerHeader endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeUpdateServerHeaderResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeUpdateServerHeaderResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body UpdateServerHeaderResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "updateServerHeader", err)
+			}
+			err = ValidateUpdateServerHeaderResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "updateServerHeader", err)
+			}
+			res := NewUpdateServerHeaderRemoteMcpServerHeaderOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body UpdateServerHeaderUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "updateServerHeader", err)
+			}
+			err = ValidateUpdateServerHeaderUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "updateServerHeader", err)
+			}
+			return nil, NewUpdateServerHeaderUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body UpdateServerHeaderForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "updateServerHeader", err)
+			}
+			err = ValidateUpdateServerHeaderForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "updateServerHeader", err)
+			}
+			return nil, NewUpdateServerHeaderForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body UpdateServerHeaderBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "updateServerHeader", err)
+			}
+			err = ValidateUpdateServerHeaderBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "updateServerHeader", err)
+			}
+			return nil, NewUpdateServerHeaderBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body UpdateServerHeaderNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "updateServerHeader", err)
+			}
+			err = ValidateUpdateServerHeaderNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "updateServerHeader", err)
+			}
+			return nil, NewUpdateServerHeaderNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body UpdateServerHeaderConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "updateServerHeader", err)
+			}
+			err = ValidateUpdateServerHeaderConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "updateServerHeader", err)
+			}
+			return nil, NewUpdateServerHeaderConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body UpdateServerHeaderUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "updateServerHeader", err)
+			}
+			err = ValidateUpdateServerHeaderUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "updateServerHeader", err)
+			}
+			return nil, NewUpdateServerHeaderUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body UpdateServerHeaderInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "updateServerHeader", err)
+			}
+			err = ValidateUpdateServerHeaderInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "updateServerHeader", err)
+			}
+			return nil, NewUpdateServerHeaderInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body UpdateServerHeaderInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteMcp", "updateServerHeader", err)
+				}
+				err = ValidateUpdateServerHeaderInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteMcp", "updateServerHeader", err)
+				}
+				return nil, NewUpdateServerHeaderInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body UpdateServerHeaderUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteMcp", "updateServerHeader", err)
+				}
+				err = ValidateUpdateServerHeaderUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteMcp", "updateServerHeader", err)
+				}
+				return nil, NewUpdateServerHeaderUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("remoteMcp", "updateServerHeader", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body UpdateServerHeaderGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "updateServerHeader", err)
+			}
+			err = ValidateUpdateServerHeaderGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "updateServerHeader", err)
+			}
+			return nil, NewUpdateServerHeaderGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("remoteMcp", "updateServerHeader", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildDeleteServerHeaderRequest instantiates a HTTP request object with
+// method and path set to call the "remoteMcp" service "deleteServerHeader"
+// endpoint
+func (c *Client) BuildDeleteServerHeaderRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DeleteServerHeaderRemoteMcpPath()}
+	req, err := http.NewRequest("DELETE", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("remoteMcp", "deleteServerHeader", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeDeleteServerHeaderRequest returns an encoder for requests sent to the
+// remoteMcp deleteServerHeader server.
+func EncodeDeleteServerHeaderRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*remotemcp.DeleteServerHeaderPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("remoteMcp", "deleteServerHeader", "*remotemcp.DeleteServerHeaderPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeDeleteServerHeaderResponse returns a decoder for responses returned by
+// the remoteMcp deleteServerHeader endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeDeleteServerHeaderResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeDeleteServerHeaderResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body DeleteServerHeaderUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "deleteServerHeader", err)
+			}
+			err = ValidateDeleteServerHeaderUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "deleteServerHeader", err)
+			}
+			return nil, NewDeleteServerHeaderUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body DeleteServerHeaderForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "deleteServerHeader", err)
+			}
+			err = ValidateDeleteServerHeaderForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "deleteServerHeader", err)
+			}
+			return nil, NewDeleteServerHeaderForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body DeleteServerHeaderBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "deleteServerHeader", err)
+			}
+			err = ValidateDeleteServerHeaderBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "deleteServerHeader", err)
+			}
+			return nil, NewDeleteServerHeaderBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body DeleteServerHeaderNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "deleteServerHeader", err)
+			}
+			err = ValidateDeleteServerHeaderNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "deleteServerHeader", err)
+			}
+			return nil, NewDeleteServerHeaderNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body DeleteServerHeaderConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "deleteServerHeader", err)
+			}
+			err = ValidateDeleteServerHeaderConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "deleteServerHeader", err)
+			}
+			return nil, NewDeleteServerHeaderConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body DeleteServerHeaderUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "deleteServerHeader", err)
+			}
+			err = ValidateDeleteServerHeaderUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "deleteServerHeader", err)
+			}
+			return nil, NewDeleteServerHeaderUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body DeleteServerHeaderInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "deleteServerHeader", err)
+			}
+			err = ValidateDeleteServerHeaderInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "deleteServerHeader", err)
+			}
+			return nil, NewDeleteServerHeaderInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body DeleteServerHeaderInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteMcp", "deleteServerHeader", err)
+				}
+				err = ValidateDeleteServerHeaderInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteMcp", "deleteServerHeader", err)
+				}
+				return nil, NewDeleteServerHeaderInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body DeleteServerHeaderUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteMcp", "deleteServerHeader", err)
+				}
+				err = ValidateDeleteServerHeaderUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteMcp", "deleteServerHeader", err)
+				}
+				return nil, NewDeleteServerHeaderUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("remoteMcp", "deleteServerHeader", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body DeleteServerHeaderGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "deleteServerHeader", err)
+			}
+			err = ValidateDeleteServerHeaderGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "deleteServerHeader", err)
+			}
+			return nil, NewDeleteServerHeaderGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("remoteMcp", "deleteServerHeader", resp.StatusCode, string(body))
+		}
+	}
 }
 
 // unmarshalRemoteMcpServerResponseBodyToTypesRemoteMcpServer builds a value of
@@ -1764,14 +2912,6 @@ func unmarshalRemoteMcpServerResponseBodyToTypesRemoteMcpServer(v *RemoteMcpServ
 		TransportType: *v.TransportType,
 		CreatedAt:     *v.CreatedAt,
 		UpdatedAt:     *v.UpdatedAt,
-	}
-	res.Headers = make([]*types.RemoteMcpServerHeader, len(v.Headers))
-	for i, val := range v.Headers {
-		if val == nil {
-			res.Headers[i] = nil
-			continue
-		}
-		res.Headers[i] = unmarshalRemoteMcpServerHeaderResponseBodyToTypesRemoteMcpServerHeader(val)
 	}
 
 	return res
@@ -1820,6 +2960,25 @@ func unmarshalProtectedResourceMetadataUnavailableResponseBodyToRemotemcpProtect
 	res := &remotemcp.ProtectedResourceMetadataUnavailable{
 		Code:    *v.Code,
 		Message: *v.Message,
+	}
+
+	return res
+}
+
+// unmarshalRemoteMcpServerHeaderResponseBodyToTypesRemoteMcpServerHeader
+// builds a value of type *types.RemoteMcpServerHeader from a value of type
+// *RemoteMcpServerHeaderResponseBody.
+func unmarshalRemoteMcpServerHeaderResponseBodyToTypesRemoteMcpServerHeader(v *RemoteMcpServerHeaderResponseBody) *types.RemoteMcpServerHeader {
+	res := &types.RemoteMcpServerHeader{
+		ID:                     *v.ID,
+		Name:                   *v.Name,
+		Description:            v.Description,
+		IsRequired:             *v.IsRequired,
+		IsSecret:               *v.IsSecret,
+		Value:                  v.Value,
+		ValueFromRequestHeader: v.ValueFromRequestHeader,
+		CreatedAt:              *v.CreatedAt,
+		UpdatedAt:              *v.UpdatedAt,
 	}
 
 	return res

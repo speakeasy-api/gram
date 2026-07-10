@@ -11,6 +11,11 @@ export { useElements as useGramElements } from "./hooks/useElements";
 export { useElements } from "./hooks/useElements";
 export { useThreadId } from "./hooks/useThreadId";
 export { useChatId } from "./contexts/ChatIdContext";
+export {
+  MarkdownLinkProvider,
+  useMarkdownLink,
+} from "./contexts/MarkdownLinkContext";
+export type { MarkdownLinkValue } from "./contexts/MarkdownLinkContext";
 
 // Core Components
 export { Chat } from "@/components/Chat";
@@ -80,6 +85,8 @@ export type {
   ErrorTrackingConfigOption,
   GetSessionFn,
   HistoryConfig,
+  LinkResolver,
+  MarkdownLinkComponent,
   MCPServerEntry,
   ModalConfig,
   ModalTriggerPosition,
@@ -87,6 +94,7 @@ export type {
   ModelConfig,
   RADII,
   Radius,
+  ResolvedLink,
   SidecarConfig,
   Suggestion,
   ThemeConfig,

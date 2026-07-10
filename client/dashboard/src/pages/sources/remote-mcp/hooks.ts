@@ -107,7 +107,6 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
           name,
           url,
           transportType: "streamable-http",
-          headers: [],
         },
       });
 

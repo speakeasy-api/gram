@@ -49,7 +49,7 @@ export default defineConfig({
         "compat-plugin": resolve(__dirname, "src/compat-plugin.ts"),
         "react-shim": resolve(__dirname, "src/react-shim.ts"),
       },
-      formats: ["es", "cjs"],
+      formats: ["es"],
     },
     rolldownOptions: {
       // NOTE: do not define externals here, as they are defined in the externalizeDeps plugin
