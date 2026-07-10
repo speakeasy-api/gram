@@ -43,9 +43,6 @@ export function useCreateTunneledMcpSource(): UseMutationResult<
 
       let mcpServer: McpServer;
       try {
-        // The backend mints the server's permanent user_session_issuer in the
-        // same transaction as the mcp_servers row, so there is nothing to
-        // pre-create or roll back here.
         mcpServer = await client.mcpServers.create({
           createMcpServerForm: {
             name: formatTunneledMcpDisplay(tunneledMcpServer),
@@ -107,8 +104,6 @@ export function useLinkMcpServerToTunneled(): UseMutationResult<
 
   return useMutation({
     mutationFn: async ({ tunneledMcpServer }) => {
-      // The backend mints the re-linked server's permanent USI in the create
-      // transaction.
       const mcpServer = await client.mcpServers.create({
         createMcpServerForm: {
           name: formatTunneledMcpDisplay(tunneledMcpServer),

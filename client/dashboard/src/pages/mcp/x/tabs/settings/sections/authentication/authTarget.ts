@@ -24,8 +24,12 @@ export type AuthTarget = {
    * no probeable upstream (tunneled, toolset-backed), leaving the probe idle.
    */
   remoteMcpServerId?: string;
-  /** Link a freshly created issuer to the target (first add). */
-  linkUserSessionIssuer: (userSessionIssuerId: string) => Promise<void>;
+  /**
+   * Link a freshly created issuer to the target (first add). Only targets
+   * that can be issuer-less provide it: toolsets do, mcp servers don't
+   * (they always come with an issuer).
+   */
+  linkUserSessionIssuer?: (userSessionIssuerId: string) => Promise<void>;
   /** Invalidate the target-specific queries that embed the link. */
   invalidate: (queryClient: QueryClient) => Promise<void>;
 };
@@ -38,15 +42,6 @@ export function useMcpServerAuthTarget(mcpServer: McpServer): AuthTarget {
       slug: mcpServer.slug ?? "mcp",
       userSessionIssuerId: mcpServer.userSessionIssuerId ?? null,
       remoteMcpServerId: mcpServer.remoteMcpServerId,
-      linkUserSessionIssuer: async () => {
-        // MCP servers mint their issuer at create time and carry it for the
-        // server's lifetime — the update API cannot attach or swap one. The
-        // attach sheet only calls this on first-add, which is unreachable for
-        // mcp servers; failing loudly beats silently mutating the server.
-        throw new Error(
-          "MCP servers carry a permanent login issuer from creation; it cannot be re-linked.",
-        );
-      },
       invalidate: async (queryClient: QueryClient) => {
         await Promise.all([
           invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),

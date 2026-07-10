@@ -65,7 +65,7 @@ describe("autoConfigureRemoteMcpAuth", () => {
         visibility: "private",
       }),
     });
-    // The issuer is fixed at create time; the update payload must not carry it.
+    // The update payload must not carry the issuer.
     expect(
       client.mcpServers.update.mock.calls[0]?.[0]?.updateMcpServerForm,
     ).not.toHaveProperty("userSessionIssuerId");

@@ -246,9 +246,7 @@ export async function autoConfigureRemoteMcpAuth({
 }
 
 // Full-record replace: updateMcpServer nulls omitted fields, so re-send the
-// server's existing references alongside the new visibility. The user session
-// issuer is attached at create time for the server's lifetime and is not part
-// of the update payload.
+// server's existing references alongside the new visibility.
 async function setMcpServerVisibility(
   client: Gram,
   mcpServer: McpServer,

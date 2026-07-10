@@ -374,9 +374,10 @@ export function AttachRemoteIdentityProviderSheet({
 
       // Step 4: on first-add, link the target to the new issuer. How the link
       // is stored (and side effects like flipping a server private) is the
-      // target's business.
+      // target's business. Targets without first-add linking (mcp servers)
+      // never reach this: they always have an issuer already.
       if (!userSessionIssuer) {
-        await target.linkUserSessionIssuer(issuerId);
+        await target.linkUserSessionIssuer?.(issuerId);
       }
 
       return { unsupportedDcrAuthMethod };

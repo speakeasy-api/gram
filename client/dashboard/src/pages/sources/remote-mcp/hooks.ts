@@ -53,9 +53,6 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
 
       let mcpServer: McpServer;
       try {
-        // The backend mints the server's permanent user_session_issuer in the
-        // same transaction as the mcp_servers row, so there is nothing to
-        // pre-create or roll back here.
         mcpServer = await client.mcpServers.create({
           createMcpServerForm: {
             // mcp_servers.name is required; reuse the canonical
@@ -156,9 +153,8 @@ export function useLinkMcpServerToRemote(): UseMutationResult<
 
   return useMutation({
     mutationFn: async ({ remoteMcpServer }) => {
-      // The backend mints the re-linked server's permanent USI in the create
-      // transaction. Auto-config of the upstream client is intentionally left
-      // to the Authentication tab here.
+      // Auto-config of the upstream client is intentionally left to the
+      // Authentication tab here.
       const mcpServer = await client.mcpServers.create({
         createMcpServerForm: {
           name: formatRemoteMcpDisplay(remoteMcpServer),

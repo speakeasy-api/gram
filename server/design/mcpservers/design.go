@@ -202,7 +202,7 @@ var CreateMcpServerForm = Type("CreateMcpServerForm", func() {
 	Attribute("environment_id", String, "The ID of the environment to associate with the server", func() {
 		Format(FormatUUID)
 	})
-	Attribute("user_session_issuer_id", String, "The ID of the user session issuer that gates OAuth-based MCP client authentication. Remote- and tunneled-backed servers always carry one: omit it and the server mints a dedicated issuer in the same transaction. Either way the issuer is attached for the server's lifetime and cannot be changed later. Toolset-backed servers must omit it (their issuer lives on the toolset).", func() {
+	Attribute("user_session_issuer_id", String, "The ID of the user session issuer that gates OAuth-based MCP client authentication. Omit to have one created automatically.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("remote_mcp_server_id", String, "The ID of the remote MCP server to use as the backend", func() {
@@ -223,7 +223,7 @@ var CreateMcpServerForm = Type("CreateMcpServerForm", func() {
 })
 
 var UpdateMcpServerForm = Type("UpdateMcpServerForm", func() {
-	Description("Form for updating an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record, except the user session issuer, which is attached at create time for the server's lifetime and cannot be changed here. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be provided. Omit name to leave the existing display name unchanged; the slug is recomputed server-side from the resulting name.")
+	Description("Form for updating an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. The user session issuer cannot be changed after create. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be provided. Omit name to leave the existing display name unchanged; the slug is recomputed server-side from the resulting name.")
 
 	Attribute("id", String, "The ID of the MCP server to update", func() {
 		Format(FormatUUID)
