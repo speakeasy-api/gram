@@ -849,6 +849,7 @@ func (f *FlyRuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntim
 		AuthToken:   authToken,
 		MCPServers:  mcpServers,
 		AssistantID: runtime.AssistantID.String(),
+		ProjectID:   runtime.ProjectID.String(),
 	})
 	if err != nil {
 		return fmt.Errorf("marshal assistant fly runtime turn request: %w", err)
