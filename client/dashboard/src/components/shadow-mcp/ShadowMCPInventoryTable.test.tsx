@@ -1174,7 +1174,7 @@ describe("ShadowMCPInventoryTable", () => {
       expect(resolveInventoryRequest).toHaveBeenCalledWith({
         request: {
           resolveShadowMCPInventoryRequestForm: {
-            decision: "approve",
+            decision: "allow",
             policyIds: ["policy-1"],
             projectId: "project-id-1",
             serverUrl: "https://requested.example.com/mcp",

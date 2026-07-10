@@ -63,7 +63,7 @@ type InventoryPage = {
 
 const EMPTY_INVENTORY_PAGES: InventoryPage[] = [];
 type InventoryActionMode = "review" | "add" | "edit" | "delete";
-type ReviewDecision = "approve" | "deny";
+type ReviewDecision = "allow" | "deny";
 type ActiveInventoryAction = {
   mode: InventoryActionMode;
   server: ShadowMCPInventoryServer;
@@ -229,7 +229,7 @@ function actionSheetSubmitLabel(
   decision: ReviewDecision,
 ) {
   if (mode === "review") {
-    return decision === "approve" ? "Approve Request" : "Deny Request";
+    return decision === "allow" ? "Approve Request" : "Deny Request";
   }
   if (mode === "delete") {
     return "Delete Rule";
@@ -414,16 +414,16 @@ function ShadowMCPInventoryActionSheet({
   open: boolean;
   roles: Role[];
 }) {
-  const [decision, setDecision] = useState<ReviewDecision>("approve");
+  const [decision, setDecision] = useState<ReviewDecision>("allow");
   const [selectedPolicyIDs, setSelectedPolicyIDs] = useState<string[]>([]);
 
   useEffect(() => {
     if (!action || !open) {
-      setDecision("approve");
+      setDecision("allow");
       setSelectedPolicyIDs([]);
       return;
     }
-    setDecision("approve");
+    setDecision("allow");
     setSelectedPolicyIDs(initialPolicyIDsForAction(action, shadowMCPPolicies));
   }, [action, shadowMCPPolicies, open]);
 
@@ -432,7 +432,7 @@ function ShadowMCPInventoryActionSheet({
   const server = action.server;
   const canChoosePolicies =
     action.mode !== "delete" &&
-    (action.mode !== "review" || decision === "approve");
+    (action.mode !== "review" || decision === "allow");
   const needsPolicySelection = canChoosePolicies;
   const canSubmit =
     !isSubmitting &&
@@ -489,10 +489,10 @@ function ShadowMCPInventoryActionSheet({
               <label
                 className={cn(
                   "flex cursor-pointer items-start gap-3 rounded-sm border border-transparent px-3 py-2.5 transition-colors",
-                  decision === "approve" && "border-border bg-card shadow-xs",
+                  decision === "allow" && "border-border bg-card shadow-xs",
                 )}
               >
-                <RadioGroupItem value="approve" className="mt-1.5" />
+                <RadioGroupItem value="allow" className="mt-1.5" />
                 <span>
                   <Badge variant="success">
                     <Badge.Text>Approve</Badge.Text>
@@ -721,14 +721,14 @@ export function ShadowMCPInventoryTable({
           request: {
             resolveShadowMCPInventoryRequestForm: {
               decision,
-              policyIds: decision === "approve" ? policyIDs : undefined,
+              policyIds: decision === "allow" ? policyIDs : undefined,
               projectId: projectID,
               serverUrl: action.server.canonicalServerUrl,
             },
           },
         });
         toast.success(
-          decision === "approve"
+          decision === "allow"
             ? `Request approved for: ${label}`
             : `Request denied for: ${label}`,
         );
