@@ -5327,9 +5327,13 @@ var tumBreakdownDimExprs = map[string]tumBreakdownDim{
 	"hook_source":         {expr: "hook_source", filter: ""},
 	"risk_analysis_model": {expr: "model", filter: riskAnalysisRowPredicate},
 	"completion_model":    {expr: "model", filter: "NOT " + riskAnalysisRowPredicate},
-	"email":               {expr: "user_email", filter: ""},
-	"division_name":       {expr: "division_name", filter: ""},
-	"role":                {expr: "arrayJoin(roles)", filter: ""},
+	// email is plumbed but NOT in the service's tumBreakdownDims: a per-user
+	// cut of billed usage (which now includes scanned-user attribution of
+	// risk-analysis inference) is deliberately not exposed on the billing
+	// page yet.
+	"email":         {expr: "user_email", filter: ""},
+	"division_name": {expr: "division_name", filter: ""},
+	"role":          {expr: "arrayJoin(roles)", filter: ""},
 }
 
 // TumBreakdownDimDayBucket is one (UTC day, dimension value) slice of

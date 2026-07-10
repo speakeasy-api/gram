@@ -48,15 +48,15 @@ type DetailGroup = {
 // under Total and the rest follow the token-type group. Only dimensions
 // billed completion rows genuinely carry: the two model cuts (the platform's
 // risk-policy analysis inference vs user-facing completion surfaces), the
-// user identity snapshot hydrated at emit time (user, division, roles), and
-// the consuming surface.
+// identity snapshot hydrated at emit time (division, roles — no per-user
+// section; that isn't exposed on the billing page yet), and the consuming
+// surface.
 const LEAD_DIMENSION_SECTIONS: string[] = [
   RISK_ANALYSIS_MODEL_DIM,
   COMPLETION_MODEL_DIM,
 ];
 const TAIL_DIMENSION_SECTIONS: string[] = [
   Dimension.DivisionName,
-  Dimension.Email,
   Dimension.Role,
   Dimension.HookSource,
 ];

@@ -256,7 +256,13 @@ func (s *Service) QueryRiskTokens(ctx context.Context, payload *telem_gen.QueryR
 // dimension identifiers the frontend picker uses. The model dimension is
 // split into the platform's risk-analysis inference (the metered unit of
 // the enterprise TUM contracts) versus user-facing completion surfaces.
-var tumBreakdownDims = []string{"hook_source", "risk_analysis_model", "completion_model", "email", "division_name", "role"}
+//
+// "email" is deliberately absent: scanned-user attribution now flows into
+// the billed rows (risk-analysis inference attributes to whose traffic was
+// scanned), and a per-user cut of that is not something we want to expose
+// on the billing page yet. The repo's dim expression stays plumbed —
+// re-adding the key here is the whole re-enable.
+var tumBreakdownDims = []string{"hook_source", "risk_analysis_model", "completion_model", "division_name", "role"}
 
 // QueryTumDetails computes the billing page's usage details for a time range
 // in one request: the billed per-day token split and per-dimension
