@@ -1,0 +1,64 @@
+server/internal/background/activities/risk_analysis/prompt_judge_batch.go
+  s_89752e5bcbf473::t_88bf4335b6930c 16,32,34,37,49,68,86,98,101,104,107
+server/cmd/gram/start.go
+  s_89752e5bcbf473::t_c0c7cf68725130 102
+  s_89752e5bcbf473::t_88bf4335b6930c 1011
+server/internal/background/activities/risk_analysis/analyze_batch_test.go
+  s_89752e5bcbf473::t_88bf4335b6930c 30,39,42,44
+server/internal/background/activities.go
+  s_89752e5bcbf473::t_88bf4335b6930c 196
+  s_89752e5bcbf473::t_c0c7cf68725130 47
+server/cmd/riskjudgebench/README.md
+  s_89752e5bcbf473::t_2a766f7572bd97 5,41
+server/internal/risk/scanner.go
+  s_89752e5bcbf473::t_c0c7cf68725130 37,178
+  s_89752e5bcbf473::t_fdf8499ce5a42f 199,636,644,661,666,682,686,691,693,698
+server/cmd/riskjudgebench/main.go
+  s_89752e5bcbf473::t_88bf4335b6930c 2,51-52,57,146,202,209,213,218,229
+server/internal/risk/impl.go
+  s_89752e5bcbf473::t_c0c7cf68725130 58
+  s_89752e5bcbf473::t_7f01fa3c1a79c3 121,181,2409,2430
+server/cmd/risk-pi-report/main.go
+  s_89752e5bcbf473::t_88bf4335b6930c 627,632-633
+  s_89752e5bcbf473::t_c0c7cf68725130 31
+server/internal/background/activities/risk_analysis/eval_guardrail.go
+  s_89752e5bcbf473::t_88bf4335b6930c 15,35,49,52,100,127,140
+server/internal/scanners/promptinjection/openrouter/judge.go
+  s_89752e5bcbf473::t_c0c7cf68725130 27
+  s_89752e5bcbf473::t_41064c9c0dcb4d 41,237,264
+server/internal/background/activities/risk_analysis/analyze_batch.go
+  s_89752e5bcbf473::t_88bf4335b6930c 48,69
+  s_89752e5bcbf473::t_c0c7cf68725130 32
+server/internal/risk/eval_guardrail_test.go
+  s_89752e5bcbf473::t_9007e4bbe147f3 21,69,71,81,153,188,218,220
+server/internal/risk/prompt_policy_scanner_test.go
+  s_89752e5bcbf473::t_881643febd7341 20,25,29,33,36,44,50-51,124-125,245-246
+server/internal/risk/setup_test.go
+  s_89752e5bcbf473::t_249fd7a393d50c 31,106,110,113
+server/internal/scanners/promptpolicy/judge.go
+  s_89752e5bcbf473::t_02a24948bcecd0 1
+server/internal/scanners/promptpolicy/judge_test.go
+  s_89752e5bcbf473::t_139bd0402c2c9c 1
+server/internal/scanners/promptpolicy/openrouter/judge.go
+  s_89752e5bcbf473::t_5ef5e69eb5ef42 25,90,101,109,120,157,178,199,335
+server/internal/scanners/promptpolicy/openrouter/judge_test.go
+  s_89752e5bcbf473::t_febbf1c403fcfd 19,57,62,65,77,82,85,99,104,120,128,143,148,174,179,275,280,298,303,321,326,338,346,374,379
+server/internal/scanners/promptpolicy/openrouter/metrics.go
+  s_89752e5bcbf473::t_88aad6ae94ba5c 30
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "14b2198c70345d6efe75db41dff8063b0770617b",
+  "prompts": {},
+  "sessions": {
+    "s_89752e5bcbf473": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f4a84-bb70-7a53-b9b6-eb0949a88bf3",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
