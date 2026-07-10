@@ -13,6 +13,7 @@ import (
 	"github.com/ettle/strcase"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/samber/lo"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -173,16 +174,22 @@ func DescribeToolsetEntries(
 		toolUrns := make([]string, len(v.ToolUrns))
 		for i, u := range v.ToolUrns {
 			toolUrns[i] = u.String()
-			allToolUrnsSet[toolUrns[i]] = true
 		}
+		toolUrns = lo.Uniq(toolUrns)
 		toolUrnsByToolsetID[ts.ID] = toolUrns
+		for _, toolUrn := range toolUrns {
+			allToolUrnsSet[toolUrn] = true
+		}
 
 		resourceUrns := make([]string, len(v.ResourceUrns))
 		for i, u := range v.ResourceUrns {
 			resourceUrns[i] = u.String()
-			allResourceUrnsSet[resourceUrns[i]] = true
 		}
+		resourceUrns = lo.Uniq(resourceUrns)
 		resourceUrnsByToolsetID[ts.ID] = resourceUrns
+		for _, resourceUrn := range resourceUrns {
+			allResourceUrnsSet[resourceUrn] = true
+		}
 	}
 	allToolUrns := slices.Collect(maps.Keys(allToolUrnsSet))
 	allResourceUrns := slices.Collect(maps.Keys(allResourceUrnsSet))
