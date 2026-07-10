@@ -1,0 +1,18 @@
+# AuthCallbackRequest
+
+## Example Usage
+
+```typescript
+import { AuthCallbackRequest } from "@gram/client/models/operations/authcallback.js";
+
+let value: AuthCallbackRequest = {
+  code: "<value>",
+};
+```
+
+## Fields
+
+| Field   | Type     | Required           | Description                                                        |
+| ------- | -------- | ------------------ | ------------------------------------------------------------------ |
+| `code`  | _string_ | :heavy_check_mark: | The auth code for authentication from the speakeasy system         |
+| `state` | _string_ | :heavy_minus_sign: | The opaque state string optionally provided during initialization. |

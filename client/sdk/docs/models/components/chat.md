@@ -1,0 +1,60 @@
+# Chat
+
+## Example Usage
+
+```typescript
+import { Chat } from "@gram/client/models/components/chat.js";
+
+let value: Chat = {
+  createdAt: new Date("2024-08-21T03:55:40.546Z"),
+  generation: 814527,
+  hasMoreAfter: true,
+  hasMoreBefore: true,
+  id: "<id>",
+  lastMessageTimestamp: new Date("2025-01-06T12:05:25.433Z"),
+  maxGeneration: 494121,
+  messages: [
+    {
+      createdAt: new Date("2025-10-11T03:37:27.690Z"),
+      generation: 436353,
+      id: "<id>",
+      model: "Roadster",
+      role: "<value>",
+      seq: 973095,
+    },
+  ],
+  numMessages: 884861,
+  title: "<value>",
+  updatedAt: new Date("2026-07-19T02:14:04.975Z"),
+};
+```
+
+## Fields
+
+| Field                  | Type                                                                                          | Required           | Description                                                                                                                                                                                                                      |
+| ---------------------- | --------------------------------------------------------------------------------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `accountEmail`         | _string_                                                                                      | :heavy_minus_sign: | Email of the AI account that produced the chat, resolved from the linked AI account. May differ from the employee's work email (e.g. a personal account).                                                                        |
+| `accountType`          | _string_                                                                                      | :heavy_minus_sign: | Account type that produced the chat ('team', 'personal', or empty), resolved from the linked AI account.                                                                                                                         |
+| `agentUsage`           | [components.AgentUsage](../../models/components/agentusage.md)                                | :heavy_minus_sign: | N/A                                                                                                                                                                                                                              |
+| `createdAt`            | [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date) | :heavy_check_mark: | When the chat was created.                                                                                                                                                                                                       |
+| `externalUserId`       | _string_                                                                                      | :heavy_minus_sign: | The ID of the external user who created the chat                                                                                                                                                                                 |
+| `generation`           | _number_                                                                                      | :heavy_check_mark: | The generation that this response's messages belong to. A generation is an immutable snapshot of the transcript; a new one is opened on compaction or message edits, while normal turns append to the current one.               |
+| `hasMoreAfter`         | _boolean_                                                                                     | :heavy_check_mark: | Whether newer messages exist after the last message in this page (within the returned generation). Load them with an `after_seq` cursor.                                                                                         |
+| `hasMoreBefore`        | _boolean_                                                                                     | :heavy_check_mark: | Whether older messages exist before the first message in this page (within the returned generation). Load them with a `before_seq` cursor.                                                                                       |
+| `id`                   | _string_                                                                                      | :heavy_check_mark: | The ID of the chat                                                                                                                                                                                                               |
+| `lastMessageTimestamp` | [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date) | :heavy_check_mark: | When the last message in the chat was created.                                                                                                                                                                                   |
+| `matchSegments`        | [components.RiskSegment](../../models/components/risksegment.md)[]                            | :heavy_minus_sign: | Present only when `query` was requested: contiguous runs of returned messages, each spanning one or more query matches and their surrounding context. Use each segment's cursors to expand it.                                   |
+| `maxGeneration`        | _number_                                                                                      | :heavy_check_mark: | The highest generation number present for this chat. To load the full history, walk from `max_generation` down to 0, requesting each generation in turn.                                                                         |
+| `messages`             | [components.ChatMessage](../../models/components/chatmessage.md)[]                            | :heavy_check_mark: | The list of messages in the chat for the returned generation, ordered oldest to newest by `seq`.                                                                                                                                 |
+| `numMessages`          | _number_                                                                                      | :heavy_check_mark: | The number of messages in the chat                                                                                                                                                                                               |
+| `riskFindingsCount`    | _number_                                                                                      | :heavy_minus_sign: | Number of risk findings recorded against messages in this chat (project-scoped, found=true). Only populated by endpoints that join risk data; absent elsewhere.                                                                  |
+| `riskSegments`         | [components.RiskSegment](../../models/components/risksegment.md)[]                            | :heavy_minus_sign: | Present only when `risk_only` was requested: contiguous runs of returned messages, each spanning a risk finding and its surrounding context. Use each segment's cursors to expand it.                                            |
+| `source`               | _string_                                                                                      | :heavy_minus_sign: | The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)                                                                                                                                                |
+| `title`                | _string_                                                                                      | :heavy_check_mark: | The title of the chat                                                                                                                                                                                                            |
+| `totalCost`            | _number_                                                                                      | :heavy_minus_sign: | Total cost in USD for this chat                                                                                                                                                                                                  |
+| `totalInputTokens`     | _number_                                                                                      | :heavy_minus_sign: | Total input tokens used in this chat                                                                                                                                                                                             |
+| `totalOutputTokens`    | _number_                                                                                      | :heavy_minus_sign: | Total output tokens used in this chat                                                                                                                                                                                            |
+| `totalTokens`          | _number_                                                                                      | :heavy_minus_sign: | Total tokens (input + output) used in this chat                                                                                                                                                                                  |
+| `totals`               | [components.ChatTotals](../../models/components/chattotals.md)                                | :heavy_minus_sign: | Trace-entry counts across the entire returned generation, independent of pagination. Each message maps to exactly one entry: a message carrying tool calls counts as a tool call regardless of role, otherwise the role decides. |
+| `updatedAt`            | [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date) | :heavy_check_mark: | When the chat was last updated.                                                                                                                                                                                                  |
+| `userId`               | _string_                                                                                      | :heavy_minus_sign: | The ID of the user who created the chat                                                                                                                                                                                          |

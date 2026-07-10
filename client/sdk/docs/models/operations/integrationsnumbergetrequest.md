@@ -1,0 +1,18 @@
+# IntegrationsNumberGetRequest
+
+## Example Usage
+
+```typescript
+import { IntegrationsNumberGetRequest } from "@gram/client/models/operations/integrationsnumberget.js";
+
+let value: IntegrationsNumberGetRequest = {};
+```
+
+## Fields
+
+| Field         | Type     | Required           | Description                                                    |
+| ------------- | -------- | ------------------ | -------------------------------------------------------------- |
+| `id`          | _string_ | :heavy_minus_sign: | The ID of the integration to get (refers to a package id).     |
+| `name`        | _string_ | :heavy_minus_sign: | The name of the integration to get (refers to a package name). |
+| `gramSession` | _string_ | :heavy_minus_sign: | Session header                                                 |
+| `gramProject` | _string_ | :heavy_minus_sign: | project header                                                 |

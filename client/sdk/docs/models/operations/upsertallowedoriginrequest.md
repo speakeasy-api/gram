@@ -1,0 +1,22 @@
+# UpsertAllowedOriginRequest
+
+## Example Usage
+
+```typescript
+import { UpsertAllowedOriginRequest } from "@gram/client/models/operations/upsertallowedorigin.js";
+
+let value: UpsertAllowedOriginRequest = {
+  upsertAllowedOriginForm: {
+    origin: "<value>",
+  },
+};
+```
+
+## Fields
+
+| Field                     | Type                                                                                     | Required           | Description    |
+| ------------------------- | ---------------------------------------------------------------------------------------- | ------------------ | -------------- |
+| `gramKey`                 | _string_                                                                                 | :heavy_minus_sign: | API Key header |
+| `gramSession`             | _string_                                                                                 | :heavy_minus_sign: | Session header |
+| `gramProject`             | _string_                                                                                 | :heavy_minus_sign: | project header |
+| `upsertAllowedOriginForm` | [components.UpsertAllowedOriginForm](../../models/components/upsertallowedoriginform.md) | :heavy_check_mark: | N/A            |
