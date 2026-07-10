@@ -1,5 +1,11 @@
-import { ArrowRight, Eye, EyeOff } from "lucide-react";
-import { type ReactElement, type ReactNode, useMemo } from "react";
+import { ArrowRight, ChevronsDownUp, Eye, EyeOff } from "lucide-react";
+import {
+  Fragment,
+  type ReactElement,
+  type ReactNode,
+  useMemo,
+  useState,
+} from "react";
 import { Link } from "react-router";
 import { Badge, Icon } from "@speakeasy-api/moonshine";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
@@ -9,6 +15,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import {
+  collapseToMatchWindows,
   getMatchStrings,
   getRiskBadgeLabel,
   highlightMatches,
@@ -18,6 +25,19 @@ import {
   shouldShowRiskRuleId,
   useRowReveal,
 } from "./chatHelpers";
+
+/** Marks a stretch of message text collapsed away between (or around) the
+ * context windows kept for a long flagged message. */
+function Ellipsis(): ReactNode {
+  return (
+    <span
+      className="text-muted-foreground select-none"
+      aria-label="elided text"
+    >
+      {" … "}
+    </span>
+  );
+}
 
 /** A short flagged message rendered inline with the matched span(s) marked in
  * yellow, plus a reveal toggle when the match is sensitive. */
@@ -42,12 +62,44 @@ export function HighlightedMessageText({
   // each such value explicitly — per-match, so an orphan isn't hidden just
   // because a sibling match happens to appear in the text.
   const orphanMatches = matches.filter((m) => m && !text.includes(m));
+  // Long messages bury the flagged span; collapse to a window of context around
+  // each match (null when the message is short enough to show whole).
+  const snippets = useMemo(
+    () => collapseToMatchWindows(text, matches),
+    [text, matches],
+  );
+  const [expanded, setExpanded] = useState(false);
+  const collapsed = snippets !== null && !expanded;
+  const masked = sensitive && !revealed;
   return (
     <div className="space-y-1">
       {text && (
         <div className="whitespace-pre-wrap">
-          {highlightMatches(text, matches, sensitive && !revealed, sensitive)}
+          {collapsed ? (
+            <>
+              {snippets[0]!.elidedBefore && <Ellipsis />}
+              {snippets.map((snippet, i) => (
+                <Fragment key={i}>
+                  {i > 0 && <Ellipsis />}
+                  {highlightMatches(snippet.text, matches, masked, sensitive)}
+                </Fragment>
+              ))}
+              {snippets[snippets.length - 1]!.elidedAfter && <Ellipsis />}
+            </>
+          ) : (
+            highlightMatches(text, matches, masked, sensitive)
+          )}
         </div>
+      )}
+      {snippets !== null && (
+        <button
+          type="button"
+          className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs"
+          onClick={() => setExpanded((e) => !e)}
+        >
+          <ChevronsDownUp className="size-3" />
+          {expanded ? "Collapse message" : "Show full message"}
+        </button>
       )}
       {orphanMatches.length > 0 && (
         <div className="text-muted-foreground space-y-1 text-xs">

@@ -23,9 +23,9 @@ import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { useDeleteMcpEndpointMutation } from "@gram/client/react-query/deleteMcpEndpoint.js";
 import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { useUpdateMcpEndpointMutation } from "@gram/client/react-query/updateMcpEndpoint.js";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Button, Dialog, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { Plus, Trash2, XIcon } from "lucide-react";
+import { Loader2, Plus, Trash2, XIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useMcpEndpointSlugValidation } from "../../../useMcpEndpointSlugValidation";
@@ -139,6 +139,7 @@ export function ServerUrlSection({
                   <AddressRow
                     mcpServer={mcpServer}
                     endpoint={platformEndpoint}
+                    isLastEndpoint={endpoints.length === 1}
                   />
                 ) : addingPlatform ? (
                   <NewPlatformAddressRow
@@ -172,6 +173,7 @@ export function ServerUrlSection({
                     mcpServer={mcpServer}
                     endpoint={endpoint}
                     domains={availableDomains}
+                    isLastEndpoint={endpoints.length === 1}
                   />
                 ))}
                 {addingCustom && (
@@ -214,15 +216,19 @@ export function ServerUrlSection({
 }
 
 // A single editable address. The slug input is always live; Save persists the
-// edit (disabled until dirty + valid) and Remove deletes immediately.
+// edit (disabled until dirty + valid) and Remove deletes immediately — except
+// for the server's last address, which asks for confirmation first since it
+// leaves the server unreachable and unpublishable.
 function AddressRow({
   mcpServer,
   endpoint,
   domains,
+  isLastEndpoint,
 }: {
   mcpServer: McpServer;
   endpoint: McpEndpoint;
   domains?: CustomDomain[];
+  isLastEndpoint: boolean;
 }) {
   const { orgSlug } = useSlugs();
   // Platform endpoints must carry the `${orgSlug}-` prefix. It's folded into
@@ -257,12 +263,15 @@ function AddressRow({
       );
     },
   });
+  const [confirmRemoveOpen, setConfirmRemoveOpen] = useState(false);
   const remove = useDeleteMcpEndpointMutation({
     onSuccess: async () => {
+      setConfirmRemoveOpen(false);
       await invalidateAllMcpEndpoints(queryClient, { refetchType: "all" });
       toast.success("Address removed");
     },
     onError: (error) => {
+      setConfirmRemoveOpen(false);
       toast.error(
         error instanceof Error ? error.message : "Failed to remove address",
       );
@@ -324,7 +333,13 @@ function AddressRow({
             variant="destructive-secondary"
             className="border border-destructive/40 bg-transparent hover:border-destructive"
             disabled={remove.isPending}
-            onClick={() => remove.mutate({ request: { id: endpoint.id } })}
+            onClick={() => {
+              if (isLastEndpoint) {
+                setConfirmRemoveOpen(true);
+                return;
+              }
+              remove.mutate({ request: { id: endpoint.id } });
+            }}
           >
             <Button.LeftIcon>
               <Trash2 className="size-4" />
@@ -334,7 +349,64 @@ function AddressRow({
       </Stack>
       {slugError && <FieldError className="text-xs">{slugError}</FieldError>}
       {update.isError && <FieldError>{update.error.message}</FieldError>}
+      <RemoveLastAddressDialog
+        isOpen={confirmRemoveOpen}
+        isLoading={remove.isPending}
+        onClose={() => setConfirmRemoveOpen(false)}
+        onConfirm={() => remove.mutate({ request: { id: endpoint.id } })}
+      />
     </Field>
+  );
+}
+
+// Confirmation for removing a server's only address. Without an address the
+// server can't serve traffic and stops being publishable — it can't be added
+// to plugins or collections until a new address is created.
+function RemoveLastAddressDialog({
+  isOpen,
+  isLoading,
+  onClose,
+  onConfirm,
+}: {
+  isOpen: boolean;
+  isLoading: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <Dialog.Content className="max-w-md">
+        <Dialog.Header>
+          <Dialog.Title>Remove this server's only address?</Dialog.Title>
+          <Dialog.Description>
+            This is the last address for this MCP server. Removing it means
+            clients can no longer connect, and the server can't be added to
+            plugins or published to collections until you create a new address.
+          </Dialog.Description>
+        </Dialog.Header>
+        <Dialog.Footer>
+          <Button variant="secondary" disabled={isLoading} onClick={onClose}>
+            <Button.Text>Cancel</Button.Text>
+          </Button>
+          <Button
+            variant="destructive-primary"
+            disabled={isLoading}
+            onClick={onConfirm}
+          >
+            {isLoading ? (
+              <>
+                <Button.LeftIcon>
+                  <Loader2 className="size-4 animate-spin" />
+                </Button.LeftIcon>
+                <Button.Text>Removing</Button.Text>
+              </>
+            ) : (
+              <Button.Text>Remove address</Button.Text>
+            )}
+          </Button>
+        </Dialog.Footer>
+      </Dialog.Content>
+    </Dialog>
   );
 }
 

@@ -1500,6 +1500,7 @@ type RiskPolicy struct {
 	UserMessage          pgtype.Text
 	Prompt               pgtype.Text
 	ModelConfig          []byte
+	Score                float64
 	Version              int64
 	CreatedAt            pgtype.Timestamptz
 	UpdatedAt            pgtype.Timestamptz

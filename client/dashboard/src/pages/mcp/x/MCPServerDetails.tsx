@@ -1,18 +1,9 @@
-import { MCPStatusIndicator } from "@/components/mcp/MCPStatusIndicator";
 import { Page } from "@/components/page-layout";
-import { DetailHero } from "@/components/detail-hero";
-import { Heading } from "@/components/ui/heading";
-import {
-  PageTabsTrigger,
-  Tabs,
-  TabsContent,
-  TabsList,
-} from "@/components/ui/tabs";
 import { RequireScope } from "@/components/require-scope";
+import { cn } from "@/lib/utils";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useRBAC } from "@/hooks/useRBAC";
 import { getMcpServerArgs } from "@/lib/sources";
-import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import type {
   McpServer,
@@ -24,63 +15,36 @@ import {
 } from "@gram/client/react-query/getMcpServer.js";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
+import { invalidateAllPlugins } from "@gram/client/react-query/plugins";
+import { invalidateAllPublishStatus } from "@gram/client/react-query/publishStatus";
 import { useUpdateMcpServerMutation } from "@gram/client/react-query/updateMcpServer.js";
 import {
-  Badge,
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Stack,
 } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, Network } from "lucide-react";
-import {
-  Link,
-  Navigate,
-  useLocation,
-  useNavigate,
-  useParams,
-} from "react-router";
+import { Check, ChevronDown } from "lucide-react";
+import { Navigate, useLocation, useParams } from "react-router";
 import { toast } from "sonner";
 import { MCPTeamAccessTab } from "../MCPTeamAccessTab";
 import {
   activeTabFromPath,
   initialTabFromHash,
   isLegacyAuthenticationTabPath,
-  type TabValue,
+  mcpServerTabHref,
 } from "./MCPServerDetailsRouting";
-import { AnalyticsTab } from "./tabs/AnalyticsTab";
-import { OverviewTab } from "./tabs/OverviewTab";
+import { MCPOverviewTab } from "@/pages/mcp/overview/MCPOverviewTab";
 import { ToolsTab } from "./tabs/ToolsTab";
 import { MCP_AUTHENTICATION_SECTION_ID } from "./tabs/settings/sections/authentication/AuthenticationSection";
-import { MCP_SERVER_URL_SECTION_ID } from "./tabs/settings/sections/ServerUrlSection";
 import { SettingsTab } from "./tabs/settings/SettingsTab";
 
-function mcpServerTabHref(
-  routes: ReturnType<typeof useRoutes>,
-  mcpServerSlug: string,
-  tab: TabValue,
-): string {
-  switch (tab) {
-    case "overview":
-      return routes.mcp.x.overview.href(mcpServerSlug);
-    case "tools":
-      return routes.mcp.x.tools.href(mcpServerSlug);
-    case "analytics":
-      return routes.mcp.x.analytics.href(mcpServerSlug);
-    case "team-access":
-      return routes.mcp.x.teamAccess.href(mcpServerSlug);
-    case "settings":
-      return routes.mcp.x.settings.href(mcpServerSlug);
-  }
-}
+const MCP_X_TAB_URLS = ["overview", "tools", "team-access", "settings"];
 
 export default function MCPServerDetails(): JSX.Element {
   const { mcpServerSlug } = useParams<{ mcpServerSlug: string }>();
   const location = useLocation();
-  const navigate = useNavigate();
   const routes = useRoutes();
   const telemetry = useTelemetry();
   const isRbacEnabled = telemetry.isFeatureEnabled("gram-rbac") ?? false;
@@ -90,18 +54,6 @@ export default function MCPServerDetails(): JSX.Element {
     location.pathname,
     idOrSlug,
   );
-
-  const handleShowServerUrlSettings = () => {
-    void navigate(
-      `${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_SERVER_URL_SECTION_ID}`,
-    );
-  };
-
-  const handleShowAuthentication = () => {
-    void navigate(
-      `${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AUTHENTICATION_SECTION_ID}`,
-    );
-  };
 
   const {
     data: mcpServer,
@@ -153,6 +105,60 @@ export default function MCPServerDetails(): JSX.Element {
     );
   }
 
+  const renderTabContent = () => {
+    switch (activeTab) {
+      case "overview":
+        return (
+          mcpServer &&
+          mcpServer.slug && (
+            <MCPOverviewTab
+              server={{
+                kind: "mcp-server",
+                id: mcpServer.id,
+                slug: mcpServer.slug,
+                name: mcpServer.name ?? "MCP Server",
+              }}
+            />
+          )
+        );
+      case "tools":
+        return (
+          mcpServer && (
+            <ToolsTab
+              mcpServer={mcpServer}
+              endpoints={endpoints}
+              isLoadingEndpoints={isLoadingEndpoints}
+            />
+          )
+        );
+      case "team-access":
+        return (
+          isRbacEnabled &&
+          mcpServer && (
+            <RequireScope scope="mcp:read" level="page">
+              {/* mcp_servers-backed servers grant under the same `mcp:*`
+                scope kind as toolset-backed ones (see selector.go), so
+                MCPTeamAccessTab is reused as-is with the mcp_server's
+                id as the resource id. No `tools` prop because the
+                Remote MCP backend doesn't expose a Gram-side tool
+                catalog. */}
+              <MCPTeamAccessTab resourceId={mcpServer.id} />
+            </RequireScope>
+          )
+        );
+      case "settings":
+        return (
+          mcpServer && (
+            <SettingsTab
+              mcpServer={mcpServer}
+              endpoints={endpoints}
+              isLoadingEndpoints={isLoadingEndpoints}
+            />
+          )
+        );
+    }
+  };
+
   return (
     <Page>
       <Page.Header>
@@ -160,115 +166,21 @@ export default function MCPServerDetails(): JSX.Element {
           substitutions={{
             [idOrSlug]: mcpServer?.name || "MCP Server",
           }}
-          skipSegments={["x"]}
+          skipSegments={[
+            "x",
+            // skipSegments matches by literal value, not position — if the
+            // server's own slug happens to collide with a tab name (e.g. a
+            // server slugged "settings"), guard against also skipping the
+            // server's own breadcrumb crumb.
+            ...MCP_X_TAB_URLS.filter((tab) => tab !== idOrSlug),
+          ]}
         />
       </Page.Header>
 
-      <Page.Body fullWidth noPadding className="gap-0">
-        <MCPServerHero server={mcpServer} />
-
-        <Tabs value={activeTab} className="flex w-full flex-1 flex-col">
-          <div className="shrink-0 border-b">
-            <div className="mx-auto max-w-[1270px] px-8">
-              <TabsList className="h-auto gap-6 rounded-none bg-transparent p-0">
-                <PageTabsTrigger value="overview" asChild>
-                  <Link to={mcpServerTabHref(routes, idOrSlug, "overview")}>
-                    Overview
-                  </Link>
-                </PageTabsTrigger>
-                <PageTabsTrigger value="tools" asChild>
-                  <Link to={mcpServerTabHref(routes, idOrSlug, "tools")}>
-                    Tools
-                  </Link>
-                </PageTabsTrigger>
-                <PageTabsTrigger value="analytics" asChild>
-                  <Link to={mcpServerTabHref(routes, idOrSlug, "analytics")}>
-                    Analytics
-                  </Link>
-                </PageTabsTrigger>
-                {isRbacEnabled && (
-                  <PageTabsTrigger value="team-access" asChild>
-                    <Link
-                      to={mcpServerTabHref(routes, idOrSlug, "team-access")}
-                    >
-                      Team Access
-                    </Link>
-                  </PageTabsTrigger>
-                )}
-                <PageTabsTrigger value="settings" asChild>
-                  <Link to={mcpServerTabHref(routes, idOrSlug, "settings")}>
-                    Settings
-                  </Link>
-                </PageTabsTrigger>
-              </TabsList>
-            </div>
-          </div>
-
-          <TabsContent
-            value="overview"
-            className="mt-0 w-full data-[state=inactive]:hidden"
-          >
-            <OverviewTab
-              mcpServer={mcpServer}
-              endpoints={endpoints}
-              isLoadingEndpoints={isLoadingEndpoints}
-              onShowEndpoints={handleShowServerUrlSettings}
-              onShowAuthentication={handleShowAuthentication}
-            />
-          </TabsContent>
-
-          <TabsContent
-            value="tools"
-            className="mt-0 w-full data-[state=inactive]:hidden"
-          >
-            {mcpServer && (
-              <ToolsTab
-                mcpServer={mcpServer}
-                endpoints={endpoints}
-                isLoadingEndpoints={isLoadingEndpoints}
-              />
-            )}
-          </TabsContent>
-
-          <TabsContent
-            value="analytics"
-            className="mt-0 w-full data-[state=inactive]:hidden"
-          >
-            <AnalyticsTab mcpServer={mcpServer} />
-          </TabsContent>
-
-          {isRbacEnabled && mcpServer && (
-            <TabsContent
-              value="team-access"
-              className="mt-0 w-full data-[state=inactive]:hidden"
-            >
-              <RequireScope scope="mcp:read" level="page">
-                <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
-                  {/* mcp_servers-backed servers grant under the same `mcp:*`
-                    scope kind as toolset-backed ones (see selector.go), so
-                    MCPTeamAccessTab is reused as-is with the mcp_server's
-                    id as the resource id. No `tools` prop because the
-                    Remote MCP backend doesn't expose a Gram-side tool
-                    catalog. */}
-                  <MCPTeamAccessTab resourceId={mcpServer.id} />
-                </div>
-              </RequireScope>
-            </TabsContent>
-          )}
-
-          <TabsContent
-            value="settings"
-            className="mt-0 w-full data-[state=inactive]:hidden"
-          >
-            {mcpServer && (
-              <SettingsTab
-                mcpServer={mcpServer}
-                endpoints={endpoints}
-                isLoadingEndpoints={isLoadingEndpoints}
-              />
-            )}
-          </TabsContent>
-        </Tabs>
+      <Page.Body fullWidth className="gap-0">
+        <div className="mx-auto w-full max-w-[1270px] flex-1">
+          {renderTabContent()}
+        </div>
       </Page.Body>
     </Page>
   );
@@ -287,7 +199,7 @@ const VISIBILITY_OPTIONS: {
   {
     value: "disabled",
     label: "Disabled",
-    description: "The server is offline.",
+    description: "This server is offline. No users can connect to it",
     dotClass: "bg-amber-400",
     hoverDotClass: "group-hover:bg-amber-400",
   },
@@ -300,7 +212,11 @@ const VISIBILITY_OPTIONS: {
   },
 ];
 
-function MCPServerStatusDropdown({ server }: { server: McpServer }) {
+export function MCPServerStatusDropdown({
+  server,
+}: {
+  server: McpServer;
+}): JSX.Element {
   const { hasScope } = useRBAC();
   const canWrite = hasScope("mcp:write");
   const queryClient = useQueryClient();
@@ -309,6 +225,11 @@ function MCPServerStatusDropdown({ server }: { server: McpServer }) {
       await Promise.all([
         invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
+        // Enabling a disabled server (e.g. disabled -> private) auto-attaches
+        // it to the Default plugin server-side, which the plugin banner's
+        // membership check and publish-freshness state need to pick up.
+        invalidateAllPlugins(queryClient, { refetchType: "all" }),
+        invalidateAllPublishStatus(queryClient, { refetchType: "all" }),
       ]);
       const next = variables.request.updateMcpServerForm.visibility;
       toast.success(
@@ -360,29 +281,51 @@ function MCPServerStatusDropdown({ server }: { server: McpServer }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild disabled={!canWrite || update.isPending}>
-        <Button variant="primary" disabled={!canWrite || update.isPending}>
-          <Button.Text>{currentLabel}</Button.Text>
-          <Button.RightIcon>
-            <ChevronDown className="h-4 w-4" />
-          </Button.RightIcon>
-        </Button>
+        <button
+          type="button"
+          disabled={!canWrite || update.isPending}
+          className="text-foreground hover:bg-muted trans border-border flex w-fit items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <span
+            className={cn(
+              "h-2 w-2 shrink-0 rounded-full",
+              VISIBILITY_OPTIONS.find(
+                (option) => option.value === server.visibility,
+              )?.dotClass ?? "bg-green-400",
+            )}
+          />
+          {currentLabel}
+          <ChevronDown className="text-muted-foreground h-3 w-3" />
+        </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-[320px] p-1">
+      <DropdownMenuContent align="start" className="w-[320px] p-1">
         {VISIBILITY_OPTIONS.map((option) => (
           <DropdownMenuItem
             key={option.value}
             onSelect={() => handleSelect(option.value)}
-            disabled={option.value === server.visibility}
             className="group flex cursor-pointer items-start gap-2.5 rounded-md p-2"
           >
-            <span
-              className={cn(
-                "mt-1 h-2 w-2 shrink-0 rounded-full transition-colors",
-                option.value === server.visibility
-                  ? option.dotClass
-                  : cn("bg-muted", option.hoverDotClass),
-              )}
-            />
+            {option.value === server.visibility ? (
+              <span
+                className={cn(
+                  "mt-1 flex size-3.5 shrink-0 items-center justify-center rounded-full",
+                  option.dotClass,
+                )}
+              >
+                <Check
+                  className="text-background h-2.5 w-2.5"
+                  strokeWidth={4}
+                />
+              </span>
+            ) : (
+              <span
+                className={cn(
+                  "mt-1 size-3.5 shrink-0 rounded-full transition-colors",
+                  "bg-muted",
+                  option.hoverDotClass,
+                )}
+              />
+            )}
             <div className="flex-1">
               <span className="block font-mono text-xs font-semibold tracking-wide uppercase">
                 {option.label}
@@ -395,32 +338,5 @@ function MCPServerStatusDropdown({ server }: { server: McpServer }) {
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
-  );
-}
-
-function MCPServerHero({ server }: { server: McpServer | undefined }) {
-  const enabled = server?.visibility !== "disabled";
-  const isPublic = server?.visibility === "public";
-  const isHostedServer =
-    !!server?.remoteMcpServerId || !!server?.tunneledMcpServerId;
-  return (
-    <DetailHero actions={server && <MCPServerStatusDropdown server={server} />}>
-      <Stack gap={2}>
-        <Stack direction="horizontal" gap={3} align="center">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 dark:bg-violet-500/20">
-            <Network className="h-5 w-5 text-violet-600 dark:text-violet-400" />
-          </div>
-          <Heading variant="h1" className="break-all normal-case">
-            {server?.name || "MCP Server"}
-          </Heading>
-          {isHostedServer && (
-            <Badge variant="neutral">
-              <Badge.Text>Hosted MCP</Badge.Text>
-            </Badge>
-          )}
-        </Stack>
-        <MCPStatusIndicator mcpEnabled={enabled} mcpIsPublic={isPublic} />
-      </Stack>
-    </DetailHero>
   );
 }
