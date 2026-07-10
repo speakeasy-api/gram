@@ -89,7 +89,9 @@ export function MCPToolFilteringSection({
     }
 
     // mcpServers.update is a full-record replace for the optional UUID
-    // references, so every field has to be re-sent or it gets nulled.
+    // references, so every field has to be re-sent or it gets nulled. The
+    // user session issuer is the exception: it is fixed at create time and
+    // is not part of the update payload.
     const server = target.mcpServer;
     updateMcpServer.mutate({
       request: {
@@ -99,7 +101,6 @@ export function MCPToolFilteringSection({
           remoteMcpServerId: server.remoteMcpServerId ?? undefined,
           toolsetId: server.toolsetId ?? undefined,
           environmentId: server.environmentId ?? undefined,
-          userSessionIssuerId: server.userSessionIssuerId ?? undefined,
           visibility: server.visibility,
           toolVariationsGroupId: groupId ?? undefined,
         },

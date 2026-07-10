@@ -1,4 +1,8 @@
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
+import {
+  buildUserSessionResourceSlug,
+  DEFAULT_USER_SESSION_DURATION_HOURS,
+} from "@/lib/externalMcpUserSessions";
 import { formatTunneledMcpDisplay } from "@/lib/sources";
 import { createDefaultMcpEndpoint } from "@/lib/mcpEndpoints";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
@@ -8,11 +12,45 @@ import { invalidateAllListTunneledMcpServerConnections } from "@gram/client/reac
 import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { invalidateAllTunneledMcpServers } from "@gram/client/react-query/tunneledMcpServers.js";
+import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
 import {
   useMutation,
   useQueryClient,
   type UseMutationResult,
 } from "@tanstack/react-query";
+
+type SdkClient = ReturnType<typeof useSdkClient>;
+
+// Mint the one permanent user_session_issuer a tunneled-backed server carries
+// for its lifetime. Must run BEFORE mcpServers.create — the create API
+// requires the issuer up front and updates can never attach one later.
+async function mintUserSessionIssuer(
+  client: SdkClient,
+  baseSlug: string,
+): Promise<string> {
+  const userSessionIssuer = await client.userSessionIssuers.create({
+    createUserSessionIssuerForm: {
+      slug: buildUserSessionResourceSlug(baseSlug),
+      authnChallengeMode: "interactive",
+      sessionDurationHours: DEFAULT_USER_SESSION_DURATION_HOURS,
+    },
+  });
+  return userSessionIssuer.id;
+}
+
+async function deleteUserSessionIssuerQuietly(
+  client: SdkClient,
+  userSessionIssuerId: string,
+): Promise<void> {
+  try {
+    await client.userSessionIssuers.delete({ id: userSessionIssuerId });
+  } catch (cleanupError) {
+    console.info("Failed to clean up user session issuer after failure.", {
+      userSessionIssuerId,
+      cleanupError,
+    });
+  }
+}
 
 export type CreateTunneledMcpSourceVariables = {
   name: string;
@@ -40,16 +78,26 @@ export function useCreateTunneledMcpSource(): UseMutationResult<
       });
       const tunneledMcpServer = result.server;
 
+      // Mint the server's permanent USI first — mcpServers.create requires it
+      // and updates can never attach one later.
+      const displayName = formatTunneledMcpDisplay(tunneledMcpServer);
+      const userSessionIssuerId = await mintUserSessionIssuer(
+        client,
+        displayName,
+      );
+
       let mcpServer: McpServer;
       try {
         mcpServer = await client.mcpServers.create({
           createMcpServerForm: {
-            name: formatTunneledMcpDisplay(tunneledMcpServer),
+            name: displayName,
             tunneledMcpServerId: tunneledMcpServer.id,
+            userSessionIssuerId,
             visibility: "disabled",
           },
         });
       } catch (linkError) {
+        await deleteUserSessionIssuerQuietly(client, userSessionIssuerId);
         try {
           await client.tunneledMcp.deleteServer({
             id: tunneledMcpServer.id,
@@ -103,13 +151,30 @@ export function useLinkMcpServerToTunneled(): UseMutationResult<
 
   return useMutation({
     mutationFn: async ({ tunneledMcpServer }) => {
-      const mcpServer = await client.mcpServers.create({
-        createMcpServerForm: {
-          name: formatTunneledMcpDisplay(tunneledMcpServer),
-          tunneledMcpServerId: tunneledMcpServer.id,
-          visibility: "disabled",
-        },
-      });
+      // Mirror the create flow: mint the re-linked server's permanent USI
+      // before the create call, since it is required up front.
+      const displayName = formatTunneledMcpDisplay(tunneledMcpServer);
+      const userSessionIssuerId = await mintUserSessionIssuer(
+        client,
+        displayName,
+      );
+
+      let mcpServer: McpServer;
+      try {
+        mcpServer = await client.mcpServers.create({
+          createMcpServerForm: {
+            name: displayName,
+            tunneledMcpServerId: tunneledMcpServer.id,
+            userSessionIssuerId,
+            visibility: "disabled",
+          },
+        });
+      } catch (createError) {
+        await deleteUserSessionIssuerQuietly(client, userSessionIssuerId);
+        throw createError instanceof Error
+          ? createError
+          : new Error(String(createError));
+      }
 
       await createDefaultMcpEndpoint(client, mcpServer, orgSlug);
     },
@@ -117,6 +182,7 @@ export function useLinkMcpServerToTunneled(): UseMutationResult<
       await Promise.all([
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
         invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
+        invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
       ]);
     },
   });

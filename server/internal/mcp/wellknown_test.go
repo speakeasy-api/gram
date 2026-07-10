@@ -88,31 +88,13 @@ func TestHandleGetAuthorizationServer_DisabledServer(t *testing.T) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	slug := "disabled-" + uuid.NewString()
-	createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, "https://upstream.invalid/mcp", slug, "disabled", uuid.Nil)
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
+	createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, "https://upstream.invalid/mcp", slug, "disabled", issuerID)
 
 	// Disabled mcp_server resolves as not-found; with no legacy toolset for
 	// the slug the fallback also misses → 404.
 	w, err := runMCPWellKnown(t, ctx, ti.service.HandleGetAuthorizationServer, slug)
 	require.Error(t, err)
-	require.Empty(t, w.Body.String())
-}
-
-func TestHandleGetAuthorizationServer_RemoteBackend(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-
-	// Remote-backed mcp_servers without issuer gating have no Gram-hosted
-	// authorization server — the upstream publishes its own .well-known.
-	slug := "remote-" + uuid.NewString()
-	createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, "https://upstream.invalid/mcp", slug, "public", uuid.Nil)
-
-	w, err := runMCPWellKnown(t, ctx, ti.service.HandleGetAuthorizationServer, slug)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "no OAuth configuration found")
 	require.Empty(t, w.Body.String())
 }
 
@@ -346,23 +328,6 @@ func TestHandleGetProtectedResource_NotFound(t *testing.T) {
 	w, err := runMCPWellKnown(t, ctx, ti.service.HandleGetProtectedResource, "definitely-missing-"+uuid.NewString()[:8])
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "mcp server not found")
-	require.Empty(t, w.Body.String())
-}
-
-func TestHandleGetProtectedResource_RemoteBackend(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-
-	slug := "remote-pr-" + uuid.NewString()
-	createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, "https://upstream.invalid/mcp", slug, "public", uuid.Nil)
-
-	w, err := runMCPWellKnown(t, ctx, ti.service.HandleGetProtectedResource, slug)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "no OAuth configuration found")
 	require.Empty(t, w.Body.String())
 }
 

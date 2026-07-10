@@ -21,8 +21,9 @@ type CreateMcpServerRequestBody struct {
 	// The ID of the environment to associate with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
 	// The ID of the user session issuer that gates OAuth-based MCP client
-	// authentication. When set, MCP clients are required to authenticate against
-	// this issuer before connecting.
+	// authentication. Required for remote and tunneled backends — the issuer is
+	// attached for the server's lifetime and cannot be changed later.
+	// Toolset-backed servers must omit it (their issuer lives on the toolset).
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The ID of the remote MCP server to use as the backend
 	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
@@ -47,9 +48,6 @@ type UpdateMcpServerRequestBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The ID of the environment to associate with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
-	// The ID of the user session issuer that gates OAuth-based MCP client
-	// authentication. Omit to disable issuer-gated OAuth.
-	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The ID of the remote MCP server to use as the backend
 	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
 	// The ID of the tunneled MCP server to use as the backend
@@ -1373,7 +1371,6 @@ func NewUpdateMcpServerRequestBody(p *mcpservers.UpdateMcpServerPayload) *Update
 		ID:                    p.ID,
 		Name:                  p.Name,
 		EnvironmentID:         p.EnvironmentID,
-		UserSessionIssuerID:   p.UserSessionIssuerID,
 		RemoteMcpServerID:     p.RemoteMcpServerID,
 		TunneledMcpServerID:   p.TunneledMcpServerID,
 		ToolsetID:             p.ToolsetID,

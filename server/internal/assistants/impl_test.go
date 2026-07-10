@@ -411,12 +411,13 @@ func TestAssistantsService_AttachMCPServer_RejectsUnreachable(t *testing.T) {
 	require.NoError(t, err)
 
 	disabled, err := mcpserversRepo.New(conn).CreateMCPServer(t.Context(), mcpserversRepo.CreateMCPServerParams{
-		ID:                uuid.New(),
-		ProjectID:         projectID,
-		Name:              pgtype.Text{String: "Disabled", Valid: true},
-		Slug:              pgtype.Text{String: "disabled-remote", Valid: true},
-		RemoteMcpServerID: uuid.NullUUID{UUID: remote.ID, Valid: true},
-		Visibility:        "disabled",
+		ID:                  uuid.New(),
+		ProjectID:           projectID,
+		Name:                pgtype.Text{String: "Disabled", Valid: true},
+		Slug:                pgtype.Text{String: "disabled-remote", Valid: true},
+		RemoteMcpServerID:   uuid.NullUUID{UUID: remote.ID, Valid: true},
+		UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
+		Visibility:          "disabled",
 	})
 	require.NoError(t, err)
 	_, err = mcpendpointsRepo.New(conn).CreateMCPEndpoint(t.Context(), mcpendpointsRepo.CreateMCPEndpointParams{

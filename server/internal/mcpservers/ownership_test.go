@@ -105,15 +105,17 @@ func TestUpdateMcpServer_RejectsCrossTenantToolset(t *testing.T) {
 
 	// Start with a valid frontend pointing at a same-project remote MCP server.
 	ownServerID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+	issuerID := seedUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID).String()
 	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
-		SessionToken:      nil,
-		ApikeyToken:       nil,
-		ProjectSlugInput:  nil,
-		Name:              "test mcp server",
-		EnvironmentID:     nil,
-		RemoteMcpServerID: &ownServerID,
-		ToolsetID:         nil,
-		Visibility:        types.McpServerVisibility("disabled"),
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		Name:                "test mcp server",
+		EnvironmentID:       nil,
+		UserSessionIssuerID: &issuerID,
+		RemoteMcpServerID:   &ownServerID,
+		ToolsetID:           nil,
+		Visibility:          types.McpServerVisibility("disabled"),
 	})
 	require.NoError(t, err)
 
@@ -141,18 +143,22 @@ func TestCreateMcpServer_RejectsCrossTenantRemoteMcpServer(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	// Remote MCP server lives in a different project in the same org.
+	// Remote MCP server lives in a different project in the same org. The
+	// issuer is in the caller's own project so the cross-tenant backend
+	// reference is what gets rejected.
 	otherServerID := seedOtherProjectRemoteMcpServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID).String()
+	issuerID := seedUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID).String()
 
 	_, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
-		SessionToken:      nil,
-		ApikeyToken:       nil,
-		ProjectSlugInput:  nil,
-		Name:              "test mcp server",
-		EnvironmentID:     nil,
-		RemoteMcpServerID: &otherServerID,
-		ToolsetID:         nil,
-		Visibility:        types.McpServerVisibility("disabled"),
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		Name:                "test mcp server",
+		EnvironmentID:       nil,
+		UserSessionIssuerID: &issuerID,
+		RemoteMcpServerID:   &otherServerID,
+		ToolsetID:           nil,
+		Visibility:          types.McpServerVisibility("disabled"),
 	})
 	requireOopsCode(t, err, oops.CodeInvalid)
 }
@@ -167,15 +173,17 @@ func TestUpdateMcpServer_RejectsCrossTenantRemoteMcpServer(t *testing.T) {
 
 	// Start with a valid frontend in the caller's own project.
 	ownServerID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+	issuerID := seedUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID).String()
 	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
-		SessionToken:      nil,
-		ApikeyToken:       nil,
-		ProjectSlugInput:  nil,
-		Name:              "test mcp server",
-		EnvironmentID:     nil,
-		RemoteMcpServerID: &ownServerID,
-		ToolsetID:         nil,
-		Visibility:        types.McpServerVisibility("disabled"),
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		Name:                "test mcp server",
+		EnvironmentID:       nil,
+		UserSessionIssuerID: &issuerID,
+		RemoteMcpServerID:   &ownServerID,
+		ToolsetID:           nil,
+		Visibility:          types.McpServerVisibility("disabled"),
 	})
 	require.NoError(t, err)
 

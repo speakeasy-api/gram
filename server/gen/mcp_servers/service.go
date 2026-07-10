@@ -78,8 +78,9 @@ type CreateMcpServerPayload struct {
 	// The ID of the environment to associate with the server
 	EnvironmentID *string
 	// The ID of the user session issuer that gates OAuth-based MCP client
-	// authentication. When set, MCP clients are required to authenticate against
-	// this issuer before connecting.
+	// authentication. Required for remote and tunneled backends — the issuer is
+	// attached for the server's lifetime and cannot be changed later.
+	// Toolset-backed servers must omit it (their issuer lives on the toolset).
 	UserSessionIssuerID *string
 	// The ID of the remote MCP server to use as the backend
 	RemoteMcpServerID *string
@@ -161,9 +162,6 @@ type UpdateMcpServerPayload struct {
 	Name *string
 	// The ID of the environment to associate with the server
 	EnvironmentID *string
-	// The ID of the user session issuer that gates OAuth-based MCP client
-	// authentication. Omit to disable issuer-gated OAuth.
-	UserSessionIssuerID *string
 	// The ID of the remote MCP server to use as the backend
 	RemoteMcpServerID *string
 	// The ID of the tunneled MCP server to use as the backend

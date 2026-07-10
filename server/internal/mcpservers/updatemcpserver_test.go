@@ -29,16 +29,18 @@ func TestUpdateMcpServer_FullReplace(t *testing.T) {
 
 	serverA := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
 	serverB := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+	issuerID := seedUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID).String()
 
 	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
-		SessionToken:      nil,
-		ApikeyToken:       nil,
-		ProjectSlugInput:  nil,
-		Name:              "test mcp server",
-		EnvironmentID:     nil,
-		RemoteMcpServerID: &serverA,
-		ToolsetID:         nil,
-		Visibility:        types.McpServerVisibility("disabled"),
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		Name:                "test mcp server",
+		EnvironmentID:       nil,
+		UserSessionIssuerID: &issuerID,
+		RemoteMcpServerID:   &serverA,
+		ToolsetID:           nil,
+		Visibility:          types.McpServerVisibility("disabled"),
 	})
 	require.NoError(t, err)
 
@@ -82,16 +84,18 @@ func TestUpdateMcpServer_InvalidBackend(t *testing.T) {
 	require.True(t, ok)
 
 	serverID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+	issuerID := seedUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID).String()
 
 	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
-		SessionToken:      nil,
-		ApikeyToken:       nil,
-		ProjectSlugInput:  nil,
-		Name:              "test mcp server",
-		EnvironmentID:     nil,
-		RemoteMcpServerID: &serverID,
-		ToolsetID:         nil,
-		Visibility:        types.McpServerVisibility("disabled"),
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		Name:                "test mcp server",
+		EnvironmentID:       nil,
+		UserSessionIssuerID: &issuerID,
+		RemoteMcpServerID:   &serverID,
+		ToolsetID:           nil,
+		Visibility:          types.McpServerVisibility("disabled"),
 	})
 	require.NoError(t, err)
 
@@ -141,6 +145,7 @@ func TestUpdateMcpServer_LeavesNameWhenOmitted(t *testing.T) {
 	require.True(t, ok)
 
 	serverID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+	issuerID := seedUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID).String()
 
 	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
 		SessionToken:        nil,
@@ -148,7 +153,7 @@ func TestUpdateMcpServer_LeavesNameWhenOmitted(t *testing.T) {
 		ProjectSlugInput:    nil,
 		Name:                "original name",
 		EnvironmentID:       nil,
-		UserSessionIssuerID: nil,
+		UserSessionIssuerID: &issuerID,
 		RemoteMcpServerID:   &serverID,
 		ToolsetID:           nil,
 		Visibility:          types.McpServerVisibility("disabled"),
@@ -156,16 +161,15 @@ func TestUpdateMcpServer_LeavesNameWhenOmitted(t *testing.T) {
 	require.NoError(t, err)
 
 	updated, err := ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
-		SessionToken:        nil,
-		ApikeyToken:         nil,
-		ProjectSlugInput:    nil,
-		ID:                  created.ID,
-		Name:                nil,
-		EnvironmentID:       nil,
-		UserSessionIssuerID: nil,
-		RemoteMcpServerID:   &serverID,
-		ToolsetID:           nil,
-		Visibility:          types.McpServerVisibility("public"),
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		ID:                created.ID,
+		Name:              nil,
+		EnvironmentID:     nil,
+		RemoteMcpServerID: &serverID,
+		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("public"),
 	})
 	require.NoError(t, err)
 	require.NotNil(t, updated.Name)
@@ -181,6 +185,7 @@ func TestUpdateMcpServer_TunneledMcpRejectsPublicVisibility(t *testing.T) {
 	require.True(t, ok)
 
 	tunneledServerID := seedTunneledMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+	issuerID := seedUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID).String()
 
 	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
 		SessionToken:        nil,
@@ -188,6 +193,7 @@ func TestUpdateMcpServer_TunneledMcpRejectsPublicVisibility(t *testing.T) {
 		ProjectSlugInput:    nil,
 		Name:                "private tunneled mcp server",
 		EnvironmentID:       nil,
+		UserSessionIssuerID: &issuerID,
 		TunneledMcpServerID: &tunneledServerID,
 		ToolsetID:           nil,
 		Visibility:          types.McpServerVisibility("private"),
@@ -217,6 +223,7 @@ func TestUpdateMcpServer_RecomputesSlugOnNameChange(t *testing.T) {
 	require.True(t, ok)
 
 	serverID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+	issuerID := seedUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID).String()
 
 	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
 		SessionToken:        nil,
@@ -224,7 +231,7 @@ func TestUpdateMcpServer_RecomputesSlugOnNameChange(t *testing.T) {
 		ProjectSlugInput:    nil,
 		Name:                "before name",
 		EnvironmentID:       nil,
-		UserSessionIssuerID: nil,
+		UserSessionIssuerID: &issuerID,
 		RemoteMcpServerID:   &serverID,
 		ToolsetID:           nil,
 		Visibility:          types.McpServerVisibility("disabled"),
@@ -235,16 +242,15 @@ func TestUpdateMcpServer_RecomputesSlugOnNameChange(t *testing.T) {
 
 	newName := "after name"
 	updated, err := ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
-		SessionToken:        nil,
-		ApikeyToken:         nil,
-		ProjectSlugInput:    nil,
-		ID:                  created.ID,
-		Name:                &newName,
-		EnvironmentID:       nil,
-		UserSessionIssuerID: nil,
-		RemoteMcpServerID:   &serverID,
-		ToolsetID:           nil,
-		Visibility:          types.McpServerVisibility("disabled"),
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		ID:                created.ID,
+		Name:              &newName,
+		EnvironmentID:     nil,
+		RemoteMcpServerID: &serverID,
+		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("disabled"),
 	})
 	require.NoError(t, err)
 	require.NotNil(t, updated.Name)
@@ -262,6 +268,7 @@ func TestUpdateMcpServer_RejectsEmptyName(t *testing.T) {
 	require.True(t, ok)
 
 	serverID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+	issuerID := seedUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID).String()
 
 	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
 		SessionToken:        nil,
@@ -269,7 +276,7 @@ func TestUpdateMcpServer_RejectsEmptyName(t *testing.T) {
 		ProjectSlugInput:    nil,
 		Name:                "original name",
 		EnvironmentID:       nil,
-		UserSessionIssuerID: nil,
+		UserSessionIssuerID: &issuerID,
 		RemoteMcpServerID:   &serverID,
 		ToolsetID:           nil,
 		Visibility:          types.McpServerVisibility("disabled"),
@@ -278,75 +285,24 @@ func TestUpdateMcpServer_RejectsEmptyName(t *testing.T) {
 
 	emptyName := "   "
 	_, err = ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
-		SessionToken:        nil,
-		ApikeyToken:         nil,
-		ProjectSlugInput:    nil,
-		ID:                  created.ID,
-		Name:                &emptyName,
-		EnvironmentID:       nil,
-		UserSessionIssuerID: nil,
-		RemoteMcpServerID:   &serverID,
-		ToolsetID:           nil,
-		Visibility:          types.McpServerVisibility("disabled"),
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		ID:                created.ID,
+		Name:              &emptyName,
+		EnvironmentID:     nil,
+		RemoteMcpServerID: &serverID,
+		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("disabled"),
 	})
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
-func TestUpdateMcpServer_SetUserSessionIssuer(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-
-	serverID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
-
-	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
-		SessionToken:        nil,
-		ApikeyToken:         nil,
-		ProjectSlugInput:    nil,
-		Name:                "set issuer",
-		EnvironmentID:       nil,
-		UserSessionIssuerID: nil,
-		RemoteMcpServerID:   &serverID,
-		ToolsetID:           nil,
-		Visibility:          types.McpServerVisibility("disabled"),
-	})
-	require.NoError(t, err)
-	require.Nil(t, created.UserSessionIssuerID)
-
-	issuerID := seedUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID).String()
-
-	updated, err := ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
-		SessionToken:        nil,
-		ApikeyToken:         nil,
-		ProjectSlugInput:    nil,
-		ID:                  created.ID,
-		Name:                nil,
-		EnvironmentID:       nil,
-		UserSessionIssuerID: &issuerID,
-		RemoteMcpServerID:   &serverID,
-		ToolsetID:           nil,
-		Visibility:          types.McpServerVisibility("disabled"),
-	})
-	require.NoError(t, err)
-	require.NotNil(t, updated.UserSessionIssuerID)
-	require.Equal(t, issuerID, *updated.UserSessionIssuerID)
-
-	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionMcpServerUpdate)
-	require.NoError(t, err)
-
-	beforeSnapshot, err := audittest.DecodeAuditData(record.BeforeSnapshot)
-	require.NoError(t, err)
-	require.Nil(t, beforeSnapshot["UserSessionIssuerID"])
-
-	afterSnapshot, err := audittest.DecodeAuditData(record.AfterSnapshot)
-	require.NoError(t, err)
-	require.Equal(t, issuerID, afterSnapshot["UserSessionIssuerID"])
-}
-
-func TestUpdateMcpServer_ClearUserSessionIssuer(t *testing.T) {
+// TestUpdateMcpServer_PreservesUserSessionIssuer: the issuer is attached at
+// create time for the server's lifetime. The update payload carries no issuer
+// field, and a full-record-replace update must leave the stored issuer intact
+// (the query COALESCEs a NULL input to the existing value).
+func TestUpdateMcpServer_PreservesUserSessionIssuer(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -361,7 +317,7 @@ func TestUpdateMcpServer_ClearUserSessionIssuer(t *testing.T) {
 		SessionToken:        nil,
 		ApikeyToken:         nil,
 		ProjectSlugInput:    nil,
-		Name:                "clear issuer",
+		Name:                "perpetual issuer",
 		EnvironmentID:       nil,
 		UserSessionIssuerID: &issuerID,
 		RemoteMcpServerID:   &serverID,
@@ -372,19 +328,19 @@ func TestUpdateMcpServer_ClearUserSessionIssuer(t *testing.T) {
 	require.NotNil(t, created.UserSessionIssuerID)
 
 	updated, err := ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
-		SessionToken:        nil,
-		ApikeyToken:         nil,
-		ProjectSlugInput:    nil,
-		ID:                  created.ID,
-		Name:                nil,
-		EnvironmentID:       nil,
-		UserSessionIssuerID: nil,
-		RemoteMcpServerID:   &serverID,
-		ToolsetID:           nil,
-		Visibility:          types.McpServerVisibility("disabled"),
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		ID:                created.ID,
+		Name:              nil,
+		EnvironmentID:     nil,
+		RemoteMcpServerID: &serverID,
+		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("private"),
 	})
 	require.NoError(t, err)
-	require.Nil(t, updated.UserSessionIssuerID)
+	require.NotNil(t, updated.UserSessionIssuerID)
+	require.Equal(t, issuerID, *updated.UserSessionIssuerID)
 
 	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionMcpServerUpdate)
 	require.NoError(t, err)
@@ -395,47 +351,7 @@ func TestUpdateMcpServer_ClearUserSessionIssuer(t *testing.T) {
 
 	afterSnapshot, err := audittest.DecodeAuditData(record.AfterSnapshot)
 	require.NoError(t, err)
-	require.Nil(t, afterSnapshot["UserSessionIssuerID"])
-}
-
-func TestUpdateMcpServer_InvalidUserSessionIssuer(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-
-	serverID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
-
-	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
-		SessionToken:        nil,
-		ApikeyToken:         nil,
-		ProjectSlugInput:    nil,
-		Name:                "bogus issuer",
-		EnvironmentID:       nil,
-		UserSessionIssuerID: nil,
-		RemoteMcpServerID:   &serverID,
-		ToolsetID:           nil,
-		Visibility:          types.McpServerVisibility("disabled"),
-	})
-	require.NoError(t, err)
-
-	bogusIssuerID := uuid.NewString()
-
-	_, err = ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
-		SessionToken:        nil,
-		ApikeyToken:         nil,
-		ProjectSlugInput:    nil,
-		ID:                  created.ID,
-		Name:                nil,
-		EnvironmentID:       nil,
-		UserSessionIssuerID: &bogusIssuerID,
-		RemoteMcpServerID:   &serverID,
-		ToolsetID:           nil,
-		Visibility:          types.McpServerVisibility("disabled"),
-	})
-	requireOopsCode(t, err, oops.CodeInvalid)
+	require.Equal(t, issuerID, afterSnapshot["UserSessionIssuerID"])
 }
 
 func TestUpdateMcpServer_RBACForbidden(t *testing.T) {

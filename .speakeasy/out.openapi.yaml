@@ -41711,7 +41711,7 @@ components:
           format: uuid
         user_session_issuer_id:
           type: string
-          description: The ID of the user session issuer that gates OAuth-based MCP client authentication. When set, MCP clients are required to authenticate against this issuer before connecting.
+          description: The ID of the user session issuer that gates OAuth-based MCP client authentication. Required for remote and tunneled backends — the issuer is attached for the server's lifetime and cannot be changed later. Toolset-backed servers must omit it (their issuer lives on the toolset).
           format: uuid
         visibility:
           type: string
@@ -54851,10 +54851,6 @@ components:
           type: string
           description: The ID of the tunneled MCP server to use as the backend
           format: uuid
-        user_session_issuer_id:
-          type: string
-          description: The ID of the user session issuer that gates OAuth-based MCP client authentication. Omit to disable issuer-gated OAuth.
-          format: uuid
         visibility:
           type: string
           description: The visibility of an MCP server
@@ -54862,7 +54858,7 @@ components:
             - disabled
             - private
             - public
-      description: 'Form for updating an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be provided. Omit name to leave the existing display name unchanged; the slug is recomputed server-side from the resulting name.'
+      description: 'Form for updating an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record, except the user session issuer, which is attached at create time for the server''s lifetime and cannot be changed here. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be provided. Omit name to leave the existing display name unchanged; the slug is recomputed server-side from the resulting name.'
       required:
         - id
         - visibility

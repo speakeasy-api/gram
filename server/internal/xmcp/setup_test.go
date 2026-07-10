@@ -255,12 +255,10 @@ func seedRemoteMCPEndpoint(t *testing.T, ctx context.Context, ti *testInstance, 
 	remoteServer = seedRemoteMCPServer(t, ctx, ti, projectID, upstreamURL, headers...)
 	mcpServerID, err := uuid.NewV7()
 	require.NoError(t, err)
-	// Private remote servers must carry a user_session_issuer per the
-	// mcp_servers_private_remote_requires_issuer_check constraint.
-	var issuerID uuid.NullUUID
-	if visibility == "private" {
-		issuerID = uuid.NullUUID{UUID: seedUserSessionIssuer(t, ctx, ti, projectID), Valid: true}
-	}
+	// Remote-backed servers always carry a user_session_issuer per the
+	// mcp_servers_issuer_required_check constraint, so every seed is
+	// issuer-gated at serve time regardless of visibility.
+	issuerID := seedUserSessionIssuer(t, ctx, ti, projectID)
 	mcpServer, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
 		ID:                  mcpServerID,
 		ProjectID:           projectID,
@@ -270,7 +268,7 @@ func seedRemoteMCPEndpoint(t *testing.T, ctx context.Context, ti *testInstance, 
 		RemoteMcpServerID:   uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
 		ToolsetID:           uuid.NullUUID{},
 		Visibility:          visibility,
-		UserSessionIssuerID: issuerID,
+		UserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
 	})
 	require.NoError(t, err)
 

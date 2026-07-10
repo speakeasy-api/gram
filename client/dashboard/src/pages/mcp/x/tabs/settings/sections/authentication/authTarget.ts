@@ -38,23 +38,14 @@ export function useMcpServerAuthTarget(mcpServer: McpServer): AuthTarget {
       slug: mcpServer.slug ?? "mcp",
       userSessionIssuerId: mcpServer.userSessionIssuerId ?? null,
       remoteMcpServerId: mcpServer.remoteMcpServerId,
-      linkUserSessionIssuer: async (userSessionIssuerId: string) => {
-        // Point the server at the issuer and set visibility private so it
-        // serves traffic. update is a full-record replace, so re-send the
-        // existing UUID references alongside.
-        await client.mcpServers.update({
-          updateMcpServerForm: {
-            id: mcpServer.id,
-            name: mcpServer.name ?? undefined,
-            remoteMcpServerId: mcpServer.remoteMcpServerId ?? undefined,
-            tunneledMcpServerId: mcpServer.tunneledMcpServerId ?? undefined,
-            toolsetId: mcpServer.toolsetId ?? undefined,
-            environmentId: mcpServer.environmentId ?? undefined,
-            toolVariationsGroupId: mcpServer.toolVariationsGroupId ?? undefined,
-            visibility: "private",
-            userSessionIssuerId,
-          },
-        });
+      linkUserSessionIssuer: async () => {
+        // MCP servers mint their issuer at create time and carry it for the
+        // server's lifetime — the update API cannot attach or swap one. The
+        // attach sheet only calls this on first-add, which is unreachable for
+        // mcp servers; failing loudly beats silently mutating the server.
+        throw new Error(
+          "MCP servers carry a permanent login issuer from creation; it cannot be re-linked.",
+        );
       },
       invalidate: async (queryClient: QueryClient) => {
         await Promise.all([

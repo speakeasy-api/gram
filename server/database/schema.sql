@@ -2981,13 +2981,10 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
   CONSTRAINT mcp_servers_tool_variations_group_id_fkey FOREIGN KEY (tool_variations_group_id) REFERENCES tool_variations_groups (id) ON DELETE SET NULL,
   -- Exactly one backend must be set.
   CONSTRAINT mcp_servers_backend_exclusivity_check CHECK (num_nonnulls(remote_mcp_server_id, tunneled_mcp_server_id, toolset_id) = 1),
-  -- Tunneled servers front a private network and are never anonymous, so they
-  -- always carry a Gram-as-AS issuer (auto-provisioned on create/update).
-  CONSTRAINT mcp_servers_tunneled_requires_issuer_check CHECK (tunneled_mcp_server_id IS NULL OR user_session_issuer_id IS NOT NULL),
-  -- Private remote servers serve authenticated traffic, so they require an
-  -- issuer; public remote servers are anonymous and carry none. Toolset-backed
+  -- Remote and tunneled servers carry a Gram-as-AS issuer attached at create
+  -- time for the server's lifetime, regardless of visibility. Toolset-backed
   -- servers are exempt (their auth lives on toolsets.user_session_issuer_id).
-  CONSTRAINT mcp_servers_private_remote_requires_issuer_check CHECK (remote_mcp_server_id IS NULL OR visibility <> 'private' OR user_session_issuer_id IS NOT NULL)
+  CONSTRAINT mcp_servers_issuer_required_check CHECK ((remote_mcp_server_id IS NULL AND tunneled_mcp_server_id IS NULL) OR user_session_issuer_id IS NOT NULL)
 );
 
 CREATE INDEX IF NOT EXISTS mcp_servers_project_id_idx

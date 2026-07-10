@@ -50,7 +50,7 @@ export type CreateMcpServerForm = {
    */
   tunneledMcpServerId?: string | undefined;
   /**
-   * The ID of the user session issuer that gates OAuth-based MCP client authentication. When set, MCP clients are required to authenticate against this issuer before connecting.
+   * The ID of the user session issuer that gates OAuth-based MCP client authentication. Required for remote and tunneled backends — the issuer is attached for the server's lifetime and cannot be changed later. Toolset-backed servers must omit it (their issuer lives on the toolset).
    */
   userSessionIssuerId?: string | undefined;
   /**

@@ -23,19 +23,21 @@ func TestCreateMcpServer_RemoteMcpBackend(t *testing.T) {
 	require.True(t, ok)
 
 	serverID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+	issuerID := seedUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID).String()
 
 	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMcpServerCreate)
 	require.NoError(t, err)
 
 	result, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
-		SessionToken:      nil,
-		ApikeyToken:       nil,
-		ProjectSlugInput:  nil,
-		Name:              "test mcp server",
-		EnvironmentID:     nil,
-		RemoteMcpServerID: &serverID,
-		ToolsetID:         nil,
-		Visibility:        types.McpServerVisibility("disabled"),
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		Name:                "test mcp server",
+		EnvironmentID:       nil,
+		UserSessionIssuerID: &issuerID,
+		RemoteMcpServerID:   &serverID,
+		ToolsetID:           nil,
+		Visibility:          types.McpServerVisibility("disabled"),
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -48,6 +50,8 @@ func TestCreateMcpServer_RemoteMcpBackend(t *testing.T) {
 	require.NotEmpty(t, *result.Slug)
 	require.NotNil(t, result.RemoteMcpServerID)
 	require.Equal(t, serverID, *result.RemoteMcpServerID)
+	require.NotNil(t, result.UserSessionIssuerID)
+	require.Equal(t, issuerID, *result.UserSessionIssuerID)
 	require.Nil(t, result.ToolsetID)
 	require.Equal(t, types.McpServerVisibility("disabled"), result.Visibility)
 
@@ -169,6 +173,52 @@ func TestCreateMcpServer_WithUserSessionIssuer(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result.UserSessionIssuerID)
 	require.Equal(t, issuerID, *result.UserSessionIssuerID)
+}
+
+func TestCreateMcpServer_RemoteRequiresUserSessionIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	serverID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+
+	_, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		Name:              "remote without issuer",
+		EnvironmentID:     nil,
+		RemoteMcpServerID: &serverID,
+		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("disabled"),
+	})
+	requireOopsCode(t, err, oops.CodeInvalid)
+}
+
+func TestCreateMcpServer_TunneledRequiresUserSessionIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	tunneledServerID := seedTunneledMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+
+	_, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		Name:                "tunneled without issuer",
+		EnvironmentID:       nil,
+		TunneledMcpServerID: &tunneledServerID,
+		ToolsetID:           nil,
+		Visibility:          types.McpServerVisibility("private"),
+	})
+	requireOopsCode(t, err, oops.CodeInvalid)
 }
 
 func TestCreateMcpServer_TunneledMcpRejectsPublicVisibility(t *testing.T) {

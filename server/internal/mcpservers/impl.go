@@ -131,6 +131,9 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 	if err := validateTunneledMCPVisibility(ids, payload.Visibility); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogWarn(ctx, logger)
 	}
+	if err := validateServerIssuerRequired(ids); err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogWarn(ctx, logger)
+	}
 
 	// Generate the server ID up front so the slug can include its suffix and
 	// the row can be inserted in a single statement (no insert-then-update).
@@ -154,14 +157,6 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 
 	if err := verifyServerReferenceOwnership(ctx, dbtx, *authCtx.ProjectID, ids); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
-	}
-
-	// Guarantee the private/tunneled ⇒ issuer invariant: auto-provision a
-	// user_session_issuer when this server requires one and none was supplied,
-	// so no create path can persist a row the CHECK constraints would reject.
-	ids.UserSessionIssuerID, err = ensureServerUserSessionIssuer(ctx, dbtx, *authCtx.ProjectID, slug, ids, string(payload.Visibility))
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "ensure mcp server issuer").LogError(ctx, logger)
 	}
 
 	server, err := txRepo.CreateMCPServer(ctx, repo.CreateMCPServerParams{
@@ -406,7 +401,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 
 	ids, err := parseServerIDs(
 		payload.EnvironmentID,
-		payload.UserSessionIssuerID,
+		nil, // The issuer is attached at create time and cannot be changed here.
 		payload.RemoteMcpServerID,
 		payload.TunneledMcpServerID,
 		payload.ToolsetID,
@@ -464,25 +459,13 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		return nil, oops.E(oops.CodeUnexpected, err, "compute server slug").LogError(ctx, logger)
 	}
 
-	// UpdateMCPServer is a full-record replace, so an omitted issuer would null
-	// the column. For servers the invariant requires an issuer on (private
-	// remote, tunneled), preserve the existing one so a partial update can't
-	// silently strip it; then auto-provision if one is still needed (e.g. a
-	// disabled server being enabled to private). Public/disabled servers keep
-	// the documented omit-to-clear behavior.
-	if !ids.UserSessionIssuerID.Valid && serverRequiresUserSessionIssuer(ids, string(payload.Visibility)) {
-		ids.UserSessionIssuerID = existing.UserSessionIssuerID
-	}
-	ids.UserSessionIssuerID, err = ensureServerUserSessionIssuer(ctx, dbtx, *authCtx.ProjectID, slug, ids, string(payload.Visibility))
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "ensure mcp server issuer").LogError(ctx, logger)
-	}
-
 	updated, err := txRepo.UpdateMCPServer(ctx, repo.UpdateMCPServerParams{
-		Name:                  name,
-		Slug:                  conv.ToPGText(slug),
-		EnvironmentID:         ids.EnvironmentID,
-		UserSessionIssuerID:   ids.UserSessionIssuerID,
+		Name:          name,
+		Slug:          conv.ToPGText(slug),
+		EnvironmentID: ids.EnvironmentID,
+		// Always NULL: the query COALESCEs to the stored issuer, which is
+		// attached at create time for the server's lifetime.
+		UserSessionIssuerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		RemoteMcpServerID:     ids.RemoteMcpServerID,
 		TunneledMcpServerID:   ids.TunneledMcpServerID,
 		ToolsetID:             ids.ToolsetID,
@@ -754,6 +737,17 @@ func validateServerBackendExclusivity(remoteMcpServerID, tunneledMcpServerID, to
 func validateTunneledMCPVisibility(ids serverIDs, visibility types.McpServerVisibility) error {
 	if ids.TunneledMcpServerID.Valid && string(visibility) == VisibilityPublic {
 		return fmt.Errorf("tunneled MCP servers cannot be public")
+	}
+	return nil
+}
+
+// validateServerIssuerRequired mirrors the mcp_servers_issuer_required_check
+// DB constraint: remote- and tunneled-backed servers carry a
+// user_session_issuer attached at create time for the server's lifetime.
+// Toolset-backed servers are exempt (their issuer lives on the toolset).
+func validateServerIssuerRequired(ids serverIDs) error {
+	if (ids.RemoteMcpServerID.Valid || ids.TunneledMcpServerID.Valid) && !ids.UserSessionIssuerID.Valid {
+		return fmt.Errorf("user_session_issuer_id is required for remote and tunneled MCP servers")
 	}
 	return nil
 }

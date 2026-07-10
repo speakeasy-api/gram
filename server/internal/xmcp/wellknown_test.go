@@ -115,25 +115,6 @@ func TestHandleWellKnownOAuthServerMetadata_DisabledServer(t *testing.T) {
 	require.Empty(t, w.Body.String())
 }
 
-func TestHandleWellKnownOAuthServerMetadata_RemoteBackend(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-
-	// Remote-backed mcp_servers return 404 from .well-known today — the
-	// upstream remote MCP server publishes its own metadata and Gram
-	// doesn't act as the AS for these.
-	slug, _, _ := seedRemoteMCPEndpoint(t, ctx, ti, *authCtx.ProjectID, "https://upstream.invalid/mcp", "public")
-
-	w, err := runWellKnown(t, ctx, ti.service.HandleWellKnownOAuthServerMetadata, "/.well-known/oauth-authorization-server/x/mcp/"+slug, slug)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "no OAuth configuration found")
-	require.Empty(t, w.Body.String())
-}
-
 func TestHandleWellKnownOAuthServerMetadata_ToolsetBackendWithoutOAuth(t *testing.T) {
 	t.Parallel()
 
@@ -388,22 +369,6 @@ func TestHandleWellKnownOAuthProtectedResourceMetadata_DisabledServer(t *testing
 
 	w, err := runWellKnown(t, ctx, ti.service.HandleWellKnownOAuthProtectedResourceMetadata, "/.well-known/oauth-protected-resource/x/mcp/"+slug, slug)
 	require.Error(t, err)
-	require.Empty(t, w.Body.String())
-}
-
-func TestHandleWellKnownOAuthProtectedResourceMetadata_RemoteBackend(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-
-	slug, _, _ := seedRemoteMCPEndpoint(t, ctx, ti, *authCtx.ProjectID, "https://upstream.invalid/mcp", "public")
-
-	w, err := runWellKnown(t, ctx, ti.service.HandleWellKnownOAuthProtectedResourceMetadata, "/.well-known/oauth-protected-resource/x/mcp/"+slug, slug)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "no OAuth configuration found")
 	require.Empty(t, w.Body.String())
 }
 

@@ -270,41 +270,15 @@ func TestServePublic_NoMcpEndpoint_FallsBackToLegacyToolset(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
 }
 
-// TestServePublic_McpEndpoint_RemoteBacked_Proxies confirms /mcp/{slug}
-// dispatches to the remote MCP proxy when the resolved mcp_server is
-// backed by a remote_mcp_server. The proxy is exercised end-to-end:
-// the test's httptest server captures the relayed initialize body.
-func TestServePublic_McpEndpoint_RemoteBacked_Proxies(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPService(t)
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-
-	done := make(chan struct{}, 1)
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-03-26","capabilities":{},"serverInfo":{"name":"upstream","version":"1.0"}}}`))
-		done <- struct{}{}
-	}))
-	t.Cleanup(upstream.Close)
-
-	endpointSlug := "endpoint-" + uuid.NewString()
-	createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, upstream.URL, endpointSlug, "public", uuid.Nil)
-
-	w, err := servePublicHTTP(t, ctx, ti, endpointSlug, makeInitializeBody(), "", nil)
-	<-done
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
-	require.Contains(t, w.Body.String(), "upstream", "upstream initialize response must be relayed back")
-}
+// Remote-backed mcp_servers are always issuer-gated (the issuer is mandatory
+// at create), so an unauthenticated /mcp/{slug} request never reaches the
+// proxy — TestServePublic_McpEndpoint_IssuerGated_NoAuth_EmitsChallenge below
+// covers that rejection, and the xmcp suite covers the authenticated
+// pass-through via the shared serveResolvedMCPEndpoint dispatch.
 
 // TestServePublic_McpEndpoint_PrivateRemoteBacked_NoAuth_Returns401
-// confirms private-visibility remote-backed mcp_endpoints route through
-// the identity-auth check in serveRemoteBackend. An unauthenticated
-// request must be rejected before the proxy fires.
+// confirms private-visibility remote-backed mcp_endpoints reject an
+// unauthenticated request at the issuer gate, before the proxy fires.
 func TestServePublic_McpEndpoint_PrivateRemoteBacked_NoAuth_Returns401(t *testing.T) {
 	t.Parallel()
 
