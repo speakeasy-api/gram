@@ -353,3 +353,83 @@ func BuildMoveIssuerPayload(organizationRemoteSessionIssuersMoveIssuerBody strin
 
 	return v, nil
 }
+
+// BuildGetIssuerMigratePreflightPayload builds the payload for the
+// organizationRemoteSessionIssuers getIssuerMigratePreflight endpoint from CLI
+// flags.
+func BuildGetIssuerMigratePreflightPayload(organizationRemoteSessionIssuersGetIssuerMigratePreflightSourceID string, organizationRemoteSessionIssuersGetIssuerMigratePreflightTargetID string, organizationRemoteSessionIssuersGetIssuerMigratePreflightSessionToken string, organizationRemoteSessionIssuersGetIssuerMigratePreflightApikeyToken string) (*organizationremotesessionissuers.GetIssuerMigratePreflightPayload, error) {
+	var err error
+	var sourceID string
+	{
+		sourceID = organizationRemoteSessionIssuersGetIssuerMigratePreflightSourceID
+		err = goa.MergeErrors(err, goa.ValidateFormat("source_id", sourceID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var targetID string
+	{
+		targetID = organizationRemoteSessionIssuersGetIssuerMigratePreflightTargetID
+		err = goa.MergeErrors(err, goa.ValidateFormat("target_id", targetID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationRemoteSessionIssuersGetIssuerMigratePreflightSessionToken != "" {
+			sessionToken = &organizationRemoteSessionIssuersGetIssuerMigratePreflightSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if organizationRemoteSessionIssuersGetIssuerMigratePreflightApikeyToken != "" {
+			apikeyToken = &organizationRemoteSessionIssuersGetIssuerMigratePreflightApikeyToken
+		}
+	}
+	v := &organizationremotesessionissuers.GetIssuerMigratePreflightPayload{}
+	v.SourceID = sourceID
+	v.TargetID = targetID
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
+// BuildMigrateIssuerPayload builds the payload for the
+// organizationRemoteSessionIssuers migrateIssuer endpoint from CLI flags.
+func BuildMigrateIssuerPayload(organizationRemoteSessionIssuersMigrateIssuerBody string, organizationRemoteSessionIssuersMigrateIssuerSessionToken string, organizationRemoteSessionIssuersMigrateIssuerApikeyToken string) (*organizationremotesessionissuers.MigrateIssuerPayload, error) {
+	var err error
+	var body MigrateIssuerRequestBody
+	{
+		err = json.Unmarshal([]byte(organizationRemoteSessionIssuersMigrateIssuerBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"source_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"target_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.source_id", body.SourceID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.target_id", body.TargetID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationRemoteSessionIssuersMigrateIssuerSessionToken != "" {
+			sessionToken = &organizationRemoteSessionIssuersMigrateIssuerSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if organizationRemoteSessionIssuersMigrateIssuerApikeyToken != "" {
+			apikeyToken = &organizationRemoteSessionIssuersMigrateIssuerApikeyToken
+		}
+	}
+	v := &organizationremotesessionissuers.MigrateIssuerPayload{
+		SourceID: body.SourceID,
+		TargetID: body.TargetID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}

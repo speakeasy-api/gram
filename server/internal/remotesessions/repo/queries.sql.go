@@ -1022,6 +1022,65 @@ func (q *Queries) GetOrganizationRemoteSessionIssuerByID(ctx context.Context, ar
 	return i, err
 }
 
+const getOrganizationRemoteSessionIssuerByIDForUpdate = `-- name: GetOrganizationRemoteSessionIssuerByIDForUpdate :one
+SELECT id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, client_id_metadata_document_supported, oidc, passthrough, name, logo_asset_id, client_setup_documentation_url, created_at, updated_at, deleted_at, deleted
+FROM remote_session_issuers
+WHERE id = $1
+  AND organization_id = $2
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+type GetOrganizationRemoteSessionIssuerByIDForUpdateParams struct {
+	ID             uuid.UUID
+	OrganizationID pgtype.Text
+}
+
+// GetOrganizationRemoteSessionIssuerByID, holding a row lock until the
+// transaction ends. migrateIssuer decides whether a migration is legal by
+// reading the issuer's project_id, organization_id, and endpoint metadata, then
+// acts on that decision later in the same transaction. Without the row lock a
+// concurrent moveIssuer (which rewrites project_id) or updateIssuer (which
+// rewrites the endpoints) could commit in between, and the migration would
+// proceed against a scope or an authorization server it never validated.
+//
+// The advisory lock in LockRemoteSessionIssuerForClientBinding does not cover
+// this: those writers never take it. The two locks guard different races, so
+// migrateIssuer takes both.
+func (q *Queries) GetOrganizationRemoteSessionIssuerByIDForUpdate(ctx context.Context, arg GetOrganizationRemoteSessionIssuerByIDForUpdateParams) (RemoteSessionIssuer, error) {
+	row := q.db.QueryRow(ctx, getOrganizationRemoteSessionIssuerByIDForUpdate, arg.ID, arg.OrganizationID)
+	var i RemoteSessionIssuer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.Slug,
+		&i.Issuer,
+		&i.AuthorizationEndpoint,
+		&i.TokenEndpoint,
+		&i.RegistrationEndpoint,
+		&i.JwksUri,
+		&i.ServiceDocumentation,
+		&i.OpPolicyUri,
+		&i.OpTosUri,
+		&i.ScopesSupported,
+		&i.GrantTypesSupported,
+		&i.ResponseTypesSupported,
+		&i.TokenEndpointAuthMethodsSupported,
+		&i.ClientIDMetadataDocumentSupported,
+		&i.Oidc,
+		&i.Passthrough,
+		&i.Name,
+		&i.LogoAssetID,
+		&i.ClientSetupDocumentationUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getRemoteSessionByID = `-- name: GetRemoteSessionByID :one
 SELECT s.id, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.refresh_expires_at, s.scopes, s.created_at, s.updated_at, s.deleted_at, s.deleted
 FROM remote_sessions AS s
@@ -1376,6 +1435,71 @@ func (q *Queries) InsertRemoteSession(ctx context.Context, arg InsertRemoteSessi
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const listConflictingClientBindingsForIssuerMigration = `-- name: ListConflictingClientBindingsForIssuerMigration :many
+SELECT DISTINCT
+    link_source.user_session_issuer_id AS user_session_issuer_id,
+    m.name AS mcp_server_name,
+    COALESCE(rms.url, '')::text AS mcp_server_url
+FROM remote_session_client_user_session_issuers AS link_source
+JOIN remote_session_clients AS source_client
+    ON source_client.id = link_source.remote_session_client_id
+JOIN remote_session_client_user_session_issuers AS link_target
+    ON link_target.user_session_issuer_id = link_source.user_session_issuer_id
+JOIN remote_session_clients AS target_client
+    ON target_client.id = link_target.remote_session_client_id
+LEFT JOIN mcp_servers AS m
+    ON m.user_session_issuer_id = link_source.user_session_issuer_id
+   AND m.deleted IS FALSE
+LEFT JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id
+WHERE source_client.remote_session_issuer_id = $1
+  AND source_client.deleted IS FALSE
+  AND target_client.remote_session_issuer_id = $2
+  AND target_client.deleted IS FALSE
+`
+
+type ListConflictingClientBindingsForIssuerMigrationParams struct {
+	SourceIssuerID uuid.UUID
+	TargetIssuerID uuid.UUID
+}
+
+type ListConflictingClientBindingsForIssuerMigrationRow struct {
+	UserSessionIssuerID uuid.UUID
+	McpServerName       pgtype.Text
+	McpServerUrl        string
+}
+
+// The user_session_issuers that already have an active remote_session_client on
+// BOTH the source and the target issuer, joined to the MCP servers those
+// user_session_issuers gate. Re-pointing the source's clients onto the target
+// would put two clients on the same (user_session_issuer, remote_session_issuer)
+// pair, violating the invariant that guardSingleClientPerRemoteIssuer enforces
+// at attach time and that ResolveAccessTokens asserts at serve time. migrateIssuer
+// refuses when this returns any row.
+//
+// The mcp_servers join is LEFT so a conflicting user_session_issuer that gates no
+// MCP server still yields a row: the conflict blocks the migration whether or not
+// it has a name to show. Keep the "same user_session_issuer, different issuer"
+// semantics here in sync with guardSingleClientPerRemoteIssuer.
+func (q *Queries) ListConflictingClientBindingsForIssuerMigration(ctx context.Context, arg ListConflictingClientBindingsForIssuerMigrationParams) ([]ListConflictingClientBindingsForIssuerMigrationRow, error) {
+	rows, err := q.db.Query(ctx, listConflictingClientBindingsForIssuerMigration, arg.SourceIssuerID, arg.TargetIssuerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListConflictingClientBindingsForIssuerMigrationRow
+	for rows.Next() {
+		var i ListConflictingClientBindingsForIssuerMigrationRow
+		if err := rows.Scan(&i.UserSessionIssuerID, &i.McpServerName, &i.McpServerUrl); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listGlobalRemoteSessionClientsByIssuerID = `-- name: ListGlobalRemoteSessionClientsByIssuerID :many
@@ -2396,6 +2520,26 @@ func (q *Queries) ListToolsetMCPEndpointsForOAuthProxyServer(ctx context.Context
 	return items, nil
 }
 
+const lockRemoteSessionIssuerForClientBinding = `-- name: LockRemoteSessionIssuerForClientBinding :exec
+SELECT pg_advisory_xact_lock(hashtextextended(($1::uuid)::text, 0))
+`
+
+// Serialize every writer that adds or re-points a remote_session_client on a
+// given remote_session_issuer. No database constraint enforces the
+// "at most one active client per (user_session_issuer, remote_session_issuer)"
+// invariant: remote_session_issuer_id lives on remote_session_clients, not on
+// remote_session_client_user_session_issuers, so no unique index over the join
+// table can express the pair. Row locks on the issuer do not help either, since
+// the attach guard reads remote_session_clients and never touches the issuer
+// row. A transaction-scoped advisory lock keyed on the issuer id is what
+// actually serializes migrateIssuer's re-point against a concurrent client
+// attach. Callers taking more than one lock MUST take them in ascending issuer
+// id order so two concurrent migrations cannot deadlock.
+func (q *Queries) LockRemoteSessionIssuerForClientBinding(ctx context.Context, remoteSessionIssuerID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, lockRemoteSessionIssuerForClientBinding, remoteSessionIssuerID)
+	return err
+}
+
 const migrateLegacyUserSessionClient = `-- name: MigrateLegacyUserSessionClient :execrows
 INSERT INTO user_session_clients (
     project_id,
@@ -3085,6 +3229,38 @@ func (q *Queries) UpdateRemoteSessionClient(ctx context.Context, arg UpdateRemot
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const updateRemoteSessionClientsToRemoteSessionIssuer = `-- name: UpdateRemoteSessionClientsToRemoteSessionIssuer :execrows
+UPDATE remote_session_clients
+SET remote_session_issuer_id = $1,
+    updated_at = clock_timestamp()
+WHERE remote_session_issuer_id = $2
+  AND deleted IS FALSE
+`
+
+type UpdateRemoteSessionClientsToRemoteSessionIssuerParams struct {
+	TargetIssuerID uuid.UUID
+	SourceIssuerID uuid.UUID
+}
+
+// Move every active client off the source issuer and onto the target. This is
+// the whole of an issuer migration: remote_session_clients is the only table
+// with a foreign key to remote_session_issuers, and remote_sessions reference
+// the client rather than the issuer, so the clients' sessions, tokens, and
+// user_session_issuer bindings all travel with the re-pointed rows and no user
+// re-authenticates.
+//
+// Soft-deleted clients stay on the source issuer: they resolve nowhere, and
+// dragging tombstones onto the target would corrupt the returned migrated count.
+// Callers establish org ownership of both issuers and hold the advisory locks
+// from LockRemoteSessionIssuerForClientBinding. Returns the number of clients moved.
+func (q *Queries) UpdateRemoteSessionClientsToRemoteSessionIssuer(ctx context.Context, arg UpdateRemoteSessionClientsToRemoteSessionIssuerParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateRemoteSessionClientsToRemoteSessionIssuer, arg.TargetIssuerID, arg.SourceIssuerID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const updateRemoteSessionIssuer = `-- name: UpdateRemoteSessionIssuer :one
