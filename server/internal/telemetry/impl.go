@@ -1558,139 +1558,34 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 		metricsMode = "session"
 	}
 
-	// These queries hit two databases. The PostgreSQL pool is safe for concurrent
-	// use, so each PG query runs in its own goroutine. The shared ClickHouse
-	// connection races when queried concurrently with itself, so every ClickHouse
-	// query runs sequentially in a single lane. Total latency is the slower of
-	// (serial ClickHouse total) and (slowest PostgreSQL query) rather than the sum
-	// of every query.
+	// These queries hit two database pools. Each pool is safe for concurrent use,
+	// so independent queries run concurrently. The ClickHouse helper keeps its
+	// orchestration and query-level tracing together.
 	var (
 		chatMetrics           chatRepo.GetChatMetricsSummaryRow
-		toolMetrics           *repo.OverviewSummary
 		chatMetricsComparison chatRepo.GetChatMetricsSummaryRow
-		toolMetricsComparison *repo.OverviewSummary
-		activeServersRaw      *repo.ActiveCounts
-		topServers            []repo.TopServer
+		clickHouseResult      projectOverviewClickHouseResult
 		serverNameOverrides   []hooksRepo.ListHooksServerNameOverridesRow
 
 		// Session-mode (PostgreSQL) results; only populated when sessionMode is true.
 		activeUsersCountPG int64
 		topUsersPG         []chatRepo.GetTopUsersByMessagesRow
 		llmClientsPG       []chatRepo.GetLLMClientBreakdownByMessagesRow
-
-		// Tool-call-mode (ClickHouse) results; only populated when sessionMode is false.
-		topUsersCH   []repo.TopUser
-		llmClientsCH []repo.LLMClientUsage
 	)
 
 	eg, egCtx := errgroup.WithContext(ctx)
 
-	// ClickHouse lane: a single goroutine runs every ClickHouse query in sequence.
-	// The shared clickhouse.Conn does not tolerate concurrent queries against
-	// itself, so these must not be split across goroutines.
 	eg.Go(func() error {
 		var fetchErr error
-
-		// Tool call metrics (no filters): current and comparison periods.
-		toolMetrics, fetchErr = s.chRepo.GetOverviewSummary(egCtx, repo.GetOverviewSummaryParams{
-			GramProjectID:     projectID,
-			TimeStart:         timeStart,
-			TimeEnd:           timeEnd,
-			UserID:            "",
-			ExternalUserID:    "",
-			APIKeyID:          "",
-			ToolsetSlug:       "",
-			RemoteMCPServerID: "",
-			MCPServerID:       "",
-			EventSource:       "",
-			HookSource:        "",
-			AccountType:       "",
-			ExternalOrgID:     "",
+		clickHouseResult, fetchErr = fetchProjectOverviewClickHouse(egCtx, s.tracer, s.chRepo, projectOverviewClickHouseParams{
+			projectID:       projectID,
+			timeStart:       timeStart,
+			timeEnd:         timeEnd,
+			comparisonStart: comparisonStart,
+			comparisonEnd:   comparisonEnd,
+			sessionMode:     sessionMode,
 		})
-		if fetchErr != nil {
-			return oops.E(oops.CodeUnexpected, fetchErr, "error retrieving tool call metrics")
-		}
-
-		toolMetricsComparison, fetchErr = s.chRepo.GetOverviewSummary(egCtx, repo.GetOverviewSummaryParams{
-			GramProjectID:     projectID,
-			TimeStart:         comparisonStart,
-			TimeEnd:           comparisonEnd,
-			UserID:            "",
-			ExternalUserID:    "",
-			APIKeyID:          "",
-			ToolsetSlug:       "",
-			RemoteMCPServerID: "",
-			MCPServerID:       "",
-			EventSource:       "",
-			HookSource:        "",
-			AccountType:       "",
-			ExternalOrgID:     "",
-		})
-		if fetchErr != nil {
-			return oops.E(oops.CodeUnexpected, fetchErr, "error retrieving comparison tool call metrics")
-		}
-
-		// Active server count from hooks data. In tool-call mode this same row also
-		// yields the active user count (resolved after Wait).
-		activeServersRaw, fetchErr = s.chRepo.GetActiveCounts(egCtx, repo.GetActiveCountsParams{
-			GramProjectID:  projectID,
-			TimeStart:      timeStart,
-			TimeEnd:        timeEnd,
-			ExternalUserID: "",
-			APIKeyID:       "",
-			ToolsetSlug:    "",
-			SessionMode:    sessionMode,
-		})
-		if fetchErr != nil {
-			return oops.E(oops.CodeUnexpected, fetchErr, "error retrieving active server counts")
-		}
-
-		// Top servers from hooks data.
-		topServers, fetchErr = s.chRepo.GetTopServers(egCtx, repo.GetTopServersParams{
-			GramProjectID:  projectID,
-			TimeStart:      timeStart,
-			TimeEnd:        timeEnd,
-			ExternalUserID: "",
-			APIKeyID:       "",
-			ToolsetSlug:    "",
-			Limit:          10,
-		})
-		if fetchErr != nil {
-			return oops.E(oops.CodeUnexpected, fetchErr, "error retrieving top servers")
-		}
-
-		// In tool-call mode, top users and the LLM client breakdown also come from
-		// ClickHouse. In session mode they come from PostgreSQL (separate lanes).
-		if !sessionMode {
-			topUsersCH, fetchErr = s.chRepo.GetTopUsers(egCtx, repo.GetTopUsersParams{
-				GramProjectID:  projectID,
-				TimeStart:      timeStart,
-				TimeEnd:        timeEnd,
-				ExternalUserID: "",
-				APIKeyID:       "",
-				ToolsetSlug:    "",
-				Limit:          10,
-				SessionMode:    false,
-			})
-			if fetchErr != nil {
-				return oops.E(oops.CodeUnexpected, fetchErr, "error retrieving top users from CH")
-			}
-
-			llmClientsCH, fetchErr = s.chRepo.GetLLMClientBreakdown(egCtx, repo.GetLLMClientBreakdownParams{
-				GramProjectID:  projectID,
-				TimeStart:      timeStart,
-				TimeEnd:        timeEnd,
-				ExternalUserID: "",
-				APIKeyID:       "",
-				ToolsetSlug:    "",
-				SessionMode:    false,
-			})
-			if fetchErr != nil {
-				return oops.E(oops.CodeUnexpected, fetchErr, "error retrieving LLM client breakdown from CH")
-			}
-		}
-
-		return nil
+		return fetchErr
 	})
 
 	// PostgreSQL lanes: the pgxpool is safe for concurrent use, so fan these out.
@@ -1777,7 +1672,7 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 	}
 
 	// Resolve active counts and top lists now that every query has returned.
-	activeServersCount := int64(activeServersRaw.ActiveServersCount) //nolint:gosec // Bounded count that won't overflow int64
+	activeServersCount := int64(clickHouseResult.activeCounts.ActiveServersCount) //nolint:gosec // Bounded count that won't overflow int64
 	var activeUsersCount int64
 	var topUsers []*telem_gen.TopUser
 	var llmClientBreakdown []*telem_gen.LLMClientUsage
@@ -1786,9 +1681,9 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 		topUsers = toTopUsersFromPG(topUsersPG)
 		llmClientBreakdown = toLLMClientUsageFromPG(llmClientsPG)
 	} else {
-		activeUsersCount = int64(activeServersRaw.ActiveUsersCount) //nolint:gosec // Bounded count that won't overflow int64
-		topUsers = toTopUsers(topUsersCH)
-		llmClientBreakdown = toLLMClientUsage(llmClientsCH)
+		activeUsersCount = int64(clickHouseResult.activeCounts.ActiveUsersCount) //nolint:gosec // Bounded count that won't overflow int64
+		topUsers = toTopUsers(clickHouseResult.topUsers)
+		llmClientBreakdown = toLLMClientUsage(clickHouseResult.llmClients)
 	}
 
 	// Build a map for quick lookup: raw_server_name -> display_name
@@ -1798,13 +1693,13 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 	}
 
 	// Apply overrides to top servers
-	topServersWithOverrides := applyServerNameOverrides(topServers, overrideMap)
+	topServersWithOverrides := applyServerNameOverrides(clickHouseResult.topServers, overrideMap)
 
 	// Convert to API types - build summaries with nested fields
 	return &telem_gen.GetProjectOverviewResult{
 		Summary: buildProjectOverviewSummary(
 			chatMetrics,
-			toolMetrics,
+			clickHouseResult.toolMetrics,
 			activeServersCount,
 			activeUsersCount,
 			topUsers,
@@ -1813,7 +1708,7 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 		),
 		Comparison: buildProjectOverviewSummary(
 			chatMetricsComparison,
-			toolMetricsComparison,
+			clickHouseResult.toolMetricsComparison,
 			0, // Don't need active counts for comparison
 			0,
 			nil, // Don't need top lists for comparison

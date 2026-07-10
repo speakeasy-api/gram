@@ -731,23 +731,29 @@ func (q *Queries) GetChatMessageStats(ctx context.Context, arg GetChatMessageSta
 }
 
 const getChatMetricsSummary = `-- name: GetChatMetricsSummary :one
-WITH chat_stats AS (
+WITH latest_resolutions AS MATERIALIZED (
+  SELECT DISTINCT ON (cr.chat_id)
+    cr.chat_id,
+    cr.resolution
+  FROM chat_resolutions cr
+  WHERE cr.project_id = $1
+  ORDER BY cr.chat_id, cr.created_at DESC
+),
+chat_stats AS (
   SELECT
     c.id as chat_id,
     MIN(m.created_at) as first_message_at,
     MAX(m.created_at) as last_message_at,
     EXTRACT(EPOCH FROM (MAX(m.created_at) - MIN(m.created_at))) * 1000 as duration_ms,
-    COALESCE(
-      (SELECT resolution FROM chat_resolutions WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1),
-      ''
-    ) as resolution_status
+    COALESCE(latest_resolutions.resolution, '') as resolution_status
   FROM chats c
   INNER JOIN chat_messages m ON m.chat_id = c.id
+  LEFT JOIN latest_resolutions ON latest_resolutions.chat_id = c.id
   WHERE c.project_id = $1
     AND c.deleted IS FALSE
     AND m.created_at >= $2
     AND m.created_at <= $3
-  GROUP BY c.id
+  GROUP BY c.id, latest_resolutions.resolution
 )
 SELECT
   COUNT(*)::bigint as total_chats,
