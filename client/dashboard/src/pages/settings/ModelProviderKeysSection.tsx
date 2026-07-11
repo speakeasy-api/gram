@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Heading } from "@/components/ui/heading";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
-import { useProject } from "@/contexts/Auth";
+import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { HumanizeDateTime } from "@/lib/dates";
 import type { ModelProviderKey } from "@gram/client/models/components/modelproviderkey.js";
 import { useDeleteModelProviderKeyMutation } from "@gram/client/react-query/deleteModelProviderKey.js";
@@ -27,9 +27,9 @@ import { ModelProviderKeyDialog } from "./ModelProviderKeyDialog";
 
 export function ModelProviderKeysSection(): JSX.Element {
   const queryClient = useQueryClient();
-  const project = useProject();
+  const gramProject = useProjectSlugForRequests();
   const { data, isLoading, isError, refetch } = useModelProviderKeys({
-    gramProject: project.slug,
+    gramProject,
   });
   const { data: features } = useProductFeatures();
   const [dialogSlot, setDialogSlot] = useState<ModelKeySlot | null>(null);

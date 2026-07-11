@@ -29,16 +29,6 @@ export const MODEL_KEY_SLOTS: ModelKeySlot[] = [
     description: "Chat completions served through Elements embeds.",
   },
   {
-    slot: "gram",
-    name: "Chat",
-    description: "Completions from the hosted MCP chat surface.",
-  },
-  {
-    slot: "slack",
-    name: "Slack",
-    description: "Completions from the Slack integration.",
-  },
-  {
     slot: "assistants",
     name: "Assistants",
     description: "Completions from assistant runs and triggers.",
