@@ -4071,3 +4071,27 @@ WHERE deleted IS FALSE;
 -- rows that the partial unique indexes above exclude.
 CREATE INDEX IF NOT EXISTS json_web_keys_set_tenant_idx
 ON json_web_keys (organization_id, json_web_key_set_id);
+
+-- Customer-supplied model provider API keys (BYOK), scoped per project and
+-- responsibility slot (completion surface). The 'default' slot applies to
+-- every surface that has no dedicated override row. Key material is
+-- AES-256-GCM encrypted at rest and never returned by the API.
+CREATE TABLE IF NOT EXISTS model_provider_keys (
+  id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  slot TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  api_key_encrypted TEXT NOT NULL,
+  enabled boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT model_provider_keys_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS model_provider_keys_project_id_slot_key
+  ON model_provider_keys (project_id, slot)
+  WHERE deleted IS FALSE;
