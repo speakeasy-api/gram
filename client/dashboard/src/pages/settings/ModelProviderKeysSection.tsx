@@ -28,9 +28,11 @@ import { ModelProviderKeyDialog } from "./ModelProviderKeyDialog";
 export function ModelProviderKeysSection(): JSX.Element {
   const queryClient = useQueryClient();
   const gramProject = useProjectSlugForRequests();
-  const { data, isLoading, isError, refetch } = useModelProviderKeys({
-    gramProject,
-  });
+  const { data, isLoading, isError, refetch } = useModelProviderKeys(
+    { gramProject },
+    undefined,
+    { throwOnError: false },
+  );
   const { data: features } = useProductFeatures();
   const [dialogSlot, setDialogSlot] = useState<ModelKeySlot | null>(null);
 
