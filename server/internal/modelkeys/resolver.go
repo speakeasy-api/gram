@@ -73,7 +73,11 @@ func (r *Resolver) ResolveKey(ctx context.Context, orgID string, projectID strin
 	// platform's internal key until the dedicated risk/PI BYOK slots ship —
 	// a project default key must not capture it.
 	if projectID == "" || keyType.OrDefault() == openrouter.KeyTypeInternal {
-		return r.platform.ResolveKey(ctx, orgID, projectID, slot, keyType)
+		resolved, err := r.platform.ResolveKey(ctx, orgID, projectID, slot, keyType)
+		if err != nil {
+			return openrouter.ResolvedKey{}, fmt.Errorf("resolve platform key: %w", err)
+		}
+		return resolved, nil
 	}
 
 	projectUUID, err := uuid.Parse(projectID)
@@ -89,7 +93,11 @@ func (r *Resolver) ResolveKey(ctx context.Context, orgID string, projectID strin
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return r.platform.ResolveKey(ctx, orgID, projectID, slot, keyType)
+		resolved, err := r.platform.ResolveKey(ctx, orgID, projectID, slot, keyType)
+		if err != nil {
+			return openrouter.ResolvedKey{}, fmt.Errorf("resolve platform key: %w", err)
+		}
+		return resolved, nil
 	case err != nil:
 		return openrouter.ResolvedKey{}, fmt.Errorf("read model provider keys: %w", err)
 	}
