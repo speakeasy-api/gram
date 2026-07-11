@@ -6,7 +6,9 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -92,7 +94,11 @@ func (r *Resolver) ResolveKey(ctx context.Context, orgID string, projectID strin
 		Provider:      ProviderOpenRouter,
 	})
 	switch {
-	case errors.Is(err, pgx.ErrNoRows):
+	// An absent table means BYOK is not deployed in this environment yet
+	// (rolling deploy ahead of the migration, or a rollback that kept the
+	// code). No key can be configured then, so the platform key is correct —
+	// completions must not fail on it.
+	case errors.Is(err, pgx.ErrNoRows), isUndefinedTable(err):
 		resolved, err := r.platform.ResolveKey(ctx, orgID, projectID, slot, keyType)
 		if err != nil {
 			return openrouter.ResolvedKey{}, fmt.Errorf("resolve platform key: %w", err)
@@ -107,4 +113,9 @@ func (r *Resolver) ResolveKey(ctx context.Context, orgID string, projectID strin
 		return openrouter.ResolvedKey{}, fmt.Errorf("decrypt model provider key: %w", err)
 	}
 	return openrouter.ResolvedKey{Key: key, Customer: true}, nil
+}
+
+func isUndefinedTable(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UndefinedTable
 }
