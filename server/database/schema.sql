@@ -4089,6 +4089,7 @@ CREATE TABLE IF NOT EXISTS model_provider_keys (
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
 
+  CONSTRAINT model_provider_keys_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
   CONSTRAINT model_provider_keys_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
 
@@ -4096,8 +4097,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS model_provider_keys_project_id_slot_key
   ON model_provider_keys (project_id, slot)
   WHERE deleted IS FALSE;
 
--- Non-partial index backing model_provider_keys_project_id_fkey (ON DELETE
--- CASCADE): keeps project cascade deletes off a seq scan, including
--- soft-deleted rows that the partial unique index above excludes.
+-- Non-partial indexes backing the cascade FKs: keep org/project cascade
+-- deletes off a seq scan, including soft-deleted rows that the partial
+-- unique index above excludes.
 CREATE INDEX IF NOT EXISTS model_provider_keys_project_id_idx
   ON model_provider_keys (project_id);
+
+CREATE INDEX IF NOT EXISTS model_provider_keys_organization_id_idx
+  ON model_provider_keys (organization_id);
