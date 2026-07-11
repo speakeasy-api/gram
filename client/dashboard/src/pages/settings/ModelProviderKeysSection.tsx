@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Heading } from "@/components/ui/heading";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
+import { useProject } from "@/contexts/Auth";
 import { HumanizeDateTime } from "@/lib/dates";
 import type { ModelProviderKey } from "@gram/client/models/components/modelproviderkey.js";
 import { useDeleteModelProviderKeyMutation } from "@gram/client/react-query/deleteModelProviderKey.js";
@@ -26,7 +27,10 @@ import { ModelProviderKeyDialog } from "./ModelProviderKeyDialog";
 
 export function ModelProviderKeysSection(): JSX.Element {
   const queryClient = useQueryClient();
-  const { data, isLoading } = useModelProviderKeys();
+  const project = useProject();
+  const { data, isLoading, isError, refetch } = useModelProviderKeys({
+    gramProject: project.slug,
+  });
   const { data: features } = useProductFeatures();
   const [dialogSlot, setDialogSlot] = useState<ModelKeySlot | null>(null);
 
@@ -133,6 +137,30 @@ export function ModelProviderKeysSection(): JSX.Element {
     },
   ];
 
+  let keyList: JSX.Element;
+  if (isLoading) {
+    keyList = <SkeletonTable />;
+  } else if (isError) {
+    keyList = (
+      <Stack direction="horizontal" gap={2} align="center">
+        <Type muted small>
+          Failed to load provider keys.
+        </Type>
+        <Button variant="secondary" size="sm" onClick={() => void refetch()}>
+          Retry
+        </Button>
+      </Stack>
+    );
+  } else {
+    keyList = (
+      <Table
+        columns={columns}
+        data={MODEL_KEY_SLOTS}
+        rowKey={(row) => row.slot}
+      />
+    );
+  }
+
   return (
     <Stack gap={4}>
       <div>
@@ -153,15 +181,7 @@ export function ModelProviderKeysSection(): JSX.Element {
         )}
       </div>
 
-      {isLoading ? (
-        <SkeletonTable />
-      ) : (
-        <Table
-          columns={columns}
-          data={MODEL_KEY_SLOTS}
-          rowKey={(row) => row.slot}
-        />
-      )}
+      {keyList}
 
       {dialogSlot ? (
         <ModelProviderKeyDialog
