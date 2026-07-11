@@ -1042,6 +1042,13 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	if source == "" {
 		source = billing.ModelUsageSourcePlayground
 	}
+	// Anything classified as the assistants surface — the runner's credential
+	// or the dashboard's setup/onboarding claim — must also resolve the
+	// assistants key slot, so it cannot be routed through another surface's
+	// customer key. No other slot value ever comes from the header.
+	if source == billing.ModelUsageSourceAssistants {
+		keySlot = billing.ModelUsageSourceAssistants
+	}
 	sourceName := string(source)
 
 	eventProperties := map[string]any{
