@@ -44,6 +44,7 @@ import (
 	mcpmetadatac "github.com/speakeasy-api/gram/server/gen/http/mcp_metadata/client"
 	mcpregistriesc "github.com/speakeasy-api/gram/server/gen/http/mcp_registries/client"
 	mcpserversc "github.com/speakeasy-api/gram/server/gen/http/mcp_servers/client"
+	modelkeysc "github.com/speakeasy-api/gram/server/gen/http/model_keys/client"
 	organizationremotesessionclientsc "github.com/speakeasy-api/gram/server/gen/http/organization_remote_session_clients/client"
 	organizationremotesessionissuersc "github.com/speakeasy-api/gram/server/gen/http/organization_remote_session_issuers/client"
 	organizationremotesessionsc "github.com/speakeasy-api/gram/server/gen/http/organization_remote_sessions/client"
@@ -108,6 +109,7 @@ func UsageCommands() []string {
 		"mcp-endpoints (create-mcp-endpoint|get-mcp-endpoint|list-mcp-endpoints|update-mcp-endpoint|check-mcp-endpoint-slug-availability|delete-mcp-endpoint)",
 		"mcp-metadata (get-mcp-metadata|set-mcp-metadata|export-mcp-metadata)",
 		"mcp-servers (create-mcp-server|get-mcp-server|list-mcp-servers|update-mcp-server|list-tool-filters|delete-mcp-server)",
+		"model-keys (list-keys|upsert-key|delete-key)",
 		"organizations (get|send-invite|revoke-invite|update-invite-role|list-invites|list-users|remove-user|enable-webhooks|disable-webhooks|create-portal-session|get-onboarding-status|verify-onboarding-hooks-setup|send-enterprise-admin-onboarding-email|generate-work-os-admin-portal-link)",
 		"otel-forwarding (get-config|upsert-config|delete-config)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
@@ -1081,6 +1083,25 @@ func ParseEndpoint(
 		mcpServersDeleteMcpServerSessionTokenFlag     = mcpServersDeleteMcpServerFlags.String("session-token", "", "")
 		mcpServersDeleteMcpServerApikeyTokenFlag      = mcpServersDeleteMcpServerFlags.String("apikey-token", "", "")
 		mcpServersDeleteMcpServerProjectSlugInputFlag = mcpServersDeleteMcpServerFlags.String("project-slug-input", "", "")
+
+		modelKeysFlags = flag.NewFlagSet("model-keys", flag.ContinueOnError)
+
+		modelKeysListKeysFlags                = flag.NewFlagSet("list-keys", flag.ExitOnError)
+		modelKeysListKeysSessionTokenFlag     = modelKeysListKeysFlags.String("session-token", "", "")
+		modelKeysListKeysApikeyTokenFlag      = modelKeysListKeysFlags.String("apikey-token", "", "")
+		modelKeysListKeysProjectSlugInputFlag = modelKeysListKeysFlags.String("project-slug-input", "", "")
+
+		modelKeysUpsertKeyFlags                = flag.NewFlagSet("upsert-key", flag.ExitOnError)
+		modelKeysUpsertKeyBodyFlag             = modelKeysUpsertKeyFlags.String("body", "REQUIRED", "")
+		modelKeysUpsertKeySessionTokenFlag     = modelKeysUpsertKeyFlags.String("session-token", "", "")
+		modelKeysUpsertKeyApikeyTokenFlag      = modelKeysUpsertKeyFlags.String("apikey-token", "", "")
+		modelKeysUpsertKeyProjectSlugInputFlag = modelKeysUpsertKeyFlags.String("project-slug-input", "", "")
+
+		modelKeysDeleteKeyFlags                = flag.NewFlagSet("delete-key", flag.ExitOnError)
+		modelKeysDeleteKeyIDFlag               = modelKeysDeleteKeyFlags.String("id", "REQUIRED", "")
+		modelKeysDeleteKeySessionTokenFlag     = modelKeysDeleteKeyFlags.String("session-token", "", "")
+		modelKeysDeleteKeyApikeyTokenFlag      = modelKeysDeleteKeyFlags.String("apikey-token", "", "")
+		modelKeysDeleteKeyProjectSlugInputFlag = modelKeysDeleteKeyFlags.String("project-slug-input", "", "")
 
 		organizationsFlags = flag.NewFlagSet("organizations", flag.ContinueOnError)
 
@@ -2673,6 +2694,11 @@ func ParseEndpoint(
 	mcpServersListToolFiltersFlags.Usage = mcpServersListToolFiltersUsage
 	mcpServersDeleteMcpServerFlags.Usage = mcpServersDeleteMcpServerUsage
 
+	modelKeysFlags.Usage = modelKeysUsage
+	modelKeysListKeysFlags.Usage = modelKeysListKeysUsage
+	modelKeysUpsertKeyFlags.Usage = modelKeysUpsertKeyUsage
+	modelKeysDeleteKeyFlags.Usage = modelKeysDeleteKeyUsage
+
 	organizationsFlags.Usage = organizationsUsage
 	organizationsGetFlags.Usage = organizationsGetUsage
 	organizationsSendInviteFlags.Usage = organizationsSendInviteUsage
@@ -3039,6 +3065,8 @@ func ParseEndpoint(
 			svcf = mcpMetadataFlags
 		case "mcp-servers":
 			svcf = mcpServersFlags
+		case "model-keys":
+			svcf = modelKeysFlags
 		case "organizations":
 			svcf = organizationsFlags
 		case "otel-forwarding":
@@ -3709,6 +3737,19 @@ func ParseEndpoint(
 
 			case "delete-mcp-server":
 				epf = mcpServersDeleteMcpServerFlags
+
+			}
+
+		case "model-keys":
+			switch epn {
+			case "list-keys":
+				epf = modelKeysListKeysFlags
+
+			case "upsert-key":
+				epf = modelKeysUpsertKeyFlags
+
+			case "delete-key":
+				epf = modelKeysDeleteKeyFlags
 
 			}
 
@@ -5170,6 +5211,19 @@ func ParseEndpoint(
 			case "delete-mcp-server":
 				endpoint = c.DeleteMcpServer()
 				data, err = mcpserversc.BuildDeleteMcpServerPayload(*mcpServersDeleteMcpServerIDFlag, *mcpServersDeleteMcpServerSessionTokenFlag, *mcpServersDeleteMcpServerApikeyTokenFlag, *mcpServersDeleteMcpServerProjectSlugInputFlag)
+			}
+		case "model-keys":
+			c := modelkeysc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "list-keys":
+				endpoint = c.ListKeys()
+				data, err = modelkeysc.BuildListKeysPayload(*modelKeysListKeysSessionTokenFlag, *modelKeysListKeysApikeyTokenFlag, *modelKeysListKeysProjectSlugInputFlag)
+			case "upsert-key":
+				endpoint = c.UpsertKey()
+				data, err = modelkeysc.BuildUpsertKeyPayload(*modelKeysUpsertKeyBodyFlag, *modelKeysUpsertKeySessionTokenFlag, *modelKeysUpsertKeyApikeyTokenFlag, *modelKeysUpsertKeyProjectSlugInputFlag)
+			case "delete-key":
+				endpoint = c.DeleteKey()
+				data, err = modelkeysc.BuildDeleteKeyPayload(*modelKeysDeleteKeyIDFlag, *modelKeysDeleteKeySessionTokenFlag, *modelKeysDeleteKeyApikeyTokenFlag, *modelKeysDeleteKeyProjectSlugInputFlag)
 			}
 		case "organizations":
 			c := organizationsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -10114,6 +10168,89 @@ func mcpServersDeleteMcpServerUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-servers delete-mcp-server --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// modelKeysUsage displays the usage of the model-keys command and its
+// subcommands.
+func modelKeysUsage() {
+	fmt.Fprintln(os.Stderr, `Manage customer-supplied model provider API keys, scoped per project and responsibility slot.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] model-keys COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    list-keys: List the model provider keys configured for a project. Key material is never returned.`)
+	fmt.Fprintln(os.Stderr, `    upsert-key: Create or replace the model provider key for a slot. The key is validated with the provider, then stored encrypted.`)
+	fmt.Fprintln(os.Stderr, `    delete-key: Delete a model provider key. Completions on the affected slot fall back to the project default key or the platform key.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s model-keys COMMAND --help\n", os.Args[0])
+}
+func modelKeysListKeysUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] model-keys list-keys", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the model provider keys configured for a project. Key material is never returned.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "model-keys list-keys --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func modelKeysUpsertKeyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] model-keys upsert-key", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create or replace the model provider key for a slot. The key is validated with the provider, then stored encrypted.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "model-keys upsert-key --body '{\n      \"api_key\": \"abc123\",\n      \"enabled\": false,\n      \"provider\": \"abc123\",\n      \"slot\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func modelKeysDeleteKeyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] model-keys delete-key", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Delete a model provider key. Completions on the affected slot fall back to the project default key or the platform key.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "model-keys delete-key --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // organizationsUsage displays the usage of the organizations command and its

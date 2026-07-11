@@ -14,6 +14,10 @@ export type GetProductFeaturesResponseBody = {
    */
   authzChallengeLoggingEnabled: boolean;
   /**
+   * Whether the organization can supply its own model provider API keys (BYOK)
+   */
+  customModelKeysEnabled: boolean;
+  /**
    * Whether generated hook plugins may mint per-user keys via the interactive browser login
    */
   hooksBrowserLoginEnabled: boolean;
@@ -54,6 +58,7 @@ export const GetProductFeaturesResponseBody$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     authz_challenge_logging_enabled: z.boolean(),
+    custom_model_keys_enabled: z.boolean(),
     hooks_browser_login_enabled: z.boolean(),
     logs_enabled: z.boolean(),
     observability_mode_enabled: z.boolean(),
@@ -66,6 +71,7 @@ export const GetProductFeaturesResponseBody$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "authz_challenge_logging_enabled": "authzChallengeLoggingEnabled",
+      "custom_model_keys_enabled": "customModelKeysEnabled",
       "hooks_browser_login_enabled": "hooksBrowserLoginEnabled",
       "logs_enabled": "logsEnabled",
       "observability_mode_enabled": "observabilityModeEnabled",

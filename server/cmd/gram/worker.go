@@ -41,6 +41,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpclient"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/memory"
+	"github.com/speakeasy-api/gram/server/internal/modelkeys"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -584,6 +585,7 @@ func newWorkerCommand() *cli.Command {
 				logger,
 				guardianPolicy,
 				openRouter,
+				modelkeys.NewResolver(db, encryptionClient, openRouter),
 				captureStrategy,
 				chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker),
 				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},

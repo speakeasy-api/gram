@@ -497,6 +497,8 @@ tags:
     description: Manages metadata for the MCP install page shown to users.
   - name: mcpServers
     description: Managing MCP servers, which configure authentication, environment, and backend selection for an MCP server.
+  - name: modelKeys
+    description: Manage customer-supplied model provider API keys, scoped per project and responsibility slot.
   - name: organizations
     description: Organization membership, invitations, and directory.
   - name: otelForwarding

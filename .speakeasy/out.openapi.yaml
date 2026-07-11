@@ -16036,6 +16036,314 @@ paths:
       x-speakeasy-name-override: update
       x-speakeasy-react-hook:
         name: UpdateMcpServer
+  /rpc/modelKeys.deleteKey:
+    delete:
+      description: Delete a model provider key. Completions on the affected slot fall back to the project default key or the platform key.
+      operationId: deleteModelProviderKey
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the key to delete.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The ID of the key to delete.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: deleteKey modelKeys
+      tags:
+        - modelKeys
+      x-speakeasy-name-override: deleteKey
+      x-speakeasy-react-hook:
+        name: DeleteModelProviderKey
+  /rpc/modelKeys.listKeys:
+    get:
+      description: List the model provider keys configured for a project. Key material is never returned.
+      operationId: listModelProviderKeys
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListKeysResponseBody'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: listKeys modelKeys
+      tags:
+        - modelKeys
+      x-speakeasy-name-override: listKeys
+      x-speakeasy-react-hook:
+        name: ModelProviderKeys
+  /rpc/modelKeys.upsertKey:
+    post:
+      description: Create or replace the model provider key for a slot. The key is validated with the provider, then stored encrypted.
+      operationId: upsertModelProviderKey
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpsertKeyRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelProviderKey'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: upsertKey modelKeys
+      tags:
+        - modelKeys
+      x-speakeasy-name-override: upsertKey
+      x-speakeasy-react-hook:
+        name: UpsertModelProviderKey
   /rpc/organizationRemoteSessionClients.create:
     post:
       description: 'Register a standalone remote_session_client under an existing remote_session_issuer in the caller''s organization, with no user_session_issuer attachments. The client is project-scoped: it inherits a project-specific issuer''s project, or the caller names a project (which must belong to the organization) when the issuer is organization-level. Requires org:admin.'
@@ -44972,6 +45280,9 @@ components:
         authz_challenge_logging_enabled:
           type: boolean
           description: Whether authz challenge logging to ClickHouse is enabled
+        custom_model_keys_enabled:
+          type: boolean
+          description: Whether the organization can supply its own model provider API keys (BYOK)
         hooks_browser_login_enabled:
           type: boolean
           description: Whether generated hook plugins may mint per-user keys via the interactive browser login
@@ -45006,6 +45317,7 @@ components:
         - scim_enabled
         - observability_mode_enabled
         - hooks_browser_login_enabled
+        - custom_model_keys_enabled
     GetProjectForm:
       type: object
       properties:
@@ -46488,6 +46800,16 @@ components:
           description: Pending invitations for the organization only; accepted, expired, and revoked invitations are omitted.
       required:
         - invitations
+    ListKeysResponseBody:
+      type: object
+      properties:
+        keys:
+          type: array
+          items:
+            $ref: '#/components/schemas/ModelProviderKey'
+          description: The model provider keys configured for the project.
+      required:
+        - keys
     ListKeysResult:
       type: object
       properties:
@@ -47780,6 +48102,43 @@ components:
       required:
         - access_token
         - expires_in
+    ModelProviderKey:
+      type: object
+      properties:
+        created_at:
+          type: string
+          description: ISO 8601 timestamp when the key was created.
+          format: date-time
+        enabled:
+          type: boolean
+          description: Whether the key participates in key resolution.
+        id:
+          type: string
+          description: The ID of the key
+          format: uuid
+        project_id:
+          type: string
+          description: The project the key belongs to
+          format: uuid
+        provider:
+          type: string
+          description: The model provider the key authenticates with. Supported values include openrouter.
+        slot:
+          type: string
+          description: The responsibility slot the key applies to. The 'default' slot covers every slot without a dedicated override.
+        updated_at:
+          type: string
+          description: ISO 8601 timestamp of the most recent change.
+          format: date-time
+      description: A customer-supplied model provider API key bound to a project and responsibility slot. Key material is write-only and never returned.
+      required:
+        - id
+        - project_id
+        - slot
+        - provider
+        - enabled
+        - created_at
+        - updated_at
     ModelUsage:
       type: object
       properties:
@@ -52542,6 +52901,7 @@ components:
             - scim
             - observability_mode
             - hooks_browser_login
+            - custom_model_keys
           maxLength: 60
       required:
         - feature_name
@@ -56368,6 +56728,25 @@ components:
           $ref: '#/components/schemas/ToolVariation'
       required:
         - variation
+    UpsertKeyRequestBody:
+      type: object
+      properties:
+        api_key:
+          type: string
+          description: The provider API key. Stored encrypted at rest; never returned on reads.
+        enabled:
+          type: boolean
+          description: Whether the key participates in key resolution. Defaults to true.
+        provider:
+          type: string
+          description: The model provider the key authenticates with. Supported values include openrouter.
+        slot:
+          type: string
+          description: The responsibility slot the key applies to. Use 'default' to cover every slot without a dedicated override.
+      required:
+        - slot
+        - provider
+        - api_key
     UpsertRequestBody:
       type: object
       properties:
@@ -56924,6 +57303,8 @@ tags:
     description: Manages metadata for the MCP install page shown to users.
   - name: mcpServers
     description: Managing MCP servers, which configure authentication, environment, and backend selection for an MCP server.
+  - name: modelKeys
+    description: Manage customer-supplied model provider API keys, scoped per project and responsibility slot.
   - name: organizations
     description: Organization membership, invitations, and directory.
   - name: otelForwarding
