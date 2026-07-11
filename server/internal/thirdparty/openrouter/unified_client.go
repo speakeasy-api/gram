@@ -107,7 +107,11 @@ func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionReques
 		return nil, fmt.Errorf("invalid project ID: %w", err)
 	}
 
-	resolvedKey, err := c.keyResolver.ResolveKey(ctx, req.OrgID, req.ProjectID, req.UsageSource, req.KeyType.OrDefault())
+	keySlot := req.KeySlot
+	if keySlot == "" {
+		keySlot = req.UsageSource
+	}
+	resolvedKey, err := c.keyResolver.ResolveKey(ctx, req.OrgID, req.ProjectID, keySlot, req.KeyType.OrDefault())
 	if err != nil {
 		return nil, fmt.Errorf("resolve OpenRouter key: %w", err)
 	}
@@ -538,6 +542,7 @@ func (c *ChatClient) GetObjectCompletion(ctx context.Context, req ObjectCompleti
 		ExternalUserID:            req.ExternalUserID,
 		UserEmail:                 req.UserEmail,
 		KeyType:                   req.KeyType,
+		KeySlot:                   "",
 		HTTPMetadata:              req.HTTPMetadata,
 		JSONSchema:                req.JSONSchema,
 		CacheControl:              nil,

@@ -138,17 +138,21 @@ func (s *Service) JWTAuth(ctx context.Context, token string, schema *security.JW
 }
 
 // directAuthorize performs authentication and authorization for chat requests.
-// It tries session auth first, then API key auth, then chat session token as fallback.
-// It also validates the project header and ensures ProjectID is present.
-func (s *Service) directAuthorize(ctx context.Context, r *http.Request) (context.Context, *contextvalues.AuthContext, error) {
+// It tries session auth first, then API key auth, then chat session token as
+// fallback. It also validates the project header and ensures ProjectID is
+// present. The returned key slot names the customer key slot the surface
+// bills to; it is derived from which credential authenticated the request —
+// like KeyType, never from client-claimed headers — so a caller cannot pick
+// another slot's customer key.
+func (s *Service) directAuthorize(ctx context.Context, r *http.Request) (context.Context, *contextvalues.AuthContext, billing.ModelUsageSource, error) {
 	if token := r.Header.Get("Authorization"); token != "" {
 		authorizedCtx, _, err := s.assistantTokens.Authorize(ctx, token)
 		if err == nil {
 			authCtx, ok := contextvalues.GetAuthContext(authorizedCtx)
 			if !ok || authCtx == nil || authCtx.ProjectID == nil {
-				return authorizedCtx, nil, oops.C(oops.CodeUnauthorized)
+				return authorizedCtx, nil, "", oops.C(oops.CodeUnauthorized)
 			}
-			return authorizedCtx, authCtx, nil
+			return authorizedCtx, authCtx, billing.ModelUsageSourceAssistants, nil
 		}
 	}
 
@@ -158,6 +162,11 @@ func (s *Service) directAuthorize(ctx context.Context, r *http.Request) (context
 		Scopes:         []string{},
 		RequiredScopes: []string{},
 	}
+
+	// Dashboard sessions and API-key clients bill the playground slot (the
+	// resolver falls back to the project default key); embedded chat (chat
+	// session tokens) bills the elements slot.
+	keySlot := billing.ModelUsageSourcePlayground
 
 	authorizedCtx, err := s.auth.Authorize(ctx, r.Header.Get(constants.SessionHeader), &sc)
 
@@ -176,8 +185,9 @@ func (s *Service) directAuthorize(ctx context.Context, r *http.Request) (context
 		token := r.Header.Get(constants.ChatSessionsTokenHeader)
 		authorizedCtx, err = s.chatSessions.Authorize(ctx, token)
 		if err != nil {
-			return authorizedCtx, nil, oops.E(oops.CodeUnauthorized, err, "unauthorized access")
+			return authorizedCtx, nil, "", oops.E(oops.CodeUnauthorized, err, "unauthorized access")
 		}
+		keySlot = billing.ModelUsageSourceElements
 	}
 
 	// Authorize with project
@@ -188,19 +198,19 @@ func (s *Service) directAuthorize(ctx context.Context, r *http.Request) (context
 	}
 	authorizedCtx, err = s.auth.Authorize(authorizedCtx, r.Header.Get(constants.ProjectHeader), &sc)
 	if err != nil {
-		return authorizedCtx, nil, oops.E(oops.CodeUnauthorized, err, "unauthorized access")
+		return authorizedCtx, nil, "", oops.E(oops.CodeUnauthorized, err, "unauthorized access")
 	}
 
 	authCtx, ok := contextvalues.GetAuthContext(authorizedCtx)
 	if !ok {
-		return authorizedCtx, nil, oops.C(oops.CodeUnauthorized)
+		return authorizedCtx, nil, "", oops.C(oops.CodeUnauthorized)
 	}
 
 	if authCtx.ProjectID == nil {
-		return authorizedCtx, nil, oops.E(oops.CodeUnauthorized, nil, "unauthorized: project id is required")
+		return authorizedCtx, nil, "", oops.E(oops.CodeUnauthorized, nil, "unauthorized: project id is required")
 	}
 
-	return authorizedCtx, authCtx, nil
+	return authorizedCtx, authCtx, keySlot, nil
 }
 
 func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) (*gen.ListChatsResult, error) {
@@ -995,7 +1005,7 @@ func (s *Service) linkSetupAssistantThread(ctx context.Context, projectID *uuid.
 
 // HandleCompletion is a proxy to the OpenAI API that logs request and response data.
 func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error {
-	ctx, authCtx, err := s.directAuthorize(r.Context(), r)
+	ctx, authCtx, keySlot, err := s.directAuthorize(r.Context(), r)
 	if err != nil {
 		return err
 	}
@@ -1011,6 +1021,12 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	userID := authCtx.UserID
 	source := billing.ModelUsageSource(metadata.Source)
 	if source == "assistant" {
+		source = billing.ModelUsageSourceAssistants
+	}
+	// A caller holding an assistant runtime token IS the assistants surface;
+	// its telemetry tag follows the credential, not the header, so a runner
+	// request can never be tagged (and billed) as another surface.
+	if _, isAssistant := contextvalues.GetAssistantPrincipal(ctx); isAssistant {
 		source = billing.ModelUsageSourceAssistants
 	}
 	// risk-analysis is reserved for the platform's own scanning inference
@@ -1172,6 +1188,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		Stream:         false,
 		UsageSource:    source,
 		KeyType:        openrouter.KeyTypeChat,
+		KeySlot:        keySlot,
 		ChatID:         completionChatID,
 		UserID:         userID,
 		ExternalUserID: authCtx.ExternalUserID,

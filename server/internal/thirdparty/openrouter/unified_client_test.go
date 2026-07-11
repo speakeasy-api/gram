@@ -1795,3 +1795,68 @@ func (t *testTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 	return resp, nil
 }
+
+// recordingKeyResolver captures the arguments of the last ResolveKey call.
+type recordingKeyResolver struct {
+	mu      sync.Mutex
+	orgID   string
+	project string
+	slot    billing.ModelUsageSource
+	keyType KeyType
+}
+
+var _ KeyResolver = (*recordingKeyResolver)(nil)
+
+func (r *recordingKeyResolver) ResolveKey(_ context.Context, orgID string, projectID string, slot billing.ModelUsageSource, keyType KeyType) (ResolvedKey, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.orgID, r.project, r.slot, r.keyType = orgID, projectID, slot, keyType
+	return ResolvedKey{Key: "recorded-key", Customer: false}, nil
+}
+
+func TestChatClient_InitializeRequest_KeySlotOverridesUsageSourceForResolution(t *testing.T) {
+	t.Parallel()
+
+	resolver := &recordingKeyResolver{}
+	client := &ChatClient{
+		logger:      testenv.NewLogger(t),
+		keyResolver: resolver,
+	}
+
+	projectID := uuid.New()
+	req := CompletionRequest{
+		OrgID:       "test-org",
+		ProjectID:   projectID.String(),
+		Messages:    []or.ChatMessages{CreateMessageUser("hi")},
+		UsageSource: billing.ModelUsageSourceSlack,
+		KeySlot:     billing.ModelUsageSourceAssistants,
+	}
+
+	_, err := client.initializeRequest(t.Context(), req)
+	require.NoError(t, err)
+	require.Equal(t, billing.ModelUsageSourceAssistants, resolver.slot,
+		"the key must resolve against the server-derived slot, not the client-claimable usage source")
+}
+
+func TestChatClient_InitializeRequest_EmptyKeySlotFallsBackToUsageSource(t *testing.T) {
+	t.Parallel()
+
+	resolver := &recordingKeyResolver{}
+	client := &ChatClient{
+		logger:      testenv.NewLogger(t),
+		keyResolver: resolver,
+	}
+
+	projectID := uuid.New()
+	req := CompletionRequest{
+		OrgID:       "test-org",
+		ProjectID:   projectID.String(),
+		Messages:    []or.ChatMessages{CreateMessageUser("hi")},
+		UsageSource: billing.ModelUsageSourceSlack,
+	}
+
+	_, err := client.initializeRequest(t.Context(), req)
+	require.NoError(t, err)
+	require.Equal(t, billing.ModelUsageSourceSlack, resolver.slot,
+		"trusted callers set UsageSource server-side; it doubles as the slot when KeySlot is unset")
+}

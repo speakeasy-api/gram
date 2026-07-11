@@ -80,6 +80,13 @@ type CompletionRequest struct {
 	// from clients.
 	KeyType KeyType
 
+	// KeySlot selects the customer key slot the call resolves against; the
+	// zero value falls back to UsageSource. Callers whose UsageSource is
+	// client-claimed (the completions proxy) must set it from the
+	// authenticated surface instead, so a claimed source cannot bill another
+	// slot's customer key.
+	KeySlot billing.ModelUsageSource
+
 	JSONSchema *or.ChatJSONSchemaConfig // For structured output mode
 
 	// Reasoning, when set, is forwarded verbatim to OpenRouter on the
