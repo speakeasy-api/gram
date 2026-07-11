@@ -108,8 +108,7 @@ func TestResolveKey_DisabledKeyIsIgnored(t *testing.T) {
 
 	_, err := ti.service.UpsertKey(ctx, newUpsertPayload(modelkeys.SlotDefault, func(p *gen.UpsertKeyPayload) {
 		p.APIKey = "sk-or-disabled"
-		disabled := false
-		p.Enabled = &disabled
+		p.Enabled = false
 	}))
 	require.NoError(t, err)
 

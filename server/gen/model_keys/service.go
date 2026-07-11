@@ -85,8 +85,8 @@ type UpsertKeyPayload struct {
 	Provider string
 	// The provider API key. Stored encrypted at rest; never returned on reads.
 	APIKey string
-	// Whether the key participates in key resolution. Defaults to true.
-	Enabled          *bool
+	// Whether the key participates in key resolution.
+	Enabled          bool
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string

@@ -24,8 +24,8 @@ type UpsertKeyRequestBody struct {
 	Provider string `form:"provider" json:"provider" xml:"provider"`
 	// The provider API key. Stored encrypted at rest; never returned on reads.
 	APIKey string `form:"api_key" json:"api_key" xml:"api_key"`
-	// Whether the key participates in key resolution. Defaults to true.
-	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
+	// Whether the key participates in key resolution.
+	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 }
 
 // ListKeysResponseBody is the type of the "modelKeys" service "listKeys"
@@ -627,6 +627,12 @@ func NewUpsertKeyRequestBody(p *modelkeys.UpsertKeyPayload) *UpsertKeyRequestBod
 		Provider: p.Provider,
 		APIKey:   p.APIKey,
 		Enabled:  p.Enabled,
+	}
+	{
+		var zero bool
+		if body.Enabled == zero {
+			body.Enabled = true
+		}
 	}
 	return body
 }

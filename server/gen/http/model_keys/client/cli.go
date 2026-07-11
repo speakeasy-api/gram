@@ -79,6 +79,12 @@ func BuildUpsertKeyPayload(modelKeysUpsertKeyBody string, modelKeysUpsertKeySess
 		APIKey:   body.APIKey,
 		Enabled:  body.Enabled,
 	}
+	{
+		var zero bool
+		if v.Enabled == zero {
+			v.Enabled = true
+		}
+	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

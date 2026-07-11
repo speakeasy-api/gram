@@ -11,7 +11,7 @@ export type UpsertKeyRequestBody = {
    */
   apiKey: string;
   /**
-   * Whether the key participates in key resolution. Defaults to true.
+   * Whether the key participates in key resolution.
    */
   enabled?: boolean | undefined;
   /**
@@ -27,7 +27,7 @@ export type UpsertKeyRequestBody = {
 /** @internal */
 export type UpsertKeyRequestBody$Outbound = {
   api_key: string;
-  enabled?: boolean | undefined;
+  enabled: boolean;
   provider: string;
   slot: string;
 };
@@ -39,7 +39,7 @@ export const UpsertKeyRequestBody$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     apiKey: z.string(),
-    enabled: z.optional(z.boolean()),
+    enabled: z._default(z.boolean(), true),
     provider: z.string(),
     slot: z.string(),
   }),

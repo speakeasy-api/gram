@@ -25,7 +25,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/modelkeys/repo"
@@ -186,7 +185,7 @@ func (s *Service) UpsertKey(ctx context.Context, payload *gen.UpsertKeyPayload) 
 		Slot:            slot,
 		Provider:        provider,
 		ApiKeyEncrypted: encrypted,
-		Enabled:         conv.PtrValOr(payload.Enabled, true),
+		Enabled:         payload.Enabled,
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -250,8 +249,10 @@ func (s *Service) DeleteKey(ctx context.Context, payload *gen.DeleteKeyPayload) 
 		ProjectID: *authCtx.ProjectID,
 	})
 	switch {
+	// Absent or already-deleted keys make retried deletes an idempotent no-op
+	// with no additional audit event.
 	case errors.Is(err, pgx.ErrNoRows):
-		return oops.E(oops.CodeNotFound, err, "model provider key not found")
+		return nil
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "delete model provider key").LogError(ctx, logger)
 	}

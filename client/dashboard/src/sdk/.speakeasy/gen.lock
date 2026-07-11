@@ -6282,7 +6282,7 @@ examples:
   upsertModelProviderKey:
     speakeasy-default-upsert-model-provider-key:
       requestBody:
-        application/json: {"api_key": "<value>", "provider": "<value>", "slot": "<value>"}
+        application/json: {"api_key": "<value>", "enabled": true, "provider": "<value>", "slot": "<value>"}
       responses:
         "200":
           application/json: {"created_at": "2026-01-29T02:43:04.828Z", "enabled": false, "id": "873c9f78-bfef-44e4-92dc-4c21e9968ecc", "project_id": "9664de42-73d2-4fc5-a4a3-9e0456581fe1", "provider": "<value>", "slot": "<value>", "updated_at": "2026-02-02T18:41:11.819Z"}

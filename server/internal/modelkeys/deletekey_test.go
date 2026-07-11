@@ -39,13 +39,20 @@ func TestDeleteKey_RemovesKey(t *testing.T) {
 	require.Equal(t, before+1, after)
 }
 
-func TestDeleteKey_NotFound(t *testing.T) {
+func TestDeleteKey_AbsentKeyIsIdempotentNoOp(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 
-	err := ti.service.DeleteKey(ctx, &gen.DeleteKeyPayload{ID: uuid.NewString(), SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
-	requireOopsCode(t, err, oops.CodeNotFound)
+	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionModelProviderKeyDelete)
+	require.NoError(t, err)
+
+	err = ti.service.DeleteKey(ctx, &gen.DeleteKeyPayload{ID: uuid.NewString(), SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+
+	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionModelProviderKeyDelete)
+	require.NoError(t, err)
+	require.Equal(t, before, after)
 }
 
 func TestDeleteKey_RequiresProjectWriteScope(t *testing.T) {

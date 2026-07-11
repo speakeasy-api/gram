@@ -24,7 +24,7 @@ type UpsertKeyRequestBody struct {
 	Provider *string `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
 	// The provider API key. Stored encrypted at rest; never returned on reads.
 	APIKey *string `form:"api_key,omitempty" json:"api_key,omitempty" xml:"api_key,omitempty"`
-	// Whether the key participates in key resolution. Defaults to true.
+	// Whether the key participates in key resolution.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 }
 
@@ -1089,7 +1089,12 @@ func NewUpsertKeyPayload(body *UpsertKeyRequestBody, sessionToken *string, apike
 		Slot:     *body.Slot,
 		Provider: *body.Provider,
 		APIKey:   *body.APIKey,
-		Enabled:  body.Enabled,
+	}
+	if body.Enabled != nil {
+		v.Enabled = *body.Enabled
+	}
+	if body.Enabled == nil {
+		v.Enabled = true
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken

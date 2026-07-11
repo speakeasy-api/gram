@@ -72,7 +72,9 @@ var _ = Service("modelKeys", func() {
 			Attribute("slot", String, "The responsibility slot the key applies to. Use 'default' to cover every slot without a dedicated override.")
 			Attribute("provider", String, "The model provider the key authenticates with. Supported values include openrouter.")
 			Attribute("api_key", String, "The provider API key. Stored encrypted at rest; never returned on reads.")
-			Attribute("enabled", Boolean, "Whether the key participates in key resolution. Defaults to true.")
+			Attribute("enabled", Boolean, "Whether the key participates in key resolution.", func() {
+				Default(true)
+			})
 			Required("slot", "provider", "api_key")
 			security.SessionPayload()
 			security.ByKeyPayload()

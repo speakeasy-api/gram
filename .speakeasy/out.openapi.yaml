@@ -56736,7 +56736,8 @@ components:
           description: The provider API key. Stored encrypted at rest; never returned on reads.
         enabled:
           type: boolean
-          description: Whether the key participates in key resolution. Defaults to true.
+          description: Whether the key participates in key resolution.
+          default: true
         provider:
           type: string
           description: The model provider the key authenticates with. Supported values include openrouter.

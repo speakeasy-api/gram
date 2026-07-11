@@ -21,7 +21,7 @@ func newUpsertPayload(slot string, opts func(*gen.UpsertKeyPayload)) *gen.Upsert
 		Slot:             slot,
 		Provider:         modelkeys.ProviderOpenRouter,
 		APIKey:           "sk-or-test-key",
-		Enabled:          nil,
+		Enabled:          true,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
