@@ -4095,3 +4095,9 @@ CREATE TABLE IF NOT EXISTS model_provider_keys (
 CREATE UNIQUE INDEX IF NOT EXISTS model_provider_keys_project_id_slot_key
   ON model_provider_keys (project_id, slot)
   WHERE deleted IS FALSE;
+
+-- Non-partial index backing model_provider_keys_project_id_fkey (ON DELETE
+-- CASCADE): keeps project cascade deletes off a seq scan, including
+-- soft-deleted rows that the partial unique index above excludes.
+CREATE INDEX IF NOT EXISTS model_provider_keys_project_id_idx
+  ON model_provider_keys (project_id);
