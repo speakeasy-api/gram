@@ -361,10 +361,13 @@ impl McpActor {
                 McpServerOptions::new().with_timeout(MCP_HANDSHAKE_TIMEOUT),
             );
             if changed {
-                // Config drift: drop the live connection and stale auth
-                // state so the next EnsureConnected reconnects fresh.
+                // Config drift: drop the live connection and stale auth,
+                // error, and reconnect-debounce state so the next
+                // EnsureConnected reconnects fresh and an immediate
+                // reconnect is not suppressed by a pre-drift timestamp.
                 self.auth_pending.remove(id);
                 self.last_errors.remove(id);
+                self.last_reconnects.remove(id);
                 if self.is_connected(id) {
                     self.drop_connection(id, "config_drift").await;
                 }

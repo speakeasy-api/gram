@@ -87,7 +87,21 @@ impl Tool for ToolSearchTool {
             .await
             .map_err(|_| ToolError::Unavailable("mcp actor dropped reply".into()))?;
 
-        let specs = self.catalog.specs();
+        // Restrict search to tools owned by a currently configured server.
+        // agentkit's disconnect can fail to unregister a detached server's
+        // tools from the catalog (the handle is dropped before close() can
+        // fail), so the raw catalog may briefly contain tools that are no
+        // longer callable; the status list is the authoritative view.
+        let live_names: std::collections::BTreeSet<&str> = servers
+            .iter()
+            .flat_map(|server| server.tools.iter().map(String::as_str))
+            .collect();
+        let specs: Vec<ToolSpec> = self
+            .catalog
+            .specs()
+            .into_iter()
+            .filter(|spec| live_names.contains(spec.name.0.as_str()))
+            .collect();
         let matches = rank(&specs, &input.query);
 
         let matched_tools: Vec<Value> = matches
