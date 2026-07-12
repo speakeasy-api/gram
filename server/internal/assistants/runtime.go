@@ -1,13 +1,17 @@
 package assistants
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/chat"
 )
@@ -23,6 +27,142 @@ type runtimeHTTPDoer interface {
 // guest VM. Backends use it when wiring service ports on freshly launched
 // machines.
 const defaultRuntimeGuestPort = 8081
+
+const (
+	// runnerDefaultReqTimeout bounds runner HTTP calls that do not carry
+	// their own timeout (state reads and other short requests).
+	runnerDefaultReqTimeout = 2 * time.Minute
+	// runnerHealthProbeTimeoutSeconds caps a single /healthz probe so one
+	// stalled probe cannot overshoot a backend's overall health budget.
+	runnerHealthProbeTimeoutSeconds = 2
+	// runnerMaxResponseBytes bounds runner response reads so a misbehaving
+	// runner cannot exhaust server memory.
+	runnerMaxResponseBytes = 4 << 20
+)
+
+// runtimeResourcePrefix names runner resources across backends (GKE claims,
+// local containers and volumes).
+const runtimeResourcePrefix = "gram-asst"
+
+// Runner workloads are labelled with assistant/project identity across
+// backends (GKE claim labels, local container labels) so owned resources can
+// be rediscovered and filtered uniformly.
+const (
+	runtimeLabelAssistantID          = "gram.speakeasy.com/assistant-id"
+	runtimeLabelProjectID            = "gram.speakeasy.com/project-id"
+	runtimeLabelRole                 = "gram.speakeasy.com/role"
+	runtimeLabelRoleAssistantRuntime = "assistant_runtime"
+)
+
+// runtimeImageRef joins an image repository and tag into the "<repo>[:<tag>]"
+// reference form backends launch machines with and compare against.
+func runtimeImageRef(image, tag string) string {
+	if tag == "" {
+		return image
+	}
+	return image + ":" + tag
+}
+
+// runnerClient speaks the runner HTTP protocol for backends that dial the
+// runner directly by base URL (GKE pod IPs, local containers). Fly keeps its
+// own request layer for machine pinning and response-size limits.
+type runnerClient struct {
+	do      runtimeHTTPDoer
+	backend string
+}
+
+func (c runnerClient) request(ctx context.Context, baseURL string, r runtimeHTTPRequest) ([]byte, error) {
+	reqCtx, cancel := runtimeRequestContext(ctx, r.MaxTimeSeconds, runnerDefaultReqTimeout)
+	defer cancel()
+
+	var reader io.Reader
+	if r.Body != nil {
+		reader = bytes.NewReader(r.Body)
+	}
+	req, err := http.NewRequestWithContext(reqCtx, r.Method, baseURL+r.Path, reader)
+	if err != nil {
+		return nil, fmt.Errorf("build %s runtime request: %w", c.backend, err)
+	}
+	if r.ContentType != "" {
+		req.Header.Set("Content-Type", r.ContentType)
+	}
+	if r.IdempotencyKey != "" {
+		req.Header.Set("X-Idempotency-Key", r.IdempotencyKey)
+	}
+
+	resp, err := c.do.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("execute %s runtime request: %w", c.backend, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, runnerMaxResponseBytes))
+	if err != nil {
+		return nil, fmt.Errorf("read %s runtime response: %w", c.backend, err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, &runtimeResponseError{StatusCode: resp.StatusCode, Body: strings.TrimSpace(string(respBody))}
+	}
+	return respBody, nil
+}
+
+// health polls /healthz until it answers, the timeout elapses, or ctx ends.
+func (c runnerClient) health(ctx context.Context, baseURL string, timeout, poll time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for {
+		probe := runtimeHTTPRequest{Method: http.MethodGet, Path: "/healthz", ContentType: "", Body: nil, MaxTimeSeconds: runnerHealthProbeTimeoutSeconds, IdempotencyKey: ""}
+		if _, err := c.request(ctx, baseURL, probe); err == nil {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("%w: %s runtime health check timed out", ErrRuntimeUnhealthy, c.backend)
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("wait for %s runtime health: %w", c.backend, ctx.Err())
+		case <-time.After(poll):
+		}
+	}
+}
+
+func (c runnerClient) state(ctx context.Context, baseURL string) (runnerStateResponse, error) {
+	body, err := c.request(ctx, baseURL, runtimeHTTPRequest{Method: http.MethodGet, Path: "/state", ContentType: "", Body: nil, MaxTimeSeconds: 0, IdempotencyKey: ""})
+	if err != nil {
+		return runnerStateResponse{}, err
+	}
+	var state runnerStateResponse
+	if err := json.Unmarshal(body, &state); err != nil {
+		return runnerStateResponse{}, fmt.Errorf("decode %s runtime state: %w", c.backend, err)
+	}
+	return state, nil
+}
+
+// turn delivers a turn to /threads/{threadID}/turn, wrapping failures with
+// the classifyTurnError sentinel the service dispatches on.
+func (c runnerClient) turn(ctx context.Context, baseURL string, runtime assistantRuntimeRecord, threadID uuid.UUID, idempotencyKey, authToken, prompt string, mcpServers []runtimeMCPServer, timeout time.Duration) error {
+	reqBody, err := json.Marshal(runtimeTurnRequest{
+		Input:       prompt,
+		AuthToken:   authToken,
+		MCPServers:  mcpServers,
+		AssistantID: runtime.AssistantID.String(),
+		ProjectID:   runtime.ProjectID.String(),
+	})
+	if err != nil {
+		return fmt.Errorf("marshal %s runtime turn request: %w", c.backend, err)
+	}
+	req := runtimeHTTPRequest{
+		Method:         http.MethodPost,
+		Path:           "/threads/" + threadID.String() + "/turn",
+		ContentType:    "application/json",
+		Body:           reqBody,
+		MaxTimeSeconds: int(timeout / time.Second),
+		IdempotencyKey: idempotencyKey,
+	}
+	if _, err := c.request(ctx, baseURL, req); err != nil {
+		return fmt.Errorf("%w: execute %s turn request: %w", classifyTurnError(err), c.backend, err)
+	}
+	return nil
+}
 
 func firstNonEmpty(values ...string) string {
 	for _, v := range values {
