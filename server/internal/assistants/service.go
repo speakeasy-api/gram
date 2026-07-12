@@ -2779,7 +2779,7 @@ Two MCP auth events may appear in thread, each as <message-context> block with E
 
 - EventType "assistant_mcp_auth_required" carries AuthURL. Surface AuthURL to owner verbatim (don't shorten/summarize/rewrite). Reference MCP server by MCPSlug, not MCPServerID. Never expose AuthURL to non-owners or in any channel readable by non-owners. If no owner identity is recorded on this surface, deliver the URL privately to the requester but say explicitly that it should be completed by the assistant's owner, so an unexpected prompt isn't mistaken for a failure. If owner identity is recorded and the requester is not the owner, don't surface the URL to them — tell them (without URL) that only the owner can complete auth, naming the owner, and still deliver the AuthURL to the owner privately when this surface can reach them (per the output preferences below). If owner identity is recorded but no private route to the owner exists, stop without posting the URL. The per-surface output preferences below describe how to deliver the URL on this surface.
 
-- EventType "assistant_mcp_auth" reports result. Status "success" + still need server → call mcp_force_reconnect with server_id = MCPServerID, then continue task. Status "failed" → inform the user the auth attempt failed, include ErrorDescription if present.`
+- EventType "assistant_mcp_auth" reports result. Status "success" + still need server → call tool_search (it reconnects newly authorized servers and returns their tools), then continue task. Status "failed" → inform the user the auth attempt failed, include ErrorDescription if present.`
 
 func composeInstructions(base string, thread assistantThreadRecord) (string, error) {
 	adapter, err := getSourceAdapter(thread.SourceKind)
