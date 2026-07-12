@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"slices"
 	"time"
@@ -162,7 +163,7 @@ func (s *Service) shadowMCPInventoryPolicyState(ctx context.Context, organizatio
 	repo := riskrepo.New(s.db)
 	policies, err := repo.ListEnabledShadowMCPPoliciesByProject(ctx, projectID)
 	if err != nil {
-		return state, err
+		return state, fmt.Errorf("listing enabled shadow mcp policies: %w", err)
 	}
 
 	blockingPolicyIDs := make(map[string]struct{}, len(policies))
@@ -180,7 +181,7 @@ func (s *Service) shadowMCPInventoryPolicyState(ctx context.Context, organizatio
 			ResourceID:     policyID,
 		})
 		if err != nil {
-			return state, err
+			return state, fmt.Errorf("listing grants for shadow mcp policy: %w", err)
 		}
 		for _, grant := range grants {
 			if grant.Effect != authz.PolicyEffectAllow {
@@ -199,11 +200,11 @@ func (s *Service) shadowMCPInventoryPolicyState(ctx context.Context, organizatio
 
 	requests, err := repo.ListRiskPolicyBypassRequests(ctx, riskrepo.ListRiskPolicyBypassRequestsParams{
 		ProjectID:    projectID,
-		RiskPolicyID: uuid.NullUUID{},
+		RiskPolicyID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		Status:       conv.ToPGText(shadowMCPInventoryBypassStatusRequested),
 	})
 	if err != nil {
-		return state, err
+		return state, fmt.Errorf("listing shadow mcp bypass requests: %w", err)
 	}
 	for _, request := range requests {
 		if _, ok := blockingPolicyIDs[request.RiskPolicyID.String()]; !ok {
@@ -270,7 +271,7 @@ func shadowMCPInventoryBypassDimensions(raw []byte) (map[string]string, error) {
 	}
 	dimensions := map[string]string{}
 	if err := json.Unmarshal(raw, &dimensions); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unmarshaling shadow mcp inventory bypass dimensions: %w", err)
 	}
 	return dimensions, nil
 }

@@ -21,6 +21,12 @@ UPDATE risk_results
 SET created_at = @created_at
 WHERE id = @id;
 
+-- name: UpdateRiskPolicyBypassRequestTimestamps :exec
+UPDATE risk_policy_bypass_requests
+SET created_at = @requested_at, updated_at = @requested_at
+WHERE id = @id
+  AND project_id = @project_id;
+
 -- name: ListDeploymentHTTPTools :many
 SELECT *
 FROM http_tool_definitions

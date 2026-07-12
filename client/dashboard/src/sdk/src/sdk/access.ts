@@ -467,6 +467,25 @@ export class Access extends ClientSDK {
   }
 
   /**
+   * listShadowMCPInventory access
+   *
+   * @remarks
+   * List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and policy-bypass state.
+   */
+  async listShadowMCPInventory(
+    request: ListShadowMCPInventoryRequest,
+    security?: ListShadowMCPInventorySecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListShadowMCPInventoryResult> {
+    return unwrapAsync(accessListShadowMCPInventory(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * listShadowMCPApprovalRequests access
    *
    * @remarks
@@ -516,25 +535,6 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ResolveChallengesResult> {
     return unwrapAsync(accessResolveChallenge(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * listShadowMCPInventory access
-   *
-   * @remarks
-   * List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and policy-bypass state.
-   */
-  async listShadowMCPInventory(
-    request: ListShadowMCPInventoryRequest,
-    security?: ListShadowMCPInventorySecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<ListShadowMCPInventoryResult> {
-    return unwrapAsync(accessListShadowMCPInventory(
       this,
       request,
       security,

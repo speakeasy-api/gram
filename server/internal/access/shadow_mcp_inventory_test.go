@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	telemetryRepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -402,11 +403,11 @@ func createShadowMCPInventoryBypassRequest(t *testing.T, ctx context.Context, ti
 	})
 	require.NoError(t, err)
 
-	_, err = ti.conn.Exec(ctx, `
-		UPDATE risk_policy_bypass_requests
-		SET created_at = $1, updated_at = $1
-		WHERE id = $2
-	`, requestedAt, requestID)
+	err = testrepo.New(ti.conn).UpdateRiskPolicyBypassRequestTimestamps(ctx, testrepo.UpdateRiskPolicyBypassRequestTimestampsParams{
+		RequestedAt: conv.ToPGTimestamptz(requestedAt),
+		ID:          requestID,
+		ProjectID:   projectID,
+	})
 	require.NoError(t, err)
 
 	return requestID.String()
