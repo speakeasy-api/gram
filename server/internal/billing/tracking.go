@@ -65,6 +65,16 @@ var (
 // list explicitly.
 const ModelUsageSourceAssistants ModelUsageSource = "assistants"
 
+// The platform-initiated risk-analysis judges are likewise unregistered:
+// their completions are tagged and billed under ModelUsageSourceRiskAnalysis.
+// These values exist only as BYOK key slots, so a project can override the
+// key paying for the prompt-based risk-policy judge and the prompt-injection
+// classifier independently of each other and of the assistant.
+const (
+	ModelUsageSourceRiskPolicy      ModelUsageSource = "risk-policy"
+	ModelUsageSourcePromptInjection ModelUsageSource = "prompt-injection"
+)
+
 // ModelUsageSources lists every registered completion surface.
 func ModelUsageSources() []ModelUsageSource {
 	return slices.Clone(modelUsageSources)

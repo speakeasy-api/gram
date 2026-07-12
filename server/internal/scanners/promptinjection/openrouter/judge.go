@@ -309,7 +309,7 @@ func (c *Engine) call(ctx context.Context, req promptinjection.Request, msg judg
 		Stream:                    false,
 		UsageSource:               billing.ModelUsageSourceRiskAnalysis,
 		KeyType:                   gramopenrouter.KeyTypeInternal,
-		KeySlot:                   "",
+		KeySlot:                   billing.ModelUsageSourcePromptInjection,
 		ChatID:                    uuid.Nil,
 		UserID:                    userID,
 		ExternalUserID:            "",
