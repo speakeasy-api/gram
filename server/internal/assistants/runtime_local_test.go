@@ -76,6 +76,7 @@ func (f *fakeContainerEngine) Inspect(_ context.Context, name string) (localCont
 		ID:       container.id,
 		Running:  container.running,
 		ImageID:  container.imageID,
+		SpecHash: container.spec.Labels[runtimeLabelSpecHash],
 		HostPort: hostPort,
 	}, nil
 }
@@ -287,6 +288,74 @@ func TestLocalEnsureReplacesDriftedIdleContainer(t *testing.T) {
 	require.True(t, engine.volumes[localVolumeName(record)])
 }
 
+func TestLocalEnsureReplacesConfigDriftedIdleContainer(t *testing.T) {
+	t.Parallel()
+
+	doer, _, port := testRunner(t, healthyRunnerHandler(5))
+	engine := newFakeContainerEngine(testLocalImageRef, testLocalImageID, port)
+	backend := newTestLocalBackend(t, engine, doer)
+	record := localRecord(uuid.New(), nil)
+
+	_, err := backend.Ensure(t.Context(), record)
+	require.NoError(t, err)
+	firstID := engine.container(t, localContainerName(record)).id
+
+	// Same image, changed backend config: the server URL frozen into the
+	// container's env no longer matches.
+	drifted := NewLocalRuntimeBackend(testenv.NewLogger(t), testenv.NewTracerProvider(t), doer, engine, LocalRuntimeConfig{
+		Enabled:         true,
+		Environment:     "local",
+		OCIImage:        "gram-assistant-runtime",
+		ImageTag:        "dev",
+		GuestPort:       defaultRuntimeGuestPort,
+		ServerURL:       &url.URL{Scheme: "https", Host: "host.docker.internal:9443"},
+		ExtraCACertFile: "",
+	})
+
+	result, err := drifted.Ensure(t.Context(), record)
+	require.NoError(t, err)
+	require.True(t, result.ColdStart)
+	metadata := decodeLocalMetadata(t, result.BackendMetadataJSON)
+	replacement := engine.container(t, metadata.ContainerName)
+	require.NotEqual(t, firstID, replacement.id)
+	require.Equal(t, "https://host.docker.internal:9443", replacement.spec.Env["GRAM_SERVER_URL"])
+	// The workspace volume survives the replacement.
+	engine.mu.Lock()
+	defer engine.mu.Unlock()
+	require.True(t, engine.volumes[localVolumeName(record)])
+}
+
+func TestLocalRecycleImageReplacesConfigDriftedIdleContainer(t *testing.T) {
+	t.Parallel()
+
+	doer, _, port := testRunner(t, healthyRunnerHandler(5))
+	engine := newFakeContainerEngine(testLocalImageRef, testLocalImageID, port)
+	backend := newTestLocalBackend(t, engine, doer)
+	record := localRecord(uuid.New(), nil)
+
+	_, err := backend.Ensure(t.Context(), record)
+	require.NoError(t, err)
+	firstID := engine.container(t, localContainerName(record)).id
+
+	drifted := NewLocalRuntimeBackend(testenv.NewLogger(t), testenv.NewTracerProvider(t), doer, engine, LocalRuntimeConfig{
+		Enabled:         true,
+		Environment:     "local",
+		OCIImage:        "gram-assistant-runtime",
+		ImageTag:        "dev",
+		GuestPort:       defaultRuntimeGuestPort,
+		ServerURL:       &url.URL{Scheme: "https", Host: "host.docker.internal:9443"},
+		ExtraCACertFile: "",
+	})
+
+	result, err := drifted.RecycleImage(t.Context(), record)
+	require.NoError(t, err)
+	require.True(t, result.Recycled)
+	metadata := decodeLocalMetadata(t, result.BackendMetadataJSON)
+	replacement := engine.container(t, metadata.ContainerName)
+	require.NotEqual(t, firstID, replacement.id)
+	require.Equal(t, "https://host.docker.internal:9443", replacement.spec.Env["GRAM_SERVER_URL"])
+}
+
 func TestLocalEnsureKeepsDriftedBusyContainer(t *testing.T) {
 	t.Parallel()
 
@@ -363,7 +432,7 @@ func TestLocalEnsureAdoptsRacingLaunch(t *testing.T) {
 		id:      "container-racer",
 		imageID: testLocalImageID,
 		running: true,
-		spec:    localContainerSpec{Name: name, Image: testLocalImageRef, Labels: nil, Env: nil, VolumeName: localVolumeName(record), ExtraCACertFile: ""},
+		spec:    backend.containerSpec(record, name),
 		starts:  1,
 	}
 	engine.mu.Unlock()

@@ -69,7 +69,10 @@ type dockerContainerInspect struct {
 	State struct {
 		Running bool `json:"Running"`
 	} `json:"State"`
-	Image           string `json:"Image"`
+	Image  string `json:"Image"`
+	Config struct {
+		Labels map[string]string `json:"Labels"`
+	} `json:"Config"`
 	NetworkSettings struct {
 		Ports map[string][]struct {
 			HostIP   string `json:"HostIp"`
@@ -106,6 +109,7 @@ func (d *dockerCLIEngine) Inspect(ctx context.Context, name string) (localContai
 		ID:       inspect.ID,
 		Running:  inspect.State.Running,
 		ImageID:  inspect.Image,
+		SpecHash: inspect.Config.Labels[runtimeLabelSpecHash],
 		HostPort: hostPort,
 	}, nil
 }

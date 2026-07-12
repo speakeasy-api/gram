@@ -52,6 +52,7 @@ const (
 	runtimeLabelProjectID            = "gram.speakeasy.com/project-id"
 	runtimeLabelRole                 = "gram.speakeasy.com/role"
 	runtimeLabelRoleAssistantRuntime = "assistant_runtime"
+	runtimeLabelSpecHash             = "gram.speakeasy.com/spec-hash"
 )
 
 // runtimeImageRef joins an image repository and tag into the "<repo>[:<tag>]"

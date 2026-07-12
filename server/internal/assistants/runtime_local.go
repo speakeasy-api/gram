@@ -2,11 +2,15 @@ package assistants
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -86,6 +90,9 @@ type localContainerInfo struct {
 	ID      string
 	Running bool
 	ImageID string
+	// SpecHash is the runtimeLabelSpecHash label stamped at creation. Empty
+	// for containers created before the label existed.
+	SpecHash string
 	// HostPort is the loopback port the runner guest port is published on.
 	// Zero when the container is not running (ephemeral publishes are
 	// re-assigned on every start).
@@ -254,13 +261,16 @@ func (l *LocalRuntimeBackend) Ensure(ctx context.Context, runtime assistantRunti
 		return RuntimeBackendEnsureResult{}, fmt.Errorf("inspect local runtime container %s: %w", name, err)
 	}
 
-	// A rebuilt image changes the image ID under the same tag. Replace the
-	// container when it is safe: a busy runner (a turn in flight) keeps its
-	// current container and a later admission picks the new image up. The
-	// workspace volume always survives replacement. Removal targets the
-	// inspected incarnation's ID, not the name, so a racing Ensure can never
-	// tear down a replacement it did not examine.
-	if exists && info.ImageID != desiredImageID && !l.runnerBusy(ctx, info) {
+	// A rebuilt image changes the image ID under the same tag, and a config
+	// change (server URL, CA file) changes the spec hash — both are frozen
+	// into the container at creation, so drift on either means replace, not
+	// warm-restart. Replacement only happens when it is safe: a busy runner
+	// (a turn in flight) keeps its current container and a later admission
+	// picks the change up. The workspace volume always survives replacement.
+	// Removal targets the inspected incarnation's ID, not the name, so a
+	// racing Ensure can never tear down a replacement it did not examine.
+	desiredSpecHash := l.containerSpec(runtime, name).Labels[runtimeLabelSpecHash]
+	if exists && (info.ImageID != desiredImageID || info.SpecHash != desiredSpecHash) && !l.runnerBusy(ctx, info) {
 		if err := l.engine.Remove(ctx, info.ID); err != nil {
 			return RuntimeBackendEnsureResult{}, fmt.Errorf("remove drifted local runtime container %s: %w", name, err)
 		}
@@ -268,7 +278,7 @@ func (l *LocalRuntimeBackend) Ensure(ctx context.Context, runtime assistantRunti
 	}
 
 	if !exists {
-		info = localContainerInfo{ID: "", Running: false, ImageID: "", HostPort: 0}
+		info = localContainerInfo{ID: "", Running: false, ImageID: "", SpecHash: "", HostPort: 0}
 	}
 	coldStart := !info.Running
 	payload, err := l.startContainer(ctx, runtime, name, info, exists)
@@ -375,7 +385,7 @@ func (l *LocalRuntimeBackend) startContainer(ctx context.Context, runtime assist
 }
 
 func (l *LocalRuntimeBackend) containerSpec(runtime assistantRuntimeRecord, name string) localContainerSpec {
-	return localContainerSpec{
+	spec := localContainerSpec{
 		Name:  name,
 		Image: l.desiredImageRef(),
 		Labels: map[string]string{
@@ -391,12 +401,28 @@ func (l *LocalRuntimeBackend) containerSpec(runtime assistantRuntimeRecord, name
 		VolumeName:      localVolumeName(runtime),
 		ExtraCACertFile: l.config.ExtraCACertFile,
 	}
+	spec.Labels[runtimeLabelSpecHash] = localContainerSpecHash(spec)
+	return spec
 }
 
-// RecycleImage replaces an idle container whose image ID drifted from the
-// currently built image, without launching anything for rows that have no
-// container. Busy runners are skipped — the next admission's Ensure picks the
-// new image up lazily.
+// localContainerSpecHash fingerprints the parts of a container spec that are
+// frozen at creation (env, image reference, mounts) and cannot be changed on
+// an existing container. Stamped as a label so Ensure and RecycleImage detect
+// config drift and replace the container instead of warm-restarting a stale
+// incarnation.
+func localContainerSpecHash(spec localContainerSpec) string {
+	parts := []string{"image=" + spec.Image, "volume=" + spec.VolumeName, "ca=" + spec.ExtraCACertFile}
+	for _, key := range slices.Sorted(maps.Keys(spec.Env)) {
+		parts = append(parts, "env."+key+"="+spec.Env[key])
+	}
+	sum := sha256.Sum256([]byte(strings.Join(parts, "\n")))
+	return hex.EncodeToString(sum[:8])
+}
+
+// RecycleImage replaces an idle container whose image ID or creation-time
+// config drifted from the current spec, without launching anything for rows
+// that have no container. Busy runners are skipped — the next admission's
+// Ensure picks the change up lazily.
 func (l *LocalRuntimeBackend) RecycleImage(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendRecycleResult, error) {
 	if err := validateRuntimeBackend(l, runtime.Backend); err != nil {
 		return RuntimeBackendRecycleResult{}, err
@@ -418,14 +444,15 @@ func (l *LocalRuntimeBackend) RecycleImage(ctx context.Context, runtime assistan
 	// A stopped container is never resurrected here — its row may be expired
 	// or stopped on purpose, and the next admission's Ensure picks the new
 	// image up anyway.
-	if !info.Running || info.ImageID == desiredImageID || l.runnerBusy(ctx, info) {
+	desiredSpecHash := l.containerSpec(runtime, name).Labels[runtimeLabelSpecHash]
+	if !info.Running || (info.ImageID == desiredImageID && info.SpecHash == desiredSpecHash) || l.runnerBusy(ctx, info) {
 		return RuntimeBackendRecycleResult{Recycled: false, BackendMetadataJSON: nil}, nil
 	}
 
 	if err := l.engine.Remove(ctx, info.ID); err != nil {
 		return RuntimeBackendRecycleResult{}, fmt.Errorf("remove drifted local runtime container %s: %w", name, err)
 	}
-	payload, err := l.startContainer(ctx, runtime, name, localContainerInfo{ID: "", Running: false, ImageID: "", HostPort: 0}, false)
+	payload, err := l.startContainer(ctx, runtime, name, localContainerInfo{ID: "", Running: false, ImageID: "", SpecHash: "", HostPort: 0}, false)
 	if err != nil {
 		return RuntimeBackendRecycleResult{}, err
 	}
