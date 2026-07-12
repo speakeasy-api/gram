@@ -492,6 +492,25 @@ export class Access extends ClientSDK {
   }
 
   /**
+   * listShadowMCPInventoryUsers access
+   *
+   * @remarks
+   * List users with observed telemetry usage for one project-scoped Shadow MCP server URL.
+   */
+  async listShadowMCPInventoryUsers(
+    request: ListShadowMCPInventoryUsersRequest,
+    security?: ListShadowMCPInventoryUsersSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListShadowMCPInventoryUsersResult> {
+    return unwrapAsync(accessListShadowMCPInventoryUsers(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * listShadowMCPApprovalRequests access
    *
    * @remarks
@@ -541,25 +560,6 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ResolveChallengesResult> {
     return unwrapAsync(accessResolveChallenge(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * listShadowMCPInventoryUsers access
-   *
-   * @remarks
-   * List users with observed telemetry usage for one project-scoped Shadow MCP server URL.
-   */
-  async listShadowMCPInventoryUsers(
-    request: ListShadowMCPInventoryUsersRequest,
-    security?: ListShadowMCPInventoryUsersSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<ListShadowMCPInventoryUsersResult> {
-    return unwrapAsync(accessListShadowMCPInventoryUsers(
       this,
       request,
       security,

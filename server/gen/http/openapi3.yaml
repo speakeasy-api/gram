@@ -2506,6 +2506,119 @@ paths:
             x-speakeasy-name-override: listShadowMCPInventory
             x-speakeasy-react-hook:
                 name: ShadowMCPInventory
+    /rpc/access.listShadowMCPInventoryUsers:
+        get:
+            description: List users with observed telemetry usage for one project-scoped Shadow MCP server URL.
+            operationId: listShadowMCPInventoryUsers
+            parameters:
+                - allowEmptyValue: true
+                  in: query
+                  name: project_id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Shadow MCP server URL to expand.
+                  in: query
+                  name: server_url
+                  required: true
+                  schema:
+                    description: Shadow MCP server URL to expand.
+                    format: uri
+                    type: string
+                - allowEmptyValue: true
+                  in: query
+                  name: limit
+                  schema:
+                    default: 50
+                    format: int64
+                    maximum: 200
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: Cursor for the next page of results.
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Cursor for the next page of results.
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListShadowMCPInventoryUsersResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: listShadowMCPInventoryUsers access
+            tags:
+                - access
+            x-speakeasy-name-override: listShadowMCPInventoryUsers
+            x-speakeasy-react-hook:
+                name: ShadowMCPInventoryUsers
     /rpc/access.listShadowMcpRequests:
         get:
             description: List Shadow MCP approval requests for the current organization. Requires organization admin access because requests include requester and block details.
@@ -2832,119 +2945,6 @@ paths:
             x-speakeasy-name-override: resolveChallenge
             x-speakeasy-react-hook:
                 name: ResolveChallenge
-    /rpc/access.shadowMcp.inventory.users.list:
-        get:
-            description: List users with observed telemetry usage for one project-scoped Shadow MCP server URL.
-            operationId: listShadowMCPInventoryUsers
-            parameters:
-                - allowEmptyValue: true
-                  in: query
-                  name: project_id
-                  required: true
-                  schema:
-                    format: uuid
-                    type: string
-                - allowEmptyValue: true
-                  description: Shadow MCP server URL to expand.
-                  in: query
-                  name: server_url
-                  required: true
-                  schema:
-                    description: Shadow MCP server URL to expand.
-                    format: uri
-                    type: string
-                - allowEmptyValue: true
-                  in: query
-                  name: limit
-                  schema:
-                    default: 50
-                    format: int64
-                    maximum: 200
-                    minimum: 1
-                    type: integer
-                - allowEmptyValue: true
-                  description: Cursor for the next page of results.
-                  in: query
-                  name: cursor
-                  schema:
-                    description: Cursor for the next page of results.
-                    type: string
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/ListShadowMCPInventoryUsersResult'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - session_header_Gram-Session: []
-            summary: listShadowMCPInventoryUsers access
-            tags:
-                - access
-            x-speakeasy-name-override: listShadowMCPInventoryUsers
-            x-speakeasy-react-hook:
-                name: ShadowMCPInventoryUsers
     /rpc/access.updateMemberRoles:
         put:
             description: Update a team member's role assignments.

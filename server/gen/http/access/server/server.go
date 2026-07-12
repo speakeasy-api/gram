@@ -88,7 +88,7 @@ func New(
 			{"DenyShadowMCPApprovalRequest", "POST", "/rpc/access.denyShadowMcpRequest"},
 			{"ListShadowMCPAccessRules", "GET", "/rpc/access.listShadowMcpRules"},
 			{"ListShadowMCPInventory", "GET", "/rpc/access.listShadowMCPInventory"},
-			{"ListShadowMCPInventoryUsers", "GET", "/rpc/access.shadowMcp.inventory.users.list"},
+			{"ListShadowMCPInventoryUsers", "GET", "/rpc/access.listShadowMCPInventoryUsers"},
 			{"CreateShadowMCPAccessRule", "POST", "/rpc/access.createShadowMcpRule"},
 			{"UpdateShadowMCPAccessRule", "PUT", "/rpc/access.updateShadowMcpRule"},
 			{"DeleteShadowMCPAccessRule", "DELETE", "/rpc/access.deleteShadowMcpRule"},
@@ -1005,7 +1005,7 @@ func MountListShadowMCPInventoryUsersHandler(mux goahttp.Muxer, h http.Handler) 
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/rpc/access.shadowMcp.inventory.users.list", f)
+	mux.Handle("GET", "/rpc/access.listShadowMCPInventoryUsers", f)
 }
 
 // NewListShadowMCPInventoryUsersHandler creates a HTTP handler which loads the

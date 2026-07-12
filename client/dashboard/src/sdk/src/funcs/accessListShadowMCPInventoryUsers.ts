@@ -105,7 +105,7 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/access.shadowMcp.inventory.users.list")();
+  const path = pathToFunc("/rpc/access.listShadowMCPInventoryUsers")();
 
   const query = encodeFormQuery({
     "cursor": payload.cursor,

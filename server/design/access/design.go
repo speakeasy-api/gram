@@ -455,7 +455,7 @@ var _ = Service("access", func() {
 		Result(ListShadowMCPInventoryUsersResult)
 
 		HTTP(func() {
-			GET("/rpc/access.shadowMcp.inventory.users.list")
+			GET("/rpc/access.listShadowMCPInventoryUsers")
 			Param("project_id")
 			Param("server_url")
 			Param("limit")
