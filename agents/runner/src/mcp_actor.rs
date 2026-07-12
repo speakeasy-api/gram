@@ -41,6 +41,12 @@ const MCP_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 /// timeout for a server that is down.
 const MCP_RETRY_COOLDOWN: Duration = Duration::from_secs(30);
 
+/// Age past which a stored auth flow URL is re-minted on the next
+/// authorization-required connect, in case the earlier flow expired before
+/// the owner completed it. Long enough that repeated searches don't spam
+/// fresh `assistant_mcp_auth_required` notices.
+const MCP_AUTH_URL_TTL: Duration = Duration::from_secs(15 * 60);
+
 pub enum McpCmd {
     /// Sent by `tool_search` before every search. The actor connects any
     /// configured server that is not yet connected (creating an auth flow
@@ -136,10 +142,10 @@ struct McpActor {
     tokens: TokenRegistry,
     inbox_tx: UnboundedSender<String>,
     // Servers whose last connect demanded authorization, mapped to the auth
-    // flow URL (None while flow creation itself is failing). Retried on
+    // flow (None while flow creation itself is failing). Retried on
     // every EnsureConnected so a completed authorization is picked up
     // without any explicit signal.
-    auth_pending: BTreeMap<String, Option<String>>,
+    auth_pending: BTreeMap<String, Option<AuthFlow>>,
     // Last transient connect failure per server, with its timestamp for
     // the retry cooldown. Surfaced in statuses.
     last_errors: BTreeMap<String, (String, Instant)>,
@@ -246,13 +252,13 @@ impl McpActor {
                         authorization_url: None,
                         error: None,
                     }
-                } else if let Some(auth_url) = self.auth_pending.get(id) {
+                } else if let Some(flow) = self.auth_pending.get(id) {
                     McpServerStatus {
                         id: id.clone(),
                         status: McpServerConnectionStatus::AuthorizationRequired,
                         tools: Vec::new(),
-                        authorization_url: auth_url.clone(),
-                        error: auth_url.is_none().then(|| {
+                        authorization_url: flow.as_ref().map(|f| f.url.clone()),
+                        error: flow.is_none().then(|| {
                             "authorization link could not be created yet; search again to retry"
                                 .to_string()
                         }),
@@ -311,8 +317,9 @@ impl McpActor {
             Err(failure) if failure.auth_required => {
                 self.ensure_auth_flow(&id).await;
                 match self.auth_pending.get(&id) {
-                    Some(Some(auth_url)) => Err(format!(
-                        "MCP server {id} requires authorization: {auth_url}"
+                    Some(Some(flow)) => Err(format!(
+                        "MCP server {id} requires authorization: {url}",
+                        url = flow.url
                     )),
                     _ => Err(format!(
                         "MCP server {id} requires authorization; the authorization link \
@@ -412,7 +419,9 @@ impl McpActor {
     /// the `assistant_mcp_auth_required` notice the assistant
     /// instructions key on.
     async fn ensure_auth_flow(&mut self, server_id: &str) {
-        if matches!(self.auth_pending.get(server_id), Some(Some(_))) {
+        if let Some(Some(flow)) = self.auth_pending.get(server_id)
+            && flow.minted_at.elapsed() < MCP_AUTH_URL_TTL
+        {
             return;
         }
         let Some(server) = self.configured.get(server_id) else {
@@ -430,8 +439,13 @@ impl McpActor {
                     mcp_slug = flow.mcp_slug,
                     auth_url = flow.auth_url,
                 ));
-                self.auth_pending
-                    .insert(server_id.to_string(), Some(flow.auth_url));
+                self.auth_pending.insert(
+                    server_id.to_string(),
+                    Some(AuthFlow {
+                        url: flow.auth_url,
+                        minted_at: Instant::now(),
+                    }),
+                );
             }
             Err(flow_err) => {
                 tracing::warn!(
@@ -485,6 +499,11 @@ impl McpActor {
 struct McpConnectFailure {
     message: String,
     auth_required: bool,
+}
+
+struct AuthFlow {
+    url: String,
+    minted_at: Instant,
 }
 
 fn build_mcp_server_config(

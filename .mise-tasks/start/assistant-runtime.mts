@@ -250,24 +250,38 @@ const desiredRuntimes = new Map<string, RuntimeRow>();
 const missingContainers = new Set<string>();
 
 // Names of running local containers, or null when docker itself is
-// unreachable (treat as unknown rather than "everything is gone").
+// unreachable or unresponsive (treat as unknown rather than "everything
+// is gone"). A wedged docker daemon can block `docker ps` indefinitely,
+// which would freeze the whole reconcile loop — bound it.
 async function listLocalContainers(): Promise<Set<string> | null> {
   return new Promise((resolve) => {
     const proc = spawn("docker", ["ps", "--format", "{{.Names}}"], {
       env: process.env,
       stdio: ["ignore", "pipe", "pipe"],
     });
+    let settled = false;
+    const settle = (value: Set<string> | null) => {
+      if (!settled) {
+        settled = true;
+        clearTimeout(timer);
+        resolve(value);
+      }
+    };
+    const timer = setTimeout(() => {
+      proc.kill("SIGKILL");
+      settle(null);
+    }, 5000);
     let stdout = "";
     proc.stdout.on("data", (chunk: Buffer | string) => {
       stdout += chunk.toString();
     });
-    proc.on("error", () => resolve(null));
+    proc.on("error", () => settle(null));
     proc.on("close", (code) => {
       if (code !== 0) {
-        resolve(null);
+        settle(null);
         return;
       }
-      resolve(
+      settle(
         new Set(
           stdout
             .split("\n")
