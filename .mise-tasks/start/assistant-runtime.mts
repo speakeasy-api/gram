@@ -208,7 +208,7 @@ function startSubscriber(runtime: RuntimeRow) {
       : `attached fly logs for ${flyAppName(runtime)}`,
   );
 
-  proc.on("close", (code, signal) => {
+  const scheduleRetry = (reason: string) => {
     const current = subscribers.get(runtime.runtime_id);
     if (current !== sub) {
       return;
@@ -217,10 +217,7 @@ function startSubscriber(runtime: RuntimeRow) {
       subscribers.delete(runtime.runtime_id);
       return;
     }
-    writeLine(
-      linePrefix(runtime),
-      `log stream exited (${signal ?? code ?? "unknown"}), retrying...`,
-    );
+    writeLine(linePrefix(runtime), reason);
     subscribers.delete(runtime.runtime_id);
     setTimeout(() => {
       if (shuttingDown) {
@@ -232,6 +229,18 @@ function startSubscriber(runtime: RuntimeRow) {
       }
       startSubscriber(desired);
     }, 2000);
+  };
+
+  // A missing/broken CLI (docker, flyctl) surfaces as a spawn "error" with no
+  // "close"; without a handler it would crash the whole watcher.
+  proc.on("error", (err) => {
+    scheduleRetry(`log stream failed to start (${err.message}), retrying...`);
+  });
+
+  proc.on("close", (code, signal) => {
+    scheduleRetry(
+      `log stream exited (${signal ?? code ?? "unknown"}), retrying...`,
+    );
   });
 }
 

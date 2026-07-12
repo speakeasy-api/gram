@@ -107,19 +107,22 @@ func (c runnerClient) request(ctx context.Context, baseURL string, r runtimeHTTP
 }
 
 // health polls /healthz until it answers, the timeout elapses, or ctx ends.
+// The whole loop runs under a timeout-scoped context so an in-flight probe
+// cannot overshoot the budget.
 func (c runnerClient) health(ctx context.Context, baseURL string, timeout, poll time.Duration) error {
-	deadline := time.Now().Add(timeout)
+	healthCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
 	for {
 		probe := runtimeHTTPRequest{Method: http.MethodGet, Path: "/healthz", ContentType: "", Body: nil, MaxTimeSeconds: runnerHealthProbeTimeoutSeconds, IdempotencyKey: ""}
-		if _, err := c.request(ctx, baseURL, probe); err == nil {
+		if _, err := c.request(healthCtx, baseURL, probe); err == nil {
 			return nil
 		}
-		if time.Now().After(deadline) {
-			return fmt.Errorf("%w: %s runtime health check timed out", ErrRuntimeUnhealthy, c.backend)
-		}
 		select {
-		case <-ctx.Done():
-			return fmt.Errorf("wait for %s runtime health: %w", c.backend, ctx.Err())
+		case <-healthCtx.Done():
+			if ctx.Err() != nil {
+				return fmt.Errorf("wait for %s runtime health: %w", c.backend, ctx.Err())
+			}
+			return fmt.Errorf("%w: %s runtime health check timed out", ErrRuntimeUnhealthy, c.backend)
 		case <-time.After(poll):
 		}
 	}

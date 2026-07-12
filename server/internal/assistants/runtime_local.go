@@ -307,19 +307,22 @@ func (l *LocalRuntimeBackend) runnerBusy(ctx context.Context, info localContaine
 func (l *LocalRuntimeBackend) startContainer(ctx context.Context, runtime assistantRuntimeRecord, name string, info localContainerInfo, exists bool) (payload []byte, err error) {
 	needInspect := false
 	if !exists {
-		_, runErr := l.engine.Run(ctx, l.containerSpec(runtime, name))
+		createdID, runErr := l.engine.Run(ctx, l.containerSpec(runtime, name))
 		switch {
 		case runErr == nil:
 			needInspect = true
 			// Clean up the container this call created on every error exit,
 			// with a fresh context so cleanup still runs on ctx timeout.
+			// Removal targets the created ID, never the shared name, so a
+			// failed admission cannot tear down a replacement container a
+			// concurrent Ensure launched in the meantime.
 			defer func() {
 				if err == nil {
 					return
 				}
 				cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 				defer cancel()
-				if removeErr := l.engine.Remove(cleanupCtx, name); removeErr != nil {
+				if removeErr := l.engine.Remove(cleanupCtx, createdID); removeErr != nil {
 					l.logger.WarnContext(ctx, "remove local runtime container after failed launch",
 						attr.SlogAssistantID(runtime.AssistantID.String()),
 						attr.SlogError(removeErr),
