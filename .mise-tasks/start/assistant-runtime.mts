@@ -245,6 +245,39 @@ function startSubscriber(runtime: RuntimeRow) {
 }
 
 const desiredRuntimes = new Map<string, RuntimeRow>();
+// Local runtimes whose container is currently absent, so the wait is
+// announced once instead of on every poll/retry.
+const missingContainers = new Set<string>();
+
+// Names of running local containers, or null when docker itself is
+// unreachable (treat as unknown rather than "everything is gone").
+async function listLocalContainers(): Promise<Set<string> | null> {
+  return new Promise((resolve) => {
+    const proc = spawn("docker", ["ps", "--format", "{{.Names}}"], {
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    proc.stdout.on("data", (chunk: Buffer | string) => {
+      stdout += chunk.toString();
+    });
+    proc.on("error", () => resolve(null));
+    proc.on("close", (code) => {
+      if (code !== 0) {
+        resolve(null);
+        return;
+      }
+      resolve(
+        new Set(
+          stdout
+            .split("\n")
+            .map((line) => line.trim())
+            .filter(Boolean),
+        ),
+      );
+    });
+  });
+}
 
 async function loadRuntimes(): Promise<RuntimeRow[]> {
   const sql = `
@@ -327,6 +360,17 @@ async function reconcileOnce() {
     waitingForRuntimes = false;
   }
 
+  // A runtime row can outlive its container (assistant deleted, container
+  // manually removed) until the backend reaps it. Attaching `docker logs`
+  // to a gone container exits immediately and the retry loop turns that
+  // into log spam, so resolve existence once per poll and hold off until
+  // the container is actually there.
+  const localContainers = runtimes.some(
+    (runtime) => runtime.backend === "local",
+  )
+    ? await listLocalContainers()
+    : null;
+
   for (const [runtimeID, runtime] of desiredRuntimes) {
     // Runtime rows start with empty backend metadata and get populated after
     // Ensure. Wait for the backend's identity field so we attach a single
@@ -339,6 +383,24 @@ async function reconcileOnce() {
     if (runtime.backend === "local" && !runtime.container_name) {
       continue;
     }
+    if (
+      runtime.backend === "local" &&
+      localContainers !== null &&
+      !localContainers.has(runtime.container_name)
+    ) {
+      if (subscribers.has(runtimeID)) {
+        stopSubscriber(runtimeID, "container gone, detaching...");
+      }
+      if (!missingContainers.has(runtimeID)) {
+        missingContainers.add(runtimeID);
+        writeLine(
+          linePrefix(runtime),
+          `container ${runtime.container_name} not running; waiting for it...`,
+        );
+      }
+      continue;
+    }
+    missingContainers.delete(runtimeID);
     const existing = subscribers.get(runtimeID);
     if (!existing) {
       startSubscriber(runtime);
@@ -355,6 +417,11 @@ async function reconcileOnce() {
   for (const runtimeID of [...subscribers.keys()]) {
     if (!desiredRuntimes.has(runtimeID)) {
       stopSubscriber(runtimeID, "runtime no longer active, detaching...");
+    }
+  }
+  for (const runtimeID of [...missingContainers]) {
+    if (!desiredRuntimes.has(runtimeID)) {
+      missingContainers.delete(runtimeID);
     }
   }
 }
