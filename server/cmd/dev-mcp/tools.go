@@ -50,7 +50,7 @@ type createAssistantInput struct {
 	Instructions   string         `json:"instructions" jsonschema:"System instructions for the assistant."`
 	Toolsets       []toolsetRef   `json:"toolsets,omitempty" jsonschema:"Toolsets available to the assistant. Defaults to none."`
 	MCPServers     []mcpServerRef `json:"mcp_servers,omitempty" jsonschema:"MCP servers attached directly to the assistant."`
-	WarmTTLSeconds int            `json:"warm_ttl_seconds,omitempty" jsonschema:"Warm runtime TTL in seconds."`
+	WarmTTLSeconds *int           `json:"warm_ttl_seconds,omitempty" jsonschema:"Warm runtime TTL in seconds. Zero disables the warm window."`
 	MaxConcurrency int            `json:"max_concurrency,omitempty" jsonschema:"Maximum active warm runtimes."`
 	Status         string         `json:"status,omitempty" jsonschema:"Initial status: active or paused. Defaults to active."`
 }
@@ -63,7 +63,7 @@ type updateAssistantInput struct {
 	Instructions   string         `json:"instructions,omitempty" jsonschema:"New system instructions."`
 	Toolsets       []toolsetRef   `json:"toolsets,omitempty" jsonschema:"Replacement toolset list."`
 	MCPServers     []mcpServerRef `json:"mcp_servers,omitempty" jsonschema:"Replacement MCP server list."`
-	WarmTTLSeconds int            `json:"warm_ttl_seconds,omitempty" jsonschema:"Warm runtime TTL in seconds."`
+	WarmTTLSeconds *int           `json:"warm_ttl_seconds,omitempty" jsonschema:"Warm runtime TTL in seconds. Zero disables the warm window."`
 	MaxConcurrency int            `json:"max_concurrency,omitempty" jsonschema:"Maximum active warm runtimes."`
 	Status         string         `json:"status,omitempty" jsonschema:"New status: active or paused."`
 }
@@ -192,8 +192,8 @@ func registerTools(server *mcp.Server, api *apiClient) {
 		if in.MCPServers != nil {
 			body["mcp_servers"] = in.MCPServers
 		}
-		if in.WarmTTLSeconds > 0 {
-			body["warm_ttl_seconds"] = in.WarmTTLSeconds
+		if in.WarmTTLSeconds != nil {
+			body["warm_ttl_seconds"] = *in.WarmTTLSeconds
 		}
 		if in.MaxConcurrency > 0 {
 			body["max_concurrency"] = in.MaxConcurrency
@@ -228,8 +228,8 @@ func registerTools(server *mcp.Server, api *apiClient) {
 		if in.MCPServers != nil {
 			body["mcp_servers"] = in.MCPServers
 		}
-		if in.WarmTTLSeconds > 0 {
-			body["warm_ttl_seconds"] = in.WarmTTLSeconds
+		if in.WarmTTLSeconds != nil {
+			body["warm_ttl_seconds"] = *in.WarmTTLSeconds
 		}
 		if in.MaxConcurrency > 0 {
 			body["max_concurrency"] = in.MaxConcurrency
@@ -393,6 +393,38 @@ func loadChatPage(ctx context.Context, api *apiClient, project, chatID string) (
 	return page, nil
 }
 
+// collectMessagesAfter pages forward through the chat with `after_seq` keyset
+// cursors so a turn that produced more than one page is reported in full.
+func collectMessagesAfter(ctx context.Context, api *apiClient, project, chatID string, baselineSeq int64) ([]chatMessage, error) {
+	const pageLimit = 200
+	var out []chatMessage
+	cursor := baselineSeq
+	for {
+		q := url.Values{"id": {chatID}, "limit": {strconv.Itoa(pageLimit)}}
+		if cursor > 0 {
+			q.Set("after_seq", strconv.FormatInt(cursor, 10))
+		} else {
+			q.Set("from_start", "true")
+		}
+		raw, err := api.call(ctx, http.MethodGet, "/rpc/chat.load", q, project, nil)
+		if err != nil {
+			return nil, err
+		}
+		var page chatPage
+		if err := json.Unmarshal(raw, &page); err != nil {
+			return nil, fmt.Errorf("decode chat page: %w", err)
+		}
+		if len(page.Messages) == 0 {
+			return out, nil
+		}
+		out = append(out, page.Messages...)
+		cursor = page.Messages[len(page.Messages)-1].Seq
+		if len(page.Messages) < pageLimit {
+			return out, nil
+		}
+	}
+}
+
 func emptyToolCalls(tc *string) bool {
 	return tc == nil || *tc == "" || *tc == "[]" || *tc == "null"
 }
@@ -465,11 +497,9 @@ func runTurn(ctx context.Context, api *apiClient, in runTurnInput) (json.RawMess
 			continue
 		}
 
-		var newMessages []chatMessage
-		for _, msg := range page.Messages {
-			if msg.Seq > baselineSeq {
-				newMessages = append(newMessages, msg)
-			}
+		newMessages, err := collectMessagesAfter(ctx, api, in.Project, sent.ChatID, baselineSeq)
+		if err != nil {
+			return nil, fmt.Errorf("collect turn messages: %w", err)
 		}
 		reply := contentText(last.Content)
 		out, err := json.Marshal(map[string]any{

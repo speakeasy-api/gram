@@ -354,6 +354,10 @@ func TestLocalRecycleImageReplacesConfigDriftedIdleContainer(t *testing.T) {
 	replacement := engine.container(t, metadata.ContainerName)
 	require.NotEqual(t, firstID, replacement.id)
 	require.Equal(t, "https://host.docker.internal:9443", replacement.spec.Env["GRAM_SERVER_URL"])
+	// The workspace volume survives the replacement.
+	engine.mu.Lock()
+	defer engine.mu.Unlock()
+	require.True(t, engine.volumes[localVolumeName(record)])
 }
 
 func TestLocalEnsureKeepsDriftedBusyContainer(t *testing.T) {
