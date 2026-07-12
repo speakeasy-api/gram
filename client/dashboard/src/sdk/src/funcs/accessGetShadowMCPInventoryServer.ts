@@ -105,7 +105,7 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/access.shadowMcp.inventory.get")();
+  const path = pathToFunc("/rpc/access.getShadowMCPInventoryServer")();
 
   const query = encodeFormQuery({
     "project_id": payload.project_id,

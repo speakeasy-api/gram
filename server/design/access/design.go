@@ -447,7 +447,7 @@ var _ = Service("access", func() {
 		Result(ShadowMCPInventoryServerModel)
 
 		HTTP(func() {
-			GET("/rpc/access.shadowMcp.inventory.get")
+			GET("/rpc/access.getShadowMCPInventoryServer")
 			Param("project_id")
 			Param("server_slug")
 			security.SessionHeader()
