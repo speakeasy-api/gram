@@ -40,7 +40,6 @@ function server(
     observedUseCount: 0,
     requestCount: 0,
     serverName: undefined,
-    serverSlug: "example-com-mcp",
     topUsers: [],
     urlHost: "example.com",
     userCount: 0,

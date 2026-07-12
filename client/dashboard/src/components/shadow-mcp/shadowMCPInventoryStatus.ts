@@ -30,20 +30,6 @@ export function shadowMCPPolicyState(
   return "none";
 }
 
-export function shadowMCPPolicyBadgeVariant(
-  state: ShadowMCPPolicyState,
-): BadgeProps["variant"] {
-  switch (state) {
-    case "blocking":
-      return "destructive";
-    case "flagging":
-      return "warning";
-    case "none":
-    case "unavailable":
-      return "neutral";
-  }
-}
-
 export function shadowMCPInventoryStatus(
   server: ShadowMCPInventoryServer,
   policyState: ShadowMCPPolicyState,

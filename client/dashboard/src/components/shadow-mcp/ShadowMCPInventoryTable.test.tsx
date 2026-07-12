@@ -364,7 +364,6 @@ function inventoryServer(
     observedUseCount: 0,
     requestCount: 0,
     serverName: undefined,
-    serverSlug: "example-com-mcp",
     topUsers: [],
     urlHost: new URL(canonicalServerUrl).host,
     userCount: 0,
