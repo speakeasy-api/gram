@@ -503,7 +503,7 @@ func (s *Service) resolveShadowMCPInventoryURLRequests(
 	q := riskrepo.New(db)
 	requests, err := q.ListRiskPolicyBypassRequests(ctx, riskrepo.ListRiskPolicyBypassRequestsParams{
 		ProjectID:    projectID,
-		RiskPolicyID: uuid.NullUUID{},
+		RiskPolicyID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		Status:       conv.ToPGText(shadowMCPInventoryBypassStatusRequested),
 	})
 	if err != nil {

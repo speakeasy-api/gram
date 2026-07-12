@@ -92,9 +92,9 @@ func New(
 			{"ListShadowMCPAccessRules", "GET", "/rpc/access.listShadowMcpRules"},
 			{"ListShadowMCPInventory", "GET", "/rpc/access.listShadowMCPInventory"},
 			{"ListShadowMCPInventoryUsers", "GET", "/rpc/access.listShadowMCPInventoryUsers"},
-			{"UpsertShadowMCPInventoryPolicyBypass", "POST", "/rpc/access.shadowMcp.inventory.policyBypass.upsert"},
-			{"DeleteShadowMCPInventoryPolicyBypass", "DELETE", "/rpc/access.shadowMcp.inventory.policyBypass.delete"},
-			{"ResolveShadowMCPInventoryRequest", "POST", "/rpc/access.shadowMcp.inventory.request.resolve"},
+			{"UpsertShadowMCPInventoryPolicyBypass", "POST", "/rpc/access.upsertShadowMCPInventoryPolicyBypass"},
+			{"DeleteShadowMCPInventoryPolicyBypass", "DELETE", "/rpc/access.deleteShadowMCPInventoryPolicyBypass"},
+			{"ResolveShadowMCPInventoryRequest", "POST", "/rpc/access.resolveShadowMCPInventoryRequest"},
 			{"CreateShadowMCPAccessRule", "POST", "/rpc/access.createShadowMcpRule"},
 			{"UpdateShadowMCPAccessRule", "PUT", "/rpc/access.updateShadowMcpRule"},
 			{"DeleteShadowMCPAccessRule", "DELETE", "/rpc/access.deleteShadowMcpRule"},
@@ -1074,7 +1074,7 @@ func MountUpsertShadowMCPInventoryPolicyBypassHandler(mux goahttp.Muxer, h http.
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/access.shadowMcp.inventory.policyBypass.upsert", f)
+	mux.Handle("POST", "/rpc/access.upsertShadowMCPInventoryPolicyBypass", f)
 }
 
 // NewUpsertShadowMCPInventoryPolicyBypassHandler creates a HTTP handler which
@@ -1128,7 +1128,7 @@ func MountDeleteShadowMCPInventoryPolicyBypassHandler(mux goahttp.Muxer, h http.
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("DELETE", "/rpc/access.shadowMcp.inventory.policyBypass.delete", f)
+	mux.Handle("DELETE", "/rpc/access.deleteShadowMCPInventoryPolicyBypass", f)
 }
 
 // NewDeleteShadowMCPInventoryPolicyBypassHandler creates a HTTP handler which
@@ -1182,7 +1182,7 @@ func MountResolveShadowMCPInventoryRequestHandler(mux goahttp.Muxer, h http.Hand
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/access.shadowMcp.inventory.request.resolve", f)
+	mux.Handle("POST", "/rpc/access.resolveShadowMCPInventoryRequest", f)
 }
 
 // NewResolveShadowMCPInventoryRequestHandler creates a HTTP handler which

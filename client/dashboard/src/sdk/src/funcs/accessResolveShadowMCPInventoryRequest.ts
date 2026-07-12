@@ -109,7 +109,7 @@ async function $do(
     { explode: true },
   );
 
-  const path = pathToFunc("/rpc/access.shadowMcp.inventory.request.resolve")();
+  const path = pathToFunc("/rpc/access.resolveShadowMCPInventoryRequest")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",

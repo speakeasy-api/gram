@@ -481,7 +481,7 @@ var _ = Service("access", func() {
 		Result(ShadowMCPInventoryURLStateModel)
 
 		HTTP(func() {
-			POST("/rpc/access.shadowMcp.inventory.policyBypass.upsert")
+			POST("/rpc/access.upsertShadowMCPInventoryPolicyBypass")
 			security.SessionHeader()
 			Response(StatusOK)
 		})
@@ -509,7 +509,7 @@ var _ = Service("access", func() {
 		Result(ShadowMCPInventoryURLStateModel)
 
 		HTTP(func() {
-			DELETE("/rpc/access.shadowMcp.inventory.policyBypass.delete")
+			DELETE("/rpc/access.deleteShadowMCPInventoryPolicyBypass")
 			Param("project_id")
 			Param("server_url")
 			security.SessionHeader()
@@ -533,7 +533,7 @@ var _ = Service("access", func() {
 		Result(ShadowMCPInventoryURLStateModel)
 
 		HTTP(func() {
-			POST("/rpc/access.shadowMcp.inventory.request.resolve")
+			POST("/rpc/access.resolveShadowMCPInventoryRequest")
 			security.SessionHeader()
 			Response(StatusOK)
 		})

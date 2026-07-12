@@ -261,6 +261,25 @@ export class Access extends ClientSDK {
   }
 
   /**
+   * deleteShadowMCPInventoryPolicyBypass access
+   *
+   * @remarks
+   * Remove a Shadow MCP URL allow decision.
+   */
+  async deleteShadowMCPInventoryPolicyBypass(
+    request: DeleteShadowMCPInventoryPolicyBypassRequest,
+    security?: DeleteShadowMCPInventoryPolicyBypassSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ShadowMCPInventoryURLState> {
+    return unwrapAsync(accessDeleteShadowMCPInventoryPolicyBypass(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * deleteShadowMCPAccessRule access
    *
    * @remarks
@@ -584,44 +603,6 @@ export class Access extends ClientSDK {
   }
 
   /**
-   * deleteShadowMCPInventoryPolicyBypass access
-   *
-   * @remarks
-   * Remove a Shadow MCP URL allow decision.
-   */
-  async deleteShadowMCPInventoryPolicyBypass(
-    request: DeleteShadowMCPInventoryPolicyBypassRequest,
-    security?: DeleteShadowMCPInventoryPolicyBypassSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<ShadowMCPInventoryURLState> {
-    return unwrapAsync(accessDeleteShadowMCPInventoryPolicyBypass(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * upsertShadowMCPInventoryPolicyBypass access
-   *
-   * @remarks
-   * Create or modify a Shadow MCP URL allow decision for selected blocking policies.
-   */
-  async upsertShadowMCPInventoryPolicyBypass(
-    request: UpsertShadowMCPInventoryPolicyBypassRequest,
-    security?: UpsertShadowMCPInventoryPolicyBypassSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<ShadowMCPInventoryURLState> {
-    return unwrapAsync(accessUpsertShadowMCPInventoryPolicyBypass(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
    * resolveShadowMCPInventoryRequest access
    *
    * @remarks
@@ -690,6 +671,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ShadowMCPAccessRule> {
     return unwrapAsync(accessUpdateShadowMCPAccessRule(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * upsertShadowMCPInventoryPolicyBypass access
+   *
+   * @remarks
+   * Create or modify a Shadow MCP URL allow decision for selected blocking policies.
+   */
+  async upsertShadowMCPInventoryPolicyBypass(
+    request: UpsertShadowMCPInventoryPolicyBypassRequest,
+    security?: UpsertShadowMCPInventoryPolicyBypassSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ShadowMCPInventoryURLState> {
+    return unwrapAsync(accessUpsertShadowMCPInventoryPolicyBypass(
       this,
       request,
       security,

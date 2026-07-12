@@ -108,9 +108,7 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc(
-    "/rpc/access.shadowMcp.inventory.policyBypass.delete",
-  )();
+  const path = pathToFunc("/rpc/access.deleteShadowMCPInventoryPolicyBypass")();
 
   const query = encodeFormQuery({
     "project_id": payload.project_id,

@@ -110,9 +110,7 @@ async function $do(
     explode: true,
   });
 
-  const path = pathToFunc(
-    "/rpc/access.shadowMcp.inventory.policyBypass.upsert",
-  )();
+  const path = pathToFunc("/rpc/access.upsertShadowMCPInventoryPolicyBypass")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
