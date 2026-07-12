@@ -559,9 +559,62 @@ func (s *ServiceCore) ReapStuckRuntimes(ctx context.Context) (ReapStuckRuntimesR
 	//     attempts after CAS active->expiring without reaching Stop or
 	//     Revert. Without this the row blocks the partial unique index
 	//     ReserveAssistantRuntime depends on.
-	// 'active' rows are never reaped: an idle runtime keeps its VM until the
-	// assistant is deleted.
+	// Healthy 'active' rows are never reaped: an idle runtime keeps its VM
+	// until the assistant is deleted. The local reconciliation below is the
+	// narrow exception for a row whose container no longer exists.
 	queries := assistantrepo.New(s.db)
+	// Local containers can be removed outside Gram (docker rm, daemon reset,
+	// pruning). Reconcile those rows before the age-based SQL sweep: unlike a
+	// healthy idle runtime, a definitively missing container can never make
+	// progress. Stop only the row; the next admission recreates the container
+	// against the preserved workspace volume.
+	if checker, ok := s.runtime.(runtimeLivenessChecker); ok && s.runtime.SupportsBackend(runtimeBackendLocal) {
+		rows, err := queries.ListActiveAssistantRuntimes(ctx, runtimeStateActive)
+		if err != nil {
+			return out, fmt.Errorf("list active assistant runtimes for liveness reconciliation: %w", err)
+		}
+		for _, row := range rows {
+			if row.Backend != runtimeBackendLocal {
+				continue
+			}
+			record := assistantRuntimeRecord{
+				ID:                  row.ID,
+				AssistantThreadID:   row.AssistantThreadID,
+				AssistantID:         row.AssistantID,
+				ProjectID:           row.ProjectID,
+				Backend:             row.Backend,
+				BackendMetadataJSON: row.BackendMetadataJson,
+				State:               row.State,
+				WarmUntil:           row.WarmUntil,
+			}
+			exists, err := checker.RuntimeExists(ctx, record)
+			if err != nil {
+				s.logger.WarnContext(ctx, "check assistant runtime existence failed",
+					attr.SlogAssistantID(row.AssistantID.String()),
+					attr.SlogProjectID(row.ProjectID.String()),
+					attr.SlogAssistantRuntimeID(row.ID.String()),
+					attr.SlogError(err),
+				)
+				continue
+			}
+			if exists {
+				continue
+			}
+			if err := queries.StopAssistantRuntime(ctx, assistantrepo.StopAssistantRuntimeParams{
+				State:         runtimeStateStopped,
+				ProjectID:     row.ProjectID,
+				RuntimeID:     row.ID,
+				StartingState: runtimeStateStarting,
+				ActiveState:   runtimeStateActive,
+				ExpiringState: runtimeStateExpiring,
+			}); err != nil {
+				return out, fmt.Errorf("stop vanished local assistant runtime: %w", err)
+			}
+			affected[row.AssistantID] = struct{}{}
+			out.StaleRuntimesStopped++
+		}
+	}
+
 	runtimeAssistantIDs, err := queries.ReapStuckAssistantRuntimes(ctx, assistantrepo.ReapStuckAssistantRuntimesParams{
 		StoppedState:   runtimeStateStopped,
 		StartingState:  runtimeStateStarting,
@@ -1480,7 +1533,7 @@ func (s *ServiceCore) RecycleActiveRuntimeImages(ctx context.Context, params Rec
 	}
 
 	queries := assistantrepo.New(s.db)
-	rows, err := queries.ListActiveAssistantRuntimesForImageRecycle(ctx, runtimeStateActive)
+	rows, err := queries.ListActiveAssistantRuntimes(ctx, runtimeStateActive)
 	if err != nil {
 		return RecycleAssistantRuntimeImagesResult{}, fmt.Errorf("list active assistant runtimes for image recycle: %w", err)
 	}

@@ -492,6 +492,24 @@ func (l *LocalRuntimeBackend) Status(ctx context.Context, runtime assistantRunti
 	return RuntimeBackendStatus{Configured: true, IdleSeconds: state.minThreadIdle()}, nil
 }
 
+// RuntimeExists checks the container resource itself rather than the runner
+// endpoint. A stopped container still exists and remains reusable; only a
+// definitive not-found result means an active database row is orphaned.
+func (l *LocalRuntimeBackend) RuntimeExists(ctx context.Context, runtime assistantRuntimeRecord) (bool, error) {
+	if err := validateRuntimeBackend(l, runtime.Backend); err != nil {
+		return false, err
+	}
+	name := localContainerName(runtime)
+	_, err := l.engine.Inspect(ctx, name)
+	if errors.Is(err, errLocalContainerNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("inspect local runtime container %s: %w", name, err)
+	}
+	return true, nil
+}
+
 // Stop halts the container while keeping it and its workspace volume in place
 // for warm restart on the next admission.
 func (l *LocalRuntimeBackend) Stop(ctx context.Context, runtime assistantRuntimeRecord) error {
@@ -547,3 +565,4 @@ func decodeLocalRuntimeMetadata(raw []byte) (localRuntimeMetadata, error) {
 }
 
 var _ RuntimeBackend = (*LocalRuntimeBackend)(nil)
+var _ runtimeLivenessChecker = (*LocalRuntimeBackend)(nil)

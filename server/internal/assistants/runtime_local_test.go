@@ -235,6 +235,30 @@ func TestLocalEnsureLaunchesAndReuses(t *testing.T) {
 	require.Equal(t, 1, engine.runCalls)
 }
 
+func TestLocalRuntimeExistsDistinguishesMissingAndStoppedContainers(t *testing.T) {
+	t.Parallel()
+
+	engine := newFakeContainerEngine(testLocalImageRef, testLocalImageID, 18081)
+	backend := newTestLocalBackend(t, engine, nil)
+	record := localRecord(uuid.New(), []byte(`{"container_id":"old"}`))
+
+	exists, err := backend.RuntimeExists(t.Context(), record)
+	require.NoError(t, err)
+	require.False(t, exists)
+
+	name := localContainerName(record)
+	engine.containers[name] = &fakeContainer{
+		id:      "container-stopped",
+		imageID: testLocalImageID,
+		running: false,
+		spec:    backend.containerSpec(record, name),
+		starts:  0,
+	}
+	exists, err = backend.RuntimeExists(t.Context(), record)
+	require.NoError(t, err)
+	require.True(t, exists, "a stopped container still exists for warm reuse")
+}
+
 func TestLocalEnsureRestartsStoppedContainer(t *testing.T) {
 	t.Parallel()
 
