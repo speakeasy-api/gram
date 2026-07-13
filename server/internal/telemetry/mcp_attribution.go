@@ -9,7 +9,7 @@ import (
 // unredacted server/tool names Claude recorded in the local session transcript
 // for a model API request whose OTEL telemetry was stamped
 // mcp_server.name='custom'. Written to Redis by the hooks ingest path
-// (Stop/SubagentStop) and read by the staged-telemetry promotion worker, which
+// (Stop/SubagentStop/SessionEnd) and read by the staged-telemetry promotion worker, which
 // is why the type and key live here rather than in the hooks package: hooks
 // already depends on background, so background/activities cannot import hooks.
 type MCPAttributionTuple struct {

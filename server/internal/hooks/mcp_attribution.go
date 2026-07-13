@@ -3,8 +3,8 @@ package hooks
 // Transcript-derived MCP attribution intake. Claude redacts user-configured
 // MCP server/tool names to "custom" on its OTEL api_request telemetry, but
 // records the real names in the local session transcript. The Claude plugin's
-// Stop/SubagentStop hooks extract (request_id, mcp_server, mcp_tool) tuples
-// from the transcript and ship them on the unified ingest payload
+// Stop/SubagentStop/SessionEnd hooks extract (request_id, mcp_server, mcp_tool)
+// tuples from the transcript and ship them on the unified ingest payload
 // (data.mcp_attribution). This file stores those tuples in Redis, keyed per
 // request id; the scheduled staged-telemetry sweep joins them against the
 // rows parked in telemetry_logs_staging (see server/internal/hooks/otel.go

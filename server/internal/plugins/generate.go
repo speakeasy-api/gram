@@ -2685,7 +2685,14 @@ gram_hooks_enrich_claude_transcript_attribution() {
   local event path
   event=$(printf '%s' "$input" | jq -r '.hook_event_name // empty' 2>/dev/null) || event=""
   case "$event" in
-    Stop)
+    Stop|SessionEnd)
+      # Stop runs at every turn boundary; SessionEnd runs once at teardown.
+      # Claude writes a turn's final api_request attribution to the transcript
+      # a beat after Stop fires, so Stop reliably captures every request except
+      # that turn's last one. A later Stop re-reads the whole transcript and
+      # backfills the previous turn's straggler (extraction is idempotent), but
+      # a session's final turn has no next Stop — SessionEnd, firing after the
+      # transcript is finalized, is the backstop that recovers it.
       path=$(printf '%s' "$input" | jq -r '.transcript_path // empty' 2>/dev/null) || path=""
       ;;
     SubagentStop)

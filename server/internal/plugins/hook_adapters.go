@@ -1174,8 +1174,8 @@ gram_hooks_canonical_data_members() {
     notification_members="\"notification\":{$notification_members}"
   fi
 
-  # Transcript-derived MCP attribution (Claude Stop/SubagentStop): the
-  # enrichment step attaches a ready-made JSON array; forward it verbatim.
+  # Transcript-derived MCP attribution (Claude Stop/SubagentStop/SessionEnd):
+  # the enrichment step attaches a ready-made JSON array; forward it verbatim.
   local mcp_attribution_members=""
   local mcp_attribution
   mcp_attribution="$(gram_hooks_json_value "$payload" "mcp_attribution")"

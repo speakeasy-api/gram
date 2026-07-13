@@ -1783,6 +1783,101 @@ printf '{}\n200'
 		"exponent-form numbers must survive extraction")
 }
 
+// TestRenderHookScriptClaudeSessionEndEnrichesTranscriptAttribution verifies
+// the SessionEnd hook restores transcript-derived MCP attribution. Claude
+// writes a turn's final api_request attribution to the transcript a beat after
+// Stop fires, so Stop misses that turn's last request; a session's final turn
+// has no next Stop to backfill it. SessionEnd fires after the transcript is
+// finalized and is the backstop that recovers the whole turn, including its
+// last request.
+func TestRenderHookScriptClaudeSessionEndEnrichesTranscriptAttribution(t *testing.T) {
+	t.Parallel()
+
+	_, err := exec.LookPath("jq")
+	require.NoError(t, err, "jq is required for Claude transcript attribution")
+
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	dir := t.TempDir()
+	binDir := filepath.Join(dir, "bin")
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	hookPath := filepath.Join(dir, "hook.sh")
+	capturePath := filepath.Join(dir, "payloads.jsonl")
+	transcriptPath := filepath.Join(dir, "transcript.jsonl")
+	require.NoError(t, os.WriteFile(hookPath, renderHookScript(cfg, "claude"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "http.sh"), renderSharedHTTPScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.sh"), renderSharedAuthScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "curl"), []byte(`#!/usr/bin/env bash
+url=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -H|-w|-X|--data-binary|--max-time|--config) shift 2 ;;
+    -*) shift ;;
+    *) url="$1"; shift ;;
+  esac
+done
+payload="$(cat)"
+case "$url" in
+  */rpc/hooks.ingest)
+    printf '%s' "$payload" >> "$GRAM_CAPTURE_PAYLOADS"
+    printf '\n---GRAM---\n' >> "$GRAM_CAPTURE_PAYLOADS"
+    ;;
+esac
+printf '{}\n200'
+`), 0o755))
+
+	// Two attributed requests within one turn: Claude stamps the unredacted
+	// server/tool onto the assistant row that consumed each tool result. The
+	// second (last) row is exactly the request Stop would race with.
+	require.NoError(t, os.WriteFile(transcriptPath, []byte(`{"type":"user","message":{"content":"go"}}
+{"type":"assistant","requestId":"req_first","attributionMcpServer":"linear-private","attributionMcpTool":"list_teams"}
+{"type":"assistant","requestId":"req_last","attributionMcpServer":"grain-private","attributionMcpTool":"myself"}
+`), 0o600))
+
+	env := hookAuthTestEnv(dir,
+		"GRAM_CAPTURE_PAYLOADS="+capturePath,
+		"GRAM_HOOKS_AUTH_FILE="+filepath.Join(dir, "auth.env"),
+		"GRAM_HOOKS_API_KEY=gram_test_hooks_key",
+		"GRAM_HOOKS_PROJECT_SLUG=acme-prod",
+	)
+	for i, kv := range env {
+		if strings.HasPrefix(kv, "PATH=") {
+			env[i] = "PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH")
+		}
+	}
+
+	cmd := exec.Command("bash", hookPath)
+	cmd.Stdin = strings.NewReader(`{"hook_event_name":"SessionEnd","session_id":"sess-end","transcript_path":"` + transcriptPath + `"}`)
+	cmd.Env = env
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+
+	chunks := strings.Split(string(requireFileBytes(t, capturePath)), "\n---GRAM---\n")
+	require.Len(t, chunks, 2, "expected one captured ingest payload")
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(chunks[0])), &parsed))
+	data := requireMapValue(t, parsed, "data")
+	rawAttribution, ok := data["mcp_attribution"].([]any)
+	require.True(t, ok, "SessionEnd must forward data.mcp_attribution: %v", data)
+
+	got := map[string]map[string]string{}
+	for _, entry := range rawAttribution {
+		m, ok := entry.(map[string]any)
+		require.True(t, ok)
+		reqID, _ := m["request_id"].(string)
+		server, _ := m["mcp_server"].(string)
+		tool, _ := m["mcp_tool"].(string)
+		got[reqID] = map[string]string{"server": server, "tool": tool}
+	}
+	require.Equal(t, map[string]map[string]string{
+		"req_first": {"server": "linear-private", "tool": "list_teams"},
+		"req_last":  {"server": "grain-private", "tool": "myself"},
+	}, got, "SessionEnd must recover every attributed request, including the turn's last")
+}
+
 // TestRenderHookScriptCursorPinsStdioMCPIdentityToCommand verifies that a
 // stdio MCP server's identity — what Shadow MCP approvals are scoped to — is
 // the launch command, not the mutable server alias, while URL servers keep
