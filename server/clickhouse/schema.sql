@@ -105,16 +105,19 @@ CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_billing_mode ON telemetry_logs
 -- attribution was redacted (mcp_server.name = 'custom') until the
 -- transcript-derived attribution for the request arrives via hooks (or a
 -- timeout passes). Its physical columns match telemetry_logs so rows can be
--- re-inserted verbatim, but it deliberately carries only the two materialized
--- columns promotion needs (chat_id, request_id) — telemetry_logs' other
+-- re-inserted verbatim, but it deliberately carries only three materialized
+-- columns (request_id, the attribution join key; org_id, the tuple's Redis
+-- key scope; and chat_id for manual inspection) — telemetry_logs' other
 -- materialized columns are recomputed at insert time when the row is
--- promoted. The promotion worker rewrites attributes.mcp_server.name /
--- attributes.mcp_tool.name and inserts the row into telemetry_logs — the
--- moment attribute_metrics_summaries_mv fires — then deletes it here. Rows
--- keep their id across promotion, so telemetry_logs itself is the
--- exactly-once ledger. The short TTL is a cleanup backstop only (measured
--- from observation time, since the promotion timeout is too): the 30-minute
--- timeout sweep promotes stragglers verbatim long before it.
+-- promoted. A scheduled sweep scans staging per
+-- project every two minutes, rewrites attributes.mcp_server.name /
+-- attributes.mcp_tool.name for rows whose tuple arrived, and inserts them
+-- into telemetry_logs — the moment attribute_metrics_summaries_mv fires —
+-- then deletes them here. Rows keep their id across promotion, so
+-- telemetry_logs itself is the exactly-once ledger. The short TTL is a
+-- cleanup backstop only (measured from observation time, since the promotion
+-- timeout is too): the 30-minute timeout promotes stragglers verbatim long
+-- before it.
 CREATE TABLE IF NOT EXISTS telemetry_logs_staging (
     id UUID DEFAULT generateUUIDv7() COMMENT 'Unique identifier for the log entry, preserved when the row is promoted to telemetry_logs.',
     time_unix_nano Int64 COMMENT 'Unix time (ns) when the event occurred measured by the origin clock.' CODEC(Delta, ZSTD),
@@ -134,7 +137,8 @@ CREATE TABLE IF NOT EXISTS telemetry_logs_staging (
     service_version Nullable(String) COMMENT 'Service version.',
     gram_chat_id Nullable(String) COMMENT 'The Chat ID (Claude session id) associated with the log.',
     chat_id String MATERIALIZED toString(attributes.gen_ai.conversation.id) COMMENT 'Chat ID (materialized from attributes.gen_ai.conversation.id) — the promotion worker scopes by this.',
-    request_id String MATERIALIZED toString(attributes.request_id) COMMENT 'Claude API request id (materialized from attributes.request_id) — the attribution join key.'
+    request_id String MATERIALIZED toString(attributes.request_id) COMMENT 'Claude API request id (materialized from attributes.request_id) — the attribution join key.',
+    org_id String MATERIALIZED toString(attributes.gram.org.id) COMMENT 'Gram org id (materialized from attributes.gram.org.id) — the attribution tuple join scope. The tuple is keyed by org, not project, because the hooks key and the OTEL exporter key can resolve different projects.'
 ) ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(fromUnixTimestamp64Nano(time_unix_nano))
 ORDER BY (gram_project_id, time_unix_nano, id)
@@ -142,8 +146,9 @@ TTL fromUnixTimestamp64Nano(observed_time_unix_nano) + INTERVAL 2 DAY
 SETTINGS index_granularity = 8192
 COMMENT 'Holding pen for Claude OTEL api_request rows with redacted (custom) MCP attribution, awaiting transcript-derived attribution before promotion into telemetry_logs.';
 
--- The promotion worker scopes every read by session, so chat_id needs the
--- same bloom-filter treatment it gets on telemetry_logs.
+-- Promotion scans by project (the sorting key prefix); this index only
+-- serves ad-hoc per-session inspection of staged rows, mirroring the
+-- bloom-filter treatment chat_id gets on telemetry_logs.
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_staging_chat_id ON telemetry_logs_staging (chat_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 
 CREATE TABLE IF NOT EXISTS trace_summaries (

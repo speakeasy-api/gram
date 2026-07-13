@@ -1,5 +1,17 @@
 # server
 
+## 0.86.0
+
+### Minor Changes
+
+- 4d22067: Add "Suggest with AI" to the exclusion create/edit form, backed by a new dedicated `risk.suggestExclusion` endpoint (separate from `risk.suggestCustomRules`). It returns structured match fields (match type, match value, rule id/source filters) that the dashboard serializes into the exclusion criteria expression — regex suggestions are validated (RE2 compile, length cap) server-side before they reach the form.
+- f3ea11b: Add the project-scoped Shadow MCP inventory listing API and generated client SDK support.
+- b10e52d: Restore Claude's redacted MCP attribution on cost telemetry via session transcripts. Claude stamps `mcp_server.name='custom'` on api_request OTEL rows for user-configured MCP servers; those rows now park in a `telemetry_logs_staging` ClickHouse table while the Claude hook plugin's Stop/SubagentStop hooks ship the unredacted `(request_id → server/tool)` attribution extracted from the local session transcript. A per-session Temporal workflow joins the two, rewrites the attribution inside the row's attributes JSON, and promotes the row into `telemetry_logs` — so `attribute_metrics_summaries` aggregates true server/tool names. Rows whose attribution never arrives promote verbatim after 30 minutes via a scheduled sweep.
+
+### Patch Changes
+
+- 00ac3b8: Fix deletion of organization-level remote session clients, derive tunnel gateway URLs from the active environment, and detach remote identity providers without deleting shared clients.
+
 ## 0.85.0
 
 ### Minor Changes

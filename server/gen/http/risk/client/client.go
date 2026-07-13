@@ -165,6 +165,10 @@ type Client struct {
 	// the suggestCustomDetectionRule endpoint.
 	SuggestCustomDetectionRuleDoer goahttp.Doer
 
+	// SuggestExclusion Doer is the HTTP client used to make requests to the
+	// suggestExclusion endpoint.
+	SuggestExclusionDoer goahttp.Doer
+
 	// TestDetectionRule Doer is the HTTP client used to make requests to the
 	// testDetectionRule endpoint.
 	TestDetectionRuleDoer goahttp.Doer
@@ -242,6 +246,7 @@ func NewClient(
 		UpdateRiskExclusionDoer:            doer,
 		DeleteRiskExclusionDoer:            doer,
 		SuggestCustomDetectionRuleDoer:     doer,
+		SuggestExclusionDoer:               doer,
 		TestDetectionRuleDoer:              doer,
 		EvaluatePromptGuardrailDoer:        doer,
 		SaveRiskEvalReviewDoer:             doer,
@@ -1138,6 +1143,30 @@ func (c *Client) SuggestCustomDetectionRule() goa.Endpoint {
 		resp, err := c.SuggestCustomDetectionRuleDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("risk", "suggestCustomDetectionRule", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SuggestExclusion returns an endpoint that makes HTTP requests to the risk
+// service suggestExclusion server.
+func (c *Client) SuggestExclusion() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSuggestExclusionRequest(c.encoder)
+		decodeResponse = DecodeSuggestExclusionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSuggestExclusionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SuggestExclusionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "suggestExclusion", err)
 		}
 		return decodeResponse(resp)
 	}

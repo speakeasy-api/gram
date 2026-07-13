@@ -28,6 +28,12 @@ func hookAdapterFor(platform string) hookAdapterSpec {
 				{Native: "PostToolUseFailure", EventType: "tool.failed"},
 				{Native: "UserPromptSubmit", EventType: "prompt.submitted"},
 				{Native: "Stop", EventType: "assistant.responded"},
+				// SubagentStop is registered for the transcript-derived MCP
+				// attribution it carries (subagent transcripts are separate
+				// files, so Stop alone cannot cover subagent lanes). It maps
+				// to usage.reported: no chat-message persistence, no policy
+				// scan — a subagent's last message is not a user-facing turn.
+				{Native: "SubagentStop", EventType: "usage.reported"},
 				{Native: "SessionEnd", EventType: "session.ended"},
 				{Native: "Notification", EventType: "notification.reported"},
 			},
@@ -1187,7 +1193,18 @@ gram_hooks_canonical_data_members() {
     notification_members="\"notification\":{$notification_members}"
   fi
 
-  data_members=$(gram_hooks_join_members "$prompt" "$message_members" "$tool_members" "$mcp_members" "$usage_members" "$skill_name" "$notification_members")
+  # Transcript-derived MCP attribution (Claude Stop/SubagentStop/SessionEnd):
+  # the enrichment step attaches a ready-made JSON array; forward it verbatim.
+  local mcp_attribution_members=""
+  local mcp_attribution
+  mcp_attribution="$(gram_hooks_json_value "$payload" "mcp_attribution")"
+  case "$mcp_attribution" in
+    \[*)
+      mcp_attribution_members="\"mcp_attribution\":$mcp_attribution"
+      ;;
+  esac
+
+  data_members=$(gram_hooks_join_members "$prompt" "$message_members" "$tool_members" "$mcp_members" "$usage_members" "$skill_name" "$notification_members" "$mcp_attribution_members")
   printf '%%s' "$data_members"
 }
 

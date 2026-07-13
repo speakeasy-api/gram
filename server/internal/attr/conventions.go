@@ -435,6 +435,13 @@ const (
 
 	AIIntegrationConfigIDKey           = attribute.Key("gram.ai_integration.config_id")
 	AIIntegrationUsagePollNextAfterKey = attribute.Key("gram.ai_integration.usage_poll.next_after")
+
+	ResilienceBreakerStateKey           = attribute.Key("gram.circuit_breaker.state")
+	ResilienceBreakerPreviousStateKey   = attribute.Key("gram.circuit_breaker.previous_state")
+	ResilienceBreakerTransitionCauseKey = attribute.Key("gram.circuit_breaker.transition_cause")
+	ResilienceNamespaceKey              = attribute.Key("gram.resilience.namespace")
+	ResiliencePartitionKey              = attribute.Key("gram.resilience.partition")
+	ResilienceSubsetKey                 = attribute.Key("gram.resilience.subset")
 )
 
 const (
@@ -1792,4 +1799,38 @@ func AIIntegrationUsagePollNextAfter(v time.Time) attribute.KeyValue {
 
 func SlogAIIntegrationUsagePollNextAfter(v time.Time) slog.Attr {
 	return slog.Time(string(AIIntegrationUsagePollNextAfterKey), v)
+}
+
+func ResilienceBreakerState(v string) attribute.KeyValue { return ResilienceBreakerStateKey.String(v) }
+func SlogResilienceBreakerState(v string) slog.Attr {
+	return slog.String(string(ResilienceBreakerStateKey), v)
+}
+
+func ResilienceBreakerPreviousState(v string) attribute.KeyValue {
+	return ResilienceBreakerPreviousStateKey.String(v)
+}
+func SlogResilienceBreakerPreviousState(v string) slog.Attr {
+	return slog.String(string(ResilienceBreakerPreviousStateKey), v)
+}
+
+func ResilienceBreakerTransitionCause(v string) attribute.KeyValue {
+	return ResilienceBreakerTransitionCauseKey.String(v)
+}
+func SlogResilienceBreakerTransitionCause(v string) slog.Attr {
+	return slog.String(string(ResilienceBreakerTransitionCauseKey), v)
+}
+
+func ResilienceNamespace(v string) attribute.KeyValue { return ResilienceNamespaceKey.String(v) }
+func SlogResilienceNamespace(v string) slog.Attr {
+	return slog.String(string(ResilienceNamespaceKey), v)
+}
+
+func ResiliencePartition(v string) attribute.KeyValue { return ResiliencePartitionKey.String(v) }
+func SlogResiliencePartition(v string) slog.Attr {
+	return slog.String(string(ResiliencePartitionKey), v)
+}
+
+func ResilienceSubset(v string) attribute.KeyValue { return ResilienceSubsetKey.String(v) }
+func SlogResilienceSubset(v string) slog.Attr {
+	return slog.String(string(ResilienceSubsetKey), v)
 }

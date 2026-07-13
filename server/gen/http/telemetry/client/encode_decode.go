@@ -5875,10 +5875,11 @@ func unmarshalRiskTokensPointResponseBodyToTelemetryRiskTokensPoint(v *RiskToken
 // *TumDetailsPointResponseBody.
 func unmarshalTumDetailsPointResponseBodyToTelemetryTumDetailsPoint(v *TumDetailsPointResponseBody) *telemetry.TumDetailsPoint {
 	res := &telemetry.TumDetailsPoint{
-		BucketTimeUnixNano: *v.BucketTimeUnixNano,
-		InputTokens:        *v.InputTokens,
-		OutputTokens:       *v.OutputTokens,
-		TotalTokens:        *v.TotalTokens,
+		BucketTimeUnixNano:  *v.BucketTimeUnixNano,
+		InputTokens:         *v.InputTokens,
+		OutputTokens:        *v.OutputTokens,
+		CacheCreationTokens: *v.CacheCreationTokens,
+		TotalTokens:         *v.TotalTokens,
 	}
 
 	return res
@@ -5889,9 +5890,10 @@ func unmarshalTumDetailsPointResponseBodyToTelemetryTumDetailsPoint(v *TumDetail
 // *TumDetailsTotalsResponseBody.
 func unmarshalTumDetailsTotalsResponseBodyToTelemetryTumDetailsTotals(v *TumDetailsTotalsResponseBody) *telemetry.TumDetailsTotals {
 	res := &telemetry.TumDetailsTotals{
-		InputTokens:  *v.InputTokens,
-		OutputTokens: *v.OutputTokens,
-		TotalTokens:  *v.TotalTokens,
+		InputTokens:         *v.InputTokens,
+		OutputTokens:        *v.OutputTokens,
+		CacheCreationTokens: *v.CacheCreationTokens,
+		TotalTokens:         *v.TotalTokens,
 	}
 
 	return res

@@ -25,6 +25,7 @@ type Environment struct {
 type EnvironmentEntry struct {
 	Name          string
 	Value         string
+	IsSecret      bool
 	EnvironmentID uuid.UUID
 	CreatedAt     pgtype.Timestamptz
 	UpdatedAt     pgtype.Timestamptz

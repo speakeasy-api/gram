@@ -1,5 +1,16 @@
 # dashboard
 
+## 0.87.0
+
+### Minor Changes
+
+- 4d22067: Add "Suggest with AI" to the exclusion create/edit form, backed by a new dedicated `risk.suggestExclusion` endpoint (separate from `risk.suggestCustomRules`). It returns structured match fields (match type, match value, rule id/source filters) that the dashboard serializes into the exclusion criteria expression — regex suggestions are validated (RE2 compile, length cap) server-side before they reach the form.
+- f3ea11b: Add the project-scoped Shadow MCP inventory listing API and generated client SDK support.
+
+### Patch Changes
+
+- 00ac3b8: Fix deletion of organization-level remote session clients, derive tunnel gateway URLs from the active environment, and detach remote identity providers without deleting shared clients.
+
 ## 0.86.0
 
 ### Minor Changes

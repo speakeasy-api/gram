@@ -237,6 +237,82 @@ func hooksManifestVersion(cfg GenerateConfig) string {
 	return "0." + hooksGeneratorVersion + "." + conv.Default(cfg.Version, "0")
 }
 
+// HooksConfig is the hook-output-affecting slice of GenerateConfig, captured at
+// publish time (persisted as plugin_github_connections.published_hooks_config)
+// so a later publish can tell whether the observability (hooks) subtree must be
+// regenerated. hooksGeneratorVersion alone can't catch these: a marketplace
+// rename or an observability-mode toggle changes the generated hook commands
+// while leaving the version untouched, so without this snapshot the publish path
+// carries a stale hooks subtree. It deliberately excludes per-publish secrets
+// (HooksAPIKey, APIKey) and the manifest version (tracked separately via
+// published_hooks_version) — only fields that change generated hook *content*
+// belong here. Fields are the resolved/effective values that actually appear in
+// output: the resolved marketplace name folds in the override, org name, project
+// slug, and default-project flag, while OrgName/OrgEmail/ProjectSlug also appear
+// directly (plugin metadata, Codex slug, hook-script Gram-Project header) and
+// ServerURL/OrgID are baked into the hook scripts.
+type HooksConfig struct {
+	MarketplaceName   string `json:"marketplace_name"`
+	OrgName           string `json:"org_name"`
+	OrgEmail          string `json:"org_email"`
+	ProjectSlug       string `json:"project_slug"`
+	ServerURL         string `json:"server_url"`
+	OrgID             string `json:"org_id"`
+	ObservabilityMode bool   `json:"observability_mode"`
+	BrowserLogin      bool   `json:"browser_login"`
+}
+
+// hooksConfigSnapshot extracts the hook-output-affecting config from cfg. The
+// marketplace name is resolved (override or org default) so the snapshot records
+// exactly what was baked into the generated hooks.
+func hooksConfigSnapshot(cfg GenerateConfig) HooksConfig {
+	return HooksConfig{
+		MarketplaceName:   resolveMarketplaceName(cfg),
+		OrgName:           cfg.OrgName,
+		OrgEmail:          cfg.OrgEmail,
+		ProjectSlug:       cfg.ProjectSlug,
+		ServerURL:         cfg.ServerURL,
+		OrgID:             cfg.OrgID,
+		ObservabilityMode: cfg.ObservabilityMode,
+		BrowserLogin:      cfg.BrowserLogin,
+	}
+}
+
+// marshalHooksConfig serializes a HooksConfig to the JSON stored in
+// published_hooks_config. Go marshals struct fields in declaration order, so the
+// bytes are deterministic for a given value.
+func marshalHooksConfig(c HooksConfig) ([]byte, error) {
+	b, err := json.Marshal(c)
+	if err != nil {
+		return nil, fmt.Errorf("marshal hooks config: %w", err)
+	}
+	return b, nil
+}
+
+// hooksConfigHash returns a stable sha256 over a HooksConfig, used to compare a
+// freshly-computed snapshot against the one last published. Hashing the value
+// (rather than raw stored bytes) normalizes away Postgres JSONB reserialization,
+// which does not preserve key order or whitespace.
+func hooksConfigHash(c HooksConfig) string {
+	b, _ := json.Marshal(c)
+	sum := sha256.Sum256(b)
+	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+// storedHooksConfigHash decodes a published_hooks_config value and hashes it for
+// comparison against a live snapshot. An empty (backfill) or unparseable value
+// hashes to "" so the caller treats it as changed and regenerates once.
+func storedHooksConfigHash(stored []byte) string {
+	if len(stored) == 0 {
+		return ""
+	}
+	var c HooksConfig
+	if err := json.Unmarshal(stored, &c); err != nil {
+		return ""
+	}
+	return hooksConfigHash(c)
+}
+
 // mcpGeneratorVersion is mixed into the MCP fingerprint (see MCPFingerprint).
 // Bump it to force the automated rollout to republish every connected project's
 // MCP plugins on the next run, even when a project's generated MCP output is
@@ -254,7 +330,7 @@ const mcpGeneratorVersion = "9"
 //
 // The Plugin Generate Check CI workflow requires the relevant one of these two
 // constants to change whenever generate.go does.
-const hooksGeneratorVersion = "12"
+const hooksGeneratorVersion = "14"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -377,6 +453,7 @@ var ClaudeObservabilityHookEvents = []string{
 	"SessionEnd",
 	"UserPromptSubmit",
 	"Stop",
+	"SubagentStop",
 	"Notification",
 }
 
@@ -2713,6 +2790,9 @@ fi
 if type gram_hooks_enrich_claude_mcp_payload >/dev/null 2>&1; then
   provider_payload="$(gram_hooks_enrich_claude_mcp_payload "$provider_payload")"
 fi
+if type gram_hooks_enrich_claude_transcript_attribution >/dev/null 2>&1; then
+  provider_payload="$(gram_hooks_enrich_claude_transcript_attribution "$provider_payload")"
+fi
 
 # gram_hooks_emit_login_nudge injects a once-per-session UserPromptSubmit
 # additionalContext telling Claude the hooks are unauthenticated and where the
@@ -3005,6 +3085,75 @@ gram_hooks_enrich_claude_mcp_payload() {
 
   printf '%s' "$input" | jq -c --arg name "$matched_name" --arg identity "$server_identity" --arg url "$matched_url" \
     '. + {mcp_server_name: $name, server_identity: $identity, url: $url, mcp_server_url: $url}' 2>/dev/null || printf '%s' "$input"
+}
+
+# gram_hooks_claude_transcript_attribution_from reads a Claude session
+# transcript (JSONL) and prints a compact JSON array of per-request MCP
+# attribution entries. Assistant rows carry requestId plus the UNREDACTED
+# attributionMcpServer / attributionMcpTool names that Claude masks to
+# "custom" on its OTEL telemetry; the server joins these on request_id to
+# restore the redacted names on staged telemetry rows.
+gram_hooks_claude_transcript_attribution_from() {
+  local path="$1"
+  [ -n "$path" ] && [ -r "$path" ] || return 0
+  # First pass streams the JSONL line-by-line (no slurp of a potentially
+  # large transcript); the second pass slurps only the tiny filtered set to
+  # dedupe by request id (the last row for a request wins, matching how the
+  # transcript finalizes attribution). Required fields must be non-empty
+  # strings and a malformed tool coerces to "" — Stop is a blocking hook, so
+  # one malformed transcript row must skip, not poison the ingest payload.
+  jq -c 'select(.type == "assistant"
+                and ((.requestId | type) == "string" and .requestId != "")
+                and ((.attributionMcpServer | type) == "string" and .attributionMcpServer != ""))
+         | {request_id: .requestId, mcp_server: .attributionMcpServer,
+            mcp_tool: (if (.attributionMcpTool | type) == "string" then .attributionMcpTool else "" end)}' \
+    "$path" 2>/dev/null | jq -c -s 'group_by(.request_id) | map(last)' 2>/dev/null
+}
+
+gram_hooks_enrich_claude_transcript_attribution() {
+  local input="$1"
+  if ! command -v jq >/dev/null 2>&1; then
+    printf '%s' "$input"
+    return
+  fi
+  local event path
+  event=$(printf '%s' "$input" | jq -r '.hook_event_name // empty' 2>/dev/null) || event=""
+  case "$event" in
+    Stop|SessionEnd)
+      # Stop runs at every turn boundary; SessionEnd runs once at teardown.
+      # Claude writes a turn's final api_request attribution to the transcript
+      # a beat after Stop fires, so Stop reliably captures every request except
+      # that turn's last one. A later Stop re-reads the whole transcript and
+      # backfills the previous turn's straggler (extraction is idempotent), but
+      # a session's final turn has no next Stop — SessionEnd, firing after the
+      # transcript is finalized, is the backstop that recovers it.
+      path=$(printf '%s' "$input" | jq -r '.transcript_path // empty' 2>/dev/null) || path=""
+      ;;
+    SubagentStop)
+      # Subagent transcripts live in separate files; the payload points at
+      # the subagent's own transcript.
+      path=$(printf '%s' "$input" | jq -r '.agent_transcript_path // .transcript_path // empty' 2>/dev/null) || path=""
+      ;;
+    *)
+      printf '%s' "$input"
+      return
+      ;;
+  esac
+  local attribution
+  attribution="$(gram_hooks_claude_transcript_attribution_from "$path")"
+  case "$attribution" in
+    \[*)
+      ;;
+    *)
+      printf '%s' "$input"
+      return
+      ;;
+  esac
+  if [ "$attribution" = "[]" ]; then
+    printf '%s' "$input"
+    return
+  fi
+  printf '%s' "$input" | jq -c --argjson attribution "$attribution" '. + {mcp_attribution: $attribution}' 2>/dev/null || printf '%s' "$input"
 }
 `
 }

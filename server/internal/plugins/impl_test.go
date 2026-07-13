@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	mcpmetarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
@@ -1933,18 +1934,180 @@ func TestPluginsService_PublishProject_MCPChangeCarriesHooksVerbatim(t *testing.
 	require.Equal(t, hooksBefore, hooksAfter, "hooks subtree must be carried verbatim across an MCP-only publish")
 }
 
-// Flipping an org-level hooks setting must regenerate the hooks subtree on the
-// next publish even though hooksGeneratorVersion is unchanged: the rendered
-// scripts bake the setting in, so carrying them verbatim would leave the old
-// behavior live until an unrelated generator bump. The persisted
-// published_hooks_config is what detects the flip.
-func TestPluginsService_PublishProject_RegeneratesHooksOnBrowserLoginFlip(t *testing.T) {
+// phasedRolloutFixture creates a published project and rewinds its stored hooks
+// version to "0", leaving a pending hooks bump for the phased rollout to gate.
+// It returns the baseline hooks files so callers can assert carry-vs-regenerate.
+func phasedRolloutFixture(t *testing.T, ctx context.Context, ti *testInstance, mock *mockGitHubPublisher, name string) (pluginID string, hooksBaseline map[string]string) {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: name})
+	require.NoError(t, err)
+
+	toolset := createTestToolset(t, ctx, ti.conn, name+"-toolset")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   conv.PtrEmpty(toolset.ID.String()),
+		DisplayName: conv.PtrEmpty(name + " Server"),
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	// Baseline publish (non-phased) records the current hooks version + MCP
+	// fingerprints, then we rewind the stored hooks version so a bump is pending.
+	_, err = ti.service.PublishProject(ctx, plugins.PublishProjectInput{
+		ProjectID:       *authCtx.ProjectID,
+		CreatedByUserID: authCtx.UserID,
+		CommitMessage:   "baseline",
+		SkipIfUnchanged: true,
+	})
+	require.NoError(t, err)
+
+	hooksBaseline = hooksFilesOf(mock.lastPushedFiles)
+	require.NotEmpty(t, hooksBaseline, "baseline publish must emit hooks files")
+
+	rewindPublishedHooksVersion(t, ctx, ti.conn, *authCtx.ProjectID, "0")
+
+	return plugin.ID, hooksBaseline
+}
+
+// A phase-gated org that is NOT in the rollout must not receive a pending hooks
+// bump: with no MCP change, the publish skips entirely and the stored hooks
+// version is left untouched (the org stays on what it already has).
+func TestPluginsService_PublishProject_PhasedRollout_NonEligibleBlocksHooksBump(t *testing.T) {
 	t.Parallel()
 
 	mock := &mockGitHubPublisher{}
 	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
+
+	phasedRolloutFixture(t, ctx, ti, mock, "Phased NonEligible")
+
+	// Empty provider → no clearance payload → org is not in the rollout phase.
+	pub := newTestPluginPublisher(t, ti, mock, &feature.InMemory{})
+
+	mock.pushFilesCalled = false
+	mock.getRepoFilesCalled = false
+	res, err := pub.PublishProject(ctx, plugins.PublishProjectInput{
+		ProjectID:       *authCtx.ProjectID,
+		CreatedByUserID: authCtx.UserID,
+		CommitMessage:   "phased",
+		SkipIfUnchanged: true,
+	})
+	require.NoError(t, err)
+	require.True(t, res.Skipped, "non-eligible org with a pending hooks bump and no content change must skip")
+	require.False(t, mock.pushFilesCalled, "a gated hooks bump must not push to GitHub")
+	require.Equal(t, "0", publishedHooksVersion(t, ctx, ti.conn, *authCtx.ProjectID), "gated org keeps its old hooks version")
+}
+
+// An org cleared by the FlagHooksRollout payload rolls the pending hooks bump
+// forward: hooks are regenerated (fresh key, so the subtree differs) and the
+// stored version advances off the rewound value.
+func TestPluginsService_PublishProject_PhasedRollout_EligibleGetsHooksBump(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	phasedRolloutFixture(t, ctx, ti, mock, "Phased Eligible")
+
+	orgID := publishOrgID(t, ctx, ti.conn, *authCtx.ProjectID)
+	hooksKeysBefore := countPluginHooksKeys(t, ctx, ti.conn, orgID)
+
+	// A pin above any plausible generator version clears this org for the bump.
+	features := &feature.InMemory{}
+	features.SetFlagPayload(feature.FlagHooksRollout, orgID, []byte(`{"version": 9999}`))
+	pub := newTestPluginPublisher(t, ti, mock, features)
+
+	mock.pushFilesCalled = false
+	res, err := pub.PublishProject(ctx, plugins.PublishProjectInput{
+		ProjectID:       *authCtx.ProjectID,
+		CreatedByUserID: authCtx.UserID,
+		CommitMessage:   "phased",
+		SkipIfUnchanged: true,
+	})
+	require.NoError(t, err)
+	require.False(t, res.Skipped, "eligible org must roll the pending hooks bump forward")
+	require.True(t, mock.pushFilesCalled)
+
+	// A regenerated hooks component mints a fresh hooks-scoped key (the hook
+	// scripts themselves no longer embed the key, so their bytes are stable).
+	require.Equal(t, hooksKeysBefore+1, countPluginHooksKeys(t, ctx, ti.conn, orgID), "eligible org regenerates the hooks subtree with a fresh key")
+	require.NotEqual(t, "0", publishedHooksVersion(t, ctx, ti.conn, *authCtx.ProjectID), "eligible org advances its stored hooks version")
+}
+
+// MCP content changes must publish regardless of the hooks rollout phase: a
+// gated org still gets its MCP update, and its hooks are carried verbatim rather
+// than rolled forward.
+func TestPluginsService_PublishProject_PhasedRollout_MCPPublishesRegardlessOfPhase(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	pluginID, hooksBefore := phasedRolloutFixture(t, ctx, ti, mock, "Phased MCP")
+	orgID := publishOrgID(t, ctx, ti.conn, *authCtx.ProjectID)
+	hooksKeysBefore := countPluginHooksKeys(t, ctx, ti.conn, orgID)
+
+	// An MCP content change (new server) while the org remains phase-gated.
+	toolset2 := createTestToolset(t, ctx, ti.conn, "phased-mcp-2")
+	_, err := ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    pluginID,
+		ToolsetID:   conv.PtrEmpty(toolset2.ID.String()),
+		DisplayName: conv.PtrEmpty("Phased MCP Server 2"),
+		Policy:      "optional",
+		SortOrder:   1,
+	})
+	require.NoError(t, err)
+
+	pub := newTestPluginPublisher(t, ti, mock, &feature.InMemory{})
+
+	mock.pushFilesCalled = false
+	mock.getRepoFilesCalled = false
+	res, err := pub.PublishProject(ctx, plugins.PublishProjectInput{
+		ProjectID:       *authCtx.ProjectID,
+		CreatedByUserID: authCtx.UserID,
+		CommitMessage:   "phased",
+		SkipIfUnchanged: true,
+	})
+	require.NoError(t, err)
+	require.False(t, res.Skipped, "MCP content change must publish even for a phase-gated org")
+	require.True(t, mock.pushFilesCalled)
+	require.True(t, mock.getRepoFilesCalled, "carrying hooks requires fetching the existing repo")
+
+	hooksAfter := hooksFilesOf(mock.lastPushedFiles)
+	require.Equal(t, hooksBefore, hooksAfter, "phase-gated org carries hooks verbatim while MCP publishes")
+	require.Equal(t, hooksKeysBefore, countPluginHooksKeys(t, ctx, ti.conn, orgID), "carrying hooks must not mint a new hooks key")
+	require.Equal(t, "0", publishedHooksVersion(t, ctx, ti.conn, *authCtx.ProjectID), "an MCP publish must not advance a gated org's hooks version")
+}
+
+// Flipping an org-level hooks setting must regenerate the hooks subtree on the
+// next publish even though hooksGeneratorVersion is unchanged: the rendered
+// scripts bake the setting in, so carrying them verbatim would leave the old
+// behavior live until an unrelated generator bump. The persisted
+// published_hooks_config is what detects the flip. The org is cleared for the
+// current hooks version up front — a non-eligible org would defer the flip
+// instead (see hooks_config_test.go for the deferral path).
+func TestPluginsService_PublishProject_RegeneratesHooksOnBrowserLoginFlip(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	features := &feature.InMemory{}
+	ctx, ti := newTestPluginsServiceWithGitHubAndFeatures(t, mock, features)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	// Pin above any real generator version so the flip regenerates rather than
+	// defers under the rollout gate.
+	features.SetFlagPayload(feature.FlagHooksRollout, authCtx.ActiveOrganizationID, []byte(`{"version": 9999}`))
 
 	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Flip Hooks"})
 	require.NoError(t, err)

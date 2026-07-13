@@ -21,12 +21,17 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, ChartTooltip, Legend);
 
 // Vercel-style consumption breakdown for tokens under management: a stacked
 // bar chart of tokens over the selected billing cycle, stacked by a chosen
-// dimension or by token type, with client-side
-// granularity roll-up (the caller fetches daily buckets) and a cumulative
-// view. Everything renders from the billing details response (points +
-// per-dimension rows, both scoped server-side to the billed completion
-// population) — plus, for the headline total, the billed per-day series the
-// usage endpoint already returns.
+// dimension or by token type, with client-side granularity roll-up (the
+// caller fetches daily buckets) and a cumulative view. Everything renders
+// from the billing details response (points + per-dimension rows, both
+// scoped server-side to the observed agent traffic, cache reads excluded) —
+// plus, for the headline total, the billed per-day series the usage endpoint
+// already returns. On a cycle finalized before a billing-definition change,
+// that sealed series is the invoiced record and can differ from the live
+// details data, so switching from the total view to a token-type or
+// dimension stacking can change the displayed sum — deliberate: the total
+// view shows what was billed, the breakdowns show the current population's
+// shape.
 
 // Pointer movement under this many pixels counts as a click, not a drag.
 const DRAG_THRESHOLD_PX = 5;
@@ -39,14 +44,17 @@ const GRANULARITIES: { value: Granularity; label: string }[] = [
   { value: "month", label: "Monthly" },
 ];
 
-// Billed completions carry no cache attributes (input + output = total), so
-// the token-type view has exactly these two series.
+// The tokens-under-management token types: input + output + cache writes
+// sum to the total. Cache READS are excluded from the population entirely
+// (a cache read re-observes already-counted prompt content), so they are
+// not a series here.
 const TOKEN_TYPES: {
   label: string;
   value: (p: TumDetailsPoint) => number;
 }[] = [
   { label: "Input", value: (p) => p.inputTokens },
   { label: "Output", value: (p) => p.outputTokens },
+  { label: "Cache write", value: (p) => p.cacheCreationTokens },
 ];
 
 const compactTokens = new Intl.NumberFormat("en-US", {
@@ -212,7 +220,7 @@ function ToggleButton({
 
 // The header info copy for the panel.
 function headerHint(): string {
-  return "Tokens under management — what the platform bills: LLM completions that run through it, dominated by the platform's own risk-policy analysis of observed agent traffic (the metered unit). Agent telemetry observed via OTEL (Claude Code, Cursor, Codex) is not billed and not included here; see the Insights pages for it.";
+  return "Tokens under management — the agent traffic the platform observes from your users' sessions (including Claude Code, Cowork, Cursor, and Codex): input, output, and cache-write tokens. Cache reads are excluded (re-read cached content isn't new traffic), and so is inference the platform itself runs (risk-policy analysis, hosted chat).";
 }
 
 // The stacks for the modes fed by the details points.
@@ -250,7 +258,6 @@ export function TokenUsagePanel({
   groups,
   billedSeries,
   stackBy,
-  scopeNote,
   breakdownPicker,
   loading,
   onSelectRange,
@@ -266,9 +273,6 @@ export function TokenUsagePanel({
   billedSeries: number[] | null;
   // How the bars stack — controlled by the caller's breakdown picker.
   stackBy: StackMode;
-  // Shown when the active breakdown charts only a slice of the billed
-  // population (the model cut), so lower bars aren't read as less usage.
-  scopeNote?: string | null;
   // The unified breakdown selector (dimensions + token type), rendered at
   // the head of the control row.
   breakdownPicker: ReactNode;
@@ -491,9 +495,6 @@ export function TokenUsagePanel({
             <Info className="text-muted-foreground size-3.5" />
           </SimpleTooltip>
         </div>
-        {scopeNote && (
-          <span className="text-muted-foreground text-xs">{scopeNote}</span>
-        )}
         <div className="ml-auto flex items-center gap-3">
           {breakdownPicker}
           <div className="bg-border h-4 w-px" />

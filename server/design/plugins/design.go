@@ -620,4 +620,5 @@ var UpdateMarketplaceSettingsResult = Type("UpdateMarketplaceSettingsResult", fu
 
 	Attribute("settings", MarketplaceSettingsResult, "The updated marketplace settings.")
 	Attribute("republished", Boolean, "Whether the marketplace was automatically republished to GitHub as part of this update.")
+	Attribute("hooks_update_deferred", Boolean, "True when the new name reached the MCP plugins and marketplace manifests but the observability (hooks) plugin could not be updated yet because the organization is not approved for the latest hooks version; it will update automatically once the organization is rolled forward.")
 })

@@ -3,6 +3,7 @@ package workos
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -73,8 +74,6 @@ type Client struct {
 type ClientOpts struct {
 	// Endpoint overrides the WorkOS base URL for both raw HTTP and SDK calls.
 	Endpoint string
-	// HTTPClient overrides the default retryable HTTP client.
-	HTTPClient *guardian.HTTPClient
 	// ClientID is the IDP client ID (GRAM_IDP_CLIENT_ID), needed for SSO code exchange.
 	ClientID string
 }
@@ -90,12 +89,16 @@ func NewClient(guardianPolicy *guardian.Policy, apiKey string, opts ...ClientOpt
 		endpoint = opt.Endpoint
 	}
 
-	httpClient := opt.HTTPClient
-	if httpClient == nil {
-		retryCfg := guardian.DefaultRetryConfig()
-		retryCfg.WaitMax = 10 * time.Second
-		httpClient = guardianPolicy.PooledClient(guardian.WithRetryConfig(retryCfg))
-	}
+	retryCfg := guardian.DefaultRetryConfig()
+	retryCfg.WaitMax = 10 * time.Second
+	httpClient := guardianPolicy.PooledClient(
+		guardian.WithRetryConfig(retryCfg),
+		guardian.WithResilience("workos", guardian.ResilienceConfig{
+			Partition: partitionByHostAndAPIKey(apiKey),
+			Limit:     guardian.PerMinute(6000),
+			Breaker:   guardian.NoBreaker(),
+		}),
+	)
 
 	um := usermanagement.NewClient(apiKey)
 	um.HTTPClient = httpClient
@@ -113,6 +116,18 @@ func NewClient(guardianPolicy *guardian.Policy, apiKey string, opts ...ClientOpt
 		events:     &events.Client{APIKey: apiKey, HTTPClient: httpClient, Endpoint: opt.Endpoint},
 		sso:        &sso.Client{APIKey: apiKey, HTTPClient: httpClient, Endpoint: opt.Endpoint, JSONEncode: nil, ClientID: opt.ClientID},
 		dsync:      &directorysync.Client{APIKey: apiKey, HTTPClient: httpClient, Endpoint: opt.Endpoint},
+	}
+}
+
+// partitionByHostAndAPIKey fingerprints the credential because guardian exports
+// partition segments as OTel attributes.
+func partitionByHostAndAPIKey(apiKey string) guardian.PartitionStrategy {
+	byHost := guardian.PartitionByHost()
+	fingerprint := sha256.Sum256([]byte(apiKey))
+	keySegment := fmt.Sprintf("key-sha256-%x", fingerprint)
+
+	return func(req *http.Request) []string {
+		return append(byHost(req), keySegment)
 	}
 }
 

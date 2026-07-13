@@ -1947,6 +1947,60 @@ func BuildSuggestCustomDetectionRulePayload(riskSuggestCustomDetectionRuleBody s
 	return v, nil
 }
 
+// BuildSuggestExclusionPayload builds the payload for the risk
+// suggestExclusion endpoint from CLI flags.
+func BuildSuggestExclusionPayload(riskSuggestExclusionBody string, riskSuggestExclusionApikeyToken string, riskSuggestExclusionSessionToken string, riskSuggestExclusionProjectSlugInput string) (*risk.SuggestExclusionPayload, error) {
+	var err error
+	var body SuggestExclusionRequestBody
+	{
+		err = json.Unmarshal([]byte(riskSuggestExclusionBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"known_rule_ids\": [\n         \"abc123\"\n      ],\n      \"prompt\": \"aaa\"\n   }'")
+		}
+		if utf8.RuneCountInString(body.Prompt) < 3 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.prompt", body.Prompt, utf8.RuneCountInString(body.Prompt), 3, true))
+		}
+		if utf8.RuneCountInString(body.Prompt) > 500 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.prompt", body.Prompt, utf8.RuneCountInString(body.Prompt), 500, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskSuggestExclusionApikeyToken != "" {
+			apikeyToken = &riskSuggestExclusionApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskSuggestExclusionSessionToken != "" {
+			sessionToken = &riskSuggestExclusionSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskSuggestExclusionProjectSlugInput != "" {
+			projectSlugInput = &riskSuggestExclusionProjectSlugInput
+		}
+	}
+	v := &risk.SuggestExclusionPayload{
+		Prompt: body.Prompt,
+	}
+	if body.KnownRuleIds != nil {
+		v.KnownRuleIds = make([]string, len(body.KnownRuleIds))
+		for i, val := range body.KnownRuleIds {
+			v.KnownRuleIds[i] = val
+		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildTestDetectionRulePayload builds the payload for the risk
 // testDetectionRule endpoint from CLI flags.
 func BuildTestDetectionRulePayload(riskTestDetectionRuleBody string, riskTestDetectionRuleApikeyToken string, riskTestDetectionRuleSessionToken string, riskTestDetectionRuleProjectSlugInput string) (*risk.TestDetectionRulePayload, error) {
