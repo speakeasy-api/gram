@@ -8,10 +8,10 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { riskCustomRulesSuggest } from "../funcs/riskCustomRulesSuggest.js";
+import { riskExclusionsSuggest } from "../funcs/riskExclusionsSuggest.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { SuggestCustomDetectionRuleResult } from "../models/components/suggestcustomdetectionruleresult.js";
+import { SuggestExclusionResult } from "../models/components/suggestexclusionresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -24,23 +24,22 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
 import {
-  SuggestCustomDetectionRuleRequest,
-  SuggestCustomDetectionRuleSecurity,
-} from "../models/operations/suggestcustomdetectionrule.js";
+  SuggestExclusionRequest,
+  SuggestExclusionSecurity,
+} from "../models/operations/suggestexclusion.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type RiskSuggestCustomRuleMutationVariables = {
-  request: SuggestCustomDetectionRuleRequest;
-  security?: SuggestCustomDetectionRuleSecurity | undefined;
+export type RiskSuggestExclusionMutationVariables = {
+  request: SuggestExclusionRequest;
+  security?: SuggestExclusionSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type RiskSuggestCustomRuleMutationData =
-  SuggestCustomDetectionRuleResult;
+export type RiskSuggestExclusionMutationData = SuggestExclusionResult;
 
-export type RiskSuggestCustomRuleMutationError =
+export type RiskSuggestExclusionMutationError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -52,49 +51,49 @@ export type RiskSuggestCustomRuleMutationError =
   | SDKValidationError;
 
 /**
- * suggestCustomDetectionRule risk
+ * suggestExclusion risk
  *
  * @remarks
- * Suggest a custom detection rule (rule_id, title, description, regex, severity) from a natural-language prompt. Calls the configured LLM with a JSON-schema constrained response so the dashboard can prefill the create form.
+ * Suggest a risk exclusion (match_type, match_value, filters) from a natural-language prompt describing findings an operator wants to stop flagging. Calls the configured LLM with a JSON-schema constrained response so the dashboard can prefill the create exclusion form.
  */
-export function useRiskSuggestCustomRuleMutation(
+export function useRiskSuggestExclusionMutation(
   options?: MutationHookOptions<
-    RiskSuggestCustomRuleMutationData,
-    RiskSuggestCustomRuleMutationError,
-    RiskSuggestCustomRuleMutationVariables
+    RiskSuggestExclusionMutationData,
+    RiskSuggestExclusionMutationError,
+    RiskSuggestExclusionMutationVariables
   >,
 ): UseMutationResult<
-  RiskSuggestCustomRuleMutationData,
-  RiskSuggestCustomRuleMutationError,
-  RiskSuggestCustomRuleMutationVariables
+  RiskSuggestExclusionMutationData,
+  RiskSuggestExclusionMutationError,
+  RiskSuggestExclusionMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildRiskSuggestCustomRuleMutation(client, options),
+    ...buildRiskSuggestExclusionMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeyRiskSuggestCustomRule(): MutationKey {
-  return ["@gram/client", "customRules", "suggest"];
+export function mutationKeyRiskSuggestExclusion(): MutationKey {
+  return ["@gram/client", "exclusions", "suggest"];
 }
 
-export function buildRiskSuggestCustomRuleMutation(
+export function buildRiskSuggestExclusionMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: RiskSuggestCustomRuleMutationVariables,
-  ) => Promise<RiskSuggestCustomRuleMutationData>;
+    variables: RiskSuggestExclusionMutationVariables,
+  ) => Promise<RiskSuggestExclusionMutationData>;
 } {
   return {
-    mutationKey: mutationKeyRiskSuggestCustomRule(),
-    mutationFn: function riskSuggestCustomRuleMutationFn({
+    mutationKey: mutationKeyRiskSuggestExclusion(),
+    mutationFn: function riskSuggestExclusionMutationFn({
       request,
       security,
       options,
-    }): Promise<RiskSuggestCustomRuleMutationData> {
+    }): Promise<RiskSuggestExclusionMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -107,7 +106,7 @@ export function buildRiskSuggestCustomRuleMutation(
           ),
         },
       };
-      return unwrapAsync(riskCustomRulesSuggest(
+      return unwrapAsync(riskExclusionsSuggest(
         client$,
         request,
         security,

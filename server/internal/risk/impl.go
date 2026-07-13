@@ -2046,21 +2046,6 @@ func (s *Service) SuggestCustomDetectionRule(ctx context.Context, payload *gen.S
 		return nil, oops.E(oops.CodeInvalid, nil, "prompt is required")
 	}
 
-	// The exclusion form shares this endpoint (target `exclusion`) so both
-	// create surfaces ride the same LLM plumbing and fallback behavior.
-	if conv.PtrValOr(payload.Target, "detection") == "exclusion" {
-		if s.completionClient == nil {
-			s.logger.WarnContext(ctx, "completion client not configured; returning heuristic exclusion suggestion")
-			return heuristicExclusionSuggestion(prompt), nil
-		}
-		suggestion, err := s.suggestExclusionViaLLM(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID, conv.PtrValOr(authCtx.Email, ""), prompt, payload.ExistingRuleIds)
-		if err != nil {
-			s.logger.WarnContext(ctx, "openrouter exclusion suggestion failed; returning heuristic suggestion", attr.SlogError(err))
-			return heuristicExclusionSuggestion(prompt), nil
-		}
-		return suggestion, nil
-	}
-
 	if s.completionClient == nil {
 		s.logger.WarnContext(ctx, "completion client not configured; returning heuristic suggestion")
 		return heuristicCustomRuleSuggestion(prompt, payload.ExistingRuleIds), nil
@@ -2072,6 +2057,61 @@ func (s *Service) SuggestCustomDetectionRule(ctx context.Context, payload *gen.S
 		return heuristicCustomRuleSuggestion(prompt, payload.ExistingRuleIds), nil
 	}
 	return suggestion, nil
+}
+
+// SuggestExclusion turns a natural-language description of findings an
+// operator wants to stop flagging into a structured exclusion suggestion
+// (match_type, match_value, filters), validated with the same gate the
+// create/update exclusion handlers use (RE2 compile, 512-char cap). The
+// exclusion form serializes the result into its criteria expression via the
+// existing client-side mapping. Falls back to an editable exact-match
+// prefill when the LLM is unavailable, mirroring
+// SuggestCustomDetectionRule's heuristic fallback.
+func (s *Service) SuggestExclusion(ctx context.Context, payload *gen.SuggestExclusionPayload) (*gen.SuggestExclusionResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	prompt := strings.TrimSpace(payload.Prompt)
+	if prompt == "" {
+		return nil, oops.E(oops.CodeInvalid, nil, "prompt is required")
+	}
+
+	if s.completionClient == nil {
+		s.logger.WarnContext(ctx, "completion client not configured; returning heuristic exclusion suggestion")
+		return heuristicExclusionSuggestion(prompt), nil
+	}
+
+	suggestion, err := s.suggestExclusionViaLLM(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID, conv.PtrValOr(authCtx.Email, ""), prompt, payload.KnownRuleIds)
+	if err != nil {
+		s.logger.WarnContext(ctx, "openrouter exclusion suggestion failed; returning heuristic suggestion", attr.SlogError(err))
+		return heuristicExclusionSuggestion(prompt), nil
+	}
+	return suggestion, nil
+}
+
+// exclusionSuggestionResult wraps structured exclusion fields in the
+// suggestExclusion result type.
+func exclusionSuggestionResult(matchType, matchValue, ruleIDFilter, sourceFilter string) *gen.SuggestExclusionResult {
+	return &gen.SuggestExclusionResult{
+		MatchType:    matchType,
+		MatchValue:   matchValue,
+		RuleIDFilter: conv.PtrEmpty(ruleIDFilter),
+		SourceFilter: conv.PtrEmpty(sourceFilter),
+	}
+}
+
+// heuristicExclusionSuggestion is the deterministic fallback when the LLM is
+// unavailable: treat the prompt as the literal value to suppress. Usually
+// wrong as-is, but it prefills an editable expression rather than dead-ending
+// the operator (mirrors heuristicCustomRuleSuggestion).
+func heuristicExclusionSuggestion(prompt string) *gen.SuggestExclusionResult {
+	return exclusionSuggestionResult("exact", strings.TrimSpace(prompt), "", "")
 }
 
 // heuristicCustomRuleSuggestion is the deterministic fallback when the LLM
@@ -2094,43 +2134,13 @@ func heuristicCustomRuleSuggestion(prompt string, existingIDs []string) *gen.Sug
 	}
 
 	return &gen.SuggestCustomDetectionRuleResult{
-		RuleID:                ruleID,
-		Title:                 title,
-		Description:           strings.TrimSpace(prompt),
-		DetectionExpr:         nil,
-		Regex:                 "",
-		Severity:              "medium",
-		ExclusionMatchType:    nil,
-		ExclusionMatchValue:   nil,
-		ExclusionRuleIDFilter: nil,
-		ExclusionSourceFilter: nil,
+		RuleID:        ruleID,
+		Title:         title,
+		Description:   strings.TrimSpace(prompt),
+		DetectionExpr: nil,
+		Regex:         "",
+		Severity:      "medium",
 	}
-}
-
-// exclusionSuggestionResult wraps structured exclusion fields in the shared
-// suggestion result. The detection-only fields stay blank; severity is
-// required by the result schema so it carries a benign "info".
-func exclusionSuggestionResult(matchType, matchValue, ruleIDFilter, sourceFilter string) *gen.SuggestCustomDetectionRuleResult {
-	return &gen.SuggestCustomDetectionRuleResult{
-		RuleID:                "",
-		Title:                 "",
-		Description:           "",
-		DetectionExpr:         nil,
-		Regex:                 "",
-		Severity:              "info",
-		ExclusionMatchType:    &matchType,
-		ExclusionMatchValue:   &matchValue,
-		ExclusionRuleIDFilter: conv.PtrEmpty(ruleIDFilter),
-		ExclusionSourceFilter: conv.PtrEmpty(sourceFilter),
-	}
-}
-
-// heuristicExclusionSuggestion is the deterministic fallback when the LLM is
-// unavailable: treat the prompt as the literal value to suppress. Usually
-// wrong as-is, but it prefills an editable expression rather than dead-ending
-// the operator (mirrors heuristicCustomRuleSuggestion).
-func heuristicExclusionSuggestion(prompt string) *gen.SuggestCustomDetectionRuleResult {
-	return exclusionSuggestionResult("exact", strings.TrimSpace(prompt), "", "")
 }
 
 var slugStripRE = regexp.MustCompile(`[^a-z0-9]+`)
@@ -2384,16 +2394,12 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 	}
 
 	return &gen.SuggestCustomDetectionRuleResult{
-		RuleID:                parsed.RuleID,
-		Title:                 parsed.Title,
-		Description:           parsed.Description,
-		DetectionExpr:         conv.PtrEmpty(parsed.DetectionExpr),
-		Regex:                 "",
-		Severity:              parsed.Severity,
-		ExclusionMatchType:    nil,
-		ExclusionMatchValue:   nil,
-		ExclusionRuleIDFilter: nil,
-		ExclusionSourceFilter: nil,
+		RuleID:        parsed.RuleID,
+		Title:         parsed.Title,
+		Description:   parsed.Description,
+		DetectionExpr: conv.PtrEmpty(parsed.DetectionExpr),
+		Regex:         "",
+		Severity:      parsed.Severity,
 	}, nil
 }
 
@@ -2407,7 +2413,7 @@ var exclusionMatchTypeAllow = map[string]bool{
 	"entity_type": true,
 }
 
-func (s *Service) suggestExclusionViaLLM(ctx context.Context, orgID, projectID, userID, userEmail, userPrompt string, knownRuleIDs []string) (*gen.SuggestCustomDetectionRuleResult, error) {
+func (s *Service) suggestExclusionViaLLM(ctx context.Context, orgID, projectID, userID, userEmail, userPrompt string, knownRuleIDs []string) (*gen.SuggestExclusionResult, error) {
 	systemPrompt := `You are a security-rules assistant for a runtime risk detection product.
 
 Given a single natural-language description of findings an operator wants to stop flagging, return a JSON object the dashboard uses to prefill a "create exclusion" form. An exclusion suppresses matching findings retroactively and going forward.

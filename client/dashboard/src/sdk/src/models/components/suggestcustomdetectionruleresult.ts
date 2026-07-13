@@ -36,22 +36,6 @@ export type SuggestCustomDetectionRuleResult = {
    */
   detectionExpr?: string | undefined;
   /**
-   * For exclusion suggestions: how exclusion_match_value is interpreted (exact, regex, rule_id, source, entity_type).
-   */
-  exclusionMatchType?: string | undefined;
-  /**
-   * For exclusion suggestions: the value matched against findings, interpreted per exclusion_match_type.
-   */
-  exclusionMatchValue?: string | undefined;
-  /**
-   * For exclusion suggestions: only apply within this rule_id. Empty means any.
-   */
-  exclusionRuleIdFilter?: string | undefined;
-  /**
-   * For exclusion suggestions: only apply within this source. Empty means any.
-   */
-  exclusionSourceFilter?: string | undefined;
-  /**
    * Deprecated legacy regex suggestion; superseded by detection_expr. Present for backward compatibility.
    */
   regex: string;
@@ -83,10 +67,6 @@ export const SuggestCustomDetectionRuleResult$inboundSchema: z.ZodMiniType<
   z.object({
     description: z.string(),
     detection_expr: z.optional(z.string()),
-    exclusion_match_type: z.optional(z.string()),
-    exclusion_match_value: z.optional(z.string()),
-    exclusion_rule_id_filter: z.optional(z.string()),
-    exclusion_source_filter: z.optional(z.string()),
     regex: z.string(),
     rule_id: z.string(),
     severity: SuggestCustomDetectionRuleResultSeverity$inboundSchema,
@@ -95,10 +75,6 @@ export const SuggestCustomDetectionRuleResult$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "detection_expr": "detectionExpr",
-      "exclusion_match_type": "exclusionMatchType",
-      "exclusion_match_value": "exclusionMatchValue",
-      "exclusion_rule_id_filter": "exclusionRuleIdFilter",
-      "exclusion_source_filter": "exclusionSourceFilter",
       "rule_id": "ruleId",
     });
   }),

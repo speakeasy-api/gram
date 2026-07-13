@@ -4,45 +4,22 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { ClosedEnum } from "../../types/enums.js";
-
-/**
- * Which surface the suggestion prefills: `detection` (default) or `exclusion`.
- */
-export const Target = {
-  Detection: "detection",
-  Exclusion: "exclusion",
-} as const;
-/**
- * Which surface the suggestion prefills: `detection` (default) or `exclusion`.
- */
-export type Target = ClosedEnum<typeof Target>;
 
 export type SuggestCustomDetectionRuleRequestBody = {
   /**
-   * Existing built-in and custom rule ids. Detection suggestions must avoid colliding with them; exclusion suggestions may reference them in rule_id filters.
+   * Existing built-in and custom rule ids the suggested id must avoid colliding with.
    */
   existingRuleIds?: Array<string> | undefined;
   /**
-   * Natural-language description of what the rule should detect (or, for exclusions, suppress).
+   * Natural-language description of what the rule should detect.
    */
   prompt: string;
-  /**
-   * Which surface the suggestion prefills: `detection` (default) or `exclusion`.
-   */
-  target?: Target | undefined;
 };
-
-/** @internal */
-export const Target$outboundSchema: z.ZodMiniEnum<typeof Target> = z.enum(
-  Target,
-);
 
 /** @internal */
 export type SuggestCustomDetectionRuleRequestBody$Outbound = {
   existing_rule_ids?: Array<string> | undefined;
   prompt: string;
-  target?: string | undefined;
 };
 
 /** @internal */
@@ -54,7 +31,6 @@ export const SuggestCustomDetectionRuleRequestBody$outboundSchema:
     z.object({
       existingRuleIds: z.optional(z.array(z.string())),
       prompt: z.string(),
-      target: z.optional(Target$outboundSchema),
     }),
     z.transform((v) => {
       return remap$(v, {

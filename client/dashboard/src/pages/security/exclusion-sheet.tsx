@@ -26,7 +26,7 @@ import { invalidateAllRiskListResults } from "@gram/client/react-query/riskListR
 import { invalidateAllRiskListResultsByChat } from "@gram/client/react-query/riskListResultsByChat.js";
 import { invalidateAllRiskListResultsForAgent } from "@gram/client/react-query/riskListResultsForAgent.js";
 import { invalidateAllRiskOverview } from "@gram/client/react-query/riskOverview.js";
-import { useRiskSuggestCustomRuleMutation } from "@gram/client/react-query/riskSuggestCustomRule.js";
+import { useRiskSuggestExclusionMutation } from "@gram/client/react-query/riskSuggestExclusion.js";
 import { useRiskUpdateExclusionMutation } from "@gram/client/react-query/riskUpdateExclusion.js";
 import type { RiskExclusion } from "@gram/client/models/components/riskexclusion.js";
 import { useQueryClient } from "@tanstack/react-query";
@@ -240,22 +240,21 @@ function ExclusionForm({
   const [error, setError] = useState<string | null>(null);
   const [askPrompt, setAskPrompt] = useState("");
 
-  // Same endpoint the detection-rule create sheet uses, pointed at the
-  // exclusion surface. The structured fields it returns are serialized through
-  // the same mapping the form parses on save, so a suggestion the user accepts
-  // untouched is guaranteed to round-trip.
-  const suggestMutation = useRiskSuggestCustomRuleMutation({
+  // Dedicated exclusion-suggestion endpoint. The structured fields it returns
+  // are serialized through the same mapping the form parses on save, so a
+  // suggestion the user accepts untouched is guaranteed to round-trip.
+  const suggestMutation = useRiskSuggestExclusionMutation({
     onSuccess: (data) => {
-      if (!data.exclusionMatchType || !data.exclusionMatchValue) {
+      if (!data.matchType || !data.matchValue) {
         toast.error("No suggestion came back. Try rewording your request.");
         return;
       }
       setExpression(
         serializeExclusionExpression({
-          matchType: data.exclusionMatchType,
-          matchValue: data.exclusionMatchValue,
-          ruleIdFilter: data.exclusionRuleIdFilter ?? "",
-          sourceFilter: data.exclusionSourceFilter ?? "",
+          matchType: data.matchType,
+          matchValue: data.matchValue,
+          ruleIdFilter: data.ruleIdFilter ?? "",
+          sourceFilter: data.sourceFilter ?? "",
         }),
       );
       setError(null);
@@ -275,10 +274,9 @@ function ExclusionForm({
     }
     suggestMutation.mutate({
       request: {
-        suggestCustomDetectionRuleRequestBody: {
+        suggestExclusionRequestBody: {
           prompt,
-          existingRuleIds: BUILTIN_RULE_ID_LIST,
-          target: "exclusion",
+          knownRuleIds: BUILTIN_RULE_ID_LIST,
         },
       },
     });

@@ -13,9 +13,9 @@ import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  SuggestCustomDetectionRuleResult,
-  SuggestCustomDetectionRuleResult$inboundSchema,
-} from "../models/components/suggestcustomdetectionruleresult.js";
+  SuggestExclusionResult,
+  SuggestExclusionResult$inboundSchema,
+} from "../models/components/suggestexclusionresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -31,27 +31,27 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  SuggestCustomDetectionRuleRequest,
-  SuggestCustomDetectionRuleRequest$outboundSchema,
-  SuggestCustomDetectionRuleSecurity,
-} from "../models/operations/suggestcustomdetectionrule.js";
+  SuggestExclusionRequest,
+  SuggestExclusionRequest$outboundSchema,
+  SuggestExclusionSecurity,
+} from "../models/operations/suggestexclusion.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * suggestCustomDetectionRule risk
+ * suggestExclusion risk
  *
  * @remarks
- * Suggest a custom detection rule (rule_id, title, description, regex, severity) from a natural-language prompt. Calls the configured LLM with a JSON-schema constrained response so the dashboard can prefill the create form.
+ * Suggest a risk exclusion (match_type, match_value, filters) from a natural-language prompt describing findings an operator wants to stop flagging. Calls the configured LLM with a JSON-schema constrained response so the dashboard can prefill the create exclusion form.
  */
-export function riskCustomRulesSuggest(
+export function riskExclusionsSuggest(
   client: GramCore,
-  request: SuggestCustomDetectionRuleRequest,
-  security?: SuggestCustomDetectionRuleSecurity | undefined,
+  request: SuggestExclusionRequest,
+  security?: SuggestExclusionSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    SuggestCustomDetectionRuleResult,
+    SuggestExclusionResult,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -73,13 +73,13 @@ export function riskCustomRulesSuggest(
 
 async function $do(
   client: GramCore,
-  request: SuggestCustomDetectionRuleRequest,
-  security?: SuggestCustomDetectionRuleSecurity | undefined,
+  request: SuggestExclusionRequest,
+  security?: SuggestExclusionSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      SuggestCustomDetectionRuleResult,
+      SuggestExclusionResult,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -95,20 +95,18 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(SuggestCustomDetectionRuleRequest$outboundSchema, value),
+    (value) => z.parse(SuggestExclusionRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON(
-    "body",
-    payload.SuggestCustomDetectionRuleRequestBody,
-    { explode: true },
-  );
+  const body = encodeJSON("body", payload.SuggestExclusionRequestBody, {
+    explode: true,
+  });
 
-  const path = pathToFunc("/rpc/risk.suggestCustomRules")();
+  const path = pathToFunc("/rpc/risk.suggestExclusion")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
@@ -157,7 +155,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "suggestCustomDetectionRule",
+    operationID: "suggestExclusion",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -201,7 +199,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    SuggestCustomDetectionRuleResult,
+    SuggestExclusionResult,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -212,7 +210,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, SuggestCustomDetectionRuleResult$inboundSchema),
+    M.json(200, SuggestExclusionResult$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),
