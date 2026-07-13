@@ -82,8 +82,8 @@ func ModelUsageSourceStrings() []string {
 
 // GramHostedHookSourceStrings lists every hook_source value Gram-server-run
 // completions are tagged with: the registered surfaces plus the unregistered
-// assistants tag, plus ” for rows recorded before Gram completions were
-// tagged (observed agent traffic is always tagged at ingest — claude-code,
+// assistants tag, plus the empty string for rows recorded before Gram
+// completions were tagged (observed agent traffic is always tagged at ingest — claude-code,
 // cursor, codex — so an untagged row can only be Gram-era history). This is
 // the tokens-under-management EXCLUSION list — billing counts observed agent
 // traffic, and everything Gram itself spends (reactive scanning inference

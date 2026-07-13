@@ -24,9 +24,14 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, ChartTooltip, Legend);
 // dimension or by token type, with client-side granularity roll-up (the
 // caller fetches daily buckets) and a cumulative view. Everything renders
 // from the billing details response (points + per-dimension rows, both
-// scoped server-side to the observed agent traffic, cache reads excluded) —
+// scoped server-side to the observed agent traffic, cache tokens excluded) —
 // plus, for the headline total, the billed per-day series the usage endpoint
-// already returns.
+// already returns. On a cycle finalized before a billing-definition change,
+// that sealed series is the invoiced record and can differ from the live
+// details data, so switching from the total view to a token-type or
+// dimension stacking can change the displayed sum — deliberate: the total
+// view shows what was billed, the breakdowns show the current population's
+// shape.
 
 // Pointer movement under this many pixels counts as a click, not a drag.
 const DRAG_THRESHOLD_PX = 5;
@@ -214,7 +219,7 @@ function ToggleButton({
 
 // The header info copy for the panel.
 function headerHint(): string {
-  return "Tokens under management — the agent traffic the platform observes from your users' sessions (Claude Code, Cursor, Codex): input and output tokens. Cache reads and writes are excluded (cached content isn't new traffic), and so is inference the platform itself runs (risk-policy analysis, hosted chat).";
+  return "Tokens under management — the agent traffic the platform observes from your users' sessions (including Claude Code, Cowork, Cursor, and Codex): input and output tokens. Cache reads and writes are excluded (cached content isn't new traffic), and so is inference the platform itself runs (risk-policy analysis, hosted chat).";
 }
 
 // The stacks for the modes fed by the details points.

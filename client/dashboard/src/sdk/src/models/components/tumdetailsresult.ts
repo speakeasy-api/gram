@@ -21,7 +21,7 @@ import {
 } from "./tumdetailstotals.js";
 
 /**
- * Result of the billing usage details query. Everything derives from the tokens-under-management population — observed agent traffic with cache tokens excluded — matching the billed totals exactly.
+ * Result of the billing usage details query. Everything derives from the tokens-under-management population — observed agent traffic with cache tokens excluded — computed live from the telemetry aggregate. Matches the billed totals for cycles billed under this definition; cycles finalized before the observed-traffic redefinition serve immutable snapshot totals on the usage endpoint that can differ from this live compute.
  */
 export type TumDetailsResult = {
   /**

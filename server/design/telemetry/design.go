@@ -1536,7 +1536,7 @@ var TumDetailsBreakdown = Type("TumDetailsBreakdown", func() {
 })
 
 var TumDetailsResult = Type("TumDetailsResult", func() {
-	Description("Result of the billing usage details query. Everything derives from the tokens-under-management population — observed agent traffic with cache tokens excluded — matching the billed totals exactly.")
+	Description("Result of the billing usage details query. Everything derives from the tokens-under-management population — observed agent traffic with cache tokens excluded — computed live from the telemetry aggregate. Matches the billed totals for cycles billed under this definition; cycles finalized before the observed-traffic redefinition serve immutable snapshot totals on the usage endpoint that can differ from this live compute.")
 
 	Attribute("interval_seconds", Int64, "Timeseries bucket width in seconds. Always 86400 — the details are bucketed daily.")
 	Attribute("points", ArrayOf(TumDetailsPoint), "Gap-filled daily buckets in ascending time order")
