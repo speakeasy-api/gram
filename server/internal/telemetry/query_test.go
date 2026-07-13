@@ -334,7 +334,7 @@ func TestQuery_GroupByDimensionsAndDrilldown(t *testing.T) {
 		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
 	})
 
-	now := time.Date(2026, time.June, 20, 1, 0, 0, 0, time.UTC)
+	now := time.Date(2026, time.July, 14, 1, 0, 0, 0, time.UTC)
 	ts := now.Add(-10 * time.Minute)
 
 	// Engineering: admin+dev ($0.25) and dev ($0.10). Sales: no roles ($0.50).
@@ -458,7 +458,7 @@ func TestQuery_DefaultSortByAndTopN(t *testing.T) {
 		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
 	})
 
-	now := time.Date(2026, time.June, 20, 1, 0, 0, 0, time.UTC)
+	now := time.Date(2026, time.July, 14, 1, 0, 0, 0, time.UTC)
 	ts := now.Add(-10 * time.Minute)
 	for i := range 12 {
 		dept := "D" + strconv.Itoa(i+1)
@@ -508,7 +508,7 @@ func TestQuery_CountsToolCalls(t *testing.T) {
 		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
 	})
 
-	now := time.Date(2026, time.June, 20, 1, 0, 0, 0, time.UTC)
+	now := time.Date(2026, time.July, 14, 1, 0, 0, 0, time.UTC)
 	ts := now.Add(-10 * time.Minute)
 	chatID := uuid.NewString()
 
@@ -579,7 +579,7 @@ func TestQuery_FallsBackToRowCountedToolCalls(t *testing.T) {
 		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
 	})
 
-	now := time.Date(2026, time.June, 20, 1, 0, 0, 0, time.UTC)
+	now := time.Date(2026, time.July, 14, 1, 0, 0, 0, time.UTC)
 	insertAttributePreDedupSummaryRow(t, ctx, projectID, now.Add(-1*time.Hour), 3, 0.75)
 
 	from := now.Add(-2 * time.Hour).Format(time.RFC3339)
@@ -622,7 +622,7 @@ func TestQuery_ExcludesAssistantChatCompletions(t *testing.T) {
 		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
 	})
 
-	now := time.Date(2026, time.June, 20, 1, 0, 0, 0, time.UTC)
+	now := time.Date(2026, time.July, 14, 1, 0, 0, 0, time.UTC)
 	ts := now.Add(-10 * time.Minute)
 	insertAttributeGramCompletionLog(t, ctx, projectID, ts, uuid.NewString(), 0.42, 25, "openai/gpt-5.4", "assistants", "assistant@example.com", "Engineering", []string{"dev"})
 	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, ts, uuid.NewString(), 0.25, 15, 0, 0, 0, "opus", "claude@example.com", "Engineering", nil, "main", "", "", "", "")
@@ -667,7 +667,7 @@ func TestQuery_AttributesClaudeAPIRequestByMCPAndSkill(t *testing.T) {
 		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
 	})
 
-	now := time.Date(2026, time.June, 20, 1, 0, 0, 0, time.UTC)
+	now := time.Date(2026, time.July, 14, 1, 0, 0, 0, time.UTC)
 	ts := now.Add(-10 * time.Minute)
 	chatID := uuid.NewString()
 
@@ -729,7 +729,7 @@ func TestQuery_TopNRollupIntoOther(t *testing.T) {
 		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
 	})
 
-	now := time.Date(2026, time.June, 20, 1, 0, 0, 0, time.UTC)
+	now := time.Date(2026, time.July, 14, 1, 0, 0, 0, time.UTC)
 	ts := now.Add(-10 * time.Minute)
 
 	// Four departments with distinct costs; top_n=2 keeps the two priciest and
@@ -820,7 +820,7 @@ func TestQueryTumDetails_CountsOnlyBilledCompletions(t *testing.T) {
 		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
 	})
 
-	now := time.Date(2026, time.June, 20, 1, 0, 0, 0, time.UTC)
+	now := time.Date(2026, time.July, 14, 1, 0, 0, 0, time.UTC)
 	ts := now.Add(-10 * time.Minute)
 
 	// A billed completion (playground, a registered usage source) with stored
@@ -940,7 +940,7 @@ func TestQueryTumDetails_IncludesDeletedProjects(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	now := time.Date(2026, time.June, 20, 1, 0, 0, 0, time.UTC)
+	now := time.Date(2026, time.July, 14, 1, 0, 0, 0, time.UTC)
 	ts := now.Add(-10 * time.Minute)
 
 	liveChat := uuid.NewString()
