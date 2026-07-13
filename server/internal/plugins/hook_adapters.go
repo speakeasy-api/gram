@@ -192,7 +192,10 @@ gram_hooks_json_value() {
 gram_hooks_json_top_level_value() {
   local input="$1"
   local key="$2"
-  printf '%%s' "$input" | awk -v target="$key" '
+  local replacement="${3-}"
+  local rewrite=0
+  [ "$#" -lt 3 ] || rewrite=1
+  printf '%%s' "$input" | awk -v target="$key" -v replacement="$replacement" -v rewrite="$rewrite" '
 function skip_ws(s, i, n, c) {
   n = length(s)
   while (i <= n) {
@@ -285,8 +288,19 @@ END {
           } else {
             stop = bare_end(json, start)
           }
-          if (stop > 0) print trim(substr(json, start, stop - start + 1))
-          exit
+          if (stop > 0) {
+            if (!rewrite) {
+              print trim(substr(json, start, stop - start + 1))
+              exit
+            }
+            matched_count++
+            if (matched_count == 1) {
+              matched_start = start
+              matched_stop = stop
+            }
+            i = stop + 1
+            continue
+          }
         }
       }
       i = key_end + 1
@@ -298,6 +312,9 @@ END {
       depth--
     }
     i++
+  }
+  if (rewrite && matched_count == 1) {
+    printf "%%s\"%%s\"%%s", substr(json, 1, matched_start - 1), replacement, substr(json, matched_stop + 1)
   }
 }'
 }

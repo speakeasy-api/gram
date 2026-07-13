@@ -172,6 +172,7 @@ func TestIngest_ShadowMCPPolicyUsesCachedSessionIdentityForSharedKey(t *testing.
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 	authCtx.APIKeyName = "plugins-hooks-20260708-120102-abc123"
+	authCtx.OrgWidePluginHooksKey = true
 
 	cachedUserID := "user_cached_owner"
 	sessionID := "canonical-shadow-mcp-cached-identity"
@@ -221,6 +222,7 @@ func TestIngest_ShadowMCPPolicyRecoversCachedIdentityForUnresolvableSharedKeyEma
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 	authCtx.APIKeyName = "plugins-hooks-20260708-120102-abc123"
+	authCtx.OrgWidePluginHooksKey = true
 
 	cachedUserID := "user_cached_owner"
 	sessionID := "canonical-shadow-mcp-unresolvable-email"
@@ -433,6 +435,7 @@ func TestResolveCanonicalActor_SharedPluginKeyDoesNotUseOwnerIdentity(t *testing
 
 	pluginKeyCtx := *authCtx
 	pluginKeyCtx.APIKeyName = "plugins-hooks-20260708-120102-abc123"
+	pluginKeyCtx.OrgWidePluginHooksKey = true
 	actor := ti.service.resolveCanonicalActor(ctx, payload, &pluginKeyCtx)
 	require.Empty(t, actor.UserID, "shared plugin key owner must not become the actor")
 	require.Empty(t, actor.Email)
@@ -449,6 +452,7 @@ func TestResolveCanonicalActor_SharedPluginKeyDoesNotUseOwnerIdentity(t *testing
 
 	legacyPersonalKeyCtx := *authCtx
 	legacyPersonalKeyCtx.APIKeyName = "plugins-hooks"
+	legacyPersonalKeyCtx.OrgWidePluginHooksKey = false
 	payload.Source.UserEmail = nil
 	actor = ti.service.resolveCanonicalActor(ctx, payload, &legacyPersonalKeyCtx)
 	require.Equal(t, authCtx.UserID, actor.UserID,
@@ -463,6 +467,7 @@ func TestIngest_CachesSelfReportedActorForLaterSharedKeyEvents(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 	authCtx.APIKeyName = "plugins-hooks-20260713-104500-c0d3e1"
+	authCtx.OrgWidePluginHooksKey = true
 	remaining := make(chan time.Duration, 1)
 	ti.service.cache = &sessionCacheDeadlineRecorder{Cache: ti.service.cache, remaining: remaining}
 

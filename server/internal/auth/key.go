@@ -35,14 +35,14 @@ const (
 
 // PluginAPIKeyNamePrefix is reserved for keys minted by plugin distribution
 // flows. Historical user-created keys may still carry this prefix, so callers
-// classifying org-wide hook keys must use IsOrgWidePluginHooksAPIKeyName.
+// classifying org-wide hook keys must verify the token/name minting marker.
 const PluginAPIKeyNamePrefix = "plugins-"
 
-// IsOrgWidePluginHooksAPIKeyName recognizes the names minted by plugin publish
-// and observability-download flows. Prefix-only checks are unsafe because API
-// key names were unrestricted before PluginAPIKeyNamePrefix became reserved;
-// a legacy personal hooks key may legitimately be named "plugins-hooks".
-func IsOrgWidePluginHooksAPIKeyName(name string) bool {
+// IsOrgWidePluginHooksAPIKey recognizes keys minted by plugin publish and
+// observability-download flows. The generated name embeds the first six token
+// characters while keyPrefix stores the first five, so authentication can
+// verify minting provenance instead of trusting a formerly-unrestricted name.
+func IsOrgWidePluginHooksAPIKey(name, key, keyPrefix string) bool {
 	var suffix string
 	switch {
 	case strings.HasPrefix(name, PluginAPIKeyNamePrefix+"hooks-download-"):
@@ -68,7 +68,12 @@ func IsOrgWidePluginHooksAPIKeyName(name string) bool {
 			return false
 		}
 	}
-	return true
+
+	tokenMarker := parts[2]
+	return len(key) > len(keyPrefix) &&
+		strings.HasPrefix(key, keyPrefix) &&
+		strings.HasSuffix(keyPrefix, tokenMarker[:5]) &&
+		key[len(keyPrefix)] == tokenMarker[5]
 }
 
 var APIKeyScopes = map[string]APIKeyScope{
@@ -203,6 +208,7 @@ func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []s
 		Email:                 &apiKey.Email,
 		APIKeyID:              apiKey.ID.String(),
 		APIKeyName:            apiKey.Name,
+		OrgWidePluginHooksKey: IsOrgWidePluginHooksAPIKey(apiKey.Name, key, apiKey.KeyPrefix),
 		ProjectID:             projectID,
 		OrganizationSlug:      org.Slug,
 		AccountType:           org.GramAccountType,

@@ -338,6 +338,7 @@ func (m *Manager) Authorize(ctx context.Context, tokenString string) (context.Co
 		ExternalUserID:        "",
 		APIKeyID:              "",
 		APIKeyName:            "",
+		OrgWidePluginHooksKey: false,
 		SessionID:             nil,
 		ProjectID:             &project.ID,
 		OrganizationSlug:      org.Slug,

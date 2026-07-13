@@ -114,6 +114,7 @@ func (m *Manager) Authorize(ctx context.Context, token string) (context.Context,
 		ExternalUserID:        externalUserID,
 		APIKeyID:              claims.APIKeyID,
 		APIKeyName:            "",
+		OrgWidePluginHooksKey: false,
 		SessionID:             claims.SessionID, // When set, the authz engine loads and enforces RBAC grants for the user
 		Email:                 nil,
 		AccountType:           claims.AccountType, // Required for RBAC enforcement (only "enterprise" accounts)

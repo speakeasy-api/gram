@@ -1300,28 +1300,16 @@ gram_enrich_identity_payload() {
   existing_token="$(gram_hooks_json_top_level_value "$trimmed" "user_email")"
   if [ -n "$existing_token" ]; then
     # The device identity outranks the provider's self-report (the jq path
-    # overwrites it). Without a parser, the top-level pair can only be
-    # rewritten when its exact text occurs once in the whole payload — the
-    # extractor proved the top-level value IS this token, so a unique
-    # occurrence is provably the top-level pair. Anything else (duplicate
-    # identical pairs, whitespace-formatted JSON) keeps the provider value
-    # rather than risk rewriting a nested tool argument.
-    local needle replacement
-    needle='"user_email":'"$existing_token"
-    replacement='"user_email":"'"$email"'"'
-    if [ "$(printf '%s' "$trimmed" | grep -oF -- "$needle" | wc -l | tr -d '[:space:]')" = "1" ]; then
-      # Post-condition over cleverness: if the unique occurrence was not the
-      # top-level pair after all (say the top-level pair is
-      # whitespace-formatted and a nested compact twin matched instead), the
-      # extractor still sees the old value and the rewrite is discarded.
-      local rewritten
-      rewritten="${trimmed/"$needle"/$replacement}"
-      if [ "$(gram_hooks_json_top_level_value "$rewritten" "user_email")" = '"'"$email"'"' ]; then
-        printf '%s' "$rewritten"
-        return
-      fi
+    # overwrites it). The normalization helper's depth-aware parser rewrites
+    # exactly one top-level key while preserving whitespace and nested tool
+    # arguments; duplicate top-level keys produce no rewrite.
+    local rewritten
+    rewritten="$(gram_hooks_json_top_level_value "$trimmed" "user_email" "$email")"
+    if [ -n "$rewritten" ] && [ "$(gram_hooks_json_top_level_value "$rewritten" "user_email")" = '"'"$email"'"' ]; then
+      printf '%s' "$rewritten"
+      return
     fi
-    gram_hooks_identity_debug "existing user_email not uniquely locatable; keeping it (no jq to rewrite safely)"
+    gram_hooks_identity_debug "existing top-level user_email is ambiguous; keeping it (no jq to rewrite safely)"
     printf '%s' "$trimmed"
     return
   fi

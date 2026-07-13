@@ -11,7 +11,6 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/auth"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -124,7 +123,7 @@ func (s *Service) resolveCanonicalActor(ctx context.Context, payload *gen.Ingest
 	}
 	selfReported := canonicalSourceUserEmail(payload)
 	if selfReported == "" {
-		if auth.IsOrgWidePluginHooksAPIKeyName(authCtx.APIKeyName) {
+		if authCtx.OrgWidePluginHooksKey {
 			return s.cachedSessionActor(ctx, payload, authCtx)
 		}
 		return canonicalActor{UserID: authCtx.UserID, Email: tokenEmail}
@@ -146,7 +145,7 @@ func (s *Service) resolveCanonicalActor(ctx context.Context, payload *gen.Ingest
 		// identity, exactly as when no email is
 		// self-reported. Either way policy enforcement and the recorded rows
 		// stay on one identity.
-		if auth.IsOrgWidePluginHooksAPIKeyName(authCtx.APIKeyName) {
+		if authCtx.OrgWidePluginHooksKey {
 			if cached := s.cachedSessionActor(ctx, payload, authCtx); cached.UserID != "" {
 				return cached
 			}
