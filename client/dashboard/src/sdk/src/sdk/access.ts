@@ -21,6 +21,7 @@ import { accessListRoles } from "../funcs/accessListRoles.js";
 import { accessListScopes } from "../funcs/accessListScopes.js";
 import { accessListShadowMCPAccessRules } from "../funcs/accessListShadowMCPAccessRules.js";
 import { accessListShadowMCPApprovalRequests } from "../funcs/accessListShadowMCPApprovalRequests.js";
+import { accessListShadowMCPInventory } from "../funcs/accessListShadowMCPInventory.js";
 import { accessResolveChallenge } from "../funcs/accessResolveChallenge.js";
 import { accessUpdateMemberRoles } from "../funcs/accessUpdateMemberRoles.js";
 import { accessUpdateRole } from "../funcs/accessUpdateRole.js";
@@ -35,6 +36,7 @@ import { ListRolesResult } from "../models/components/listrolesresult.js";
 import { ListScopesResult } from "../models/components/listscopesresult.js";
 import { ListShadowMCPAccessRulesResult } from "../models/components/listshadowmcpaccessrulesresult.js";
 import { ListShadowMCPApprovalRequestsResult } from "../models/components/listshadowmcpapprovalrequestsresult.js";
+import { ListShadowMCPInventoryResult } from "../models/components/listshadowmcpinventoryresult.js";
 import { ListUserGrantsResult } from "../models/components/listusergrantsresult.js";
 import { RBACStatus } from "../models/components/rbacstatus.js";
 import { ResolveChallengesResult } from "../models/components/resolvechallengesresult.js";
@@ -118,6 +120,10 @@ import {
   ListShadowMCPApprovalRequestsRequest,
   ListShadowMCPApprovalRequestsSecurity,
 } from "../models/operations/listshadowmcpapprovalrequests.js";
+import {
+  ListShadowMCPInventoryRequest,
+  ListShadowMCPInventorySecurity,
+} from "../models/operations/listshadowmcpinventory.js";
 import {
   ResolveChallengeRequest,
   ResolveChallengeSecurity,
@@ -453,6 +459,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListScopesResult> {
     return unwrapAsync(accessListScopes(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listShadowMCPInventory access
+   *
+   * @remarks
+   * List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and policy-bypass state.
+   */
+  async listShadowMCPInventory(
+    request: ListShadowMCPInventoryRequest,
+    security?: ListShadowMCPInventorySecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListShadowMCPInventoryResult> {
+    return unwrapAsync(accessListShadowMCPInventory(
       this,
       request,
       security,

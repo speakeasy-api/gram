@@ -50,6 +50,7 @@ trackedFiles:
   src/funcs/accessListScopes.ts: {}
   src/funcs/accessListShadowMCPAccessRules.ts: {}
   src/funcs/accessListShadowMCPApprovalRequests.ts: {}
+  src/funcs/accessListShadowMCPInventory.ts: {}
   src/funcs/accessResolveChallenge.ts: {}
   src/funcs/accessUpdateMemberRoles.ts: {}
   src/funcs/accessUpdateRole.ts: {}
@@ -692,6 +693,7 @@ trackedFiles:
   src/models/components/listsessionsresult.ts: {}
   src/models/components/listshadowmcpaccessrulesresult.ts: {}
   src/models/components/listshadowmcpapprovalrequestsresult.ts: {}
+  src/models/components/listshadowmcpinventoryresult.ts: {}
   src/models/components/listsourcesresult.ts: {}
   src/models/components/listsyncedusersresult.ts: {}
   src/models/components/listtoolfiltersresult.ts: {}
@@ -897,6 +899,8 @@ trackedFiles:
   src/models/components/shadowmcpaccessrule.ts: {}
   src/models/components/shadowmcpapprovaldecisionresult.ts: {}
   src/models/components/shadowmcpapprovalrequest.ts: {}
+  src/models/components/shadowmcpinventoryrequestsummary.ts: {}
+  src/models/components/shadowmcpinventoryserver.ts: {}
   src/models/components/skillbreakdownrow.ts: {}
   src/models/components/skillsummary.ts: {}
   src/models/components/skilltimeseriespoint.ts: {}
@@ -1280,6 +1284,7 @@ trackedFiles:
   src/models/operations/listsessions.ts: {}
   src/models/operations/listshadowmcpaccessrules.ts: {}
   src/models/operations/listshadowmcpapprovalrequests.ts: {}
+  src/models/operations/listshadowmcpinventory.ts: {}
   src/models/operations/listsyncedagentusers.ts: {}
   src/models/operations/listtemplates.ts: {}
   src/models/operations/listtools.ts: {}
@@ -1888,6 +1893,8 @@ trackedFiles:
   src/react-query/shadowMCPAccessRules.ts: {}
   src/react-query/shadowMCPApprovalRequests.core.ts: {}
   src/react-query/shadowMCPApprovalRequests.ts: {}
+  src/react-query/shadowMCPInventory.core.ts: {}
+  src/react-query/shadowMCPInventory.ts: {}
   src/react-query/switchScopes.ts: {}
   src/react-query/syncedAgentUsers.core.ts: {}
   src/react-query/syncedAgentUsers.ts: {}
@@ -4790,6 +4797,19 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  listShadowMCPInventory:
+    speakeasy-default-list-shadow-MCP-inventory:
+      parameters:
+        query:
+          project_id: "6b899ed5-f939-40c4-b6bc-8a61c885cf97"
+          limit: 50
+      responses:
+        "200":
+          application/json: {"servers": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   listSlackApps:
     speakeasy-default-list-slack-apps:
       responses:

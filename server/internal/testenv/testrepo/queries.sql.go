@@ -547,6 +547,24 @@ func (q *Queries) UpdateChatMessageCreatedAt(ctx context.Context, arg UpdateChat
 	return err
 }
 
+const updateRiskPolicyBypassRequestTimestamps = `-- name: UpdateRiskPolicyBypassRequestTimestamps :exec
+UPDATE risk_policy_bypass_requests
+SET created_at = $1, updated_at = $1
+WHERE id = $2
+  AND project_id = $3
+`
+
+type UpdateRiskPolicyBypassRequestTimestampsParams struct {
+	RequestedAt pgtype.Timestamptz
+	ID          uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+func (q *Queries) UpdateRiskPolicyBypassRequestTimestamps(ctx context.Context, arg UpdateRiskPolicyBypassRequestTimestampsParams) error {
+	_, err := q.db.Exec(ctx, updateRiskPolicyBypassRequestTimestamps, arg.RequestedAt, arg.ID, arg.ProjectID)
+	return err
+}
+
 const updateRiskResultCreatedAt = `-- name: UpdateRiskResultCreatedAt :exec
 UPDATE risk_results
 SET created_at = $1

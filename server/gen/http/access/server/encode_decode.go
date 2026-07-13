@@ -3069,6 +3069,234 @@ func EncodeListShadowMCPAccessRulesError(encoder func(context.Context, http.Resp
 	}
 }
 
+// EncodeListShadowMCPInventoryResponse returns an encoder for responses
+// returned by the access listShadowMCPInventory endpoint.
+func EncodeListShadowMCPInventoryResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*access.ListShadowMCPInventoryResult)
+		enc := encoder(ctx, w)
+		body := NewListShadowMCPInventoryResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeListShadowMCPInventoryRequest returns a decoder for requests sent to
+// the access listShadowMCPInventory endpoint.
+func DecodeListShadowMCPInventoryRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*access.ListShadowMCPInventoryPayload, error) {
+	return func(r *http.Request) (*access.ListShadowMCPInventoryPayload, error) {
+		var payload *access.ListShadowMCPInventoryPayload
+		var (
+			projectID    string
+			limit        int
+			cursor       *string
+			sessionToken *string
+			err          error
+		)
+		qp := r.URL.Query()
+		projectID = qp.Get("project_id")
+		if projectID == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "query string"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("project_id", projectID, goa.FormatUUID))
+		{
+			limitRaw := qp.Get("limit")
+			if limitRaw == "" {
+				limit = 50
+			} else {
+				v, err2 := strconv.ParseInt(limitRaw, 10, strconv.IntSize)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("limit", limitRaw, "integer"))
+				}
+				limit = int(v)
+			}
+		}
+		if limit < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+		}
+		if limit > 200 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 200, false))
+		}
+		cursorRaw := qp.Get("cursor")
+		if cursorRaw != "" {
+			cursor = &cursorRaw
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewListShadowMCPInventoryPayload(projectID, limit, cursor, sessionToken)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeListShadowMCPInventoryError returns an encoder for errors returned by
+// the listShadowMCPInventory access endpoint.
+func EncodeListShadowMCPInventoryError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListShadowMCPInventoryUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListShadowMCPInventoryForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListShadowMCPInventoryBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListShadowMCPInventoryNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListShadowMCPInventoryConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListShadowMCPInventoryUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListShadowMCPInventoryInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListShadowMCPInventoryInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListShadowMCPInventoryUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListShadowMCPInventoryGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeCreateShadowMCPAccessRuleResponse returns an encoder for responses
 // returned by the access createShadowMCPAccessRule endpoint.
 func EncodeCreateShadowMCPAccessRuleResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -5285,6 +5513,63 @@ func marshalAccessShadowMCPAccessRuleToShadowMCPAccessRuleResponseBody(v *access
 		Reason:                 v.Reason,
 		CreatedAt:              v.CreatedAt,
 		UpdatedAt:              v.UpdatedAt,
+	}
+
+	return res
+}
+
+// marshalAccessShadowMCPInventoryServerToShadowMCPInventoryServerResponseBody
+// builds a value of type *ShadowMCPInventoryServerResponseBody from a value of
+// type *access.ShadowMCPInventoryServer.
+func marshalAccessShadowMCPInventoryServerToShadowMCPInventoryServerResponseBody(v *access.ShadowMCPInventoryServer) *ShadowMCPInventoryServerResponseBody {
+	res := &ShadowMCPInventoryServerResponseBody{
+		CanonicalServerURL: v.CanonicalServerURL,
+		URLHost:            v.URLHost,
+		ServerName:         v.ServerName,
+		FirstSeen:          v.FirstSeen,
+		LastSeen:           v.LastSeen,
+		LastCalled:         v.LastCalled,
+		ObservedUseCount:   v.ObservedUseCount,
+		UserCount:          v.UserCount,
+		Access:             v.Access,
+		RequestCount:       v.RequestCount,
+	}
+	if v.TopUsers != nil {
+		res.TopUsers = make([]string, len(v.TopUsers))
+		for i, val := range v.TopUsers {
+			res.TopUsers[i] = val
+		}
+	} else {
+		res.TopUsers = []string{}
+	}
+	if v.LatestRequest != nil {
+		res.LatestRequest = marshalAccessShadowMCPInventoryRequestSummaryToShadowMCPInventoryRequestSummaryResponseBody(v.LatestRequest)
+	}
+	if v.AllowedPolicyIds != nil {
+		res.AllowedPolicyIds = make([]string, len(v.AllowedPolicyIds))
+		for i, val := range v.AllowedPolicyIds {
+			res.AllowedPolicyIds[i] = val
+		}
+	} else {
+		res.AllowedPolicyIds = []string{}
+	}
+
+	return res
+}
+
+// marshalAccessShadowMCPInventoryRequestSummaryToShadowMCPInventoryRequestSummaryResponseBody
+// builds a value of type *ShadowMCPInventoryRequestSummaryResponseBody from a
+// value of type *access.ShadowMCPInventoryRequestSummary.
+func marshalAccessShadowMCPInventoryRequestSummaryToShadowMCPInventoryRequestSummaryResponseBody(v *access.ShadowMCPInventoryRequestSummary) *ShadowMCPInventoryRequestSummaryResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &ShadowMCPInventoryRequestSummaryResponseBody{
+		ID:              v.ID,
+		PolicyID:        v.PolicyID,
+		RequesterUserID: v.RequesterUserID,
+		RequesterEmail:  v.RequesterEmail,
+		RequestedAt:     v.RequestedAt,
 	}
 
 	return res
