@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { EnvironmentVariable } from "./environmentVariableUtils";
-import { getSystemProvidedVariables } from "./environmentVariableUtils";
+import {
+  getSystemProvidedVariables,
+  getSystemValueSaveOp,
+} from "./environmentVariableUtils";
 
 const mkVar = (
   overrides: Partial<EnvironmentVariable> &
@@ -68,5 +71,44 @@ describe("getSystemProvidedVariables", () => {
       }),
     ];
     expect(getSystemProvidedVariables(vars, "prod")).toEqual(["CUSTOM_SECRET"]);
+  });
+});
+
+describe("getSystemValueSaveOp", () => {
+  it("skips when the variable was never edited", () => {
+    expect(getSystemValueSaveOp(undefined, "sup*****")).toEqual({
+      kind: "skip",
+    });
+    expect(getSystemValueSaveOp(undefined, "")).toEqual({ kind: "skip" });
+  });
+
+  it("skips when the editing value is the loaded redacted value", () => {
+    // State toggles seed editing state with the redacted display value;
+    // saving must not write the mask back over the real secret.
+    expect(getSystemValueSaveOp("sup*****", "sup*****")).toEqual({
+      kind: "skip",
+    });
+  });
+
+  it("updates when the user typed a new value", () => {
+    expect(getSystemValueSaveOp("new-secret", "sup*****")).toEqual({
+      kind: "update",
+      value: "new-secret",
+    });
+  });
+
+  it("updates when a value is typed for a variable with no stored value", () => {
+    expect(getSystemValueSaveOp("first-value", "")).toEqual({
+      kind: "update",
+      value: "first-value",
+    });
+  });
+
+  it("removes when the user cleared a previously stored value", () => {
+    expect(getSystemValueSaveOp("", "sup*****")).toEqual({ kind: "remove" });
+  });
+
+  it("skips when cleared and no value was stored", () => {
+    expect(getSystemValueSaveOp("", "")).toEqual({ kind: "skip" });
   });
 });

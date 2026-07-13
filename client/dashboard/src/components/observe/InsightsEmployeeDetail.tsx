@@ -1624,7 +1624,11 @@ function AccountsCard({ accounts }: { accounts: UserAccount[] }) {
             />
           ))
         ) : (
-          <p className="text-muted-foreground text-sm">No linked accounts</p>
+          <p className="text-muted-foreground text-sm">
+            No AI accounts detected yet. As this employee is seen using AI tools
+            (Claude, Codex, Cursor), the team and personal accounts they sign in
+            with are linked automatically and appear here.
+          </p>
         )}
       </div>
     </section>
