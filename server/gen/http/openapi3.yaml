@@ -13237,18 +13237,18 @@ paths:
             operationId: ingestHookEvent
             parameters:
                 - allowEmptyValue: true
-                  description: API Key header
+                  description: Optional API key for plugin-driven attribution.
                   in: header
                   name: Gram-Key
                   schema:
-                    description: API Key header
+                    description: Optional API key for plugin-driven attribution.
                     type: string
                 - allowEmptyValue: true
-                  description: project header
+                  description: Optional project slug for plugin-driven attribution.
                   in: header
                   name: Gram-Project
                   schema:
-                    description: project header
+                    description: Optional project slug for plugin-driven attribution.
                     type: string
                 - allowEmptyValue: true
                   description: Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.
@@ -13324,9 +13324,6 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
-            security:
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
             summary: ingest hooks
             tags:
                 - hooks
@@ -42089,10 +42086,6 @@ components:
                     type: string
                     description: The ID of the tunneled MCP server to use as the backend
                     format: uuid
-                user_session_issuer_id:
-                    type: string
-                    description: The ID of the user session issuer that gates OAuth-based MCP client authentication. When set, MCP clients are required to authenticate against this issuer before connecting.
-                    format: uuid
                 visibility:
                     type: string
                     description: The visibility of an MCP server
@@ -45033,6 +45026,9 @@ components:
                 authz_challenge_logging_enabled:
                     type: boolean
                     description: Whether authz challenge logging to ClickHouse is enabled
+                hooks_browser_login_enabled:
+                    type: boolean
+                    description: Whether generated hook plugins may mint per-user keys via the interactive browser login
                 logs_enabled:
                     type: boolean
                     description: Whether logging is enabled
@@ -45063,6 +45059,7 @@ components:
                 - sso_enabled
                 - scim_enabled
                 - observability_mode_enabled
+                - hooks_browser_login_enabled
         GetProjectForm:
             type: object
             properties:
@@ -45550,6 +45547,9 @@ components:
                 raw_event_name:
                     type: string
                     description: Provider-native event name, if one exists.
+                user_email:
+                    type: string
+                    description: Self-reported email of the developer on the emitting machine (device agent or provider account), used for attribution when the API key is shared org-wide.
             description: Metadata about the local hook adapter that translated a provider event into the Gram hook contract.
             required:
                 - adapter
@@ -48938,6 +48938,9 @@ components:
                     type: string
                     description: Unique plugin identifier.
                     format: uuid
+                is_default:
+                    type: boolean
+                    description: Whether this is the project's fallback plugin that new servers attach to.
                 name:
                     type: string
                     description: Display name.
@@ -52568,6 +52571,7 @@ components:
                         - sso
                         - scim
                         - observability_mode
+                        - hooks_browser_login
                     maxLength: 60
             required:
                 - feature_name
@@ -55250,10 +55254,6 @@ components:
                     type: string
                     description: The ID of the tunneled MCP server to use as the backend
                     format: uuid
-                user_session_issuer_id:
-                    type: string
-                    description: The ID of the user session issuer that gates OAuth-based MCP client authentication. Omit to disable issuer-gated OAuth.
-                    format: uuid
                 visibility:
                     type: string
                     description: The visibility of an MCP server
@@ -55261,7 +55261,7 @@ components:
                         - disabled
                         - private
                         - public
-            description: 'Form for updating an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be provided. Omit name to leave the existing display name unchanged; the slug is recomputed server-side from the resulting name.'
+            description: 'Form for updating an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. The user session issuer cannot be changed after create. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be provided. Omit name to leave the existing display name unchanged; the slug is recomputed server-side from the resulting name.'
             required:
                 - id
                 - visibility

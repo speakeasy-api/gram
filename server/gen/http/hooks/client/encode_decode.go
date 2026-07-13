@@ -1445,6 +1445,7 @@ func marshalHooksHookIngestSourceToHookIngestSourceRequestBody(v *hooks.HookInge
 		AdapterVersion: v.AdapterVersion,
 		RawEventName:   v.RawEventName,
 		Hostname:       v.Hostname,
+		UserEmail:      v.UserEmail,
 	}
 
 	return res
@@ -1661,6 +1662,7 @@ func marshalHookIngestSourceRequestBodyToHooksHookIngestSource(v *HookIngestSour
 		AdapterVersion: v.AdapterVersion,
 		RawEventName:   v.RawEventName,
 		Hostname:       v.Hostname,
+		UserEmail:      v.UserEmail,
 	}
 
 	return res

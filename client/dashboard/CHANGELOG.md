@@ -1,5 +1,21 @@
 # dashboard
 
+## 0.86.0
+
+### Minor Changes
+
+- b8e7fe0: Hook plugin browser sign-in is now opt-in per organization. By default, published plugins never open a browser: they authenticate with explicitly configured credentials, a previously cached key, or the organization-wide key, and the login helper prints manual setup instructions instead. Organization admins can re-enable the interactive browser sign-in from the org settings page.
+
+### Patch Changes
+
+- 78898af: Include Codex alongside Claude Code and Cursor in example agent lists across risk policies, logging, insights, and the connect-server dialog.
+- a29bea1: feat: expose `is_default` on the plugin API and use it in the dashboard instead of matching on the "Default" name/slug. The onboarding distribute-servers step and plugin card/detail pages previously identified the org's fallback plugin by string comparison (`name === "Default"` / `slug === "default"`), a proxy that predates the server's `is_default` column and unique-per-project index. Both now read the real `is_default` flag returned by `listPlugins`/`getPlugin`.
+- 7c637c7: Refresh the OpenRouter model list: add Claude Fable 5 (marked Expensive) and the GPT-5.6 series (Sol/Terra/Luna), replace the playground picker's "(Expensive)" label suffixes with a badge, and remove deprecated models (Claude Sonnet 4, GPT-4.1, o3, o4-mini, Gemini 2.5 Pro/Flash, DeepSeek R1).
+- 4a98092: Address review feedback from the OpenRouter model refresh: pin explicit per-provider fallback models in ResolveModel so de-listed or unknown models never silently resolve to a premium model (previously anthropic/\* fell back alphabetically to Claude Fable 5), give elements an explicit DEFAULT_MODEL (Claude Sonnet 5) instead of MODELS[0], and remove Gemini 3.5 Flash from the prompt-policy judge picker (the judge disables reasoning, which that model rejects).
+- Updated dependencies [7c637c7]
+- Updated dependencies [4a98092]
+  - @gram-ai/elements@1.42.1
+
 ## 0.85.0
 
 ### Minor Changes

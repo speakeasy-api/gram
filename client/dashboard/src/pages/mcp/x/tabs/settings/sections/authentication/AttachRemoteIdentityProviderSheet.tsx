@@ -376,7 +376,7 @@ export function AttachRemoteIdentityProviderSheet({
       // is stored (and side effects like flipping a server private) is the
       // target's business.
       if (!userSessionIssuer) {
-        await target.linkUserSessionIssuer(issuerId);
+        await target.linkUserSessionIssuer?.(issuerId);
       }
 
       return { unsupportedDcrAuthMethod };

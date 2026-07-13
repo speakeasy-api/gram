@@ -238,6 +238,8 @@ type Plugin struct {
 	Slug string
 	// Optional description.
 	Description *string
+	// Whether this is the project's fallback plugin that new servers attach to.
+	IsDefault *bool
 	// Number of active servers in this plugin.
 	ServerCount *int64
 	// Number of role/user assignments.

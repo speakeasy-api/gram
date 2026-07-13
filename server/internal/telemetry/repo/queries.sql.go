@@ -283,8 +283,10 @@ func (q *Queries) InsertTelemetryLog(ctx context.Context, arg InsertTelemetryLog
 	return q.InsertTelemetryLogs(ctx, []InsertTelemetryLogParams{arg})
 }
 
-// InsertTelemetryLogs inserts telemetry log records into ClickHouse in a single
-// synchronous statement.
+// InsertTelemetryLogs inserts telemetry log records using a server-side async
+// insert (async_insert=1, wait_for_async_insert=0). The call is fire-and-forget
+// from CH's perspective: it acks once the rows are queued in CH's async insert
+// buffer, not once they are committed to disk.
 func (q *Queries) InsertTelemetryLogs(ctx context.Context, args []InsertTelemetryLogParams) error {
 	return q.insertTelemetryLogsInto(ctx, "telemetry_logs", args)
 }
@@ -358,6 +360,9 @@ type shadowMCPInventoryURLUpsert struct {
 	UpdatedAt          time.Time
 }
 
+// UpsertShadowMCPInventoryURLs merges the given rows with any existing
+// inventory rows and writes them using a server-side async insert
+// (fire-and-forget), same as InsertTelemetryLogs.
 func (q *Queries) UpsertShadowMCPInventoryURLs(ctx context.Context, args []UpsertShadowMCPInventoryURLParams) error {
 	if len(args) == 0 {
 		return nil

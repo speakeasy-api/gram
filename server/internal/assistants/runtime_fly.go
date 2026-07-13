@@ -705,7 +705,7 @@ func (f *FlyRuntimeBackend) RecycleImage(ctx context.Context, runtime assistantR
 // desiredImageRef returns the configured runtime image reference in the same
 // "<repo>:<tag>" form fly's MachineImageRef serialises into.
 func (f *FlyRuntimeBackend) desiredImageRef() string {
-	return fmt.Sprintf("%s:%s", f.config.OCIImage, f.config.ImageTag)
+	return runtimeImageRef(f.config.OCIImage, f.config.ImageTag)
 }
 
 // machineImageRef rebuilds the "<registry>/<repo>:<tag>" form from a fly

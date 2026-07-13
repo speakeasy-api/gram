@@ -339,12 +339,14 @@ func TestServeInstallPage_Scopes_RemoteBacked_NoScopes(t *testing.T) {
 		Url:           "https://upstream.example.com/mcp",
 	})
 
+	issuer := createUserSessionIssuer(t, ctx, ti, *authCtx.ProjectID)
 	endpointSlug := "scopes-remote-" + uuid.NewString()[:8]
 	createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
-		name:              "Remote MCP Scopes",
-		visibility:        mcpservers.VisibilityPublic,
-		endpointSlug:      endpointSlug,
-		remoteMcpServerID: uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
+		name:                "Remote MCP Scopes",
+		visibility:          mcpservers.VisibilityPublic,
+		endpointSlug:        endpointSlug,
+		remoteMcpServerID:   uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
+		userSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
 	})
 
 	body := serveInstallPageBody(t, ctx, ti, endpointSlug)

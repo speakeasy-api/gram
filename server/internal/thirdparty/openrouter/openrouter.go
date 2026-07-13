@@ -82,6 +82,7 @@ func (k KeyType) Validate() error {
 // Just a general allowlist for models we allow to proxy through us for playground usage, chat, or agentic usecases
 // This list can stay sufficiently robust, we should just need to allow list a model before it goes through us
 var allowList = map[string]bool{
+	"anthropic/claude-fable-5":      true,
 	"anthropic/claude-sonnet-5":     true,
 	"anthropic/claude-opus-4.8":     true,
 	"anthropic/claude-opus-4.7":     true,
@@ -90,7 +91,9 @@ var allowList = map[string]bool{
 	"anthropic/claude-opus-4.6":     true,
 	"anthropic/claude-opus-4.5":     true,
 	"anthropic/claude-haiku-4.5":    true,
-	"anthropic/claude-sonnet-4":     true,
+	"openai/gpt-5.6-sol":            true,
+	"openai/gpt-5.6-terra":          true,
+	"openai/gpt-5.6-luna":           true,
 	"openai/gpt-5.5":                true,
 	"openai/gpt-5.5-pro":            true,
 	"openai/gpt-5.4":                true,
@@ -99,18 +102,12 @@ var allowList = map[string]bool{
 	"openai/gpt-5.3-codex":          true,
 	"openai/gpt-5.1":                true,
 	"openai/gpt-5":                  true,
-	"openai/gpt-4.1":                true,
-	"openai/o4-mini":                true,
-	"openai/o3":                     true,
 	"google/gemini-3.5-flash":       true,
 	"google/gemini-3.1-pro-preview": true,
 	"google/gemini-3.1-flash-lite":  true,
-	"google/gemini-2.5-pro":         true,
-	"google/gemini-2.5-flash":       true,
 	"deepseek/deepseek-v4-pro":      true,
 	"deepseek/deepseek-v4-flash":    true,
 	"deepseek/deepseek-v3.2":        true,
-	"deepseek/deepseek-r1":          true,
 	"meta-llama/llama-4-maverick":   true,
 	"x-ai/grok-4.3":                 true,
 	"x-ai/grok-4.20":                true,
@@ -129,9 +126,27 @@ func IsModelAllowed(model string) bool {
 	return allowList[model]
 }
 
-// ResolveModel returns the model as-is if it's in the allowlist.
-// Otherwise, it returns the first allowed model (sorted alphabetically)
-// from the same provider. Returns empty string if no fallback is found.
+// providerFallbacks pins the model an unknown or de-listed model resolves to,
+// per provider. Without this, ResolveModel's alphabetical fallback silently
+// upgrades callers to whatever sorts first — for Anthropic that is the
+// premium-priced claude-fable-5. Each entry names the provider's
+// standard-cost workhorse; keep it allowlisted (enforced by tests).
+var providerFallbacks = map[string]string{
+	"anthropic":  "anthropic/claude-sonnet-5",
+	"openai":     "openai/gpt-5.6-terra",
+	"google":     "google/gemini-3.5-flash",
+	"deepseek":   "deepseek/deepseek-v4-flash",
+	"meta-llama": "meta-llama/llama-4-maverick",
+	"x-ai":       "x-ai/grok-4.3",
+	"qwen":       "qwen/qwen3.7-max",
+	"moonshotai": "moonshotai/kimi-k2.6",
+	"mistralai":  "mistralai/mistral-medium-3-5",
+}
+
+// ResolveModel returns the model as-is if it's in the allowlist. Otherwise, it
+// returns the provider's pinned fallback from providerFallbacks, or — for
+// providers without a pin — the first allowed model sorted alphabetically.
+// Returns empty string if no fallback is found.
 func ResolveModel(model string) string {
 	if allowList[model] {
 		return model
@@ -140,6 +155,10 @@ func ResolveModel(model string) string {
 	provider, _, ok := strings.Cut(model, "/")
 	if !ok || provider == "" {
 		return ""
+	}
+
+	if fallback := providerFallbacks[provider]; fallback != "" && allowList[fallback] {
+		return fallback
 	}
 
 	prefix := provider + "/"

@@ -99,7 +99,6 @@ export function MCPToolFilteringSection({
           remoteMcpServerId: server.remoteMcpServerId ?? undefined,
           toolsetId: server.toolsetId ?? undefined,
           environmentId: server.environmentId ?? undefined,
-          userSessionIssuerId: server.userSessionIssuerId ?? undefined,
           visibility: server.visibility,
           toolVariationsGroupId: groupId ?? undefined,
         },

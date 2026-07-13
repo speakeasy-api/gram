@@ -130,9 +130,11 @@ import { formatUsageCost } from "@/pages/chatLogs/claudeUsage";
 // empty-string item value, so "" is mapped through this and back on change.
 const DEFAULT_MODEL_VALUE = "__default__";
 
+// Gemini 3.5 Flash is deliberately absent: the judge disables reasoning
+// (`reasoning.effort: "none"`), which the Gemini 3.5 generation rejects with a
+// 400 — every evaluation on it would fail into the policy's error mode.
 const JUDGE_MODELS: { value: string; label: string }[] = [
   { value: "", label: "Default (Gemini 3.1 Flash Lite)" },
-  { value: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash" },
   { value: "anthropic/claude-sonnet-4.6", label: "Claude Sonnet 4.6" },
   { value: "anthropic/claude-haiku-4.5", label: "Claude Haiku 4.5" },
 ];

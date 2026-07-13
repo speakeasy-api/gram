@@ -7,6 +7,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -54,6 +55,7 @@ type testInstance struct {
 	service            *telemetry.Service
 	logger             *slog.Logger
 	conn               *pgxpool.Pool
+	chConn             clickhouse.Conn
 	chClient           *repo.Queries
 	sessionManager     *sessions.Manager
 	orgID              string
@@ -129,6 +131,7 @@ func newTestLogsServiceWithSessionCapture(t *testing.T, sessionCapture bool) (co
 		telemLogger:        telemLogger,
 		logger:             logger,
 		conn:               conn,
+		chConn:             chConn,
 		chClient:           chClient,
 		sessionManager:     sessionManager,
 		orgID:              authCtx.ActiveOrganizationID,

@@ -2820,10 +2820,7 @@ async function seedObservabilityData(init: {
   const SURFACE_PROVIDER: Record<string, string> = {
     "claude-code": "anthropic",
     cowork: "anthropic",
-    claude: "anthropic",
-    api: "anthropic",
     codex: "openai",
-    vscode: "openai",
     cursor: "cursor",
     cli: "cursor",
     // Gram-managed surfaces (billed completions through gram-server).

@@ -94,18 +94,35 @@ func loadConfigFromFile(c *cli.Context, flags []cli.Flag) error {
 	return cfgLoader(c)
 }
 
-func newGuardianPolicy(c *cli.Context, tracerProvider trace.TracerProvider) (policy *guardian.Policy, err error) {
+func newGuardianPolicy(c *cli.Context, logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider) (policy *guardian.Policy, err error) {
+	breaker := guardian.NewNoopBreaker(logger, meterProvider)
+	limiter := guardian.NewNoopLimiter(logger, meterProvider)
+
 	// In local development, allow loopback addresses for internal tool-to-tool communication
 	if c.String("environment") == "local" {
-		policy, err = guardian.NewUnsafePolicy(tracerProvider, []string{}) // Allow all traffic for local development
+		policy, err = guardian.NewUnsafePolicy(
+			tracerProvider,
+			[]string{}, // Allow all traffic for local development
+			guardian.WithBreaker(breaker),
+			guardian.WithLimiter(limiter),
+		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create unsafe http guardian policy: %w", err)
 		}
 	} else {
-		policy = guardian.NewDefaultPolicy(tracerProvider)
+		policy = guardian.NewDefaultPolicy(
+			tracerProvider,
+			guardian.WithBreaker(breaker),
+			guardian.WithLimiter(limiter),
+		)
 	}
 	if s := c.StringSlice("disallowed-cidr-blocks"); s != nil {
-		policy, err = guardian.NewUnsafePolicy(tracerProvider, s)
+		policy, err = guardian.NewUnsafePolicy(
+			tracerProvider,
+			s,
+			guardian.WithBreaker(breaker),
+			guardian.WithLimiter(limiter),
+		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create unsafe http guardian policy: %w", err)
 		}

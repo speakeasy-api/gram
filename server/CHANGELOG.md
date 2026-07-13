@@ -1,5 +1,28 @@
 # server
 
+## 0.85.0
+
+### Minor Changes
+
+- ceb150d: Forward each organization's tokens-under-management usage to PostHog (AGE-2289): hourly group properties on the organization group (current/previous cycle tokens, contracted allowance, utilization) plus a once-per-day organization_token_usage event, emitted from the billing usage refresh workflow.
+- b8e7fe0: Hook plugin browser sign-in is now opt-in per organization. By default, published plugins never open a browser: they authenticate with explicitly configured credentials, a previously cached key, or the organization-wide key, and the login helper prints manual setup instructions instead. Organization admins can re-enable the interactive browser sign-in from the org settings page.
+- 83f97ec: Judge timeouts now surface as a dedicated `outcome:timeout` metric tag, with retuned duration histogram buckets near the 10s call timeout.
+- fff8efc: Assistant runtimes can now run locally: the new `local` runtime provider (the
+  local-development default) starts one Docker container per assistant on demand,
+  reuses it across turns, and automatically replaces idle containers when the
+  runtime image is rebuilt — no Fly.io credentials or registry pushes needed for
+  local image development.
+- dfe9fd9: feat: require a user_session_issuer for every remote and tunneled MCP server. The server mints the issuer in the same transaction as the mcp_servers row and it lasts for the server's lifetime: `user_session_issuer_id` is removed from both the create and update APIs, and the update query COALESCEs to the stored value, so no code path can supply, strip, or swap it. Enforced at the schema level by a `mcp_servers` CHECK constraint (added NOT VALID, then validated). Toolset-backed servers are exempt (their issuer lives on the toolset).
+
+### Patch Changes
+
+- 4c57fa5: Stop the chat session list visibility check from recording an authz challenge. Listing sessions probes `chat:read` only to decide whether the caller sees all sessions or just their own; a member without the grant is the normal case, not a denial. Logging it as one polluted the access diagnostics with spurious `chat:read` denials (the insights dock lists chats on every page load), making it look like `chat:read` was required to view unrelated pages such as the Cost dashboard.
+- a29bea1: feat: expose `is_default` on the plugin API and use it in the dashboard instead of matching on the "Default" name/slug. The onboarding distribute-servers step and plugin card/detail pages previously identified the org's fallback plugin by string comparison (`name === "Default"` / `slug === "default"`), a proxy that predates the server's `is_default` column and unique-per-project index. Both now read the real `is_default` flag returned by `listPlugins`/`getPlugin`.
+- fe3ddb2: fix: batch toolsets.list queries to eliminate N+1. `toolsets.list` used to loop over every toolset in a project issuing 11+ DB round trips each (plus one more per external-MCP tool), making the endpoint take seconds for projects with many toolsets and slowing the dashboard home page, which prefetches it on every project route. Replaced with a single batched fetch across all toolsets, cutting round trips from `O(toolset_count)` to a fixed ~10 regardless of how many toolsets a project has.
+- 7c637c7: Refresh the OpenRouter model list: add Claude Fable 5 (marked Expensive) and the GPT-5.6 series (Sol/Terra/Luna), replace the playground picker's "(Expensive)" label suffixes with a badge, and remove deprecated models (Claude Sonnet 4, GPT-4.1, o3, o4-mini, Gemini 2.5 Pro/Flash, DeepSeek R1).
+- 4a98092: Address review feedback from the OpenRouter model refresh: pin explicit per-provider fallback models in ResolveModel so de-listed or unknown models never silently resolve to a premium model (previously anthropic/\* fell back alphabetically to Claude Fable 5), give elements an explicit DEFAULT_MODEL (Claude Sonnet 5) instead of MODELS[0], and remove Gemini 3.5 Flash from the prompt-policy judge picker (the judge disables reasoning, which that model rejects).
+- 125059e: Reduce project overview latency by running independent ClickHouse aggregations concurrently, tracing each query, and computing chat resolutions in a single PostgreSQL pass.
+
 ## 0.84.0
 
 ### Minor Changes

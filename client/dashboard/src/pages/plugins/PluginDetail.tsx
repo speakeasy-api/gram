@@ -49,10 +49,7 @@ import type { PluginServer } from "@gram/client/models/components/pluginserver.j
 import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import { useSdkClient } from "@/contexts/Sdk";
 import { toast } from "sonner";
-import {
-  DEFAULT_PLUGIN_DESCRIPTION,
-  isDefaultPluginSlug,
-} from "./default-plugin";
+import { DEFAULT_PLUGIN_DESCRIPTION } from "./default-plugin";
 import { downloadPluginPackage } from "./downloadPluginPackage";
 import { InstallInstructionsDialog } from "./InstallInstructionsDialog";
 import { PublishDialog } from "./PublishDialog";
@@ -327,7 +324,7 @@ export default function PluginDetail(): JSX.Element | null {
 
   if (!plugin) return null;
 
-  const isDefaultPlugin = isDefaultPluginSlug(plugin.slug);
+  const isDefaultPlugin = plugin.isDefault ?? false;
   const description =
     plugin.description ??
     (isDefaultPlugin ? DEFAULT_PLUGIN_DESCRIPTION : "No description");

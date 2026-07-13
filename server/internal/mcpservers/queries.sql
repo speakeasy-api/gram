@@ -77,7 +77,7 @@ SET
     name = @name,
     slug = @slug,
     environment_id = @environment_id,
-    user_session_issuer_id = @user_session_issuer_id,
+    user_session_issuer_id = COALESCE(sqlc.narg('user_session_issuer_id'), user_session_issuer_id),
     remote_mcp_server_id = @remote_mcp_server_id,
     tunneled_mcp_server_id = @tunneled_mcp_server_id,
     toolset_id = @toolset_id,

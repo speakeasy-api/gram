@@ -116,7 +116,6 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 
 	ids, err := parseServerIDs(
 		payload.EnvironmentID,
-		payload.UserSessionIssuerID,
 		payload.RemoteMcpServerID,
 		payload.TunneledMcpServerID,
 		payload.ToolsetID,
@@ -154,6 +153,17 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 
 	if err := verifyServerReferenceOwnership(ctx, dbtx, *authCtx.ProjectID, ids); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
+	}
+
+	// Remote- and tunneled-backed servers carry a user_session_issuer for
+	// their lifetime (mcp_servers_issuer_required_check). Mint it here in the
+	// same transaction as the server row so a failed create can never leak an
+	// orphan issuer.
+	if ids.RemoteMcpServerID.Valid || ids.TunneledMcpServerID.Valid {
+		ids.UserSessionIssuerID, err = mintServerUserSessionIssuer(ctx, dbtx, *authCtx.ProjectID, slug)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "mint mcp server issuer").LogError(ctx, logger)
+		}
 	}
 
 	server, err := txRepo.CreateMCPServer(ctx, repo.CreateMCPServerParams{
@@ -398,7 +408,6 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 
 	ids, err := parseServerIDs(
 		payload.EnvironmentID,
-		payload.UserSessionIssuerID,
 		payload.RemoteMcpServerID,
 		payload.TunneledMcpServerID,
 		payload.ToolsetID,
@@ -457,10 +466,12 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	}
 
 	updated, err := txRepo.UpdateMCPServer(ctx, repo.UpdateMCPServerParams{
-		Name:                  name,
-		Slug:                  conv.ToPGText(slug),
-		EnvironmentID:         ids.EnvironmentID,
-		UserSessionIssuerID:   ids.UserSessionIssuerID,
+		Name:          name,
+		Slug:          conv.ToPGText(slug),
+		EnvironmentID: ids.EnvironmentID,
+		// Always NULL: the query COALESCEs to the stored issuer, which is
+		// attached at create time for the server's lifetime.
+		UserSessionIssuerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		RemoteMcpServerID:     ids.RemoteMcpServerID,
 		TunneledMcpServerID:   ids.TunneledMcpServerID,
 		ToolsetID:             ids.ToolsetID,
@@ -653,6 +664,60 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		}
 	}
 
+	// Remote- and tunneled-backed servers own the issuer minted with them.
+	// An issuer may also be referenced by another server or toolset, so only
+	// cascade once this deletion leaves it without an active owner.
+	if deleted.UserSessionIssuerID.Valid {
+		userSessionsRepo := usersessionsrepo.New(dbtx)
+		hasActiveOwner, err := userSessionsRepo.UserSessionIssuerHasActiveOwner(ctx, usersessionsrepo.UserSessionIssuerHasActiveOwnerParams{
+			ProjectID:           *authCtx.ProjectID,
+			UserSessionIssuerID: deleted.UserSessionIssuerID.UUID,
+		})
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "check user session issuer ownership").LogError(ctx, logger)
+		}
+
+		if !hasActiveOwner {
+			deletedIssuer, err := userSessionsRepo.DeleteUserSessionIssuer(ctx, usersessionsrepo.DeleteUserSessionIssuerParams{
+				ID:        deleted.UserSessionIssuerID.UUID,
+				ProjectID: *authCtx.ProjectID,
+			})
+			switch {
+			case errors.Is(err, pgx.ErrNoRows):
+				// A missing issuer must not block server deletion.
+			case err != nil:
+				return oops.E(oops.CodeUnexpected, err, "delete mcp server issuer").LogError(ctx, logger)
+			default:
+				if err := userSessionsRepo.DeleteRemoteSessionClientAttachmentsForUserSessionIssuer(ctx, usersessionsrepo.DeleteRemoteSessionClientAttachmentsForUserSessionIssuerParams{
+					UserSessionIssuerID: deletedIssuer.ID,
+					ProjectID:           *authCtx.ProjectID,
+				}); err != nil {
+					return oops.E(oops.CodeUnexpected, err, "delete mcp server issuer client attachments").LogError(ctx, logger)
+				}
+
+				if _, err := userSessionsRepo.SoftDeleteUserSessionsByIssuerID(ctx, deletedIssuer.ID); err != nil {
+					return oops.E(oops.CodeUnexpected, err, "delete mcp server issuer sessions").LogError(ctx, logger)
+				}
+
+				if _, err := userSessionsRepo.SoftDeleteUserSessionConsentsByIssuerID(ctx, deletedIssuer.ID); err != nil {
+					return oops.E(oops.CodeUnexpected, err, "delete mcp server issuer consents").LogError(ctx, logger)
+				}
+
+				if err := s.audit.LogUserSessionIssuerDelete(ctx, dbtx, audit.LogUserSessionIssuerDeleteEvent{
+					OrganizationID:       authCtx.ActiveOrganizationID,
+					ProjectID:            *authCtx.ProjectID,
+					Actor:                urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+					ActorDisplayName:     authCtx.Email,
+					ActorSlug:            nil,
+					UserSessionIssuerURN: urn.NewUserSessionIssuer(deletedIssuer.ID),
+					Slug:                 deletedIssuer.Slug,
+				}); err != nil {
+					return oops.E(oops.CodeUnexpected, err, "log mcp server issuer deletion").LogError(ctx, logger)
+				}
+			}
+		}
+	}
+
 	if err := s.audit.LogMcpServerDelete(ctx, dbtx, audit.LogMcpServerDeleteEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		ProjectID:        *authCtx.ProjectID,
@@ -677,7 +742,8 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 // create/update payloads so they can be passed around without a long
 // positional argument list.
 type serverIDs struct {
-	EnvironmentID         uuid.NullUUID
+	EnvironmentID uuid.NullUUID
+	// Set by mintServerUserSessionIssuer during create, never parsed from a payload.
 	UserSessionIssuerID   uuid.NullUUID
 	RemoteMcpServerID     uuid.NullUUID
 	TunneledMcpServerID   uuid.NullUUID
@@ -689,7 +755,6 @@ type serverIDs struct {
 // serverIDs struct. Any malformed UUID surfaces with a field-specific error.
 func parseServerIDs(
 	environmentIDStr *string,
-	userSessionIssuerIDStr *string,
 	remoteMcpServerIDStr *string,
 	tunneledMcpServerIDStr *string,
 	toolsetIDStr *string,
@@ -702,9 +767,6 @@ func parseServerIDs(
 
 	if ids.EnvironmentID, err = conv.PtrToNullUUID(environmentIDStr); err != nil {
 		return serverIDs{}, fmt.Errorf("invalid environment_id: %w", err)
-	}
-	if ids.UserSessionIssuerID, err = conv.PtrToNullUUID(userSessionIssuerIDStr); err != nil {
-		return serverIDs{}, fmt.Errorf("invalid user_session_issuer_id: %w", err)
 	}
 	if ids.RemoteMcpServerID, err = conv.PtrToNullUUID(remoteMcpServerIDStr); err != nil {
 		return serverIDs{}, fmt.Errorf("invalid remote_mcp_server_id: %w", err)
@@ -768,18 +830,6 @@ func verifyServerReferenceOwnership(
 				return fmt.Errorf("environment_id does not reference a resource in this project")
 			}
 			return fmt.Errorf("check environment ownership: %w", err)
-		}
-	}
-
-	if ids.UserSessionIssuerID.Valid {
-		if _, err := usersessionsrepo.New(dbtx).GetUserSessionIssuerByID(ctx, usersessionsrepo.GetUserSessionIssuerByIDParams{
-			ID:        ids.UserSessionIssuerID.UUID,
-			ProjectID: projectID,
-		}); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return fmt.Errorf("user_session_issuer_id does not reference a resource in this project")
-			}
-			return fmt.Errorf("check user session issuer ownership: %w", err)
 		}
 	}
 

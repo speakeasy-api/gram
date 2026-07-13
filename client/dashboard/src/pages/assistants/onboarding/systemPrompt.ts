@@ -45,18 +45,18 @@ Pass section bodies WITHOUT a leading heading — the tool adds it. Inside a sec
 - Integration — packaged toolset from the catalog. \`list_integrations\`.
 
 # Models (pass full id to \`update_assistant\`)
-- Anthropic: \`anthropic/claude-sonnet-5\` (default), \`anthropic/claude-opus-4.8\`, \`anthropic/claude-opus-4.7\`, \`anthropic/claude-sonnet-4.6\`, \`anthropic/claude-haiku-4.5\`, \`anthropic/claude-sonnet-4.5\`, \`anthropic/claude-opus-4.6\`, \`anthropic/claude-opus-4.5\`, \`anthropic/claude-sonnet-4\`
-- OpenAI: \`openai/gpt-5.5\`, \`openai/gpt-5.5-pro\`, \`openai/gpt-5.4\`, \`openai/gpt-5.4-mini\`, \`openai/gpt-5.4-nano\`, \`openai/gpt-5.3-codex\`, \`openai/gpt-5.1\`, \`openai/gpt-5\`, \`openai/gpt-4.1\`, \`openai/o4-mini\`, \`openai/o3\`
-- Google: \`google/gemini-3.5-flash\`, \`google/gemini-3.1-pro-preview\`, \`google/gemini-3.1-flash-lite\`, \`google/gemini-2.5-pro\`, \`google/gemini-2.5-flash\`
-- Others: \`deepseek/deepseek-v4-pro\`, \`deepseek/deepseek-v4-flash\`, \`deepseek/deepseek-v3.2\`, \`deepseek/deepseek-r1\`, \`meta-llama/llama-4-maverick\`, \`x-ai/grok-4.3\`, \`x-ai/grok-4.20\`, \`qwen/qwen3.7-max\`, \`qwen/qwen3-coder\`, \`moonshotai/kimi-k2.6\`, \`moonshotai/kimi-k2.5\`, \`mistralai/mistral-medium-3-5\`, \`mistralai/codestral-2508\`, \`mistralai/devstral-2512\`, \`mistralai/mistral-medium-3.1\`
+- Anthropic: \`anthropic/claude-sonnet-5\` (default), \`anthropic/claude-fable-5\`, \`anthropic/claude-opus-4.8\`, \`anthropic/claude-opus-4.7\`, \`anthropic/claude-sonnet-4.6\`, \`anthropic/claude-haiku-4.5\`, \`anthropic/claude-sonnet-4.5\`, \`anthropic/claude-opus-4.6\`, \`anthropic/claude-opus-4.5\`
+- OpenAI: \`openai/gpt-5.6-sol\`, \`openai/gpt-5.6-terra\`, \`openai/gpt-5.6-luna\`, \`openai/gpt-5.5\`, \`openai/gpt-5.5-pro\`, \`openai/gpt-5.4\`, \`openai/gpt-5.4-mini\`, \`openai/gpt-5.4-nano\`, \`openai/gpt-5.3-codex\`, \`openai/gpt-5.1\`, \`openai/gpt-5\`
+- Google: \`google/gemini-3.5-flash\`, \`google/gemini-3.1-pro-preview\`, \`google/gemini-3.1-flash-lite\`
+- Others: \`deepseek/deepseek-v4-pro\`, \`deepseek/deepseek-v4-flash\`, \`deepseek/deepseek-v3.2\`, \`meta-llama/llama-4-maverick\`, \`x-ai/grok-4.3\`, \`x-ai/grok-4.20\`, \`qwen/qwen3.7-max\`, \`qwen/qwen3-coder\`, \`moonshotai/kimi-k2.6\`, \`moonshotai/kimi-k2.5\`, \`mistralai/mistral-medium-3-5\`, \`mistralai/codestral-2508\`, \`mistralai/devstral-2512\`, \`mistralai/mistral-medium-3.1\`
 
 Recommend:
 - General default → \`anthropic/claude-sonnet-5\` (strong all-rounder, good price/performance).
-- Agentic / tool-heavy → \`anthropic/claude-sonnet-5\` or \`anthropic/claude-opus-4.8\` (hardest reasoning, pricier).
-- Cheap / fast / high-volume → \`anthropic/claude-haiku-4.5\` or \`openai/gpt-5.4-mini\`.
-- Coding → \`openai/gpt-5.3-codex\`, \`qwen/qwen3-coder\`, \`mistralai/codestral-2508\`.
-- Deep reasoning / math → \`openai/o3\` or \`openai/o4-mini\`.
-- Fast Google → \`google/gemini-2.5-flash\`.
+- Agentic / tool-heavy → \`anthropic/claude-sonnet-5\` or \`anthropic/claude-fable-5\` (hardest reasoning, expensive).
+- Cheap / fast / high-volume → \`anthropic/claude-haiku-4.5\` or \`openai/gpt-5.6-luna\`.
+- Coding → \`openai/gpt-5.6-sol\`, \`openai/gpt-5.3-codex\`, \`qwen/qwen3-coder\`.
+- Deep reasoning / math → \`anthropic/claude-fable-5\` (expensive) or \`openai/gpt-5.6-sol\`.
+- Fast Google → \`google/gemini-3.5-flash\`.
 - Unsure → \`anthropic/claude-sonnet-5\`.
 
 # "How do I connect X?" decision tree

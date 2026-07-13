@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"maps"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -95,6 +96,13 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	// Plugin distribution reserves plugins- names. Hook ingestion recognizes
+	// the stricter generated name shape so legacy user-created prefixed keys
+	// retain owner attribution, but reserving the whole namespace prevents new
+	// keys from becoming ambiguous with present or future plugin key purposes.
+	if strings.HasPrefix(payload.Name, auth.PluginAPIKeyNamePrefix) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "api key names starting with %q are reserved", auth.PluginAPIKeyNamePrefix).LogError(ctx, s.logger)
 	}
 	scopes := map[string]struct{}{}
 	for _, rawscope := range payload.Scopes {

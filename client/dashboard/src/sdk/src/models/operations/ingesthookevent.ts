@@ -10,18 +10,13 @@ import {
   IngestRequestBody$outboundSchema,
 } from "../components/ingestrequestbody.js";
 
-export type IngestHookEventSecurity = {
-  apikeyHeaderGramKey?: string | undefined;
-  projectSlugHeaderGramProject?: string | undefined;
-};
-
 export type IngestHookEventRequest = {
   /**
-   * API Key header
+   * Optional API key for plugin-driven attribution.
    */
   gramKey?: string | undefined;
   /**
-   * project header
+   * Optional project slug for plugin-driven attribution.
    */
   gramProject?: string | undefined;
   /**
@@ -30,37 +25,6 @@ export type IngestHookEventRequest = {
   idempotencyKey?: string | undefined;
   ingestRequestBody: IngestRequestBody;
 };
-
-/** @internal */
-export type IngestHookEventSecurity$Outbound = {
-  "apikey_header_Gram-Key"?: string | undefined;
-  "project_slug_header_Gram-Project"?: string | undefined;
-};
-
-/** @internal */
-export const IngestHookEventSecurity$outboundSchema: z.ZodMiniType<
-  IngestHookEventSecurity$Outbound,
-  IngestHookEventSecurity
-> = z.pipe(
-  z.object({
-    apikeyHeaderGramKey: z.optional(z.string()),
-    projectSlugHeaderGramProject: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      apikeyHeaderGramKey: "apikey_header_Gram-Key",
-      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-    });
-  }),
-);
-
-export function ingestHookEventSecurityToJSON(
-  ingestHookEventSecurity: IngestHookEventSecurity,
-): string {
-  return JSON.stringify(
-    IngestHookEventSecurity$outboundSchema.parse(ingestHookEventSecurity),
-  );
-}
 
 /** @internal */
 export type IngestHookEventRequest$Outbound = {

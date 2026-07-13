@@ -312,6 +312,10 @@ type HookIngestSource struct {
 	RawEventName *string
 	// Hostname of the machine that emitted the hook event.
 	Hostname *string
+	// Self-reported email of the developer on the emitting machine (device agent
+	// or provider account), used for attribution when the API key is shared
+	// org-wide.
+	UserEmail *string
 }
 
 // Transcript-derived MCP attribution for one model API request. Claude redacts
@@ -430,7 +434,9 @@ type IngestHookResult struct {
 
 // IngestPayload is the payload type of the hooks service ingest method.
 type IngestPayload struct {
-	ApikeyToken      *string
+	// Optional API key for plugin-driven attribution.
+	ApikeyToken *string
+	// Optional project slug for plugin-driven attribution.
 	ProjectSlugInput *string
 	// Contract version. The current version is hook.ingest.v1.
 	SchemaVersion string
