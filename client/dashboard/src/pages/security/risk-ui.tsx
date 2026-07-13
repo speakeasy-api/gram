@@ -112,16 +112,10 @@ export function SeverityBadge({
   );
 }
 
-// Numeric severity, colored by band. Used in list/table columns where the raw
-// score is more useful than the qualitative label. Colors mirror the badge
-// variants so the two representations read as one system.
-const SEVERITY_SCORE_CLASS: Record<SeverityRating, string> = {
-  low: "text-muted-foreground",
-  medium: "text-yellow-600 dark:text-yellow-500",
-  high: "text-orange-600 dark:text-orange-500",
-  critical: "text-destructive-default",
-};
-
+// Numeric severity, rendered as a color-coded pill. Used in list/table columns
+// where the raw score is more useful than the qualitative label — the number
+// carries the exact value while the band color (shared with SeverityBadge) makes
+// severity scannable at a glance.
 export function SeverityScore({
   score,
   className,
@@ -134,16 +128,14 @@ export function SeverityScore({
   }
   const rating = scoreToRating(score);
   return (
-    <span
-      className={cn(
-        "text-sm font-medium tabular-nums",
-        SEVERITY_SCORE_CLASS[rating],
-        className,
-      )}
-      title={`${SEVERITY_RATING_LABEL[rating]} severity`}
+    <SeverityBadgeBase
+      variant={SEVERITY_BADGE_VARIANT[rating]}
+      size="sm"
+      className={cn("tabular-nums", className)}
+      tooltip={`${SEVERITY_RATING_LABEL[rating]} severity`}
     >
       {score.toFixed(1)}
-    </span>
+    </SeverityBadgeBase>
   );
 }
 
