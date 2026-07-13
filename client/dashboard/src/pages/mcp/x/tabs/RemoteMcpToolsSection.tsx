@@ -17,14 +17,17 @@ import {
   type RemoteMcpTool,
   type RemoteMcpToolAnnotations,
 } from "@/hooks/useRemoteMcpTools";
-import { useRemoteMcpUserSessionToken } from "@/hooks/useRemoteMcpUserSessionToken";
 import { handleError, toError } from "@/lib/errors";
 import { cn, firstPartyConnectUrl, mcpConnectionUrl } from "@/lib/utils";
-import { Badge, Button } from "@speakeasy-api/moonshine";
+import { Badge } from "@speakeasy-api/moonshine";
 import { QueryErrorResetBoundary } from "@tanstack/react-query";
-import { PlugZap } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
+import {
+  RemoteMcpConnection,
+  RemoteMcpConnectPrompt,
+  useRemoteMcpConnection,
+} from "@/contexts/RemoteMcpConnection";
 
 type RemoteMcpToolsSectionProps = {
   /** The Gram-proxied MCP URL to connect to; undefined while endpoints load. */
@@ -33,23 +36,18 @@ type RemoteMcpToolsSectionProps = {
   isResolvingUrl: boolean;
   /** The mcp_server id, used to mint the user-session JWT. */
   mcpServerId: string | undefined;
-  /** Whether the server is issuer-gated (has a user_session_issuer). */
-  isIssuerGated: boolean;
+  /** The server's user_session_issuer id; undefined when not issuer-gated. */
+  userSessionIssuerId: string | undefined;
 };
 
 /**
  * Lists the tools advertised by the remote MCP server, connecting through the
- * Gram-proxied `/mcp/<slug>` endpoint via the AI SDK MCP client.
+ * Gram-proxied `/mcp/<slug>` endpoint via the AI SDK MCP client. The listing
+ * renders inside RemoteMcpConnection, which owns the connect-before-mint gate.
  *
- * For issuer-gated servers we mint a user-session JWT scoped to the mcp_server
- * and connect with it. When no upstream remote_session exists yet the gateway
- * 401s into `needsAuth`, and we surface an Authenticate button that opens the
- * first-party connect page in a new tab; returning focus re-attempts the list.
- *
- * Expected fetch failures are rendered inline (see RemoteMcpToolsBody). The
- * surrounding ErrorBoundary is the defensive layer for unexpected render-time
- * throws — its Retry resets the boundary and any errored queries so a fresh
- * attempt runs without reloading the page.
+ * Expected fetch failures render inline. The surrounding ErrorBoundary is the
+ * defensive layer for unexpected render-time throws — its Retry resets the
+ * boundary and any errored queries without reloading the page.
  */
 export function RemoteMcpToolsSection(
   props: RemoteMcpToolsSectionProps,
@@ -104,38 +102,60 @@ function RemoteMcpToolsSectionInner({
   mcpUrl,
   isResolvingUrl,
   mcpServerId,
-  isIssuerGated,
+  userSessionIssuerId,
 }: RemoteMcpToolsSectionProps): JSX.Element {
-  const { accessToken, isLoading: isTokenLoading } =
-    useRemoteMcpUserSessionToken({ mcpServerId, isIssuerGated });
-
-  // Issuer-gated servers must wait for the JWT before connecting, otherwise the
-  // unauthenticated request 401s and caches a spurious `needsAuth`.
-  const headers = useMemo(
-    () =>
-      accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
-    [accessToken],
-  );
-  const connectionEnabled = !isIssuerGated || !!accessToken;
-
   // Connect through the dev proxy origin (same-origin) so the AI SDK transport
   // carries the gram_session cookie and the gateway's proxied SSE response
   // isn't dropped on a cross-origin hop. No-op in prod / for custom domains.
   const connectUrl = useMemo(() => mcpConnectionUrl(mcpUrl), [mcpUrl]);
 
+  // The first-party connect page is opened as a top-level new tab, so it rides
+  // the gram_session cookie on the backend origin (not the dev proxy).
+  const authUrl = useMemo(() => firstPartyConnectUrl(mcpUrl), [mcpUrl]);
+
+  if (isResolvingUrl) {
+    return (
+      <ToolsSectionShell>
+        <ToolsListSkeleton />
+      </ToolsSectionShell>
+    );
+  }
+
+  return (
+    <ToolsSectionShell>
+      <RemoteMcpConnection
+        mcpServerId={mcpServerId}
+        userSessionIssuerId={userSessionIssuerId}
+        authUrl={authUrl}
+        fallback={<ToolsListSkeleton />}
+      >
+        <RemoteMcpToolsListing connectUrl={connectUrl} />
+      </RemoteMcpConnection>
+    </ToolsSectionShell>
+  );
+}
+
+/**
+ * The connected path: lists tools with the connection's headers. A gateway
+ * 401 (stale upstream credentials, invisible to the gate's pre-check) falls
+ * back to the same Connect prompt; focus returning from connect re-probes.
+ */
+function RemoteMcpToolsListing({
+  connectUrl,
+}: {
+  connectUrl: string | undefined;
+}): JSX.Element {
+  const { headers, connect } = useRemoteMcpConnection();
+
   const { tools, isLoading, needsAuth, isError, refetch } = useRemoteMcpTools(
     connectUrl,
-    { headers, enabled: connectionEnabled },
+    { headers },
   );
 
   const toolEntries = useMemo(
     () => (tools ? Object.entries(tools) : []),
     [tools],
   );
-
-  // The first-party connect page is opened as a top-level new tab, so it rides
-  // the gram_session cookie on the backend origin (not the dev proxy).
-  const authUrl = useMemo(() => firstPartyConnectUrl(mcpUrl), [mcpUrl]);
 
   // When the user comes back from the connect tab, re-attempt the listing so a
   // freshly linked session surfaces without a manual refresh.
@@ -146,54 +166,19 @@ function RemoteMcpToolsSectionInner({
     return () => window.removeEventListener("focus", onFocus);
   }, [needsAuth, refetch]);
 
-  const handleConnect = () => {
-    if (authUrl) window.open(authUrl, "_blank", "noopener,noreferrer");
-  };
-
-  const loading = isResolvingUrl || isTokenLoading || isLoading;
-
-  return (
-    <ToolsSectionShell>
-      <RemoteMcpToolsBody
-        loading={loading}
-        needsAuth={needsAuth}
-        isError={isError}
-        toolEntries={toolEntries}
-        onRetry={refetch}
-        onConnect={authUrl ? handleConnect : undefined}
-      />
-    </ToolsSectionShell>
-  );
-}
-
-function RemoteMcpToolsBody({
-  loading,
-  needsAuth,
-  isError,
-  toolEntries,
-  onRetry,
-  onConnect,
-}: {
-  loading: boolean;
-  needsAuth: boolean;
-  isError: boolean;
-  toolEntries: Array<[string, RemoteMcpTool]>;
-  onRetry: () => void;
-  onConnect?: () => void;
-}): JSX.Element {
-  if (loading) {
+  if (isLoading) {
     return <ToolsListSkeleton />;
   }
 
   if (needsAuth) {
-    return <RemoteMcpToolsConnectPrompt onConnect={onConnect} />;
+    return <RemoteMcpConnectPrompt onConnect={connect} />;
   }
 
   if (isError) {
     return (
       <EmptyState
         message="Couldn't connect to this server to list its tools."
-        onRetry={onRetry}
+        onRetry={refetch}
       />
     );
   }
@@ -426,31 +411,6 @@ function ToolRowSkeleton(): JSX.Element {
     <div className="border-neutral-softest flex flex-col gap-2 border-b py-4 pr-3 pl-4 last:border-b-0">
       <Skeleton className="h-4 w-48" />
       <Skeleton className="h-3 w-80 max-w-full" />
-    </div>
-  );
-}
-
-/**
- * The needs-connect state: a centered card prompting the user to connect
- * upstream before tools can be listed. Connecting opens the first-party connect
- * page; returning focus re-attempts the listing.
- */
-function RemoteMcpToolsConnectPrompt({
-  onConnect,
-}: {
-  onConnect?: () => void;
-}): JSX.Element {
-  return (
-    <div className="border-neutral-softest flex flex-col items-center gap-3 rounded-lg border px-6 py-12 text-center">
-      <PlugZap className="text-muted-foreground/70 size-8" />
-      <Type muted small>
-        Connect to this MCP to view the tools.
-      </Type>
-      {onConnect ? (
-        <Button variant="secondary" onClick={onConnect}>
-          <Button.Text>Connect</Button.Text>
-        </Button>
-      ) : null}
     </div>
   );
 }

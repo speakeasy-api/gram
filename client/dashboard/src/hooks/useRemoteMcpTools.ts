@@ -66,26 +66,20 @@ export interface UseRemoteMcpToolsOptions {
    * dashboard user's stored upstream credentials.
    */
   headers?: Record<string, string>;
-  /**
-   * Gate the connection. Pass `false` while a required credential (the minted
-   * JWT) is still loading so we don't fire an unauthenticated request and cache
-   * a spurious `needsAuth`.
-   */
-  enabled?: boolean;
 }
 
 /**
  * Connects to a Gram-proxied remote MCP endpoint and lists its tools.
  *
  * Issuer-gated servers need a user-session JWT passed via `options.headers`
- * (minted by useRemoteMcpUserSessionToken); without it they surface as
+ * (tunnelled through RemoteMcpConnection); without it they surface as
  * `needsAuth`.
  */
 export function useRemoteMcpTools(
   mcpUrl: string | undefined,
   options?: UseRemoteMcpToolsOptions,
 ): UseRemoteMcpToolsResult {
-  const { headers, enabled = true } = options ?? {};
+  const { headers } = options ?? {};
 
   // Key on the header values so the query refetches once the JWT arrives or
   // rotates, without keying on object identity.
@@ -98,7 +92,7 @@ export function useRemoteMcpTools(
   const query: UseQueryResult<RemoteMcpToolSet, Error> = useQuery({
     queryKey: ["remoteMcpTools", mcpUrl, headersKey],
     queryFn: async () => {
-      // `enabled` guards against an undefined URL, but narrow for the type.
+      // The query is disabled for an undefined URL, but narrow for the type.
       if (!mcpUrl) throw new Error("No MCP URL configured");
 
       const client = await createMCPClient({
@@ -144,7 +138,7 @@ export function useRemoteMcpTools(
         await client.close().catch(() => {});
       }
     },
-    enabled: enabled && !!mcpUrl,
+    enabled: !!mcpUrl,
     // Auth-related failures shouldn't be hammered; the user re-triggers via the
     // Authenticate flow or a manual refetch.
     retry: false,
