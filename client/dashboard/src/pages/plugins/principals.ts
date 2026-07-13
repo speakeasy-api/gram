@@ -78,12 +78,16 @@ export function normalizeToPrincipalUrn(value: string): string | null {
   if (
     trimmed === WILDCARD_PRINCIPAL ||
     trimmed.startsWith("role:") ||
-    trimmed.startsWith("user:") ||
-    trimmed.startsWith(EMAIL_PREFIX)
+    trimmed.startsWith("user:")
   ) {
     return trimmed;
   }
-  const email = trimmed.toLowerCase();
+  // Validate the address whether or not the email: prefix is already present, so
+  // a typo like "email:not-an-address" can't be saved as a dead assignment.
+  const bare = trimmed.startsWith(EMAIL_PREFIX)
+    ? trimmed.slice(EMAIL_PREFIX.length)
+    : trimmed;
+  const email = bare.toLowerCase();
   return emailSchema.safeParse(email).success
     ? `${EMAIL_PREFIX}${email}`
     : null;

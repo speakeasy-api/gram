@@ -177,8 +177,16 @@ WHERE id = @id
 RETURNING *;
 
 -- name: AddPluginAssignment :one
+-- Scoped to the org: the row is inserted only when @plugin_id resolves to a
+-- non-deleted plugin in @organization_id, so a mismatched (plugin, org) pair
+-- can never create a cross-tenant assignment. Returns no row (ErrNoRows) when
+-- the plugin does not belong to the org.
 INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn)
-VALUES (@plugin_id, @organization_id, @principal_urn)
+SELECT p.id, @organization_id, @principal_urn
+FROM plugins p
+WHERE p.id = @plugin_id
+  AND p.organization_id = @organization_id
+  AND p.deleted IS FALSE
 ON CONFLICT (plugin_id, principal_urn) DO UPDATE
   SET principal_urn = EXCLUDED.principal_urn
 RETURNING *;

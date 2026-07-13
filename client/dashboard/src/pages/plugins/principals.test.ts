@@ -47,6 +47,14 @@ describe("normalizeToPrincipalUrn", () => {
     expect(normalizeToPrincipalUrn("not-an-email")).toBeNull();
     expect(normalizeToPrincipalUrn("")).toBeNull();
   });
+
+  it("validates the address even when the email: prefix is already present", () => {
+    expect(normalizeToPrincipalUrn("email:not-an-address")).toBeNull();
+    expect(normalizeToPrincipalUrn("email:")).toBeNull();
+    expect(normalizeToPrincipalUrn("email:Jane@Corp.com")).toBe(
+      "email:jane@corp.com",
+    );
+  });
 });
 
 describe("describePrincipal", () => {

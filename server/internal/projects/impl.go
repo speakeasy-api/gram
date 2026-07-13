@@ -33,7 +33,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
-	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/projects/repo"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -45,7 +44,6 @@ type Service struct {
 	db                   *pgxpool.Pool
 	repo                 *repo.Queries
 	envRepo              *envrepo.Queries
-	pluginsRepo          *pluginsrepo.Queries
 	sessions             *sessions.Manager
 	auth                 *auth.Auth
 	authz                *authz.Engine
@@ -74,7 +72,6 @@ func NewService(
 		db:                   db,
 		repo:                 repo.New(db),
 		envRepo:              envrepo.New(db),
-		pluginsRepo:          pluginsrepo.New(db),
 		sessions:             sessions,
 		auth:                 auth.New(logger, db, sessions, authzEngine),
 		authz:                authzEngine,
@@ -170,7 +167,6 @@ func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectP
 
 	pr := s.repo.WithTx(dbtx)
 	er := s.envRepo.WithTx(dbtx)
-	plr := s.pluginsRepo.WithTx(dbtx)
 
 	prj, err := pr.CreateProject(ctx, repo.CreateProjectParams{
 		OrganizationID: payload.OrganizationID,
@@ -199,37 +195,27 @@ func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectP
 		return nil, oops.E(oops.CodeUnexpected, err, "error creating default environment").LogError(ctx, s.logger)
 	}
 
-	defaultPlugin, err := plr.CreateDefaultPlugin(ctx, pluginsrepo.CreateDefaultPluginParams{
-		OrganizationID: payload.OrganizationID,
-		ProjectID:      prj.ID,
-	})
+	// Provision the project's Default plugin through the shared helper so it
+	// takes the same create-and-seed path (including the org-wildcard audience
+	// default) as the lazy-heal callers — no separate seeding to drift.
+	ensured, err := plugins.EnsureDefaultPlugin(ctx, dbtx, payload.OrganizationID, prj.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error creating default plugin").LogError(ctx, s.logger)
 	}
 
-	// Default the Default plugin to the org wildcard so it delivers to every
-	// member: agent.getPlugins scopes delivery by assignment, so without this the
-	// auto-provisioned plugin (where enabled servers auto-attach) would reach no
-	// one. Admins can narrow the audience later from the plugin's assignment UI.
-	if _, err := plr.AddPluginAssignment(ctx, pluginsrepo.AddPluginAssignmentParams{
-		PluginID:       defaultPlugin.ID,
-		OrganizationID: payload.OrganizationID,
-		PrincipalUrn:   urn.PrincipalWildcard,
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error assigning default plugin").LogError(ctx, s.logger)
-	}
-
-	if err := s.audit.LogPluginCreate(ctx, dbtx, audit.LogPluginCreateEvent{
-		OrganizationID:   payload.OrganizationID,
-		ProjectID:        prj.ID,
-		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName: authCtx.Email,
-		ActorSlug:        nil,
-		PluginID:         defaultPlugin.ID,
-		PluginName:       defaultPlugin.Name,
-		PluginSlug:       defaultPlugin.Slug,
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error creating default plugin audit log").LogError(ctx, s.logger)
+	if ensured.Created {
+		if err := s.audit.LogPluginCreate(ctx, dbtx, audit.LogPluginCreateEvent{
+			OrganizationID:   payload.OrganizationID,
+			ProjectID:        prj.ID,
+			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName: authCtx.Email,
+			ActorSlug:        nil,
+			PluginID:         ensured.Plugin.ID,
+			PluginName:       ensured.Plugin.Name,
+			PluginSlug:       ensured.Plugin.Slug,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "error creating default plugin audit log").LogError(ctx, s.logger)
+		}
 	}
 
 	if err := s.audit.LogProjectCreate(ctx, dbtx, audit.LogProjectCreateEvent{

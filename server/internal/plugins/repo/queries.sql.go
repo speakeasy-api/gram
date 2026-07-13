@@ -14,20 +14,28 @@ import (
 
 const addPluginAssignment = `-- name: AddPluginAssignment :one
 INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn)
-VALUES ($1, $2, $3)
+SELECT p.id, $1, $2
+FROM plugins p
+WHERE p.id = $3
+  AND p.organization_id = $1
+  AND p.deleted IS FALSE
 ON CONFLICT (plugin_id, principal_urn) DO UPDATE
   SET principal_urn = EXCLUDED.principal_urn
 RETURNING id, plugin_id, organization_id, principal_urn, created_at, updated_at
 `
 
 type AddPluginAssignmentParams struct {
-	PluginID       uuid.UUID
 	OrganizationID string
 	PrincipalUrn   string
+	PluginID       uuid.UUID
 }
 
+// Scoped to the org: the row is inserted only when @plugin_id resolves to a
+// non-deleted plugin in @organization_id, so a mismatched (plugin, org) pair
+// can never create a cross-tenant assignment. Returns no row (ErrNoRows) when
+// the plugin does not belong to the org.
 func (q *Queries) AddPluginAssignment(ctx context.Context, arg AddPluginAssignmentParams) (PluginAssignment, error) {
-	row := q.db.QueryRow(ctx, addPluginAssignment, arg.PluginID, arg.OrganizationID, arg.PrincipalUrn)
+	row := q.db.QueryRow(ctx, addPluginAssignment, arg.OrganizationID, arg.PrincipalUrn, arg.PluginID)
 	var i PluginAssignment
 	err := row.Scan(
 		&i.ID,
