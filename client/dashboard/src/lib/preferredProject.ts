@@ -1,6 +1,6 @@
 // Slug of the last-visited project, written by ProjectProvider. AuthProvider
 // and CliCallback still hold local copies of this key.
-export const PREFERRED_PROJECT_KEY = "preferredProject";
+const PREFERRED_PROJECT_KEY = "preferredProject";
 
 /**
  * The stored slug is global across organizations, so it only resolves when it

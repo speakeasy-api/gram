@@ -8,7 +8,7 @@ import type { QueryKey } from "@tanstack/react-query";
  * Presets are keyed by name, not resolved timestamps: timestamp keys would
  * never match across mounts. Custom ranges use their exact ISO bounds.
  */
-export type ProjectOverviewRange =
+type ProjectOverviewRange =
   | { preset: DateRangePreset }
   | { from: string; to: string };
 
