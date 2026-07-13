@@ -1,1 +1,0 @@
-ALTER TABLE `telemetry_logs_staging` ADD COLUMN `org_id` String MATERIALIZED toString(attributes.gram.org.id) COMMENT 'Gram org id (materialized from attributes.gram.org.id) — the attribution tuple join scope. The tuple is keyed by org, not project, because the hooks key and the OTEL exporter key can resolve different projects.';
