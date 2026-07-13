@@ -17,9 +17,7 @@ import {
   type SeverityRating,
 } from "./risk-utils";
 import { Badge } from "@speakeasy-api/moonshine";
-import { Badge as SeverityBadgeBase } from "@/components/ui/badge";
 import { SimpleTooltip } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
 import {
   RevealAllContext,
   useRevealAll,
@@ -81,13 +79,15 @@ export function RuleLabel({
 // finding resolves it from its owning policy. Variant maps to the qualitative
 // band so the color scales with risk. Renders nothing when the score is absent
 // (e.g. a finding whose policy hasn't loaded yet).
+// Moonshine's badge palette has no distinct "orange", so High and Critical both
+// map to destructive — the label text / numeric score still distinguishes them.
 const SEVERITY_BADGE_VARIANT: Record<
   SeverityRating,
-  "secondary" | "warning" | "urgent-warning" | "destructive"
+  "success" | "warning" | "destructive"
 > = {
-  low: "secondary",
+  low: "success",
   medium: "warning",
-  high: "urgent-warning",
+  high: "destructive",
   critical: "destructive",
 };
 
@@ -101,14 +101,13 @@ export function SeverityBadge({
   if (score == null) return null;
   const rating = scoreToRating(score);
   return (
-    <SeverityBadgeBase
-      variant={SEVERITY_BADGE_VARIANT[rating]}
-      size="sm"
-      className={className}
+    <SimpleTooltip
       tooltip={`${SEVERITY_RATING_LABEL[rating]} severity · score ${score.toFixed(1)}`}
     >
-      {SEVERITY_RATING_LABEL[rating]}
-    </SeverityBadgeBase>
+      <Badge variant={SEVERITY_BADGE_VARIANT[rating]} className={className}>
+        <Badge.Text>{SEVERITY_RATING_LABEL[rating]}</Badge.Text>
+      </Badge>
+    </SimpleTooltip>
   );
 }
 
@@ -132,14 +131,11 @@ export function SeverityScore({
   const displayed = Math.round(score * 10) / 10;
   const rating = scoreToRating(displayed);
   return (
-    <SeverityBadgeBase
-      variant={SEVERITY_BADGE_VARIANT[rating]}
-      size="sm"
-      className={cn("tabular-nums", className)}
-      tooltip={`${SEVERITY_RATING_LABEL[rating]} severity`}
-    >
-      {displayed.toFixed(1)}
-    </SeverityBadgeBase>
+    <SimpleTooltip tooltip={`${SEVERITY_RATING_LABEL[rating]} severity`}>
+      <Badge variant={SEVERITY_BADGE_VARIANT[rating]} className={className}>
+        <Badge.Text className="tabular-nums">{displayed.toFixed(1)}</Badge.Text>
+      </Badge>
+    </SimpleTooltip>
   );
 }
 
