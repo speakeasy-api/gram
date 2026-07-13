@@ -105,10 +105,11 @@ CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_billing_mode ON telemetry_logs
 -- attribution was redacted (mcp_server.name = 'custom') until the
 -- transcript-derived attribution for the request arrives via hooks (or a
 -- timeout passes). Its physical columns match telemetry_logs so rows can be
--- re-inserted verbatim, but it deliberately carries only two materialized
--- columns (request_id, the attribution join key, and chat_id for manual
--- inspection) — telemetry_logs' other materialized columns are recomputed at
--- insert time when the row is promoted. A scheduled sweep scans staging per
+-- re-inserted verbatim, but it deliberately carries only three materialized
+-- columns (request_id, the attribution join key; org_id, the tuple's Redis
+-- key scope; and chat_id for manual inspection) — telemetry_logs' other
+-- materialized columns are recomputed at insert time when the row is
+-- promoted. A scheduled sweep scans staging per
 -- project every two minutes, rewrites attributes.mcp_server.name /
 -- attributes.mcp_tool.name for rows whose tuple arrived, and inserts them
 -- into telemetry_logs — the moment attribute_metrics_summaries_mv fires —
@@ -136,7 +137,8 @@ CREATE TABLE IF NOT EXISTS telemetry_logs_staging (
     service_version Nullable(String) COMMENT 'Service version.',
     gram_chat_id Nullable(String) COMMENT 'The Chat ID (Claude session id) associated with the log.',
     chat_id String MATERIALIZED toString(attributes.gen_ai.conversation.id) COMMENT 'Chat ID (materialized from attributes.gen_ai.conversation.id) — the promotion worker scopes by this.',
-    request_id String MATERIALIZED toString(attributes.request_id) COMMENT 'Claude API request id (materialized from attributes.request_id) — the attribution join key.'
+    request_id String MATERIALIZED toString(attributes.request_id) COMMENT 'Claude API request id (materialized from attributes.request_id) — the attribution join key.',
+    org_id String MATERIALIZED toString(attributes.gram.org.id) COMMENT 'Gram org id (materialized from attributes.gram.org.id) — the attribution tuple join scope. The tuple is keyed by org, not project, because the hooks key and the OTEL exporter key can resolve different projects.'
 ) ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(fromUnixTimestamp64Nano(time_unix_nano))
 ORDER BY (gram_project_id, time_unix_nano, id)

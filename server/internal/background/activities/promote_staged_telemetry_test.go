@@ -20,6 +20,7 @@ import (
 type stagedRowFixture struct {
 	id        string
 	projectID uuid.UUID
+	orgID     string
 	sessionID string
 	requestID string
 	observed  time.Time
@@ -38,6 +39,7 @@ func insertStagedRowForTest(t *testing.T, ctx context.Context, queries *telemetr
 		"mcp_tool.name":          "custom",
 		"cost_usd":               0.0042,
 		"gram.project.id":        fx.projectID.String(),
+		"gram.org.id":            fx.orgID,
 		"gram.event.source":      "hook",
 	})
 	require.NoError(t, err)
@@ -99,6 +101,11 @@ func TestPromoteStagedTelemetry_RewritesWithTuple(t *testing.T) {
 	ctx, act, queries, cacheAdapter := newPromoteStagedTelemetryHarness(t)
 
 	projectID := uuid.New()
+	// The tuple is keyed by org, not project — the hooks key that writes it
+	// can resolve a different project than the OTEL exporter that staged the
+	// row. An org id distinct from the project id proves the join no longer
+	// depends on the two credentials agreeing on a project.
+	orgID := "org-" + uuid.NewString()
 	sessionID := "promo-session-rewrite"
 	rowID := uuid.NewString()
 	observed := time.Now().UTC().Add(-time.Minute)
@@ -106,12 +113,13 @@ func TestPromoteStagedTelemetry_RewritesWithTuple(t *testing.T) {
 	insertStagedRowForTest(t, ctx, queries, stagedRowFixture{
 		id:        rowID,
 		projectID: projectID,
+		orgID:     orgID,
 		sessionID: sessionID,
 		requestID: "req_rewrite_1",
 		observed:  observed,
 	})
 	require.NoError(t, cacheAdapter.Set(ctx,
-		telemetry.MCPAttributionTupleKey(projectID.String(), "req_rewrite_1"),
+		telemetry.MCPAttributionTupleKey(orgID, "req_rewrite_1"),
 		telemetry.MCPAttributionTuple{Server: "workos-public", Tool: "whoami"},
 		telemetry.MCPAttributionTupleTTL,
 	))
@@ -148,6 +156,49 @@ func TestPromoteStagedTelemetry_RewritesWithTuple(t *testing.T) {
 	}, 3*time.Second, 50*time.Millisecond)
 }
 
+// TestPromoteStagedTelemetry_IgnoresTupleFromAnotherOrg pins the tuple key's
+// tenant isolation: a tuple submitted under one org must never rewrite a
+// staged row belonging to another org, even when the (client-controlled)
+// request id collides. This is the org-scoped successor to the original
+// project-scoped defense.
+func TestPromoteStagedTelemetry_IgnoresTupleFromAnotherOrg(t *testing.T) {
+	t.Parallel()
+
+	ctx, act, queries, cacheAdapter := newPromoteStagedTelemetryHarness(t)
+
+	projectID := uuid.New()
+	sessionID := "promo-session-cross-org"
+	observed := time.Now().UTC().Add(-time.Minute)
+
+	insertStagedRowForTest(t, ctx, queries, stagedRowFixture{
+		id:        uuid.NewString(),
+		projectID: projectID,
+		orgID:     "org-" + uuid.NewString(),
+		sessionID: sessionID,
+		requestID: "req_cross_org_1",
+		observed:  observed,
+	})
+	require.NoError(t, cacheAdapter.Set(ctx,
+		telemetry.MCPAttributionTupleKey("org-"+uuid.NewString(), "req_cross_org_1"),
+		telemetry.MCPAttributionTuple{Server: "attacker-server", Tool: "attacker-tool"},
+		telemetry.MCPAttributionTupleTTL,
+	))
+
+	var result *activities.PromoteStagedTelemetryResult
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		var err error
+		result, err = act.Do(ctx, activities.PromoteStagedTelemetryArgs{ProjectID: projectID})
+		assert.NoError(collect, err)
+		if result != nil {
+			assert.Equal(collect, 1, result.Remaining)
+		}
+	}, 3*time.Second, 50*time.Millisecond)
+	require.Equal(t, 0, result.Promoted, "another org's tuple must not promote the row")
+
+	require.Empty(t, listPromotedLogs(t, ctx, queries, projectID, observed),
+		"another org's tuple must never be applied to this org's staged row")
+}
+
 func TestPromoteStagedTelemetry_LeavesFreshRowsAwaitingTuple(t *testing.T) {
 	t.Parallel()
 
@@ -160,6 +211,7 @@ func TestPromoteStagedTelemetry_LeavesFreshRowsAwaitingTuple(t *testing.T) {
 	insertStagedRowForTest(t, ctx, queries, stagedRowFixture{
 		id:        uuid.NewString(),
 		projectID: projectID,
+		orgID:     "org-" + uuid.NewString(),
 		sessionID: sessionID,
 		requestID: "req_waiting_1",
 		observed:  observed,
@@ -198,6 +250,7 @@ func TestPromoteStagedTelemetry_PromotesVerbatimAfterTimeout(t *testing.T) {
 	insertStagedRowForTest(t, ctx, queries, stagedRowFixture{
 		id:        rowID,
 		projectID: projectID,
+		orgID:     "org-" + uuid.NewString(),
 		sessionID: sessionID,
 		requestID: "req_timeout_1",
 		observed:  observed,
@@ -229,6 +282,7 @@ func TestPromoteStagedTelemetry_DefersRowClaimedByConcurrentAttempt(t *testing.T
 	ctx, act, queries, cacheAdapter := newPromoteStagedTelemetryHarness(t)
 
 	projectID := uuid.New()
+	orgID := "org-" + uuid.NewString()
 	sessionID := "promo-session-claim"
 	rowID := uuid.NewString()
 	observed := time.Now().UTC().Add(-time.Minute)
@@ -236,12 +290,13 @@ func TestPromoteStagedTelemetry_DefersRowClaimedByConcurrentAttempt(t *testing.T
 	insertStagedRowForTest(t, ctx, queries, stagedRowFixture{
 		id:        rowID,
 		projectID: projectID,
+		orgID:     orgID,
 		sessionID: sessionID,
 		requestID: "req_claim_1",
 		observed:  observed,
 	})
 	require.NoError(t, cacheAdapter.Set(ctx,
-		telemetry.MCPAttributionTupleKey(projectID.String(), "req_claim_1"),
+		telemetry.MCPAttributionTupleKey(orgID, "req_claim_1"),
 		telemetry.MCPAttributionTuple{Server: "workos-public", Tool: "whoami"},
 		telemetry.MCPAttributionTupleTTL,
 	))
@@ -302,6 +357,7 @@ func TestPromoteStagedTelemetry_DedupSkipsAlreadyPromotedRows(t *testing.T) {
 	ctx, act, queries, cacheAdapter := newPromoteStagedTelemetryHarness(t)
 
 	projectID := uuid.New()
+	orgID := "org-" + uuid.NewString()
 	sessionID := "promo-session-dedup"
 	rowID := uuid.NewString()
 	observed := time.Now().UTC().Add(-time.Minute)
@@ -309,12 +365,13 @@ func TestPromoteStagedTelemetry_DedupSkipsAlreadyPromotedRows(t *testing.T) {
 	insertStagedRowForTest(t, ctx, queries, stagedRowFixture{
 		id:        rowID,
 		projectID: projectID,
+		orgID:     orgID,
 		sessionID: sessionID,
 		requestID: "req_dedup_1",
 		observed:  observed,
 	})
 	require.NoError(t, cacheAdapter.Set(ctx,
-		telemetry.MCPAttributionTupleKey(projectID.String(), "req_dedup_1"),
+		telemetry.MCPAttributionTupleKey(orgID, "req_dedup_1"),
 		telemetry.MCPAttributionTuple{Server: "workos-public", Tool: "whoami"},
 		telemetry.MCPAttributionTupleTTL,
 	))

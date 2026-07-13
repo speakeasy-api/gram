@@ -124,9 +124,13 @@ func (p *PromoteStagedTelemetry) Do(ctx context.Context, args PromoteStagedTelem
 		}
 		seen[row.ID] = struct{}{}
 
+		// The tuple key is org-scoped, not project-scoped: the hooks key that
+		// wrote the tuple and the OTEL exporter key that staged this row can
+		// resolve different projects (org-wide plugin keys), but both agree
+		// on the org, which the row carries as a materialized column.
 		tuple, ok := tuples[row.RequestID]
 		if !ok {
-			tuple = p.lookupTuple(ctx, args.ProjectID.String(), row.RequestID)
+			tuple = p.lookupTuple(ctx, row.OrgID, row.RequestID)
 			tuples[row.RequestID] = tuple
 		}
 
@@ -292,13 +296,15 @@ func (p *PromoteStagedTelemetry) releaseClaims(ctx context.Context, projectID st
 
 // lookupTuple fetches the transcript-derived attribution for one request id,
 // or nil when no usable tuple is stored (missing key, cache error, or an
-// empty server name).
-func (p *PromoteStagedTelemetry) lookupTuple(ctx context.Context, projectID string, requestID string) *telemetry.MCPAttributionTuple {
-	if requestID == "" {
+// empty server name). An empty org id (a row staged without gram.org.id in
+// its attributes) never matches a key, so such rows promote verbatim at the
+// timeout — today's behavior.
+func (p *PromoteStagedTelemetry) lookupTuple(ctx context.Context, orgID string, requestID string) *telemetry.MCPAttributionTuple {
+	if orgID == "" || requestID == "" {
 		return nil
 	}
 	var tuple telemetry.MCPAttributionTuple
-	if err := p.cache.Get(ctx, telemetry.MCPAttributionTupleKey(projectID, requestID), &tuple); err != nil {
+	if err := p.cache.Get(ctx, telemetry.MCPAttributionTupleKey(orgID, requestID), &tuple); err != nil {
 		return nil
 	}
 	if tuple.Server == "" {

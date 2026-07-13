@@ -94,11 +94,17 @@ func TestLogs_StagesRedactedClaudeAPIRequests(t *testing.T) {
 	require.Contains(t, stagedRow.Attributes, `"custom"`)
 	require.NotNil(t, stagedRow.GramChatID)
 	require.Equal(t, sessionID, *stagedRow.GramChatID)
+	// The staged row must carry the org id (materialized from the stamped
+	// gram.org.id attribute) — it is the attribution tuple's join scope.
+	require.Equal(t, authCtx.ActiveOrganizationID, stagedRow.OrgID)
 }
 
 // TestIngest_CapturesMCPAttributionTuples verifies that a unified ingest
 // payload carrying data.mcp_attribution (the Claude Stop/SubagentStop shape)
 // stores one Redis tuple per request id for the promotion worker to join on.
+// Tuples must be keyed by the authenticated org, not the project: the plugin's
+// hooks key resolves a project from the client-sent project slug, which need
+// not match the OTEL exporter's project on the staged row.
 func TestIngest_CapturesMCPAttributionTuples(t *testing.T) {
 	t.Parallel()
 
@@ -159,14 +165,19 @@ func TestIngest_CapturesMCPAttributionTuples(t *testing.T) {
 	require.Equal(t, "allow", result.Decision)
 
 	cacheAdapter := cache.NewRedisCacheAdapter(ti.redisClient)
-	projectID := hookAuthContext(t, ctx).ProjectID.String()
+	authCtx := hookAuthContext(t, ctx)
+	orgID := authCtx.ActiveOrganizationID
 
 	var tuple telemetry.MCPAttributionTuple
-	require.NoError(t, cacheAdapter.Get(ctx, telemetry.MCPAttributionTupleKey(projectID, "req_attr_1"), &tuple))
+	require.NoError(t, cacheAdapter.Get(ctx, telemetry.MCPAttributionTupleKey(orgID, "req_attr_1"), &tuple))
 	require.Equal(t, telemetry.MCPAttributionTuple{Server: "workos-public", Tool: "whoami"}, tuple)
 
-	require.NoError(t, cacheAdapter.Get(ctx, telemetry.MCPAttributionTupleKey(projectID, "req_attr_2"), &tuple))
+	require.NoError(t, cacheAdapter.Get(ctx, telemetry.MCPAttributionTupleKey(orgID, "req_attr_2"), &tuple))
 	require.Equal(t, telemetry.MCPAttributionTuple{Server: "linear-public", Tool: ""}, tuple)
 
-	require.Error(t, cacheAdapter.Get(ctx, telemetry.MCPAttributionTupleKey(projectID, "req_attr_3"), &tuple))
+	require.Error(t, cacheAdapter.Get(ctx, telemetry.MCPAttributionTupleKey(orgID, "req_attr_3"), &tuple))
+
+	// The old project-scoped key must not be written anymore — a promotion
+	// pass reading by org would miss it.
+	require.Error(t, cacheAdapter.Get(ctx, telemetry.MCPAttributionTupleKey(authCtx.ProjectID.String(), "req_attr_1"), &tuple))
 }
