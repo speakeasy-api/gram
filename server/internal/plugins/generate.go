@@ -254,7 +254,7 @@ const mcpGeneratorVersion = "9"
 //
 // The Plugin Generate Check CI workflow requires the relevant one of these two
 // constants to change whenever generate.go does.
-const hooksGeneratorVersion = "10"
+const hooksGeneratorVersion = "12"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -1138,7 +1138,7 @@ func generateCodexObservabilityPluginInDir(files map[string][]byte, subdir strin
 	}
 	files[path.Join(subdir, "hooks/hooks.json")] = hooksJSON
 
-	files[path.Join(subdir, "hooks/identity.sh")] = renderDeviceAgentIdentityScript()
+	files[path.Join(subdir, "hooks/identity.sh")] = renderCodexIdentityScript()
 	files[path.Join(subdir, "hooks/http.sh")] = renderSharedHTTPScript()
 	files[path.Join(subdir, "hooks/auth.sh")] = renderSharedAuthScript()
 	files[path.Join(subdir, "hooks/login.sh")] = renderLoginScript(cfg)
@@ -1246,8 +1246,21 @@ gram_enrich_identity_payload() {
   done
   IFS="$old_ifs"
 
+  # Providers can supply a platform-native fallback. The device agent remains
+  # authoritative when present because it represents the managed machine
+  # identity rather than an account self-report from the coding client.
+  if [ -z "$email" ] && type gram_hooks_provider_identity_email >/dev/null 2>&1; then
+    email="$(gram_hooks_provider_identity_email "$payload")"
+    if [[ "$email" =~ ^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$ ]]; then
+      gram_hooks_identity_debug "resolved user_email via provider account"
+    else
+      [ -n "$email" ] && gram_hooks_identity_debug "provider account returned an invalid email; ignoring it"
+      email=""
+    fi
+  fi
+
   if [ -z "$email" ]; then
-    gram_hooks_identity_debug "no user_email resolved from device agent(s) [$commands]; sending payload without attribution (server may fall back to OTEL session metadata)"
+    gram_hooks_identity_debug "no user_email resolved from device agent(s) [$commands] or provider account; sending payload without attribution (server may fall back to OTEL session metadata)"
     printf '%s' "$payload"
     return
   fi
@@ -1320,6 +1333,170 @@ gram_enrich_identity_payload() {
   fi
 }
 `)
+}
+
+// renderCodexIdentityScript adds a Codex-native fallback to the managed device
+// identity lookup. account/read is preferred because Codex owns its credential
+// storage abstraction (file, keychain, PAT, or agent identity). Older Codex
+// builds and incomplete account responses fall back to locally decoding both
+// JWTs in auth.json; the access token's profile claim often fills the gap left
+// by an ID token without an email claim.
+func renderCodexIdentityScript() []byte {
+	script := renderDeviceAgentIdentityScript()
+	return append(script, []byte(`
+
+gram_hooks_codex_find_binary() {
+  local candidate
+  if command -v codex >/dev/null 2>&1; then
+    command -v codex
+    return 0
+  fi
+  for candidate in \
+    "${CODEX_HOME:-${HOME:-}/.codex}/packages/standalone/current/bin/codex" \
+    "${HOME:-}/.local/bin/codex" \
+    "/usr/local/bin/codex" \
+    "/Applications/Codex.app/Contents/Resources/codex"; do
+    if [ -x "$candidate" ]; then
+      printf '%s' "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+gram_hooks_codex_json_email() {
+  local input="$1"
+  local email profile
+  email="$(gram_hooks_json_string_value "$input" "email")"
+  if [ -z "$email" ]; then
+    profile="$(gram_hooks_json_top_level_value "$input" "https://api.openai.com/profile")"
+    [ -n "$profile" ] && email="$(gram_hooks_json_string_value "$profile" "email")"
+  fi
+  printf '%s' "$email"
+}
+
+gram_hooks_codex_base64url_decode() {
+  local encoded="$1"
+  encoded="${encoded//-/+}"
+  encoded="${encoded//_//}"
+  case $((${#encoded} % 4)) in
+    2) encoded="${encoded}==" ;;
+    3) encoded="${encoded}=" ;;
+    1) return 1 ;;
+  esac
+  if printf 'dGVzdA==' | base64 --decode >/dev/null 2>&1; then
+    printf '%s' "$encoded" | base64 --decode
+  elif printf 'dGVzdA==' | base64 -D >/dev/null 2>&1; then
+    printf '%s' "$encoded" | base64 -D
+  elif command -v openssl >/dev/null 2>&1; then
+    printf '%s' "$encoded" | openssl base64 -d -A
+  else
+    return 1
+  fi
+}
+
+gram_hooks_codex_jwt_email() {
+  local jwt="$1"
+  local rest encoded claims
+  rest="${jwt#*.}"
+  [ "$rest" != "$jwt" ] || return 1
+  encoded="${rest%%.*}"
+  [ "$encoded" != "$rest" ] || return 1
+  claims="$(gram_hooks_codex_base64url_decode "$encoded" 2>/dev/null)" || return 1
+  gram_hooks_codex_json_email "$claims"
+}
+
+gram_hooks_codex_auth_file_email() {
+  local auth_file="${CODEX_HOME:-${HOME:-}/.codex}/auth.json"
+  local auth tokens token token_name email
+  [ -r "$auth_file" ] || return 1
+  auth="$(cat "$auth_file" 2>/dev/null)" || return 1
+  tokens="$(gram_hooks_json_top_level_value "$auth" "tokens")"
+  [ -n "$tokens" ] || return 1
+  # Prefer the access token because Codex puts the account profile there even
+  # when its ID token omits email. The ID token remains a compatibility fallback.
+  for token_name in access_token id_token; do
+    token="$(gram_hooks_json_string_value "$tokens" "$token_name")"
+    [ -n "$token" ] || continue
+    email="$(gram_hooks_codex_jwt_email "$token")"
+    [ -n "$email" ] && printf '%s' "$email" && return 0
+  done
+  return 1
+}
+
+gram_hooks_codex_app_server_email() {
+  local codex_bin work_dir input_fifo output_file pid elapsed timeout_tenths
+  local response result account email
+  codex_bin="$(gram_hooks_codex_find_binary)" || return 1
+  work_dir="$(mktemp -d "${TMPDIR:-/tmp}/gram-codex-identity.XXXXXX")" || return 1
+  input_fifo="$work_dir/input"
+  output_file="$work_dir/output"
+  mkfifo "$input_fifo" 2>/dev/null || { rm -rf "$work_dir"; return 1; }
+
+  "$codex_bin" app-server --stdio <"$input_fifo" >"$output_file" 2>/dev/null &
+  pid=$!
+  exec 9>"$input_fifo"
+  printf '%s\n' '{"id":71001,"method":"initialize","params":{"clientInfo":{"name":"gram_hooks","title":"Gram Hooks","version":"1.0.0"},"capabilities":{"optOutNotificationMethods":["remoteControl/status/changed"]}}}' >&9
+
+  timeout_tenths="${GRAM_CODEX_IDENTITY_TIMEOUT_TENTHS:-10}"
+  elapsed=0
+  while ! grep -q '"id"[[:space:]]*:[[:space:]]*71001' "$output_file" 2>/dev/null &&
+    kill -0 "$pid" >/dev/null 2>&1 && [ "$elapsed" -lt "$timeout_tenths" ]; do
+    sleep 0.1
+    elapsed=$((elapsed + 1))
+  done
+  if ! grep -q '"id"[[:space:]]*:[[:space:]]*71001' "$output_file" 2>/dev/null; then
+    exec 9>&-
+    kill "$pid" >/dev/null 2>&1 || true
+    wait "$pid" >/dev/null 2>&1 || true
+    rm -rf "$work_dir"
+    return 1
+  fi
+
+  printf '%s\n' '{"method":"initialized"}' >&9
+  printf '%s\n' '{"id":71002,"method":"account/read","params":{"refreshToken":false}}' >&9
+  elapsed=0
+  while ! grep -q '"id"[[:space:]]*:[[:space:]]*71002' "$output_file" 2>/dev/null &&
+    kill -0 "$pid" >/dev/null 2>&1 && [ "$elapsed" -lt "$timeout_tenths" ]; do
+    sleep 0.1
+    elapsed=$((elapsed + 1))
+  done
+  exec 9>&-
+  kill "$pid" >/dev/null 2>&1 || true
+  wait "$pid" >/dev/null 2>&1 || true
+
+  response="$(grep '"id"[[:space:]]*:[[:space:]]*71002' "$output_file" 2>/dev/null | tail -n 1)"
+  rm -rf "$work_dir"
+  [ -n "$response" ] || return 1
+  result="$(gram_hooks_json_top_level_value "$response" "result")"
+  account="$(gram_hooks_json_top_level_value "$result" "account")"
+  email="$(gram_hooks_json_string_value "$account" "email")"
+  [ -n "$email" ] || return 1
+  printf '%s' "$email"
+}
+
+gram_hooks_provider_identity_email() {
+  local payload="$1"
+  local event email
+  event="$(gram_hooks_json_string_value "$payload" "hook_event_name")"
+  [ "$event" = "SessionStart" ] || return 1
+
+  email="$(gram_hooks_codex_app_server_email)"
+  if [ -n "$email" ]; then
+    gram_hooks_identity_debug "Codex account/read returned an email"
+    printf '%s' "$email"
+    return 0
+  fi
+  email="$(gram_hooks_codex_auth_file_email)"
+  if [ -n "$email" ]; then
+    gram_hooks_identity_debug "Codex auth.json JWT fallback returned an email"
+    printf '%s' "$email"
+    return 0
+  fi
+  gram_hooks_identity_debug "Codex account/read and local JWT fallbacks returned no email"
+  return 1
+}
+`)...)
 }
 
 func renderHookRuntimeSourceSnippet() string {

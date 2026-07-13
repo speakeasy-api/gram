@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -4127,6 +4128,101 @@ printf '{}\n200'
 	require.Contains(t, string(requireFileBytes(t, capturePath)), `"adapter":"cursor"`)
 }
 
+func TestCodexIdentityUsesAccountReadOnSessionStart(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "identity.sh"), renderCodexIdentityScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "helpers.sh"), []byte(renderHookPayloadNormalizationSnippet("codex")), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "codex"), []byte(`#!/usr/bin/env bash
+while IFS= read -r request; do
+  case "$request" in
+    *'"id":71001'*) printf '%s\n' '{"id":71001,"result":{"userAgent":"stub"}}' ;;
+    *'"id":71002'*) printf '%s\n' '{"id":71002,"result":{"account":{"type":"chatgpt","email":"codex-account@example.com"}}}' ;;
+  esac
+done
+`), 0o755))
+
+	driver := `#!/usr/bin/env bash
+. ./helpers.sh
+. ./identity.sh
+gram_enrich_identity_payload '{"hook_event_name":"SessionStart","session_id":"session-1"}'
+printf '\n===GRAM===\n'
+gram_enrich_identity_payload '{"hook_event_name":"PreToolUse","session_id":"session-1"}'
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "driver.sh"), []byte(driver), 0o755))
+
+	cmd := exec.Command("bash", "driver.sh")
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(),
+		"HOME="+dir,
+		"PATH="+dir+string(os.PathListSeparator)+"/usr/bin:/bin",
+		"GRAM_DEVICE_AGENT_COMMANDS=missing-agent",
+		"GRAM_CODEX_IDENTITY_TIMEOUT_TENTHS=20",
+	)
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+	parts := strings.Split(string(output), "\n===GRAM===\n")
+	require.Len(t, parts, 2)
+	require.JSONEq(t, `{"hook_event_name":"SessionStart","session_id":"session-1","user_email":"codex-account@example.com"}`, parts[0])
+	require.NotContains(t, parts[1], "user_email", "Codex account lookup should run only once at SessionStart")
+}
+
+func TestCodexIdentityFallsBackAcrossBothAuthJWTs(t *testing.T) {
+	t.Parallel()
+
+	jwt := func(claims string) string {
+		return "header." + base64.RawURLEncoding.EncodeToString([]byte(claims)) + ".signature"
+	}
+	tests := []struct {
+		name        string
+		accessToken string
+		idToken     string
+		wantEmail   string
+	}{
+		{
+			name:        "access token profile claim",
+			accessToken: jwt(`{"https://api.openai.com/profile":{"email":"access@example.com"}}`),
+			idToken:     jwt(`{"email":"id@example.com"}`),
+			wantEmail:   "access@example.com",
+		},
+		{
+			name:        "id token top-level claim",
+			accessToken: "malformed",
+			idToken:     jwt(`{"email":"id@example.com"}`),
+			wantEmail:   "id@example.com",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			codexHome := filepath.Join(dir, ".codex")
+			require.NoError(t, os.MkdirAll(codexHome, 0o755))
+			auth, err := json.Marshal(map[string]any{"tokens": map[string]string{
+				"access_token": tt.accessToken,
+				"id_token":     tt.idToken,
+			}})
+			require.NoError(t, err)
+			require.NoError(t, os.WriteFile(filepath.Join(codexHome, "auth.json"), auth, 0o600))
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "identity.sh"), renderCodexIdentityScript(), 0o755))
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "helpers.sh"), []byte(renderHookPayloadNormalizationSnippet("codex")), 0o755))
+
+			cmd := exec.Command("bash", "-c", `. ./helpers.sh; . ./identity.sh; gram_enrich_identity_payload '{"hook_event_name":"SessionStart"}'`)
+			cmd.Dir = dir
+			cmd.Env = append(os.Environ(),
+				"HOME="+dir,
+				"CODEX_HOME="+codexHome,
+				"PATH=/usr/bin:/bin",
+				"GRAM_DEVICE_AGENT_COMMANDS=missing-agent",
+			)
+			output, err := cmd.CombinedOutput()
+			require.NoError(t, err, string(output))
+			require.JSONEq(t, fmt.Sprintf(`{"hook_event_name":"SessionStart","user_email":%q}`, tt.wantEmail), string(output))
+		})
+	}
+}
+
 func TestDeviceAgentIdentityScriptHandlesWhitespaceEmptyObject(t *testing.T) {
 	t.Parallel()
 
@@ -4478,7 +4574,10 @@ func TestGenerateCodexObservabilityPluginScriptPostsToCodexEndpoint(t *testing.T
 	require.Contains(t, script, `[ "$http_code" -lt 300 ]`, "generated hooks must not treat redirects as allow")
 	require.NotContains(t, script, `[ "$http_code" -lt 400 ]`, "redirects carry no hook decision and must fail closed")
 	require.Contains(t, script, cfg.HooksAPIKey, "hook.sh must embed the org-wide hooks key fallback")
-	require.NotContains(t, script, "auth.json", "hook.sh must not inspect Codex auth claims for attribution")
+	identityScript := string(files[CodexObservabilitySlug(cfg)+"/hooks/identity.sh"])
+	require.Contains(t, identityScript, `account/read`, "Codex attribution should ask Codex for its active account first")
+	require.Contains(t, identityScript, `access_token id_token`, "Codex attribution should inspect both local JWTs as a fallback")
+	require.NotContains(t, identityScript, "python3", "Codex identity resolution must not depend on python")
 	require.Contains(t, script, `"user_email"`, "hook.sh must carry self-reported attribution on source.user_email for org-wide keys")
 	require.NotContains(t, script, "python3", "hook runtime must not depend on python")
 	require.NotContains(t, script, "GRAM_USER_EMAIL", "hook.sh must not rely on a manually configured user email")
