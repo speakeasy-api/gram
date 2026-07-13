@@ -39,3 +39,10 @@ export const MODELS = [
   "mistralai/devstral-2512",
   "mistralai/mistral-medium-3.1",
 ] as const;
+
+// Default model for chat surfaces when the host app doesn't pin one via
+// config.model.defaultModel. Kept explicit (rather than MODELS[0]) so
+// reordering MODELS — e.g. listing a premium model first — can never
+// silently change what unconfigured embeds run on.
+export const DEFAULT_MODEL: (typeof MODELS)[number] =
+  "anthropic/claude-sonnet-5";
