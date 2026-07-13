@@ -93,7 +93,46 @@ func TestResolveKey_InternalKeyTypeStaysOnPlatform(t *testing.T) {
 
 	upsertTestKey(t, ctx, ti, modelkeys.SlotDefault, "sk-or-project-default")
 
+	// Internal completions outside the exposed judge slots (chat titles,
+	// segment analysis, …) must not be captured by the project default key.
 	resolved, err := resolver.ResolveKey(ctx, orgID, projectID, billing.ModelUsageSourceRiskAnalysis, openrouter.KeyTypeInternal)
+	require.NoError(t, err)
+	require.Equal(t, "platform-key", resolved.Key)
+	require.False(t, resolved.Customer)
+}
+
+func TestResolveKey_JudgeSlotsResolveIndependently(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	enableCustomModelKeys(t, ctx, ti.conn)
+	resolver, orgID, projectID := newResolverUnderTest(t, ctx, ti)
+
+	upsertTestKey(t, ctx, ti, modelkeys.SlotDefault, "sk-or-project-default")
+	upsertTestKey(t, ctx, ti, string(billing.ModelUsageSourceRiskPolicy), "sk-or-risk-policy-override")
+
+	// The risk-policy judge resolves its dedicated override.
+	resolved, err := resolver.ResolveKey(ctx, orgID, projectID, billing.ModelUsageSourceRiskPolicy, openrouter.KeyTypeInternal)
+	require.NoError(t, err)
+	require.Equal(t, "sk-or-risk-policy-override", resolved.Key)
+	require.True(t, resolved.Customer)
+
+	// The prompt-injection classifier has no override and falls back to the
+	// project default key, not the risk-policy override.
+	resolved, err = resolver.ResolveKey(ctx, orgID, projectID, billing.ModelUsageSourcePromptInjection, openrouter.KeyTypeInternal)
+	require.NoError(t, err)
+	require.Equal(t, "sk-or-project-default", resolved.Key)
+	require.True(t, resolved.Customer)
+}
+
+func TestResolveKey_JudgeSlotsWithoutKeysStayOnPlatform(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	enableCustomModelKeys(t, ctx, ti.conn)
+	resolver, orgID, projectID := newResolverUnderTest(t, ctx, ti)
+
+	resolved, err := resolver.ResolveKey(ctx, orgID, projectID, billing.ModelUsageSourcePromptInjection, openrouter.KeyTypeInternal)
 	require.NoError(t, err)
 	require.Equal(t, "platform-key", resolved.Key)
 	require.False(t, resolved.Customer)

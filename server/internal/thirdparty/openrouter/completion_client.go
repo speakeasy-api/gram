@@ -119,6 +119,9 @@ type ObjectCompletionRequest struct {
 	// KeyType selects which of the org's OpenRouter keys pays for the call;
 	// the zero value resolves to the chat key.
 	KeyType KeyType
+	// KeySlot selects the customer key slot the call resolves against; the
+	// zero value falls back to UsageSource.
+	KeySlot billing.ModelUsageSource
 }
 
 // CompletionResponse encapsulates the result of a completion call.

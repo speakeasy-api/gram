@@ -187,6 +187,7 @@ There are %d messages total (indices 0-%d).%s`, conversationText, numMessages, n
 			JSONSchema:     &jsonSchemaConfig,
 			UsageSource:    billing.ModelUsageSourceGram,
 			KeyType:        openrouter.KeyTypeInternal,
+			KeySlot:        "",
 			UserID:         "",
 			ExternalUserID: "",
 			UserEmail:      "",

@@ -542,7 +542,7 @@ func (c *ChatClient) GetObjectCompletion(ctx context.Context, req ObjectCompleti
 		ExternalUserID:            req.ExternalUserID,
 		UserEmail:                 req.UserEmail,
 		KeyType:                   req.KeyType,
-		KeySlot:                   "",
+		KeySlot:                   req.KeySlot,
 		HTTPMetadata:              req.HTTPMetadata,
 		JSONSchema:                req.JSONSchema,
 		CacheControl:              nil,

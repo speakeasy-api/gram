@@ -655,6 +655,7 @@ func judgeOne(ctx context.Context, client openrouter.CompletionClient, model str
 		Temperature:    &temp,
 		UsageSource:    billing.ModelUsageSourceGram,
 		KeyType:        openrouter.KeyTypeInternal,
+		KeySlot:        "",
 		UserID:         "",
 		ExternalUserID: "",
 		UserEmail:      "",

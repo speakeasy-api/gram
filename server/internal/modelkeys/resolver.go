@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
@@ -32,17 +33,21 @@ const (
 func ValidSlots() []string {
 	slots := []string{SlotDefault}
 	for _, source := range billing.ModelUsageSources() {
-		// Risk-policy analysis is platform-initiated inference; its BYOK slot
-		// ships with the dedicated risk/PI phase, together with lifting the
-		// KeyTypeInternal short-circuit in ResolveKey.
+		// Risk-analysis completions resolve through the dedicated judge slots
+		// below, never through a slot named after their shared usage source.
 		if source == billing.ModelUsageSourceRiskAnalysis {
 			continue
 		}
 		slots = append(slots, string(source))
 	}
 	// Assistants is deliberately not a registered (billed) usage source while
-	// Speakeasy covers its inference, but it is a valid BYOK slot.
-	return append(slots, string(billing.ModelUsageSourceAssistants))
+	// Speakeasy covers its inference, but it is a valid BYOK slot; so is each
+	// platform-initiated judge slot.
+	slots = append(slots, string(billing.ModelUsageSourceAssistants))
+	for _, slot := range internalBYOKSlots {
+		slots = append(slots, string(slot))
+	}
+	return slots
 }
 
 // Resolver picks the OpenRouter API key a completion bills to. Precedence:
@@ -70,11 +75,12 @@ func NewResolver(db *pgxpool.Pool, enc *encryption.Client, provisioner openroute
 
 func (r *Resolver) ResolveKey(ctx context.Context, orgID string, projectID string, slot billing.ModelUsageSource, keyType openrouter.KeyType) (openrouter.ResolvedKey, error) {
 	// Callers without a project (e.g. embeddings) resolve straight to the
-	// platform key. So does KeyTypeInternal: it marks platform-initiated
-	// inference (risk judge, prompt-injection scanner), which stays on the
-	// platform's internal key until the dedicated risk/PI BYOK slots ship —
-	// a project default key must not capture it.
-	if projectID == "" || keyType.OrDefault() == openrouter.KeyTypeInternal {
+	// platform key. KeyTypeInternal marks platform-initiated inference; only
+	// the slots exposed for it (the risk-analysis judges) consult customer
+	// keys. Every other internal completion (chat titles, segment analysis,
+	// memory contradiction, naming helpers) stays on the platform's internal
+	// key — a project default key must not capture it.
+	if projectID == "" || (keyType.OrDefault() == openrouter.KeyTypeInternal && !internalSlotWithBYOK(slot)) {
 		resolved, err := r.platform.ResolveKey(ctx, orgID, projectID, slot, keyType)
 		if err != nil {
 			return openrouter.ResolvedKey{}, fmt.Errorf("resolve platform key: %w", err)
@@ -113,6 +119,20 @@ func (r *Resolver) ResolveKey(ctx context.Context, orgID string, projectID strin
 		return openrouter.ResolvedKey{}, fmt.Errorf("decrypt model provider key: %w", err)
 	}
 	return openrouter.ResolvedKey{Key: key, Customer: true}, nil
+}
+
+// internalBYOKSlots lists the platform-initiated (KeyTypeInternal) slots a
+// project may override with a customer key. Feeding both ValidSlots and the
+// ResolveKey gate from this one list keeps them from drifting: a slot
+// accepted by UpsertKey but absent from the gate would store keys that are
+// silently never consulted.
+var internalBYOKSlots = []billing.ModelUsageSource{
+	billing.ModelUsageSourceRiskPolicy,
+	billing.ModelUsageSourcePromptInjection,
+}
+
+func internalSlotWithBYOK(slot billing.ModelUsageSource) bool {
+	return slices.Contains(internalBYOKSlots, slot)
 }
 
 func isUndefinedTable(err error) bool {
