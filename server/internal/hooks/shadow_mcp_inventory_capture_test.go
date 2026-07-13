@@ -11,13 +11,13 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestClaudeSessionStartUpsertsShadowMCPInventoryURLs(t *testing.T) {
@@ -40,7 +40,7 @@ func TestClaudeSessionStartUpsertsShadowMCPInventoryURLs(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	rows := requireShadowMCPInventoryURLsFromHooksEventually(ctx, t, chClient, authCtx.ProjectID.String(), 1)
+	rows := requireShadowMCPInventoryURLsFromHooks(ctx, t, ti, chClient, authCtx.ProjectID.String(), 1)
 	require.Equal(t, "https://mcp.speakeasy.com/mcp", rows[0].CanonicalServerURL)
 	require.Equal(t, "mcp.speakeasy.com", rows[0].URLHost)
 	require.Equal(t, "speakeasy", rows[0].ServerName)
@@ -88,7 +88,7 @@ func TestClaudeSessionStartSkipsHostedMCPInventoryURLs(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	rows := requireShadowMCPInventoryURLsFromHooksEventually(ctx, t, chClient, authCtx.ProjectID.String(), 1)
+	rows := requireShadowMCPInventoryURLsFromHooks(ctx, t, ti, chClient, authCtx.ProjectID.String(), 1)
 	require.Equal(t, "https://external.example.com/mcp", rows[0].CanonicalServerURL)
 	require.Equal(t, "external.example.com", rows[0].URLHost)
 	require.Equal(t, "external", rows[0].ServerName)
@@ -126,7 +126,7 @@ func TestClaudeConfigChangeUpsertsCoworkShadowMCPInventoryURLs(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	rows := requireShadowMCPInventoryURLsFromHooksEventually(ctx, t, chClient, authCtx.ProjectID.String(), 1)
+	rows := requireShadowMCPInventoryURLsFromHooks(ctx, t, ti, chClient, authCtx.ProjectID.String(), 1)
 	require.Equal(t, "https://mcp.linear.app/mcp", rows[0].CanonicalServerURL)
 	require.Equal(t, "mcp.linear.app", rows[0].URLHost)
 	require.Equal(t, "Linear", rows[0].ServerName)
@@ -171,7 +171,7 @@ func TestClaudeSessionStartUpsertsShadowMCPInventoryURLsWhenOTELMetadataArrives(
 	))
 	require.NoError(t, err)
 
-	rows := requireShadowMCPInventoryURLsFromHooksEventually(ctx, t, chClient, authCtx.ProjectID.String(), 1)
+	rows := requireShadowMCPInventoryURLsFromHooks(ctx, t, ti, chClient, authCtx.ProjectID.String(), 1)
 	require.Equal(t, "https://mcp.notion.com/mcp", rows[0].CanonicalServerURL)
 	require.Equal(t, "mcp.notion.com", rows[0].URLHost)
 	require.Equal(t, "notion", rows[0].ServerName)
@@ -206,7 +206,7 @@ func TestClaudeConfigChangeUpsertsShadowMCPInventoryURLsFromCachedSessionMetadat
 	})
 	require.NoError(t, err)
 
-	rows := requireShadowMCPInventoryURLsFromHooksEventually(ctx, t, chClient, authCtx.ProjectID.String(), 1)
+	rows := requireShadowMCPInventoryURLsFromHooks(ctx, t, ti, chClient, authCtx.ProjectID.String(), 1)
 	require.Equal(t, "https://mcp.asana.com/mcp", rows[0].CanonicalServerURL)
 	require.Equal(t, "mcp.asana.com", rows[0].URLHost)
 	require.Equal(t, "asana", rows[0].ServerName)
@@ -247,7 +247,7 @@ func TestCodexSessionStartUpsertsShadowMCPInventoryURLs(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	rows := requireShadowMCPInventoryURLsFromHooksEventually(ctx, t, chClient, authCtx.ProjectID.String(), 1)
+	rows := requireShadowMCPInventoryURLsFromHooks(ctx, t, ti, chClient, authCtx.ProjectID.String(), 1)
 	require.Equal(t, "https://logs.example.com/mcp", rows[0].CanonicalServerURL)
 	require.Equal(t, "logs.example.com", rows[0].URLHost)
 	require.Equal(t, "platform-logs", rows[0].ServerName)
@@ -279,7 +279,7 @@ func TestCodexSessionStartUpsertsShadowMCPInventoryURLWithoutName(t *testing.T) 
 	})
 	require.NoError(t, err)
 
-	rows := requireShadowMCPInventoryURLsFromHooksEventually(ctx, t, chClient, authCtx.ProjectID.String(), 1)
+	rows := requireShadowMCPInventoryURLsFromHooks(ctx, t, ti, chClient, authCtx.ProjectID.String(), 1)
 	require.Equal(t, "https://nameless.example.com/mcp", rows[0].CanonicalServerURL)
 	require.Equal(t, "nameless.example.com", rows[0].URLHost)
 	require.Empty(t, rows[0].ServerName)
@@ -320,7 +320,7 @@ func TestCodexSessionStartDedupesShadowMCPInventoryURLsByCanonicalURL(t *testing
 	})
 	require.NoError(t, err)
 
-	rows := requireShadowMCPInventoryURLsFromHooksEventually(ctx, t, chClient, authCtx.ProjectID.String(), 1)
+	rows := requireShadowMCPInventoryURLsFromHooks(ctx, t, ti, chClient, authCtx.ProjectID.String(), 1)
 	require.Equal(t, "https://dedupe.example.com/mcp", rows[0].CanonicalServerURL)
 	require.Equal(t, "dedupe.example.com", rows[0].URLHost)
 }
@@ -358,14 +358,13 @@ func TestCodexSessionStartSkipsShadowMCPInventoryWhenSnapshotCacheFails(t *testi
 	})
 	require.NoError(t, err)
 
-	require.Never(t, func() bool {
-		rows, err := chClient.ListShadowMCPInventoryURLs(ctx, telemetryrepo.ListShadowMCPInventoryURLsParams{
-			GramProjectID: authCtx.ProjectID.String(),
-			Limit:         50,
-		})
-		require.NoError(t, err)
-		return len(rows) > 0
-	}, 500*time.Millisecond, 50*time.Millisecond)
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+	rows, err := chClient.ListShadowMCPInventoryURLs(ctx, telemetryrepo.ListShadowMCPInventoryURLsParams{
+		GramProjectID: authCtx.ProjectID.String(),
+		Limit:         50,
+	})
+	require.NoError(t, err)
+	require.Empty(t, rows)
 }
 
 func TestClaudeOTELLogsWarnsWhenMCPInventorySnapshotMissing(t *testing.T) {
@@ -395,25 +394,23 @@ func TestClaudeOTELLogsWarnsWhenMCPInventorySnapshotMissing(t *testing.T) {
 	require.True(t, strings.Contains(logBuffer.String(), "cache miss") || strings.Contains(logBuffer.String(), "cache"))
 }
 
-func requireShadowMCPInventoryURLsFromHooksEventually(
+func requireShadowMCPInventoryURLsFromHooks(
 	ctx context.Context,
 	t *testing.T,
+	ti *testInstance,
 	chClient *telemetryrepo.Queries,
 	projectID string,
 	wantLen int,
 ) []telemetryrepo.ShadowMCPInventoryURLRow {
 	t.Helper()
 
-	var rows []telemetryrepo.ShadowMCPInventoryURLRow
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		var err error
-		rows, err = chClient.ListShadowMCPInventoryURLs(ctx, telemetryrepo.ListShadowMCPInventoryURLsParams{
-			GramProjectID: projectID,
-			Limit:         50,
-		})
-		assert.NoError(c, err)
-		assert.Len(c, rows, wantLen)
-	}, 5*time.Second, 100*time.Millisecond)
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+	rows, err := chClient.ListShadowMCPInventoryURLs(ctx, telemetryrepo.ListShadowMCPInventoryURLsParams{
+		GramProjectID: projectID,
+		Limit:         50,
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, wantLen)
 
 	return rows
 }
