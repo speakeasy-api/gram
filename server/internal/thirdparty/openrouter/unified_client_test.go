@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
-	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -35,22 +34,38 @@ type mockProvisioner struct {
 	modelUsageErr       error
 	getModelUsageCalled bool
 	generationID        string
+	// provisionKeyTypes records the key type of every ProvisionAPIKey call,
+	// so tests can assert which of the org's keys paid for a request.
+	provisionKeyTypes []KeyType
+	// modelUsageKeyType records the key type of the last GetModelUsage call.
+	modelUsageKeyType KeyType
 }
 
 var _ Provisioner = (*mockProvisioner)(nil)
 
-func (m *mockProvisioner) ProvisionAPIKey(ctx context.Context, orgID string) (string, error) {
+func (m *mockProvisioner) ProvisionAPIKey(ctx context.Context, orgID string, keyType KeyType) (string, error) {
+	m.mu.Lock()
+	m.provisionKeyTypes = append(m.provisionKeyTypes, keyType)
+	m.mu.Unlock()
 	if m.err != nil {
 		return "", m.err
 	}
 	return m.apiKey, nil
 }
 
-func (m *mockProvisioner) RefreshAPIKeyLimit(ctx context.Context, orgID string, limit *int) (int, error) {
+func (m *mockProvisioner) ProvisionedKeyTypes() []KeyType {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]KeyType, len(m.provisionKeyTypes))
+	copy(out, m.provisionKeyTypes)
+	return out
+}
+
+func (m *mockProvisioner) RefreshAPIKeyLimit(ctx context.Context, orgID string, keyType KeyType, limit *int) (int, error) {
 	return 0, nil
 }
 
-func (m *mockProvisioner) GetCreditsUsed(ctx context.Context, orgID string) (float64, int, error) {
+func (m *mockProvisioner) GetCreditsUsed(ctx context.Context, orgID string, keyType KeyType) (float64, int, error) {
 	return 0, 0, nil
 }
 
@@ -58,15 +73,16 @@ func (m *mockProvisioner) GetKeyUsage(ctx context.Context, apiKey string) (float
 	return 0, nil, nil
 }
 
-func (m *mockProvisioner) ReconcileMonthlyCredits(ctx context.Context, orgID string, currentLimit int64, upstreamLimit *int64) (int64, error) {
+func (m *mockProvisioner) ReconcileMonthlyCredits(ctx context.Context, orgID string, keyType KeyType, currentLimit int64, upstreamLimit *int64) (int64, error) {
 	return currentLimit, nil
 }
 
-func (m *mockProvisioner) GetModelUsage(ctx context.Context, generationID string, orgID string) (*ModelUsage, error) {
+func (m *mockProvisioner) GetModelUsage(ctx context.Context, generationID string, orgID string, keyType KeyType) (*ModelUsage, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.getModelUsageCalled = true
 	m.generationID = generationID
+	m.modelUsageKeyType = keyType
 	return m.modelUsage, m.modelUsageErr
 }
 
@@ -1572,17 +1588,6 @@ func TestChatClient_GetCompletion_WithoutJSONSchema(t *testing.T) {
 		"response_format should not be set when JSONSchema is nil")
 }
 
-func firstAllowedModelForProvider(prefix string) string {
-	var models []string
-	for m := range allowList {
-		if strings.HasPrefix(m, prefix) {
-			models = append(models, m)
-		}
-	}
-	sort.Strings(models)
-	return models[0]
-}
-
 func TestResolveModel_AllowedModelReturnedAsIs(t *testing.T) {
 	t.Parallel()
 	require.Equal(t, "openai/gpt-5.4", ResolveModel("openai/gpt-5.4"))
@@ -1590,14 +1595,33 @@ func TestResolveModel_AllowedModelReturnedAsIs(t *testing.T) {
 
 func TestResolveModel_UnsupportedOpenAIFallback(t *testing.T) {
 	t.Parallel()
-	expected := firstAllowedModelForProvider("openai/")
-	require.Equal(t, expected, ResolveModel("openai/gpt-4"))
+	require.Equal(t, "openai/gpt-5.6-terra", ResolveModel("openai/gpt-4"))
 }
 
 func TestResolveModel_UnsupportedAnthropicFallback(t *testing.T) {
 	t.Parallel()
-	expected := firstAllowedModelForProvider("anthropic/")
-	require.Equal(t, expected, ResolveModel("anthropic/claude-2"))
+	require.Equal(t, "anthropic/claude-sonnet-5", ResolveModel("anthropic/claude-2"))
+}
+
+func TestResolveModel_FallbacksAreAllowlisted(t *testing.T) {
+	t.Parallel()
+	for provider, fallback := range providerFallbacks {
+		require.True(t, allowList[fallback],
+			"providerFallbacks[%q] = %q is not in the allowlist", provider, fallback)
+	}
+}
+
+func TestResolveModel_EveryProviderHasPinnedFallback(t *testing.T) {
+	t.Parallel()
+	// Every provider in the allowlist must have an explicit fallback pin, so
+	// de-listing a model can never silently route callers to whichever model
+	// sorts first alphabetically (e.g. a premium-priced one).
+	for m := range allowList {
+		provider, _, ok := strings.Cut(m, "/")
+		require.True(t, ok, "allowlist entry %q has no provider prefix", m)
+		require.NotEmpty(t, providerFallbacks[provider],
+			"provider %q (from allowlist entry %q) has no pinned fallback", provider, m)
+	}
 }
 
 func TestResolveModel_UnknownProviderReturnsEmpty(t *testing.T) {

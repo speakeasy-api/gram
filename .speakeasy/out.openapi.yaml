@@ -12601,18 +12601,18 @@ paths:
       operationId: ingestHookEvent
       parameters:
         - allowEmptyValue: true
-          description: API Key header
+          description: Optional API key for plugin-driven attribution.
           in: header
           name: Gram-Key
           schema:
-            description: API Key header
+            description: Optional API key for plugin-driven attribution.
             type: string
         - allowEmptyValue: true
-          description: project header
+          description: Optional project slug for plugin-driven attribution.
           in: header
           name: Gram-Project
           schema:
-            description: project header
+            description: Optional project slug for plugin-driven attribution.
             type: string
         - allowEmptyValue: true
           description: Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.
@@ -12688,10 +12688,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
-      security:
-        - apikey_header_Gram-Key: []
-          project_slug_header_Gram-Project: []
-        - {}
       summary: ingest hooks
       tags:
         - hooks
@@ -29056,6 +29052,113 @@ paths:
       x-speakeasy-react-hook:
         name: RiskSuggestCustomRule
         type: mutation
+  /rpc/risk.suggestExclusion:
+    post:
+      description: Suggest a risk exclusion (match_type, match_value, filters) from a natural-language prompt describing findings an operator wants to stop flagging. Calls the configured LLM with a JSON-schema constrained response so the dashboard can prefill the create exclusion form.
+      operationId: suggestExclusion
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SuggestExclusionRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuggestExclusionResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: suggestExclusion risk
+      tags:
+        - risk
+      x-speakeasy-group: risk.exclusions
+      x-speakeasy-name-override: suggest
+      x-speakeasy-react-hook:
+        name: RiskSuggestExclusion
+        type: mutation
   /rpc/risk.testRule:
     post:
       description: Run a single detection rule against pasted sample text and return any matches. Reuses the same scanner code (gitleaks, Presidio, prompt-injection, custom regex) that the analyzer runs in production so the playground match shape mirrors the chat-message path.
@@ -41709,10 +41812,6 @@ components:
           type: string
           description: The ID of the tunneled MCP server to use as the backend
           format: uuid
-        user_session_issuer_id:
-          type: string
-          description: The ID of the user session issuer that gates OAuth-based MCP client authentication. When set, MCP clients are required to authenticate against this issuer before connecting.
-          format: uuid
         visibility:
           type: string
           description: The visibility of an MCP server
@@ -42243,6 +42342,14 @@ components:
         scope_include:
           type: string
           description: 'CEL scope predicate: the policy evaluates a message only when this boolean expression is true (in addition to message_types). Omit/empty means all messages are in scope.'
+        score:
+          type: number
+          description: CVSS-style severity (0.1-10) assigned to findings this policy produces. Omit to apply the default (5).
+          default: 5
+          example: 5
+          format: double
+          minimum: 0.1
+          maximum: 10
         sources:
           type: array
           items:
@@ -44646,6 +44753,9 @@ components:
         authz_challenge_logging_enabled:
           type: boolean
           description: Whether authz challenge logging to ClickHouse is enabled
+        hooks_browser_login_enabled:
+          type: boolean
+          description: Whether generated hook plugins may mint per-user keys via the interactive browser login
         logs_enabled:
           type: boolean
           description: Whether logging is enabled
@@ -44676,6 +44786,7 @@ components:
         - sso_enabled
         - scim_enabled
         - observability_mode_enabled
+        - hooks_browser_login_enabled
     GetProjectForm:
       type: object
       properties:
@@ -45088,6 +45199,11 @@ components:
       properties:
         mcp:
           $ref: '#/components/schemas/HookMCPData'
+        mcp_attribution:
+          type: array
+          items:
+            $ref: '#/components/schemas/HookMCPAttributionEntry'
+          description: Transcript-derived per-request MCP attribution (Claude Stop/SubagentStop).
         message:
           $ref: '#/components/schemas/HookMessageData'
         notification:
@@ -45158,9 +45274,27 @@ components:
         raw_event_name:
           type: string
           description: Provider-native event name, if one exists.
+        user_email:
+          type: string
+          description: Self-reported email of the developer on the emitting machine (device agent or provider account), used for attribution when the API key is shared org-wide.
       description: Metadata about the local hook adapter that translated a provider event into the Gram hook contract.
       required:
         - adapter
+    HookMCPAttributionEntry:
+      type: object
+      properties:
+        mcp_server:
+          type: string
+          description: Unredacted MCP server name from the transcript.
+        mcp_tool:
+          type: string
+          description: Unredacted MCP tool name from the transcript.
+        request_id:
+          type: string
+          description: Provider API request identifier (e.g. Claude's req_*) the attribution applies to.
+      description: Transcript-derived MCP attribution for one model API request. Claude redacts user-configured MCP server names to 'custom' on its OTEL telemetry, but records the real names in the local session transcript; hooks ship them here so ingest can restore the redacted names.
+      required:
+        - request_id
     HookMCPData:
       type: object
       properties:
@@ -48531,6 +48665,9 @@ components:
           type: string
           description: Unique plugin identifier.
           format: uuid
+        is_default:
+          type: boolean
+          description: Whether this is the project's fallback plugin that new servers attach to.
         name:
           type: string
           description: Display name.
@@ -49179,6 +49316,12 @@ components:
     PublishStatusResult:
       type: object
       properties:
+        claude_observability_plugin:
+          type: string
+          description: Slug of the generated Claude Code observability plugin in the published marketplace — install as `<slug>@<marketplace name>`. Present when connected.
+        codex_observability_plugin:
+          type: string
+          description: Slug of the generated Codex observability plugin in the published marketplace — install as `<slug>@<marketplace name>`. Present when connected.
         configured:
           type: boolean
           description: Whether GitHub publishing is configured on the server.
@@ -50458,6 +50601,14 @@ components:
         scope_include:
           type: string
           description: 'CEL scope predicate: the policy evaluates a message only when this boolean expression is true (in addition to message_types). Null/empty means all messages are in scope.'
+        score:
+          type: number
+          description: CVSS-style severity (0.1-10) the author assigns to findings this policy produces. Descriptive only; changing it does not re-scan messages. Defaults to 5.
+          default: 5
+          example: 5
+          format: double
+          minimum: 0.1
+          maximum: 10
         sources:
           type: array
           items:
@@ -50489,6 +50640,7 @@ components:
         - audience_type
         - audience_principal_urns
         - auto_name
+        - score
         - version
         - created_at
         - updated_at
@@ -52146,6 +52298,7 @@ components:
             - sso
             - scim
             - observability_mode
+            - hooks_browser_login
           maxLength: 60
       required:
         - feature_name
@@ -52602,6 +52755,39 @@ components:
         - description
         - regex
         - severity
+    SuggestExclusionRequestBody:
+      type: object
+      properties:
+        known_rule_ids:
+          type: array
+          items:
+            type: string
+          description: Built-in and custom rule ids the suggestion may reference in rule_id filters.
+        prompt:
+          type: string
+          description: Natural-language description of the findings to stop flagging.
+          minLength: 3
+          maxLength: 500
+      required:
+        - prompt
+    SuggestExclusionResult:
+      type: object
+      properties:
+        match_type:
+          type: string
+          description: How match_value is interpreted (exact, regex, rule_id, source, entity_type).
+        match_value:
+          type: string
+          description: The value matched against findings, interpreted per match_type.
+        rule_id_filter:
+          type: string
+          description: Only apply within this rule_id. Empty means any.
+        source_filter:
+          type: string
+          description: Only apply within this source. Empty means any.
+      required:
+        - match_type
+        - match_value
     SyncedAgentUser:
       type: object
       properties:
@@ -54831,10 +55017,6 @@ components:
           type: string
           description: The ID of the tunneled MCP server to use as the backend
           format: uuid
-        user_session_issuer_id:
-          type: string
-          description: The ID of the user session issuer that gates OAuth-based MCP client authentication. Omit to disable issuer-gated OAuth.
-          format: uuid
         visibility:
           type: string
           description: The visibility of an MCP server
@@ -54842,7 +55024,7 @@ components:
             - disabled
             - private
             - public
-      description: 'Form for updating an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be provided. Omit name to leave the existing display name unchanged; the slug is recomputed server-side from the resulting name.'
+      description: 'Form for updating an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. The user session issuer cannot be changed after create. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be provided. Omit name to leave the existing display name unchanged; the slug is recomputed server-side from the resulting name.'
       required:
         - id
         - visibility
@@ -55276,6 +55458,13 @@ components:
         scope_include:
           type: string
           description: CEL scope predicate (in addition to message_types). Omit to preserve the current value; send empty to clear.
+        score:
+          type: number
+          description: CVSS-style severity (0.1-10) assigned to findings this policy produces. Omit to preserve the current value.
+          example: 5
+          format: double
+          minimum: 0.1
+          maximum: 10
         sources:
           type: array
           items:

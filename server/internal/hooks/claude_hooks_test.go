@@ -276,9 +276,8 @@ func TestClaude_PreToolUse_DeniesWhenMCPListNotCached(t *testing.T) {
 		"deny reason should tell the user to retry or restart so they aren't stuck guessing")
 }
 
-// Gram-hosted MCP servers (URL host == app.getgram.ai) are the only ones
-// the shadow-MCP guard permits — even a server present in the cache is
-// rejected when its URL points elsewhere.
+// Gram-hosted MCP servers are permitted by the shadow-MCP guard. A server
+// present in the cache is rejected when its URL points elsewhere.
 func TestClaude_PreToolUse_DeniesWhenMatchedServerNotGramHosted(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
@@ -471,7 +470,7 @@ func TestClaude_PreToolUse_DoesNotAllowUnconfiguredServerByIdentityRule(t *testi
 }
 
 // Allow path: a cached entry that resolves the tool's server prefix and
-// points at app.getgram.ai must succeed even under a blocking policy.
+// points at a Gram-hosted URL must succeed even under a blocking policy.
 func TestClaude_PreToolUse_AllowsGramHostedServer(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)

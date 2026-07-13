@@ -104,6 +104,8 @@ type GetPluginResponseBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Optional description.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether this is the project's fallback plugin that new servers attach to.
+	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of role/user assignments.
@@ -127,6 +129,8 @@ type CreatePluginResponseBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Optional description.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether this is the project's fallback plugin that new servers attach to.
+	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of role/user assignments.
@@ -150,6 +154,8 @@ type UpdatePluginResponseBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Optional description.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether this is the project's fallback plugin that new servers attach to.
+	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of role/user assignments.
@@ -227,6 +233,12 @@ type GetPublishStatusResponseBody struct {
 	// Present once a marketplace token has been minted, which happens
 	// automatically on the first publish.
 	MarketplaceURL *string `form:"marketplace_url,omitempty" json:"marketplace_url,omitempty" xml:"marketplace_url,omitempty"`
+	// Slug of the generated Claude Code observability plugin in the published
+	// marketplace — install as `<slug>@<marketplace name>`. Present when connected.
+	ClaudeObservabilityPlugin *string `form:"claude_observability_plugin,omitempty" json:"claude_observability_plugin,omitempty" xml:"claude_observability_plugin,omitempty"`
+	// Slug of the generated Codex observability plugin in the published
+	// marketplace — install as `<slug>@<marketplace name>`. Present when connected.
+	CodexObservabilityPlugin *string `form:"codex_observability_plugin,omitempty" json:"codex_observability_plugin,omitempty" xml:"codex_observability_plugin,omitempty"`
 	// Whether the repo has at least one directly-added GitHub collaborator
 	// (excludes access granted via org membership/teams). Absent when the project
 	// is not connected.
@@ -3251,6 +3263,8 @@ type PluginResponseBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Optional description.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether this is the project's fallback plugin that new servers attach to.
+	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of role/user assignments.
@@ -3331,6 +3345,7 @@ func NewGetPluginResponseBody(res *plugins.Plugin) *GetPluginResponseBody {
 		Name:            res.Name,
 		Slug:            res.Slug,
 		Description:     res.Description,
+		IsDefault:       res.IsDefault,
 		ServerCount:     res.ServerCount,
 		AssignmentCount: res.AssignmentCount,
 		CreatedAt:       res.CreatedAt,
@@ -3367,6 +3382,7 @@ func NewCreatePluginResponseBody(res *plugins.Plugin) *CreatePluginResponseBody 
 		Name:            res.Name,
 		Slug:            res.Slug,
 		Description:     res.Description,
+		IsDefault:       res.IsDefault,
 		ServerCount:     res.ServerCount,
 		AssignmentCount: res.AssignmentCount,
 		CreatedAt:       res.CreatedAt,
@@ -3403,6 +3419,7 @@ func NewUpdatePluginResponseBody(res *plugins.Plugin) *UpdatePluginResponseBody 
 		Name:            res.Name,
 		Slug:            res.Slug,
 		Description:     res.Description,
+		IsDefault:       res.IsDefault,
 		ServerCount:     res.ServerCount,
 		AssignmentCount: res.AssignmentCount,
 		CreatedAt:       res.CreatedAt,
@@ -3484,15 +3501,17 @@ func NewSetPluginAssignmentsResponseBody(res *plugins.SetPluginAssignmentsResult
 // result of the "getPublishStatus" endpoint of the "plugins" service.
 func NewGetPublishStatusResponseBody(res *plugins.PublishStatusResult) *GetPublishStatusResponseBody {
 	body := &GetPublishStatusResponseBody{
-		Configured:       res.Configured,
-		Connected:        res.Connected,
-		RepoOwner:        res.RepoOwner,
-		RepoName:         res.RepoName,
-		RepoURL:          res.RepoURL,
-		MarketplaceURL:   res.MarketplaceURL,
-		HasCollaborators: res.HasCollaborators,
-		UpToDate:         res.UpToDate,
-		LastPublishedAt:  res.LastPublishedAt,
+		Configured:                res.Configured,
+		Connected:                 res.Connected,
+		RepoOwner:                 res.RepoOwner,
+		RepoName:                  res.RepoName,
+		RepoURL:                   res.RepoURL,
+		MarketplaceURL:            res.MarketplaceURL,
+		ClaudeObservabilityPlugin: res.ClaudeObservabilityPlugin,
+		CodexObservabilityPlugin:  res.CodexObservabilityPlugin,
+		HasCollaborators:          res.HasCollaborators,
+		UpToDate:                  res.UpToDate,
+		LastPublishedAt:           res.LastPublishedAt,
 	}
 	return body
 }

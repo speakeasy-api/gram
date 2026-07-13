@@ -71,6 +71,9 @@ type CreateRiskPolicyRequestBody struct {
 	Prompt *string `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
 	// For prompt_based policies: per-policy LLM-judge model configuration.
 	ModelConfig *RiskPolicyModelConfigRequestBody `form:"model_config,omitempty" json:"model_config,omitempty" xml:"model_config,omitempty"`
+	// CVSS-style severity (0.1-10) assigned to findings this policy produces. Omit
+	// to apply the default (5).
+	Score *float64 `form:"score,omitempty" json:"score,omitempty" xml:"score,omitempty"`
 }
 
 // UpdateRiskPolicyRequestBody is the type of the "risk" service
@@ -129,6 +132,9 @@ type UpdateRiskPolicyRequestBody struct {
 	// For prompt_based policies: per-policy LLM-judge model configuration. Omit to
 	// preserve the current value.
 	ModelConfig *RiskPolicyModelConfigRequestBody `form:"model_config,omitempty" json:"model_config,omitempty" xml:"model_config,omitempty"`
+	// CVSS-style severity (0.1-10) assigned to findings this policy produces. Omit
+	// to preserve the current value.
+	Score *float64 `form:"score,omitempty" json:"score,omitempty" xml:"score,omitempty"`
 }
 
 // UnmaskRiskResultRequestBody is the type of the "risk" service
@@ -303,6 +309,15 @@ type SuggestCustomDetectionRuleRequestBody struct {
 	ExistingRuleIds []string `form:"existing_rule_ids,omitempty" json:"existing_rule_ids,omitempty" xml:"existing_rule_ids,omitempty"`
 }
 
+// SuggestExclusionRequestBody is the type of the "risk" service
+// "suggestExclusion" endpoint HTTP request body.
+type SuggestExclusionRequestBody struct {
+	// Natural-language description of the findings to stop flagging.
+	Prompt *string `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
+	// Built-in and custom rule ids the suggestion may reference in rule_id filters.
+	KnownRuleIds []string `form:"known_rule_ids,omitempty" json:"known_rule_ids,omitempty" xml:"known_rule_ids,omitempty"`
+}
+
 // TestDetectionRuleRequestBody is the type of the "risk" service
 // "testDetectionRule" endpoint HTTP request body.
 type TestDetectionRuleRequestBody struct {
@@ -417,6 +432,10 @@ type CreateRiskPolicyResponseBody struct {
 	// For prompt_based policies: per-policy LLM-judge model configuration. Null
 	// for standard policies.
 	ModelConfig *RiskPolicyModelConfigResponseBody `form:"model_config,omitempty" json:"model_config,omitempty" xml:"model_config,omitempty"`
+	// CVSS-style severity (0.1-10) the author assigns to findings this policy
+	// produces. Descriptive only; changing it does not re-scan messages. Defaults
+	// to 5.
+	Score float64 `form:"score" json:"score" xml:"score"`
 	// Policy version, incremented on each update.
 	Version int64 `form:"version" json:"version" xml:"version"`
 	// When the policy was created.
@@ -512,6 +531,10 @@ type GetRiskPolicyResponseBody struct {
 	// For prompt_based policies: per-policy LLM-judge model configuration. Null
 	// for standard policies.
 	ModelConfig *RiskPolicyModelConfigResponseBody `form:"model_config,omitempty" json:"model_config,omitempty" xml:"model_config,omitempty"`
+	// CVSS-style severity (0.1-10) the author assigns to findings this policy
+	// produces. Descriptive only; changing it does not re-scan messages. Defaults
+	// to 5.
+	Score float64 `form:"score" json:"score" xml:"score"`
 	// Policy version, incremented on each update.
 	Version int64 `form:"version" json:"version" xml:"version"`
 	// When the policy was created.
@@ -591,6 +614,10 @@ type UpdateRiskPolicyResponseBody struct {
 	// For prompt_based policies: per-policy LLM-judge model configuration. Null
 	// for standard policies.
 	ModelConfig *RiskPolicyModelConfigResponseBody `form:"model_config,omitempty" json:"model_config,omitempty" xml:"model_config,omitempty"`
+	// CVSS-style severity (0.1-10) the author assigns to findings this policy
+	// produces. Descriptive only; changing it does not re-scan messages. Defaults
+	// to 5.
+	Score float64 `form:"score" json:"score" xml:"score"`
 	// Policy version, incremented on each update.
 	Version int64 `form:"version" json:"version" xml:"version"`
 	// When the policy was created.
@@ -1123,6 +1150,19 @@ type SuggestCustomDetectionRuleResponseBody struct {
 	Regex string `form:"regex" json:"regex" xml:"regex"`
 	// Suggested severity level.
 	Severity string `form:"severity" json:"severity" xml:"severity"`
+}
+
+// SuggestExclusionResponseBody is the type of the "risk" service
+// "suggestExclusion" endpoint HTTP response body.
+type SuggestExclusionResponseBody struct {
+	// How match_value is interpreted (exact, regex, rule_id, source, entity_type).
+	MatchType string `form:"match_type" json:"match_type" xml:"match_type"`
+	// The value matched against findings, interpreted per match_type.
+	MatchValue string `form:"match_value" json:"match_value" xml:"match_value"`
+	// Only apply within this rule_id. Empty means any.
+	RuleIDFilter *string `form:"rule_id_filter,omitempty" json:"rule_id_filter,omitempty" xml:"rule_id_filter,omitempty"`
+	// Only apply within this source. Empty means any.
+	SourceFilter *string `form:"source_filter,omitempty" json:"source_filter,omitempty" xml:"source_filter,omitempty"`
 }
 
 // TestDetectionRuleResponseBody is the type of the "risk" service
@@ -8080,6 +8120,188 @@ type SuggestCustomDetectionRuleGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// SuggestExclusionUnauthorizedResponseBody is the type of the "risk" service
+// "suggestExclusion" endpoint HTTP response body for the "unauthorized" error.
+type SuggestExclusionUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SuggestExclusionForbiddenResponseBody is the type of the "risk" service
+// "suggestExclusion" endpoint HTTP response body for the "forbidden" error.
+type SuggestExclusionForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SuggestExclusionBadRequestResponseBody is the type of the "risk" service
+// "suggestExclusion" endpoint HTTP response body for the "bad_request" error.
+type SuggestExclusionBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SuggestExclusionNotFoundResponseBody is the type of the "risk" service
+// "suggestExclusion" endpoint HTTP response body for the "not_found" error.
+type SuggestExclusionNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SuggestExclusionConflictResponseBody is the type of the "risk" service
+// "suggestExclusion" endpoint HTTP response body for the "conflict" error.
+type SuggestExclusionConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SuggestExclusionUnsupportedMediaResponseBody is the type of the "risk"
+// service "suggestExclusion" endpoint HTTP response body for the
+// "unsupported_media" error.
+type SuggestExclusionUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SuggestExclusionInvalidResponseBody is the type of the "risk" service
+// "suggestExclusion" endpoint HTTP response body for the "invalid" error.
+type SuggestExclusionInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SuggestExclusionInvariantViolationResponseBody is the type of the "risk"
+// service "suggestExclusion" endpoint HTTP response body for the
+// "invariant_violation" error.
+type SuggestExclusionInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SuggestExclusionUnexpectedResponseBody is the type of the "risk" service
+// "suggestExclusion" endpoint HTTP response body for the "unexpected" error.
+type SuggestExclusionUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SuggestExclusionGatewayErrorResponseBody is the type of the "risk" service
+// "suggestExclusion" endpoint HTTP response body for the "gateway_error" error.
+type SuggestExclusionGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // TestDetectionRuleUnauthorizedResponseBody is the type of the "risk" service
 // "testDetectionRule" endpoint HTTP response body for the "unauthorized" error.
 type TestDetectionRuleUnauthorizedResponseBody struct {
@@ -9088,6 +9310,10 @@ type RiskPolicyResponseBody struct {
 	// For prompt_based policies: per-policy LLM-judge model configuration. Null
 	// for standard policies.
 	ModelConfig *RiskPolicyModelConfigResponseBody `form:"model_config,omitempty" json:"model_config,omitempty" xml:"model_config,omitempty"`
+	// CVSS-style severity (0.1-10) the author assigns to findings this policy
+	// produces. Descriptive only; changing it does not re-scan messages. Defaults
+	// to 5.
+	Score float64 `form:"score" json:"score" xml:"score"`
 	// Policy version, incremented on each update.
 	Version int64 `form:"version" json:"version" xml:"version"`
 	// When the policy was created.
@@ -9523,6 +9749,7 @@ func NewCreateRiskPolicyResponseBody(res *types.RiskPolicy) *CreateRiskPolicyRes
 		AutoName:               res.AutoName,
 		UserMessage:            res.UserMessage,
 		Prompt:                 res.Prompt,
+		Score:                  res.Score,
 		Version:                res.Version,
 		CreatedAt:              res.CreatedAt,
 		UpdatedAt:              res.UpdatedAt,
@@ -9644,6 +9871,7 @@ func NewGetRiskPolicyResponseBody(res *types.RiskPolicy) *GetRiskPolicyResponseB
 		AutoName:               res.AutoName,
 		UserMessage:            res.UserMessage,
 		Prompt:                 res.Prompt,
+		Score:                  res.Score,
 		Version:                res.Version,
 		CreatedAt:              res.CreatedAt,
 		UpdatedAt:              res.UpdatedAt,
@@ -9725,6 +9953,7 @@ func NewUpdateRiskPolicyResponseBody(res *types.RiskPolicy) *UpdateRiskPolicyRes
 		AutoName:               res.AutoName,
 		UserMessage:            res.UserMessage,
 		Prompt:                 res.Prompt,
+		Score:                  res.Score,
 		Version:                res.Version,
 		CreatedAt:              res.CreatedAt,
 		UpdatedAt:              res.UpdatedAt,
@@ -10403,6 +10632,18 @@ func NewSuggestCustomDetectionRuleResponseBody(res *risk.SuggestCustomDetectionR
 		DetectionExpr: res.DetectionExpr,
 		Regex:         res.Regex,
 		Severity:      res.Severity,
+	}
+	return body
+}
+
+// NewSuggestExclusionResponseBody builds the HTTP response body from the
+// result of the "suggestExclusion" endpoint of the "risk" service.
+func NewSuggestExclusionResponseBody(res *risk.SuggestExclusionResult) *SuggestExclusionResponseBody {
+	body := &SuggestExclusionResponseBody{
+		MatchType:    res.MatchType,
+		MatchValue:   res.MatchValue,
+		RuleIDFilter: res.RuleIDFilter,
+		SourceFilter: res.SourceFilter,
 	}
 	return body
 }
@@ -15881,6 +16122,148 @@ func NewSuggestCustomDetectionRuleGatewayErrorResponseBody(res *goa.ServiceError
 	return body
 }
 
+// NewSuggestExclusionUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "suggestExclusion" endpoint of the "risk" service.
+func NewSuggestExclusionUnauthorizedResponseBody(res *goa.ServiceError) *SuggestExclusionUnauthorizedResponseBody {
+	body := &SuggestExclusionUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSuggestExclusionForbiddenResponseBody builds the HTTP response body from
+// the result of the "suggestExclusion" endpoint of the "risk" service.
+func NewSuggestExclusionForbiddenResponseBody(res *goa.ServiceError) *SuggestExclusionForbiddenResponseBody {
+	body := &SuggestExclusionForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSuggestExclusionBadRequestResponseBody builds the HTTP response body from
+// the result of the "suggestExclusion" endpoint of the "risk" service.
+func NewSuggestExclusionBadRequestResponseBody(res *goa.ServiceError) *SuggestExclusionBadRequestResponseBody {
+	body := &SuggestExclusionBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSuggestExclusionNotFoundResponseBody builds the HTTP response body from
+// the result of the "suggestExclusion" endpoint of the "risk" service.
+func NewSuggestExclusionNotFoundResponseBody(res *goa.ServiceError) *SuggestExclusionNotFoundResponseBody {
+	body := &SuggestExclusionNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSuggestExclusionConflictResponseBody builds the HTTP response body from
+// the result of the "suggestExclusion" endpoint of the "risk" service.
+func NewSuggestExclusionConflictResponseBody(res *goa.ServiceError) *SuggestExclusionConflictResponseBody {
+	body := &SuggestExclusionConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSuggestExclusionUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "suggestExclusion" endpoint of the "risk"
+// service.
+func NewSuggestExclusionUnsupportedMediaResponseBody(res *goa.ServiceError) *SuggestExclusionUnsupportedMediaResponseBody {
+	body := &SuggestExclusionUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSuggestExclusionInvalidResponseBody builds the HTTP response body from
+// the result of the "suggestExclusion" endpoint of the "risk" service.
+func NewSuggestExclusionInvalidResponseBody(res *goa.ServiceError) *SuggestExclusionInvalidResponseBody {
+	body := &SuggestExclusionInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSuggestExclusionInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "suggestExclusion" endpoint of the "risk"
+// service.
+func NewSuggestExclusionInvariantViolationResponseBody(res *goa.ServiceError) *SuggestExclusionInvariantViolationResponseBody {
+	body := &SuggestExclusionInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSuggestExclusionUnexpectedResponseBody builds the HTTP response body from
+// the result of the "suggestExclusion" endpoint of the "risk" service.
+func NewSuggestExclusionUnexpectedResponseBody(res *goa.ServiceError) *SuggestExclusionUnexpectedResponseBody {
+	body := &SuggestExclusionUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSuggestExclusionGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "suggestExclusion" endpoint of the "risk" service.
+func NewSuggestExclusionGatewayErrorResponseBody(res *goa.ServiceError) *SuggestExclusionGatewayErrorResponseBody {
+	body := &SuggestExclusionGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewTestDetectionRuleUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "testDetectionRule" endpoint of the "risk" service.
 func NewTestDetectionRuleUnauthorizedResponseBody(res *goa.ServiceError) *TestDetectionRuleUnauthorizedResponseBody {
@@ -16623,6 +17006,9 @@ func NewCreateRiskPolicyPayload(body *CreateRiskPolicyRequestBody, apikeyToken *
 	if body.AudienceType != nil {
 		v.AudienceType = *body.AudienceType
 	}
+	if body.Score != nil {
+		v.Score = *body.Score
+	}
 	if body.PolicyType == nil {
 		v.PolicyType = "standard"
 	}
@@ -16683,6 +17069,9 @@ func NewCreateRiskPolicyPayload(body *CreateRiskPolicyRequestBody, apikeyToken *
 	if body.ModelConfig != nil {
 		v.ModelConfig = unmarshalRiskPolicyModelConfigRequestBodyToTypesRiskPolicyModelConfig(body.ModelConfig)
 	}
+	if body.Score == nil {
+		v.Score = 5
+	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -16738,6 +17127,7 @@ func NewUpdateRiskPolicyPayload(body *UpdateRiskPolicyRequestBody, apikeyToken *
 		AutoName:               body.AutoName,
 		UserMessage:            body.UserMessage,
 		Prompt:                 body.Prompt,
+		Score:                  body.Score,
 	}
 	if body.Sources != nil {
 		v.Sources = make([]string, len(body.Sources))
@@ -17276,6 +17666,25 @@ func NewSuggestCustomDetectionRulePayload(body *SuggestCustomDetectionRuleReques
 	return v
 }
 
+// NewSuggestExclusionPayload builds a risk service suggestExclusion endpoint
+// payload.
+func NewSuggestExclusionPayload(body *SuggestExclusionRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.SuggestExclusionPayload {
+	v := &risk.SuggestExclusionPayload{
+		Prompt: *body.Prompt,
+	}
+	if body.KnownRuleIds != nil {
+		v.KnownRuleIds = make([]string, len(body.KnownRuleIds))
+		for i, val := range body.KnownRuleIds {
+			v.KnownRuleIds[i] = val
+		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewTestDetectionRulePayload builds a risk service testDetectionRule endpoint
 // payload.
 func NewTestDetectionRulePayload(body *TestDetectionRuleRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.TestDetectionRulePayload {
@@ -17384,6 +17793,16 @@ func ValidateCreateRiskPolicyRequestBody(body *CreateRiskPolicyRequestBody) (err
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.audience_type", *body.AudienceType, []any{"everyone", "targeted"}))
 		}
 	}
+	if body.Score != nil {
+		if *body.Score < 0.1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.score", *body.Score, 0.1, true))
+		}
+	}
+	if body.Score != nil {
+		if *body.Score > 10 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.score", *body.Score, 10, false))
+		}
+	}
 	return
 }
 
@@ -17417,6 +17836,16 @@ func ValidateUpdateRiskPolicyRequestBody(body *UpdateRiskPolicyRequestBody) (err
 	if body.AudienceType != nil {
 		if !(*body.AudienceType == "everyone" || *body.AudienceType == "targeted") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.audience_type", *body.AudienceType, []any{"everyone", "targeted"}))
+		}
+	}
+	if body.Score != nil {
+		if *body.Score < 0.1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.score", *body.Score, 0.1, true))
+		}
+	}
+	if body.Score != nil {
+		if *body.Score > 10 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.score", *body.Score, 10, false))
 		}
 	}
 	return
@@ -17644,6 +18073,25 @@ func ValidateUpdateRiskExclusionRequestBody(body *UpdateRiskExclusionRequestBody
 // ValidateSuggestCustomDetectionRuleRequestBody runs the validations defined
 // on SuggestCustomDetectionRuleRequestBody
 func ValidateSuggestCustomDetectionRuleRequestBody(body *SuggestCustomDetectionRuleRequestBody) (err error) {
+	if body.Prompt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("prompt", "body"))
+	}
+	if body.Prompt != nil {
+		if utf8.RuneCountInString(*body.Prompt) < 3 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.prompt", *body.Prompt, utf8.RuneCountInString(*body.Prompt), 3, true))
+		}
+	}
+	if body.Prompt != nil {
+		if utf8.RuneCountInString(*body.Prompt) > 500 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.prompt", *body.Prompt, utf8.RuneCountInString(*body.Prompt), 500, false))
+		}
+	}
+	return
+}
+
+// ValidateSuggestExclusionRequestBody runs the validations defined on
+// SuggestExclusionRequestBody
+func ValidateSuggestExclusionRequestBody(body *SuggestExclusionRequestBody) (err error) {
 	if body.Prompt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("prompt", "body"))
 	}

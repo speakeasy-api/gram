@@ -19,6 +19,7 @@ const (
 	FeatureSSO                   Feature = "sso"
 	FeatureSCIM                  Feature = "scim"
 	FeatureObservabilityMode     Feature = "observability_mode"
+	FeatureHooksBrowserLogin     Feature = "hooks_browser_login"
 )
 
 type FeatureCache struct {

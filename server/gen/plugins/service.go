@@ -238,6 +238,8 @@ type Plugin struct {
 	Slug string
 	// Optional description.
 	Description *string
+	// Whether this is the project's fallback plugin that new servers attach to.
+	IsDefault *bool
 	// Number of active servers in this plugin.
 	ServerCount *int64
 	// Number of role/user assignments.
@@ -312,6 +314,12 @@ type PublishStatusResult struct {
 	// Present once a marketplace token has been minted, which happens
 	// automatically on the first publish.
 	MarketplaceURL *string
+	// Slug of the generated Claude Code observability plugin in the published
+	// marketplace — install as `<slug>@<marketplace name>`. Present when connected.
+	ClaudeObservabilityPlugin *string
+	// Slug of the generated Codex observability plugin in the published
+	// marketplace — install as `<slug>@<marketplace name>`. Present when connected.
+	CodexObservabilityPlugin *string
 	// Whether the repo has at least one directly-added GitHub collaborator
 	// (excludes access granted via org membership/teams). Absent when the project
 	// is not connected.

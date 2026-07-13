@@ -1,6 +1,7 @@
 package marketplace
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -20,6 +21,11 @@ import (
 // out one namespace, and so the dispatch logic stays here rather than leaking
 // into the server bootstrap.
 const RoutePrefix = "/marketplace/"
+
+// Upload-pack requests contain ref negotiation data rather than packfiles.
+// Bounding and buffering them lets net/http replay the read-only POST if an
+// idle upstream connection disappears while the request is being sent.
+const maxUploadPackRequestBytes = 1 << 20
 
 // Server hosts the git Smart HTTP proxy for plugin source clones. Streams
 // directly from GitHub against an installation token minted by the resolver —
@@ -117,8 +123,8 @@ func (s *Server) handleInfoRefs(w http.ResponseWriter, r *http.Request) {
 	s.proxyToGitHub(w, r, http.MethodGet, upstreamURL, up.AccessToken, nil)
 }
 
-// handleUploadPack streams the packfile by piping the client's wants/haves to
-// github.com and the resulting packfile back.
+// handleUploadPack buffers the client's small wants/haves request so it can be
+// replayed, then streams the resulting packfile back from GitHub.
 func (s *Server) handleUploadPack(w http.ResponseWriter, r *http.Request) {
 	token := tokenFromSlug(r.PathValue("slug"))
 	if token == "" {
@@ -132,16 +138,27 @@ func (s *Server) handleUploadPack(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxUploadPackRequestBytes))
+	if err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+			return
+		}
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
 	upstreamURL := fmt.Sprintf(
 		"https://github.com/%s/%s.git/git-upload-pack",
 		url.PathEscape(up.Owner), url.PathEscape(up.Repo),
 	)
-	s.proxyToGitHub(w, r, http.MethodPost, upstreamURL, up.AccessToken, r.Body)
+	s.proxyToGitHub(w, r, http.MethodPost, upstreamURL, up.AccessToken, bytes.NewReader(body))
 }
 
 // proxyToGitHub forwards a Smart HTTP request to github.com with installation-
-// token basic auth and streams the response back. Body and headers are
-// streamed without buffering so packfiles flow through in chunks.
+// token basic auth and streams the response back so packfiles flow through in
+// chunks.
 func (s *Server) proxyToGitHub(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -159,6 +176,11 @@ func (s *Server) proxyToGitHub(
 		return
 	}
 	upstreamReq.SetBasicAuth("x-access-token", accessToken)
+	if method == http.MethodPost {
+		// git-upload-pack is read-only. An empty value marks the POST as
+		// idempotent to net/http without sending the header to GitHub.
+		upstreamReq.Header["Idempotency-Key"] = []string{}
+	}
 	if ct := r.Header.Get("Content-Type"); ct != "" {
 		upstreamReq.Header.Set("Content-Type", ct)
 	}

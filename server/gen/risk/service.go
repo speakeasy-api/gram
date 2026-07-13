@@ -123,6 +123,11 @@ type Service interface {
 	// JSON-schema constrained response so the dashboard can prefill the create
 	// form.
 	SuggestCustomDetectionRule(context.Context, *SuggestCustomDetectionRulePayload) (res *SuggestCustomDetectionRuleResult, err error)
+	// Suggest a risk exclusion (match_type, match_value, filters) from a
+	// natural-language prompt describing findings an operator wants to stop
+	// flagging. Calls the configured LLM with a JSON-schema constrained response
+	// so the dashboard can prefill the create exclusion form.
+	SuggestExclusion(context.Context, *SuggestExclusionPayload) (res *SuggestExclusionResult, err error)
 	// Run a single detection rule against pasted sample text and return any
 	// matches. Reuses the same scanner code (gitleaks, Presidio, prompt-injection,
 	// custom regex) that the analyzer runs in production so the playground match
@@ -170,7 +175,7 @@ const ServiceName = "risk"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [42]string{"createRiskPolicy", "listRiskPolicies", "listBuiltinExclusions", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "unmaskRiskResult", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "compileExpr", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "acknowledgeRiskPolicyChallenge", "getRiskPolicyChallenge", "declineRiskPolicyChallenge", "getRiskBlock", "submitRiskBlockFeedback", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "testDetectionRule", "evaluatePromptGuardrail", "saveRiskEvalReview", "listRiskEvalReviews", "deleteRiskEvalReview"}
+var MethodNames = [43]string{"createRiskPolicy", "listRiskPolicies", "listBuiltinExclusions", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "unmaskRiskResult", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "compileExpr", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "acknowledgeRiskPolicyChallenge", "getRiskPolicyChallenge", "declineRiskPolicyChallenge", "getRiskBlock", "submitRiskBlockFeedback", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "suggestExclusion", "testDetectionRule", "evaluatePromptGuardrail", "saveRiskEvalReview", "listRiskEvalReviews", "deleteRiskEvalReview"}
 
 // AcknowledgeRiskPolicyChallengePayload is the payload type of the risk
 // service acknowledgeRiskPolicyChallenge method.
@@ -346,6 +351,9 @@ type CreateRiskPolicyPayload struct {
 	Prompt *string
 	// For prompt_based policies: per-policy LLM-judge model configuration.
 	ModelConfig *types.RiskPolicyModelConfig
+	// CVSS-style severity (0.1-10) assigned to findings this policy produces. Omit
+	// to apply the default (5).
+	Score float64
 }
 
 // DeclineRiskPolicyChallengePayload is the payload type of the risk service
@@ -1068,6 +1076,31 @@ type SuggestCustomDetectionRuleResult struct {
 	Severity string
 }
 
+// SuggestExclusionPayload is the payload type of the risk service
+// suggestExclusion method.
+type SuggestExclusionPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Natural-language description of the findings to stop flagging.
+	Prompt string
+	// Built-in and custom rule ids the suggestion may reference in rule_id filters.
+	KnownRuleIds []string
+}
+
+// SuggestExclusionResult is the result type of the risk service
+// suggestExclusion method.
+type SuggestExclusionResult struct {
+	// How match_value is interpreted (exact, regex, rule_id, source, entity_type).
+	MatchType string
+	// The value matched against findings, interpreted per match_type.
+	MatchValue string
+	// Only apply within this rule_id. Empty means any.
+	RuleIDFilter *string
+	// Only apply within this source. Empty means any.
+	SourceFilter *string
+}
+
 type TestDetectionRuleMatch struct {
 	// Canonical rule id of the match (may differ from the requested rule id when
 	// one input matches multiple rules).
@@ -1244,6 +1277,9 @@ type UpdateRiskPolicyPayload struct {
 	// For prompt_based policies: per-policy LLM-judge model configuration. Omit to
 	// preserve the current value.
 	ModelConfig *types.RiskPolicyModelConfig
+	// CVSS-style severity (0.1-10) assigned to findings this policy produces. Omit
+	// to preserve the current value.
+	Score *float64
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

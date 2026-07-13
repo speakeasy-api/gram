@@ -246,14 +246,15 @@ func TestCreateMcpEndpoint_AttachesToDefaultPlugin(t *testing.T) {
 	mcpServerID, err := uuid.NewV7()
 	require.NoError(t, err)
 	_, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ID:                mcpServerID,
-		ProjectID:         *authCtx.ProjectID,
-		Name:              conv.ToPGText("Attach Test Server"),
-		Slug:              conv.ToPGText("attach-test-server-" + uuid.NewString()),
-		EnvironmentID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		RemoteMcpServerID: uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
-		ToolsetID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Visibility:        "public",
+		ID:                  mcpServerID,
+		ProjectID:           *authCtx.ProjectID,
+		Name:                conv.ToPGText("Attach Test Server"),
+		Slug:                conv.ToPGText("attach-test-server-" + uuid.NewString()),
+		EnvironmentID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		RemoteMcpServerID:   uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
+		UserSessionIssuerID: uuid.NullUUID{UUID: seedUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID), Valid: true},
+		ToolsetID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Visibility:          "public",
 	})
 	require.NoError(t, err)
 
@@ -298,14 +299,15 @@ func TestCreateMcpEndpoint_LazilyCreatesDefaultPluginWhenMissing(t *testing.T) {
 	mcpServerID, err := uuid.NewV7()
 	require.NoError(t, err)
 	_, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ID:                mcpServerID,
-		ProjectID:         *authCtx.ProjectID,
-		Name:              conv.ToPGText("No Default Plugin Server"),
-		Slug:              conv.ToPGText("no-default-plugin-server-" + uuid.NewString()),
-		EnvironmentID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		RemoteMcpServerID: uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
-		ToolsetID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Visibility:        "public",
+		ID:                  mcpServerID,
+		ProjectID:           *authCtx.ProjectID,
+		Name:                conv.ToPGText("No Default Plugin Server"),
+		Slug:                conv.ToPGText("no-default-plugin-server-" + uuid.NewString()),
+		EnvironmentID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		RemoteMcpServerID:   uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
+		UserSessionIssuerID: uuid.NullUUID{UUID: seedUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID), Valid: true},
+		ToolsetID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Visibility:          "public",
 	})
 	require.NoError(t, err)
 
@@ -383,14 +385,15 @@ func TestCreateMcpEndpoint_LegacyProject_TriggersInitialPublish(t *testing.T) {
 	mcpServerID, err := uuid.NewV7()
 	require.NoError(t, err)
 	_, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ID:                mcpServerID,
-		ProjectID:         *authCtx.ProjectID,
-		Name:              conv.ToPGText("Legacy Gap Server"),
-		Slug:              conv.ToPGText("legacy-gap-server-" + uuid.NewString()),
-		EnvironmentID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		RemoteMcpServerID: uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
-		ToolsetID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Visibility:        "public",
+		ID:                  mcpServerID,
+		ProjectID:           *authCtx.ProjectID,
+		Name:                conv.ToPGText("Legacy Gap Server"),
+		Slug:                conv.ToPGText("legacy-gap-server-" + uuid.NewString()),
+		EnvironmentID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		RemoteMcpServerID:   uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
+		UserSessionIssuerID: uuid.NullUUID{UUID: seedUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID), Valid: true},
+		ToolsetID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Visibility:          "public",
 	})
 	require.NoError(t, err)
 
@@ -445,14 +448,15 @@ func TestCreateMcpEndpoint_SecondEndpointOnAttachedServerIsNoOp(t *testing.T) {
 	mcpServerID, err := uuid.NewV7()
 	require.NoError(t, err)
 	_, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ID:                mcpServerID,
-		ProjectID:         *authCtx.ProjectID,
-		Name:              conv.ToPGText("Second Endpoint Server"),
-		Slug:              conv.ToPGText("second-endpoint-server-" + uuid.NewString()),
-		EnvironmentID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		RemoteMcpServerID: uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
-		ToolsetID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Visibility:        "public",
+		ID:                  mcpServerID,
+		ProjectID:           *authCtx.ProjectID,
+		Name:                conv.ToPGText("Second Endpoint Server"),
+		Slug:                conv.ToPGText("second-endpoint-server-" + uuid.NewString()),
+		EnvironmentID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		RemoteMcpServerID:   uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
+		UserSessionIssuerID: uuid.NullUUID{UUID: seedUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID), Valid: true},
+		ToolsetID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Visibility:          "public",
 	})
 	require.NoError(t, err)
 

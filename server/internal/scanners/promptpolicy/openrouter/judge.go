@@ -143,11 +143,14 @@ func (j *Judge) Evaluate(ctx context.Context, in promptpolicy.Input) (*promptpol
 
 	start := time.Now()
 	callResult, err := j.call(ctx, in)
-	j.metrics.RecordEvaluation(ctx, in.OrgID, o11y.OutcomeFromError(err), time.Since(start))
+	outcome := o11y.OutcomeFromErrorWithTimeout(err)
+	j.metrics.RecordEvaluation(ctx, in.OrgID, outcome, time.Since(start))
 	if err != nil {
 		span.RecordError(err)
+		span.SetAttributes(attr.Outcome(outcome))
 		j.logger.WarnContext(ctx, "llm judge call failed",
 			attr.SlogError(err),
+			attr.SlogOutcome(string(outcome)),
 			attr.SlogOrganizationID(in.OrgID),
 		)
 		return nil, err
@@ -212,6 +215,7 @@ func (j *Judge) call(ctx context.Context, in promptpolicy.Input) (judgeCallResul
 		Prompt:         judgePrompt,
 		Temperature:    &temperature,
 		UsageSource:    billing.ModelUsageSourceRiskAnalysis,
+		KeyType:        openrouter.KeyTypeInternal,
 		UserID:         in.UserID,
 		ExternalUserID: "",
 		UserEmail:      "",

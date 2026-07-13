@@ -54,6 +54,12 @@ var _ = Service("risk", func() {
 			Attribute("user_message", String, "Optional message shown to end users when this policy blocks an action or surfaces a flagged finding.")
 			Attribute("prompt", String, "For prompt_based policies: the guardrail prompt the LLM judge evaluates each in-scope message against. Required when policy_type is prompt_based.")
 			Attribute("model_config", shared.RiskPolicyModelConfig, "For prompt_based policies: per-policy LLM-judge model configuration.")
+			Attribute("score", Float64, "CVSS-style severity (0.1-10) assigned to findings this policy produces. Omit to apply the default (5).", func() {
+				Minimum(0.1)
+				Maximum(10)
+				Default(5)
+				Example(5)
+			})
 		})
 
 		Result(shared.RiskPolicy)
@@ -188,6 +194,11 @@ var _ = Service("risk", func() {
 			Attribute("user_message", String, "Optional message shown to end users when this policy blocks an action or surfaces a flagged finding. Send an empty string to clear.")
 			Attribute("prompt", String, "For prompt_based policies: the guardrail prompt the LLM judge evaluates each in-scope message against. Omit to preserve the current value.")
 			Attribute("model_config", shared.RiskPolicyModelConfig, "For prompt_based policies: per-policy LLM-judge model configuration. Omit to preserve the current value.")
+			Attribute("score", Float64, "CVSS-style severity (0.1-10) assigned to findings this policy produces. Omit to preserve the current value.", func() {
+				Minimum(0.1)
+				Maximum(10)
+				Example(5)
+			})
 			Required("id", "name")
 		})
 
@@ -1256,6 +1267,37 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskSuggestCustomRule", "type": "mutation"}`)
 	})
 
+	Method("suggestExclusion", func() {
+		Description("Suggest a risk exclusion (match_type, match_value, filters) from a natural-language prompt describing findings an operator wants to stop flagging. Calls the configured LLM with a JSON-schema constrained response so the dashboard can prefill the create exclusion form.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("prompt", String, "Natural-language description of the findings to stop flagging.", func() {
+				MinLength(3)
+				MaxLength(500)
+			})
+			Attribute("known_rule_ids", ArrayOf(String), "Built-in and custom rule ids the suggestion may reference in rule_id filters.")
+			Required("prompt")
+		})
+
+		Result(SuggestExclusionResult)
+
+		HTTP(func() {
+			POST("/rpc/risk.suggestExclusion")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "suggestExclusion")
+		Meta("openapi:extension:x-speakeasy-group", "risk.exclusions")
+		Meta("openapi:extension:x-speakeasy-name-override", "suggest")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskSuggestExclusion", "type": "mutation"}`)
+	})
+
 	Method("testDetectionRule", func() {
 		Description("Run a single detection rule against pasted sample text and return any matches. Reuses the same scanner code (gitleaks, Presidio, prompt-injection, custom regex) that the analyzer runs in production so the playground match shape mirrors the chat-message path.")
 
@@ -1480,6 +1522,14 @@ var SuggestCustomDetectionRuleResult = Type("SuggestCustomDetectionRuleResult", 
 		Enum("info", "low", "medium", "high", "critical")
 	})
 	Required("rule_id", "title", "description", "regex", "severity")
+})
+
+var SuggestExclusionResult = Type("SuggestExclusionResult", func() {
+	Attribute("match_type", String, "How match_value is interpreted (exact, regex, rule_id, source, entity_type).")
+	Attribute("match_value", String, "The value matched against findings, interpreted per match_type.")
+	Attribute("rule_id_filter", String, "Only apply within this rule_id. Empty means any.")
+	Attribute("source_filter", String, "Only apply within this source. Empty means any.")
+	Required("match_type", "match_value")
 })
 
 var TestDetectionRuleMatch = Type("TestDetectionRuleMatch", func() {

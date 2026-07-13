@@ -1,19 +1,37 @@
+import { useFilterState, type FilterValue } from "@/components/filters";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { DotTable } from "@/components/ui/dot-table";
-import { ViewToggle } from "@/components/ui/view-toggle";
+import { Type } from "@/components/ui/type";
 import { useViewMode } from "@/components/ui/use-view-mode";
-import { useSdkClient } from "@/contexts/Sdk";
+import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useCatalogIconMap } from "./sources-hooks";
-import { remoteMcpRouteParam, tunneledMcpRouteParam } from "@/lib/sources";
+import {
+  attachmentToURNPrefix,
+  remoteMcpRouteParam,
+  tunneledMcpRouteParam,
+} from "@/lib/sources";
 import { TUNNELED_MCP_FEATURE_FLAG } from "@/lib/tunneledMcp";
 import { useRoutes } from "@/routes";
 import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import { useListAssets } from "@gram/client/react-query/listAssets.js";
 import { useListTools } from "@gram/client/react-query/listTools.js";
+import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
+import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.js";
 import { useTunneledMcpServers } from "@gram/client/react-query/tunneledMcpServers.js";
+import {
+  contentTypeToFormat,
+  hasActiveSourceFilters,
+  matchesSourceFilters,
+  SOURCE_FILTERS,
+  SOURCE_FILTER_OPTIONS,
+  sourceTypeFilterOptions,
+  transportFilterOptions,
+  visibleSourceFilters,
+  type SourceFacets,
+} from "./source-filter-schema";
 import {
   Button,
   Dialog,
@@ -32,7 +50,7 @@ import {
   Plus,
   Server,
 } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { create } from "zustand";
 import { RemoveSourceDialogContent } from "./RemoveSourceDialogContent";
@@ -113,8 +131,11 @@ export default function Sources(): JSX.Element {
     (isTunneledMcpEnabled && isLoadingTunneledMcp);
 
   const [viewMode, setViewMode] = useViewMode();
+  const [search, setSearch] = useState("");
+  const filters = useFilterState(SOURCE_FILTERS);
   const toolCountsBySource = useToolCountsBySource();
   const assetsCausingFailure = useUnusedAssetIds();
+  const mcpUsage = useMcpUsage();
   const {
     dialogState,
     openRemoveSource,
@@ -196,6 +217,7 @@ export default function Sources(): JSX.Element {
       name: server.name,
       url: server.url,
       type: "remotemcp" as const,
+      transportType: server.transportType,
     }));
 
     const tunneledMcpSources: NamedAsset[] = isTunneledMcpEnabled
@@ -225,6 +247,43 @@ export default function Sources(): JSX.Element {
     tunneledMcpServersResult,
     isTunneledMcpEnabled,
   ]);
+
+  const filteredSources = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return allSources.filter((asset) => {
+      const facets = sourceFacets(
+        asset,
+        mcpUsage,
+        assetsCausingFailure.has(asset.deploymentAssetId),
+      );
+      if (!matchesSourceFilters(facets, filters.values)) return false;
+      if (!query) return true;
+      return (
+        (asset.name?.toLowerCase().includes(query) ?? false) ||
+        asset.slug.toLowerCase().includes(query)
+      );
+    });
+  }, [allSources, mcpUsage, assetsCausingFailure, filters.values, search]);
+
+  const filterOptions = useMemo(
+    () => ({
+      ...SOURCE_FILTER_OPTIONS,
+      type: sourceTypeFilterOptions(isTunneledMcpEnabled),
+      transport: transportFilterOptions(
+        allSources.flatMap((asset) =>
+          asset.type === "remotemcp" && asset.transportType
+            ? [asset.transportType]
+            : [],
+        ),
+      ),
+    }),
+    [allSources, isTunneledMcpEnabled],
+  );
+
+  const showNoMatches =
+    !isLoading &&
+    filteredSources.length === 0 &&
+    (search.trim() !== "" || hasActiveSourceFilters(filters.values));
 
   const removeSource = async (
     assetId: string,
@@ -307,9 +366,6 @@ export default function Sources(): JSX.Element {
         <Page.Section.Description className="max-w-2xl">
           {sourcesDescription(isFunctionsEnabled, isTunneledMcpEnabled)}
         </Page.Section.Description>
-        <Page.Section.CTA>
-          <ViewToggle value={viewMode} onChange={setViewMode} />
-        </Page.Section.CTA>
         <Page.Section.CTA>
           <DeploymentsButton deploymentId={deployment?.id} />
         </Page.Section.CTA>
@@ -415,15 +471,41 @@ export default function Sources(): JSX.Element {
           </RequireScope>
         </Page.Section.CTA>
         <Page.Section.Body>
+          {!isLoading && (
+            <Page.Toolbar className="mb-6">
+              <Page.Toolbar.Search
+                value={search}
+                onChange={setSearch}
+                placeholder="Search sources..."
+              />
+              <Page.Toolbar.Filters
+                schema={visibleSourceFilters(filters.values)}
+                values={filters.values}
+                optionsById={filterOptions}
+                onChange={
+                  filters.setValue as (id: string, value: FilterValue) => void
+                }
+                onClear={filters.clearValue as (id: string) => void}
+                onClearAll={filters.clearAll}
+              />
+              <Page.Toolbar.ViewAs value={viewMode} onChange={setViewMode} />
+            </Page.Toolbar>
+          )}
           {isLoading ? (
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
               <SourceCardSkeleton />
               <SourceCardSkeleton />
               <SourceCardSkeleton />
             </div>
+          ) : showNoMatches ? (
+            <Type muted className="py-8 text-center">
+              {search.trim() !== ""
+                ? `No sources matching “${search}”`
+                : "No sources match your filters"}
+            </Type>
           ) : viewMode === "grid" ? (
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-              {allSources?.map((asset: NamedAsset) => (
+              {filteredSources.map((asset: NamedAsset) => (
                 <SourceCard
                   key={asset.id}
                   asset={asset}
@@ -449,7 +531,7 @@ export default function Sources(): JSX.Element {
                 { label: "", className: "text-right" },
               ]}
             >
-              {allSources?.map((asset: NamedAsset) => (
+              {filteredSources.map((asset: NamedAsset) => (
                 <SourceTableRow
                   key={asset.id}
                   asset={asset}
@@ -507,6 +589,81 @@ export default function Sources(): JSX.Element {
       </Page.Section>
     </>
   );
+}
+
+interface McpUsage {
+  /** Every tool URN exposed by any toolset (Hosted MCP server). */
+  toolsetToolUrns: string[];
+  /** IDs of remote/tunneled MCP servers that have an mcp_server row. */
+  remoteMcpServerIds: Set<string>;
+  tunneledMcpServerIds: Set<string>;
+}
+
+/**
+ * A source counts as "used in an MCP server" through one of two paths, because
+ * the two kinds of MCP server are backed differently. Deployment-bound sources
+ * (OpenAPI / functions / catalog) contribute tools, so they're used when some
+ * toolset references a tool URN under their prefix. Remote and tunneled
+ * sources contribute no tools; they're used when an mcp_server row points back
+ * at them.
+ */
+function useMcpUsage(): McpUsage {
+  const gramProject = useProjectSlugForRequests();
+  const { data: toolsetsData } = useListToolsets();
+  const { data: mcpServersResult } = useMcpServers({ gramProject }, undefined, {
+    throwOnError: false,
+  });
+
+  return useMemo(() => {
+    const toolsetToolUrns = (toolsetsData?.toolsets ?? []).flatMap(
+      (toolset) => toolset.toolUrns ?? [],
+    );
+    const remoteMcpServerIds = new Set<string>();
+    const tunneledMcpServerIds = new Set<string>();
+    for (const server of mcpServersResult?.mcpServers ?? []) {
+      if (server.remoteMcpServerId) {
+        remoteMcpServerIds.add(server.remoteMcpServerId);
+      }
+      if (server.tunneledMcpServerId) {
+        tunneledMcpServerIds.add(server.tunneledMcpServerId);
+      }
+    }
+    return { toolsetToolUrns, remoteMcpServerIds, tunneledMcpServerIds };
+  }, [toolsetsData, mcpServersResult]);
+}
+
+function sourceUsedInMcp(asset: NamedAsset, usage: McpUsage): boolean {
+  if (asset.type === "remotemcp") {
+    return usage.remoteMcpServerIds.has(asset.id);
+  }
+  if (asset.type === "tunneledmcp") {
+    return usage.tunneledMcpServerIds.has(asset.id);
+  }
+  const prefix = attachmentToURNPrefix(asset.type, asset.slug);
+  return usage.toolsetToolUrns.some((urn) => urn.startsWith(prefix));
+}
+
+function sourceFacets(
+  asset: NamedAsset,
+  usage: McpUsage,
+  failing: boolean,
+): SourceFacets {
+  return {
+    type: asset.type,
+    usedInMcp: sourceUsedInMcp(asset, usage),
+    transport: asset.type === "remotemcp" ? asset.transportType : undefined,
+    format:
+      asset.type === "openapi"
+        ? contentTypeToFormat(asset.contentType)
+        : undefined,
+    catalogKind:
+      asset.type === "externalmcp"
+        ? asset.organizationMcpCollectionRegistryId
+          ? "collection"
+          : "server"
+        : undefined,
+    failing,
+  };
 }
 
 /**

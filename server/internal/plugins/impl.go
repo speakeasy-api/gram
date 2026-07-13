@@ -293,6 +293,7 @@ func (s *Service) ListPlugins(ctx context.Context, payload *gen.ListPluginsPaylo
 			Name:            r.Name,
 			Slug:            r.Slug,
 			Description:     conv.FromPGText[string](r.Description),
+			IsDefault:       conv.FromPGBool[bool](r.IsDefault),
 			ServerCount:     &r.ServerCount,
 			AssignmentCount: &r.AssignmentCount,
 			Servers:         genServers,
@@ -1307,15 +1308,17 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 	}
 
 	result := &gen.PublishStatusResult{
-		Configured:       s.github != nil,
-		Connected:        false,
-		RepoOwner:        nil,
-		RepoName:         nil,
-		RepoURL:          nil,
-		MarketplaceURL:   nil,
-		HasCollaborators: nil,
-		UpToDate:         nil,
-		LastPublishedAt:  nil,
+		Configured:                s.github != nil,
+		Connected:                 false,
+		RepoOwner:                 nil,
+		RepoName:                  nil,
+		RepoURL:                   nil,
+		MarketplaceURL:            nil,
+		ClaudeObservabilityPlugin: nil,
+		CodexObservabilityPlugin:  nil,
+		HasCollaborators:          nil,
+		UpToDate:                  nil,
+		LastPublishedAt:           nil,
 	}
 
 	if s.github != nil {
@@ -1329,6 +1332,24 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 			result.RepoName = &conn.RepoName
 			repoURL := fmt.Sprintf("https://github.com/%s/%s", conn.RepoOwner, conn.RepoName)
 			result.RepoURL = &repoURL
+			// The observability plugin slugs are org-name-derived (see naming
+			// package); surface them so install UIs never re-derive the formula.
+			slugCfg := GenerateConfig{
+				OrgName:           s.resolveOrganizationName(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug),
+				OrgEmail:          "",
+				OrgID:             "",
+				ServerURL:         "",
+				APIKey:            "",
+				HooksAPIKey:       "",
+				ProjectSlug:       "",
+				IsDefaultProject:  false,
+				Version:           "",
+				MarketplaceName:   "",
+				ObservabilityMode: false,
+				BrowserLogin:      false,
+			}
+			result.ClaudeObservabilityPlugin = conv.PtrEmpty(ClaudeObservabilitySlug(slugCfg))
+			result.CodexObservabilityPlugin = conv.PtrEmpty(CodexObservabilitySlug(slugCfg))
 			if conn.MarketplaceToken.Valid && s.serverURL != "" {
 				marketplaceURL := fmt.Sprintf("%s%s%s.git", s.serverURL, marketplace.RoutePrefix, conn.MarketplaceToken.String)
 				result.MarketplaceURL = &marketplaceURL
@@ -2112,18 +2133,7 @@ func (s *Service) UpdateMarketplaceSettings(ctx context.Context, payload *gen.Up
 // flows like project-scoped API keys leave unset) so non-default projects get
 // their correct project-scoped name.
 func (s *Service) resolveDefaultMarketplaceName(ctx context.Context, orgID, orgSlug string, projectID uuid.UUID) string {
-	orgName := orgSlug
-	switch fetched, err := s.repo.GetOrganizationName(ctx, orgID); {
-	case err == nil:
-		orgName = fetched
-	case errors.Is(err, pgx.ErrNoRows):
-		// Use the slug from auth context.
-	default:
-		s.logger.WarnContext(ctx, "failed to fetch organization name, falling back to slug",
-			attr.SlogOrganizationID(orgID),
-			attr.SlogError(err),
-		)
-	}
+	orgName := s.resolveOrganizationName(ctx, orgID, orgSlug)
 
 	pctx, err := s.repo.GetProjectMarketplaceNameContext(ctx, projectID)
 	if err != nil {
@@ -2136,6 +2146,25 @@ func (s *Service) resolveDefaultMarketplaceName(ctx context.Context, orgID, orgS
 		return DefaultMarketplaceName(orgName, "", true)
 	}
 	return DefaultMarketplaceName(orgName, pctx.ProjectSlug, pctx.IsDefaultProject)
+}
+
+// resolveOrganizationName returns the org's display name, falling back to the
+// auth-context slug when the org row is missing or unreadable. The name feeds
+// the org-derived marketplace and observability-plugin slug formulas.
+func (s *Service) resolveOrganizationName(ctx context.Context, orgID, orgSlug string) string {
+	orgName := orgSlug
+	switch fetched, err := s.repo.GetOrganizationName(ctx, orgID); {
+	case err == nil:
+		orgName = fetched
+	case errors.Is(err, pgx.ErrNoRows):
+		// Use the slug from auth context.
+	default:
+		s.logger.WarnContext(ctx, "failed to fetch organization name, falling back to slug",
+			attr.SlogOrganizationID(orgID),
+			attr.SlogError(err),
+		)
+	}
+	return orgName
 }
 
 // pluginAPIKeyCandidate is the in-memory shape of a generated plugin API key
@@ -2171,7 +2200,7 @@ func (s *Service) buildPluginAPIKeyCandidate(scope auth.APIKeyScope, purpose str
 		fullKey:   fullKey,
 		keyHash:   keyHash,
 		keyPrefix: s.keyPrefix + token[:5],
-		keyName:   fmt.Sprintf("plugins-%s-%s-%s", purpose, time.Now().UTC().Format("20060102-150405"), token[:6]),
+		keyName:   fmt.Sprintf("%s%s-%s-%s", auth.PluginAPIKeyNamePrefix, purpose, time.Now().UTC().Format("20060102-150405"), token[:6]),
 		scope:     scope,
 	}, nil
 }
@@ -2515,13 +2544,15 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlu
 		APIKey:      "",
 		HooksAPIKey: "",
 		ProjectSlug: projectSlug,
-		// 0.1.{epoch} stays strictly above the historical 0.1.0 manifests
-		// already in users' Claude/Cursor/Codex caches, so a re-publish is
-		// always seen as a newer version and triggers a refresh.
-		Version:           fmt.Sprintf("0.1.%d", time.Now().Unix()),
+		// Milliseconds rather than seconds so publishes close together (e.g. a
+		// settings flip right after a publish) still mint distinct manifest
+		// versions; the 13-digit patch also sorts numerically above the
+		// 10-digit second epochs already in installed caches.
+		Version:           fmt.Sprintf("%d", time.Now().UnixMilli()),
 		MarketplaceName:   "",
 		IsDefaultProject:  s.isDefaultProject(ctx, projectID),
 		ObservabilityMode: false,
+		BrowserLogin:      false,
 	}
 	orgName, err := s.repo.GetOrganizationName(ctx, orgID)
 	switch {
@@ -2559,6 +2590,21 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlu
 		)
 	}
 	cfg.ObservabilityMode = observabilityMode
+	// hooks_browser_login is the org-level opt-in for the interactive browser
+	// token exchange. Off (or unreadable), the generated plugin never opens a
+	// browser: senders authenticate through env credentials, a previously
+	// cached key, or the baked org-wide key.
+	browserLogin, err := s.repo.IsOrganizationFeatureEnabled(ctx, repo.IsOrganizationFeatureEnabledParams{
+		OrganizationID: orgID,
+		FeatureName:    string(productfeatures.FeatureHooksBrowserLogin),
+	})
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to read hooks browser login flag, defaulting to no browser login",
+			attr.SlogOrganizationID(orgID),
+			attr.SlogError(err),
+		)
+	}
+	cfg.BrowserLogin = browserLogin
 	return cfg
 }
 
@@ -2596,6 +2642,7 @@ func pluginToGen(p repo.Plugin, servers []repo.PluginServer, assignments []repo.
 		Name:            p.Name,
 		Slug:            p.Slug,
 		Description:     conv.FromPGText[string](p.Description),
+		IsDefault:       conv.FromPGBool[bool](p.IsDefault),
 		ServerCount:     nil,
 		AssignmentCount: nil,
 		Servers:         nil,

@@ -21,6 +21,7 @@ INSERT INTO risk_policies (
   , user_message
   , prompt
   , model_config
+  , score
   , version
 )
 VALUES (
@@ -45,6 +46,7 @@ VALUES (
   , @user_message
   , sqlc.narg(prompt)::text
   , sqlc.narg(model_config)::jsonb
+  , COALESCE(sqlc.narg(score)::double precision, 5.0)
   , 1
 )
 RETURNING *;
@@ -103,6 +105,8 @@ SET name = @name
   , user_message = @user_message
   , prompt = sqlc.narg(prompt)::text
   , model_config = sqlc.narg(model_config)::jsonb
+  -- Descriptive severity: preserve on omit, never contributes to the version bump.
+  , score = COALESCE(sqlc.narg(score)::double precision, score)
   , version = CASE
       WHEN sources IS DISTINCT FROM @sources
         OR presidio_entities IS DISTINCT FROM @presidio_entities

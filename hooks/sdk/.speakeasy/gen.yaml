@@ -1,0 +1,69 @@
+configVersion: 2.0.0
+generation:
+  devContainers:
+    enabled: false
+    schemaPath: ""
+  sdkClassName: SpeakeasyHooks
+  maintainOpenAPIOrder: true
+  usageSnippets:
+    optionalPropertyRendering: withExample
+    sdkInitStyle: constructor
+  useClassNamesForArrayFields: true
+  fixes:
+    nameResolutionDec2023: true
+    nameResolutionFeb2025: true
+    parameterOrderingFeb2024: true
+    requestResponseComponentNamesFeb2024: true
+    securityFeb2025: true
+    sharedErrorComponentsApr2025: true
+    sharedNestedComponentsJan2026: true
+    nameOverrideFeb2026: true
+  auth:
+    oAuth2ClientCredentialsEnabled: false
+    oAuth2PasswordEnabled: false
+    hoistGlobalSecurity: true
+  inferSSEOverload: true
+  sdkHooksConfigAccess: true
+  schemas:
+    allOfMergeStrategy: shallowMerge
+  requestBodyFieldName: body
+  versioningStrategy: manual
+  persistentEdits: {}
+  tests:
+    generateTests: false
+    generateNewTests: false
+    skipResponseBodyAssertions: false
+go:
+  version: 0.1.0
+  additionalDependencies: {}
+  baseErrorName: SpeakeasyHooksError
+  clientServerStatusCodesAsErrors: true
+  defaultErrorName: APIError
+  enableCustomCodeRegions: false
+  enableSkipDeserialization: false
+  flattenGlobalSecurity: true
+  forwardCompatibleEnumsByDefault: true
+  forwardCompatibleUnionsByDefault: tagged-and-untagged
+  imports:
+    option: openapi
+    paths:
+      callbacks: models/callbacks
+      errors: models/apierrors
+      operations: models/operations
+      shared: models/components
+      webhooks: models/webhooks
+  includeEmptyObjects: true
+  inferUnionDiscriminators: true
+  inputModelSuffix: input
+  maxMethodParams: 0
+  methodArguments: require-security-and-request
+  modulePath: ""
+  multipartArrayFormat: standard
+  nullableOptionalWrapper: true
+  outputModelSuffix: output
+  packageName: github.com/speakeasy-api/gram/hooks/sdk
+  respectRequiredFields: false
+  respectTitlesForPrimitiveUnionMembers: true
+  responseFormat: envelope
+  sdkPackageName: ""
+  unionStrategy: populated-fields

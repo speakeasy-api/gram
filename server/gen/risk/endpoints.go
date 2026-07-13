@@ -53,6 +53,7 @@ type Endpoints struct {
 	UpdateRiskExclusion            goa.Endpoint
 	DeleteRiskExclusion            goa.Endpoint
 	SuggestCustomDetectionRule     goa.Endpoint
+	SuggestExclusion               goa.Endpoint
 	TestDetectionRule              goa.Endpoint
 	EvaluatePromptGuardrail        goa.Endpoint
 	SaveRiskEvalReview             goa.Endpoint
@@ -102,6 +103,7 @@ func NewEndpoints(s Service) *Endpoints {
 		UpdateRiskExclusion:            NewUpdateRiskExclusionEndpoint(s, a.APIKeyAuth),
 		DeleteRiskExclusion:            NewDeleteRiskExclusionEndpoint(s, a.APIKeyAuth),
 		SuggestCustomDetectionRule:     NewSuggestCustomDetectionRuleEndpoint(s, a.APIKeyAuth),
+		SuggestExclusion:               NewSuggestExclusionEndpoint(s, a.APIKeyAuth),
 		TestDetectionRule:              NewTestDetectionRuleEndpoint(s, a.APIKeyAuth),
 		EvaluatePromptGuardrail:        NewEvaluatePromptGuardrailEndpoint(s, a.APIKeyAuth),
 		SaveRiskEvalReview:             NewSaveRiskEvalReviewEndpoint(s, a.APIKeyAuth),
@@ -149,6 +151,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.UpdateRiskExclusion = m(e.UpdateRiskExclusion)
 	e.DeleteRiskExclusion = m(e.DeleteRiskExclusion)
 	e.SuggestCustomDetectionRule = m(e.SuggestCustomDetectionRule)
+	e.SuggestExclusion = m(e.SuggestExclusion)
 	e.TestDetectionRule = m(e.TestDetectionRule)
 	e.EvaluatePromptGuardrail = m(e.EvaluatePromptGuardrail)
 	e.SaveRiskEvalReview = m(e.SaveRiskEvalReview)
@@ -2120,6 +2123,65 @@ func NewSuggestCustomDetectionRuleEndpoint(s Service, authAPIKeyFn security.Auth
 			return nil, err
 		}
 		return s.SuggestCustomDetectionRule(ctx, p)
+	}
+}
+
+// NewSuggestExclusionEndpoint returns an endpoint function that calls the
+// method "suggestExclusion" of service "risk".
+func NewSuggestExclusionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SuggestExclusionPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.SuggestExclusion(ctx, p)
 	}
 }
 

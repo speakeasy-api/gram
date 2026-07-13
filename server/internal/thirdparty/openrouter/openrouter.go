@@ -31,9 +31,58 @@ import (
 
 const OpenRouterBaseURL = "https://openrouter.ai/api"
 
+// KeyType selects which of an org's provisioned OpenRouter keys pays for a
+// request. Each org can hold one key per type (openrouter_api_keys is keyed
+// by (organization_id, key_type)): the chat key funds customer-facing
+// completion surfaces, while the internal key funds platform-initiated LLM
+// usage (risk judges, title generation, chat resolutions, memory) so a burst
+// of scanning inference can never exhaust the chat cap and 402 the
+// customer's chat surface. Selection is an explicit request field — never
+// derived from the usage source, which the completions proxy accepts from
+// clients and could be spoofed onto the internal key.
+type KeyType string
+
+const (
+	KeyTypeChat     KeyType = "chat"
+	KeyTypeInternal KeyType = "internal"
+)
+
+// AllKeyTypes is the single definition of the valid key-type set. Validate
+// and any caller that fans out across an org's keys (e.g. account-type
+// limit refreshes) consume it, so adding a key type here propagates without
+// hunting call sites.
+var AllKeyTypes = []KeyType{KeyTypeChat, KeyTypeInternal}
+
+// upstreamKeyCreateTimeout bounds the POST /v1/keys call made while holding
+// the per-(org, key type) provisioning advisory lock.
+const upstreamKeyCreateTimeout = 15 * time.Second
+
+// OrDefault resolves the zero value to the chat key, so existing callers
+// that never set a key type keep their behavior.
+func (k KeyType) OrDefault() KeyType {
+	if k == "" {
+		return KeyTypeChat
+	}
+	return k
+}
+
+// Validate rejects unknown key types (the zero value counts as chat). The
+// allowed values are deliberately enforced here, not with a DB CHECK
+// constraint, per this repo's schema conventions — and callers that mint
+// rows or pick workflow ids must call it so a typo cannot create a third
+// key type under the chat naming pattern or clobber the chat refresh
+// workflow id.
+func (k KeyType) Validate() error {
+	if slices.Contains(AllKeyTypes, k.OrDefault()) {
+		return nil
+	}
+	return fmt.Errorf("invalid openrouter key type %q", string(k))
+}
+
 // Just a general allowlist for models we allow to proxy through us for playground usage, chat, or agentic usecases
 // This list can stay sufficiently robust, we should just need to allow list a model before it goes through us
 var allowList = map[string]bool{
+	"anthropic/claude-fable-5":      true,
 	"anthropic/claude-sonnet-5":     true,
 	"anthropic/claude-opus-4.8":     true,
 	"anthropic/claude-opus-4.7":     true,
@@ -42,7 +91,9 @@ var allowList = map[string]bool{
 	"anthropic/claude-opus-4.6":     true,
 	"anthropic/claude-opus-4.5":     true,
 	"anthropic/claude-haiku-4.5":    true,
-	"anthropic/claude-sonnet-4":     true,
+	"openai/gpt-5.6-sol":            true,
+	"openai/gpt-5.6-terra":          true,
+	"openai/gpt-5.6-luna":           true,
 	"openai/gpt-5.5":                true,
 	"openai/gpt-5.5-pro":            true,
 	"openai/gpt-5.4":                true,
@@ -51,18 +102,12 @@ var allowList = map[string]bool{
 	"openai/gpt-5.3-codex":          true,
 	"openai/gpt-5.1":                true,
 	"openai/gpt-5":                  true,
-	"openai/gpt-4.1":                true,
-	"openai/o4-mini":                true,
-	"openai/o3":                     true,
 	"google/gemini-3.5-flash":       true,
 	"google/gemini-3.1-pro-preview": true,
 	"google/gemini-3.1-flash-lite":  true,
-	"google/gemini-2.5-pro":         true,
-	"google/gemini-2.5-flash":       true,
 	"deepseek/deepseek-v4-pro":      true,
 	"deepseek/deepseek-v4-flash":    true,
 	"deepseek/deepseek-v3.2":        true,
-	"deepseek/deepseek-r1":          true,
 	"meta-llama/llama-4-maverick":   true,
 	"x-ai/grok-4.3":                 true,
 	"x-ai/grok-4.20":                true,
@@ -81,9 +126,27 @@ func IsModelAllowed(model string) bool {
 	return allowList[model]
 }
 
-// ResolveModel returns the model as-is if it's in the allowlist.
-// Otherwise, it returns the first allowed model (sorted alphabetically)
-// from the same provider. Returns empty string if no fallback is found.
+// providerFallbacks pins the model an unknown or de-listed model resolves to,
+// per provider. Without this, ResolveModel's alphabetical fallback silently
+// upgrades callers to whatever sorts first — for Anthropic that is the
+// premium-priced claude-fable-5. Each entry names the provider's
+// standard-cost workhorse; keep it allowlisted (enforced by tests).
+var providerFallbacks = map[string]string{
+	"anthropic":  "anthropic/claude-sonnet-5",
+	"openai":     "openai/gpt-5.6-terra",
+	"google":     "google/gemini-3.5-flash",
+	"deepseek":   "deepseek/deepseek-v4-flash",
+	"meta-llama": "meta-llama/llama-4-maverick",
+	"x-ai":       "x-ai/grok-4.3",
+	"qwen":       "qwen/qwen3.7-max",
+	"moonshotai": "moonshotai/kimi-k2.6",
+	"mistralai":  "mistralai/mistral-medium-3-5",
+}
+
+// ResolveModel returns the model as-is if it's in the allowlist. Otherwise, it
+// returns the provider's pinned fallback from providerFallbacks, or — for
+// providers without a pin — the first allowed model sorted alphabetically.
+// Returns empty string if no fallback is found.
 func ResolveModel(model string) string {
 	if allowList[model] {
 		return model
@@ -92,6 +155,10 @@ func ResolveModel(model string) string {
 	provider, _, ok := strings.Cut(model, "/")
 	if !ok || provider == "" {
 		return ""
+	}
+
+	if fallback := providerFallbacks[provider]; fallback != "" && allowList[fallback] {
+		return fallback
 	}
 
 	prefix := provider + "/"
@@ -130,13 +197,13 @@ func IsSpecialLimitOrg(orgID string) bool {
 }
 
 type Provisioner interface {
-	ProvisionAPIKey(ctx context.Context, orgID string) (string, error)
+	ProvisionAPIKey(ctx context.Context, orgID string, keyType KeyType) (string, error)
 
 	// RefreshAPIKeyLimit mutates the upstream OpenRouter key limit (PATCH
 	// /v1/keys/:hash) and mirrors the new value into the local DB.
-	RefreshAPIKeyLimit(ctx context.Context, orgID string, limit *int) (int, error)
+	RefreshAPIKeyLimit(ctx context.Context, orgID string, keyType KeyType, limit *int) (int, error)
 
-	GetCreditsUsed(ctx context.Context, orgID string) (float64, int, error)
+	GetCreditsUsed(ctx context.Context, orgID string, keyType KeyType) (float64, int, error)
 
 	// GetKeyUsage issues GET /v1/key for the given API key and returns the
 	// rounded monthly usage along with the upstream-configured monthly limit
@@ -151,27 +218,31 @@ type Provisioner interface {
 	// introduced by out-of-band edits on the OpenRouter dashboard. A nil
 	// upstreamLimit (unlimited key) is treated as a no-op. Returns the
 	// effective limit the caller should use for the current tick.
-	ReconcileMonthlyCredits(ctx context.Context, orgID string, currentLimit int64, upstreamLimit *int64) (int64, error)
+	ReconcileMonthlyCredits(ctx context.Context, orgID string, keyType KeyType, currentLimit int64, upstreamLimit *int64) (int64, error)
 
 	// GetModelUsage fetches generation usage by ID. Normal completion paths use
 	// inline usage; this is only a fallback for streams closed before the final
-	// usage chunk arrives.
-	GetModelUsage(ctx context.Context, generationID string, orgID string) (*ModelUsage, error)
+	// usage chunk arrives. A generation is only visible under the key that made
+	// it, so the caller must name the same key type the completion used.
+	GetModelUsage(ctx context.Context, generationID string, orgID string, keyType KeyType) (*ModelUsage, error)
 }
 
 type KeyRefresher interface {
-	ScheduleOpenRouterKeyRefresh(ctx context.Context, orgID string) error
+	ScheduleOpenRouterKeyRefresh(ctx context.Context, orgID string, keyType KeyType) error
 }
 
 type OpenRouter struct {
 	provisioningKey string
 	env             string
 	logger          *slog.Logger
+	db              *pgxpool.Pool
 	repo            *repo.Queries
 	orgRepo         *orgRepo.Queries
 	orClient        *guardian.HTTPClient
 	refresher       KeyRefresher
 	featureClient   *productfeatures.Client
+	// baseURL is OpenRouterBaseURL outside of tests.
+	baseURL string
 }
 
 var _ Provisioner = (*OpenRouter)(nil)
@@ -183,52 +254,39 @@ func New(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolic
 		provisioningKey: provisioningKey,
 		env:             env,
 		logger:          logger.With(attr.SlogComponent("openrouter")),
+		db:              db,
 		repo:            repo.New(db),
 		orgRepo:         orgRepo.New(db),
 		orClient:        orClient,
 		refresher:       refresher,
 		featureClient:   featureClient,
+		baseURL:         OpenRouterBaseURL,
 	}
 }
 
-func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string) (string, error) {
+func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string, keyType KeyType) (string, error) {
 	var openrouterKey string
 
-	key, err := o.repo.GetOpenRouterAPIKey(ctx, orgID)
+	keyType = keyType.OrDefault()
+	if err := keyType.Validate(); err != nil {
+		return "", fmt.Errorf("provision openrouter key: %w", err)
+	}
+	key, err := o.repo.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(keyType),
+	})
 	switch {
+	// A real read failure must be checked before the missing-key case: a
+	// failed lookup returns a zero-valued row, so key.Key == "" would
+	// otherwise swallow the error and mint an upstream key.
+	case err != nil && !errors.Is(err, pgx.ErrNoRows):
+		return "", oops.E(oops.CodeUnexpected, err, "error reading open router key data").LogError(ctx, o.logger)
+
 	case errors.Is(err, pgx.ErrNoRows), key.Key == "":
-		org, err := o.orgRepo.GetOrganizationMetadata(ctx, orgID)
-		if err != nil {
-			return "", oops.E(oops.CodeUnexpected, err, "failed to get organization").LogError(ctx, o.logger)
-		}
-
-		creditAmount := o.getLimitForOrg(org)
-
-		keyResponse, err := o.createOpenRouterAPIKey(ctx, orgID, org.Slug, creditAmount)
+		openrouterKey, err = o.createAndStoreAPIKey(ctx, orgID, keyType)
 		if err != nil {
 			return "", err
 		}
-
-		_, err = o.repo.CreateOpenRouterAPIKey(ctx, repo.CreateOpenRouterAPIKeyParams{
-			OrganizationID: orgID,
-			Key:            *keyResponse.Key,
-			KeyHash:        keyResponse.Data.Hash,
-			MonthlyCredits: int64(creditAmount),
-		})
-		if err != nil {
-			return "", oops.E(oops.CodeUnexpected, err, "failed to store openrouter key data").LogError(ctx, o.logger)
-		}
-
-		if o.refresher != nil {
-			if err := o.refresher.ScheduleOpenRouterKeyRefresh(ctx, orgID); err != nil {
-				return "", oops.E(oops.CodeUnexpected, err, "error scheduling open router key refresh").LogError(ctx, o.logger)
-			}
-		}
-
-		openrouterKey = *keyResponse.Key
-
-	case err != nil:
-		return "", oops.E(oops.CodeUnexpected, err, "error reading open router key data").LogError(ctx, o.logger)
 
 	default:
 		openrouterKey = key.Key
@@ -241,8 +299,100 @@ func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string) (string,
 	return openrouterKey, nil
 }
 
-func (o *OpenRouter) RefreshAPIKeyLimit(ctx context.Context, orgID string, limit *int) (int, error) {
-	key, err := o.repo.GetOpenRouterAPIKey(ctx, orgID)
+// createAndStoreAPIKey mints an upstream OpenRouter key and records it,
+// serialized per (org, key type) with an advisory lock held across the
+// upstream call: concurrent first completions would otherwise both miss the
+// row, both create upstream keys, and the loser's insert would fail on the
+// composite primary key, leaving an orphaned upstream key. Contention only
+// happens on an org's first completion per key type, so holding the
+// transaction across one HTTP round trip is acceptable — but the round trip
+// is time-boxed below, because the lock and a pooled DB connection are held
+// across it and every waiter pins its own pool connection.
+func (o *OpenRouter) createAndStoreAPIKey(ctx context.Context, orgID string, keyType KeyType) (string, error) {
+	dbtx, err := o.db.Begin(ctx)
+	if err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "error provisioning openrouter key").LogError(ctx, o.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	txRepo := o.repo.WithTx(dbtx)
+	if err := txRepo.LockOpenRouterKeyProvisioning(ctx, repo.LockOpenRouterKeyProvisioningParams{
+		OrganizationID: orgID,
+		KeyType:        string(keyType),
+	}); err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "error locking openrouter key provisioning").LogError(ctx, o.logger)
+	}
+
+	// Re-read under the lock: a concurrent provisioner may have created the
+	// key while we waited.
+	key, err := txRepo.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(keyType),
+	})
+	switch {
+	// Read-failure check must precede the missing-key case — see
+	// ProvisionAPIKey.
+	case err != nil && !errors.Is(err, pgx.ErrNoRows):
+		return "", oops.E(oops.CodeUnexpected, err, "error reading open router key data").LogError(ctx, o.logger)
+	case errors.Is(err, pgx.ErrNoRows), key.Key == "":
+	default:
+		return key.Key, nil
+	}
+
+	// Read through the transaction: this goroutine already holds a pool
+	// connection, and under provisioning contention every waiter holds one
+	// too — acquiring a second connection here could deadlock the winner
+	// against a pool exhausted by its own waiters.
+	org, err := o.orgRepo.WithTx(dbtx).GetOrganizationMetadata(ctx, orgID)
+	if err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "failed to get organization").LogError(ctx, o.logger)
+	}
+
+	creditAmount := o.getLimitForOrg(org)
+
+	// Cap the upstream call so guardian's retry backoff cannot stretch the
+	// advisory-lock hold to minutes during an OpenRouter outage; a burst of
+	// waiters would otherwise exhaust the DB pool.
+	createCtx, cancel := context.WithTimeout(ctx, upstreamKeyCreateTimeout)
+	defer cancel()
+	keyResponse, err := o.createOpenRouterAPIKey(createCtx, orgID, org.Slug, keyType, creditAmount)
+	if err != nil {
+		return "", err
+	}
+
+	_, err = txRepo.CreateOpenRouterAPIKey(ctx, repo.CreateOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(keyType),
+		Key:            *keyResponse.Key,
+		KeyHash:        keyResponse.Data.Hash,
+		MonthlyCredits: int64(creditAmount),
+	})
+	if err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "failed to store openrouter key data").LogError(ctx, o.logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "failed to store openrouter key data").LogError(ctx, o.logger)
+	}
+
+	if o.refresher != nil {
+		if err := o.refresher.ScheduleOpenRouterKeyRefresh(ctx, orgID, keyType); err != nil {
+			return "", oops.E(oops.CodeUnexpected, err, "error scheduling open router key refresh").LogError(ctx, o.logger)
+		}
+	}
+
+	return *keyResponse.Key, nil
+}
+
+func (o *OpenRouter) RefreshAPIKeyLimit(ctx context.Context, orgID string, keyType KeyType, limit *int) (int, error) {
+	keyType = keyType.OrDefault()
+	if err := keyType.Validate(); err != nil {
+		return 0, fmt.Errorf("refresh openrouter key limit: %w", err)
+	}
+	key, err := o.repo.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(keyType),
+	})
 	if err != nil {
 		return 0, fmt.Errorf("failed to get OpenRouter API key: %w", err)
 	}
@@ -270,6 +420,7 @@ func (o *OpenRouter) RefreshAPIKeyLimit(ctx context.Context, orgID string, limit
 
 	_, err = o.repo.UpdateOpenRouterKey(ctx, repo.UpdateOpenRouterKeyParams{
 		OrganizationID: orgID,
+		KeyType:        string(keyType),
 		MonthlyCredits: int64(keyLimit),
 		KeyHash:        keyResponse.Data.Hash,
 		Key:            key.Key,
@@ -288,14 +439,17 @@ type keyUsageResponse struct {
 	} `json:"data"`
 }
 
-func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string) (float64, int, error) {
+func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string, keyType KeyType) (float64, int, error) {
 	org, err := o.orgRepo.GetOrganizationMetadata(ctx, orgID)
 	if err != nil {
 		return 0, 0, oops.E(oops.CodeUnexpected, err, "failed to get organization").LogError(ctx, o.logger)
 	}
 	limit := o.getLimitForOrg(org)
 
-	key, err := o.repo.GetOpenRouterAPIKey(ctx, orgID)
+	key, err := o.repo.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(keyType.OrDefault()),
+	})
 	if err != nil {
 		return 0, limit, nil // the key doesn't exist yet
 	}
@@ -316,7 +470,7 @@ func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string) (float64,
 // openrouter_api_keys in a single SQL query) can skip the org/key DB lookups
 // in GetCreditsUsed.
 func (o *OpenRouter) GetKeyUsage(ctx context.Context, apiKey string) (float64, *int64, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", OpenRouterBaseURL+"/v1/key", nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", o.baseURL+"/v1/key", nil)
 	if err != nil {
 		o.logger.ErrorContext(ctx, "failed to build openrouter key usage request", attr.SlogError(err))
 		return 0, nil, fmt.Errorf("build key usage request: %w", err)
@@ -362,7 +516,7 @@ func (o *OpenRouter) GetKeyUsage(ctx context.Context, apiKey string) (float64, *
 // ReconcileMonthlyCredits self-heals drift in the locally cached monthly limit
 // after an out-of-band change on the OpenRouter dashboard. See the
 // Provisioner interface doc for the full contract.
-func (o *OpenRouter) ReconcileMonthlyCredits(ctx context.Context, orgID string, currentLimit int64, upstreamLimit *int64) (int64, error) {
+func (o *OpenRouter) ReconcileMonthlyCredits(ctx context.Context, orgID string, keyType KeyType, currentLimit int64, upstreamLimit *int64) (int64, error) {
 	if upstreamLimit == nil {
 		return currentLimit, nil
 	}
@@ -374,6 +528,7 @@ func (o *OpenRouter) ReconcileMonthlyCredits(ctx context.Context, orgID string, 
 
 	if err := o.repo.UpdateOpenRouterKeyMonthlyCredits(ctx, repo.UpdateOpenRouterKeyMonthlyCreditsParams{
 		OrganizationID: orgID,
+		KeyType:        string(keyType.OrDefault()),
 		MonthlyCredits: newLimit,
 	}); err != nil {
 		return currentLimit, fmt.Errorf("reconcile openrouter monthly credits: %w", err)
@@ -381,6 +536,7 @@ func (o *OpenRouter) ReconcileMonthlyCredits(ctx context.Context, orgID string, 
 
 	o.logger.InfoContext(ctx, "reconciled openrouter monthly credits from upstream",
 		attr.SlogOrganizationID(orgID),
+		attr.SlogOpenRouterKeyType(string(keyType.OrDefault())),
 		attr.SlogOpenRouterKeyPreviousLimit(int(currentLimit)),
 		attr.SlogOpenRouterKeyLimit(int(newLimit)),
 	)
@@ -394,6 +550,19 @@ func (o *OpenRouter) getLimitForOrg(org orgRepo.OrganizationMetadatum) int {
 	}
 
 	return creditsAccountTypeMap[org.GramAccountType]
+}
+
+// upstreamKeyIdentity names an org's OpenRouter key. Chat key naming must
+// stay byte-identical to the historical format — the upstream keys already
+// exist under these names — so only internal keys get a suffix.
+func upstreamKeyIdentity(env, orgID, orgSlug string, keyType KeyType) (name, label string) {
+	name = fmt.Sprintf("gram-%s-%s", env, orgID)
+	label = fmt.Sprintf("%s (%s environment)", orgSlug, env)
+	if keyType == KeyTypeInternal {
+		name += "-internal"
+		label = fmt.Sprintf("%s (%s environment, internal)", orgSlug, env)
+	}
+	return name, label
 }
 
 type createKeyRequest struct {
@@ -416,11 +585,12 @@ type keyResponse struct {
 	Key *string `json:"key,omitempty"` // will be empty outside of createKey
 }
 
-func (o *OpenRouter) createOpenRouterAPIKey(ctx context.Context, orgID string, orgSlug string, keyLimit int) (*keyResponse, error) {
+func (o *OpenRouter) createOpenRouterAPIKey(ctx context.Context, orgID string, orgSlug string, keyType KeyType, keyLimit int) (*keyResponse, error) {
 	creditLimit := float64(keyLimit)
+	name, label := upstreamKeyIdentity(o.env, orgID, orgSlug, keyType)
 	requestBody := createKeyRequest{
-		Name:       fmt.Sprintf("gram-%s-%s", o.env, orgID),
-		Label:      fmt.Sprintf("%s (%s environment)", orgSlug, o.env),
+		Name:       name,
+		Label:      label,
 		Limit:      &creditLimit,
 		LimitReset: "monthly",
 	}
@@ -431,7 +601,7 @@ func (o *OpenRouter) createOpenRouterAPIKey(ctx context.Context, orgID string, o
 		return nil, fmt.Errorf("failed to serialize create key request body: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", OpenRouterBaseURL+"/v1/keys", bytes.NewReader(bodyBytes))
+	req, err := http.NewRequestWithContext(ctx, "POST", o.baseURL+"/v1/keys", bytes.NewReader(bodyBytes))
 	if err != nil {
 		o.logger.ErrorContext(ctx, "failed to create openrouter key HTTP request", attr.SlogError(err))
 		return nil, fmt.Errorf("failed to build create key request: %w", err)
@@ -478,7 +648,7 @@ func (o *OpenRouter) updateOpenRouterAPIKeyLimit(ctx context.Context, keyHash st
 		return nil, fmt.Errorf("failed to serialize update key request body: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "PATCH", OpenRouterBaseURL+fmt.Sprintf("/v1/keys/%s", keyHash), bytes.NewReader(bodyBytes))
+	req, err := http.NewRequestWithContext(ctx, "PATCH", o.baseURL+fmt.Sprintf("/v1/keys/%s", keyHash), bytes.NewReader(bodyBytes))
 	if err != nil {
 		o.logger.ErrorContext(ctx, "failed to create update openrouter key HTTP request", attr.SlogError(err))
 		return nil, fmt.Errorf("failed to create update key request: %w", err)
@@ -534,13 +704,19 @@ type generationResponse struct {
 	} `json:"data"`
 }
 
-func (o *OpenRouter) getGenerationDetails(ctx context.Context, generationID string, orgID string) (*generationResponse, int, error) {
-	key, err := o.repo.GetOpenRouterAPIKey(ctx, orgID)
+func (o *OpenRouter) getGenerationDetails(ctx context.Context, generationID string, orgID string, keyType KeyType) (*generationResponse, int, error) {
+	// A generation is only visible under the key that produced it — querying
+	// with the wrong key type 404s (e.g. a streamed internal completion's
+	// usage fallback).
+	key, err := o.repo.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(keyType.OrDefault()),
+	})
 	if err != nil {
 		return nil, 0, oops.E(oops.CodeUnexpected, err, "failed to get openrouter API key").LogError(ctx, o.logger)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", OpenRouterBaseURL+"/v1/generation", nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", o.baseURL+"/v1/generation", nil)
 	if err != nil {
 		return nil, 0, fmt.Errorf("create generation request: %w", err)
 	}
@@ -575,7 +751,7 @@ func (o *OpenRouter) getGenerationDetails(ctx context.Context, generationID stri
 
 // GetModelUsage fetches generation details from OpenRouter when inline usage is
 // unavailable, currently only for streams closed before the final usage chunk.
-func (o *OpenRouter) GetModelUsage(ctx context.Context, generationID string, orgID string) (*ModelUsage, error) {
+func (o *OpenRouter) GetModelUsage(ctx context.Context, generationID string, orgID string, keyType KeyType) (*ModelUsage, error) {
 	var genResp *generationResponse
 	var statusCode int
 	var err error
@@ -594,7 +770,7 @@ func (o *OpenRouter) GetModelUsage(ctx context.Context, generationID string, org
 			}
 		}
 
-		genResp, statusCode, err = o.getGenerationDetails(ctx, generationID, orgID)
+		genResp, statusCode, err = o.getGenerationDetails(ctx, generationID, orgID, keyType)
 		if err == nil {
 			break
 		}
