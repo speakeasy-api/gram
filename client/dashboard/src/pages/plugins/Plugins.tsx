@@ -208,11 +208,17 @@ export default function Plugins(): JSX.Element {
           invalidateAllPublishStatus(queryClient),
         ]);
         setMarketplaceNameInput(data.settings.marketplaceName ?? "");
-        toast.success(
-          data.republished
-            ? "Marketplace name updated and republished"
-            : "Marketplace name saved",
-        );
+        if (data.hooksUpdateDeferred) {
+          toast.warning(
+            "Marketplace name updated, but the observability hooks plugin can't be updated yet: your organization isn't approved for the latest hooks version. It will update automatically once your org is rolled forward.",
+          );
+        } else {
+          toast.success(
+            data.republished
+              ? "Marketplace name updated and republished"
+              : "Marketplace name saved",
+          );
+        }
       },
       onError: () => {
         toast.error("Failed to update marketplace name");

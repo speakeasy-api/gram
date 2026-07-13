@@ -325,6 +325,30 @@ LEFT JOIN LATERAL (
 ORDER BY cp.project_id ASC
 LIMIT @result_limit;
 
+-- name: ListOrgPluginPublishTargets :many
+-- Lists every project in one organization that has a GitHub plugin connection,
+-- with the actor user for each (the creator of the project's most recent
+-- plugins-mcp API key), so an org-level setting change (e.g. observability mode)
+-- can be republished to all of the org's marketplaces. Like
+-- ListPluginPublishCandidates this is a deliberate cross-project sweep, but it is
+-- constrained to a single organization rather than scanning globally.
+SELECT
+  c.project_id,
+  k.created_by_user_id
+FROM plugin_github_connections c
+JOIN projects p ON p.id = c.project_id AND p.deleted IS FALSE
+JOIN LATERAL (
+  SELECT created_by_user_id
+  FROM api_keys
+  WHERE project_id = c.project_id
+    AND deleted IS FALSE
+    AND name LIKE 'plugins-mcp-%'
+  ORDER BY created_at DESC
+  LIMIT 1
+) k ON TRUE
+WHERE p.organization_id = @organization_id
+ORDER BY c.project_id ASC;
+
 -- name: GetGitHubConnectionByMarketplaceToken :one
 -- Resolves a marketplace proxy URL token to the upstream connection. The token
 -- is the auth credential — there's no project scope to apply ahead of it.
@@ -338,10 +362,12 @@ WHERE marketplace_token = @marketplace_token;
 -- conflict the existing token is preserved via COALESCE so callers can pass a
 -- freshly-generated token on every publish without overwriting prior state.
 -- Token rotation goes through a separate query. published_mcp_fingerprints,
--- published_hooks_version, and published_hooks_config record the per-plugin
--- MCP content hashes, the hooks generator version, and the org-level hooks
--- settings just published; all are always overwritten so subsequent rollout
--- runs can detect independently whether the MCP or hooks component changed.
+-- published_hooks_version, and published_hooks_config record the per-plugin MCP
+-- content hashes, the hooks generator version, and the hook-output-affecting
+-- config just published; all are always overwritten so subsequent rollout runs
+-- can detect independently whether the MCP or hooks component changed (including
+-- hooks config drift a version bump can't capture, e.g. a marketplace rename or
+-- observability-mode toggle).
 INSERT INTO plugin_github_connections (project_id, installation_id, repo_owner, repo_name, marketplace_token, published_mcp_fingerprints, published_hooks_version, published_hooks_config)
 VALUES (@project_id, @installation_id, @repo_owner, @repo_name, @marketplace_token, @published_mcp_fingerprints, @published_hooks_version, @published_hooks_config)
 ON CONFLICT (project_id) DO UPDATE
