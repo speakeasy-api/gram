@@ -20,4 +20,6 @@ CREATE TABLE `telemetry_logs_staging` (
   `chat_id` String MATERIALIZED toString(attributes.gen_ai.conversation.id) COMMENT 'Chat ID (materialized from attributes.gen_ai.conversation.id) — the promotion worker scopes by this.',
   `request_id` String MATERIALIZED toString(attributes.request_id) COMMENT 'Claude API request id (materialized from attributes.request_id) — the attribution join key.'
 ) ENGINE = MergeTree
-PRIMARY KEY (`gram_project_id`, `time_unix_nano`, `id`) ORDER BY (`gram_project_id`, `time_unix_nano`, `id`) PARTITION BY (toYYYYMMDD(fromUnixTimestamp64Nano(time_unix_nano))) TTL fromUnixTimestamp64Nano(time_unix_nano) + toIntervalDay(2) SETTINGS index_granularity = 8192 COMMENT 'Holding pen for Claude OTEL api_request rows with redacted (custom) MCP attribution, awaiting transcript-derived attribution before promotion into telemetry_logs.';
+PRIMARY KEY (`gram_project_id`, `time_unix_nano`, `id`) ORDER BY (`gram_project_id`, `time_unix_nano`, `id`) PARTITION BY (toYYYYMMDD(fromUnixTimestamp64Nano(time_unix_nano))) TTL fromUnixTimestamp64Nano(observed_time_unix_nano) + toIntervalDay(2) SETTINGS index_granularity = 8192 COMMENT 'Holding pen for Claude OTEL api_request rows with redacted (custom) MCP attribution, awaiting transcript-derived attribution before promotion into telemetry_logs.';
+-- create index "idx_telemetry_logs_staging_chat_id" to table: "telemetry_logs_staging"
+ALTER TABLE `telemetry_logs_staging` ADD INDEX `idx_telemetry_logs_staging_chat_id` ((chat_id)) TYPE bloom_filter(0.01) GRANULARITY 1;

@@ -23,8 +23,10 @@ type MCPAttributionTuple struct {
 const MCPAttributionTupleTTL = 2 * time.Hour
 
 // MCPAttributionTupleKey is the Redis key for one request's attribution
-// tuple. Request ids (Claude req_*) are globally unique, so no session scope
-// is needed — the promotion worker looks tuples up per staged row.
-func MCPAttributionTupleKey(requestID string) string {
-	return fmt.Sprintf("mcp-attr:tuple:%s", requestID)
+// tuple. Request ids (Claude req_*) are globally unique, but the request id
+// arrives on an untrusted client payload — scoping the key by the
+// authenticated project keeps one project's submission from ever being read
+// while another project's staged row with the same request id is promoted.
+func MCPAttributionTupleKey(projectID string, requestID string) string {
+	return fmt.Sprintf("mcp-attr:tuple:%s:%s", projectID, requestID)
 }

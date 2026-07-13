@@ -93,7 +93,7 @@ func (p *PromoteStagedTelemetry) Do(ctx context.Context, args PromoteStagedTelem
 	for _, row := range rows {
 		var tuple telemetry.MCPAttributionTuple
 		hasTuple := row.RequestID != "" &&
-			p.cache.Get(ctx, telemetry.MCPAttributionTupleKey(row.RequestID), &tuple) == nil &&
+			p.cache.Get(ctx, telemetry.MCPAttributionTupleKey(args.ProjectID.String(), row.RequestID), &tuple) == nil &&
 			tuple.Server != ""
 
 		attributes := row.Attributes
@@ -180,8 +180,14 @@ func (p *PromoteStagedTelemetry) Do(ctx context.Context, args PromoteStagedTelem
 		return nil, fmt.Errorf("delete promoted staged telemetry logs: %w", err)
 	}
 
-	result.Promoted = len(ids)
-	result.Rewritten = len(rewrittenByID)
+	// Count only rows this pass actually inserted: rows the dedup guard
+	// skipped were promoted by an earlier crashed pass, not this one.
+	result.Promoted = len(insert)
+	for _, row := range insert {
+		if rewrittenByID[row.ID] {
+			result.Rewritten++
+		}
+	}
 	return result, nil
 }
 

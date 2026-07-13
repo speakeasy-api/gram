@@ -71,10 +71,13 @@ func (s *Service) Ingest(ctx context.Context, payload *gen.IngestPayload) (*gen.
 		// claimed, so a client disconnect here would otherwise drop the event
 		// for good — the retry gets marked duplicate and skips persistence.
 		s.recordCanonicalHook(context.WithoutCancel(ctx), payload, authCtx, timestamp, blockReason)
-		// Transcript-derived MCP attribution (Claude Stop/SubagentStop):
-		// stash tuples and kick promotion of staged telemetry rows.
-		s.captureMCPAttribution(context.WithoutCancel(ctx), payload, authCtx)
 	}
+	// Transcript-derived MCP attribution (Claude Stop/SubagentStop): stash
+	// tuples and kick promotion of staged telemetry rows. Runs for duplicate
+	// deliveries too — the Redis Set is idempotent, and skipping retries
+	// would permanently lose attribution when the first delivery's cache
+	// write failed transiently (the retry arrives already marked duplicate).
+	s.captureMCPAttribution(context.WithoutCancel(ctx), payload, authCtx)
 	if blockReason != "" {
 		return canonicalDenyResult(userReason), nil
 	}

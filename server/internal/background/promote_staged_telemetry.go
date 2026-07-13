@@ -33,7 +33,10 @@ import (
 )
 
 const (
-	promoteStagedTelemetryWorkflowRunTimeout = 2 * time.Minute
+	// Comfortably above the activity's worst-case retry window (~105s with
+	// three 30s attempts and backoff) so a slow final attempt is not cut off
+	// by the workflow deadline.
+	promoteStagedTelemetryWorkflowRunTimeout = 3 * time.Minute
 
 	stagedTelemetrySweepScheduleID = "v1:staged-telemetry-sweep-schedule"
 	stagedTelemetrySweepWorkflowID = stagedTelemetrySweepScheduleID + "/scheduled"
@@ -90,12 +93,14 @@ func PromoteStagedTelemetryWorkflow(ctx workflow.Context, params PromoteStagedTe
 	return nil
 }
 
-// StagedTelemetrySweepWorkflow re-triggers promotion for every session with
-// rows still in staging. It is the safety net for both race directions
-// (staged row after the last hook, tuples after the last OTEL batch) and the
-// enforcer of the verbatim-promotion timeout. Promotion itself runs in child
-// workflows carrying the same per-session IDs as the hook/OTEL triggers, so
-// the sweep can never race a concurrent pass for the same session.
+// StagedTelemetrySweepWorkflow re-triggers promotion for sessions with rows
+// still in staging (oldest first, capped per pass — see
+// stagedTelemetrySessionsLimit — so one sweep's work stays bounded). It is
+// the safety net for both race directions (staged row after the last hook,
+// tuples after the last OTEL batch) and the enforcer of the
+// verbatim-promotion timeout. Promotion itself runs in child workflows
+// carrying the same per-session IDs as the hook/OTEL triggers, so the sweep
+// can never race a concurrent pass for the same session.
 func StagedTelemetrySweepWorkflow(ctx workflow.Context) error {
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: 30 * time.Second,

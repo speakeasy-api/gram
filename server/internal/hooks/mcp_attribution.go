@@ -50,7 +50,7 @@ func (s *Service) captureMCPAttribution(ctx context.Context, payload *gen.Ingest
 			Server: server,
 			Tool:   strings.TrimSpace(conv.PtrValOr(entry.McpTool, "")),
 		}
-		if err := s.cache.Set(ctx, telemetry.MCPAttributionTupleKey(requestID), tuple, telemetry.MCPAttributionTupleTTL); err != nil {
+		if err := s.cache.Set(ctx, telemetry.MCPAttributionTupleKey(authCtx.ProjectID.String(), requestID), tuple, telemetry.MCPAttributionTupleTTL); err != nil {
 			s.logger.WarnContext(ctx, "failed to store MCP attribution tuple",
 				attr.SlogEvent("mcp_attribution_tuple_store_failed"),
 				attr.SlogError(err),

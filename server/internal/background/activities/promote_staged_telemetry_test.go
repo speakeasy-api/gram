@@ -111,7 +111,7 @@ func TestPromoteStagedTelemetry_RewritesWithTuple(t *testing.T) {
 		observed:  observed,
 	})
 	require.NoError(t, cacheAdapter.Set(ctx,
-		telemetry.MCPAttributionTupleKey("req_rewrite_1"),
+		telemetry.MCPAttributionTupleKey(projectID.String(), "req_rewrite_1"),
 		telemetry.MCPAttributionTuple{Server: "workos-public", Tool: "whoami"},
 		telemetry.MCPAttributionTupleTTL,
 	))
@@ -241,7 +241,7 @@ func TestPromoteStagedTelemetry_DedupSkipsAlreadyPromotedRows(t *testing.T) {
 		observed:  observed,
 	})
 	require.NoError(t, cacheAdapter.Set(ctx,
-		telemetry.MCPAttributionTupleKey("req_dedup_1"),
+		telemetry.MCPAttributionTupleKey(projectID.String(), "req_dedup_1"),
 		telemetry.MCPAttributionTuple{Server: "workos-public", Tool: "whoami"},
 		telemetry.MCPAttributionTupleTTL,
 	))
@@ -269,16 +269,30 @@ func TestPromoteStagedTelemetry_DedupSkipsAlreadyPromotedRows(t *testing.T) {
 		GramChatID:           &gramChatID,
 	}}))
 
-	// Re-run the (idempotent) pass until it sees the staged row and reports
-	// the promotion — the dedup guard must have skipped the insert.
+	// Wait for the staged insert to become visible first — otherwise a pass
+	// that sees nothing would satisfy the assertions below vacuously and the
+	// row would never be processed.
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		staged, err := queries.ListStagedTelemetryLogs(ctx, projectID.String(), sessionID)
+		assert.NoError(collect, err)
+		assert.Len(collect, staged, 1)
+	}, 5*time.Second, 50*time.Millisecond)
+
+	// Run the (idempotent) pass until staging drains. The dedup guard skips
+	// the insert, so Promoted stays 0 — the row was promoted by the earlier
+	// (simulated) crashed pass. Generous budget: a pass that reaches the
+	// delete blocks on a ClickHouse lightweight-delete mutation, so one
+	// iteration can take seconds.
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {
 		result, err := act.Do(ctx, activities.PromoteStagedTelemetryArgs{ProjectID: projectID, SessionID: sessionID})
 		assert.NoError(collect, err)
-		assert.NotNil(collect, result)
-		if result != nil {
-			assert.Positive(collect, result.Promoted)
+		if err == nil && result != nil {
+			assert.Equal(collect, 0, result.Promoted, "dedup guard must not count skipped rows as promoted")
 		}
-	}, 5*time.Second, 50*time.Millisecond)
+		staged, err := queries.ListStagedTelemetryLogs(ctx, projectID.String(), sessionID)
+		assert.NoError(collect, err)
+		assert.Empty(collect, staged)
+	}, 20*time.Second, 50*time.Millisecond)
 
 	// Exactly one copy in telemetry_logs (no double insert)…
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {

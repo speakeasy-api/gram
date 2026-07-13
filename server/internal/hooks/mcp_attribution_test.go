@@ -150,13 +150,14 @@ func TestIngest_CapturesMCPAttributionTuples(t *testing.T) {
 	require.Equal(t, "allow", result.Decision)
 
 	cacheAdapter := cache.NewRedisCacheAdapter(ti.redisClient)
+	projectID := hookAuthContext(t, ctx).ProjectID.String()
 
 	var tuple telemetry.MCPAttributionTuple
-	require.NoError(t, cacheAdapter.Get(ctx, telemetry.MCPAttributionTupleKey("req_attr_1"), &tuple))
+	require.NoError(t, cacheAdapter.Get(ctx, telemetry.MCPAttributionTupleKey(projectID, "req_attr_1"), &tuple))
 	require.Equal(t, telemetry.MCPAttributionTuple{Server: "workos-public", Tool: "whoami"}, tuple)
 
-	require.NoError(t, cacheAdapter.Get(ctx, telemetry.MCPAttributionTupleKey("req_attr_2"), &tuple))
+	require.NoError(t, cacheAdapter.Get(ctx, telemetry.MCPAttributionTupleKey(projectID, "req_attr_2"), &tuple))
 	require.Equal(t, telemetry.MCPAttributionTuple{Server: "linear-public", Tool: ""}, tuple)
 
-	require.Error(t, cacheAdapter.Get(ctx, telemetry.MCPAttributionTupleKey("req_attr_3"), &tuple))
+	require.Error(t, cacheAdapter.Get(ctx, telemetry.MCPAttributionTupleKey(projectID, "req_attr_3"), &tuple))
 }

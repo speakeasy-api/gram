@@ -166,11 +166,21 @@ func (q *Queries) ListStagedTelemetryLogs(ctx context.Context, projectID string,
 	return result, nil
 }
 
+// stagedTelemetrySessionsLimit bounds one sweep's worth of sessions so a
+// large backlog cannot outlast the sweep workflow's run timeout. Promotion
+// drains staging, so sessions beyond the cap surface in the next sweep
+// (every 5 minutes) rather than starving.
+const stagedTelemetrySessionsLimit = 1000
+
 // ListStagedTelemetrySessions returns the distinct (project, session) pairs
 // with rows currently waiting in staging, for the sweep to re-trigger
-// promotion.
+// promotion. Oldest sessions first, so timeout enforcement is not delayed by
+// newer arrivals when the limit kicks in.
 func (q *Queries) ListStagedTelemetrySessions(ctx context.Context) ([]StagedTelemetrySession, error) {
-	query := "SELECT DISTINCT toString(gram_project_id) AS project_id, chat_id AS session_id FROM telemetry_logs_staging WHERE chat_id != ''"
+	query := fmt.Sprintf(
+		"SELECT toString(gram_project_id) AS project_id, chat_id AS session_id FROM telemetry_logs_staging WHERE chat_id != '' GROUP BY project_id, session_id ORDER BY min(observed_time_unix_nano) LIMIT %d",
+		stagedTelemetrySessionsLimit,
+	)
 
 	rows, err := q.conn.Query(ctx, query)
 	if err != nil {

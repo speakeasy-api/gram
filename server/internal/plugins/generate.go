@@ -2665,9 +2665,14 @@ gram_hooks_claude_transcript_attribution_from() {
   # First pass streams the JSONL line-by-line (no slurp of a potentially
   # large transcript); the second pass slurps only the tiny filtered set to
   # dedupe by request id (the last row for a request wins, matching how the
-  # transcript finalizes attribution).
-  jq -c 'select(.type == "assistant" and (.requestId // "") != "" and (.attributionMcpServer // "") != "")
-         | {request_id: .requestId, mcp_server: .attributionMcpServer, mcp_tool: (.attributionMcpTool // "")}' \
+  # transcript finalizes attribution). Required fields must be non-empty
+  # strings and a malformed tool coerces to "" — Stop is a blocking hook, so
+  # one malformed transcript row must skip, not poison the ingest payload.
+  jq -c 'select(.type == "assistant"
+                and ((.requestId | type) == "string" and .requestId != "")
+                and ((.attributionMcpServer | type) == "string" and .attributionMcpServer != ""))
+         | {request_id: .requestId, mcp_server: .attributionMcpServer,
+            mcp_tool: (if (.attributionMcpTool | type) == "string" then .attributionMcpTool else "" end)}' \
     "$path" 2>/dev/null | jq -c -s 'group_by(.request_id) | map(last)' 2>/dev/null
 }
 

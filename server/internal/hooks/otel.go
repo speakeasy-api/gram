@@ -407,8 +407,11 @@ func (s *Service) writeClaudeOTELLogsToClickHouse(ctx context.Context, payload *
 				// Stop/SubagentStop hooks (or the promotion timeout passes);
 				// promotion then rewrites the names and inserts into
 				// telemetry_logs so attribute_metrics_summaries_mv aggregates
-				// the true attribution. Everything else writes through.
-				if isRedactedClaudeAPIRequest(logAttrs) {
+				// the true attribution. Everything else writes through —
+				// including sessionless redacted rows, because promotion is
+				// scoped by session id and a row it can never reach would sit
+				// in staging until the TTL discards it.
+				if sessionID != "" && isRedactedClaudeAPIRequest(logAttrs) {
 					stagedParams = append(stagedParams, logParams)
 					stagedSessionIDs[sessionID] = struct{}{}
 					continue
