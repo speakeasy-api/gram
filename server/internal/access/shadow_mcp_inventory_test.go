@@ -289,16 +289,14 @@ func TestService_GetShadowMCPInventoryServer_ComposesOneURL(t *testing.T) {
 	})
 	grantShadowMCPInventoryBypass(t, ctx, ti, authCtx.ActiveOrganizationID, policy.ID.String(), "https://detail.example.com/mcp")
 
-	var server *gen.ShadowMCPInventoryServer
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		var err error
-		server, err = ti.service.GetShadowMCPInventoryServer(ctx, &gen.GetShadowMCPInventoryServerPayload{
-			ProjectID:  projectID,
-			ServerSlug: "detail-example-com-mcp-30d7c46c",
-		})
-		require.NoError(c, err)
-		require.NotNil(c, server.LastCalled)
-	}, 5*time.Second, 100*time.Millisecond)
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	server, err := ti.service.GetShadowMCPInventoryServer(ctx, &gen.GetShadowMCPInventoryServerPayload{
+		ProjectID:  projectID,
+		ServerSlug: "detail-example-com-mcp-30d7c46c",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, server.LastCalled)
 
 	require.Equal(t, "https://detail.example.com/mcp", server.CanonicalServerURL)
 	require.Equal(t, "detail-example-com-mcp-30d7c46c", server.ServerSlug)
