@@ -98,3 +98,33 @@ func TestAssembleEnvironmentVariablesForToolset_DisambiguatesSameKeyAcrossDocume
 	require.Len(t, vars, 1)
 	require.Equal(t, []string{"DOC_A_API_KEY"}, vars[0].EnvVariables, "tool from doc A must resolve doc A's entry, never doc B's")
 }
+
+func TestAssembleEnvironmentVariablesForToolset_StableSortedOrder(t *testing.T) {
+	t.Parallel()
+
+	// Ordering previously fell out of Go map iteration, which is randomized
+	// per call, so the API shuffled variables on every request and the
+	// dashboard env vars table reordered on each refresh (AGE-2985).
+	securityEntriesByKey := map[mv.SecurityDefinitionKey]tsr.HttpSecurity{
+		{Key: "zulu"}:  {ID: uuid.New(), Key: "zulu", EnvVariables: []string{"ZULU_KEY"}},
+		{Key: "mike"}:  {ID: uuid.New(), Key: "mike", EnvVariables: []string{"MIKE_KEY"}},
+		{Key: "alpha"}: {ID: uuid.New(), Key: "alpha", EnvVariables: []string{"ALPHA_KEY"}},
+	}
+
+	tools := []mv.ToolEnvLookupParams{
+		{Security: []byte(`[{"zulu":[]},{"mike":[]}]`), ServerEnvVar: "SERVER_URL_B"},
+		{Security: []byte(`[{"alpha":[]}]`), ServerEnvVar: "SERVER_URL_A"},
+	}
+
+	for range 20 {
+		securityVars, serverVars := mv.AssembleEnvironmentVariablesForToolset(tools, securityEntriesByKey, nil)
+
+		require.Len(t, securityVars, 3)
+		require.Equal(t, []string{"ALPHA_KEY"}, securityVars[0].EnvVariables)
+		require.Equal(t, []string{"MIKE_KEY"}, securityVars[1].EnvVariables)
+		require.Equal(t, []string{"ZULU_KEY"}, securityVars[2].EnvVariables)
+
+		require.Len(t, serverVars, 1)
+		require.Equal(t, []string{"SERVER_URL_A", "SERVER_URL_B"}, serverVars[0].EnvVariables)
+	}
+}
