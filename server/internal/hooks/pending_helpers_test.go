@@ -91,6 +91,54 @@ func TestBuildTelemetryAttributesWithMetadata_HookSourceFromCoworkVariant(t *tes
 	assert.Equal(t, agentVariantCowork, attrs[attr.HookSourceKey])
 }
 
+// End-to-end across the cache: a SessionStart carrying a cowork MCP
+// inventory (what hook.sh sends from inside cowork) must be enough for a
+// later tool call to be labelled "cowork" — no hand-seeded cache. This
+// pins the writer (cacheMCPListSnapshot) and reader (sessionAgentVariant)
+// to the same key and value.
+func TestBuildTelemetryAttributesWithMetadata_HookSourceCoworkFromSessionStart(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	sessionID := uuid.NewString()
+	userEmail := "cowork-hook-source@example.com"
+	_, err := ti.service.Claude(ctx, &hooks.ClaudePayload{
+		HookEventName: "SessionStart",
+		SessionID:     &sessionID,
+		UserEmail:     &userEmail,
+		AdditionalData: map[string]any{
+			"mcp_inventory_cowork": []any{
+				map[string]any{
+					"name":           "Linear",
+					"url":            "https://mcp.linear.app/mcp",
+					"transport":      "HTTP",
+					"status":         "connected",
+					"connector_uuid": "linear-connector",
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	metadata := &SessionMetadata{
+		SessionID:   sessionID,
+		ServiceName: "claude-code",
+		GramOrgID:   authCtx.ActiveOrganizationID,
+		ProjectID:   authCtx.ProjectID.String(),
+	}
+	attrs := ti.service.buildTelemetryAttributesWithMetadata(ctx, &hooks.ClaudePayload{
+		HookEventName: "PreToolUse",
+		ToolName:      &toolName,
+		ToolUseID:     &toolUseID,
+		SessionID:     &sessionID,
+	}, metadata)
+
+	assert.Equal(t, agentVariantCowork, attrs[attr.HookSourceKey])
+}
+
 // A claude-code variant (or no cached variant) must not be rewritten to
 // "cowork"; hook_source keeps the ServiceName / "claude" default.
 func TestBuildTelemetryAttributesWithMetadata_HookSourceDefaultsWithoutCoworkVariant(t *testing.T) {
