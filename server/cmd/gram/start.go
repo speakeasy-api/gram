@@ -478,7 +478,7 @@ func newStartCommand() *cli.Command {
 			tracerProvider := otel.GetTracerProvider()
 			meterProvider := otel.GetMeterProvider()
 
-			guardianPolicy, err := newGuardianPolicy(c, tracerProvider)
+			guardianPolicy, err := newGuardianPolicy(c, logger, tracerProvider, meterProvider)
 			if err != nil {
 				return err
 			}

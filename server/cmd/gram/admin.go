@@ -205,7 +205,7 @@ func newAdminCommand() *cli.Command {
 			meterProvider := otel.GetMeterProvider()
 			slog.SetDefault(logger)
 
-			guardianPolicy, err := newGuardianPolicy(c, tracerProvider)
+			guardianPolicy, err := newGuardianPolicy(c, logger, tracerProvider, meterProvider)
 			if err != nil {
 				return err
 			}
