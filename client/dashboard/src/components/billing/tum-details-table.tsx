@@ -315,7 +315,11 @@ export function TumDetailsTable({
   const billedScale = useMemo(() => {
     if (!billedCycle) return 1;
     const analyticsTotal = data?.totals?.totalTokens ?? 0;
-    if (analyticsTotal === 0 || billedCycle.tokens === 0) return 1;
+    if (analyticsTotal === 0) return 1;
+    // A sealed zero-token cycle is a known zero: scale everything to 0 so
+    // the Total row matches the card even when live analytics recomputed
+    // nonzero tokens after the seal.
+    if (billedCycle.tokens === 0) return 0;
     return billedCycle.tokens / analyticsTotal;
   }, [data, billedCycle]);
 

@@ -891,7 +891,9 @@ func TestQueryTumDetails_CountsOnlyObservedTraffic(t *testing.T) {
 	// Observed traffic attributes to the session's user.
 	require.Equal(t, map[string]int64{"fleet@example.com": 1200, "codex@example.com": 400}, rowsByKey["email"])
 	require.Equal(t, map[string]int64{"Engineering": 1600}, rowsByKey["department_name"])
-	require.Equal(t, map[string]int64{"dev": 1200}, rowsByKey["role"])
+	// Role-less traffic (the codex row) lands on the '' row rather than
+	// vanishing from the section (arrayJoin on an empty array emits nothing).
+	require.Equal(t, map[string]int64{"dev": 1200, "": 400}, rowsByKey["role"])
 	// The fixtures carry no division attribute; the tokens land on the ''
 	// row (labeled by the frontend).
 	require.Equal(t, map[string]int64{"": 1600}, rowsByKey["division_name"])

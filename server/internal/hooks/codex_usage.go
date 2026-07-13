@@ -119,6 +119,18 @@ func codexUsageFromRecord(rec *gen.OTELLogRecord) (codexUsageDataPoint, bool) {
 	reasoning, _ := logAttrInt64(attrs, "reasoning_token_count")
 	toolTokens, _ := logAttrInt64(attrs, "tool_token_count")
 
+	// Codex reports input_token_count INCLUSIVE of cached_token_count (OpenAI
+	// usage semantics: cached tokens are a subset of input), while the
+	// canonical gen_ai.usage.* shape is disjoint (Anthropic-style: input
+	// excludes cache reads, which land in cache_read.input_tokens). Normalize
+	// here so a codex row's input means the same thing as a Claude or Cursor
+	// row's everywhere downstream — tokens-under-management's cache exclusion
+	// depends on it.
+	if cached > input {
+		cached = input
+	}
+	input -= cached
+
 	return codexUsageDataPoint{
 		ConversationID:  logAttrString(attrs, "conversation.id"),
 		Model:           logAttrString(attrs, "model"),
@@ -183,6 +195,12 @@ func (s *Service) writeCodexUsageToClickHouse(ctx context.Context, payload *gen.
 		}
 		if p.CachedTokens > 0 {
 			attrs[attr.GenAIUsageCacheReadInputTokensKey] = p.CachedTokens
+		}
+		// The disjoint sum, matching Claude semantics (input + output + cache
+		// read; codex reports no cache writes). Without it codex rows count 0
+		// toward every total_tokens measure.
+		if total := p.InputTokens + p.OutputTokens + p.CachedTokens; total > 0 {
+			attrs[attr.GenAIUsageTotalTokensKey] = total
 		}
 		if p.ReasoningTokens > 0 {
 			// Saved for completeness; not surfaced on the dashboard yet.

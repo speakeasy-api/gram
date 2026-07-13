@@ -5819,7 +5819,10 @@ var tumBreakdownDimExprs = map[string]string{
 	"email":           "user_email",
 	"division_name":   "division_name",
 	"department_name": "department_name",
-	"role":            "arrayJoin(roles)",
+	// arrayJoin([]) emits zero rows, which would silently DROP tokens from
+	// users with no roles — map the empty array to the '' row instead, so
+	// role-less traffic shows as "(unset)" like every other dimension.
+	"role": "arrayJoin(if(empty(roles), [''], roles))",
 	// Values are project UUIDs; the dashboard maps them to project names.
 	"project_id": "toString(gram_project_id)",
 }
