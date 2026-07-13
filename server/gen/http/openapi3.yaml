@@ -1236,6 +1236,102 @@ paths:
             x-speakeasy-name-override: deleteRole
             x-speakeasy-react-hook:
                 name: DeleteRole
+    /rpc/access.deleteShadowMCPInventoryPolicyBypass:
+        delete:
+            description: Remove a Shadow MCP URL allow decision.
+            operationId: deleteShadowMCPInventoryPolicyBypass
+            parameters:
+                - allowEmptyValue: true
+                  in: query
+                  name: project_id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  in: query
+                  name: server_url
+                  required: true
+                  schema:
+                    format: uri
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ShadowMCPInventoryURLState'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: deleteShadowMCPInventoryPolicyBypass access
+            tags:
+                - access
+            x-speakeasy-name-override: deleteShadowMCPInventoryPolicyBypass
+            x-speakeasy-react-hook:
+                name: DeleteShadowMCPInventoryPolicyBypass
+                type: mutation
     /rpc/access.deleteShadowMcpRule:
         delete:
             description: Delete a managed Shadow MCP access rule.
@@ -2945,6 +3041,94 @@ paths:
             x-speakeasy-name-override: resolveChallenge
             x-speakeasy-react-hook:
                 name: ResolveChallenge
+    /rpc/access.resolveShadowMCPInventoryRequest:
+        post:
+            description: Review the latest pending Shadow MCP URL request and resolve all pending requests for that URL.
+            operationId: resolveShadowMCPInventoryRequest
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ResolveShadowMCPInventoryRequestForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ShadowMCPInventoryURLState'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: resolveShadowMCPInventoryRequest access
+            tags:
+                - access
+            x-speakeasy-name-override: resolveShadowMCPInventoryRequest
+            x-speakeasy-react-hook:
+                name: ResolveShadowMCPInventoryRequest
+                type: mutation
     /rpc/access.updateMemberRoles:
         put:
             description: Update a team member's role assignments.
@@ -3222,6 +3406,94 @@ paths:
             x-speakeasy-name-override: updateShadowMCPAccessRule
             x-speakeasy-react-hook:
                 name: UpdateShadowMCPAccessRule
+                type: mutation
+    /rpc/access.upsertShadowMCPInventoryPolicyBypass:
+        post:
+            description: Create or modify a Shadow MCP URL allow decision for selected blocking policies.
+            operationId: upsertShadowMCPInventoryPolicyBypass
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ShadowMCPInventoryPolicyBypassForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ShadowMCPInventoryURLState'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: upsertShadowMCPInventoryPolicyBypass access
+            tags:
+                - access
+            x-speakeasy-name-override: upsertShadowMCPInventoryPolicyBypass
+            x-speakeasy-react-hook:
+                name: UpsertShadowMCPInventoryPolicyBypass
                 type: mutation
     /rpc/adminRemoteSessions.createGlobalClient:
         post:
@@ -50732,6 +51004,30 @@ components:
                     description: The created resolution records.
             required:
                 - resolutions
+        ResolveShadowMCPInventoryRequestForm:
+            type: object
+            properties:
+                decision:
+                    type: string
+                    description: Decision used when resolving a Shadow MCP inventory request.
+                    enum:
+                        - allow
+                        - deny
+                policy_ids:
+                    type: array
+                    items:
+                        type: string
+                        format: uuid
+                project_id:
+                    type: string
+                    format: uuid
+                server_url:
+                    type: string
+                    format: uri
+            required:
+                - project_id
+                - server_url
+                - decision
         Resource:
             type: object
             properties:
@@ -53215,6 +53511,24 @@ components:
                 - requested_at
                 - created_at
                 - updated_at
+        ShadowMCPInventoryPolicyBypassForm:
+            type: object
+            properties:
+                policy_ids:
+                    type: array
+                    items:
+                        type: string
+                        format: uuid
+                project_id:
+                    type: string
+                    format: uuid
+                server_url:
+                    type: string
+                    format: uri
+            required:
+                - project_id
+                - server_url
+                - policy_ids
         ShadowMCPInventoryRequestSummary:
             type: object
             properties:
@@ -53288,6 +53602,24 @@ components:
                 - observed_use_count
                 - user_count
                 - top_users
+                - access
+                - request_count
+                - allowed_policy_ids
+        ShadowMCPInventoryURLState:
+            type: object
+            properties:
+                access:
+                    type: string
+                allowed_policy_ids:
+                    type: array
+                    items:
+                        type: string
+                latest_request:
+                    $ref: '#/components/schemas/ShadowMCPInventoryRequestSummary'
+                request_count:
+                    type: integer
+                    format: int64
+            required:
                 - access
                 - request_count
                 - allowed_policy_ids
