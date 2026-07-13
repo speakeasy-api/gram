@@ -330,18 +330,16 @@ func TestService_ListShadowMCPInventoryUsers_ReturnsPaginatedUsersForCanonicalUR
 		ObservedAt: now.Add(-10 * time.Minute),
 	})
 
-	var firstPage *gen.ListShadowMCPInventoryUsersResult
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		var err error
-		firstPage, err = ti.service.ListShadowMCPInventoryUsers(ctx, &gen.ListShadowMCPInventoryUsersPayload{
-			ProjectID: projectID,
-			ServerURL: "https://mcp.speakeasy.com/mcp?token=ignored",
-			Limit:     1,
-		})
-		require.NoError(c, err)
-		require.Len(c, firstPage.Users, 1)
-		require.Equal(c, 2, firstPage.Users[0].ObservedUseCount)
-	}, 5*time.Second, 100*time.Millisecond)
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	firstPage, err := ti.service.ListShadowMCPInventoryUsers(ctx, &gen.ListShadowMCPInventoryUsersPayload{
+		ProjectID: projectID,
+		ServerURL: "https://mcp.speakeasy.com/mcp?token=ignored",
+		Limit:     1,
+	})
+	require.NoError(t, err)
+	require.Len(t, firstPage.Users, 1)
+	require.Equal(t, 2, firstPage.Users[0].ObservedUseCount)
 
 	require.NotNil(t, firstPage.NextCursor)
 	require.Equal(t, "ada@example.com", firstPage.Users[0].UserKey)
