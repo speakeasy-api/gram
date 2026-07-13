@@ -12,7 +12,7 @@ var ClaudeHookPayload = Type("ClaudeHookPayload", func() {
 	Required("hook_event_name")
 	Attribute("hook_event_name", String, "The type of hook event", func() {
 		Enum("SessionStart", "ConfigChange", "PreToolUse", "PostToolUse", "PostToolUseFailure",
-			"UserPromptSubmit", "Stop", "SubagentStop", "SessionEnd", "Notification")
+			"UserPromptSubmit", "Stop", "SessionEnd", "Notification")
 	})
 	// Tool-related fields (PreToolUse, PostToolUse, PostToolUseFailure)
 	Attribute("tool_name", String, "The name of the tool (for tool-related events)")

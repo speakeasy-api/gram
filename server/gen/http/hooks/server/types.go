@@ -2704,8 +2704,8 @@ func ValidateClaudeRequestBody(body *ClaudeRequestBody) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("hook_event_name", "body"))
 	}
 	if body.HookEventName != nil {
-		if !(*body.HookEventName == "SessionStart" || *body.HookEventName == "ConfigChange" || *body.HookEventName == "PreToolUse" || *body.HookEventName == "PostToolUse" || *body.HookEventName == "PostToolUseFailure" || *body.HookEventName == "UserPromptSubmit" || *body.HookEventName == "Stop" || *body.HookEventName == "SubagentStop" || *body.HookEventName == "SessionEnd" || *body.HookEventName == "Notification") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.hook_event_name", *body.HookEventName, []any{"SessionStart", "ConfigChange", "PreToolUse", "PostToolUse", "PostToolUseFailure", "UserPromptSubmit", "Stop", "SubagentStop", "SessionEnd", "Notification"}))
+		if !(*body.HookEventName == "SessionStart" || *body.HookEventName == "ConfigChange" || *body.HookEventName == "PreToolUse" || *body.HookEventName == "PostToolUse" || *body.HookEventName == "PostToolUseFailure" || *body.HookEventName == "UserPromptSubmit" || *body.HookEventName == "Stop" || *body.HookEventName == "SessionEnd" || *body.HookEventName == "Notification") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.hook_event_name", *body.HookEventName, []any{"SessionStart", "ConfigChange", "PreToolUse", "PostToolUse", "PostToolUseFailure", "UserPromptSubmit", "Stop", "SessionEnd", "Notification"}))
 		}
 	}
 	return
