@@ -537,22 +537,17 @@ func (q *Queries) DeleteOrganizationRemoteSessionIssuer(ctx context.Context, arg
 const deleteRemoteSessionClient = `-- name: DeleteRemoteSessionClient :one
 UPDATE remote_session_clients
 SET deleted_at = clock_timestamp()
-WHERE id = $1
-  AND (project_id = $2 OR (project_id IS NULL AND organization_id = $3))
-  AND deleted IS FALSE
+WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
 RETURNING id, project_id, organization_id, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, scope, audience, client_id_metadata_uri, legacy_callback_url, created_at, updated_at, deleted_at, deleted
 `
 
 type DeleteRemoteSessionClientParams struct {
-	ID             uuid.UUID
-	ProjectID      uuid.NullUUID
-	OrganizationID pgtype.Text
+	ID        uuid.UUID
+	ProjectID uuid.NullUUID
 }
 
-// Scoped like GetRemoteSessionClientByID so org-level clients
-// (project_id NULL) are deletable through project-scoped calls.
 func (q *Queries) DeleteRemoteSessionClient(ctx context.Context, arg DeleteRemoteSessionClientParams) (RemoteSessionClient, error) {
-	row := q.db.QueryRow(ctx, deleteRemoteSessionClient, arg.ID, arg.ProjectID, arg.OrganizationID)
+	row := q.db.QueryRow(ctx, deleteRemoteSessionClient, arg.ID, arg.ProjectID)
 	var i RemoteSessionClient
 	err := row.Scan(
 		&i.ID,
@@ -627,8 +622,6 @@ DELETE FROM remote_session_client_user_session_issuers
 WHERE remote_session_client_id = $1
 `
 
-// Id-only: the caller established ownership, and a deleted client's
-// attachments are dead org-wide.
 func (q *Queries) DeleteUserSessionIssuerAttachmentsForRemoteSessionClient(ctx context.Context, remoteSessionClientID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, deleteUserSessionIssuerAttachmentsForRemoteSessionClient, remoteSessionClientID)
 	return err

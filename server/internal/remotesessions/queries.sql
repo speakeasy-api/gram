@@ -241,8 +241,6 @@ WHERE remote_session_client_id = @remote_session_client_id
   AND user_session_issuer_id = @user_session_issuer_id;
 
 -- name: DeleteUserSessionIssuerAttachmentsForRemoteSessionClient :exec
--- Id-only: the caller established ownership, and a deleted client's
--- attachments are dead org-wide.
 DELETE FROM remote_session_client_user_session_issuers
 WHERE remote_session_client_id = @remote_session_client_id;
 
@@ -370,13 +368,9 @@ VALUES (
 RETURNING *;
 
 -- name: DeleteRemoteSessionClient :one
--- Scoped like GetRemoteSessionClientByID so org-level clients
--- (project_id NULL) are deletable through project-scoped calls.
 UPDATE remote_session_clients
 SET deleted_at = clock_timestamp()
-WHERE id = @id
-  AND (project_id = @project_id OR (project_id IS NULL AND organization_id = @organization_id))
-  AND deleted IS FALSE
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
 -- name: SoftDeleteRemoteSessionsByClientID :execrows

@@ -1006,9 +1006,8 @@ func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.De
 	txRepo := repo.New(dbtx)
 
 	deleted, err := txRepo.DeleteRemoteSessionClient(ctx, repo.DeleteRemoteSessionClientParams{
-		ID:             clientID,
-		ProjectID:      conv.ToNullUUID(*authCtx.ProjectID),
-		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
+		ID:        clientID,
+		ProjectID: conv.ToNullUUID(*authCtx.ProjectID),
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
