@@ -55,7 +55,7 @@ import { DEFAULT_PLUGIN_DESCRIPTION } from "./default-plugin";
 import { downloadPluginPackage } from "./downloadPluginPackage";
 import { InstallInstructionsDialog } from "./InstallInstructionsDialog";
 import { PluginAssignmentsSheet } from "./PluginAssignmentsSheet";
-import { PrincipalBadge } from "./PrincipalBadge";
+import { PluginAssignmentsList } from "./PluginAssignmentsList";
 import { memberMapByUrn, roleMapByUrn } from "./principals";
 import { PublishDialog } from "./PublishDialog";
 
@@ -566,13 +566,20 @@ export default function PluginDetail(): JSX.Element | null {
         {/* Assignments section */}
         <div className="mb-3 flex items-center gap-3">
           <div className="border-border flex-1 border-t" />
-          <Type
-            small
-            muted
-            className="shrink-0 font-mono text-xs tracking-wide uppercase"
-          >
-            Assignments
-          </Type>
+          <div className="flex shrink-0 items-center gap-2">
+            <Type
+              small
+              muted
+              className="font-mono text-xs tracking-wide uppercase"
+            >
+              Assignments
+            </Type>
+            {assignments.length > 0 && (
+              <span className="bg-muted text-muted-foreground rounded-full px-1.5 py-0.5 text-xs font-medium tabular-nums">
+                {assignments.length}
+              </span>
+            )}
+          </div>
           <div className="border-border flex-1 border-t" />
         </div>
         <div className="mb-3 flex justify-end">
@@ -604,16 +611,11 @@ export default function PluginDetail(): JSX.Element | null {
               </Type>
             </Stack>
           ) : (
-            <div className="border-border flex flex-wrap gap-2 rounded-xl border p-4">
-              {assignments.map((assignment) => (
-                <PrincipalBadge
-                  key={assignment.id}
-                  urn={assignment.principalUrn}
-                  roleByUrn={roleByUrn}
-                  memberByUrn={memberByUrn}
-                />
-              ))}
-            </div>
+            <PluginAssignmentsList
+              assignments={assignments}
+              roleByUrn={roleByUrn}
+              memberByUrn={memberByUrn}
+            />
           )}
         </div>
 
