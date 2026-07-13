@@ -18,6 +18,8 @@ func TestIsOrgWidePluginHooksAPIKeyName(t *testing.T) {
 		{name: "plugins-hooks", want: false},
 		{name: "plugins-hooks-personal", want: false},
 		{name: "plugins-hooks-20260713-104500-nothex", want: false},
+		{name: "plugins-hooks-20260713-104500-ABCDEF", want: false},
+		{name: "plugins-hooks-20260713-104500.5-abcdef", want: false},
 		{name: "plugins-hooks-20261340-256199-abcdef", want: false},
 		{name: "plugins-mcp-20260713-104500-abcdef", want: false},
 	}

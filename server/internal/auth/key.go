@@ -54,14 +54,21 @@ func IsOrgWidePluginHooksAPIKeyName(name string) bool {
 	}
 
 	parts := strings.Split(suffix, "-")
-	if len(parts) != 3 || len(parts[2]) != 6 {
+	if len(parts) != 3 || len(parts[0]) != 8 || len(parts[1]) != 6 || len(parts[2]) != 6 {
 		return false
 	}
-	if _, err := time.Parse("20060102-150405", parts[0]+"-"+parts[1]); err != nil {
+	const timestampLayout = "20060102-150405"
+	timestamp := parts[0] + "-" + parts[1]
+	parsedTimestamp, err := time.Parse(timestampLayout, timestamp)
+	if err != nil || parsedTimestamp.Format(timestampLayout) != timestamp {
 		return false
 	}
-	tokenSuffix, err := hex.DecodeString(parts[2])
-	return err == nil && len(tokenSuffix) == 3
+	for _, char := range parts[2] {
+		if (char < '0' || char > '9') && (char < 'a' || char > 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 var APIKeyScopes = map[string]APIKeyScope{
