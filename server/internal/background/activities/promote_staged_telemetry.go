@@ -14,19 +14,24 @@ package activities
 //     attributes.mcp_tool.name; no tuple but row older than the timeout ->
 //     promote verbatim (stays "custom" — today's behavior); otherwise leave
 //     the row for a later pass.
-//  3. Dedup guard: drop rows whose id already exists in telemetry_logs
-//     (sequentially-consistent read), so a retry after a crash between
-//     insert and delete does not re-insert.
-//  4. Insert the batch into telemetry_logs (this is when
-//     attribute_metrics_summaries_mv aggregates the row) with per-row
-//     insert_deduplication_tokens — on engines with an insert-dedup window
-//     the engine drops any duplicate the check could not see — then delete
-//     the promoted ids from staging.
+//  3. Existence guard: skip rows whose id already exists in telemetry_logs
+//     (sequentially-consistent read), so a fresh pass after a crash between
+//     insert and delete does not re-insert — it just finishes the staging
+//     delete.
+//  4. Promotion claim: claim each remaining row in Redis (SET NX) before
+//     inserting, so only one attempt ever inserts a given id. Insert the
+//     claimed rows into telemetry_logs (this is when
+//     attribute_metrics_summaries_mv aggregates the row), then delete the
+//     rows now confirmed in telemetry_logs from staging.
 //
 // Passes are serialized per project by the promotion workflow's ID, so the
-// read-check-insert sequence normally has a single writer; the dedup token
-// covers the residual race of a timed-out activity attempt whose insert
-// lands after the retrying attempt's existence check.
+// check-insert sequence normally has a single writer. The existence guard
+// catches a row an earlier completed pass already committed; the claim covers
+// the residual race the guard cannot see — a timed-out activity attempt whose
+// insert lands after the retrying attempt's existence check — because
+// insert_deduplication_token is inert on the non-replicated MergeTree
+// deployment. (The insert still carries the token as a no-cost belt for any
+// replicated/Cloud engine.)
 
 import (
 	"context"
@@ -47,6 +52,12 @@ import (
 // promoteStagedTelemetryTimeout is how long a staged row waits for its
 // attribution tuple before it is promoted verbatim.
 const promoteStagedTelemetryTimeout = 30 * time.Minute
+
+// promoteStagedTelemetryClaimTTL bounds a per-row promotion claim: long enough
+// to outlast an insert plus the activity's retry gap so a live winner's claim
+// is not stolen mid-insert, short enough that a winner which crashed before
+// inserting frees the row for a later pass quickly.
+const promoteStagedTelemetryClaimTTL = 5 * time.Minute
 
 type PromoteStagedTelemetry struct {
 	logger    *slog.Logger
@@ -168,12 +179,10 @@ func (p *PromoteStagedTelemetry) Do(ctx context.Context, args PromoteStagedTelem
 		return result, nil
 	}
 
-	// Dedup guard: a crash after insert but before delete leaves the row in
-	// both tables; the retry must not insert (and double-count in the MVs)
-	// again. Ids are preserved across promotion, so existence in
-	// telemetry_logs marks the row done — finish its delete instead. The
-	// insert below additionally carries per-row dedup tokens for races this
-	// read cannot see.
+	// Existence guard: a crash after insert but before delete leaves the row
+	// in both tables; a fresh pass must not re-insert (and double-count in the
+	// MVs). Ids are preserved across promotion, so existence in telemetry_logs
+	// marks the row done — finish its staging delete instead of re-inserting.
 	ids := make([]string, 0, len(promote))
 	minTime, maxTime := promote[0].TimeUnixNano, promote[0].TimeUnixNano
 	for _, row := range promote {
@@ -190,33 +199,93 @@ func (p *PromoteStagedTelemetry) Do(ctx context.Context, args PromoteStagedTelem
 		existingSet[id] = struct{}{}
 	}
 
+	// Promotion claim: the existence guard cannot see an insert a timed-out
+	// attempt commits after this attempt's check. Claim each row (SET NX)
+	// before inserting so only one attempt inserts a given id; an attempt that
+	// loses the claim defers the row rather than racing a double insert. Only
+	// rows now confirmed in telemetry_logs — either already there (existing)
+	// or inserted by this pass — are deleted from staging; deferred rows stay
+	// for a later pass.
 	insert := make([]telemetryrepo.InsertTelemetryLogParams, 0, len(promote))
+	claimedIDs := make([]string, 0, len(promote))
+	deleteIDs := make([]string, 0, len(promote))
+	deferred := 0
 	for _, row := range promote {
 		if _, ok := existingSet[row.ID]; ok {
+			deleteIDs = append(deleteIDs, row.ID)
 			continue
 		}
+		claimed, err := p.cache.Add(ctx, telemetry.MCPPromotionClaimKey(args.ProjectID.String(), row.ID), promoteStagedTelemetryClaimTTL)
+		if err != nil {
+			// Cannot establish exclusivity — defer rather than risk a double
+			// insert. The row stays staged and promotes on a later pass.
+			p.logger.WarnContext(ctx, "failed to claim staged telemetry promotion",
+				attr.SlogEvent("staged_telemetry_claim_failed"),
+				attr.SlogError(err),
+				attr.SlogProjectID(args.ProjectID.String()),
+			)
+			deferred++
+			continue
+		}
+		if !claimed {
+			// A concurrent (e.g. timed-out) attempt already claimed this row's
+			// promotion and may have an in-doubt insert. Defer to avoid a
+			// double insert; the winner finishes it, or a later pass retries
+			// once the claim's TTL lapses.
+			deferred++
+			continue
+		}
+		claimedIDs = append(claimedIDs, row.ID)
 		insert = append(insert, row)
 	}
 
-	if err := p.telemetry.InsertPromotedTelemetryLogs(ctx, insert); err != nil {
-		return nil, fmt.Errorf("insert promoted telemetry logs: %w", err)
-	}
-	if err := p.telemetry.DeleteStagedTelemetryLogs(ctx, args.ProjectID.String(), ids); err != nil {
-		return nil, fmt.Errorf("delete promoted staged telemetry logs: %w", err)
+	if len(insert) > 0 {
+		if err := p.telemetry.InsertPromotedTelemetryLogs(ctx, insert); err != nil {
+			// Release this attempt's claims so the retry can re-insert
+			// immediately instead of waiting out the TTL. Rows that did commit
+			// before the error are caught by the existence guard on the retry,
+			// so releasing cannot cause a double insert.
+			p.releaseClaims(ctx, args.ProjectID.String(), claimedIDs)
+			return nil, fmt.Errorf("insert promoted telemetry logs: %w", err)
+		}
+		deleteIDs = append(deleteIDs, claimedIDs...)
 	}
 
-	// Count only rows this pass actually inserted: rows the dedup guard
-	// skipped were promoted by an earlier crashed pass, not this one — they
-	// surface in Deduped so the drain loop still sees the progress made by
-	// finishing their staging delete.
+	if len(deleteIDs) > 0 {
+		if err := p.telemetry.DeleteStagedTelemetryLogs(ctx, args.ProjectID.String(), deleteIDs); err != nil {
+			return nil, fmt.Errorf("delete promoted staged telemetry logs: %w", err)
+		}
+	}
+
+	// Counts: Promoted is what this pass inserted. Deduped is the
+	// already-promoted rows whose staging delete this pass finished — progress
+	// the drain loop counts even though nothing was inserted. Deferred rows
+	// made no progress (staging did not shrink), so they surface as Remaining
+	// and the loop yields to the next tick instead of re-scanning them.
 	result.Promoted = len(insert)
-	result.Deduped = len(promote) - len(insert)
+	result.Deduped = len(deleteIDs) - len(insert)
+	result.Remaining += deferred
 	for _, row := range insert {
 		if rewrittenByID[row.ID] {
 			result.Rewritten++
 		}
 	}
 	return result, nil
+}
+
+// releaseClaims best-effort deletes the given promotion claims. Failures are
+// non-fatal: a leaked claim only delays the affected row's next promotion
+// attempt until the claim's TTL lapses.
+func (p *PromoteStagedTelemetry) releaseClaims(ctx context.Context, projectID string, ids []string) {
+	for _, id := range ids {
+		if err := p.cache.Delete(ctx, telemetry.MCPPromotionClaimKey(projectID, id)); err != nil {
+			p.logger.WarnContext(ctx, "failed to release staged telemetry promotion claim",
+				attr.SlogEvent("staged_telemetry_claim_release_failed"),
+				attr.SlogError(err),
+				attr.SlogProjectID(projectID),
+			)
+		}
+	}
 }
 
 // lookupTuple fetches the transcript-derived attribution for one request id,

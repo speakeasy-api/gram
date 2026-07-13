@@ -30,3 +30,14 @@ const MCPAttributionTupleTTL = 2 * time.Hour
 func MCPAttributionTupleKey(projectID string, requestID string) string {
 	return fmt.Sprintf("mcp-attr:tuple:%s:%s", projectID, requestID)
 }
+
+// MCPPromotionClaimKey is the Redis key for one staged row's promotion claim.
+// The staged-telemetry promotion path SET-NX's this key before inserting the
+// row into telemetry_logs, so only one activity attempt ever inserts a given
+// id. It closes the race the existence check cannot see — a timed-out attempt
+// whose insert lands after a retry's check — on the non-replicated MergeTree
+// deployment, where insert_deduplication_token is inert. Scoped by project to
+// mirror the tuple key.
+func MCPPromotionClaimKey(projectID string, id string) string {
+	return fmt.Sprintf("mcp-attr:promote-claim:%s:%s", projectID, id)
+}

@@ -223,6 +223,79 @@ func TestPromoteStagedTelemetry_PromotesVerbatimAfterTimeout(t *testing.T) {
 	require.Contains(t, logs[0].Attributes, `"custom"`)
 }
 
+func TestPromoteStagedTelemetry_DefersRowClaimedByConcurrentAttempt(t *testing.T) {
+	t.Parallel()
+
+	ctx, act, queries, cacheAdapter := newPromoteStagedTelemetryHarness(t)
+
+	projectID := uuid.New()
+	sessionID := "promo-session-claim"
+	rowID := uuid.NewString()
+	observed := time.Now().UTC().Add(-time.Minute)
+
+	insertStagedRowForTest(t, ctx, queries, stagedRowFixture{
+		id:        rowID,
+		projectID: projectID,
+		sessionID: sessionID,
+		requestID: "req_claim_1",
+		observed:  observed,
+	})
+	require.NoError(t, cacheAdapter.Set(ctx,
+		telemetry.MCPAttributionTupleKey(projectID.String(), "req_claim_1"),
+		telemetry.MCPAttributionTuple{Server: "workos-public", Tool: "whoami"},
+		telemetry.MCPAttributionTupleTTL,
+	))
+
+	// Simulate a concurrent (e.g. timed-out) attempt already holding this
+	// row's promotion claim, with an insert that may still be in flight.
+	claimKey := telemetry.MCPPromotionClaimKey(projectID.String(), rowID)
+	won, err := cacheAdapter.Add(ctx, claimKey, time.Minute)
+	require.NoError(t, err)
+	require.True(t, won, "test must be the one holding the claim")
+
+	// Wait for the staged row to be visible, then a pass must DEFER it (the
+	// claim is held) rather than insert a second copy.
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		staged, err := queries.ListStagedTelemetryLogs(ctx, projectID.String())
+		assert.NoError(collect, err)
+		assert.Len(collect, staged, 1)
+	}, 5*time.Second, 50*time.Millisecond)
+
+	result, err := act.Do(ctx, activities.PromoteStagedTelemetryArgs{ProjectID: projectID})
+	require.NoError(t, err)
+	require.Equal(t, 0, result.Promoted, "a claimed row must not be promoted by a losing attempt")
+	require.Equal(t, 0, result.Deduped)
+	require.GreaterOrEqual(t, result.Remaining, 1, "the deferred row must surface as Remaining")
+
+	require.Empty(t, listPromotedLogs(t, ctx, queries, projectID, observed),
+		"a claimed row must not be inserted into telemetry_logs")
+	staged, err := queries.ListStagedTelemetryLogs(ctx, projectID.String())
+	require.NoError(t, err)
+	require.Len(t, staged, 1, "a deferred row must stay in staging")
+
+	// The winner finishing (or the claim's TTL lapsing) frees the row: release
+	// the claim and a later pass promotes it exactly once.
+	require.NoError(t, cacheAdapter.Delete(ctx, claimKey))
+
+	var promoted *activities.PromoteStagedTelemetryResult
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		result, err := act.Do(ctx, activities.PromoteStagedTelemetryArgs{ProjectID: projectID})
+		assert.NoError(collect, err)
+		if err == nil && result != nil && result.Promoted > 0 {
+			promoted = result
+		}
+		assert.NotNil(collect, promoted)
+	}, 5*time.Second, 50*time.Millisecond)
+	require.Equal(t, 1, promoted.Promoted)
+	require.Equal(t, 1, promoted.Rewritten)
+
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		staged, err := queries.ListStagedTelemetryLogs(ctx, projectID.String())
+		assert.NoError(collect, err)
+		assert.Empty(collect, staged)
+	}, 3*time.Second, 50*time.Millisecond)
+}
+
 func TestPromoteStagedTelemetry_DedupSkipsAlreadyPromotedRows(t *testing.T) {
 	t.Parallel()
 

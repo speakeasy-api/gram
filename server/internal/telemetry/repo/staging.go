@@ -14,11 +14,13 @@ package repo
 //  2. Rows keep their id across promotion, and a pass skips ids that already
 //     landed in telemetry_logs (a sequentially-consistent existence check, so
 //     a retry after a crash between insert and delete does not re-insert).
-//  3. Promotion inserts carry a per-row insert_deduplication_token, so on
-//     engines with an insert-dedup window (replicated/shared — i.e.
-//     production) even a race the check cannot see (e.g. a timed-out
-//     activity attempt whose insert lands after the retry's check) is
-//     dropped by the engine instead of double-counted.
+//  3. Before inserting, a pass claims each row's promotion in Redis (SET NX,
+//     see PromoteStagedTelemetry), so a race the existence check cannot see —
+//     a timed-out attempt whose insert lands after the retry's check — cannot
+//     double-insert: the retry loses the claim and defers the row. (Inserts
+//     still carry a per-row insert_deduplication_token as a no-cost backstop
+//     for any replicated/Cloud engine; it is inert on the non-replicated
+//     MergeTree deployment, which is why the claim exists.)
 
 import (
 	"context"
@@ -68,11 +70,11 @@ func (q *Queries) InsertTelemetryLogsStaging(ctx context.Context, args []InsertT
 
 // InsertPromotedTelemetryLogs moves staged rows into telemetry_logs, one
 // insert per row, each carrying a deterministic insert_deduplication_token
-// derived from the row id. On engines with an insert-dedup window
-// (replicated/shared — i.e. production) the engine drops a duplicate insert
-// of the same row even when it races past the promotion pass's existence
-// check, which keeps the downstream MVs from double-counting. Promotion
-// batches are tiny (a session's redacted rows), so per-row inserts are fine.
+// derived from the row id. The token is a no-cost backstop on a replicated/
+// Cloud engine; it is inert on the non-replicated MergeTree deployment, where
+// the promotion path instead relies on a per-row Redis SET NX claim (see
+// PromoteStagedTelemetry) to prevent a double insert. Promotion batches are
+// tiny (a session's redacted rows), so per-row inserts are fine.
 func (q *Queries) InsertPromotedTelemetryLogs(ctx context.Context, args []InsertTelemetryLogParams) error {
 	for _, arg := range args {
 		tokenCtx := clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
