@@ -25,7 +25,17 @@ import {
 } from "./model-key-slots";
 import { ModelProviderKeyDialog } from "./ModelProviderKeyDialog";
 
-export function ModelProviderKeysSection(): JSX.Element {
+export function ModelProviderKeysSection(): JSX.Element | null {
+  const { data: features } = useProductFeatures();
+
+  if (!features?.customModelKeysEnabled) {
+    return null;
+  }
+
+  return <EnabledModelProviderKeysSection />;
+}
+
+function EnabledModelProviderKeysSection(): JSX.Element {
   const queryClient = useQueryClient();
   const gramProject = useProjectSlugForRequests();
   const { data, isLoading, isError, refetch } = useModelProviderKeys(
@@ -33,10 +43,7 @@ export function ModelProviderKeysSection(): JSX.Element {
     undefined,
     { throwOnError: false },
   );
-  const { data: features } = useProductFeatures();
   const [dialogSlot, setDialogSlot] = useState<ModelKeySlot | null>(null);
-
-  const canWrite = features?.customModelKeysEnabled ?? false;
 
   const keysBySlot = useMemo(
     () => new Map((data?.keys ?? []).map((key) => [key.slot, key] as const)),
@@ -98,7 +105,13 @@ export function ModelProviderKeysSection(): JSX.Element {
       width: "140px",
       render: (slot) => {
         const key = keysBySlot.get(slot.slot);
-        if (!key) return null;
+        if (!key) {
+          return (
+            <Type muted small>
+              —
+            </Type>
+          );
+        }
         return (
           <Type muted small>
             <HumanizeDateTime date={key.updatedAt} />
@@ -118,7 +131,7 @@ export function ModelProviderKeysSection(): JSX.Element {
               variant="secondary"
               size="sm"
               onClick={() => setDialogSlot(slot)}
-              disabled={!canWrite || isDeleting}
+              disabled={isDeleting}
             >
               {key ? "Replace key" : "Set key"}
             </Button>
@@ -175,12 +188,6 @@ export function ModelProviderKeysSection(): JSX.Element {
           default for all surfaces, or override individual surfaces. Keys are
           write-only and never displayed after saving.
         </Type>
-        {features && !features.customModelKeysEnabled && (
-          <Type muted small className="mt-2">
-            Custom model provider keys are not enabled for your organization.
-            Contact Speakeasy to enable them.
-          </Type>
-        )}
       </div>
 
       {keyList}

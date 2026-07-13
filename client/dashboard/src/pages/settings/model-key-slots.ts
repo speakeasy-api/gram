@@ -1,6 +1,6 @@
 import type { ModelProviderKey } from "@gram/client/models/components/modelproviderkey.js";
 
-export const PROJECT_DEFAULT_SLOT = "default";
+const PROJECT_DEFAULT_SLOT = "default";
 export const MODEL_KEY_PROVIDER = "openrouter";
 
 export type ModelKeySlot = {
