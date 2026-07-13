@@ -73,6 +73,21 @@ describe("shadowMCPPolicyState", () => {
 });
 
 describe("shadowMCPInventoryStatus", () => {
+  it("shows pending when a URL has access requests", () => {
+    expect(
+      shadowMCPInventoryStatus(
+        server({ access: "blocked", requestCount: 2 }),
+        "blocking",
+      ),
+    ).toBe("pending");
+    expect(
+      shadowMCPInventoryStatusDescription(
+        server({ access: "blocked", requestCount: 2 }),
+        "blocking",
+      ),
+    ).toBe("2 access requests pending");
+  });
+
   it("shows allowed when a URL has an allow rule", () => {
     expect(
       shadowMCPInventoryStatus(server({ access: "allowed" }), "blocking"),
@@ -92,6 +107,18 @@ describe("shadowMCPInventoryStatus", () => {
     expect(shadowMCPInventoryStatus(server({ access: "none" }), "none")).toBe(
       "observed",
     );
+  });
+
+  it("shows unknown when policy state is unavailable", () => {
+    expect(
+      shadowMCPInventoryStatus(server({ access: "none" }), "unavailable"),
+    ).toBe("unavailable");
+    expect(
+      shadowMCPInventoryStatusDescription(
+        server({ access: "none" }),
+        "unavailable",
+      ),
+    ).toBe("Policy status unavailable");
   });
 
   it("describes the status source", () => {

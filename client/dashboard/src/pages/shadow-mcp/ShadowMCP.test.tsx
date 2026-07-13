@@ -274,5 +274,6 @@ describe("ShadowMCP", () => {
     expect(
       screen.getByText("Shadow MCP inventory for project-1 with policy none"),
     ).toBeTruthy();
+    expect(screen.getByText("Shadow MCP policies: none")).toBeTruthy();
   });
 });

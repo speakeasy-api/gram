@@ -35,8 +35,8 @@ export default function ShadowMCP(): JSX.Element {
     ? "unavailable"
     : shadowMCPPolicyState(policiesQuery.data?.policies);
   const shadowMCPPolicies =
-    policiesQuery.data?.policies.filter((policy) =>
-      policy.sources.includes("shadow_mcp"),
+    policiesQuery.data?.policies.filter(
+      (policy) => policy.enabled && policy.sources.includes("shadow_mcp"),
     ) ?? [];
 
   return (
