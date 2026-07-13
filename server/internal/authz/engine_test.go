@@ -907,9 +907,9 @@ func TestEngineFindMatched_logsSingleAggregateChallenge(t *testing.T) {
 	}, 5*time.Second, 100*time.Millisecond)
 }
 
-// --- Engine.Allowed tests ---
+// --- Engine.Evaluate tests ---
 
-func TestEngineAllowed_trueWhenGranted(t *testing.T) {
+func TestEngineEvaluate_trueWhenGranted(t *testing.T) {
 	t.Parallel()
 
 	chConn, err := newClickhouseClient(t)
@@ -917,12 +917,12 @@ func TestEngineAllowed_trueWhenGranted(t *testing.T) {
 	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeChatRead, WildcardResource)})
 
-	allowed, err := engine.Allowed(ctx, ChatReadCheck("proj_123"))
+	allowed, err := engine.Evaluate(ctx, ChatReadCheck("proj_123"))
 	require.NoError(t, err)
 	require.True(t, allowed)
 }
 
-func TestEngineAllowed_falseWhenUnsatisfied(t *testing.T) {
+func TestEngineEvaluate_falseWhenUnsatisfied(t *testing.T) {
 	t.Parallel()
 
 	chConn, err := newClickhouseClient(t)
@@ -930,31 +930,31 @@ func TestEngineAllowed_falseWhenUnsatisfied(t *testing.T) {
 	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeProjectRead, WildcardResource)})
 
-	allowed, err := engine.Allowed(ctx, ChatReadCheck("proj_123"))
+	allowed, err := engine.Evaluate(ctx, ChatReadCheck("proj_123"))
 	require.NoError(t, err)
 	require.False(t, allowed)
 }
 
-func TestEngineAllowed_trueWhenRBACDisabled(t *testing.T) {
+func TestEngineEvaluate_trueWhenRBACDisabled(t *testing.T) {
 	t.Parallel()
 
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
 	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(false), staticChallengeLogging(true), workos.NewStubClient())
 
-	allowed, err := engine.Allowed(enterpriseSessionCtx(t), ChatReadCheck("proj_123"))
+	allowed, err := engine.Evaluate(enterpriseSessionCtx(t), ChatReadCheck("proj_123"))
 	require.NoError(t, err)
 	require.True(t, allowed)
 }
 
-func TestEngineAllowed_errorsWhenGrantsMissing(t *testing.T) {
+func TestEngineEvaluate_errorsWhenGrantsMissing(t *testing.T) {
 	t.Parallel()
 
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
 	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
 
-	allowed, err := engine.Allowed(enterpriseSessionCtx(t), ChatReadCheck("proj_123"))
+	allowed, err := engine.Evaluate(enterpriseSessionCtx(t), ChatReadCheck("proj_123"))
 	require.False(t, allowed)
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
@@ -962,10 +962,10 @@ func TestEngineAllowed_errorsWhenGrantsMissing(t *testing.T) {
 	require.ErrorIs(t, err, ErrMissingGrants)
 }
 
-// An unsatisfied Allowed check is a routine visibility branch, not a denial —
+// An unsatisfied Evaluate check is a routine visibility branch, not a denial —
 // it must never emit an authz challenge, otherwise it would pollute the
 // diagnostics UI with false "denied" scopes (the coupling AIS-305 removes).
-func TestEngineAllowed_neverLogsChallenge(t *testing.T) {
+func TestEngineEvaluate_neverLogsChallenge(t *testing.T) {
 	t.Parallel()
 
 	orgID := "org_" + uuid.NewString()
@@ -974,7 +974,7 @@ func TestEngineAllowed_neverLogsChallenge(t *testing.T) {
 	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtxWithOrg(t, orgID), []Grant{NewGrant(ScopeProjectRead, WildcardResource)})
 
-	allowed, err := engine.Allowed(ctx, ChatReadCheck("proj_123"))
+	allowed, err := engine.Evaluate(ctx, ChatReadCheck("proj_123"))
 	require.NoError(t, err)
 	require.False(t, allowed)
 
@@ -994,7 +994,7 @@ func TestEngineAllowed_neverLogsChallenge(t *testing.T) {
 			return false
 		}
 		return count > 0
-	}, 500*time.Millisecond, 50*time.Millisecond, "Allowed must not emit any challenge log entry")
+	}, 500*time.Millisecond, 50*time.Millisecond, "Evaluate must not emit any challenge log entry")
 }
 
 func enterpriseSessionCtx(t *testing.T) context.Context {

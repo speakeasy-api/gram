@@ -350,7 +350,7 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 	return e.mapError(ctx, Denied(checks[0].Scope, checks[0].selector()))
 }
 
-// Allowed reports whether the caller satisfies every check, WITHOUT recording an
+// Evaluate reports whether the caller satisfies every check, WITHOUT recording an
 // authz challenge. Unlike Require, a negative result is not a denial to surface
 // in the challenges/diagnostics UI — it is a routine branch used by handlers
 // that gracefully degrade rather than reject. The canonical case is chat session
@@ -363,7 +363,7 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 // short-circuit). A non-nil error is returned only for genuine evaluation
 // failures (missing prepared grants, invalid check); a merely unsatisfied check
 // yields (false, nil).
-func (e *Engine) Allowed(ctx context.Context, checks ...Check) (bool, error) {
+func (e *Engine) Evaluate(ctx context.Context, checks ...Check) (bool, error) {
 	enforce, err := e.ShouldEnforce(ctx)
 	if err != nil {
 		return false, err

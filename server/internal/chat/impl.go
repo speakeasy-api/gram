@@ -424,10 +424,10 @@ func (s *Service) chatVisibilityScope(ctx context.Context, authCtx *contextvalue
 	// owner-matching, not via chat:read.
 	//
 	// When RBAC is not enforced for the org we must NOT fall through to "see all"
-	// — Allowed short-circuits to true when enforcement is off, so check
+	// — Evaluate short-circuits to true when enforcement is off, so check
 	// ShouldEnforce explicitly and treat the disabled case as constrained.
 	//
-	// Use Allowed rather than Require here: this is a visibility branch, not an
+	// Use Evaluate rather than Require here: this is a visibility branch, not an
 	// access gate. Members legitimately hold no chat:read grant and fall through
 	// to own-session visibility, so a denial is the expected, non-error outcome.
 	// Require would stamp a chat:read "DENIED" authz challenge on every such
@@ -438,7 +438,7 @@ func (s *Service) chatVisibilityScope(ctx context.Context, authCtx *contextvalue
 	if enforce, err := s.authz.ShouldEnforce(ctx); err != nil {
 		s.logger.WarnContext(ctx, "could not determine RBAC enforcement for chat visibility; showing own sessions", attr.SlogError(err))
 	} else if enforce {
-		allowed, err := s.authz.Allowed(ctx, authz.ChatReadCheck(authCtx.ProjectID.String()))
+		allowed, err := s.authz.Evaluate(ctx, authz.ChatReadCheck(authCtx.ProjectID.String()))
 		if err != nil {
 			// An unsatisfied grant yields (false, nil); a non-nil error is
 			// unexpected. Log it but still serve own sessions rather than
