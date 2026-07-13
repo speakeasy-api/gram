@@ -9,9 +9,17 @@ import {
 } from "react";
 import { useRiskUnmaskResultMutation } from "@gram/client/react-query/riskUnmaskResult.js";
 import { RULE_CATEGORY_META } from "./policy-data";
-import { getCategoryForFinding, getRuleTitleFallback } from "./risk-utils";
+import {
+  getCategoryForFinding,
+  getRuleTitleFallback,
+  SEVERITY_RATING_LABEL,
+  scoreToRating,
+  type SeverityRating,
+} from "./risk-utils";
 import { Badge } from "@speakeasy-api/moonshine";
+import { Badge as SeverityBadgeBase } from "@/components/ui/badge";
 import { SimpleTooltip } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 import {
   RevealAllContext,
   useRevealAll,
@@ -65,6 +73,76 @@ export function RuleLabel({
   return (
     <span className="font-mono text-xs" title={ruleId}>
       {label}
+    </span>
+  );
+}
+
+// Severity badge for a finding or policy. The score is a policy attribute; a
+// finding resolves it from its owning policy. Variant maps to the qualitative
+// band so the color scales with risk. Renders nothing when the score is absent
+// (e.g. a finding whose policy hasn't loaded yet).
+const SEVERITY_BADGE_VARIANT: Record<
+  SeverityRating,
+  "secondary" | "warning" | "urgent-warning" | "destructive"
+> = {
+  low: "secondary",
+  medium: "warning",
+  high: "urgent-warning",
+  critical: "destructive",
+};
+
+export function SeverityBadge({
+  score,
+  className,
+}: {
+  score: number | undefined;
+  className?: string;
+}): JSX.Element | null {
+  if (score == null) return null;
+  const rating = scoreToRating(score);
+  return (
+    <SeverityBadgeBase
+      variant={SEVERITY_BADGE_VARIANT[rating]}
+      size="sm"
+      className={className}
+      tooltip={`${SEVERITY_RATING_LABEL[rating]} severity · score ${score.toFixed(1)}`}
+    >
+      {SEVERITY_RATING_LABEL[rating]}
+    </SeverityBadgeBase>
+  );
+}
+
+// Numeric severity, colored by band. Used in list/table columns where the raw
+// score is more useful than the qualitative label. Colors mirror the badge
+// variants so the two representations read as one system.
+const SEVERITY_SCORE_CLASS: Record<SeverityRating, string> = {
+  low: "text-muted-foreground",
+  medium: "text-yellow-600 dark:text-yellow-500",
+  high: "text-orange-600 dark:text-orange-500",
+  critical: "text-destructive-default",
+};
+
+export function SeverityScore({
+  score,
+  className,
+}: {
+  score: number | undefined;
+  className?: string;
+}): JSX.Element {
+  if (score == null) {
+    return <span className="text-muted-foreground text-sm">-</span>;
+  }
+  const rating = scoreToRating(score);
+  return (
+    <span
+      className={cn(
+        "text-sm font-medium tabular-nums",
+        SEVERITY_SCORE_CLASS[rating],
+        className,
+      )}
+      title={`${SEVERITY_RATING_LABEL[rating]} severity`}
+    >
+      {score.toFixed(1)}
     </span>
   );
 }

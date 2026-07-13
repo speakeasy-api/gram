@@ -102,6 +102,7 @@ import {
   getPolicyDeleteRuleListItems,
   getPolicyRuleGroupNamesForDeleteDialog,
 } from "./policy-delete-dialog";
+import { SeverityBadge } from "./risk-ui";
 
 /** One built-in detector as a toggleable card (Detect step). "Customize" opens
  *  a side-sheet to pick which rules in the category are active. */
@@ -764,6 +765,16 @@ function PolicyCenterContent() {
       render: (row) => (
         <span className="inline-flex">
           <ActionBadge action={(row.policy.action as PolicyAction) ?? "flag"} />
+        </span>
+      ),
+    },
+    {
+      key: "severity",
+      header: "Severity",
+      width: "0.5fr",
+      render: (row) => (
+        <span className="inline-flex">
+          <SeverityBadge score={row.policy.score} />
         </span>
       ),
     },

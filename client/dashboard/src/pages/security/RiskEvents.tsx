@@ -25,10 +25,11 @@ import {
   RevealAllProvider,
   RevealAllToggle,
   RuleLabel,
+  SeverityScore,
 } from "./risk-ui";
 
 const RISK_EVENTS_GRID =
-  "grid grid-cols-[172px_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1.25fr)_minmax(0,1.1fr)_110px] gap-3";
+  "grid grid-cols-[172px_minmax(0,0.9fr)_88px_minmax(0,1fr)_minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1.25fr)_minmax(0,1.1fr)_110px] gap-3";
 
 // Strongly-typed filter schema for Risk Events. `policy_id` and the date range
 // are pinned (always visible in the bar); the rest live behind "More filters".
@@ -114,6 +115,17 @@ export default function RiskEvents(): JSX.Element {
       if (policy.name && policy.name.trim() !== "") {
         m.set(policy.id, policy.name);
       }
+    }
+    return m;
+  }, [policies]);
+
+  // Findings surface their owning policy's severity score, resolved by
+  // risk_policy_id at read time (score is a policy attribute, not stored on the
+  // finding).
+  const policyScoreById = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const policy of policies) {
+      m.set(policy.id, policy.score);
     }
     return m;
   }, [policies]);
@@ -239,7 +251,7 @@ export default function RiskEvents(): JSX.Element {
           </>
         }
         header={
-          <div className="min-w-[1120px]">
+          <div className="min-w-[1200px]">
             <RiskEventsHeader />
           </div>
         }
@@ -267,13 +279,14 @@ export default function RiskEvents(): JSX.Element {
         scrollRef={containerRef}
         onScroll={handleScroll}
         surfaceClassName="overflow-x-auto"
-        contentClassName="min-w-[1120px]"
+        contentClassName="min-w-[1200px]"
       >
         <RiskEventsRows
           error={resultsQuery.error}
           isLoading={isInitialLoading}
           results={results}
           policyNameById={policyNameById}
+          policyScoreById={policyScoreById}
           scrollRef={containerRef}
           onSelectChat={setSelectedChatId}
         />
@@ -319,6 +332,7 @@ function RiskEventsHeader() {
     >
       <div className="min-w-0">Timestamp</div>
       <div className="min-w-0">Category</div>
+      <div className="min-w-0">Severity</div>
       <div className="min-w-0">Rule</div>
       <div className="min-w-0">Session Name</div>
       <div className="min-w-0">User</div>
@@ -334,6 +348,7 @@ function RiskEventsRows({
   isLoading,
   results,
   policyNameById,
+  policyScoreById,
   scrollRef,
   onSelectChat,
 }: {
@@ -341,6 +356,7 @@ function RiskEventsRows({
   isLoading: boolean;
   results: RiskResult[];
   policyNameById: Map<string, string>;
+  policyScoreById: Map<string, number>;
   scrollRef: RefObject<HTMLDivElement | null>;
   onSelectChat: (chatId: string | null) => void;
 }) {
@@ -412,6 +428,7 @@ function RiskEventsRows({
             <RiskEventsRow
               result={result}
               policyName={policyNameById.get(result.policyId)}
+              policyScore={policyScoreById.get(result.policyId)}
               onSelectChat={onSelectChat}
             />
           </div>
@@ -424,10 +441,12 @@ function RiskEventsRows({
 function RiskEventsRow({
   result,
   policyName,
+  policyScore,
   onSelectChat,
 }: {
   result: RiskResult;
   policyName: string | undefined;
+  policyScore: number | undefined;
   onSelectChat: (chatId: string | null) => void;
 }) {
   const isShadowMCP = result.source === "shadow_mcp";
@@ -475,6 +494,9 @@ function RiskEventsRow({
       </div>
       <div className="min-w-0 truncate">
         <CategoryLabel source={result.source} ruleId={result.ruleId} />
+      </div>
+      <div className="min-w-0">
+        <SeverityScore score={policyScore} />
       </div>
       <div className="min-w-0 truncate">
         <RuleLabel source={result.source} ruleId={result.ruleId} />
