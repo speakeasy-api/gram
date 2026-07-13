@@ -8950,6 +8950,248 @@ func DecodeSuggestCustomDetectionRuleResponse(decoder func(*http.Response) goaht
 	}
 }
 
+// BuildSuggestExclusionRequest instantiates a HTTP request object with method
+// and path set to call the "risk" service "suggestExclusion" endpoint
+func (c *Client) BuildSuggestExclusionRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SuggestExclusionRiskPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("risk", "suggestExclusion", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSuggestExclusionRequest returns an encoder for requests sent to the
+// risk suggestExclusion server.
+func EncodeSuggestExclusionRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*risk.SuggestExclusionPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("risk", "suggestExclusion", "*risk.SuggestExclusionPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewSuggestExclusionRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("risk", "suggestExclusion", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSuggestExclusionResponse returns a decoder for responses returned by
+// the risk suggestExclusion endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeSuggestExclusionResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSuggestExclusionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SuggestExclusionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "suggestExclusion", err)
+			}
+			err = ValidateSuggestExclusionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "suggestExclusion", err)
+			}
+			res := NewSuggestExclusionResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SuggestExclusionUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "suggestExclusion", err)
+			}
+			err = ValidateSuggestExclusionUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "suggestExclusion", err)
+			}
+			return nil, NewSuggestExclusionUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SuggestExclusionForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "suggestExclusion", err)
+			}
+			err = ValidateSuggestExclusionForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "suggestExclusion", err)
+			}
+			return nil, NewSuggestExclusionForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SuggestExclusionBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "suggestExclusion", err)
+			}
+			err = ValidateSuggestExclusionBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "suggestExclusion", err)
+			}
+			return nil, NewSuggestExclusionBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SuggestExclusionNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "suggestExclusion", err)
+			}
+			err = ValidateSuggestExclusionNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "suggestExclusion", err)
+			}
+			return nil, NewSuggestExclusionNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SuggestExclusionConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "suggestExclusion", err)
+			}
+			err = ValidateSuggestExclusionConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "suggestExclusion", err)
+			}
+			return nil, NewSuggestExclusionConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SuggestExclusionUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "suggestExclusion", err)
+			}
+			err = ValidateSuggestExclusionUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "suggestExclusion", err)
+			}
+			return nil, NewSuggestExclusionUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SuggestExclusionInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "suggestExclusion", err)
+			}
+			err = ValidateSuggestExclusionInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "suggestExclusion", err)
+			}
+			return nil, NewSuggestExclusionInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SuggestExclusionInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "suggestExclusion", err)
+				}
+				err = ValidateSuggestExclusionInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "suggestExclusion", err)
+				}
+				return nil, NewSuggestExclusionInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SuggestExclusionUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "suggestExclusion", err)
+				}
+				err = ValidateSuggestExclusionUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "suggestExclusion", err)
+				}
+				return nil, NewSuggestExclusionUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("risk", "suggestExclusion", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SuggestExclusionGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "suggestExclusion", err)
+			}
+			err = ValidateSuggestExclusionGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "suggestExclusion", err)
+			}
+			return nil, NewSuggestExclusionGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("risk", "suggestExclusion", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildTestDetectionRuleRequest instantiates a HTTP request object with method
 // and path set to call the "risk" service "testDetectionRule" endpoint
 func (c *Client) BuildTestDetectionRuleRequest(ctx context.Context, v any) (*http.Request, error) {

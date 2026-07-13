@@ -192,6 +192,11 @@ func SuggestCustomDetectionRuleRiskPath() string {
 	return "/rpc/risk.suggestCustomRules"
 }
 
+// SuggestExclusionRiskPath returns the URL path to the risk service suggestExclusion HTTP endpoint.
+func SuggestExclusionRiskPath() string {
+	return "/rpc/risk.suggestExclusion"
+}
+
 // TestDetectionRuleRiskPath returns the URL path to the risk service testDetectionRule HTTP endpoint.
 func TestDetectionRuleRiskPath() string {
 	return "/rpc/risk.testRule"

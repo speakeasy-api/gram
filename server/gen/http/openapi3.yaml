@@ -29528,6 +29528,112 @@ paths:
             x-speakeasy-react-hook:
                 name: RiskSuggestCustomRule
                 type: mutation
+    /rpc/risk.suggestExclusion:
+        post:
+            description: Suggest a risk exclusion (match_type, match_value, filters) from a natural-language prompt describing findings an operator wants to stop flagging. Calls the configured LLM with a JSON-schema constrained response so the dashboard can prefill the create exclusion form.
+            operationId: suggestExclusion
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SuggestExclusionRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SuggestExclusionResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: suggestExclusion risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.exclusions
+            x-speakeasy-name-override: suggest
+            x-speakeasy-react-hook:
+                name: RiskSuggestExclusion
+                type: mutation
     /rpc/risk.testRule:
         post:
             description: Run a single detection rule against pasted sample text and return any matches. Reuses the same scanner code (gitleaks, Presidio, prompt-injection, custom regex) that the analyzer runs in production so the playground match shape mirrors the chat-message path.
@@ -53008,6 +53114,39 @@ components:
                 - description
                 - regex
                 - severity
+        SuggestExclusionRequestBody:
+            type: object
+            properties:
+                known_rule_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: Built-in and custom rule ids the suggestion may reference in rule_id filters.
+                prompt:
+                    type: string
+                    description: Natural-language description of the findings to stop flagging.
+                    minLength: 3
+                    maxLength: 500
+            required:
+                - prompt
+        SuggestExclusionResult:
+            type: object
+            properties:
+                match_type:
+                    type: string
+                    description: How match_value is interpreted (exact, regex, rule_id, source, entity_type).
+                match_value:
+                    type: string
+                    description: The value matched against findings, interpreted per match_type.
+                rule_id_filter:
+                    type: string
+                    description: Only apply within this rule_id. Empty means any.
+                source_filter:
+                    type: string
+                    description: Only apply within this source. Empty means any.
+            required:
+                - match_type
+                - match_value
         SyncedAgentUser:
             type: object
             properties:
