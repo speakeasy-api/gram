@@ -8,29 +8,10 @@ import (
 	"net/http"
 )
 
-type IngestHookEventSecurity struct {
-	ApikeyHeaderGramKey          *string `security:"scheme,type=apiKey,subtype=header,composite,name=Gram-Key"`
-	ProjectSlugHeaderGramProject *string `security:"scheme,type=apiKey,subtype=header,composite,name=Gram-Project"`
-}
-
-func (i *IngestHookEventSecurity) GetApikeyHeaderGramKey() *string {
-	if i == nil {
-		return nil
-	}
-	return i.ApikeyHeaderGramKey
-}
-
-func (i *IngestHookEventSecurity) GetProjectSlugHeaderGramProject() *string {
-	if i == nil {
-		return nil
-	}
-	return i.ProjectSlugHeaderGramProject
-}
-
 type IngestHookEventRequest struct {
-	// API Key header
+	// Optional API key for plugin-driven attribution.
 	GramKey *string `header:"style=simple,explode=false,name=Gram-Key"`
-	// project header
+	// Optional project slug for plugin-driven attribution.
 	GramProject *string `header:"style=simple,explode=false,name=Gram-Project"`
 	// Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.
 	IdempotencyKey *string                      `header:"style=simple,explode=false,name=Idempotency-Key"`

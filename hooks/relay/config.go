@@ -30,6 +30,14 @@ type Config struct {
 	// never authenticate this plugin (shared "default" slugs would otherwise
 	// cross project boundaries).
 	OrgID string
+	// HooksAPIKey is the shared org-wide hooks key baked into a published
+	// plugin. It is a fallback behind explicit and cached per-user keys and is
+	// never persisted locally.
+	HooksAPIKey string
+	// BrowserLogin controls whether fresh machines may mint a per-user hooks
+	// key through the dashboard. Published plugins default this off and use the
+	// shared org key unless the organization opts in.
+	BrowserLogin bool
 	// Nonblocking swallows server deny decisions and turns transport failures
 	// into allow. It mirrors the plugin's observability mode.
 	Nonblocking bool
@@ -52,10 +60,12 @@ type Config struct {
 // a binary and a config file can skew in either direction. Never rename or
 // repurpose a key.
 type FileConfig struct {
-	ServerURL   string `json:"server_url"`
-	Project     string `json:"project"`
-	Org         string `json:"org,omitempty"`
-	Nonblocking bool   `json:"nonblocking,omitempty"`
+	ServerURL    string `json:"server_url"`
+	Project      string `json:"project"`
+	Org          string `json:"org,omitempty"`
+	HooksAPIKey  string `json:"hooks_api_key,omitempty"`
+	BrowserLogin bool   `json:"browser_login,omitempty"`
+	Nonblocking  bool   `json:"nonblocking,omitempty"`
 }
 
 // SplitInlineFlags extracts the deployment flags from a hook command's argv and
@@ -67,7 +77,7 @@ type FileConfig struct {
 // manual overrides layered on top of the file.
 func SplitInlineFlags(defaults Config, args []string) (Config, []string) {
 	cfg := defaults
-	overrides := Config{ServerURL: "", ProjectSlug: "", OrgID: "", Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+	overrides := Config{ServerURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
 	rest := make([]string, 0, len(args))
 	for _, a := range args {
 		switch {
@@ -78,6 +88,8 @@ func SplitInlineFlags(defaults Config, args []string) (Config, []string) {
 				cfg.ServerURL = fc.ServerURL
 				cfg.ProjectSlug = fc.Project
 				cfg.OrgID = fc.Org
+				cfg.HooksAPIKey = fc.HooksAPIKey
+				cfg.BrowserLogin = fc.BrowserLogin
 				cfg.Nonblocking = fc.Nonblocking
 			} else {
 				cfg.ConfigError = err.Error()
@@ -143,6 +155,12 @@ func LoadConfig(defaults Config) Config {
 	}
 	if v := strings.TrimSpace(os.Getenv("GRAM_HOOKS_ORG_ID")); v != "" {
 		cfg.OrgID = v
+	}
+	if v := strings.TrimSpace(os.Getenv("GRAM_HOOKS_ORG_KEY")); v != "" {
+		cfg.HooksAPIKey = v
+	}
+	if v := strings.TrimSpace(os.Getenv("GRAM_HOOKS_BROWSER_LOGIN")); v != "" {
+		cfg.BrowserLogin = v == "1" || strings.EqualFold(v, "true")
 	}
 	if os.Getenv("GRAM_HOOKS_NONBLOCKING") != "" || os.Getenv("GRAM_HOOKS_OBSERVABILITY_MODE") != "" {
 		cfg.Nonblocking = true

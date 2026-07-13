@@ -25,7 +25,7 @@ func main() {
 				Adapter: "<value>",
 			},
 		},
-	}, nil)
+	})
 	if err != nil {
 		log.Fatal(err)
 	}

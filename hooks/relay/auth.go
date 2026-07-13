@@ -18,6 +18,7 @@ const (
 	credNone credSource = iota
 	credEnv
 	credCache
+	credOrg
 )
 
 // creds is the resolved credential used to authenticate an ingest request.
@@ -126,7 +127,20 @@ func resolveAuth(cfg Config) (creds, bool) {
 			Source:    credEnv,
 		}, true
 	}
-	return readCachedAuth(cfg)
+	if cached, ok := readCachedAuth(cfg); ok {
+		return cached, true
+	}
+	if apiKey := strings.TrimSpace(cfg.HooksAPIKey); apiKey != "" {
+		return creds{
+			ServerURL: cfg.ServerURL,
+			APIKey:    apiKey,
+			Project:   cfg.ProjectSlug,
+			Email:     "",
+			Org:       cfg.OrgID,
+			Source:    credOrg,
+		}, true
+	}
+	return creds{}, false
 }
 
 // writeAuth atomically persists credentials with 0600 permissions and marks the

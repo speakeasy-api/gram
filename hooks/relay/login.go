@@ -45,7 +45,7 @@ func newLoginFlow(cfg Config) *loginFlow {
 // tryInteractive runs a best-effort sign-in for the SessionStart preflight:
 // guards and cooldown suppress it silently, and any failure is non-fatal.
 func (l *loginFlow) tryInteractive(ctx context.Context) {
-	if l.cfg.ConfigError != "" || insecureServerURL(l.cfg.ServerURL) {
+	if !l.cfg.BrowserLogin || l.cfg.ConfigError != "" || insecureServerURL(l.cfg.ServerURL) {
 		return
 	}
 	if ok, _ := loginViable(); !ok {
@@ -66,13 +66,16 @@ func (l *loginFlow) Run(ctx context.Context, force bool) error {
 	if l.cfg.ConfigError != "" {
 		return fmt.Errorf("cannot read plugin config at %q (%s); reinstall the Speakeasy hooks plugin", l.cfg.ConfigPath, l.cfg.ConfigError)
 	}
-	if _, ok := resolveAuth(l.cfg); ok && !force {
+	if c, ok := resolveAuth(l.cfg); ok && !force && c.Source != credOrg {
 		return nil
 	}
 	// A key minted for a plaintext non-loopback server would be refused by
 	// every send; don't open a browser to it in the first place.
 	if insecureServerURL(l.cfg.ServerURL) {
 		return fmt.Errorf("refusing insecure Gram server URL %q; use https:// (or an http://localhost dev server)", l.cfg.ServerURL)
+	}
+	if !l.cfg.BrowserLogin {
+		return errors.New("browser sign-in is disabled for this organization; set GRAM_HOOKS_API_KEY to a hooks-scoped key")
 	}
 	if ok, reason := loginViable(); !ok {
 		return fmt.Errorf("browser sign-in is unavailable: %s", reason)
@@ -111,20 +114,27 @@ func (l *loginFlow) run(ctx context.Context, force bool) error {
 			http.Error(w, "invalid state", http.StatusBadRequest)
 			return
 		}
-		apiKey := strings.TrimSpace(q.Get("api_key"))
+		if req.Method == http.MethodPost {
+			req.Body = http.MaxBytesReader(w, req.Body, 16<<10)
+		}
+		if err := req.ParseForm(); err != nil {
+			http.Error(w, "invalid callback", http.StatusBadRequest)
+			return
+		}
+		apiKey := strings.TrimSpace(req.Form.Get("api_key"))
 		if apiKey == "" {
 			http.Error(w, "missing api_key", http.StatusBadRequest)
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_, _ = w.Write([]byte("<!doctype html><meta charset=utf-8><title>Speakeasy</title><body style=\"font-family:sans-serif\">Speakeasy hooks are connected. You can close this tab.</body>"))
+		_, _ = w.Write([]byte("<!doctype html><meta charset=utf-8><title>Speakeasy</title><body style=\"font-family:sans-serif\">Speakeasy hooks are connected. You can close this tab.<script>window.close()</script></body>"))
 		select {
 		case resultCh <- creds{
 			ServerURL: l.cfg.ServerURL,
 			APIKey:    apiKey,
-			Project:   firstNonEmpty(q.Get("project"), l.cfg.ProjectSlug),
-			Email:     q.Get("email"),
-			Org:       firstNonEmpty(q.Get("organization_id"), l.cfg.OrgID),
+			Project:   firstNonEmpty(req.Form.Get("project"), l.cfg.ProjectSlug),
+			Email:     req.Form.Get("email"),
+			Org:       firstNonEmpty(req.Form.Get("organization_id"), l.cfg.OrgID),
 			Source:    credCache,
 		}:
 		default:
@@ -166,6 +176,7 @@ func (l *loginFlow) dashboardURL(port int, state string) string {
 	q.Set("from_cli", "true")
 	q.Set("cli_callback_url", callback)
 	q.Set("key_scope", "hooks")
+	q.Set("callback_method", "post")
 	if l.cfg.ProjectSlug != "" {
 		q.Set("project", l.cfg.ProjectSlug)
 	}

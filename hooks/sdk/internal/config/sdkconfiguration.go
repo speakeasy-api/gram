@@ -3,7 +3,6 @@
 package config
 
 import (
-	"context"
 	"github.com/speakeasy-api/gram/hooks/sdk/retry"
 	"net/http"
 	"time"
@@ -14,8 +13,8 @@ type HTTPClient interface {
 }
 
 type SDKConfiguration struct {
-	Client      HTTPClient
-	Security    func(context.Context) (interface{}, error)
+	Client HTTPClient
+
 	ServerURL   string
 	ServerIndex int
 	ServerList  []string

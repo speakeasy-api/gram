@@ -12,18 +12,18 @@ paths:
       operationId: ingestHookEvent
       parameters:
         - allowEmptyValue: true
-          description: API Key header
+          description: Optional API key for plugin-driven attribution.
           in: header
           name: Gram-Key
           schema:
-            description: API Key header
+            description: Optional API key for plugin-driven attribution.
             type: string
         - allowEmptyValue: true
-          description: project header
+          description: Optional project slug for plugin-driven attribution.
           in: header
           name: Gram-Project
           schema:
-            description: project header
+            description: Optional project slug for plugin-driven attribution.
             type: string
         - allowEmptyValue: true
           description: Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.
@@ -99,10 +99,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
-      security:
-        - apikey_header_Gram-Key: []
-          project_slug_header_Gram-Project: []
-        - {}
       summary: ingest hooks
       tags:
         - hooks
@@ -219,6 +215,9 @@ components:
         raw_event_name:
           type: string
           description: Provider-native event name, if one exists.
+        user_email:
+          type: string
+          description: Self-reported email of the developer on the emitting machine (device agent or provider account), used for attribution when the API key is shared org-wide.
       description: Metadata about the local hook adapter that translated a provider event into the Gram hook contract.
       required:
         - adapter
@@ -454,6 +453,8 @@ tags:
     description: Manage custom domains for gram.
   - name: environments
     description: Managing toolset environments.
+  - name: externalCredentials
+    description: Manage organization-level external credentials — how Gram authenticates into a customer's AWS or GCP account.
   - name: mcpRegistries
     description: External MCP registry operations
   - name: collections
@@ -490,16 +491,20 @@ tags:
     description: Manages projects in Gram.
   - name: remoteMcp
     description: Managing remote MCP servers.
+  - name: organizationRemoteSessionClients
+    description: Manage remote_session_client records from the organization-administrator surface — clients across every project in the caller's organization. client_secret_encrypted is never returned.
   - name: remoteSessionClients
     description: Manage remote_session_client records — credentials Gram uses when acting as an OAuth client of a remote_session_issuer. client_secret_encrypted is never returned.
-  - name: remoteSessions
-    description: Operator visibility into remote_sessions Gram is holding on a principal's behalf. Read + revoke; sessions are written by /mcp/{slug}/remote_login_callback and the silent-refresh path. access_token_encrypted and refresh_token_encrypted are never returned.
   - name: organizationRemoteSessionIssuers
     description: Manage organization-level remote_session_issuer records — cross-project upstream Authorization Server identity records inherited by every project in the organization.
   - name: remoteSessionIssuers
     description: Manage remote_session_issuer records — upstream Authorization Server identity records that Gram talks to as an OAuth client.
   - name: adminRemoteSessions
     description: Platform-admin management of global remote_session_issuer / remote_session_client records — shared across every organization (project_id NULL, organization_id NULL). Speakeasy-staff only; every method requires the platform-admin flag.
+  - name: organizationRemoteSessions
+    description: Organization-administrator visibility into remote_sessions Gram is holding on a principal's behalf, across every project in the caller's organization. access_token_encrypted and refresh_token_encrypted are never returned.
+  - name: remoteSessions
+    description: Operator visibility into remote_sessions Gram is holding on a principal's behalf. Read + revoke; sessions are written by /mcp/{slug}/remote_login_callback and the silent-refresh path. access_token_encrypted and refresh_token_encrypted are never returned.
   - name: resources
     description: Dashboard API for interacting with resources.
   - name: risk
@@ -514,6 +519,8 @@ tags:
     description: Managed toolsets for gram AI consumers.
   - name: triggers
     description: Manage project trigger instances and static trigger definitions.
+  - name: tunneledMcp
+    description: Managing customer-hosted tunneled MCP servers.
   - name: usage
     description: Read usage for gram.
   - name: userSessionClients

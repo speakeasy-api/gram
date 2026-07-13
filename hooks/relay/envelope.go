@@ -140,6 +140,7 @@ func buildEnvelope(typed any, hostname string) components.IngestRequestBody {
 			AdapterVersion: nil,
 			RawEventName:   optStr(base.NativeName),
 			Hostname:       optStr(hostname),
+			UserEmail:      nil,
 		},
 		Session: sessionOf(base),
 		Event: components.HookIngestEvent{

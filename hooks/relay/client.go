@@ -88,24 +88,20 @@ func (cl *client) send(ctx context.Context, c creds, body components.IngestReque
 	ctx, cancel := context.WithTimeout(ctx, cl.budget)
 	defer cancel()
 
-	sec := &operations.IngestHookEventSecurity{
-		ApikeyHeaderGramKey:          new(c.APIKey),
-		ProjectSlugHeaderGramProject: nil,
-	}
-	if c.Project != "" {
-		sec.ProjectSlugHeaderGramProject = new(c.Project)
-	}
 	req := operations.IngestHookEventRequest{
-		GramKey:        nil,
+		GramKey:        new(c.APIKey),
 		GramProject:    nil,
 		IdempotencyKey: new(newIdempotencyToken()),
 		Body:           body,
+	}
+	if c.Project != "" {
+		req.GramProject = new(c.Project)
 	}
 
 	var res *operations.IngestHookEventResponse
 	var err error
 	for attempt := 0; ; attempt++ {
-		res, err = cl.sdk.Hooks.Ingest(ctx, req, sec)
+		res, err = cl.sdk.Hooks.Ingest(ctx, req)
 		if err == nil {
 			break
 		}

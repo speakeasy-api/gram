@@ -2,15 +2,13 @@
 
 package sdk
 
-// Generated from OpenAPI doc version 0.0.1 and generator version 2.915.0
+// Generated from OpenAPI doc version 0.0.1 and generator version 2.916.4
 
 import (
-	"context"
 	"fmt"
 	"github.com/speakeasy-api/gram/hooks/sdk/internal/config"
 	"github.com/speakeasy-api/gram/hooks/sdk/internal/hooks"
 	"github.com/speakeasy-api/gram/hooks/sdk/internal/utils"
-	"github.com/speakeasy-api/gram/hooks/sdk/models/components"
 	"github.com/speakeasy-api/gram/hooks/sdk/retry"
 	"net/http"
 	"time"
@@ -95,22 +93,6 @@ func WithClient(client HTTPClient) SDKOption {
 	}
 }
 
-// WithSecurity configures the SDK to use the provided security details
-func WithSecurity(security components.Security) SDKOption {
-	return func(sdk *SpeakeasyHooks) {
-		sdk.sdkConfiguration.Security = utils.AsSecuritySource(security)
-	}
-}
-
-// WithSecuritySource configures the SDK to invoke the Security Source function on each method call to determine authentication
-func WithSecuritySource(security func(context.Context) (components.Security, error)) SDKOption {
-	return func(sdk *SpeakeasyHooks) {
-		sdk.sdkConfiguration.Security = func(ctx context.Context) (interface{}, error) {
-			return security(ctx)
-		}
-	}
-}
-
 func WithRetryConfig(retryConfig retry.Config) SDKOption {
 	return func(sdk *SpeakeasyHooks) {
 		sdk.sdkConfiguration.RetryConfig = &retryConfig
@@ -129,7 +111,7 @@ func New(opts ...SDKOption) *SpeakeasyHooks {
 	sdk := &SpeakeasyHooks{
 		SDKVersion: "0.1.0",
 		sdkConfiguration: config.SDKConfiguration{
-			UserAgent:  "speakeasy-sdk/go 0.1.0 2.915.0 0.0.1 github.com/speakeasy-api/gram/hooks/sdk",
+			UserAgent:  "speakeasy-sdk/go 0.1.0 2.916.4 0.0.1 github.com/speakeasy-api/gram/hooks/sdk",
 			ServerList: ServerList,
 		},
 		hooks: hooks.New(),

@@ -34,7 +34,7 @@ func newHooks(rootSDK *SpeakeasyHooks, sdkConfig config.SDKConfiguration, hooks 
 
 // Ingest - ingest hooks
 // Feature-first unified endpoint for hook events from supported coding assistants.
-func (s *Hooks) Ingest(ctx context.Context, request operations.IngestHookEventRequest, security *operations.IngestHookEventSecurity, opts ...operations.Option) (*operations.IngestHookEventResponse, error) {
+func (s *Hooks) Ingest(ctx context.Context, request operations.IngestHookEventRequest, opts ...operations.Option) (*operations.IngestHookEventResponse, error) {
 	o := operations.Options{}
 	supportedOptions := []string{
 		operations.SupportedOptionRetries,
@@ -65,7 +65,7 @@ func (s *Hooks) Ingest(ctx context.Context, request operations.IngestHookEventRe
 		Context:          ctx,
 		OperationID:      "ingestHookEvent",
 		OAuth2Scopes:     nil,
-		SecuritySource:   utils.AsSecuritySource(security),
+		SecuritySource:   nil,
 	}
 	bodyReader, reqContentType, err := utils.SerializeRequestBody(ctx, request, false, false, "Body", "json", `request:"mediaType=application/json"`)
 	if err != nil {
@@ -94,10 +94,6 @@ func (s *Hooks) Ingest(ctx context.Context, request operations.IngestHookEventRe
 	}
 
 	utils.PopulateHeaders(ctx, req, request, nil)
-
-	if err := utils.PopulateSecurity(ctx, req, utils.AsSecuritySource(security)); err != nil {
-		return nil, err
-	}
 
 	for k, v := range o.SetHeaders {
 		req.Header.Set(k, v)

@@ -22,7 +22,6 @@ Gram API Description: Gram is the tools platform for AI agents
 * [sdk](#sdk)
   * [SDK Installation](#sdk-installation)
   * [SDK Example Usage](#sdk-example-usage)
-  * [Authentication](#authentication)
   * [Available Resources and Operations](#available-resources-and-operations)
   * [Retries](#retries)
   * [Error Handling](#error-handling)
@@ -74,7 +73,7 @@ func main() {
 				Adapter: "<value>",
 			},
 		},
-	}, nil)
+	})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -85,62 +84,6 @@ func main() {
 
 ```
 <!-- End SDK Example Usage [usage] -->
-
-<!-- Start Authentication [security] -->
-## Authentication
-
-### Per-Client Security Schemes
-
-This SDK supports the following security schemes globally:
-
-| Name                           | Type   | Scheme  |
-| ------------------------------ | ------ | ------- |
-| `ApikeyHeaderGramKey`          | apiKey | API key |
-| `ProjectSlugHeaderGramProject` | apiKey | API key |
-
-You can set the security parameters through the `WithSecurity` option when initializing the SDK client instance. The selected scheme will be used by default to authenticate with the API for all operations that support it. For example:
-
-
-### Per-Operation Security Schemes
-
-Some operations in this SDK require the security scheme to be specified at the request level. For example:
-```go
-package main
-
-import (
-	"context"
-	"github.com/speakeasy-api/gram/hooks/sdk"
-	"github.com/speakeasy-api/gram/hooks/sdk/models/components"
-	"github.com/speakeasy-api/gram/hooks/sdk/models/operations"
-	"log"
-)
-
-func main() {
-	ctx := context.Background()
-
-	s := sdk.New()
-
-	res, err := s.Hooks.Ingest(ctx, operations.IngestHookEventRequest{
-		Body: components.IngestRequestBody{
-			Event: components.HookIngestEvent{
-				Type: components.TypeSkillActivated,
-			},
-			SchemaVersion: "<value>",
-			Source: components.HookIngestSource{
-				Adapter: "<value>",
-			},
-		},
-	}, sdk.Pointer(operations.IngestHookEventSecurity{}))
-	if err != nil {
-		log.Fatal(err)
-	}
-	if res.IngestHookResult != nil {
-		// handle response
-	}
-}
-
-```
-<!-- End Authentication [security] -->
 
 <!-- Start Available Resources and Operations [operations] -->
 ## Available Resources and Operations
@@ -189,7 +132,7 @@ func main() {
 				Adapter: "<value>",
 			},
 		},
-	}, nil, operations.WithRetries(
+	}, operations.WithRetries(
 		retry.Config{
 			Strategy: "backoff",
 			Backoff: &retry.BackoffStrategy{
@@ -250,7 +193,7 @@ func main() {
 				Adapter: "<value>",
 			},
 		},
-	}, nil)
+	})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -307,7 +250,7 @@ func main() {
 				Adapter: "<value>",
 			},
 		},
-	}, nil)
+	})
 	if err != nil {
 
 		var e *apierrors.ServiceError
@@ -367,7 +310,7 @@ func main() {
 				Adapter: "<value>",
 			},
 		},
-	}, nil)
+	})
 	if err != nil {
 		log.Fatal(err)
 	}

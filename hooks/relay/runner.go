@@ -89,6 +89,9 @@ func NewRunner(cfg Config) *agenthooks.Runner {
 	runner.OnNotification(func(ctx context.Context, e *agenthooks.NotificationEvent) error {
 		return r.onObserve(ctx, e)
 	})
+	runner.OnOther("ConfigChange", func(ctx context.Context, e *agenthooks.Event) error {
+		return r.onObserve(ctx, e)
+	})
 	// Cursor is the only provider whose rendered config subscribes
 	// model-response natives (afterAgentResponse/afterAgentThought); they carry
 	// the assistant message text and token usage.
@@ -158,6 +161,9 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 	}
 
 	payload := buildEnvelope(typed, hostname())
+	if email := resolveUserEmail(ctx, typed); email != "" {
+		payload.Source.UserEmail = new(email)
+	}
 	r.correlateCodexToolID(typed, &payload)
 	res := r.client.send(ctx, c, payload)
 	r.debugf("event=%s type=%s server=%s authfile=%s status=%d denied=%t", agenthooks.EventOf(typed).NativeName, payload.Event.Type, r.cfg.ServerURL, authFilePath(), res.statusCode, res.decision.denied())
@@ -172,11 +178,27 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 		return res, stateReady
 	}
 	if res.authRejected && c.Source == credCache && !disableLocalAuth() {
-		// A cache-sourced key the server rejected is forgotten; only the
-		// interactive preflight/login re-mints one. The reauth marker keeps
-		// prompt submissions nudging reconnect instead of blocking on it.
+		// A rejected personal cache is forgotten. When the published plugin has
+		// a shared org key, replay the same event through it so a stale personal
+		// key does not interrupt telemetry or policy enforcement.
 		forgetAuth()
 		markReauthNeeded()
+		if r.cfg.HooksAPIKey != "" {
+			if c.Email != "" {
+				payload.Source.UserEmail = new(c.Email)
+			}
+			orgCreds := creds{
+				ServerURL: r.cfg.ServerURL,
+				APIKey:    r.cfg.HooksAPIKey,
+				Project:   r.cfg.ProjectSlug,
+				Email:     "",
+				Org:       r.cfg.OrgID,
+				Source:    credOrg,
+			}
+			res = r.client.send(ctx, orgCreds, payload)
+			r.debugf("event=%s auth-retry=org status=%d denied=%t", agenthooks.EventOf(typed).NativeName, res.statusCode, res.decision.denied())
+			return res, stateReady
+		}
 		return res, stateReauthNeeded
 	}
 	return res, stateReady
@@ -338,7 +360,8 @@ func (r *Relay) onStop(ctx context.Context, e *agenthooks.StopEvent) (agenthooks
 // session.started telemetry. Viability guards and the attempt cooldown keep
 // the browser from nagging.
 func (r *Relay) onSessionStart(ctx context.Context, e *agenthooks.SessionStartEvent) (agenthooks.SessionStartDecision, error) {
-	if _, ok := resolveAuth(r.cfg); !ok {
+	_, cached := readCachedAuth(r.cfg)
+	if r.cfg.BrowserLogin && strings.TrimSpace(os.Getenv("GRAM_HOOKS_API_KEY")) == "" && !cached {
 		r.login.tryInteractive(ctx)
 	}
 	r.deliver(ctx, e)

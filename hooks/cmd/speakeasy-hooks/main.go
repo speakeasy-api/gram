@@ -35,7 +35,7 @@ func main() {
 			// login accepts the same deployment flags as the hook path
 			// (--config, --server-url, --project, --org) so the nudge can
 			// point it at the plugin's identity instead of the prod defaults.
-			flagCfg, rest := relay.SplitInlineFlags(relay.Config{ServerURL: "", ProjectSlug: "", OrgID: "", Nonblocking: false, DebugLog: "", ConfigPath: ""}, os.Args[2:])
+			flagCfg, rest := relay.SplitInlineFlags(relay.Config{ServerURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}, os.Args[2:])
 			os.Exit(runLogin(relay.LoadConfig(flagCfg), rest))
 		case "install":
 			os.Exit(runInstall(os.Args[2:]))
@@ -46,7 +46,7 @@ func main() {
 	// speakeasy.json via --config. Read the deployment flags without mutating
 	// argv: agenthooks tolerates unknown flags, and its --async re-exec
 	// forwards argv to the detached worker, which must keep --config.
-	flagCfg, _ := relay.SplitInlineFlags(relay.Config{ServerURL: "", ProjectSlug: "", OrgID: "", Nonblocking: false, DebugLog: "", ConfigPath: ""}, os.Args[1:])
+	flagCfg, _ := relay.SplitInlineFlags(relay.Config{ServerURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}, os.Args[1:])
 	cfg := relay.LoadConfig(flagCfg)
 
 	agenthooks.Main(relay.NewRunner(cfg))
@@ -61,6 +61,8 @@ func runInstall(args []string) int {
 	serverURL := fs.String("server-url", relay.DefaultServerURL, "Gram server URL to bake into the plugin")
 	project := fs.String("project", "default", "project slug")
 	org := fs.String("org", "", "organization id hint")
+	browserLogin := fs.Bool("browser-login", false, "enable per-user browser sign-in")
+	nonblocking := fs.Bool("nonblocking", false, "record events without enforcing deny decisions")
 	binary := fs.String("binary", "", "path to the speakeasy-hooks binary (defaults to this executable)")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -78,10 +80,13 @@ func runInstall(args []string) int {
 		}
 	}
 	if err := relay.WritePlugin(context.Background(), *provider, *dir, relay.PluginConfig{
-		ServerURL:   *serverURL,
-		ProjectSlug: *project,
-		OrgID:       *org,
-		BinaryPath:  binaryPath,
+		ServerURL:    *serverURL,
+		ProjectSlug:  *project,
+		OrgID:        *org,
+		HooksAPIKey:  os.Getenv("GRAM_HOOKS_ORG_KEY"),
+		BrowserLogin: *browserLogin,
+		Nonblocking:  *nonblocking,
+		BinaryPath:   binaryPath,
 	}); err != nil {
 		fmt.Fprintf(os.Stderr, "speakeasy-hooks install: %v\n", err)
 		return 1

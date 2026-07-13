@@ -12,6 +12,8 @@ type HookIngestSource struct {
 	Hostname *string `json:"hostname,omitzero"`
 	// Provider-native event name, if one exists.
 	RawEventName *string `json:"raw_event_name,omitzero"`
+	// Self-reported email of the developer on the emitting machine (device agent or provider account), used for attribution when the API key is shared org-wide.
+	UserEmail *string `json:"user_email,omitzero"`
 }
 
 func (h *HookIngestSource) GetAdapter() string {
@@ -40,4 +42,11 @@ func (h *HookIngestSource) GetRawEventName() *string {
 		return nil
 	}
 	return h.RawEventName
+}
+
+func (h *HookIngestSource) GetUserEmail() *string {
+	if h == nil {
+		return nil
+	}
+	return h.UserEmail
 }

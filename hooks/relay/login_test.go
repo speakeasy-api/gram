@@ -56,25 +56,25 @@ func TestLoginRoundtrip(t *testing.T) {
 		u := loginURLFromOpener(t, target)
 		callback := u.Query().Get("cli_callback_url")
 		require.Equal(t, "hooks", u.Query().Get("key_scope"))
+		require.Equal(t, "post", u.Query().Get("callback_method"))
 		cb, err := url.Parse(callback)
 		if err != nil {
 			return
 		}
-		q := cb.Query()
-		q.Set("api_key", "minted-key-123")
-		q.Set("project", "acme")
-		q.Set("email", "dev@example.com")
-		q.Set("organization_id", "org-9")
-		cb.RawQuery = q.Encode()
+		form := url.Values{}
+		form.Set("api_key", "minted-key-123")
+		form.Set("project", "acme")
+		form.Set("email", "dev@example.com")
+		form.Set("organization_id", "org-9")
 		go func() {
-			resp, err := http.Get(cb.String())
+			resp, err := http.PostForm(cb.String(), form)
 			if err == nil {
 				_ = resp.Body.Close()
 			}
 		}()
 	}
 
-	cfg := Config{ServerURL: "https://app.example.test", ProjectSlug: "acme", OrgID: "org-9", Nonblocking: false}
+	cfg := Config{ServerURL: "https://app.example.test", ProjectSlug: "acme", OrgID: "org-9", HooksAPIKey: "", BrowserLogin: true, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
 	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
 	defer cancel()
 	require.NoError(t, NewRelay(cfg).Login(ctx, true))
@@ -87,6 +87,52 @@ func TestLoginRoundtrip(t *testing.T) {
 	require.Equal(t, "org-9", values["org"])
 	require.Equal(t, "https://app.example.test", values["server_url"])
 	require.True(t, authEstablished())
+}
+
+// TestLoginLegacyGETRoundtrip keeps compatibility with dashboards released
+// before callback_method=post, which append credentials to the callback URL.
+func TestLoginLegacyGETRoundtrip(t *testing.T) {
+	authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
+	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
+	t.Setenv("GRAM_HOOKS_LOGIN_TIMEOUT_SECONDS", "10")
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
+	forceInteractiveEnv(t)
+
+	orig := openBrowser
+	t.Cleanup(func() { openBrowser = orig })
+	openBrowser = func(target string) {
+		u := loginURLFromOpener(t, target)
+		cb, err := url.Parse(u.Query().Get("cli_callback_url"))
+		if err != nil {
+			return
+		}
+		q := cb.Query()
+		q.Set("api_key", "legacy-key")
+		q.Set("project", "legacy-project")
+		cb.RawQuery = q.Encode()
+		go func() {
+			resp, err := http.Get(cb.String())
+			if err == nil {
+				_ = resp.Body.Close()
+			}
+		}()
+	}
+
+	cfg := Config{ServerURL: "https://app.example.test", ProjectSlug: "acme", OrgID: "", HooksAPIKey: "", BrowserLogin: true, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+	require.NoError(t, NewRelay(cfg).Login(t.Context(), true))
+
+	values, err := readAuthFile(authFile)
+	require.NoError(t, err)
+	require.Equal(t, "legacy-key", values["api_key"])
+	require.Equal(t, "legacy-project", values["project"])
+}
+
+func TestLoginDisabledPointsToManualKey(t *testing.T) {
+	t.Setenv("GRAM_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
+	cfg := Config{ServerURL: "https://app.example.test", ProjectSlug: "acme", OrgID: "", HooksAPIKey: "org-key", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+	err := NewRelay(cfg).Login(t.Context(), true)
+	require.ErrorContains(t, err, "GRAM_HOOKS_API_KEY")
 }
 
 // TestLoginRejectsMismatchedState ensures a callback carrying the wrong state
@@ -115,7 +161,7 @@ func TestLoginRejectsMismatchedState(t *testing.T) {
 		}()
 	}
 
-	cfg := Config{ServerURL: "https://app.example.test", ProjectSlug: "acme", OrgID: "", Nonblocking: false}
+	cfg := Config{ServerURL: "https://app.example.test", ProjectSlug: "acme", OrgID: "", HooksAPIKey: "", BrowserLogin: true, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
 	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
 	defer cancel()
 	err := NewRelay(cfg).Login(ctx, true)
@@ -132,7 +178,7 @@ func TestLoginRefusesBrokenConfig(t *testing.T) {
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	forceInteractiveEnv(t)
 
-	cfg := Config{ServerURL: "https://app.example.test", ProjectSlug: "acme", OrgID: "", Nonblocking: false, DebugLog: "", ConfigPath: "/missing/speakeasy.json", ConfigError: "open /missing/speakeasy.json: no such file or directory"}
+	cfg := Config{ServerURL: "https://app.example.test", ProjectSlug: "acme", OrgID: "", HooksAPIKey: "", BrowserLogin: true, Nonblocking: false, DebugLog: "", ConfigPath: "/missing/speakeasy.json", ConfigError: "open /missing/speakeasy.json: no such file or directory"}
 	err := NewRelay(cfg).Login(t.Context(), true)
 	require.ErrorContains(t, err, "reinstall")
 }
@@ -144,7 +190,7 @@ func TestMarkAttemptCreatesAuthDir(t *testing.T) {
 	authFile := filepath.Join(t.TempDir(), "config", "gram", "hooks-auth.env")
 	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
 
-	l := newLoginFlow(Config{ServerURL: "https://app.example.test", ProjectSlug: "acme", OrgID: "", Nonblocking: false})
+	l := newLoginFlow(Config{ServerURL: "https://app.example.test", ProjectSlug: "acme", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""})
 	l.markAttempt()
 	require.FileExists(t, authFile+".login-attempt")
 	require.False(t, l.cooldownElapsed(false), "a fresh attempt marker must hold the cooldown")

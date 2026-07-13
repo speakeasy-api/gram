@@ -39,22 +39,6 @@ WithClient allows the overriding of the default HTTP client used by the SDK.
 sdk.WithClient(httpClient)
 ```
 
-### WithSecurity
-
-WithSecurity configures the SDK to use the provided security details.
-
-```go
-sdk.WithSecurity(/* ... */)
-```
-
-### WithSecuritySource
-
-WithSecuritySource configures the SDK to invoke the provided function on each method call to determine authentication.
-
-```go
-sdk.WithSecuritySource(/* ... */)
-```
-
 ### WithRetryConfig
 
 WithRetryConfig allows setting the default retry configuration used by the SDK for all supported operations.
