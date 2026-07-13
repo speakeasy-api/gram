@@ -93,6 +93,10 @@ type runtimeTurnRequest struct {
 	// from the turn. Boot env wins when present, so it is harmless and unused
 	// on Fly.
 	AssistantID string `json:"assistant_id,omitempty"`
+	// ProjectID travels with AssistantID under the same set-once discipline.
+	// The runner stamps it on exported trace spans so traces filter per
+	// project; it never drives runner behavior.
+	ProjectID string `json:"project_id,omitempty"`
 }
 
 type runtimeHTTPRequest struct {

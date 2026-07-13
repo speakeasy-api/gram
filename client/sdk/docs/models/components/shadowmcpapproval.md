@@ -1,0 +1,23 @@
+# ShadowMCPApproval
+
+## Example Usage
+
+```typescript
+import { ShadowMCPApproval } from "@gram/client/models/components";
+
+let value: ShadowMCPApproval = {
+  approvedAt: new Date("2026-03-03T02:52:36.606Z"),
+  match: "<value>",
+  policyId: "ece7335d-5143-40e7-a9c7-98617e39b1aa",
+};
+```
+
+## Fields
+
+| Field        | Type                                                                                          | Required           | Description                                                                                                                                                          |
+| ------------ | --------------------------------------------------------------------------------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `approvedAt` | [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date) | :heavy_check_mark: | When the approval was recorded.                                                                                                                                      |
+| `approvedBy` | _string_                                                                                      | :heavy_minus_sign: | User that recorded the approval.                                                                                                                                     |
+| `match`      | _string_                                                                                      | :heavy_check_mark: | The MCP server identifier this approval covers — typically a server URL, stdio command, or `mcp__<server>__` prefix (the same value surfaced in `RiskResult.match`). |
+| `policyId`   | _string_                                                                                      | :heavy_check_mark: | The risk policy ID this approval is scoped to.                                                                                                                       |
+| `serverName` | _string_                                                                                      | :heavy_minus_sign: | Display name of the MCP server, when known.                                                                                                                          |

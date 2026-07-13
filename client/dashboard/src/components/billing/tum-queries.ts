@@ -1,7 +1,5 @@
 import { type GramCore } from "@gram/client/core.js";
-import { telemetryQueryRiskTokens } from "@gram/client/funcs/telemetryQueryRiskTokens";
 import { telemetryQueryTumDetails } from "@gram/client/funcs/telemetryQueryTumDetails";
-import { type QueryRiskTokensResult } from "@gram/client/models/components/queryrisktokensresult.js";
 import { type TumDetailsResult } from "@gram/client/models/components/tumdetailsresult.js";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { type BillingPeriod, periodStaleTime } from "./billing-cycles";
@@ -14,7 +12,7 @@ import { type BillingPeriod, periodStaleTime } from "./billing-cycles";
 // directly with payload-encoding keys; closed periods cache forever (their
 // telemetry is immutable) via periodStaleTime.
 //
-// Both requests land on billing-page-specific endpoints that scope their
+// The request lands on a billing-page-specific endpoint that scopes its
 // reads server-side to the billed completion population (see
 // billing.ModelUsageSources on the server) — the client carries no knowledge
 // of what is billed.
@@ -56,25 +54,6 @@ function periodQuery<T>(
     throwOnError: false,
     queryFn,
   };
-}
-
-// The session-level risky-token series for a period. The chart's risk
-// stacking and the details table's risk rows both consume this with the same
-// key, so React Query dedupes them into one request.
-export function riskPointsQuery(
-  scope: PeriodScope,
-): PeriodQuery<QueryRiskTokensResult> {
-  return periodQuery("tum-risk-tokens", scope, [], () =>
-    unwrapAsync(
-      telemetryQueryRiskTokens(scope.client, {
-        telemetryWindowPayload: {
-          from: scope.period.start,
-          to: scope.period.end,
-          projectId: scope.projectId ?? undefined,
-        },
-      }),
-    ),
-  );
 }
 
 // Every measure of the usage details table in one request.

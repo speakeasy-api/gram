@@ -259,11 +259,16 @@ trackedFiles:
   src/funcs/projectsSetOrganizationWhitelist.ts: {}
   src/funcs/projectsUpsertAllowedOrigin.ts: {}
   src/funcs/remoteMcpCreateServer.ts: {}
+  src/funcs/remoteMcpCreateServerHeader.ts: {}
   src/funcs/remoteMcpDeleteServer.ts: {}
+  src/funcs/remoteMcpDeleteServerHeader.ts: {}
   src/funcs/remoteMcpDiscoverProtectedResourceMetadata.ts: {}
   src/funcs/remoteMcpGetServer.ts: {}
+  src/funcs/remoteMcpGetServerHeader.ts: {}
+  src/funcs/remoteMcpListServerHeaders.ts: {}
   src/funcs/remoteMcpListServers.ts: {}
   src/funcs/remoteMcpUpdateServer.ts: {}
+  src/funcs/remoteMcpUpdateServerHeader.ts: {}
   src/funcs/remoteMcpVerifyURL.ts: {}
   src/funcs/remoteSessionClientsAttachUserSessionIssuer.ts: {}
   src/funcs/remoteSessionClientsCloneClientFromOAuthProxyProvider.ts: {}
@@ -512,6 +517,7 @@ trackedFiles:
   src/models/components/createriskpolicyrequestbody.ts: {}
   src/models/components/createroleform.ts: {}
   src/models/components/createserverform.ts: {}
+  src/models/components/createserverheaderform.ts: {}
   src/models/components/createshadowmcpaccessruleform.ts: {}
   src/models/components/createshadowmcpaccessruleresult.ts: {}
   src/models/components/createshadowmcpapprovalrequestform.ts: {}
@@ -600,7 +606,6 @@ trackedFiles:
   src/models/components/gettoolusagesummaryresult.ts: {}
   src/models/components/getusermetricssummarypayload.ts: {}
   src/models/components/getusermetricssummaryresult.ts: {}
-  src/models/components/headerinput.ts: {}
   src/models/components/hookingestdata.ts: {}
   src/models/components/hookingestevent.ts: {}
   src/models/components/hookingestsession.ts: {}
@@ -678,6 +683,7 @@ trackedFiles:
   src/models/components/listrolegrant.ts: {}
   src/models/components/listrolesresult.ts: {}
   src/models/components/listscopesresult.ts: {}
+  src/models/components/listserverheadersresult.ts: {}
   src/models/components/listserversresponsebody.ts: {}
   src/models/components/listserversresult.ts: {}
   src/models/components/listsessionspayload.ts: {}
@@ -977,6 +983,7 @@ trackedFiles:
   src/models/components/updateriskpolicyrequestbody.ts: {}
   src/models/components/updateroleform.ts: {}
   src/models/components/updateserverform.ts: {}
+  src/models/components/updateserverheaderform.ts: {}
   src/models/components/updateshadowmcpaccessruleform.ts: {}
   src/models/components/updatetoolsetrequestbody.ts: {}
   src/models/components/updatetriggerinstanceform.ts: {}
@@ -1060,6 +1067,7 @@ trackedFiles:
   src/models/operations/createportalsession.ts: {}
   src/models/operations/createproject.ts: {}
   src/models/operations/createremotemcpserver.ts: {}
+  src/models/operations/createremotemcpserverheader.ts: {}
   src/models/operations/createremotesessionclient.ts: {}
   src/models/operations/createremotesessionissuer.ts: {}
   src/models/operations/createriskexclusion.ts: {}
@@ -1098,6 +1106,7 @@ trackedFiles:
   src/models/operations/deleteplugin.ts: {}
   src/models/operations/deleteproject.ts: {}
   src/models/operations/deleteremotemcpserver.ts: {}
+  src/models/operations/deleteremotemcpserverheader.ts: {}
   src/models/operations/deleteremotesessionclient.ts: {}
   src/models/operations/deleteremotesessionissuer.ts: {}
   src/models/operations/deleteriskevalreview.ts: {}
@@ -1173,6 +1182,7 @@ trackedFiles:
   src/models/operations/getpublishstatus.ts: {}
   src/models/operations/getrbacstatus.ts: {}
   src/models/operations/getremotemcpserver.ts: {}
+  src/models/operations/getremotemcpserverheader.ts: {}
   src/models/operations/getremotesessionclient.ts: {}
   src/models/operations/getremotesessionissuer.ts: {}
   src/models/operations/getriskblock.ts: {}
@@ -1246,6 +1256,7 @@ trackedFiles:
   src/models/operations/listpackages.ts: {}
   src/models/operations/listplugins.ts: {}
   src/models/operations/listprojects.ts: {}
+  src/models/operations/listremotemcpserverheaders.ts: {}
   src/models/operations/listremotemcpservers.ts: {}
   src/models/operations/listremotesessionclients.ts: {}
   src/models/operations/listremotesessionissuers.ts: {}
@@ -1371,6 +1382,7 @@ trackedFiles:
   src/models/operations/updateplugin.ts: {}
   src/models/operations/updatepluginserver.ts: {}
   src/models/operations/updateremotemcpserver.ts: {}
+  src/models/operations/updateremotemcpserverheader.ts: {}
   src/models/operations/updateremotesessionclient.ts: {}
   src/models/operations/updateremotesessionissuer.ts: {}
   src/models/operations/updateriskexclusion.ts: {}
@@ -1470,6 +1482,7 @@ trackedFiles:
   src/react-query/createPortalSession.ts: {}
   src/react-query/createProject.ts: {}
   src/react-query/createRemoteMcpServer.ts: {}
+  src/react-query/createRemoteMcpServerHeader.ts: {}
   src/react-query/createRemoteSessionClient.ts: {}
   src/react-query/createRemoteSessionIssuer.ts: {}
   src/react-query/createRole.ts: {}
@@ -1500,6 +1513,7 @@ trackedFiles:
   src/react-query/deletePlugin.ts: {}
   src/react-query/deleteProject.ts: {}
   src/react-query/deleteRemoteMcpServer.ts: {}
+  src/react-query/deleteRemoteMcpServerHeader.ts: {}
   src/react-query/deleteRemoteSessionClient.ts: {}
   src/react-query/deleteRemoteSessionIssuer.ts: {}
   src/react-query/deleteRole.ts: {}
@@ -1559,6 +1573,8 @@ trackedFiles:
   src/react-query/getProjectOverview.ts: {}
   src/react-query/getRemoteMcpServer.core.ts: {}
   src/react-query/getRemoteMcpServer.ts: {}
+  src/react-query/getRemoteMcpServerHeader.core.ts: {}
+  src/react-query/getRemoteMcpServerHeader.ts: {}
   src/react-query/getSourceEnvironment.core.ts: {}
   src/react-query/getSourceEnvironment.ts: {}
   src/react-query/getTokensUnderManagement.core.ts: {}
@@ -1738,6 +1754,8 @@ trackedFiles:
   src/react-query/refreshOrganizationRemoteSession.ts: {}
   src/react-query/register.ts: {}
   src/react-query/registerDomain.ts: {}
+  src/react-query/remoteMcpServerHeaders.core.ts: {}
+  src/react-query/remoteMcpServerHeaders.ts: {}
   src/react-query/remoteMcpServers.core.ts: {}
   src/react-query/remoteMcpServers.ts: {}
   src/react-query/remoteSessionClient.core.ts: {}
@@ -1908,6 +1926,7 @@ trackedFiles:
   src/react-query/updatePlugin.ts: {}
   src/react-query/updatePluginServer.ts: {}
   src/react-query/updateRemoteMcpServer.ts: {}
+  src/react-query/updateRemoteMcpServerHeader.ts: {}
   src/react-query/updateRemoteSessionClient.ts: {}
   src/react-query/updateRemoteSessionIssuer.ts: {}
   src/react-query/updateRole.ts: {}
@@ -2532,14 +2551,25 @@ examples:
   createRemoteMcpServer:
     speakeasy-default-create-remote-mcp-server:
       requestBody:
-        application/json: {"headers": [], "transport_type": "<value>", "url": "https://paltry-costume.com"}
+        application/json: {"transport_type": "<value>", "url": "https://paltry-costume.com"}
       responses:
         "200":
-          application/json: {"created_at": "2025-08-01T05:21:55.747Z", "headers": [{"created_at": "2024-12-25T23:19:04.624Z", "id": "c6e7004c-5705-426c-b93f-959e6076803a", "is_required": false, "is_secret": false, "name": "<value>", "updated_at": "2025-06-08T16:34:32.725Z"}], "id": "0ddcf693-345a-4d68-86f9-28fadf840536", "project_id": "7c71fab8-5e6f-4fa5-9841-4f97a146174f", "transport_type": "<value>", "updated_at": "2024-11-26T02:55:01.659Z", "url": "https://substantial-label.info/"}
+          application/json: {"created_at": "2025-08-01T05:21:55.747Z", "id": "0ddcf693-345a-4d68-86f9-28fadf840536", "project_id": "7c71fab8-5e6f-4fa5-9841-4f97a146174f", "transport_type": "<value>", "updated_at": "2024-11-26T02:55:01.659Z", "url": "https://substantial-label.info/"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  createRemoteMcpServerHeader:
+    speakeasy-default-create-remote-mcp-server-header:
+      requestBody:
+        application/json: {"name": "<value>", "remote_mcp_server_id": "d0987c65-6566-4925-a6f4-11e93f53f0ff"}
+      responses:
+        "200":
+          application/json: {"created_at": "2026-05-19T03:59:39.227Z", "id": "1d888265-f35f-4891-91bf-47c78f7834f7", "is_required": false, "is_secret": false, "name": "<value>", "updated_at": "2025-03-07T11:08:32.857Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   createRemoteSessionClient:
     speakeasy-default-create-remote-session-client:
       requestBody:
@@ -2938,6 +2968,16 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  deleteRemoteMcpServerHeader:
+    speakeasy-default-delete-remote-mcp-server-header:
+      parameters:
+        query:
+          id: "dddcf9c4-114d-443d-83a1-a0709dffae5c"
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   deleteRemoteSessionClient:
     speakeasy-default-delete-remote-session-client:
       parameters:
@@ -3723,11 +3763,23 @@ examples:
     speakeasy-default-get-remote-mcp-server:
       responses:
         "200":
-          application/json: {"created_at": "2024-01-20T20:38:03.097Z", "headers": [], "id": "41ff2c52-8a43-4ebc-ad34-ab309a0d85b1", "project_id": "1822d85c-8774-4a3d-bc6f-a9e018121fb4", "transport_type": "<value>", "updated_at": "2026-02-12T04:10:45.897Z", "url": "https://pertinent-colonialism.com"}
+          application/json: {"created_at": "2024-01-20T20:38:03.097Z", "id": "41ff2c52-8a43-4ebc-ad34-ab309a0d85b1", "project_id": "1822d85c-8774-4a3d-bc6f-a9e018121fb4", "transport_type": "<value>", "updated_at": "2026-02-12T04:10:45.897Z", "url": "https://pertinent-colonialism.com"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getRemoteMcpServerHeader:
+    speakeasy-default-get-remote-mcp-server-header:
+      parameters:
+        query:
+          id: "efc0383c-b0c5-44be-a077-04a0d0499b77"
+      responses:
+        "200":
+          application/json: {"created_at": "2024-12-26T19:41:43.925Z", "id": "dcebfbcc-1975-4d7d-8879-184603b67129", "is_required": true, "is_secret": false, "name": "<value>", "updated_at": "2025-06-12T11:59:38.190Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   getRemoteSessionClient:
     speakeasy-default-get-remote-session-client:
       parameters:
@@ -4526,6 +4578,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  listRemoteMcpServerHeaders:
+    speakeasy-default-list-remote-mcp-server-headers:
+      parameters:
+        query:
+          remote_mcp_server_id: "2c58f142-32f8-4cf7-9ae0-7f1e950eafdd"
+      responses:
+        "200":
+          application/json: {"headers": [{"created_at": "2024-03-17T04:16:31.291Z", "id": "dd6dc2ed-f1bc-4db4-8cb2-507e0bff7c48", "is_required": false, "is_secret": false, "name": "<value>", "updated_at": "2024-06-02T01:23:56.548Z"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   listRemoteMcpServers:
     speakeasy-default-list-remote-mcp-servers:
       responses:
@@ -5030,7 +5094,7 @@ examples:
         application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-26T10:00:00Z"}
       responses:
         "200":
-          application/json: {"breakdowns": [{"key": "<key>", "rows": []}], "interval_seconds": 788271, "points": [], "totals": {"input_tokens": 970099, "output_tokens": 419661, "risky_message_tokens": 850464, "tool_message_tokens": 673665, "total_tokens": 804391}}
+          application/json: {"breakdowns": [{"key": "<key>", "rows": []}], "interval_seconds": 788271, "points": [], "totals": {"input_tokens": 970099, "output_tokens": 419661, "total_tokens": 804391}}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -5887,7 +5951,18 @@ examples:
         application/json: {"id": "<id>"}
       responses:
         "200":
-          application/json: {"created_at": "2024-08-23T05:48:58.481Z", "headers": [], "id": "e38db113-f6e1-47dc-b3de-440139eb0de1", "project_id": "e43260c8-3e37-449c-8fae-dc25b37cd219", "transport_type": "<value>", "updated_at": "2025-06-22T12:46:40.588Z", "url": "https://jealous-newsletter.info/"}
+          application/json: {"created_at": "2024-08-23T05:48:58.481Z", "id": "e38db113-f6e1-47dc-b3de-440139eb0de1", "project_id": "e43260c8-3e37-449c-8fae-dc25b37cd219", "transport_type": "<value>", "updated_at": "2025-06-22T12:46:40.588Z", "url": "https://jealous-newsletter.info/"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  updateRemoteMcpServerHeader:
+    speakeasy-default-update-remote-mcp-server-header:
+      requestBody:
+        application/json: {"id": "39e8aa76-0064-4a7e-a340-e4a1e823c4ff", "name": "<value>"}
+      responses:
+        "200":
+          application/json: {"created_at": "2025-12-05T08:58:10.982Z", "id": "5cb6e8be-3a1f-407b-ab6a-228848c8ecf6", "is_required": true, "is_secret": false, "name": "<value>", "updated_at": "2024-07-05T22:50:42.714Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

@@ -39,6 +39,23 @@ var (
 	ModelUsageSourceElements   = registerModelUsageSource("elements")
 	ModelUsageSourceGram       = registerModelUsageSource("gram")
 	ModelUsageSourceSlack      = registerModelUsageSource("slack")
+
+	// ModelUsageSourceRiskAnalysis tags the platform's own risk-policy
+	// analysis inference (risk judge, prompt-injection scanner). Scanning is
+	// the metered unit of the enterprise TUM contracts — the act of securing
+	// observed agent traffic — so this source is registered (billed) even
+	// though no end user initiates the completions. The billing page reports
+	// it as its own "Risk policy analysis model" section, separate from
+	// user-facing completion surfaces.
+	//
+	// Callers tagging gram or risk-analysis (platform-initiated inference)
+	// must also set openrouter.KeyTypeInternal on the completion request so
+	// the usage bills against the org's internal OpenRouter key, not the
+	// customer-facing chat key's monthly cap. For risk-analysis the unified
+	// client rejects a chat-key pairing at request initialization; gram stays
+	// convention-only because the completions proxy legitimately accepts a
+	// client-supplied gram source on the chat key (Elements).
+	ModelUsageSourceRiskAnalysis = registerModelUsageSource("risk-analysis")
 )
 
 // ModelUsageSourceAssistants tags assistants completions in telemetry but is

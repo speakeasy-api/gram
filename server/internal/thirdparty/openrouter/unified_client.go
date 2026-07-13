@@ -19,6 +19,7 @@ import (
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	or_operations "github.com/OpenRouterTeam/go-sdk/models/operations"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -79,6 +80,16 @@ type initializeRequestResult struct {
 
 // initializeRequest creates the OpenAI-compatible request body with defaults applied.
 func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionRequest) (*initializeRequestResult, error) {
+	// risk-analysis inference is always platform-initiated (the completions
+	// proxy clamps client-supplied claims to a customer surface), so a
+	// chat-key pairing can only be a miswired caller — fail fast instead of
+	// silently draining the customer's chat cap. The gram source cannot get
+	// the same mechanical check: the proxy legitimately accepts it from
+	// Elements on the chat key.
+	if req.UsageSource == billing.ModelUsageSourceRiskAnalysis && req.KeyType.OrDefault() != KeyTypeInternal {
+		return nil, fmt.Errorf("usage source %q requires KeyTypeInternal, got %q", req.UsageSource, req.KeyType.OrDefault())
+	}
+
 	var captureSession CaptureSession
 	if c.messageCaptureStrategy != nil {
 		sess, err := c.messageCaptureStrategy.StartOrResumeChat(ctx, req)
@@ -89,7 +100,7 @@ func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionReques
 	}
 
 	// Provision API key
-	apiKey, err := c.provisioner.ProvisionAPIKey(ctx, req.OrgID)
+	apiKey, err := c.provisioner.ProvisionAPIKey(ctx, req.OrgID, req.KeyType.OrDefault())
 	if err != nil {
 		return nil, fmt.Errorf("provision OpenRouter key: %w", err)
 	}
@@ -236,7 +247,7 @@ func (c *ChatClient) onMessageComplete(ctx context.Context, session CaptureSessi
 		go func() {
 			modelUsage := inlineUsage
 			if response.MessageID != "" && (modelUsage == nil || modelUsage.TotalCost == nil) {
-				fallbackUsage, err := c.provisioner.GetModelUsage(context.WithoutCancel(ctx), response.MessageID, req.OrgID)
+				fallbackUsage, err := c.provisioner.GetModelUsage(context.WithoutCancel(ctx), response.MessageID, req.OrgID, req.KeyType.OrDefault())
 				if err != nil {
 					c.logger.WarnContext(ctx, "failed to fetch fallback openrouter usage", attr.SlogError(err))
 				} else if fallbackUsage != nil {
@@ -517,7 +528,8 @@ func (c *ChatClient) GetObjectCompletion(ctx context.Context, req ObjectCompleti
 		UsageSource:               req.UsageSource,
 		UserID:                    req.UserID,
 		ExternalUserID:            req.ExternalUserID,
-		UserEmail:                 "",
+		UserEmail:                 req.UserEmail,
+		KeyType:                   req.KeyType,
 		HTTPMetadata:              req.HTTPMetadata,
 		JSONSchema:                req.JSONSchema,
 		CacheControl:              nil,
@@ -776,7 +788,7 @@ func (c *ChatClient) emitGenAITelemetry(
 	c.telemetryLogger.Log(ctx, telemetry.LogParams{
 		Timestamp:  time.Now(),
 		ToolInfo:   toolInfo,
-		UserInfo:   telemetry.UserInfoByID(userID),
+		UserInfo:   telemetry.UserInfoByIDAndEmail(userID, userEmail),
 		Attributes: attrs,
 	})
 }
@@ -806,7 +818,7 @@ func (c *ChatClient) CreateEmbeddings(ctx context.Context, orgID string, model s
 }
 
 func (c *ChatClient) createEmbeddings(ctx context.Context, orgID string, model string, inputs []string, dimensions *int64) ([][]float32, error) {
-	openrouterKey, err := c.provisioner.ProvisionAPIKey(ctx, orgID)
+	openrouterKey, err := c.provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
 	if err != nil {
 		return nil, fmt.Errorf("provisioning OpenRouter key: %w", err)
 	}

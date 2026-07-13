@@ -23,7 +23,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
-	"github.com/speakeasy-api/gram/server/internal/riskjudge"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	gramopenrouter "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
@@ -38,7 +37,7 @@ const (
 	// production form factors it had the cleanest false-positive profile of the
 	// models tested — the only one that stops over-flagging the agent's own
 	// tool-call XML, with no flip-flopping — AND the highest recall on the
-	// PromptIntel attack feed. It is also riskjudge's default, so both judges
+	// PromptIntel attack feed. It is also the promptpolicy evaluator's default, so both judges
 	// share one model. Paired with the machinery-aware clause in SystemPrompt
 	// below, the adversarial benchmark measured false positives dropping 6.9% ->
 	// 2.6% at unchanged recall. Every error path fails open (SAFE), so this stays
@@ -110,7 +109,7 @@ type Engine struct {
 	schema      or.ChatJSONSchemaConfig // built once; the verdict shape is constant
 }
 
-var _ promptinjection.Engine = (*Engine)(nil).Classify
+var _ promptinjection.Classifier = (*Engine)(nil).Classify
 
 var safeResult = promptinjection.Result{Label: promptinjection.LabelSafe, Score: 0, Rationale: ""}
 
@@ -160,6 +159,16 @@ func (c *Engine) Classify(ctx context.Context, req promptinjection.Request) (_ [
 		span.End()
 	}()
 
+	// UserIDs is documented as parallel to Messages; a shorter slice is a
+	// caller bug that would silently scan the tail unattributed. Scan anyway
+	// (attribution is best-effort, verdicts are not) but surface it. (cubic)
+	if len(req.UserIDs) != 0 && len(req.UserIDs) != n {
+		c.logger.WarnContext(ctx, "pi judge user ids not parallel to messages; unmatched messages scan unattributed",
+			attr.SlogOrganizationID(req.OrgID),
+			attr.SlogProjectID(req.ProjectID),
+		)
+	}
+
 	results := make([]promptinjection.Result, n)
 	sem := make(chan struct{}, concurrency)
 	var wg sync.WaitGroup
@@ -171,18 +180,22 @@ func (c *Engine) Classify(ctx context.Context, req promptinjection.Request) (_ [
 		}
 		wg.Add(1)
 		sem <- struct{}{}
-		go func(i int, msg judgemessage.Message) {
+		userID := ""
+		if i < len(req.UserIDs) {
+			userID = req.UserIDs[i]
+		}
+		go func(i int, msg judgemessage.Message, userID string) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			results[i] = c.classifyOne(ctx, req, msg)
-		}(i, msg)
+			results[i] = c.classifyOne(ctx, req, msg, userID)
+		}(i, msg, userID)
 	}
 	wg.Wait()
 	return results, nil
 }
 
 // classifyOne returns SAFE for every fail-open path.
-func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, msg judgemessage.Message) promptinjection.Result {
+func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, msg judgemessage.Message, userID string) promptinjection.Result {
 	// Bail before spending a rate-limit token (or making the call) on a context
 	// that is already canceled — otherwise a cancellation burst can drain the
 	// org's budget and throttle real requests into fail-open SAFE. (cubic)
@@ -206,7 +219,7 @@ func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, m
 	}
 
 	start := time.Now()
-	verdict, err := c.call(ctx, req, msg)
+	verdict, err := c.call(ctx, req, msg, userID)
 	c.metrics.RecordClassification(ctx, req.OrgID, labelFor(verdict.IsAttack, err), o11y.OutcomeFromError(err), time.Since(start))
 	if err != nil {
 		c.logger.WarnContext(ctx, "pi judge call failed; failing open",
@@ -229,12 +242,12 @@ func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, m
 }
 
 // judgePayload is the user turn: the captured event rendered as a structured
-// "message" object (produced_by, tool, body_kind, body / tool_calls) — the same
-// shape riskjudge feeds its policy judge, reused here. Structured JSON means a
+// "message" object (produced_by, tool, body_kind, body / tool_calls), matching
+// the policy judge payload shape. Structured JSON means a
 // hostile body can never spoof a field or instruction line: it is always a
 // quoted value in a known field the system prompt tells the judge to evaluate.
 type judgePayload struct {
-	Message riskjudge.MessagePayload `json:"message"`
+	Message judgemessage.Payload `json:"message"`
 }
 
 // judgeVerdict is the judge's structured-output response: the model's call plus
@@ -260,8 +273,8 @@ func cachedSystemMessage() or.ChatMessages {
 	})
 }
 
-func (c *Engine) call(ctx context.Context, req promptinjection.Request, msg judgemessage.Message) (judgeVerdict, error) {
-	payload, err := json.Marshal(judgePayload{Message: riskjudge.RenderMessage(msg)})
+func (c *Engine) call(ctx context.Context, req promptinjection.Request, msg judgemessage.Message, userID string) (judgeVerdict, error) {
+	payload, err := json.Marshal(judgePayload{Message: judgemessage.RenderPayload(msg)})
 	if err != nil {
 		// Unreachable: the payload is strings, bools, and slices. Fall back to the
 		// raw body so a marshaling regression can't silently drop the event.
@@ -292,9 +305,10 @@ func (c *Engine) call(ctx context.Context, req promptinjection.Request, msg judg
 		Temperature:               &c.temperature,
 		Model:                     c.model,
 		Stream:                    false,
-		UsageSource:               billing.ModelUsageSourceGram,
+		UsageSource:               billing.ModelUsageSourceRiskAnalysis,
+		KeyType:                   gramopenrouter.KeyTypeInternal,
 		ChatID:                    uuid.Nil,
-		UserID:                    "",
+		UserID:                    userID,
 		ExternalUserID:            "",
 		UserEmail:                 "",
 		HTTPMetadata:              nil,

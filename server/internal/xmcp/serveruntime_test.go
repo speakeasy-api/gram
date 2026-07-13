@@ -224,7 +224,7 @@ func TestServeMCP_PublicRemoteBackend_AppliesStaticSecretHeader(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	slug, _, _ := seedRemoteMCPEndpoint(t, ctx, ti, *authCtx.ProjectID, upstream.URL, "public", remotemcprepo.CreateHeaderParams{
+	slug, _, _ := seedRemoteMCPEndpoint(t, ctx, ti, *authCtx.ProjectID, upstream.URL, "public", remotemcprepo.CreateServerHeaderParams{
 		Name:       "X-Upstream-Api-Key",
 		Value:      pgtype.Text{String: "upstream-secret", Valid: true},
 		IsRequired: true,

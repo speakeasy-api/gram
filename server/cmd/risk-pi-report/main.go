@@ -25,7 +25,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
-	"github.com/speakeasy-api/gram/server/internal/riskjudge"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	piopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptinjection/openrouter"
@@ -624,13 +623,13 @@ func scanJudge(ctx context.Context, opts options, client openrouter.CompletionCl
 }
 
 // judgeOne issues one GetObjectCompletion shaped exactly like piopenrouter's call:
-// the structured "message" payload (riskjudge.RenderMessage), piopenrouter's system
-// prompt and verdict schema, temperature 0. No copy of the prompt/schema to keep
-// in sync — it drives the production constants directly.
+// the structured message payload, piopenrouter's system prompt and verdict
+// schema, temperature 0. No copy of the prompt/schema to keep in sync - it
+// drives the production constants directly.
 func judgeOne(ctx context.Context, client openrouter.CompletionClient, model string, msg judgemessage.Message) (isAttack bool, confidence float64, err error) {
 	payload, err := json.Marshal(struct {
-		Message riskjudge.MessagePayload `json:"message"`
-	}{Message: riskjudge.RenderMessage(msg)})
+		Message judgemessage.Payload `json:"message"`
+	}{Message: judgemessage.RenderPayload(msg)})
 	if err != nil {
 		return false, 0, fmt.Errorf("marshal judge payload: %w", err)
 	}
@@ -655,8 +654,10 @@ func judgeOne(ctx context.Context, client openrouter.CompletionClient, model str
 		Prompt:         string(payload),
 		Temperature:    &temp,
 		UsageSource:    billing.ModelUsageSourceGram,
+		KeyType:        openrouter.KeyTypeInternal,
 		UserID:         "",
 		ExternalUserID: "",
+		UserEmail:      "",
 		HTTPMetadata:   nil,
 		JSONSchema:     &schema,
 	})
@@ -703,22 +704,22 @@ func newOpenRouterClient(apiKey string) openrouter.CompletionClient {
 // the GetObjectCompletion path; the rest are unreachable here.
 type devProvisioner struct{ apiKey string }
 
-func (d *devProvisioner) ProvisionAPIKey(_ context.Context, _ string) (string, error) {
+func (d *devProvisioner) ProvisionAPIKey(_ context.Context, _ string, _ openrouter.KeyType) (string, error) {
 	return d.apiKey, nil
 }
-func (d *devProvisioner) RefreshAPIKeyLimit(_ context.Context, _ string, _ *int) (int, error) {
+func (d *devProvisioner) RefreshAPIKeyLimit(_ context.Context, _ string, _ openrouter.KeyType, _ *int) (int, error) {
 	return 0, fmt.Errorf("not implemented in bench")
 }
-func (d *devProvisioner) GetCreditsUsed(_ context.Context, _ string) (float64, int, error) {
+func (d *devProvisioner) GetCreditsUsed(_ context.Context, _ string, _ openrouter.KeyType) (float64, int, error) {
 	return 0, 0, fmt.Errorf("not implemented in bench")
 }
 func (d *devProvisioner) GetKeyUsage(_ context.Context, _ string) (float64, *int64, error) {
 	return 0, nil, fmt.Errorf("not implemented in bench")
 }
-func (d *devProvisioner) ReconcileMonthlyCredits(_ context.Context, _ string, currentLimit int64, _ *int64) (int64, error) {
+func (d *devProvisioner) ReconcileMonthlyCredits(_ context.Context, _ string, _ openrouter.KeyType, currentLimit int64, _ *int64) (int64, error) {
 	return currentLimit, nil
 }
-func (d *devProvisioner) GetModelUsage(_ context.Context, _ string, _ string) (*openrouter.ModelUsage, error) {
+func (d *devProvisioner) GetModelUsage(_ context.Context, _ string, _ string, _ openrouter.KeyType) (*openrouter.ModelUsage, error) {
 	return nil, fmt.Errorf("not implemented in bench")
 }
 

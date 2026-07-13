@@ -8,7 +8,6 @@ import {
   Shield,
   ShieldAlert,
   Sigma,
-  UserRound,
 } from "lucide-react";
 
 // The token-usage panel's breakdown catalog: every group-by dimension plus the
@@ -17,9 +16,9 @@ import {
 // satisfies the react-refresh "only export components" rule.
 
 // How the chart's bars stack: by the selected dimension's groups, by token
-// type, by risk involvement, or as a single un-broken-down total. Lives here
-// (not in the panel component) so this module stays import-cycle-free.
-export type StackMode = "group" | "tokenType" | "risk" | "total";
+// type, or as a single un-broken-down total. Lives here (not in the panel
+// component) so this module stays import-cycle-free.
+export type StackMode = "group" | "tokenType" | "total";
 
 // Sentinel values for the non-dimension modes. Dimension values are
 // snake_case attribute keys, so these can't collide.
@@ -27,7 +26,12 @@ export type StackMode = "group" | "tokenType" | "risk" | "total";
 // series, so the billing page opens on the number that matches the usage card.
 export const BREAKDOWN_TOTAL = "total";
 const BREAKDOWN_TOKEN_TYPE = "tokenType";
-export const BREAKDOWN_RISK = "risk";
+
+// The two halves of the billed population's model cut (see the server's
+// tumBreakdownDims): the platform's risk-policy scanning inference — the
+// metered unit of the TUM contracts — and user-facing completion surfaces.
+export const RISK_ANALYSIS_MODEL_DIM = "risk_analysis_model";
+export const COMPLETION_MODEL_DIM = "completion_model";
 
 // The chart series palette, shared with the usage details table so a metric's
 // dot color matches its chart legend color.
@@ -44,8 +48,6 @@ export const CHART_COLORS = [
   "#f472b6", // pink
 ];
 export const OTHER_COLOR = "#94a3b8"; // slate — the top-N remainder rollup
-export const RISKY_COLOR = "#fb7185"; // rose — tokens from sessions with risk findings
-export const CLEAN_COLOR = "#60a5fa"; // blue — everything else
 
 type BreakdownOption = {
   value: string;
@@ -59,10 +61,11 @@ export type BreakdownGroup = {
 };
 
 // Only dimensions billed completion rows genuinely carry: the model, the
-// user identity snapshot hydrated at emit time (user, division, roles), and
-// the consuming surface. Fleet-only concepts (provider, account type, skill,
-// MCP server/tool, cache token types) live on the costs/insights pages,
-// whose analytics aggregate is scoped to agent-fleet provenance.
+// identity snapshot hydrated at emit time (division, roles — a per-user cut
+// is deliberately not exposed on the billing page yet), and the consuming
+// surface. Fleet-only concepts (provider, account type, skill, MCP
+// server/tool, cache token types) live on the costs/insights pages, whose
+// analytics aggregate is scoped to agent-fleet provenance.
 export const BREAKDOWN_GROUPS: BreakdownGroup[] = [
   {
     // Ungrouped: the no-breakdown view leads the list, above every category.
@@ -71,13 +74,19 @@ export const BREAKDOWN_GROUPS: BreakdownGroup[] = [
   },
   {
     heading: "Model",
-    options: [{ value: Dimension.Model, label: "Model", icon: Cpu }],
+    options: [
+      {
+        value: RISK_ANALYSIS_MODEL_DIM,
+        label: "Risk Policy Analysis Model",
+        icon: ShieldAlert,
+      },
+      { value: COMPLETION_MODEL_DIM, label: "Completion Model", icon: Cpu },
+    ],
   },
   {
     heading: "Usage",
     options: [
       { value: BREAKDOWN_TOKEN_TYPE, label: "Token type", icon: Layers },
-      { value: BREAKDOWN_RISK, label: "Risk findings", icon: ShieldAlert },
     ],
   },
   {
@@ -88,10 +97,7 @@ export const BREAKDOWN_GROUPS: BreakdownGroup[] = [
   },
   {
     heading: "People",
-    options: [
-      { value: Dimension.Email, label: "User", icon: UserRound },
-      { value: Dimension.Role, label: "Role", icon: Shield },
-    ],
+    options: [{ value: Dimension.Role, label: "Role", icon: Shield }],
   },
   {
     heading: "Surfaces",
@@ -109,10 +115,22 @@ export function stackModeFor(breakdown: string): StackMode {
       return "total";
     case BREAKDOWN_TOKEN_TYPE:
       return "tokenType";
-    case BREAKDOWN_RISK:
-      return "risk";
     default:
       return "group";
+  }
+}
+
+// The model cut is the one breakdown whose bars do NOT sum to the billed
+// total: each option charts only its half of the population. The panel shows
+// this note so lower bars read as a narrower scope, not less usage.
+export function scopeNoteFor(breakdown: string): string | null {
+  switch (breakdown) {
+    case RISK_ANALYSIS_MODEL_DIM:
+      return "Risk policy analysis inference only — one slice of the billed total";
+    case COMPLETION_MODEL_DIM:
+      return "Completion surfaces only — one slice of the billed total";
+    default:
+      return null;
   }
 }
 

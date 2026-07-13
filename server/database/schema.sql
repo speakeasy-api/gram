@@ -3295,6 +3295,16 @@ CREATE TABLE IF NOT EXISTS plugin_github_connections (
   -- publish leaves the hooks plugin untouched. Nullable so connections predating
   -- the split republish the hooks plugin once to backfill it.
   published_hooks_version TEXT,
+  -- Snapshot of the hook-output-affecting config the observability (hooks) plugin
+  -- was last generated from: a JSON object with the resolved marketplace name,
+  -- observability mode, server URL, org id, and project slug. Stored verbatim (not
+  -- just a hash) so it stays human-readable; the publish path compares a hash of
+  -- it to decide whether the hooks subtree must be regenerated. The
+  -- hooksGeneratorVersion alone can't catch these config changes (a rename or an
+  -- observability-mode toggle leaves the version untouched), so without this the
+  -- carried hooks subtree would keep stale commands. Nullable so connections
+  -- predating this column republish the hooks plugin once to backfill it.
+  published_hooks_config JSONB,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),

@@ -1069,10 +1069,12 @@ func (q *Queries) GetCustomDetectionRule(ctx context.Context, arg GetCustomDetec
 }
 
 const getMessageContentBatch = `-- name: GetMessageContentBatch :many
-SELECT id, role, content, tool_calls
-FROM chat_messages
-WHERE id = ANY($1::uuid[])
-  AND project_id = $2
+SELECT cm.id, cm.role, cm.content, cm.tool_calls,
+  COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::TEXT AS chat_user_id
+FROM chat_messages cm
+LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
+WHERE cm.id = ANY($1::uuid[])
+  AND cm.project_id = $2
 `
 
 type GetMessageContentBatchParams struct {
@@ -1081,12 +1083,18 @@ type GetMessageContentBatchParams struct {
 }
 
 type GetMessageContentBatchRow struct {
-	ID        uuid.UUID
-	Role      string
-	Content   string
-	ToolCalls []byte
+	ID         uuid.UUID
+	Role       string
+	Content    string
+	ToolCalls  []byte
+	ChatUserID string
 }
 
+// The scanned user's id rides along so the LLM judge's completion telemetry
+// can attribute scanning volume to whose traffic was analyzed. Same
+// attribution rule as ListRiskOverviewTopUsers: the message's own user_id
+// wins, the chat owner's is the fallback — and a soft-deleted chat's owner
+// never is (LEFT JOIN so the message still gets scanned, just unattributed).
 func (q *Queries) GetMessageContentBatch(ctx context.Context, arg GetMessageContentBatchParams) ([]GetMessageContentBatchRow, error) {
 	rows, err := q.db.Query(ctx, getMessageContentBatch, arg.Ids, arg.ProjectID)
 	if err != nil {
@@ -1101,6 +1109,7 @@ func (q *Queries) GetMessageContentBatch(ctx context.Context, arg GetMessageCont
 			&i.Role,
 			&i.Content,
 			&i.ToolCalls,
+			&i.ChatUserID,
 		); err != nil {
 			return nil, err
 		}

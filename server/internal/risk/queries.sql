@@ -828,10 +828,17 @@ WHERE id = ANY(@message_ids::uuid[])
   AND project_id = @project_id;
 
 -- name: GetMessageContentBatch :many
-SELECT id, role, content, tool_calls
-FROM chat_messages
-WHERE id = ANY(@ids::uuid[])
-  AND project_id = @project_id;
+-- The scanned user's id rides along so the LLM judge's completion telemetry
+-- can attribute scanning volume to whose traffic was analyzed. Same
+-- attribution rule as ListRiskOverviewTopUsers: the message's own user_id
+-- wins, the chat owner's is the fallback — and a soft-deleted chat's owner
+-- never is (LEFT JOIN so the message still gets scanned, just unattributed).
+SELECT cm.id, cm.role, cm.content, cm.tool_calls,
+  COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::TEXT AS chat_user_id
+FROM chat_messages cm
+LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
+WHERE cm.id = ANY(@ids::uuid[])
+  AND cm.project_id = @project_id;
 
 -- name: GetBatchChatIdentities :many
 -- One row per chat represented in a batch of messages, for the session-scoped

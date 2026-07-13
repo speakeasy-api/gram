@@ -1008,6 +1008,16 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	if source == "assistant" {
 		source = billing.ModelUsageSourceAssistants
 	}
+	// risk-analysis is reserved for the platform's own scanning inference
+	// (risk judge, prompt-injection judge), which never enters through this
+	// proxy. A client claiming it would dodge Polar metering and mislabel its
+	// traffic into the billing page's risk-analysis section, so the claim
+	// falls back to the default customer surface. Client-supplied "gram"
+	// stays accepted: Elements sends it for follow-on-suggestion inference
+	// and relies on its metering exemption.
+	if source == billing.ModelUsageSourceRiskAnalysis {
+		source = billing.ModelUsageSourcePlayground
+	}
 	if source == "" {
 		source = billing.ModelUsageSourcePlayground
 	}
@@ -1156,6 +1166,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		Model:          chatRequest.Model,
 		Stream:         false,
 		UsageSource:    source,
+		KeyType:        openrouter.KeyTypeChat,
 		ChatID:         completionChatID,
 		UserID:         userID,
 		ExternalUserID: authCtx.ExternalUserID,
@@ -1401,7 +1412,9 @@ func (s *Service) CreditUsage(ctx context.Context, payload *gen.CreditUsagePaylo
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	creditsUsed, creditLimit, err := s.openRouter.GetCreditsUsed(ctx, authCtx.ActiveOrganizationID)
+	// The dashboard's credit meter reports the chat key only; the internal
+	// key's budget is an operational concern, not a customer-facing one.
+	creditsUsed, creditLimit, err := s.openRouter.GetCreditsUsed(ctx, authCtx.ActiveOrganizationID, openrouter.KeyTypeChat)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get credit usage").LogError(ctx, s.logger)
 	}

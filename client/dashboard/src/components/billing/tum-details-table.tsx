@@ -13,11 +13,11 @@ import { type BillingPeriod, bucketDateKey } from "./billing-cycles";
 import {
   breakdownLabel,
   CHART_COLORS,
-  CLEAN_COLOR,
+  COMPLETION_MODEL_DIM,
   OTHER_COLOR,
-  RISKY_COLOR,
+  RISK_ANALYSIS_MODEL_DIM,
 } from "./breakdown-options";
-import { riskPointsQuery, tumDetailsQuery } from "./tum-queries";
+import { tumDetailsQuery } from "./tum-queries";
 
 // Vercel-style usage details for the selected billing cycle: one row per
 // metric with a colored dot, a mini sparkline of the daily series, the
@@ -44,21 +44,25 @@ type DetailGroup = {
   rows: DetailRow[];
 };
 
-// The dimension sections, split so the headline model cut sits directly
-// under Total and the rest follow the token/risk groups. Only dimensions
-// billed completion rows genuinely carry: the model, the user identity
-// snapshot hydrated at emit time (user, division, roles), and the consuming
+// The dimension sections, split so the headline model cuts sit directly
+// under Total and the rest follow the token-type group. Only dimensions
+// billed completion rows genuinely carry: the two model cuts (the platform's
+// risk-policy analysis inference vs user-facing completion surfaces), the
+// identity snapshot hydrated at emit time (division, roles — no per-user
+// section; that isn't exposed on the billing page yet), and the consuming
 // surface.
-const LEAD_DIMENSION_SECTIONS: string[] = [Dimension.Model];
+const LEAD_DIMENSION_SECTIONS: string[] = [
+  RISK_ANALYSIS_MODEL_DIM,
+  COMPLETION_MODEL_DIM,
+];
 const TAIL_DIMENSION_SECTIONS: string[] = [
   Dimension.DivisionName,
-  Dimension.Email,
   Dimension.Role,
   Dimension.HookSource,
 ];
 
 // A measure carried by both the daily points and the whole-range totals.
-type MeasureField = "inputTokens" | "outputTokens" | "toolMessageTokens";
+type MeasureField = "inputTokens" | "outputTokens";
 
 type MeasureRowSpec = {
   label: string;
@@ -71,12 +75,6 @@ const TOKEN_TYPE_ROWS: MeasureRowSpec[] = [
   { label: "Input", color: CHART_COLORS[0]!, field: "inputTokens" },
   { label: "Output", color: CHART_COLORS[1]!, field: "outputTokens" },
 ];
-
-const TOOL_MESSAGE_ROW: MeasureRowSpec = {
-  label: "Tokens from tool call messages",
-  color: "#94a3b8",
-  field: "toolMessageTokens",
-};
 
 // Row color for a dimension value — same palette walk as the chart's stacks,
 // so a value's dot matches its chart series color.
@@ -272,8 +270,7 @@ function DetailGroupSection({
 /**
  * Per-metric usage details for the selected period, rendered under the token
  * usage chart. Everything comes from a single telemetry.queryTumDetails
- * request (plus the risk series shared with the chart); closed periods cache
- * forever (their data is immutable).
+ * request; closed periods cache forever (their data is immutable).
  */
 export function TumDetailsTable({
   period,
@@ -290,8 +287,6 @@ export function TumDetailsTable({
   const organization = useOrganization();
   const scope = { client, orgId: organization.id, period, projectId };
   const { data, isFetching, isError } = useQuery(tumDetailsQuery(scope));
-  // Same query (and key) as the chart's risk series — React Query dedupes.
-  const { data: riskData } = useQuery(riskPointsQuery(scope));
 
   // Sections collapsed via their header band, keyed by heading so the state
   // survives period/project switches.
@@ -329,24 +324,6 @@ export function TumDetailsTable({
   const groups = useMemo<DetailGroup[]>(() => {
     const points = data?.points ?? [];
     const totals = data?.totals;
-    // The risk series comes from a separate request — align it to the main
-    // points grid by bucket timestamp rather than by array position.
-    const riskyByBucket = new Map(
-      (riskData?.points ?? []).map((p) => [
-        p.bucketTimeUnixNano,
-        p.riskyTokens,
-      ]),
-    );
-    const riskySeries = points.map(
-      (p) => riskyByBucket.get(p.bucketTimeUnixNano) ?? 0,
-    );
-    const riskyTotal = riskySeries.reduce((sum, v) => sum + v, 0);
-    // Remainder against the same totals as the "Total tokens" row, so the two
-    // risk rows sum to it exactly (the risk endpoint's own session aggregate
-    // includes forwarded tokens that the analytics totals exclude).
-    const cleanSeries = points.map((p, i) =>
-      Math.max(0, p.totalTokens - riskySeries[i]!),
-    );
 
     const measureRow = (spec: MeasureRowSpec): DetailRow => ({
       label: spec.label,
@@ -369,30 +346,6 @@ export function TumDetailsTable({
       },
       ...dimensionGroups(data, LEAD_DIMENSION_SECTIONS),
       { heading: "Token type", rows: TOKEN_TYPE_ROWS.map(measureRow) },
-      {
-        heading: "Sessions & messages",
-        rows: [
-          {
-            label: "Sessions with risk findings",
-            color: RISKY_COLOR,
-            series: riskySeries,
-            total: riskyTotal,
-          },
-          {
-            label: "Sessions without risk findings",
-            color: CLEAN_COLOR,
-            series: cleanSeries,
-            total: cleanSeries.reduce((sum, v) => sum + v, 0),
-          },
-          {
-            label: "Messages with risk findings",
-            color: "#e879f9",
-            series: points.map((p) => p.riskyMessageTokens),
-            total: totals?.riskyMessageTokens ?? 0,
-          },
-          measureRow(TOOL_MESSAGE_ROW),
-        ],
-      },
       ...dimensionGroups(data, TAIL_DIMENSION_SECTIONS),
     ];
 
@@ -405,7 +358,7 @@ export function TumDetailsTable({
         series: row.series.map((v) => v * billedScale),
       })),
     }));
-  }, [data, riskData, billedScale]);
+  }, [data, billedScale]);
 
   // Time-based overage attribution: tokens count as overage from the moment
   // the ORGANIZATION's cumulative usage crossed the included allowance. Days

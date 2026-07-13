@@ -7,25 +7,29 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use tokio::net::TcpListener;
 use tokio::sync::{Mutex, Notify};
+use tracing::Instrument;
 
 use crate::runtime::{
     AppState, DEFAULT_THREAD_IDLE_TTL, McpCmd, build_host, ensure_thread, snapshot_threads,
 };
+use crate::telemetry::SpanIdentity;
 
 const IDEMPOTENCY_HEADER: &str = "x-idempotency-key";
 use crate::wire::{RunnerStateResponse, ThreadStateView, ThreadTurnRequest, ThreadTurnResponse};
 
 pub struct ServeConfig {
     pub addr: SocketAddr,
-    pub assistant_id: Option<String>,
     pub server_url: String,
     pub initial_token: String,
+    /// Shared with the span processor registered in `init_tracing` so spans
+    /// pick up the identity as soon as the host learns it.
+    pub identity: Arc<SpanIdentity>,
 }
 
 pub async fn serve(config: ServeConfig) -> Result<(), std::io::Error> {
     let shutdown = Arc::new(Notify::new());
     let host = build_host(
-        config.assistant_id,
+        config.identity,
         config.server_url,
         config.initial_token,
         DEFAULT_THREAD_IDLE_TTL,
@@ -57,7 +61,12 @@ async fn healthz() -> &'static str {
 async fn state_handler(State(host): State<AppState>) -> Json<RunnerStateResponse> {
     let snapshot = snapshot_threads(&host);
     Json(RunnerStateResponse {
-        assistant_id: host.assistant_id.get().cloned().unwrap_or_default(),
+        assistant_id: host
+            .identity
+            .assistant_id
+            .get()
+            .cloned()
+            .unwrap_or_default(),
         uptime_seconds: host.started_at.elapsed().as_secs(),
         threads: snapshot
             .into_iter()
@@ -75,6 +84,26 @@ async fn thread_turn(
     Path(thread_id): Path<String>,
     headers: HeaderMap,
     Json(request): Json<ThreadTurnRequest>,
+) -> Result<Json<ThreadTurnResponse>, (StatusCode, String)> {
+    // Bind identity from the request before opening the span so the span
+    // processor stamps this turn's own spans too — a warm-pool sandbox
+    // learns its identity from the first turn that carries it. Nothing is
+    // authenticated yet, so bind_request commits only well-formed UUIDs to
+    // the permanent cells; a stray malformed POST leaves them open for the
+    // real first turn.
+    SpanIdentity::bind_request(&host.identity.assistant_id, request.assistant_id.as_deref());
+    SpanIdentity::bind_request(&host.identity.project_id, request.project_id.as_deref());
+    let span = tracing::info_span!("thread_turn", thread_id = %thread_id);
+    thread_turn_inner(host, thread_id, headers, request)
+        .instrument(span)
+        .await
+}
+
+async fn thread_turn_inner(
+    host: AppState,
+    thread_id: String,
+    headers: HeaderMap,
+    request: ThreadTurnRequest,
 ) -> Result<Json<ThreadTurnResponse>, (StatusCode, String)> {
     if thread_id.is_empty() {
         return Err((StatusCode::BAD_REQUEST, "missing thread_id".to_string()));
@@ -112,19 +141,6 @@ async fn thread_turn(
     let thread = ensure_thread(&host, &thread_id, request.auth_token)
         .await
         .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))?;
-
-    // A warm-pool sandbox boots without GRAM_ASSISTANT_ID and learns its
-    // assistant from the first turn that carries one. Bind it only after
-    // bootstrap succeeds (so a failed turn can't poison the pod's identity) and
-    // never from an empty/whitespace id. Set-once: a boot env value wins.
-    if let Some(assistant_id) = request
-        .assistant_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|id| !id.is_empty())
-    {
-        let _ = host.assistant_id.set(assistant_id.to_string());
-    }
 
     // Hand reconcile to the actor and proceed to enqueue. The actor runs
     // concurrently with the agent loop, so a server added by this /turn

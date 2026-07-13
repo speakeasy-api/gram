@@ -1,0 +1,19 @@
+# UploadChatAttachmentSecurityOption3
+
+## Example Usage
+
+```typescript
+import { UploadChatAttachmentSecurityOption3 } from "@gram/client/models/operations/uploadchatattachment.js";
+
+let value: UploadChatAttachmentSecurityOption3 = {
+  chatSessionsTokenHeaderGramChatSession: "<value>",
+  projectSlugHeaderGramProject: "<value>",
+};
+```
+
+## Fields
+
+| Field                                    | Type     | Required           | Description |
+| ---------------------------------------- | -------- | ------------------ | ----------- |
+| `chatSessionsTokenHeaderGramChatSession` | _string_ | :heavy_check_mark: | N/A         |
+| `projectSlugHeaderGramProject`           | _string_ | :heavy_check_mark: | N/A         |

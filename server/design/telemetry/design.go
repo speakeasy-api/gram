@@ -1492,16 +1492,13 @@ var QueryRiskTokensResult = Type("QueryRiskTokensResult", func() {
 })
 
 // The per-metric fields shared by the daily points and the range totals.
-// Every measure comes from billing-native sources — the billed token
-// aggregate and per-message chat stats — never the analytics aggregates,
-// so the page reports exactly the billed population.
+// Every measure comes from the dimensioned billing aggregate — never the
+// analytics aggregates — so the page reports exactly the billed population.
 func tumDetailsMeasures() {
 	Attribute("input_tokens", Int64, "Billed input tokens")
 	Attribute("output_tokens", Int64, "Billed output tokens")
 	Attribute("total_tokens", Int64, "Billed tokens under management")
-	Attribute("risky_message_tokens", Int64, "Tokens in messages carrying at least one active risk finding")
-	Attribute("tool_message_tokens", Int64, "Tokens in tool-call messages")
-	Required("input_tokens", "output_tokens", "total_tokens", "risky_message_tokens", "tool_message_tokens")
+	Required("input_tokens", "output_tokens", "total_tokens")
 }
 
 var TumDetailsPoint = Type("TumDetailsPoint", func() {
@@ -1531,7 +1528,7 @@ var TumDetailsBreakdownRow = Type("TumDetailsBreakdownRow", func() {
 var TumDetailsBreakdown = Type("TumDetailsBreakdown", func() {
 	Description("Per-dimension billed token breakdown for the usage details table")
 
-	Attribute("key", String, "The breakdown dimension key (hook_source, model, email, division_name, role)")
+	Attribute("key", String, "The breakdown dimension key (hook_source, risk_analysis_model, completion_model, division_name, role). The two model keys partition the billed population: risk_analysis_model covers the platform's risk-policy scanning inference, completion_model covers user-facing completion surfaces.")
 	Attribute("rows", ArrayOf(TumDetailsBreakdownRow), "Top values by tokens in descending order, with the remainder rolled into 'Other'")
 
 	Required("key", "rows")

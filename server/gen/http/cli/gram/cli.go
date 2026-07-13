@@ -114,7 +114,7 @@ func UsageCommands() []string {
 		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|download-observability-plugin|download-codex-install-script|get-publish-status|publish-plugins|get-marketplace-settings|update-marketplace-settings)",
 		"features (get-product-features|set-product-feature)",
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
-		"remote-mcp (create-server|list-servers|get-server|update-server|discover-protected-resource-metadata|verify-url|delete-server)",
+		"remote-mcp (create-server|list-servers|get-server|update-server|discover-protected-resource-metadata|verify-url|delete-server|list-server-headers|get-server-header|create-server-header|update-server-header|delete-server-header)",
 		"organization-remote-session-clients (list-clients|get-client|get-client-delete-preflight|list-client-mcp-servers|create-client|create-cimd-client|update-client|delete-client|remove-client-from-mcp-server)",
 		"remote-session-clients (create-remote-session-client|create-cimd|clone-client-fromoauth-proxy-provider|update-remote-session-client|attach-user-session-issuer|detach-user-session-issuer|list-remote-session-clients|get-remote-session-client|delete-remote-session-client)",
 		"organization-remote-session-issuers (create-issuer|list-issuers|get-issuer|get-issuer-delete-preflight|update-issuer|delete-issuer|move-issuer)",
@@ -1341,6 +1341,36 @@ func ParseEndpoint(
 		remoteMcpDeleteServerSessionTokenFlag     = remoteMcpDeleteServerFlags.String("session-token", "", "")
 		remoteMcpDeleteServerApikeyTokenFlag      = remoteMcpDeleteServerFlags.String("apikey-token", "", "")
 		remoteMcpDeleteServerProjectSlugInputFlag = remoteMcpDeleteServerFlags.String("project-slug-input", "", "")
+
+		remoteMcpListServerHeadersFlags                 = flag.NewFlagSet("list-server-headers", flag.ExitOnError)
+		remoteMcpListServerHeadersRemoteMcpServerIDFlag = remoteMcpListServerHeadersFlags.String("remote-mcp-server-id", "REQUIRED", "")
+		remoteMcpListServerHeadersSessionTokenFlag      = remoteMcpListServerHeadersFlags.String("session-token", "", "")
+		remoteMcpListServerHeadersApikeyTokenFlag       = remoteMcpListServerHeadersFlags.String("apikey-token", "", "")
+		remoteMcpListServerHeadersProjectSlugInputFlag  = remoteMcpListServerHeadersFlags.String("project-slug-input", "", "")
+
+		remoteMcpGetServerHeaderFlags                = flag.NewFlagSet("get-server-header", flag.ExitOnError)
+		remoteMcpGetServerHeaderIDFlag               = remoteMcpGetServerHeaderFlags.String("id", "REQUIRED", "")
+		remoteMcpGetServerHeaderSessionTokenFlag     = remoteMcpGetServerHeaderFlags.String("session-token", "", "")
+		remoteMcpGetServerHeaderApikeyTokenFlag      = remoteMcpGetServerHeaderFlags.String("apikey-token", "", "")
+		remoteMcpGetServerHeaderProjectSlugInputFlag = remoteMcpGetServerHeaderFlags.String("project-slug-input", "", "")
+
+		remoteMcpCreateServerHeaderFlags                = flag.NewFlagSet("create-server-header", flag.ExitOnError)
+		remoteMcpCreateServerHeaderBodyFlag             = remoteMcpCreateServerHeaderFlags.String("body", "REQUIRED", "")
+		remoteMcpCreateServerHeaderSessionTokenFlag     = remoteMcpCreateServerHeaderFlags.String("session-token", "", "")
+		remoteMcpCreateServerHeaderApikeyTokenFlag      = remoteMcpCreateServerHeaderFlags.String("apikey-token", "", "")
+		remoteMcpCreateServerHeaderProjectSlugInputFlag = remoteMcpCreateServerHeaderFlags.String("project-slug-input", "", "")
+
+		remoteMcpUpdateServerHeaderFlags                = flag.NewFlagSet("update-server-header", flag.ExitOnError)
+		remoteMcpUpdateServerHeaderBodyFlag             = remoteMcpUpdateServerHeaderFlags.String("body", "REQUIRED", "")
+		remoteMcpUpdateServerHeaderSessionTokenFlag     = remoteMcpUpdateServerHeaderFlags.String("session-token", "", "")
+		remoteMcpUpdateServerHeaderApikeyTokenFlag      = remoteMcpUpdateServerHeaderFlags.String("apikey-token", "", "")
+		remoteMcpUpdateServerHeaderProjectSlugInputFlag = remoteMcpUpdateServerHeaderFlags.String("project-slug-input", "", "")
+
+		remoteMcpDeleteServerHeaderFlags                = flag.NewFlagSet("delete-server-header", flag.ExitOnError)
+		remoteMcpDeleteServerHeaderIDFlag               = remoteMcpDeleteServerHeaderFlags.String("id", "REQUIRED", "")
+		remoteMcpDeleteServerHeaderSessionTokenFlag     = remoteMcpDeleteServerHeaderFlags.String("session-token", "", "")
+		remoteMcpDeleteServerHeaderApikeyTokenFlag      = remoteMcpDeleteServerHeaderFlags.String("apikey-token", "", "")
+		remoteMcpDeleteServerHeaderProjectSlugInputFlag = remoteMcpDeleteServerHeaderFlags.String("project-slug-input", "", "")
 
 		organizationRemoteSessionClientsFlags = flag.NewFlagSet("organization-remote-session-clients", flag.ContinueOnError)
 
@@ -2690,6 +2720,11 @@ func ParseEndpoint(
 	remoteMcpDiscoverProtectedResourceMetadataFlags.Usage = remoteMcpDiscoverProtectedResourceMetadataUsage
 	remoteMcpVerifyURLFlags.Usage = remoteMcpVerifyURLUsage
 	remoteMcpDeleteServerFlags.Usage = remoteMcpDeleteServerUsage
+	remoteMcpListServerHeadersFlags.Usage = remoteMcpListServerHeadersUsage
+	remoteMcpGetServerHeaderFlags.Usage = remoteMcpGetServerHeaderUsage
+	remoteMcpCreateServerHeaderFlags.Usage = remoteMcpCreateServerHeaderUsage
+	remoteMcpUpdateServerHeaderFlags.Usage = remoteMcpUpdateServerHeaderUsage
+	remoteMcpDeleteServerHeaderFlags.Usage = remoteMcpDeleteServerHeaderUsage
 
 	organizationRemoteSessionClientsFlags.Usage = organizationRemoteSessionClientsUsage
 	organizationRemoteSessionClientsListClientsFlags.Usage = organizationRemoteSessionClientsListClientsUsage
@@ -3839,6 +3874,21 @@ func ParseEndpoint(
 
 			case "delete-server":
 				epf = remoteMcpDeleteServerFlags
+
+			case "list-server-headers":
+				epf = remoteMcpListServerHeadersFlags
+
+			case "get-server-header":
+				epf = remoteMcpGetServerHeaderFlags
+
+			case "create-server-header":
+				epf = remoteMcpCreateServerHeaderFlags
+
+			case "update-server-header":
+				epf = remoteMcpUpdateServerHeaderFlags
+
+			case "delete-server-header":
+				epf = remoteMcpDeleteServerHeaderFlags
 
 			}
 
@@ -5276,6 +5326,21 @@ func ParseEndpoint(
 			case "delete-server":
 				endpoint = c.DeleteServer()
 				data, err = remotemcpc.BuildDeleteServerPayload(*remoteMcpDeleteServerIDFlag, *remoteMcpDeleteServerSessionTokenFlag, *remoteMcpDeleteServerApikeyTokenFlag, *remoteMcpDeleteServerProjectSlugInputFlag)
+			case "list-server-headers":
+				endpoint = c.ListServerHeaders()
+				data, err = remotemcpc.BuildListServerHeadersPayload(*remoteMcpListServerHeadersRemoteMcpServerIDFlag, *remoteMcpListServerHeadersSessionTokenFlag, *remoteMcpListServerHeadersApikeyTokenFlag, *remoteMcpListServerHeadersProjectSlugInputFlag)
+			case "get-server-header":
+				endpoint = c.GetServerHeader()
+				data, err = remotemcpc.BuildGetServerHeaderPayload(*remoteMcpGetServerHeaderIDFlag, *remoteMcpGetServerHeaderSessionTokenFlag, *remoteMcpGetServerHeaderApikeyTokenFlag, *remoteMcpGetServerHeaderProjectSlugInputFlag)
+			case "create-server-header":
+				endpoint = c.CreateServerHeader()
+				data, err = remotemcpc.BuildCreateServerHeaderPayload(*remoteMcpCreateServerHeaderBodyFlag, *remoteMcpCreateServerHeaderSessionTokenFlag, *remoteMcpCreateServerHeaderApikeyTokenFlag, *remoteMcpCreateServerHeaderProjectSlugInputFlag)
+			case "update-server-header":
+				endpoint = c.UpdateServerHeader()
+				data, err = remotemcpc.BuildUpdateServerHeaderPayload(*remoteMcpUpdateServerHeaderBodyFlag, *remoteMcpUpdateServerHeaderSessionTokenFlag, *remoteMcpUpdateServerHeaderApikeyTokenFlag, *remoteMcpUpdateServerHeaderProjectSlugInputFlag)
+			case "delete-server-header":
+				endpoint = c.DeleteServerHeader()
+				data, err = remotemcpc.BuildDeleteServerHeaderPayload(*remoteMcpDeleteServerHeaderIDFlag, *remoteMcpDeleteServerHeaderSessionTokenFlag, *remoteMcpDeleteServerHeaderApikeyTokenFlag, *remoteMcpDeleteServerHeaderProjectSlugInputFlag)
 			}
 		case "organization-remote-session-clients":
 			c := organizationremotesessionclientsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -11086,6 +11151,11 @@ func remoteMcpUsage() {
 	fmt.Fprintln(os.Stderr, `    discover-protected-resource-metadata: Probe the remote MCP server's origin for an RFC 9728 .well-known/oauth-protected-resource document and return either the parsed metadata or a typed unavailability reason. Runs server-side under guardian.Policy so production resource servers without CORS can still be inspected.`)
 	fmt.Fprintln(os.Stderr, `    verify-url: Probe a candidate remote MCP server URL by issuing an MCP initialize request and reporting the outcome. Used to give users a reachability signal before they save a new or updated remote MCP server. Treats reachable-but-401/403 responses as verified — auth verification is intentionally out of scope.`)
 	fmt.Fprintln(os.Stderr, `    delete-server: Delete a remote MCP server`)
+	fmt.Fprintln(os.Stderr, `    list-server-headers: List the headers configured for a remote MCP server`)
+	fmt.Fprintln(os.Stderr, `    get-server-header: Get a remote MCP server header by ID`)
+	fmt.Fprintln(os.Stderr, `    create-server-header: Create a header on a remote MCP server`)
+	fmt.Fprintln(os.Stderr, `    update-server-header: Update a remote MCP server header`)
+	fmt.Fprintln(os.Stderr, `    delete-server-header: Delete a remote MCP server header`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s remote-mcp COMMAND --help\n", os.Args[0])
@@ -11111,7 +11181,7 @@ func remoteMcpCreateServerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-mcp create-server --body '{\n      \"headers\": [\n         {\n            \"description\": \"abc123\",\n            \"is_required\": false,\n            \"is_secret\": false,\n            \"name\": \"abc123\",\n            \"value\": \"abc123\",\n            \"value_from_request_header\": \"abc123\"\n         }\n      ],\n      \"name\": \"abc123\",\n      \"transport_type\": \"abc123\",\n      \"url\": \"https://example.com/foo\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-mcp create-server --body '{\n      \"name\": \"abc123\",\n      \"transport_type\": \"abc123\",\n      \"url\": \"https://example.com/foo\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func remoteMcpListServersUsage() {
@@ -11183,7 +11253,7 @@ func remoteMcpUpdateServerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-mcp update-server --body '{\n      \"headers\": [\n         {\n            \"description\": \"abc123\",\n            \"is_required\": false,\n            \"is_secret\": false,\n            \"name\": \"abc123\",\n            \"value\": \"abc123\",\n            \"value_from_request_header\": \"abc123\"\n         }\n      ],\n      \"id\": \"abc123\",\n      \"name\": \"abc123\",\n      \"transport_type\": \"abc123\",\n      \"url\": \"https://example.com/foo\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-mcp update-server --body '{\n      \"id\": \"abc123\",\n      \"name\": \"abc123\",\n      \"transport_type\": \"abc123\",\n      \"url\": \"https://example.com/foo\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func remoteMcpDiscoverProtectedResourceMetadataUsage() {
@@ -11256,6 +11326,126 @@ func remoteMcpDeleteServerUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-mcp delete-server --id \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func remoteMcpListServerHeadersUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-mcp list-server-headers", os.Args[0])
+	fmt.Fprint(os.Stderr, " -remote-mcp-server-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the headers configured for a remote MCP server`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -remote-mcp-server-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-mcp list-server-headers --remote-mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func remoteMcpGetServerHeaderUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-mcp get-server-header", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get a remote MCP server header by ID`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-mcp get-server-header --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func remoteMcpCreateServerHeaderUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-mcp create-server-header", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create a header on a remote MCP server`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-mcp create-server-header --body '{\n      \"description\": \"abc123\",\n      \"is_required\": false,\n      \"is_secret\": false,\n      \"name\": \"abc123\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"value\": \"abc123\",\n      \"value_from_request_header\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func remoteMcpUpdateServerHeaderUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-mcp update-server-header", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Update a remote MCP server header`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-mcp update-server-header --body '{\n      \"description\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"is_required\": false,\n      \"is_secret\": false,\n      \"name\": \"abc123\",\n      \"value\": \"abc123\",\n      \"value_from_request_header\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func remoteMcpDeleteServerHeaderUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-mcp delete-server-header", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Delete a remote MCP server header`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-mcp delete-server-header --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // organizationRemoteSessionClientsUsage displays the usage of the

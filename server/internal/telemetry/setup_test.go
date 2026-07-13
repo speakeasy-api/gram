@@ -57,11 +57,18 @@ type testInstance struct {
 	chClient           *repo.Queries
 	sessionManager     *sessions.Manager
 	orgID              string
+	projectID          string
 	disabledLogsOrgID  string
 	enabledToolIOOrgID string
 }
 
 func newTestLogsService(t *testing.T) (context.Context, *testInstance) {
+	t.Helper()
+
+	return newTestLogsServiceWithSessionCapture(t, true)
+}
+
+func newTestLogsServiceWithSessionCapture(t *testing.T, sessionCapture bool) (context.Context, *testInstance) {
 	t.Helper()
 
 	ctx := t.Context()
@@ -107,8 +114,8 @@ func newTestLogsService(t *testing.T) (context.Context, *testInstance) {
 		return false, nil
 	}
 
-	sessionCaptureEnabled := func(_ context.Context, orgID string) (bool, error) {
-		return true, nil
+	sessionCaptureEnabled := func(_ context.Context, _ string) (bool, error) {
+		return sessionCapture, nil
 	}
 
 	posthogClient := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
@@ -125,6 +132,7 @@ func newTestLogsService(t *testing.T) (context.Context, *testInstance) {
 		chClient:           chClient,
 		sessionManager:     sessionManager,
 		orgID:              authCtx.ActiveOrganizationID,
+		projectID:          authCtx.ProjectID.String(),
 		disabledLogsOrgID:  disabledLogsOrgID,
 		enabledToolIOOrgID: enabledToolIOOrgID,
 	}

@@ -1294,8 +1294,8 @@ function EmployeeCostTable({
   );
 
   return (
-    <section className="bg-card flex flex-col gap-4">
-      <div className="flex items-center justify-between">
+    <section className="bg-card flex flex-col">
+      <div className="mb-4 flex items-center justify-between">
         <div>
           <h3 className="font-semibold">
             {isCost ? "Cost" : "Usage"} by {isRoleView ? "Role" : "Employee"}

@@ -5,12 +5,15 @@ import (
 	"encoding/base64"
 	"fmt"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/Masterminds/squirrel"
+
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
 // validJSONPath matches safe dot-separated JSON paths for ClickHouse attribute access.
@@ -54,12 +57,28 @@ func withAccountTypeFilter(sb squirrel.SelectBuilder, accountType string) squirr
 
 // SearchUsers powers employee enrollment lists, so internal users are grouped by
 // email first to collapse rows that mix email-only and opaque user.id identity.
+// Rows that carry a user_id but no email resolve an email through the
+// known_emails join (see SearchUsers) so a person's email-less rows (e.g. tool
+// calls attributed by id only) merge into their email-keyed summary instead of
+// splitting into a second, token-less one.
 func searchUsersGroupExpr(groupBy string) string {
 	if groupBy == "external_user_id" {
 		return userIdentifierExpr("external_user_id")
 	}
-	return "if(telemetry_logs.user_email != '', telemetry_logs.user_email, telemetry_logs.user_id)"
+	return "multiIf(" +
+		"telemetry_logs.user_email != '', telemetry_logs.user_email, " +
+		"known_emails.known_email != '', known_emails.known_email, " +
+		"telemetry_logs.user_id)"
 }
+
+// searchUsersKnownEmailsJoin maps each user_id to an email observed alongside it
+// anywhere in the search window, for use as a LEFT JOIN on telemetry_logs. It
+// backs the email fallback in searchUsersGroupExpr and takes three args:
+// project id, time start, time end.
+const searchUsersKnownEmailsJoin = "(SELECT user_id, any(user_email) AS known_email" +
+	" FROM telemetry_logs" +
+	" WHERE gram_project_id = ? AND time_unix_nano >= ? AND time_unix_nano <= ? AND user_id != '' AND user_email != ''" +
+	" GROUP BY user_id) AS known_emails ON telemetry_logs.user_id = known_emails.user_id"
 
 // totalTokensExpr is a grouped-aggregate expression that yields a reliable total
 // token count. AI-coding providers like Claude Code report
@@ -266,8 +285,6 @@ func (q *Queries) InsertTelemetryLog(ctx context.Context, arg InsertTelemetryLog
 
 // InsertTelemetryLogs inserts telemetry log records into ClickHouse in a single
 // synchronous statement.
-//
-//nolint:wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) InsertTelemetryLogs(ctx context.Context, args []InsertTelemetryLogParams) error {
 	if len(args) == 0 {
 		return nil
@@ -322,7 +339,490 @@ func (q *Queries) InsertTelemetryLogs(ctx context.Context, args []InsertTelemetr
 		return fmt.Errorf("building insert query: %w", err)
 	}
 
-	return q.conn.Exec(ctx, query, queryArgs...)
+	if err := q.conn.Exec(ctx, query, queryArgs...); err != nil {
+		return fmt.Errorf("inserting telemetry logs: %w", err)
+	}
+
+	return nil
+}
+
+type UpsertShadowMCPInventoryURLParams struct {
+	GramProjectID      string
+	CanonicalServerURL string
+	URLHost            string
+	ServerName         string
+	SeenAt             time.Time
+	FirstSeen          time.Time
+	LastSeen           time.Time
+	UpdatedAt          time.Time
+}
+
+type ListShadowMCPInventoryURLsParams struct {
+	GramProjectID string
+	Limit         int
+}
+
+type ShadowMCPInventoryURLRow struct {
+	CanonicalServerURL string    `ch:"canonical_server_url"`
+	URLHost            string    `ch:"url_host"`
+	ServerName         string    `ch:"server_name"`
+	FirstSeen          time.Time `ch:"first_seen"`
+	LastSeen           time.Time `ch:"last_seen"`
+}
+
+type ListShadowMCPInventoryUsageParams struct {
+	GramProjectID string
+	Limit         int
+}
+
+type ShadowMCPInventoryUsageRow struct {
+	CanonicalServerURL string
+	ServerName         string
+	FirstCalled        *time.Time
+	LastCalled         *time.Time
+	CallCount          uint64
+	UserCount          uint64
+	TopUsers           []string
+}
+
+type ListShadowMCPInventoryUsersParams struct {
+	GramProjectID      string
+	CanonicalServerURL string
+	Limit              int
+}
+
+type ShadowMCPInventoryUserRow struct {
+	UserKey    string
+	LastCalled time.Time
+	CallCount  uint64
+}
+
+type shadowMCPInventoryTraceUsageRow struct {
+	TraceID    string    `ch:"trace_id"`
+	ServerURL  string    `ch:"server_url"`
+	ServerName string    `ch:"server_name"`
+	UserKey    string    `ch:"user_key"`
+	CalledAt   time.Time `ch:"called_at"`
+}
+
+type shadowMCPInventoryURLUpsert struct {
+	GramProjectID      string
+	CanonicalServerURL string
+	URLHost            string
+	ServerName         string
+	FirstSeen          time.Time
+	LastSeen           time.Time
+	UpdatedAt          time.Time
+}
+
+func (q *Queries) UpsertShadowMCPInventoryURLs(ctx context.Context, args []UpsertShadowMCPInventoryURLParams) error {
+	if len(args) == 0 {
+		return nil
+	}
+
+	upserts := make(map[string]*shadowMCPInventoryURLUpsert, len(args))
+	for _, arg := range args {
+		if arg.GramProjectID == "" || arg.CanonicalServerURL == "" {
+			continue
+		}
+		seenAt := arg.SeenAt
+		if seenAt.IsZero() {
+			seenAt = time.Now()
+		}
+		firstSeen := arg.FirstSeen
+		if firstSeen.IsZero() {
+			firstSeen = seenAt
+		}
+		lastSeen := arg.LastSeen
+		if lastSeen.IsZero() {
+			lastSeen = seenAt
+		}
+		if lastSeen.Before(firstSeen) {
+			firstSeen, lastSeen = lastSeen, firstSeen
+		}
+		updatedAt := arg.UpdatedAt
+		if updatedAt.IsZero() {
+			updatedAt = time.Now()
+		}
+
+		key := arg.GramProjectID + "\x00" + arg.CanonicalServerURL
+		upsert := upserts[key]
+		if upsert == nil {
+			upsert = &shadowMCPInventoryURLUpsert{
+				GramProjectID:      arg.GramProjectID,
+				CanonicalServerURL: arg.CanonicalServerURL,
+				URLHost:            arg.URLHost,
+				ServerName:         arg.ServerName,
+				FirstSeen:          firstSeen.UTC(),
+				LastSeen:           lastSeen.UTC(),
+				UpdatedAt:          updatedAt.UTC(),
+			}
+			upserts[key] = upsert
+			continue
+		}
+		if upsert.URLHost == "" {
+			upsert.URLHost = arg.URLHost
+		}
+		if arg.ServerName != "" {
+			upsert.ServerName = arg.ServerName
+		}
+		if firstSeen.Before(upsert.FirstSeen) {
+			upsert.FirstSeen = firstSeen.UTC()
+		}
+		if lastSeen.After(upsert.LastSeen) {
+			upsert.LastSeen = lastSeen.UTC()
+		}
+		if updatedAt.After(upsert.UpdatedAt) {
+			upsert.UpdatedAt = updatedAt.UTC()
+		}
+	}
+
+	if len(upserts) == 0 {
+		return nil
+	}
+
+	for _, upsert := range upserts {
+		existing, err := q.getShadowMCPInventoryURL(ctx, upsert.GramProjectID, upsert.CanonicalServerURL)
+		if err != nil {
+			return err
+		}
+		if existing == nil {
+			continue
+		}
+		if upsert.URLHost == "" {
+			upsert.URLHost = existing.URLHost
+		}
+		if upsert.ServerName == "" {
+			upsert.ServerName = existing.ServerName
+		}
+		if existing.FirstSeen.Before(upsert.FirstSeen) {
+			upsert.FirstSeen = existing.FirstSeen
+		}
+		if existing.LastSeen.After(upsert.LastSeen) {
+			upsert.LastSeen = existing.LastSeen
+		}
+	}
+
+	ctx = clickhouse.Context(ctx, clickhouse.WithAsync(false))
+	builder := sq.Insert("shadow_mcp_inventory_urls").
+		Columns(
+			"gram_project_id",
+			"canonical_server_url",
+			"url_host",
+			"server_name",
+			"first_seen",
+			"last_seen",
+			"updated_at",
+		)
+
+	for _, upsert := range upserts {
+		builder = builder.Values(
+			upsert.GramProjectID,
+			upsert.CanonicalServerURL,
+			upsert.URLHost,
+			upsert.ServerName,
+			upsert.FirstSeen.UTC(),
+			upsert.LastSeen.UTC(),
+			upsert.UpdatedAt.UTC(),
+		)
+	}
+
+	query, queryArgs, err := builder.ToSql()
+	if err != nil {
+		return fmt.Errorf("building shadow mcp inventory url upsert query: %w", err)
+	}
+
+	if err := q.conn.Exec(ctx, query, queryArgs...); err != nil {
+		return fmt.Errorf("upserting shadow mcp inventory urls: %w", err)
+	}
+
+	return nil
+}
+
+func (q *Queries) getShadowMCPInventoryURL(ctx context.Context, projectID string, canonicalURL string) (*ShadowMCPInventoryURLRow, error) {
+	sb := sq.Select(
+		"canonical_server_url",
+		"max(url_host) AS url_host",
+		"argMaxIf(server_name, updated_at, server_name != '') AS server_name",
+		"min(first_seen) AS first_seen",
+		"max(last_seen) AS last_seen",
+	).
+		From("shadow_mcp_inventory_urls").
+		Where("gram_project_id = ?", projectID).
+		Where("canonical_server_url = ?", canonicalURL).
+		GroupBy("gram_project_id", "canonical_server_url").
+		Limit(1)
+
+	query, queryArgs, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building shadow mcp inventory url lookup query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, queryArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("querying shadow mcp inventory url lookup: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return nil, fmt.Errorf("iterating shadow mcp inventory url lookup rows: %w", err)
+		}
+		return nil, nil
+	}
+
+	var row ShadowMCPInventoryURLRow
+	if err := rows.ScanStruct(&row); err != nil {
+		return nil, fmt.Errorf("scanning shadow mcp inventory url lookup row: %w", err)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating shadow mcp inventory url lookup rows: %w", err)
+	}
+
+	return &row, nil
+}
+
+func (q *Queries) ListShadowMCPInventoryURLs(ctx context.Context, arg ListShadowMCPInventoryURLsParams) ([]ShadowMCPInventoryURLRow, error) {
+	limit := clampShadowMCPInventoryLimit(arg.Limit)
+	sb := sq.Select(
+		"canonical_server_url",
+		"max(url_host) AS url_host",
+		"argMaxIf(server_name, updated_at, server_name != '') AS server_name",
+		"min(first_seen) AS first_seen",
+		"max(last_seen) AS last_seen",
+	).
+		From("shadow_mcp_inventory_urls").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		GroupBy("gram_project_id", "canonical_server_url").
+		OrderBy("last_seen DESC", "canonical_server_url ASC").
+		Limit(limit)
+
+	query, queryArgs, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building shadow mcp inventory url query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, queryArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("querying shadow mcp inventory urls: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	inventoryURLs := make([]ShadowMCPInventoryURLRow, 0)
+	for rows.Next() {
+		var row ShadowMCPInventoryURLRow
+		if err := rows.ScanStruct(&row); err != nil {
+			return nil, fmt.Errorf("scanning shadow mcp inventory url row: %w", err)
+		}
+		inventoryURLs = append(inventoryURLs, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating shadow mcp inventory url rows: %w", err)
+	}
+
+	return inventoryURLs, nil
+}
+
+func (q *Queries) ListShadowMCPInventoryUsage(ctx context.Context, arg ListShadowMCPInventoryUsageParams) ([]ShadowMCPInventoryUsageRow, error) {
+	traceRows, err := q.listShadowMCPInventoryTraceUsage(ctx, arg.GramProjectID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+
+	usageByURL := make(map[string]*ShadowMCPInventoryUsageRow)
+	usersByURL := make(map[string]map[string]*ShadowMCPInventoryUserRow)
+	for _, traceRow := range traceRows {
+		invURL, ok := shadowmcp.CanonicalizeInventoryURL(traceRow.ServerURL)
+		if !ok {
+			continue
+		}
+		usage := usageByURL[invURL.CanonicalURL]
+		if usage == nil {
+			firstCalled := traceRow.CalledAt
+			lastCalled := traceRow.CalledAt
+			usage = &ShadowMCPInventoryUsageRow{
+				CanonicalServerURL: invURL.CanonicalURL,
+				ServerName:         traceRow.ServerName,
+				FirstCalled:        &firstCalled,
+				LastCalled:         &lastCalled,
+				CallCount:          0,
+				UserCount:          0,
+				TopUsers:           nil,
+			}
+			usageByURL[invURL.CanonicalURL] = usage
+		}
+		if traceRow.ServerName != "" {
+			usage.ServerName = traceRow.ServerName
+		}
+		if usage.FirstCalled == nil || traceRow.CalledAt.Before(*usage.FirstCalled) {
+			firstCalled := traceRow.CalledAt
+			usage.FirstCalled = &firstCalled
+		}
+		if usage.LastCalled == nil || traceRow.CalledAt.After(*usage.LastCalled) {
+			lastCalled := traceRow.CalledAt
+			usage.LastCalled = &lastCalled
+		}
+		usage.CallCount++
+
+		if traceRow.UserKey == "" {
+			continue
+		}
+		users := usersByURL[invURL.CanonicalURL]
+		if users == nil {
+			users = make(map[string]*ShadowMCPInventoryUserRow)
+			usersByURL[invURL.CanonicalURL] = users
+		}
+		user := users[traceRow.UserKey]
+		if user == nil {
+			user = &ShadowMCPInventoryUserRow{
+				UserKey:    traceRow.UserKey,
+				LastCalled: traceRow.CalledAt,
+				CallCount:  0,
+			}
+			users[traceRow.UserKey] = user
+		}
+		user.CallCount++
+		if traceRow.CalledAt.After(user.LastCalled) {
+			user.LastCalled = traceRow.CalledAt
+		}
+	}
+
+	usageRows := make([]ShadowMCPInventoryUsageRow, 0, len(usageByURL))
+	for canonicalURL, usage := range usageByURL {
+		users := sortedShadowMCPInventoryUsers(usersByURL[canonicalURL])
+		usage.UserCount = uint64(len(users))
+		topUsers := make([]string, 0, min(len(users), 5))
+		for i := 0; i < len(users) && i < 5; i++ {
+			topUsers = append(topUsers, users[i].UserKey)
+		}
+		usage.TopUsers = topUsers
+		usageRows = append(usageRows, *usage)
+	}
+	sort.Slice(usageRows, func(i, j int) bool {
+		return usageRows[i].CanonicalServerURL < usageRows[j].CanonicalServerURL
+	})
+
+	return usageRows, nil
+}
+
+func (q *Queries) ListShadowMCPInventoryUsers(ctx context.Context, arg ListShadowMCPInventoryUsersParams) ([]ShadowMCPInventoryUserRow, error) {
+	traceRows, err := q.listShadowMCPInventoryTraceUsage(ctx, arg.GramProjectID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+
+	users := make(map[string]*ShadowMCPInventoryUserRow)
+	for _, traceRow := range traceRows {
+		invURL, ok := shadowmcp.CanonicalizeInventoryURL(traceRow.ServerURL)
+		if !ok || invURL.CanonicalURL != arg.CanonicalServerURL || traceRow.UserKey == "" {
+			continue
+		}
+		user := users[traceRow.UserKey]
+		if user == nil {
+			user = &ShadowMCPInventoryUserRow{
+				UserKey:    traceRow.UserKey,
+				LastCalled: traceRow.CalledAt,
+				CallCount:  0,
+			}
+			users[traceRow.UserKey] = user
+		}
+		user.CallCount++
+		if traceRow.CalledAt.After(user.LastCalled) {
+			user.LastCalled = traceRow.CalledAt
+		}
+	}
+
+	userRows := sortedShadowMCPInventoryUsers(users)
+	limit := clampShadowMCPInventoryLimitInt(arg.Limit)
+	if len(userRows) > limit {
+		userRows = userRows[:limit]
+	}
+	return userRows, nil
+}
+
+func (q *Queries) listShadowMCPInventoryTraceUsage(ctx context.Context, projectID string, limit int) ([]shadowMCPInventoryTraceUsageRow, error) {
+	queryLimit := clampShadowMCPInventoryUsageTraceLimit(limit)
+	sb := sq.Select(
+		"trace_id",
+		"max(mcp_server_url) AS server_url",
+		"max(tool_source) AS server_name",
+		"if(max(user_email) != '', max(user_email), max(user_id)) AS user_key",
+		"fromUnixTimestamp64Nano(max(start_time_unix_nano)) AS called_at",
+	).
+		From("trace_summaries").
+		Where("gram_project_id = ?", projectID).
+		GroupBy("trace_id").
+		Having("server_url != ''").
+		OrderBy("max(start_time_unix_nano) DESC", "trace_id ASC").
+		Limit(queryLimit)
+
+	query, queryArgs, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building shadow mcp inventory trace usage query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, queryArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("querying shadow mcp inventory trace usage: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	traceRows := make([]shadowMCPInventoryTraceUsageRow, 0)
+	for rows.Next() {
+		var row shadowMCPInventoryTraceUsageRow
+		if err := rows.ScanStruct(&row); err != nil {
+			return nil, fmt.Errorf("scanning shadow mcp inventory trace usage row: %w", err)
+		}
+		traceRows = append(traceRows, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating shadow mcp inventory trace usage rows: %w", err)
+	}
+
+	return traceRows, nil
+}
+
+func sortedShadowMCPInventoryUsers(users map[string]*ShadowMCPInventoryUserRow) []ShadowMCPInventoryUserRow {
+	userRows := make([]ShadowMCPInventoryUserRow, 0, len(users))
+	for _, user := range users {
+		userRows = append(userRows, *user)
+	}
+	sort.Slice(userRows, func(i, j int) bool {
+		if userRows[i].CallCount != userRows[j].CallCount {
+			return userRows[i].CallCount > userRows[j].CallCount
+		}
+		if !userRows[i].LastCalled.Equal(userRows[j].LastCalled) {
+			return userRows[i].LastCalled.After(userRows[j].LastCalled)
+		}
+		return userRows[i].UserKey < userRows[j].UserKey
+	})
+	return userRows
+}
+
+func clampShadowMCPInventoryLimit(limit int) uint64 {
+	return uint64(clampShadowMCPInventoryLimitInt(limit)) // #nosec G115 -- clamped to 1..500 by clampShadowMCPInventoryLimitInt.
+}
+
+func clampShadowMCPInventoryLimitInt(limit int) int {
+	switch {
+	case limit <= 0:
+		return 50
+	case limit > 500:
+		return 500
+	default:
+		return limit
+	}
+}
+
+func clampShadowMCPInventoryUsageTraceLimit(limit int) uint64 {
+	switch {
+	case limit <= 0:
+		return 5000
+	case limit > 50000:
+		return 50000
+	default:
+		return uint64(limit)
+	}
 }
 
 // ListTelemetryLogsParams contains the parameters for listing telemetry logs.
@@ -1163,7 +1663,7 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ChatSum
 	sb = sb.GroupBy("gram_chat_id")
 
 	// HAVING clause for cursor pagination with tuple comparison for tie-breaking
-	sb = withHavingTuplePagination(sb, arg.Cursor, arg.SortOrder, arg.GramProjectID, "gram_chat_id", "min(time_unix_nano)")
+	sb = withHavingTuplePagination(sb, arg.Cursor, arg.SortOrder, arg.GramProjectID, "gram_chat_id", "min(time_unix_nano)", "", nil)
 
 	// Ordering - include gram_chat_id as secondary for stable ordering
 	sb = withOrdering(sb, arg.SortOrder, "start_time_unix_nano", "gram_chat_id")
@@ -1568,12 +2068,29 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 
 		// Distinct account types observed (powers the employees personal-account indicator)
 		"groupUniqArrayIf(account_type, account_type != '') AS account_types",
+
+		// Raw user_id values folded into this summary. The group key is email-first,
+		// so callers joining against user_id-keyed stores (user_accounts, role
+		// assignments) need these to find the summary's underlying ids.
+		"groupUniqArrayIf(telemetry_logs.user_id, telemetry_logs.user_id != '') AS raw_user_ids",
 	).
 		From("telemetry_logs").
 		Where("gram_project_id = ?", arg.GramProjectID).
 		Where("time_unix_nano >= ?", arg.TimeStart).
 		Where("time_unix_nano <= ?", arg.TimeEnd).
 		Where(groupExpr + " != ''")
+
+	// Internal grouping keys on email, so rows missing user_email look up the
+	// email observed alongside their user_id elsewhere in the window. Without
+	// this, a person's email-less rows surface as a separate summary keyed by
+	// their raw user_id that carries none of their token usage.
+	var joinClause string
+	var joinArgs []any
+	if arg.GroupBy != "external_user_id" {
+		joinClause = searchUsersKnownEmailsJoin
+		joinArgs = []any{arg.GramProjectID, arg.TimeStart, arg.TimeEnd}
+		sb = sb.LeftJoin(joinClause, joinArgs...)
+	}
 
 	// Optional deployment filter
 	if arg.GramDeploymentID != "" {
@@ -1603,7 +2120,7 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 	sb = sb.GroupBy(groupExpr)
 
 	// Cursor pagination using last_seen + group column for stable ordering
-	sb = withHavingTuplePagination(sb, arg.Cursor, arg.SortOrder, arg.GramProjectID, groupExpr, "max(time_unix_nano)")
+	sb = withHavingTuplePagination(sb, arg.Cursor, arg.SortOrder, arg.GramProjectID, groupExpr, "max(time_unix_nano)", joinClause, joinArgs)
 
 	// Order by last_seen with group column as tie-breaker
 	sb = withOrdering(sb, arg.SortOrder, "last_seen_unix_nano", "user_id")
@@ -5296,15 +5813,44 @@ func (q *Queries) GetTumBreakdownTotalsByDay(ctx context.Context, arg GetTokensU
 	return buckets, nil
 }
 
+// riskAnalysisRowPredicate classifies a billed row as the platform's own
+// risk-policy analysis inference — the metered unit of the enterprise TUM
+// contracts. Declared rows carry the dedicated source
+// (billing.ModelUsageSourceRiskAnalysis); the second clause grandfathers
+// rows emitted before that source existed, fingerprinted as internal
+// inference: gram/” source with the nil chat id (background workers run
+// completions outside any stored chat). Other internal nil-chat inference
+// (title generation, chat resolutions, memory) rides along under the same
+// clause — a deliberate simplification, it is a rounding error next to the
+// judges and is platform-side analysis either way.
+const riskAnalysisRowPredicate = "(hook_source = 'risk-analysis' OR (hook_source IN ('gram', '') AND chat_id = '00000000-0000-0000-0000-000000000000'))"
+
+// tumBreakdownDim describes one billing-page breakdown dimension: the
+// grouping expression over tum_breakdown_summaries, plus an optional row
+// filter for dimensions that slice the billed population (the two model
+// sections) rather than partition it by a column.
+type tumBreakdownDim struct {
+	expr   string
+	filter string
+}
+
 // tumBreakdownDimExprs maps the billing page's breakdown dimensions to
 // their tum_breakdown_summaries expressions. Roles are multi-valued: a
 // session's tokens count once under each held role, so role rows overlap.
-var tumBreakdownDimExprs = map[string]string{
-	"hook_source":   "hook_source",
-	"model":         "model",
-	"email":         "user_email",
-	"division_name": "division_name",
-	"role":          "arrayJoin(roles)",
+// The model dimension is split in two: risk_analysis_model covers the
+// platform's scanning inference and completion_model covers user-facing
+// completion surfaces — together they partition the billed population.
+var tumBreakdownDimExprs = map[string]tumBreakdownDim{
+	"hook_source":         {expr: "hook_source", filter: ""},
+	"risk_analysis_model": {expr: "model", filter: riskAnalysisRowPredicate},
+	"completion_model":    {expr: "model", filter: "NOT " + riskAnalysisRowPredicate},
+	// email is plumbed but NOT in the service's tumBreakdownDims: a per-user
+	// cut of billed usage (which now includes scanned-user attribution of
+	// risk-analysis inference) is deliberately not exposed on the billing
+	// page yet.
+	"email":         {expr: "user_email", filter: ""},
+	"division_name": {expr: "division_name", filter: ""},
+	"role":          {expr: "arrayJoin(roles)", filter: ""},
 }
 
 // TumBreakdownDimDayBucket is one (UTC day, dimension value) slice of
@@ -5325,18 +5871,21 @@ func (q *Queries) GetTumBreakdownDimByDay(ctx context.Context, arg GetTokensUnde
 	if len(arg.ProjectIDs) == 0 {
 		return nil, nil
 	}
-	expr, ok := tumBreakdownDimExprs[dimension]
+	dim, ok := tumBreakdownDimExprs[dimension]
 	if !ok {
 		return nil, fmt.Errorf("unsupported tum breakdown dimension: %q", dimension)
 	}
 
 	sb, err := tumBreakdownBase(sq.Select(
 		"time_bucket",
-		expr+" AS dim_value",
+		dim.expr+" AS dim_value",
 		"sum(total_tokens) AS tokens",
 	), arg)
 	if err != nil {
 		return nil, err
+	}
+	if dim.filter != "" {
+		sb = sb.Where(dim.filter)
 	}
 	sb = sb.GroupBy("time_bucket", "dim_value").OrderBy("time_bucket", "dim_value")
 

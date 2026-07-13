@@ -837,6 +837,18 @@ func TestQueryTumDetails_CountsOnlyBilledCompletions(t *testing.T) {
 	insertChatEvidenceRow(t, ctx, projectID, ts, assistantsChat)
 	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, ts, uuid.NewString(), 1.5, 999999, 0, 0, 0, "claude-4.6", "fleet@example.com", "Engineering", nil, "main", "", "", "", "")
 
+	// The platform's scanning inference, billed under its own model section:
+	// a judge completion carrying the dedicated risk-analysis source (and the
+	// scanned user's identity), plus a legacy internal row from before the
+	// source existed — gram-tagged with the nil chat id, classified by the
+	// grandfather fingerprint.
+	riskChat := uuid.NewString()
+	nilChat := "00000000-0000-0000-0000-000000000000"
+	insertAttributeGramCompletionLog(t, ctx, projectID, ts, riskChat, 0.01, 300, "google/gemini-3.1-flash-lite", "risk-analysis", "scanned@example.com", "Engineering", nil)
+	insertChatEvidenceRow(t, ctx, projectID, ts, riskChat)
+	insertAttributeGramCompletionLog(t, ctx, projectID, ts, nilChat, 0.01, 70, "google/gemini-3.1-flash-lite", "gram", "", "", nil)
+	insertChatEvidenceRow(t, ctx, projectID, ts, nilChat)
+
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
@@ -847,13 +859,13 @@ func TestQueryTumDetails_CountsOnlyBilledCompletions(t *testing.T) {
 	require.NoError(t, err)
 	require.Eventually(t, func() bool {
 		row := chConn.QueryRow(ctx,
-			"SELECT count(DISTINCT chat_id) FROM tum_breakdown_summaries WHERE gram_project_id = ? AND chat_id IN (?, ?)",
-			projectID, playgroundChat, assistantsChat)
+			"SELECT count(DISTINCT chat_id) FROM tum_breakdown_summaries WHERE gram_project_id = ? AND chat_id IN (?, ?, ?, ?)",
+			projectID, playgroundChat, assistantsChat, riskChat, nilChat)
 		var chats uint64
 		if err := row.Scan(&chats); err != nil {
 			return false
 		}
-		return chats == 2
+		return chats == 4
 	}, 10*time.Second, 200*time.Millisecond)
 
 	var result *gen.TumDetailsResult
@@ -869,17 +881,17 @@ func TestQueryTumDetails_CountsOnlyBilledCompletions(t *testing.T) {
 		}
 		result = res
 		// The stored-evidence rows qualify the chats asynchronously too.
-		return res.Totals.TotalTokens == 1000
+		return res.Totals.TotalTokens == 1370
 	}, 10*time.Second, 200*time.Millisecond)
 
-	require.Equal(t, int64(1000), result.Totals.InputTokens, "the fixture reports all tokens as input")
+	require.Equal(t, int64(1370), result.Totals.InputTokens, "the fixture reports all tokens as input")
 	require.Equal(t, int64(0), result.Totals.OutputTokens)
 
 	var pointSum int64
 	for _, p := range result.Points {
 		pointSum += p.TotalTokens
 	}
-	require.Equal(t, int64(1000), pointSum, "daily points must only count the billed completion")
+	require.Equal(t, int64(1370), pointSum, "daily points must only count the billed completions")
 
 	rowsByKey := map[string]map[string]int64{}
 	for _, b := range result.Breakdowns {
@@ -888,14 +900,20 @@ func TestQueryTumDetails_CountsOnlyBilledCompletions(t *testing.T) {
 			rowsByKey[b.Key][row.Value] = row.TotalTokens
 		}
 	}
-	require.Equal(t, map[string]int64{"playground": 1000}, rowsByKey["hook_source"],
-		"the source breakdown holds exactly the billed surface")
-	require.Equal(t, map[string]int64{"anthropic/claude-4.6": 1000}, rowsByKey["model"])
-	require.Equal(t, map[string]int64{"user@example.com": 1000}, rowsByKey["email"])
+	require.Equal(t, map[string]int64{"playground": 1000, "risk-analysis": 300, "gram": 70}, rowsByKey["hook_source"],
+		"the source breakdown holds exactly the billed surfaces")
+	// The two model sections partition the billed population: user-facing
+	// completions vs the platform's scanning inference (declared tag and the
+	// grandfathered nil-chat gram row alike).
+	require.Equal(t, map[string]int64{"anthropic/claude-4.6": 1000}, rowsByKey["completion_model"])
+	require.Equal(t, map[string]int64{"google/gemini-3.1-flash-lite": 370}, rowsByKey["risk_analysis_model"])
+	// Scanned-user attribution flows into the billed rows, but a per-user
+	// (email) cut is deliberately not served to the billing page yet.
+	require.NotContains(t, rowsByKey, "email")
 	require.Equal(t, map[string]int64{"dev": 1000}, rowsByKey["role"])
 	// The fixture carries no division attribute; the tokens land on the ''
 	// row (labeled by the frontend).
-	require.Equal(t, map[string]int64{"": 1000}, rowsByKey["division_name"])
+	require.Equal(t, map[string]int64{"": 1370}, rowsByKey["division_name"])
 }
 
 func TestQueryTumDetails_IncludesDeletedProjects(t *testing.T) {
