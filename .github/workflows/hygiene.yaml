@@ -24,11 +24,11 @@ jobs:
             exit 0
           fi
 
-          if [[ "$PR_TITLE" =~ ^(chore|fix|feat|mig)(\([a-zA-Z0-9_-]+\))?!?:\ [a-zA-Z] ]]; then
+          if [[ "$PR_TITLE" =~ ^[a-z0-9_-]+(\([a-zA-Z0-9_-]+\))?!?:\ [a-zA-Z] ]]; then
             echo "PR title format is valid."
           else
             echo "PR title must:"
-            echo '- Start with one of: "chore", "fix", "feat", "mig"'
+            echo '- Start with a lowercase qualifier (e.g. "chore", "fix", "feat", "mig") - alphanumeric, dashes, and underscores only'
             echo "- ... optionally followed by a scope in parentheses - alphanumeric, dashes, and underscores only"
             echo "- ... optionally followed by an exclamation mark (!) to indicate a breaking change"
             echo "- ... followed by a colon and a space"
