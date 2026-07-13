@@ -298,7 +298,7 @@ export const TumUsageSection = (): JSX.Element => {
       <Page.Section.Title>Billing</Page.Section.Title>
       <Page.Section.Description>
         The volume of agent traffic the platform observes from your users'
-        sessions each billing cycle, measured in tokens. Cache tokens are
+        sessions each billing cycle, measured in tokens. Cache reads are
         excluded, as is inference the platform runs itself.
       </Page.Section.Description>
       <Page.Section.Body>
@@ -308,7 +308,7 @@ export const TumUsageSection = (): JSX.Element => {
               <Type variant="body" className="font-medium">
                 Tokens Under Management
               </Type>
-              <SimpleTooltip tooltip="Counts the tokens observed in your users' agent sessions (input and output; cache reads and writes excluded) during the selected billing cycle. Compared against your contracted monthly allowance.">
+              <SimpleTooltip tooltip="Counts the tokens observed in your users' agent sessions (input, output, and cache writes; cache reads excluded) during the selected billing cycle. Compared against your contracted monthly allowance.">
                 <Info className="text-muted-foreground h-4 w-4" />
               </SimpleTooltip>
               <div className="ml-auto flex items-center gap-2">

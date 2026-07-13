@@ -181,7 +181,7 @@ func insertRetainedGramAggregateRow(t *testing.T, conn driver.Conn, projectID st
 	require.NoError(t, err)
 }
 
-func TestGetTokensUnderManagementQuery_ExcludesCacheTokens(t *testing.T) {
+func TestGetTokensUnderManagementQuery_ExcludesCacheReads(t *testing.T) {
 	t.Parallel()
 
 	_, _, chConn, projectID := newTUMTestService(t, "org-tum-query")
@@ -193,8 +193,8 @@ func TestGetTokensUnderManagementQuery_ExcludesCacheTokens(t *testing.T) {
 	windowStart := dayStart.Add(-2 * 24 * time.Hour)
 	windowEnd := dayStart.Add(24 * time.Hour)
 
-	// A Claude session whose turn re-read a huge cached prefix: only the
-	// input and output count — cache reads AND writes are excluded.
+	// A Claude session whose turn re-read a huge cached prefix: input,
+	// output, and the cache WRITE count — the cache READ is excluded.
 	insertObservedClaudeRow(t, chConn, projectID.String(), now, 100, 50, 100000, 25)
 
 	// A Codex usage row: observed traffic from the other admitted shape.
@@ -213,7 +213,7 @@ func TestGetTokensUnderManagementQuery_ExcludesCacheTokens(t *testing.T) {
 		if !assert.NoError(c, err) {
 			return
 		}
-		assert.Equal(c, int64(550), sumTumBuckets(res), "input + output only — no cache reads, no cache writes")
+		assert.Equal(c, int64(575), sumTumBuckets(res), "input + output + cache writes — never cache reads")
 		if !assert.Len(c, res, 1, "all in-window rows share one day bucket") {
 			return
 		}

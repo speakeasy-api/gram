@@ -5103,21 +5103,27 @@ type RiskTokensPointResponseBody struct {
 type TumDetailsPointResponseBody struct {
 	// Bucket start time in Unix nanoseconds (string for JS precision)
 	BucketTimeUnixNano *string `form:"bucket_time_unix_nano,omitempty" json:"bucket_time_unix_nano,omitempty" xml:"bucket_time_unix_nano,omitempty"`
-	// Observed input tokens (cache reads and writes excluded)
+	// Observed input tokens (cache reads excluded)
 	InputTokens *int64 `form:"input_tokens,omitempty" json:"input_tokens,omitempty" xml:"input_tokens,omitempty"`
 	// Observed output tokens
 	OutputTokens *int64 `form:"output_tokens,omitempty" json:"output_tokens,omitempty" xml:"output_tokens,omitempty"`
-	// Tokens under management: input + output
+	// Observed cache-write tokens — prompt content entering the provider cache,
+	// counted once
+	CacheCreationTokens *int64 `form:"cache_creation_tokens,omitempty" json:"cache_creation_tokens,omitempty" xml:"cache_creation_tokens,omitempty"`
+	// Tokens under management: input + output + cache writes
 	TotalTokens *int64 `form:"total_tokens,omitempty" json:"total_tokens,omitempty" xml:"total_tokens,omitempty"`
 }
 
 // TumDetailsTotalsResponseBody is used to define fields on response body types.
 type TumDetailsTotalsResponseBody struct {
-	// Observed input tokens (cache reads and writes excluded)
+	// Observed input tokens (cache reads excluded)
 	InputTokens *int64 `form:"input_tokens,omitempty" json:"input_tokens,omitempty" xml:"input_tokens,omitempty"`
 	// Observed output tokens
 	OutputTokens *int64 `form:"output_tokens,omitempty" json:"output_tokens,omitempty" xml:"output_tokens,omitempty"`
-	// Tokens under management: input + output
+	// Observed cache-write tokens — prompt content entering the provider cache,
+	// counted once
+	CacheCreationTokens *int64 `form:"cache_creation_tokens,omitempty" json:"cache_creation_tokens,omitempty" xml:"cache_creation_tokens,omitempty"`
+	// Tokens under management: input + output + cache writes
 	TotalTokens *int64 `form:"total_tokens,omitempty" json:"total_tokens,omitempty" xml:"total_tokens,omitempty"`
 }
 
@@ -16234,6 +16240,9 @@ func ValidateTumDetailsPointResponseBody(body *TumDetailsPointResponseBody) (err
 	if body.OutputTokens == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("output_tokens", "body"))
 	}
+	if body.CacheCreationTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cache_creation_tokens", "body"))
+	}
 	if body.TotalTokens == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("total_tokens", "body"))
 	}
@@ -16251,6 +16260,9 @@ func ValidateTumDetailsTotalsResponseBody(body *TumDetailsTotalsResponseBody) (e
 	}
 	if body.OutputTokens == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("output_tokens", "body"))
+	}
+	if body.CacheCreationTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cache_creation_tokens", "body"))
 	}
 	if body.TotalTokens == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("total_tokens", "body"))

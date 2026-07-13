@@ -834,8 +834,8 @@ func TestQueryTumDetails_CountsOnlyObservedTraffic(t *testing.T) {
 	ts := now.Add(-10 * time.Minute)
 
 	// The tokens-under-management population: observed agent traffic. A
-	// Claude session with a huge cached prefix (only input + output count —
-	// cache reads and writes are excluded) and a Codex usage row.
+	// Claude session with a huge cached prefix (input, output, and cache
+	// writes count — cache reads are excluded) and a Codex usage row.
 	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, ts, uuid.NewString(), 1.5, 1000, 200, 50000, 300, "claude-4.6", "fleet@example.com", "Engineering", []string{"dev"}, "main", "", "", "", "")
 	insertAttributeUsageLog(t, ctx, projectID, ts, uuid.NewString(), 0.2, 400, "gpt-5.4-codex", "codex", "codex@example.com", "Engineering", nil)
 
@@ -864,17 +864,18 @@ func TestQueryTumDetails_CountsOnlyObservedTraffic(t *testing.T) {
 			return false
 		}
 		result = res
-		return res.Totals.TotalTokens == 1600
+		return res.Totals.TotalTokens == 1900
 	}, 10*time.Second, 200*time.Millisecond)
 
 	require.Equal(t, int64(1400), result.Totals.InputTokens)
 	require.Equal(t, int64(200), result.Totals.OutputTokens)
+	require.Equal(t, int64(300), result.Totals.CacheCreationTokens)
 
 	var pointSum int64
 	for _, p := range result.Points {
 		pointSum += p.TotalTokens
 	}
-	require.Equal(t, int64(1600), pointSum, "daily points must only count the observed traffic, minus cache tokens")
+	require.Equal(t, int64(1900), pointSum, "daily points must only count the observed traffic, minus cache reads")
 
 	rowsByKey := map[string]map[string]int64{}
 	for _, b := range result.Breakdowns {
@@ -883,22 +884,22 @@ func TestQueryTumDetails_CountsOnlyObservedTraffic(t *testing.T) {
 			rowsByKey[b.Key][row.Value] = row.TotalTokens
 		}
 	}
-	require.Equal(t, map[string]int64{"claude-code": 1200, "codex": 400}, rowsByKey["hook_source"],
+	require.Equal(t, map[string]int64{"claude-code": 1500, "codex": 400}, rowsByKey["hook_source"],
 		"the agent breakdown holds exactly the observed surfaces — no Gram-hosted rows")
-	require.Equal(t, map[string]int64{"claude-4.6": 1200, "gpt-5.4-codex": 400}, rowsByKey["model"])
-	require.Equal(t, map[string]int64{"anthropic": 1200, "": 400}, rowsByKey["provider"])
-	require.Equal(t, map[string]int64{"team": 1200, "": 400}, rowsByKey["account_type"])
+	require.Equal(t, map[string]int64{"claude-4.6": 1500, "gpt-5.4-codex": 400}, rowsByKey["model"])
+	require.Equal(t, map[string]int64{"anthropic": 1500, "": 400}, rowsByKey["provider"])
+	require.Equal(t, map[string]int64{"team": 1500, "": 400}, rowsByKey["account_type"])
 	// Observed traffic attributes to the session's user.
-	require.Equal(t, map[string]int64{"fleet@example.com": 1200, "codex@example.com": 400}, rowsByKey["email"])
-	require.Equal(t, map[string]int64{"Engineering": 1600}, rowsByKey["department_name"])
+	require.Equal(t, map[string]int64{"fleet@example.com": 1500, "codex@example.com": 400}, rowsByKey["email"])
+	require.Equal(t, map[string]int64{"Engineering": 1900}, rowsByKey["department_name"])
 	// Role-less traffic (the codex row) lands on the '' row rather than
 	// vanishing from the section (arrayJoin on an empty array emits nothing).
-	require.Equal(t, map[string]int64{"dev": 1200, "": 400}, rowsByKey["role"])
+	require.Equal(t, map[string]int64{"dev": 1500, "": 400}, rowsByKey["role"])
 	// The fixtures carry no division attribute; the tokens land on the ''
 	// row (labeled by the frontend).
-	require.Equal(t, map[string]int64{"": 1600}, rowsByKey["division_name"])
+	require.Equal(t, map[string]int64{"": 1900}, rowsByKey["division_name"])
 	// Project rows carry the project UUID; the frontend maps it to a name.
-	require.Equal(t, map[string]int64{projectID: 1600}, rowsByKey["project_id"])
+	require.Equal(t, map[string]int64{projectID: 1900}, rowsByKey["project_id"])
 }
 
 func TestQueryTumDetails_IncludesDeletedProjects(t *testing.T) {

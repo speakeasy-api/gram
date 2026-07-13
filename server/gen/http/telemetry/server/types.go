@@ -4989,21 +4989,27 @@ type RiskTokensPointResponseBody struct {
 type TumDetailsPointResponseBody struct {
 	// Bucket start time in Unix nanoseconds (string for JS precision)
 	BucketTimeUnixNano string `form:"bucket_time_unix_nano" json:"bucket_time_unix_nano" xml:"bucket_time_unix_nano"`
-	// Observed input tokens (cache reads and writes excluded)
+	// Observed input tokens (cache reads excluded)
 	InputTokens int64 `form:"input_tokens" json:"input_tokens" xml:"input_tokens"`
 	// Observed output tokens
 	OutputTokens int64 `form:"output_tokens" json:"output_tokens" xml:"output_tokens"`
-	// Tokens under management: input + output
+	// Observed cache-write tokens — prompt content entering the provider cache,
+	// counted once
+	CacheCreationTokens int64 `form:"cache_creation_tokens" json:"cache_creation_tokens" xml:"cache_creation_tokens"`
+	// Tokens under management: input + output + cache writes
 	TotalTokens int64 `form:"total_tokens" json:"total_tokens" xml:"total_tokens"`
 }
 
 // TumDetailsTotalsResponseBody is used to define fields on response body types.
 type TumDetailsTotalsResponseBody struct {
-	// Observed input tokens (cache reads and writes excluded)
+	// Observed input tokens (cache reads excluded)
 	InputTokens int64 `form:"input_tokens" json:"input_tokens" xml:"input_tokens"`
 	// Observed output tokens
 	OutputTokens int64 `form:"output_tokens" json:"output_tokens" xml:"output_tokens"`
-	// Tokens under management: input + output
+	// Observed cache-write tokens — prompt content entering the provider cache,
+	// counted once
+	CacheCreationTokens int64 `form:"cache_creation_tokens" json:"cache_creation_tokens" xml:"cache_creation_tokens"`
+	// Tokens under management: input + output + cache writes
 	TotalTokens int64 `form:"total_tokens" json:"total_tokens" xml:"total_tokens"`
 }
 

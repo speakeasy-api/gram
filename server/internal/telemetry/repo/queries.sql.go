@@ -5653,12 +5653,13 @@ type GetTokensUnderManagementParams struct {
 }
 
 // tumMeasureExpr is the tokens-under-management measure over
-// attribute_metrics_summaries: input + output. Cache tokens are deliberately
-// excluded on both sides — a cache read re-observes prompt content that was
-// already counted (and dwarfs everything else: agent sessions re-read their
-// whole cached prefix on every turn), and a cache write is the provider's
-// storage of that same prompt content, not additional user traffic.
-const tumMeasureExpr = "toInt64(sumIfMerge(total_input_tokens) + sumIfMerge(total_output_tokens))"
+// attribute_metrics_summaries: input + output + cache WRITES. Cache reads
+// are deliberately excluded — a cache read re-observes prompt content that
+// was already counted when it entered the cache (and dwarfs everything else:
+// agent sessions re-read their whole cached prefix on every turn) — while a
+// cache write is new prompt content being observed for the first time, so it
+// counts.
+const tumMeasureExpr = "toInt64(sumIfMerge(total_input_tokens) + sumIfMerge(total_output_tokens) + sumIfMerge(cache_creation_input_tokens))"
 
 // tumObservedBase applies the shared window and observed-population scoping
 // for tokens-under-management reads over attribute_metrics_summaries. The
@@ -5694,9 +5695,10 @@ type TumDayBucket struct {
 }
 
 // GetTokensUnderManagementByDay sums the tokens-under-management measure per
-// UTC day for the billing window: the observed agent traffic's input and
-// output tokens (cache tokens excluded — see tumMeasureExpr), scoped to the
-// observed population (see ExcludedHookSources).
+// UTC day for the billing window: the observed agent traffic's input,
+// output, and cache-write tokens (cache reads excluded — see
+// tumMeasureExpr), scoped to the observed population (see
+// ExcludedHookSources).
 //
 // Reads the attribute_metrics_summaries aggregate — the provenance-first
 // fleet aggregate whose rows are, by construction, sessions the platform
@@ -5749,13 +5751,14 @@ func (q *Queries) GetTokensUnderManagementByDay(ctx context.Context, arg GetToke
 }
 
 // TumBreakdownDayBucket is one UTC day of tokens under management split by
-// type. TotalTokens is the TUM measure (input + output; cache tokens are
-// excluded from the population entirely).
+// type. TotalTokens is the TUM measure (input + output + cache writes;
+// cache reads are excluded from the population entirely).
 type TumBreakdownDayBucket struct {
-	Day          time.Time `ch:"day_bucket"`
-	InputTokens  int64     `ch:"sum_input_tokens"`
-	OutputTokens int64     `ch:"sum_output_tokens"`
-	TotalTokens  int64     `ch:"tum_tokens"`
+	Day                 time.Time `ch:"day_bucket"`
+	InputTokens         int64     `ch:"sum_input_tokens"`
+	OutputTokens        int64     `ch:"sum_output_tokens"`
+	CacheCreationTokens int64     `ch:"sum_cache_creation_tokens"`
+	TotalTokens         int64     `ch:"tum_tokens"`
 }
 
 // GetTumBreakdownTotalsByDay sums the tokens-under-management token-type
@@ -5774,6 +5777,7 @@ func (q *Queries) GetTumBreakdownTotalsByDay(ctx context.Context, arg GetTokensU
 		"toStartOfDay(time_bucket) AS day_bucket",
 		"toInt64(sumIfMerge(total_input_tokens)) AS sum_input_tokens",
 		"toInt64(sumIfMerge(total_output_tokens)) AS sum_output_tokens",
+		"toInt64(sumIfMerge(cache_creation_input_tokens)) AS sum_cache_creation_tokens",
 		tumMeasureExpr+" AS tum_tokens",
 	), arg).
 		GroupBy("day_bucket").

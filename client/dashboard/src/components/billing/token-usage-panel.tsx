@@ -24,7 +24,7 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, ChartTooltip, Legend);
 // dimension or by token type, with client-side granularity roll-up (the
 // caller fetches daily buckets) and a cumulative view. Everything renders
 // from the billing details response (points + per-dimension rows, both
-// scoped server-side to the observed agent traffic, cache tokens excluded) —
+// scoped server-side to the observed agent traffic, cache reads excluded) —
 // plus, for the headline total, the billed per-day series the usage endpoint
 // already returns. On a cycle finalized before a billing-definition change,
 // that sealed series is the invoiced record and can differ from the live
@@ -44,16 +44,17 @@ const GRANULARITIES: { value: Granularity; label: string }[] = [
   { value: "month", label: "Monthly" },
 ];
 
-// The tokens-under-management token types: input + output sum to the total.
-// Cache tokens are excluded from the population entirely (a cache read
-// re-observes already-counted prompt content; a cache write is the provider
-// storing it), so they are not series here.
+// The tokens-under-management token types: input + output + cache writes
+// sum to the total. Cache READS are excluded from the population entirely
+// (a cache read re-observes already-counted prompt content), so they are
+// not a series here.
 const TOKEN_TYPES: {
   label: string;
   value: (p: TumDetailsPoint) => number;
 }[] = [
   { label: "Input", value: (p) => p.inputTokens },
   { label: "Output", value: (p) => p.outputTokens },
+  { label: "Cache write", value: (p) => p.cacheCreationTokens },
 ];
 
 const compactTokens = new Intl.NumberFormat("en-US", {
@@ -219,7 +220,7 @@ function ToggleButton({
 
 // The header info copy for the panel.
 function headerHint(): string {
-  return "Tokens under management — the agent traffic the platform observes from your users' sessions (including Claude Code, Cowork, Cursor, and Codex): input and output tokens. Cache reads and writes are excluded (cached content isn't new traffic), and so is inference the platform itself runs (risk-policy analysis, hosted chat).";
+  return "Tokens under management — the agent traffic the platform observes from your users' sessions (including Claude Code, Cowork, Cursor, and Codex): input, output, and cache-write tokens. Cache reads are excluded (re-read cached content isn't new traffic), and so is inference the platform itself runs (risk-policy analysis, hosted chat).";
 }
 
 // The stacks for the modes fed by the details points.

@@ -61,7 +61,7 @@ const TAIL_DIMENSION_SECTIONS: string[] = [
 ];
 
 // A measure carried by both the daily points and the whole-range totals.
-type MeasureField = "inputTokens" | "outputTokens";
+type MeasureField = "inputTokens" | "outputTokens" | "cacheCreationTokens";
 
 type MeasureRowSpec = {
   label: string;
@@ -69,11 +69,16 @@ type MeasureRowSpec = {
   field: MeasureField;
 };
 
-// Input + output sum to the TUM total; cache tokens (reads and writes) are
+// Input + output + cache writes sum to the TUM total; cache reads are
 // excluded from the population entirely.
 const TOKEN_TYPE_ROWS: MeasureRowSpec[] = [
   { label: "Input", color: CHART_COLORS[0]!, field: "inputTokens" },
   { label: "Output", color: CHART_COLORS[1]!, field: "outputTokens" },
+  {
+    label: "Cache write",
+    color: CHART_COLORS[2]!,
+    field: "cacheCreationTokens",
+  },
 ];
 
 // Row color for a dimension value — same palette walk as the chart's stacks,

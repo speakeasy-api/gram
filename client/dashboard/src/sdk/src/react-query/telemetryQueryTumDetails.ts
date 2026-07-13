@@ -59,7 +59,7 @@ export type TelemetryQueryTumDetailsQueryError =
  * queryTumDetails telemetry
  *
  * @remarks
- * Org-scoped daily usage details for the billing page, computed in one pass: the tokens-under-management daily token-type split (observed agent traffic; cache tokens excluded) and per-dimension breakdowns over the same population.
+ * Org-scoped daily usage details for the billing page, computed in one pass: the tokens-under-management daily token-type split (observed agent traffic; cache reads excluded) and per-dimension breakdowns over the same population.
  */
 export function useTelemetryQueryTumDetails(
   request: QueryTumDetailsRequest,
@@ -88,7 +88,7 @@ export function useTelemetryQueryTumDetails(
  * queryTumDetails telemetry
  *
  * @remarks
- * Org-scoped daily usage details for the billing page, computed in one pass: the tokens-under-management daily token-type split (observed agent traffic; cache tokens excluded) and per-dimension breakdowns over the same population.
+ * Org-scoped daily usage details for the billing page, computed in one pass: the tokens-under-management daily token-type split (observed agent traffic; cache reads excluded) and per-dimension breakdowns over the same population.
  */
 export function useTelemetryQueryTumDetailsSuspense(
   request: QueryTumDetailsRequest,

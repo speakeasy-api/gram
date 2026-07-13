@@ -51,7 +51,7 @@ type Service interface {
 	QueryRiskTokens(context.Context, *QueryRiskTokensPayload) (res *QueryRiskTokensResult, err error)
 	// Org-scoped daily usage details for the billing page, computed in one pass:
 	// the tokens-under-management daily token-type split (observed agent traffic;
-	// cache tokens excluded) and per-dimension breakdowns over the same population.
+	// cache reads excluded) and per-dimension breakdowns over the same population.
 	QueryTumDetails(context.Context, *QueryTumDetailsPayload) (res *TumDetailsResult, err error)
 	// Org-scoped list of individual chat sessions for a slice of usage, filtered
 	// by the same allowlisted dimensions as telemetry.query. Returns per-session
@@ -1695,11 +1695,14 @@ type TumDetailsBreakdownRow struct {
 type TumDetailsPoint struct {
 	// Bucket start time in Unix nanoseconds (string for JS precision)
 	BucketTimeUnixNano string
-	// Observed input tokens (cache reads and writes excluded)
+	// Observed input tokens (cache reads excluded)
 	InputTokens int64
 	// Observed output tokens
 	OutputTokens int64
-	// Tokens under management: input + output
+	// Observed cache-write tokens — prompt content entering the provider cache,
+	// counted once
+	CacheCreationTokens int64
+	// Tokens under management: input + output + cache writes
 	TotalTokens int64
 }
 
@@ -1719,11 +1722,14 @@ type TumDetailsResult struct {
 
 // Whole-range totals for the billing usage details
 type TumDetailsTotals struct {
-	// Observed input tokens (cache reads and writes excluded)
+	// Observed input tokens (cache reads excluded)
 	InputTokens int64
 	// Observed output tokens
 	OutputTokens int64
-	// Tokens under management: input + output
+	// Observed cache-write tokens — prompt content entering the provider cache,
+	// counted once
+	CacheCreationTokens int64
+	// Tokens under management: input + output + cache writes
 	TotalTokens int64
 }
 

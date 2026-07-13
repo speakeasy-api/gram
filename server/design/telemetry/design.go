@@ -358,7 +358,7 @@ var _ = Service("telemetry", func() {
 	})
 
 	Method("queryTumDetails", func() {
-		Description("Org-scoped daily usage details for the billing page, computed in one pass: the tokens-under-management daily token-type split (observed agent traffic; cache tokens excluded) and per-dimension breakdowns over the same population.")
+		Description("Org-scoped daily usage details for the billing page, computed in one pass: the tokens-under-management daily token-type split (observed agent traffic; cache reads excluded) and per-dimension breakdowns over the same population.")
 
 		// Org-scoped like queryRiskTokens; project_id optionally narrows the
 		// slice to one of the caller's projects.
@@ -1493,13 +1493,14 @@ var QueryRiskTokensResult = Type("QueryRiskTokensResult", func() {
 
 // The per-metric fields shared by the daily points and the range totals.
 // Every measure describes the observed agent traffic (the tokens-under-
-// management population) with cache tokens excluded on both sides, so
-// total_tokens = input + output.
+// management population) with cache reads excluded, so total_tokens =
+// input + output + cache_creation.
 func tumDetailsMeasures() {
-	Attribute("input_tokens", Int64, "Observed input tokens (cache reads and writes excluded)")
+	Attribute("input_tokens", Int64, "Observed input tokens (cache reads excluded)")
 	Attribute("output_tokens", Int64, "Observed output tokens")
-	Attribute("total_tokens", Int64, "Tokens under management: input + output")
-	Required("input_tokens", "output_tokens", "total_tokens")
+	Attribute("cache_creation_tokens", Int64, "Observed cache-write tokens — prompt content entering the provider cache, counted once")
+	Attribute("total_tokens", Int64, "Tokens under management: input + output + cache writes")
+	Required("input_tokens", "output_tokens", "cache_creation_tokens", "total_tokens")
 }
 
 var TumDetailsPoint = Type("TumDetailsPoint", func() {
@@ -1536,7 +1537,7 @@ var TumDetailsBreakdown = Type("TumDetailsBreakdown", func() {
 })
 
 var TumDetailsResult = Type("TumDetailsResult", func() {
-	Description("Result of the billing usage details query. Everything derives from the tokens-under-management population — observed agent traffic with cache tokens excluded — computed live from the telemetry aggregate. Matches the billed totals for cycles billed under this definition; cycles finalized before the observed-traffic redefinition serve immutable snapshot totals on the usage endpoint that can differ from this live compute.")
+	Description("Result of the billing usage details query. Everything derives from the tokens-under-management population — observed agent traffic with cache reads excluded — computed live from the telemetry aggregate. Matches the billed totals for cycles billed under this definition; cycles finalized before the observed-traffic redefinition serve immutable snapshot totals on the usage endpoint that can differ from this live compute.")
 
 	Attribute("interval_seconds", Int64, "Timeseries bucket width in seconds. Always 86400 — the details are bucketed daily.")
 	Attribute("points", ArrayOf(TumDetailsPoint), "Gap-filled daily buckets in ascending time order")

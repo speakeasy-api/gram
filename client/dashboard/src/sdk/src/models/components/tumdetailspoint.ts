@@ -17,7 +17,11 @@ export type TumDetailsPoint = {
    */
   bucketTimeUnixNano: string;
   /**
-   * Observed input tokens (cache reads and writes excluded)
+   * Observed cache-write tokens — prompt content entering the provider cache, counted once
+   */
+  cacheCreationTokens: number;
+  /**
+   * Observed input tokens (cache reads excluded)
    */
   inputTokens: number;
   /**
@@ -25,7 +29,7 @@ export type TumDetailsPoint = {
    */
   outputTokens: number;
   /**
-   * Tokens under management: input + output
+   * Tokens under management: input + output + cache writes
    */
   totalTokens: number;
 };
@@ -37,6 +41,7 @@ export const TumDetailsPoint$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     bucket_time_unix_nano: z.string(),
+    cache_creation_tokens: z.int(),
     input_tokens: z.int(),
     output_tokens: z.int(),
     total_tokens: z.int(),
@@ -44,6 +49,7 @@ export const TumDetailsPoint$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "bucket_time_unix_nano": "bucketTimeUnixNano",
+      "cache_creation_tokens": "cacheCreationTokens",
       "input_tokens": "inputTokens",
       "output_tokens": "outputTokens",
       "total_tokens": "totalTokens",

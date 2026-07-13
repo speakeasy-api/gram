@@ -341,11 +341,12 @@ func (s *Service) QueryTumDetails(ctx context.Context, payload *telem_gen.QueryT
 	}
 
 	dayByBucket := make(map[int64]repo.TumBreakdownDayBucket, len(dayRows))
-	var totalInput, totalOutput, totalTokens int64
+	var totalInput, totalOutput, totalCacheCreation, totalTokens int64
 	for _, row := range dayRows {
 		dayByBucket[row.Day.UTC().UnixNano()] = row
 		totalInput += row.InputTokens
 		totalOutput += row.OutputTokens
+		totalCacheCreation += row.CacheCreationTokens
 		totalTokens += row.TotalTokens
 	}
 
@@ -419,10 +420,11 @@ func (s *Service) QueryTumDetails(ctx context.Context, payload *telem_gen.QueryT
 	for _, start := range starts {
 		day := dayByBucket[start]
 		points = append(points, &telem_gen.TumDetailsPoint{
-			BucketTimeUnixNano: strconv.FormatInt(start, 10),
-			InputTokens:        day.InputTokens,
-			OutputTokens:       day.OutputTokens,
-			TotalTokens:        day.TotalTokens,
+			BucketTimeUnixNano:  strconv.FormatInt(start, 10),
+			InputTokens:         day.InputTokens,
+			OutputTokens:        day.OutputTokens,
+			CacheCreationTokens: day.CacheCreationTokens,
+			TotalTokens:         day.TotalTokens,
 		})
 	}
 
@@ -431,9 +433,10 @@ func (s *Service) QueryTumDetails(ctx context.Context, payload *telem_gen.QueryT
 		Points:          points,
 		Breakdowns:      breakdowns,
 		Totals: &telem_gen.TumDetailsTotals{
-			InputTokens:  totalInput,
-			OutputTokens: totalOutput,
-			TotalTokens:  totalTokens,
+			InputTokens:         totalInput,
+			OutputTokens:        totalOutput,
+			CacheCreationTokens: totalCacheCreation,
+			TotalTokens:         totalTokens,
 		},
 	}, nil
 }

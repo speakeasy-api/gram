@@ -13,7 +13,11 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
  */
 export type TumDetailsTotals = {
   /**
-   * Observed input tokens (cache reads and writes excluded)
+   * Observed cache-write tokens — prompt content entering the provider cache, counted once
+   */
+  cacheCreationTokens: number;
+  /**
+   * Observed input tokens (cache reads excluded)
    */
   inputTokens: number;
   /**
@@ -21,7 +25,7 @@ export type TumDetailsTotals = {
    */
   outputTokens: number;
   /**
-   * Tokens under management: input + output
+   * Tokens under management: input + output + cache writes
    */
   totalTokens: number;
 };
@@ -32,12 +36,14 @@ export const TumDetailsTotals$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    cache_creation_tokens: z.int(),
     input_tokens: z.int(),
     output_tokens: z.int(),
     total_tokens: z.int(),
   }),
   z.transform((v) => {
     return remap$(v, {
+      "cache_creation_tokens": "cacheCreationTokens",
       "input_tokens": "inputTokens",
       "output_tokens": "outputTokens",
       "total_tokens": "totalTokens",

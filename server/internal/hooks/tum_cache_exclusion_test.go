@@ -15,11 +15,11 @@ import (
 // TestTumCacheExclusion_AllSurfaces drives all three REAL observed-traffic
 // ingest paths — the Claude OTEL logs endpoint, the Codex logs endpoint, and
 // the Cursor afterAgentResponse hook — with cache-heavy usage, then asserts
-// the tokens-under-management measure counts exactly the uncached input +
-// output for every surface. This pins the cross-surface semantic contract:
-// Claude and Cursor report input EXCLUSIVE of cache tokens, Codex reports it
-// INCLUSIVE (cached is a subset of input) and ingest normalizes it, so cache
-// reads and writes are excluded from billing uniformly.
+// the tokens-under-management measure counts exactly input + output + cache
+// WRITES for every surface, never cache READS. This pins the cross-surface
+// semantic contract: Claude and Cursor report input EXCLUSIVE of cache
+// tokens, Codex reports it INCLUSIVE (cached is a subset of input) and
+// ingest normalizes it, so cache reads are excluded from billing uniformly.
 func TestTumCacheExclusion_AllSurfaces(t *testing.T) {
 	t.Parallel()
 
@@ -30,7 +30,7 @@ func TestTumCacheExclusion_AllSurfaces(t *testing.T) {
 	now := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
 
 	// Claude: disjoint semantics at the source — input excludes the cache
-	// fields. TUM = 100 + 40 = 140.
+	// fields. TUM = 100 + 40 + 7000 (cache write) = 7140.
 	require.NoError(t, ti.service.Logs(ctx, claudeLogsPayload(
 		[]*gen.OTELResourceAttribute{resourceStrAttr("service.name", "claude-code")},
 		nil,
@@ -51,7 +51,8 @@ func TestTumCacheExclusion_AllSurfaces(t *testing.T) {
 	)))
 
 	// Codex: input_token_count is cache-INCLUSIVE (cached is a subset);
-	// ingest normalizes to the disjoint shape. TUM = (9000-8800) + 60 = 260.
+	// ingest normalizes to the disjoint shape; codex reports no cache
+	// writes. TUM = (9000-8800) + 60 = 260.
 	require.NoError(t, ti.service.Logs(ctx, codexLogsPayload(&gen.OTELLogRecord{
 		TimeUnixNano: new(nanoString(now)),
 		Attributes: []*gen.OTELAttribute{
@@ -66,7 +67,7 @@ func TestTumCacheExclusion_AllSurfaces(t *testing.T) {
 	})))
 
 	// Cursor: disjoint semantics at the source (Anthropic-style four-way
-	// split). TUM = 300 + 25 = 325.
+	// split). TUM = 300 + 25 + 3000 (cache write) = 3325.
 	email := "tum-cursor@example.com"
 	convID := "tum-cursor-conv"
 	inputTokens := 300
@@ -104,8 +105,8 @@ func TestTumCacheExclusion_AllSurfaces(t *testing.T) {
 		for _, b := range buckets {
 			total += b.Tokens
 		}
-		assert.Equal(c, int64(140+260+325), total,
-			"TUM must count uncached input + output only, on every surface")
+		assert.Equal(c, int64(7140+260+3325), total,
+			"TUM must count input + output + cache writes, never cache reads, on every surface")
 	}, 15*time.Second, 200*time.Millisecond)
 
 	rows, err := chQueries.GetTumBreakdownDimByDay(ctx, params, "hook_source")
@@ -115,8 +116,8 @@ func TestTumCacheExclusion_AllSurfaces(t *testing.T) {
 		bySurface[r.Value] += r.Tokens
 	}
 	require.Equal(t, map[string]int64{
-		"claude-code": 140,
+		"claude-code": 7140,
 		"codex":       260,
-		"cursor":      325,
+		"cursor":      3325,
 	}, bySurface)
 }
