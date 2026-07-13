@@ -24,6 +24,8 @@ import (
 
 const hookIngestSchemaV1 = "hook.ingest.v1"
 
+const canonicalSessionCacheWriteTimeout = time.Second
+
 // eventTypeSkillActivated is the canonical event type senders use when a
 // provider reports a skill activation directly (Claude's Skill tool). Inferred
 // activations (Codex heuristics) arrive as ordinary events carrying data.skill
@@ -418,7 +420,10 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 	metadata := s.canonicalSessionMetadata(ctx, payload, authCtx, actor)
 	if strings.TrimSpace(payload.Event.Type) == "session.started" &&
 		metadata.SessionID != "" && (metadata.UserID != "" || metadata.UserEmail != "") {
-		if err := s.cache.Set(ctx, sessionCacheKey(metadata.SessionID), metadata, 24*time.Hour); err != nil {
+		cacheCtx, cancel := context.WithTimeout(ctx, canonicalSessionCacheWriteTimeout)
+		err := s.cache.Set(cacheCtx, sessionCacheKey(metadata.SessionID), metadata, 24*time.Hour)
+		cancel()
+		if err != nil {
 			s.logger.WarnContext(ctx, "failed to cache canonical hook session identity",
 				attr.SlogEvent("hooks_ingest_session_cache_failed"),
 				attr.SlogError(err),

@@ -3,6 +3,7 @@ package hooks
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/risk"
@@ -27,6 +29,24 @@ import (
 // made-up policy UUID would fail the row's risk_policies reference.
 type ingestUserScopedShadowMCPScanner struct {
 	userID string
+}
+
+type sessionCacheDeadlineRecorder struct {
+	cache.Cache
+	remaining chan time.Duration
+}
+
+func (r *sessionCacheDeadlineRecorder) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
+	deadline, ok := ctx.Deadline()
+	if ok {
+		r.remaining <- time.Until(deadline)
+	} else {
+		r.remaining <- 0
+	}
+	if err := r.Cache.Set(ctx, key, value, ttl); err != nil {
+		return fmt.Errorf("set cache: %w", err)
+	}
+	return nil
 }
 
 func (s ingestUserScopedShadowMCPScanner) ScanForEnforcement(_ context.Context, _ string, _ uuid.UUID, _ string, _ string, _ string, _ string) (*risk.ScanResult, error) {
@@ -436,6 +456,8 @@ func TestIngest_CachesSelfReportedActorForLaterSharedKeyEvents(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 	authCtx.APIKeyName = "plugins-hooks-20260713-codex"
+	remaining := make(chan time.Duration, 1)
+	ti.service.cache = &sessionCacheDeadlineRecorder{Cache: ti.service.cache, remaining: remaining}
 
 	userID := "user_codex_session_actor"
 	userEmail := "codex-session@example.com"
@@ -452,6 +474,9 @@ func TestIngest_CachesSelfReportedActorForLaterSharedKeyEvents(t *testing.T) {
 	require.NoError(t, ti.service.cache.Get(ctx, sessionCacheKey(sessionID), &cached))
 	require.Equal(t, userID, cached.UserID)
 	require.Equal(t, userEmail, cached.UserEmail)
+	writeBudget := <-remaining
+	require.Positive(t, writeBudget, "session cache write must carry a deadline")
+	require.LessOrEqual(t, writeBudget, canonicalSessionCacheWriteTimeout)
 
 	later := canonicalIngestPayload("codex", "tool.requested", sessionID)
 	actor := ti.service.resolveCanonicalActor(ctx, later, authCtx)
