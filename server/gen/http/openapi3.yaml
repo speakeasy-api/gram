@@ -46574,6 +46574,11 @@ components:
                     items:
                         $ref: '#/components/schemas/HookMCPAttributionEntry'
                     description: Transcript-derived per-request MCP attribution (Claude Stop/SubagentStop).
+                mcp_inventory:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/HookMCPData'
+                    description: Configured MCP server snapshot captured at session start or configuration change. Transport credentials must be redacted by the sender.
                 message:
                     $ref: '#/components/schemas/HookMessageData'
                 notification:
