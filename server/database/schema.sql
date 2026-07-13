@@ -672,6 +672,7 @@ WHERE definition_slug = 'dashboard' AND status = 'active' AND deleted IS FALSE;
 CREATE TABLE IF NOT EXISTS environment_entries (
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 60),
   value TEXT NOT NULL CHECK (value <> '' AND CHAR_LENGTH(value) <= 4000),
+  is_secret BOOLEAN NOT NULL DEFAULT TRUE,
   environment_id uuid NOT NULL,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
