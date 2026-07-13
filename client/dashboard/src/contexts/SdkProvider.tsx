@@ -1,4 +1,5 @@
 import { getRBACScopeOverrideHeader } from "@/components/dev-toolbar-utils";
+import { isProjectOverviewQueryKey } from "@/components/project/projectOverviewQuery";
 import { clearStorageForLogout } from "@/lib/logout-storage";
 import { getServerURL } from "@/lib/utils";
 import { datadogRum } from "@datadog/browser-rum";
@@ -89,10 +90,14 @@ export const SdkProvider = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- telemetry is stable context value; including it would recreate the SDK client unnecessarily
   }, [projectSlug, pathProjectSlug]);
 
-  // Invalidate all queries when projectSlug changes
+  // Invalidate all queries when projectSlug changes; most keys are not
+  // project-aware. Overview keys are, and must survive so the org-home
+  // prefetch isn't discarded on navigation.
   useEffect(() => {
     if (previousProjectSlug.current !== projectSlug) {
-      void queryClient.invalidateQueries();
+      void queryClient.invalidateQueries({
+        predicate: (query) => !isProjectOverviewQueryKey(query.queryKey),
+      });
       previousProjectSlug.current = projectSlug;
     }
   }, [projectSlug]);
