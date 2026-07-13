@@ -10,7 +10,9 @@ from asyncer import asyncify
 from gram.risk.v1 import finding_pb2, presidio_analysis_pb2
 from gram_infra.pubsub import PublishResult
 from gram_infra.pubsub.subscriber import MessageMetadata
+from opentelemetry import trace
 
+from pystreams import attr
 from pystreams.risk import metrics
 from pystreams.risk.scanner import DEFAULT_SCORE_THRESHOLD, Detection, Scanner
 
@@ -61,6 +63,16 @@ class PresidioHandler:
         requested = list(message.entities) or None
         # Zero/unset on the request means "use the default floor".
         score_threshold = message.score_threshold or DEFAULT_SCORE_THRESHOLD
+
+        # Stamp the exact input size on the delivery span (the traced-receiver
+        # span is current here). A size — never content — is safe to record, and
+        # span attributes aren't cardinality-bounded like metric tags, so trace
+        # analytics can scatter per-message duration against exact size and click
+        # through to the pathological payloads. The metrics below carry the same
+        # dimension as a bounded ``size_bucket`` band for dashboards/monitors.
+        content_chars = len(message.content)
+        trace.get_current_span().set_attribute(attr.RISK_CONTENT_CHARS, content_chars)
+        size_bucket = metrics.size_bucket_for(content_chars)
 
         # Time the whole handler end to end and record it as a distribution,
         # tagged with the terminal outcome. The timer starts here and is recorded
@@ -157,7 +169,7 @@ class PresidioHandler:
             )
         finally:
             metrics.record_process_duration(
-                time.perf_counter() - process_started, outcome
+                time.perf_counter() - process_started, outcome, size_bucket
             )
 
     def _build_and_dispatch(
