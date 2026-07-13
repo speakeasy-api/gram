@@ -346,6 +346,9 @@ type CreateRiskPolicyPayload struct {
 	Prompt *string
 	// For prompt_based policies: per-policy LLM-judge model configuration.
 	ModelConfig *types.RiskPolicyModelConfig
+	// CVSS-style severity (0.1-10) assigned to findings this policy produces. Omit
+	// to apply the default (5).
+	Score float64
 }
 
 // DeclineRiskPolicyChallengePayload is the payload type of the risk service
@@ -1244,6 +1247,9 @@ type UpdateRiskPolicyPayload struct {
 	// For prompt_based policies: per-policy LLM-judge model configuration. Omit to
 	// preserve the current value.
 	ModelConfig *types.RiskPolicyModelConfig
+	// CVSS-style severity (0.1-10) assigned to findings this policy produces. Omit
+	// to preserve the current value.
+	Score *float64
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

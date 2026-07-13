@@ -594,6 +594,7 @@ INSERT INTO risk_policies (
   , user_message
   , prompt
   , model_config
+  , score
   , version
 )
 VALUES (
@@ -618,6 +619,7 @@ VALUES (
   , $19
   , $20::text
   , $21::jsonb
+  , COALESCE($22::double precision, 5.0)
   , 1
 )
 RETURNING id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, scope_include, scope_exempt, action, audience_type, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
@@ -645,6 +647,7 @@ type CreateRiskPolicyParams struct {
 	UserMessage          pgtype.Text
 	Prompt               pgtype.Text
 	ModelConfig          []byte
+	Score                pgtype.Float8
 }
 
 func (q *Queries) CreateRiskPolicy(ctx context.Context, arg CreateRiskPolicyParams) (RiskPolicy, error) {
@@ -670,6 +673,7 @@ func (q *Queries) CreateRiskPolicy(ctx context.Context, arg CreateRiskPolicyPara
 		arg.UserMessage,
 		arg.Prompt,
 		arg.ModelConfig,
+		arg.Score,
 	)
 	var i RiskPolicy
 	err := row.Scan(
@@ -3618,6 +3622,8 @@ SET name = $1
   , user_message = $15
   , prompt = $16::text
   , model_config = $17::jsonb
+  -- Descriptive severity: preserve on omit, never contributes to the version bump.
+  , score = COALESCE($18::double precision, score)
   , version = CASE
       WHEN sources IS DISTINCT FROM $2
         OR presidio_entities IS DISTINCT FROM $3
@@ -3637,8 +3643,8 @@ SET name = $1
       ELSE version
     END
   , updated_at = clock_timestamp()
-WHERE id = $18
-  AND project_id = $19
+WHERE id = $19
+  AND project_id = $20
   AND deleted IS FALSE
 RETURNING id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, scope_include, scope_exempt, action, audience_type, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
 `
@@ -3661,6 +3667,7 @@ type UpdateRiskPolicyParams struct {
 	UserMessage          pgtype.Text
 	Prompt               pgtype.Text
 	ModelConfig          []byte
+	Score                pgtype.Float8
 	ID                   uuid.UUID
 	ProjectID            uuid.UUID
 }
@@ -3684,6 +3691,7 @@ func (q *Queries) UpdateRiskPolicy(ctx context.Context, arg UpdateRiskPolicyPara
 		arg.UserMessage,
 		arg.Prompt,
 		arg.ModelConfig,
+		arg.Score,
 		arg.ID,
 		arg.ProjectID,
 	)

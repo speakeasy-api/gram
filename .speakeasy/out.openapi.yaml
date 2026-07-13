@@ -42243,6 +42243,14 @@ components:
         scope_include:
           type: string
           description: 'CEL scope predicate: the policy evaluates a message only when this boolean expression is true (in addition to message_types). Omit/empty means all messages are in scope.'
+        score:
+          type: number
+          description: CVSS-style severity (0.1-10) assigned to findings this policy produces. Omit to apply the default (5).
+          default: 5
+          example: 5
+          format: double
+          minimum: 0.1
+          maximum: 10
         sources:
           type: array
           items:
@@ -50464,6 +50472,14 @@ components:
         scope_include:
           type: string
           description: 'CEL scope predicate: the policy evaluates a message only when this boolean expression is true (in addition to message_types). Null/empty means all messages are in scope.'
+        score:
+          type: number
+          description: CVSS-style severity (0.1-10) the author assigns to findings this policy produces. Descriptive only; changing it does not re-scan messages. Defaults to 5.
+          default: 5
+          example: 5
+          format: double
+          minimum: 0.1
+          maximum: 10
         sources:
           type: array
           items:
@@ -50495,6 +50511,7 @@ components:
         - audience_type
         - audience_principal_urns
         - auto_name
+        - score
         - version
         - created_at
         - updated_at
@@ -55279,6 +55296,13 @@ components:
         scope_include:
           type: string
           description: CEL scope predicate (in addition to message_types). Omit to preserve the current value; send empty to clear.
+        score:
+          type: number
+          description: CVSS-style severity (0.1-10) assigned to findings this policy produces. Omit to preserve the current value.
+          example: 5
+          format: double
+          minimum: 0.1
+          maximum: 10
         sources:
           type: array
           items:

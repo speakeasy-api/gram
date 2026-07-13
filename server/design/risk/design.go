@@ -54,6 +54,12 @@ var _ = Service("risk", func() {
 			Attribute("user_message", String, "Optional message shown to end users when this policy blocks an action or surfaces a flagged finding.")
 			Attribute("prompt", String, "For prompt_based policies: the guardrail prompt the LLM judge evaluates each in-scope message against. Required when policy_type is prompt_based.")
 			Attribute("model_config", shared.RiskPolicyModelConfig, "For prompt_based policies: per-policy LLM-judge model configuration.")
+			Attribute("score", Float64, "CVSS-style severity (0.1-10) assigned to findings this policy produces. Omit to apply the default (5).", func() {
+				Minimum(0.1)
+				Maximum(10)
+				Default(5)
+				Example(5)
+			})
 		})
 
 		Result(shared.RiskPolicy)
@@ -188,6 +194,11 @@ var _ = Service("risk", func() {
 			Attribute("user_message", String, "Optional message shown to end users when this policy blocks an action or surfaces a flagged finding. Send an empty string to clear.")
 			Attribute("prompt", String, "For prompt_based policies: the guardrail prompt the LLM judge evaluates each in-scope message against. Omit to preserve the current value.")
 			Attribute("model_config", shared.RiskPolicyModelConfig, "For prompt_based policies: per-policy LLM-judge model configuration. Omit to preserve the current value.")
+			Attribute("score", Float64, "CVSS-style severity (0.1-10) assigned to findings this policy produces. Omit to preserve the current value.", func() {
+				Minimum(0.1)
+				Maximum(10)
+				Example(5)
+			})
 			Required("id", "name")
 		})
 
