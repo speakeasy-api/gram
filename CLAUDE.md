@@ -73,6 +73,10 @@ The main frontend application lives in `client/dashboard/` (not `client/` direct
 
 </commands>
 
+### Testing assistants locally
+
+`.mcp.json` registers the `assistants-dev` MCP server (`server/cmd/dev-mcp`), which drives the local management API without the dashboard UI. It logs into the local stack on its own (dev-idp auto-approves), so no setup is needed beyond a running dev stack. Use its tools — assistant CRUD, `run_turn` (send a message and wait for the assistant's reply), `load_chat`, and trigger CRUD — to exercise assistant runtime changes end to end. `whoami` lists the available project slugs.
+
 ### Database Migrations
 
 Migration rules live in the `postgresql` skill (`.agents/skills/postgresql/SKILL.md`, "Database migrations" section). Activate that skill any time you touch `server/migrations/`, `atlas.sum`, or `server/database/schema.sql`.

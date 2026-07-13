@@ -61,11 +61,11 @@ linters:
       - path: cmd/|internal/dns/
         linters:
           - forbidigo
-      # riskjudgebench is a developer/benchmark CLI (not part of the server
-      # binary). Like test files, it favors terse partial structs and direct
-      # error returns over production-grade hardening, so exempt it from the
+      # riskjudgebench and dev-mcp are developer CLIs (not part of the server
+      # binary). Like test files, they favor terse partial structs and direct
+      # error returns over production-grade hardening, so exempt them from the
       # same dev-tooling linters we exempt tests from.
-      - path: cmd/riskjudgebench/
+      - path: cmd/riskjudgebench/|cmd/dev-mcp/
         linters:
           - exhaustruct
           - wrapcheck
