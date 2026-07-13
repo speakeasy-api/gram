@@ -55,7 +55,7 @@ export type RiskSuggestCustomRuleMutationError =
  * suggestCustomDetectionRule risk
  *
  * @remarks
- * Suggest a custom detection rule (rule_id, title, description, regex, severity) from a natural-language prompt. Calls the configured LLM with a JSON-schema constrained response so the dashboard can prefill the create form.
+ * Suggest a custom detection rule (rule_id, title, description, regex, severity) or, with target `exclusion`, an exclusion rule (match_type, match_value, filters) from a natural-language prompt. Calls the configured LLM with a JSON-schema constrained response so the dashboard can prefill the create form.
  */
 export function useRiskSuggestCustomRuleMutation(
   options?: MutationHookOptions<
