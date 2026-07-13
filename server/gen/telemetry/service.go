@@ -45,10 +45,6 @@ type Service interface {
 	// filters (e.g. group by department_name, then drill in by filtering
 	// department_name and grouping by role).
 	Query(context.Context, *QueryPayload) (res *QueryResult, err error)
-	// Org-scoped daily token usage split by risk involvement: tokens from sessions
-	// with at least one active risk finding in the window versus all session
-	// tokens. Powers the token-usage panel's risk breakdown on the costs page.
-	QueryRiskTokens(context.Context, *QueryRiskTokensPayload) (res *QueryRiskTokensResult, err error)
 	// Org-scoped daily usage details for the billing page, computed in one pass:
 	// the tokens-under-management daily token-type split (observed agent traffic;
 	// cache reads excluded) and per-dimension breakdowns over the same population.
@@ -96,7 +92,7 @@ const ServiceName = "telemetry"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [21]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getProjectOverview", "query", "queryRiskTokens", "queryTumDetails", "listSessions", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "listToolUsageTraces", "getToolUsageFilterOptions", "listHooksTraces"}
+var MethodNames = [20]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getProjectOverview", "query", "queryTumDetails", "listSessions", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "listToolUsageTraces", "getToolUsageFilterOptions", "listHooksTraces"}
 
 // CaptureEventPayload is the payload type of the telemetry service
 // captureEvent method.
@@ -923,28 +919,6 @@ type QueryResult struct {
 	Timeseries []*QuerySeries
 }
 
-// QueryRiskTokensPayload is the payload type of the telemetry service
-// queryRiskTokens method.
-type QueryRiskTokensPayload struct {
-	SessionToken *string
-	// Start time in ISO 8601 format
-	From string
-	// End time in ISO 8601 format
-	To string
-	// Optional project to scope to; defaults to every project in the organization.
-	ProjectID *string
-}
-
-// QueryRiskTokensResult is the result type of the telemetry service
-// queryRiskTokens method.
-type QueryRiskTokensResult struct {
-	// Timeseries bucket width in seconds. Always 86400 — the source aggregate is
-	// bucketed daily.
-	IntervalSeconds int64
-	// Gap-filled daily buckets in ascending time order
-	Points []*RiskTokensPoint
-}
-
 // One row of the grouped table: measures aggregated over the full time range
 // for a single group value.
 type QueryRow struct {
@@ -980,17 +954,6 @@ type QueryTumDetailsPayload struct {
 	To string
 	// Optional project to scope to; defaults to every project in the organization.
 	ProjectID *string
-}
-
-// One UTC day of token usage split by risk involvement
-type RiskTokensPoint struct {
-	// Bucket start time in Unix nanoseconds (string for JS precision)
-	BucketTimeUnixNano string
-	// Tokens from sessions with at least one active risk finding created in the
-	// query window
-	RiskyTokens int64
-	// All session tokens in the bucket
-	TotalTokens int64
 }
 
 // Aggregated usage summary for a role
