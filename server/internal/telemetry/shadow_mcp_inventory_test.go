@@ -395,23 +395,29 @@ func TestListShadowMCPInventoryUsers_Paginates(t *testing.T) {
 		ObservedAt: base.Add(3 * time.Minute),
 	})
 
-	firstPage := requireShadowMCPInventoryUsersEventually(ctx, t, ti, telemetryRepo.ListShadowMCPInventoryUsersParams{
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	firstPage, err := ti.chClient.ListShadowMCPInventoryUsers(ctx, telemetryRepo.ListShadowMCPInventoryUsersParams{
 		GramProjectID:      projectID,
 		CanonicalServerURL: "https://mcp.speakeasy.com/mcp",
 		Limit:              2,
-	}, 2)
+	})
+	require.NoError(t, err)
+	require.Len(t, firstPage, 2)
 
 	require.Equal(t, "ada@example.com", firstPage[0].UserKey)
 	require.Equal(t, "linus@example.com", firstPage[1].UserKey)
 	cursor, err := telemetryRepo.EncodeShadowMCPInventoryUserCursor(firstPage[1])
 	require.NoError(t, err)
 
-	secondPage := requireShadowMCPInventoryUsersEventually(ctx, t, ti, telemetryRepo.ListShadowMCPInventoryUsersParams{
+	secondPage, err := ti.chClient.ListShadowMCPInventoryUsers(ctx, telemetryRepo.ListShadowMCPInventoryUsersParams{
 		GramProjectID:      projectID,
 		CanonicalServerURL: "https://mcp.speakeasy.com/mcp",
 		Limit:              2,
 		Cursor:             cursor,
-	}, 1)
+	})
+	require.NoError(t, err)
+	require.Len(t, secondPage, 1)
 
 	require.Equal(t, "grace@example.com", secondPage[0].UserKey)
 }
