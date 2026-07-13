@@ -6,6 +6,7 @@ from typing import cast
 import anyio
 import pytest
 
+from pystreams.risk import scanner as scanner_mod
 from pystreams.risk.scanner import (
     Detection,
     ProcessPoolScanner,
@@ -244,10 +245,14 @@ class _StuckExecutor:
 
 
 class _ImmediateExecutor:
-    """Executor stand-in whose futures are already resolved to a canned value."""
+    """Executor stand-in whose futures are already resolved to a canned value.
 
-    def __init__(self, result: list[Detection]):
-        self._result = result
+    Resolves to the ``(detections, scan_seconds)`` tuple ``_worker_scan`` returns
+    from a real worker.
+    """
+
+    def __init__(self, result: list[Detection], scan_seconds: float = 0.0):
+        self._result = (result, scan_seconds)
 
     def submit(self, fn, *args):
         future: Future = Future()
@@ -283,6 +288,63 @@ async def test_pool_scan_without_timeout_returns_result():
 
     # scan_timeout=None disables the deadline; the result passes straight through.
     assert await scanner.scan("a@b.com", None, 0.75) == [detection]
+
+
+@pytest.fixture
+def recorded_scan_durations(monkeypatch):
+    """Capture every ``record_scan_duration`` call as ``(seconds, size_bucket)``.
+
+    Patched on the scanner module's ``metrics`` import so both scan strategies'
+    recording is observable without a real ``MeterProvider``.
+    """
+    calls: list[tuple[float, str]] = []
+
+    def _capture(seconds: float, size_bucket: str) -> None:
+        calls.append((seconds, size_bucket))
+
+    monkeypatch.setattr(scanner_mod.metrics, "record_scan_duration", _capture)
+    return calls
+
+
+async def test_thread_scan_records_duration_with_size_bucket(recorded_scan_durations):
+    content = "email me at a@b.com"
+    analyzer = FakeAnalyzer(
+        {content: [_Result("EMAIL_ADDRESS", start=12, end=19, score=0.85)]}
+    )
+
+    await _scanner(analyzer).scan(content, None, 0.75)
+
+    (seconds, size_bucket) = recorded_scan_durations[-1]
+    assert seconds >= 0.0
+    assert size_bucket == "0-1k"
+
+
+async def test_pool_scan_records_worker_reported_duration(recorded_scan_durations):
+    # The pool scanner records the seconds the *worker* measured (returned beside
+    # the detections), not its own wall clock — the worker process cannot export
+    # metrics itself, and the parent's wall clock would include queue wait.
+    scanner = ProcessPoolScanner(
+        cast(ProcessPoolExecutor, _ImmediateExecutor([], scan_seconds=1.25)),
+        scan_timeout=None,
+    )
+
+    await scanner.scan("x" * 5_000, None, 0.75)
+
+    (seconds, size_bucket) = recorded_scan_durations[-1]
+    assert seconds == 1.25
+    assert size_bucket == "1k-10k"
+
+
+async def test_pool_scan_timeout_records_no_duration(recorded_scan_durations):
+    executor = _StuckExecutor()
+    scanner = ProcessPoolScanner(cast(ProcessPoolExecutor, executor), scan_timeout=0.05)
+
+    # A timed-out scan reports nothing: scan_duration stays a clean read of what
+    # completed scans cost.
+    with pytest.raises(TimeoutError):
+        await scanner.scan("anything", None, 0.75)
+
+    assert recorded_scan_durations == []
 
 
 class _WarmupFailExecutor:
@@ -369,7 +431,8 @@ class _DeferredExecutor:
             ready = list(self.pending) if len(self.pending) == self._expected else None
         if ready is not None:
             for queued_content, queued_future in reversed(ready):
-                queued_future.set_result([_email_detection(queued_content)])
+                # The (detections, scan_seconds) tuple a real _worker_scan returns.
+                queued_future.set_result(([_email_detection(queued_content)], 0.0))
         return future
 
 

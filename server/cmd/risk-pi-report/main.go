@@ -655,6 +655,7 @@ func judgeOne(ctx context.Context, client openrouter.CompletionClient, model str
 		Temperature:    &temp,
 		UsageSource:    billing.ModelUsageSourceGram,
 		KeyType:        openrouter.KeyTypeInternal,
+		KeySlot:        "",
 		UserID:         "",
 		ExternalUserID: "",
 		UserEmail:      "",
@@ -688,10 +689,12 @@ func judgeOne(ctx context.Context, client openrouter.CompletionClient, model str
 func newOpenRouterClient(apiKey string) openrouter.CompletionClient {
 	logger := slog.New(slog.DiscardHandler)
 	policy := guardian.NewDefaultPolicy(tracenoop.NewTracerProvider())
+	prov := &devProvisioner{apiKey: apiKey}
 	return openrouter.NewUnifiedClient(
 		logger,
 		policy,
-		&devProvisioner{apiKey: apiKey},
+		prov,
+		&openrouter.PlatformKeyResolver{Provisioner: prov},
 		nil, // message capture  (nil-guarded)
 		nil, // usage tracking   (nil-guarded)
 		nil, // chat title gen   (nil-guarded)

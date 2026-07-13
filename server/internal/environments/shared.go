@@ -227,6 +227,7 @@ func (e *EnvironmentEntries) ListEnvironmentEntries(ctx context.Context, project
 		decryptedEntries[i] = repo.EnvironmentEntry{
 			Name:          entry.Name,
 			Value:         value,
+			IsSecret:      entry.IsSecret,
 			EnvironmentID: entry.EnvironmentID,
 			CreatedAt:     entry.CreatedAt,
 			UpdatedAt:     entry.UpdatedAt,
@@ -260,6 +261,7 @@ func (e *EnvironmentEntries) CreateEnvironmentEntries(ctx context.Context, param
 		decryptedEntries[i] = repo.EnvironmentEntry{
 			Name:          entry.Name,
 			Value:         redactedEnvironment(originalValues[entry.Name]), // avoid having to needlessly decrypt the value
+			IsSecret:      entry.IsSecret,
 			EnvironmentID: entry.EnvironmentID,
 			CreatedAt:     entry.CreatedAt,
 			UpdatedAt:     entry.UpdatedAt,

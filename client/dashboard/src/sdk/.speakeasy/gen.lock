@@ -197,6 +197,9 @@ trackedFiles:
   src/funcs/mcpServersList.ts: {}
   src/funcs/mcpServersListToolFilters.ts: {}
   src/funcs/mcpServersUpdate.ts: {}
+  src/funcs/modelKeysDeleteKey.ts: {}
+  src/funcs/modelKeysListKeys.ts: {}
+  src/funcs/modelKeysUpsertKey.ts: {}
   src/funcs/organizationRemoteSessionClientsCreate.ts: {}
   src/funcs/organizationRemoteSessionClientsCreateCimd.ts: {}
   src/funcs/organizationRemoteSessionClientsDelete.ts: {}
@@ -351,7 +354,6 @@ trackedFiles:
   src/funcs/telemetryListSessions.ts: {}
   src/funcs/telemetryListToolUsageTraces.ts: {}
   src/funcs/telemetryQuery.ts: {}
-  src/funcs/telemetryQueryRiskTokens.ts: {}
   src/funcs/telemetryQueryTumDetails.ts: {}
   src/funcs/telemetrySearchChats.ts: {}
   src/funcs/telemetrySearchLogs.ts: {}
@@ -662,6 +664,7 @@ trackedFiles:
   src/models/components/listhookstracesresult.ts: {}
   src/models/components/listintegrationsresult.ts: {}
   src/models/components/listinvitesresult.ts: {}
+  src/models/components/listkeysresponsebody.ts: {}
   src/models/components/listkeysresult.ts: {}
   src/models/components/listmcpendpointsresult.ts: {}
   src/models/components/listmcpserversresult.ts: {}
@@ -738,6 +741,7 @@ trackedFiles:
   src/models/components/migratelegacygramregistrationsresult.ts: {}
   src/models/components/mintusersessionrequestbody.ts: {}
   src/models/components/mintusersessionresponsebody.ts: {}
+  src/models/components/modelproviderkey.ts: {}
   src/models/components/modelusage.ts: {}
   src/models/components/moveissuerrequestbody.ts: {}
   src/models/components/notmodified.ts: {}
@@ -807,7 +811,6 @@ trackedFiles:
   src/models/components/querypayload.ts: {}
   src/models/components/querypoint.ts: {}
   src/models/components/queryresult.ts: {}
-  src/models/components/queryrisktokensresult.ts: {}
   src/models/components/queryrow.ts: {}
   src/models/components/queryseries.ts: {}
   src/models/components/rbacstatus.ts: {}
@@ -857,7 +860,6 @@ trackedFiles:
   src/models/components/risksegment.ts: {}
   src/models/components/riskspan.ts: {}
   src/models/components/riskspanredacted.ts: {}
-  src/models/components/risktokenspoint.ts: {}
   src/models/components/riskunmaskresultresult.ts: {}
   src/models/components/riskuserbreakdownresult.ts: {}
   src/models/components/role.ts: {}
@@ -1016,6 +1018,7 @@ trackedFiles:
   src/models/components/upsertconfigrequestbody2.ts: {}
   src/models/components/upsertglobaltoolvariationform.ts: {}
   src/models/components/upsertglobaltoolvariationresult.ts: {}
+  src/models/components/upsertkeyrequestbody.ts: {}
   src/models/components/upsertrequestbody.ts: {}
   src/models/components/usagetiers.ts: {}
   src/models/components/useraccount.ts: {}
@@ -1117,6 +1120,7 @@ trackedFiles:
   src/models/operations/deleteglobalvariation.ts: {}
   src/models/operations/deletemcpendpoint.ts: {}
   src/models/operations/deletemcpserver.ts: {}
+  src/models/operations/deletemodelproviderkey.ts: {}
   src/models/operations/deleteorganizationremotesessionclient.ts: {}
   src/models/operations/deleteorganizationremotesessionissuer.ts: {}
   src/models/operations/deleteotelforwardingconfig.ts: {}
@@ -1266,6 +1270,7 @@ trackedFiles:
   src/models/operations/listmcpservers.ts: {}
   src/models/operations/listmcpservertoolfilters.ts: {}
   src/models/operations/listmembers.ts: {}
+  src/models/operations/listmodelproviderkeys.ts: {}
   src/models/operations/listorganizationremotesessionclientmcpservers.ts: {}
   src/models/operations/listorganizationremotesessionclients.ts: {}
   src/models/operations/listorganizationremotesessionclientsessions.ts: {}
@@ -1323,7 +1328,6 @@ trackedFiles:
   src/models/operations/publish.ts: {}
   src/models/operations/publishplugins.ts: {}
   src/models/operations/query.ts: {}
-  src/models/operations/queryrisktokens.ts: {}
   src/models/operations/querytumdetails.ts: {}
   src/models/operations/receiveworkoswebhook.ts: {}
   src/models/operations/redeploydeployment.ts: {}
@@ -1423,6 +1427,7 @@ trackedFiles:
   src/models/operations/upsertaiintegrationconfig.ts: {}
   src/models/operations/upsertallowedorigin.ts: {}
   src/models/operations/upsertglobalvariation.ts: {}
+  src/models/operations/upsertmodelproviderkey.ts: {}
   src/models/operations/upsertotelforwardingconfig.ts: {}
   src/models/operations/upsertservernameoverride.ts: {}
   src/models/operations/upsertshadowmcpinventorypolicybypass.ts: {}
@@ -1530,6 +1535,7 @@ trackedFiles:
   src/react-query/deleteGlobalVariation.ts: {}
   src/react-query/deleteMcpEndpoint.ts: {}
   src/react-query/deleteMcpServer.ts: {}
+  src/react-query/deleteModelProviderKey.ts: {}
   src/react-query/deleteOrganizationRemoteSessionClient.ts: {}
   src/react-query/deleteOrganizationRemoteSessionIssuer.ts: {}
   src/react-query/deleteOtelForwardingConfig.ts: {}
@@ -1729,6 +1735,8 @@ trackedFiles:
   src/react-query/members.ts: {}
   src/react-query/migrateLegacyGramRegistrations.ts: {}
   src/react-query/mintUserSession.ts: {}
+  src/react-query/modelProviderKeys.core.ts: {}
+  src/react-query/modelProviderKeys.ts: {}
   src/react-query/moveOrganizationRemoteSessionIssuer.ts: {}
   src/react-query/onboardingStatus.core.ts: {}
   src/react-query/onboardingStatus.ts: {}
@@ -1918,8 +1926,6 @@ trackedFiles:
   src/react-query/telemetryCaptureEvent.ts: {}
   src/react-query/telemetryQuery.core.ts: {}
   src/react-query/telemetryQuery.ts: {}
-  src/react-query/telemetryQueryRiskTokens.core.ts: {}
-  src/react-query/telemetryQueryRiskTokens.ts: {}
   src/react-query/telemetryQueryTumDetails.core.ts: {}
   src/react-query/telemetryQueryTumDetails.ts: {}
   src/react-query/template.core.ts: {}
@@ -1973,6 +1979,7 @@ trackedFiles:
   src/react-query/upsertAIIntegrationConfig.ts: {}
   src/react-query/upsertAllowedOrigin.ts: {}
   src/react-query/upsertGlobalVariation.ts: {}
+  src/react-query/upsertModelProviderKey.ts: {}
   src/react-query/upsertOtelForwardingConfig.ts: {}
   src/react-query/upsertShadowMCPInventoryPolicyBypass.ts: {}
   src/react-query/userSessionClient.core.ts: {}
@@ -2028,6 +2035,7 @@ trackedFiles:
   src/sdk/mcpmetadata.ts: {}
   src/sdk/mcpregistries.ts: {}
   src/sdk/mcpservers.ts: {}
+  src/sdk/modelkeys.ts: {}
   src/sdk/organizationremotesessionclients.ts: {}
   src/sdk/organizationremotesessionissuers.ts: {}
   src/sdk/organizationremotesessions.ts: {}
@@ -2942,6 +2950,16 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  deleteModelProviderKey:
+    speakeasy-default-delete-model-provider-key:
+      parameters:
+        query:
+          id: "76f79aa6-e8a7-47f2-ab56-7d5ee94e2931"
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   deleteOrganizationRemoteSessionClient:
     speakeasy-default-delete-organization-remote-session-client:
       parameters:
@@ -3746,7 +3764,7 @@ examples:
     speakeasy-default-get-product-features:
       responses:
         "200":
-          application/json: {"authz_challenge_logging_enabled": false, "hooks_browser_login_enabled": false, "logs_enabled": false, "observability_mode_enabled": false, "scim_enabled": false, "session_capture_enabled": true, "sso_enabled": false, "tool_io_logs_enabled": true, "webhooks": true}
+          application/json: {"authz_challenge_logging_enabled": false, "custom_model_keys_enabled": false, "hooks_browser_login_enabled": false, "logs_enabled": false, "observability_mode_enabled": false, "scim_enabled": false, "session_capture_enabled": true, "sso_enabled": false, "tool_io_logs_enabled": true, "webhooks": true}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -4538,6 +4556,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listModelProviderKeys:
+    speakeasy-default-list-model-provider-keys:
+      responses:
+        "200":
+          application/json: {"keys": [{"created_at": "2025-08-08T14:15:13.335Z", "enabled": true, "id": "98afce50-6212-442f-a207-c316ca5c3417", "project_id": "915f574a-8d3d-4dc0-a987-d9ba34b2137c", "provider": "<value>", "slot": "<value>", "updated_at": "2025-11-03T21:53:39.813Z"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   listOrganizationRemoteSessionClientMcpServers:
     speakeasy-default-list-organization-remote-session-client-mcp-servers:
       parameters:
@@ -6282,6 +6309,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  upsertModelProviderKey:
+    speakeasy-default-upsert-model-provider-key:
+      requestBody:
+        application/json: {"api_key": "<value>", "enabled": true, "provider": "<value>", "slot": "<value>"}
+      responses:
+        "200":
+          application/json: {"created_at": "2026-01-29T02:43:04.828Z", "enabled": false, "id": "873c9f78-bfef-44e4-92dc-4c21e9968ecc", "project_id": "9664de42-73d2-4fc5-a4a3-9e0456581fe1", "provider": "<value>", "slot": "<value>", "updated_at": "2026-02-02T18:41:11.819Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   upsertOtelForwardingConfig:
     speakeasy-default-upsert-otel-forwarding-config:
       requestBody:

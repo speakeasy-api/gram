@@ -236,7 +236,7 @@ func (s *Service) writeCodexUsageToClickHouse(ctx context.Context, payload *gen.
 			FunctionID:     nil,
 		}
 
-		ts := time.Now()
+		ts := s.now()
 		if p.TimestampNano > 0 {
 			ts = time.Unix(0, p.TimestampNano)
 		}

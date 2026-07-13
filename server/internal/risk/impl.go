@@ -2340,6 +2340,7 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 		Temperature:  &temperature,
 		UsageSource:  billing.ModelUsageSourceGram,
 		KeyType:      openrouter.KeyTypeInternal,
+		KeySlot:      "",
 		// The admin who asked for the suggestion — this completion is
 		// user-initiated, so usage attributes to them, not "(unset)". (cubic)
 		UserID:         userID,
@@ -2474,6 +2475,7 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 		Temperature:  &temperature,
 		UsageSource:  billing.ModelUsageSourceGram,
 		KeyType:      openrouter.KeyTypeInternal,
+		KeySlot:      "",
 		// The admin who asked for the suggestion — this completion is
 		// user-initiated, so usage attributes to them, not "(unset)".
 		UserID:         userID,
@@ -3187,6 +3189,7 @@ func (s *Service) generatePolicyName(ctx context.Context, orgID, projectID strin
 		Stream:                    false,
 		UsageSource:               billing.ModelUsageSourceGram,
 		KeyType:                   openrouter.KeyTypeInternal,
+		KeySlot:                   "",
 		UserID:                    "",
 		ExternalUserID:            "",
 		UserEmail:                 "",
@@ -3335,6 +3338,7 @@ func (s *Service) generatePromptPolicyName(ctx context.Context, orgID, projectID
 		Stream:                    false,
 		UsageSource:               billing.ModelUsageSourceGram,
 		KeyType:                   openrouter.KeyTypeInternal,
+		KeySlot:                   "",
 		UserID:                    "",
 		ExternalUserID:            "",
 		UserEmail:                 "",

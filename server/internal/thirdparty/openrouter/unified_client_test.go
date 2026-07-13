@@ -234,6 +234,7 @@ func TestChatClient_GetCompletion(t *testing.T) {
 		testenv.NewLogger(t),
 		guardianPolicy,
 		provisioner,
+		&PlatformKeyResolver{Provisioner: provisioner},
 		captureStrategy,
 		trackingStrategy,
 		titleGenerator,
@@ -380,6 +381,7 @@ func TestChatClient_GetCompletionStream(t *testing.T) {
 		testenv.NewLogger(t),
 		guardianPolicy,
 		provisioner,
+		&PlatformKeyResolver{Provisioner: provisioner},
 		captureStrategy,
 		trackingStrategy,
 		titleGenerator,
@@ -505,6 +507,7 @@ func TestChatClient_GetCompletionStream_FetchesFallbackUsageWhenFinalUsageChunkM
 		testenv.NewLogger(t),
 		guardianPolicy,
 		provisioner,
+		&PlatformKeyResolver{Provisioner: provisioner},
 		&mockMessageCaptureStrategy{},
 		trackingStrategy,
 		&mockChatTitleGenerator{},
@@ -599,6 +602,7 @@ func TestChatClient_GetCompletion_FetchesFallbackUsageWhenInlineCostMissing(t *t
 		testenv.NewLogger(t),
 		guardianPolicy,
 		provisioner,
+		&PlatformKeyResolver{Provisioner: provisioner},
 		&mockMessageCaptureStrategy{},
 		trackingStrategy,
 		&mockChatTitleGenerator{},
@@ -707,6 +711,7 @@ func TestChatClient_GetCompletion_WithToolCalls(t *testing.T) {
 		testenv.NewLogger(t),
 		guardianPolicy,
 		provisioner,
+		&PlatformKeyResolver{Provisioner: provisioner},
 		captureStrategy,
 		trackingStrategy,
 		titleGenerator,
@@ -805,6 +810,7 @@ func TestChatClient_NormalizesMixedAssistantOnlyForOpenRouterRequest(t *testing.
 		testenv.NewLogger(t),
 		guardianPolicy,
 		&mockProvisioner{apiKey: "test-api-key"},
+		&PlatformKeyResolver{Provisioner: &mockProvisioner{apiKey: "test-api-key"}},
 		captureStrategy,
 		nil,
 		nil,
@@ -885,6 +891,7 @@ func TestChatClient_PassesMixedAssistantThroughWhenNormalizeFlagUnset(t *testing
 		testenv.NewLogger(t),
 		guardianPolicy,
 		&mockProvisioner{apiKey: "test-api-key"},
+		&PlatformKeyResolver{Provisioner: &mockProvisioner{apiKey: "test-api-key"}},
 		&mockMessageCaptureStrategy{},
 		nil,
 		nil,
@@ -930,7 +937,7 @@ func TestChatClient_ErrorHandling(t *testing.T) {
 		{
 			name:             "provisioner error",
 			provisionerError: fmt.Errorf("failed to provision key"),
-			expectedError:    "provision OpenRouter key",
+			expectedError:    "resolve OpenRouter key",
 		},
 		{
 			name:               "start or resume error",
@@ -965,6 +972,7 @@ func TestChatClient_ErrorHandling(t *testing.T) {
 				testenv.NewLogger(t),
 				guardianPolicy,
 				provisioner,
+				&PlatformKeyResolver{Provisioner: provisioner},
 				captureStrategy,
 				trackingStrategy,
 				titleGenerator,
@@ -1035,6 +1043,7 @@ func TestChatClient_MultipleCompletions_TitleAndResolutionScheduling(t *testing.
 		testenv.NewLogger(t),
 		guardianPolicy,
 		provisioner,
+		&PlatformKeyResolver{Provisioner: provisioner},
 		captureStrategy,
 		trackingStrategy,
 		titleGenerator,
@@ -1199,6 +1208,7 @@ func TestChatClient_NilChatID_ShouldNotScheduleTitleGeneration(t *testing.T) {
 		testenv.NewLogger(t),
 		guardianPolicy,
 		&mockProvisioner{apiKey: "test-api-key"},
+		&PlatformKeyResolver{Provisioner: &mockProvisioner{apiKey: "test-api-key"}},
 		&mockMessageCaptureStrategy{},
 		&mockUsageTrackingStrategy{},
 		titleGenerator,
@@ -1245,6 +1255,7 @@ func TestChatClient_TitleGeneration_ScheduledPerCompletionWithValidChatID(t *tes
 		testenv.NewLogger(t),
 		guardianPolicy,
 		&mockProvisioner{apiKey: "test-api-key"},
+		&PlatformKeyResolver{Provisioner: &mockProvisioner{apiKey: "test-api-key"}},
 		tracker,
 		&mockUsageTrackingStrategy{},
 		titleGenerator,
@@ -1309,6 +1320,7 @@ func TestChatClient_ReloadChat_NoDuplicateMessages(t *testing.T) {
 		testenv.NewLogger(t),
 		guardianPolicy,
 		&mockProvisioner{apiKey: "test-api-key"},
+		&PlatformKeyResolver{Provisioner: &mockProvisioner{apiKey: "test-api-key"}},
 		tracker,
 		&mockUsageTrackingStrategy{},
 		&mockChatTitleGenerator{},
@@ -1437,6 +1449,7 @@ func TestChatClient_GetCompletion_WithJSONSchema(t *testing.T) {
 		testenv.NewLogger(t),
 		guardianPolicy,
 		provisioner,
+		&PlatformKeyResolver{Provisioner: provisioner},
 		captureStrategy,
 		trackingStrategy,
 		titleGenerator,
@@ -1552,6 +1565,7 @@ func TestChatClient_GetCompletion_WithoutJSONSchema(t *testing.T) {
 		testenv.NewLogger(t),
 		guardianPolicy,
 		provisioner,
+		&PlatformKeyResolver{Provisioner: provisioner},
 		captureStrategy,
 		trackingStrategy,
 		titleGenerator,
@@ -1668,6 +1682,7 @@ func TestChatClient_GetCompletion_UnsupportedModelFallback(t *testing.T) {
 		testenv.NewLogger(t),
 		guardianPolicy,
 		&mockProvisioner{apiKey: "test-api-key"},
+		&PlatformKeyResolver{Provisioner: &mockProvisioner{apiKey: "test-api-key"}},
 		&mockMessageCaptureStrategy{},
 		&mockUsageTrackingStrategy{},
 		&mockChatTitleGenerator{},
@@ -1725,6 +1740,7 @@ func TestChatClient_GetCompletion_AttributionFields(t *testing.T) {
 		testenv.NewLogger(t),
 		guardianPolicy,
 		&mockProvisioner{apiKey: "test-api-key"},
+		&PlatformKeyResolver{Provisioner: &mockProvisioner{apiKey: "test-api-key"}},
 		&mockMessageCaptureStrategy{},
 		&mockUsageTrackingStrategy{},
 		&mockChatTitleGenerator{},
@@ -1778,4 +1794,69 @@ func (t *testTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		return nil, fmt.Errorf("test transport round trip: %w", err)
 	}
 	return resp, nil
+}
+
+// recordingKeyResolver captures the arguments of the last ResolveKey call.
+type recordingKeyResolver struct {
+	mu      sync.Mutex
+	orgID   string
+	project string
+	slot    billing.ModelUsageSource
+	keyType KeyType
+}
+
+var _ KeyResolver = (*recordingKeyResolver)(nil)
+
+func (r *recordingKeyResolver) ResolveKey(_ context.Context, orgID string, projectID string, slot billing.ModelUsageSource, keyType KeyType) (ResolvedKey, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.orgID, r.project, r.slot, r.keyType = orgID, projectID, slot, keyType
+	return ResolvedKey{Key: "recorded-key", Customer: false}, nil
+}
+
+func TestChatClient_InitializeRequest_KeySlotOverridesUsageSourceForResolution(t *testing.T) {
+	t.Parallel()
+
+	resolver := &recordingKeyResolver{}
+	client := &ChatClient{
+		logger:      testenv.NewLogger(t),
+		keyResolver: resolver,
+	}
+
+	projectID := uuid.New()
+	req := CompletionRequest{
+		OrgID:       "test-org",
+		ProjectID:   projectID.String(),
+		Messages:    []or.ChatMessages{CreateMessageUser("hi")},
+		UsageSource: billing.ModelUsageSourceSlack,
+		KeySlot:     billing.ModelUsageSourceAssistants,
+	}
+
+	_, err := client.initializeRequest(t.Context(), req)
+	require.NoError(t, err)
+	require.Equal(t, billing.ModelUsageSourceAssistants, resolver.slot,
+		"the key must resolve against the server-derived slot, not the client-claimable usage source")
+}
+
+func TestChatClient_InitializeRequest_EmptyKeySlotFallsBackToUsageSource(t *testing.T) {
+	t.Parallel()
+
+	resolver := &recordingKeyResolver{}
+	client := &ChatClient{
+		logger:      testenv.NewLogger(t),
+		keyResolver: resolver,
+	}
+
+	projectID := uuid.New()
+	req := CompletionRequest{
+		OrgID:       "test-org",
+		ProjectID:   projectID.String(),
+		Messages:    []or.ChatMessages{CreateMessageUser("hi")},
+		UsageSource: billing.ModelUsageSourceSlack,
+	}
+
+	_, err := client.initializeRequest(t.Context(), req)
+	require.NoError(t, err)
+	require.Equal(t, billing.ModelUsageSourceSlack, resolver.slot,
+		"trusted callers set UsageSource server-side; it doubles as the slot when KeySlot is unset")
 }

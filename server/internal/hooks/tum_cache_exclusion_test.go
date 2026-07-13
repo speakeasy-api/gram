@@ -27,7 +27,15 @@ func TestTumCacheExclusion_AllSurfaces(t *testing.T) {
 	chQueries := enableHookTelemetryLogger(t, ctx, ti)
 	authCtx := hookAuthContext(t, ctx)
 	projectID := authCtx.ProjectID.String()
-	now := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
+
+	// Pin event time just after the attribute_metrics_summaries MV ingestion
+	// cutoff (2026-07-14 00:00:00 UTC; see server/clickhouse/schema.sql) so the
+	// MV admits all three surfaces regardless of the wall clock. The Claude and
+	// Codex rows carry an explicit TimeUnixNano, but the Cursor usage row is
+	// stamped server-side (its payload has no timestamp), so drive the service
+	// clock to the same instant.
+	now := time.Date(2026, time.July, 14, 1, 0, 0, 0, time.UTC)
+	ti.service.nowFunc = func() time.Time { return now }
 
 	// Claude: disjoint semantics at the source — input excludes the cache
 	// fields. TUM = 100 + 40 + 7000 (cache write) = 7140.

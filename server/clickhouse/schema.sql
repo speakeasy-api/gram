@@ -507,8 +507,9 @@ CREATE TABLE IF NOT EXISTS attribute_metrics_summaries (
     -- time_bucket) so rows with identical keys always carry the same flag and
     -- merges can never combine a hidden row with a visible one.
     --
-    -- MV inserts omit both columns and take the defaults (generation 0,
-    -- active). Production runbook:
+    -- The MV emits both columns explicitly as constants (generation 0, active) —
+    -- a TO-table MV inserts positionally, so the SELECT must produce every
+    -- target column; column defaults are not applied. Production runbook:
     -- clickhouse/local/backfill/20260713000000_backfill-attribute-metrics-summaries.sql
     generation UInt8,
     is_active UInt8 DEFAULT 1
@@ -649,7 +650,15 @@ SELECT
     if(is_claude_api_request, toString(attributes.skill.name), '') AS skill_name,
     if(is_claude_api_request, toString(attributes.agent.name), '') AS agent_name,
     if(is_claude_api_request, toString(attributes.mcp_server.name), '') AS mcp_server_name,
-    if(is_claude_api_request, toString(attributes.mcp_tool.name), '') AS mcp_tool_name
+    if(is_claude_api_request, toString(attributes.mcp_tool.name), '') AS mcp_tool_name,
+
+    -- Rollback machinery: MV rows are always generation 0 and active. These are
+    -- emitted explicitly (as constants) rather than relying on column defaults —
+    -- a TO-table MV inserts positionally with no column list, so the SELECT must
+    -- produce every target column or ingestion fails with a column-count
+    -- mismatch. Constants need no GROUP BY entry.
+    toUInt8(0) AS generation,
+    toUInt8(1) AS is_active
 FROM telemetry_logs
 -- Admit only the three agent surfaces: Claude OTEL api_request/tool_result
 -- rows, Codex/Cursor usage rows, and Codex/Cursor completed tool-call hook

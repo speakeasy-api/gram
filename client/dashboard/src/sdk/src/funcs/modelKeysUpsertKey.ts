@@ -13,9 +13,9 @@ import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  QueryRiskTokensResult,
-  QueryRiskTokensResult$inboundSchema,
-} from "../models/components/queryrisktokensresult.js";
+  ModelProviderKey,
+  ModelProviderKey$inboundSchema,
+} from "../models/components/modelproviderkey.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -31,27 +31,27 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  QueryRiskTokensRequest,
-  QueryRiskTokensRequest$outboundSchema,
-  QueryRiskTokensSecurity,
-} from "../models/operations/queryrisktokens.js";
+  UpsertModelProviderKeyRequest,
+  UpsertModelProviderKeyRequest$outboundSchema,
+  UpsertModelProviderKeySecurity,
+} from "../models/operations/upsertmodelproviderkey.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * queryRiskTokens telemetry
+ * upsertKey modelKeys
  *
  * @remarks
- * Org-scoped daily token usage split by risk involvement: tokens from sessions with at least one active risk finding in the window versus all session tokens. Powers the token-usage panel's risk breakdown on the costs page.
+ * Create or replace the model provider key for a slot. The key is validated with the provider, then stored encrypted.
  */
-export function telemetryQueryRiskTokens(
+export function modelKeysUpsertKey(
   client: GramCore,
-  request: QueryRiskTokensRequest,
-  security?: QueryRiskTokensSecurity | undefined,
+  request: UpsertModelProviderKeyRequest,
+  security?: UpsertModelProviderKeySecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    QueryRiskTokensResult,
+    ModelProviderKey,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -73,13 +73,13 @@ export function telemetryQueryRiskTokens(
 
 async function $do(
   client: GramCore,
-  request: QueryRiskTokensRequest,
-  security?: QueryRiskTokensSecurity | undefined,
+  request: UpsertModelProviderKeyRequest,
+  security?: UpsertModelProviderKeySecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      QueryRiskTokensResult,
+      ModelProviderKey,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -95,22 +95,30 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(QueryRiskTokensRequest$outboundSchema, value),
+    (value) => z.parse(UpsertModelProviderKeyRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.TelemetryWindowPayload, {
+  const body = encodeJSON("body", payload.UpsertKeyRequestBody, {
     explode: true,
   });
 
-  const path = pathToFunc("/rpc/telemetry.queryRiskTokens")();
+  const path = pathToFunc("/rpc/modelKeys.upsertKey")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
     Accept: "application/json",
+    "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
+      explode: false,
+      charEncoding: "none",
+    }),
+    "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
+      explode: false,
+      charEncoding: "none",
+    }),
     "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
       explode: false,
       charEncoding: "none",
@@ -120,9 +128,26 @@ async function $do(
   const requestSecurity = resolveSecurity(
     [
       {
+        fieldName: "Gram-Project",
+        type: "apiKey:header",
+        value: security?.option1?.projectSlugHeaderGramProject,
+      },
+      {
         fieldName: "Gram-Session",
         type: "apiKey:header",
-        value: security?.sessionHeaderGramSession,
+        value: security?.option1?.sessionHeaderGramSession,
+      },
+    ],
+    [
+      {
+        fieldName: "Gram-Key",
+        type: "apiKey:header",
+        value: security?.option2?.apikeyHeaderGramKey,
+      },
+      {
+        fieldName: "Gram-Project",
+        type: "apiKey:header",
+        value: security?.option2?.projectSlugHeaderGramProject,
       },
     ],
   );
@@ -130,7 +155,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "queryRiskTokens",
+    operationID: "upsertModelProviderKey",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -174,7 +199,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    QueryRiskTokensResult,
+    ModelProviderKey,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -185,7 +210,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, QueryRiskTokensResult$inboundSchema),
+    M.json(200, ModelProviderKey$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),

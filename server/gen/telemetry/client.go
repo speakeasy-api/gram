@@ -26,7 +26,6 @@ type Client struct {
 	GetObservabilityOverviewEndpoint  goa.Endpoint
 	GetProjectOverviewEndpoint        goa.Endpoint
 	QueryEndpoint                     goa.Endpoint
-	QueryRiskTokensEndpoint           goa.Endpoint
 	QueryTumDetailsEndpoint           goa.Endpoint
 	ListSessionsEndpoint              goa.Endpoint
 	ListFilterOptionsEndpoint         goa.Endpoint
@@ -39,7 +38,7 @@ type Client struct {
 }
 
 // NewClient initializes a "telemetry" service client given the endpoints.
-func NewClient(searchLogs, searchToolCalls, searchChats, searchUsers, captureEvent, getProjectMetricsSummary, getUserMetricsSummary, getEmployeeDataFlowGraph, getObservabilityOverview, getProjectOverview, query, queryRiskTokens, queryTumDetails, listSessions, listFilterOptions, listAttributeKeys, getHooksSummary, getToolUsageSummary, listToolUsageTraces, getToolUsageFilterOptions, listHooksTraces goa.Endpoint) *Client {
+func NewClient(searchLogs, searchToolCalls, searchChats, searchUsers, captureEvent, getProjectMetricsSummary, getUserMetricsSummary, getEmployeeDataFlowGraph, getObservabilityOverview, getProjectOverview, query, queryTumDetails, listSessions, listFilterOptions, listAttributeKeys, getHooksSummary, getToolUsageSummary, listToolUsageTraces, getToolUsageFilterOptions, listHooksTraces goa.Endpoint) *Client {
 	return &Client{
 		SearchLogsEndpoint:                searchLogs,
 		SearchToolCallsEndpoint:           searchToolCalls,
@@ -52,7 +51,6 @@ func NewClient(searchLogs, searchToolCalls, searchChats, searchUsers, captureEve
 		GetObservabilityOverviewEndpoint:  getObservabilityOverview,
 		GetProjectOverviewEndpoint:        getProjectOverview,
 		QueryEndpoint:                     query,
-		QueryRiskTokensEndpoint:           queryRiskTokens,
 		QueryTumDetailsEndpoint:           queryTumDetails,
 		ListSessionsEndpoint:              listSessions,
 		ListFilterOptionsEndpoint:         listFilterOptions,
@@ -311,29 +309,6 @@ func (c *Client) Query(ctx context.Context, p *QueryPayload) (res *QueryResult, 
 		return
 	}
 	return ires.(*QueryResult), nil
-}
-
-// QueryRiskTokens calls the "queryRiskTokens" endpoint of the "telemetry"
-// service.
-// QueryRiskTokens may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) QueryRiskTokens(ctx context.Context, p *QueryRiskTokensPayload) (res *QueryRiskTokensResult, err error) {
-	var ires any
-	ires, err = c.QueryRiskTokensEndpoint(ctx, p)
-	if err != nil {
-		return
-	}
-	return ires.(*QueryRiskTokensResult), nil
 }
 
 // QueryTumDetails calls the "queryTumDetails" endpoint of the "telemetry"

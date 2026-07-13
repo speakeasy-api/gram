@@ -2,7 +2,7 @@ import path from "node:path";
 import fs from "node:fs";
 import process from "node:process";
 
-import { defineConfig } from "vite";
+import { defineConfig, normalizePath, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
@@ -38,6 +38,51 @@ const manualChunkGroups: [string, string[]][] = [
     ],
   ],
 ];
+
+const themeInitPath = path.resolve(__dirname, "src/theme-init.ts");
+const themeInitScriptPattern =
+  /<script src="\/src\/theme-init\.ts"\s*><\/script>/;
+
+function themeInitPlugin(): Plugin {
+  return {
+    name: "theme-init",
+    apply: "build",
+    buildStart() {
+      this.emitFile({
+        type: "chunk",
+        id: themeInitPath,
+        name: "theme-init",
+      });
+    },
+    transformIndexHtml: {
+      order: "post",
+      handler(html, context) {
+        if (!context.bundle) {
+          this.error("Theme bootstrap output bundle is unavailable");
+        }
+
+        const normalizedThemeInitPath = normalizePath(themeInitPath);
+        const themeInitChunk = Object.values(context.bundle).find(
+          (output) =>
+            output.type === "chunk" &&
+            output.facadeModuleId !== null &&
+            normalizePath(output.facadeModuleId) === normalizedThemeInitPath,
+        );
+        if (!themeInitChunk) {
+          this.error("Could not find the emitted theme bootstrap chunk");
+        }
+        if (!themeInitScriptPattern.test(html)) {
+          this.error("Could not find the theme bootstrap script in index.html");
+        }
+
+        return html.replace(
+          themeInitScriptPattern,
+          `<script src="/${themeInitChunk.fileName}"></script>`,
+        );
+      },
+    },
+  };
+}
 
 function packagePathRegex(packages: string[]): RegExp {
   const alternatives = packages.map((pkg) =>
@@ -175,7 +220,7 @@ export default defineConfig(({ command }) => {
           }
         : undefined,
     },
-    plugins: [react(), tailwindcss()],
+    plugins: [themeInitPlugin(), react(), tailwindcss()],
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./src"),

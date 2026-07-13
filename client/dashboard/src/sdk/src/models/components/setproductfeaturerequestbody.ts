@@ -19,6 +19,7 @@ export const FeatureName = {
   Scim: "scim",
   ObservabilityMode: "observability_mode",
   HooksBrowserLogin: "hooks_browser_login",
+  CustomModelKeys: "custom_model_keys",
 } as const;
 /**
  * Name of the feature to update
