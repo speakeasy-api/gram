@@ -220,10 +220,12 @@ func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, m
 
 	start := time.Now()
 	verdict, err := c.call(ctx, req, msg, userID)
-	c.metrics.RecordClassification(ctx, req.OrgID, labelFor(verdict.IsAttack, err), o11y.OutcomeFromError(err), time.Since(start))
+	outcome := o11y.OutcomeFromErrorWithTimeout(err)
+	c.metrics.RecordClassification(ctx, req.OrgID, labelFor(verdict.IsAttack, err), outcome, time.Since(start))
 	if err != nil {
 		c.logger.WarnContext(ctx, "pi judge call failed; failing open",
 			attr.SlogError(err),
+			attr.SlogOutcome(string(outcome)),
 			attr.SlogOrganizationID(req.OrgID),
 		)
 		return safeResult
@@ -306,6 +308,7 @@ func (c *Engine) call(ctx context.Context, req promptinjection.Request, msg judg
 		Model:                     c.model,
 		Stream:                    false,
 		UsageSource:               billing.ModelUsageSourceRiskAnalysis,
+		KeyType:                   gramopenrouter.KeyTypeInternal,
 		ChatID:                    uuid.Nil,
 		UserID:                    userID,
 		ExternalUserID:            "",

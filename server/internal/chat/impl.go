@@ -424,23 +424,28 @@ func (s *Service) chatVisibilityScope(ctx context.Context, authCtx *contextvalue
 	// owner-matching, not via chat:read.
 	//
 	// When RBAC is not enforced for the org we must NOT fall through to "see all"
-	// — Require short-circuits to allow when enforcement is off, so check
+	// — Evaluate short-circuits to true when enforcement is off, so check
 	// ShouldEnforce explicitly and treat the disabled case as constrained.
+	//
+	// Use Evaluate rather than Require here: this is a visibility branch, not an
+	// access gate. Members legitimately hold no chat:read grant and fall through
+	// to own-session visibility, so a denial is the expected, non-error outcome.
+	// Require would stamp a chat:read "DENIED" authz challenge on every such
+	// listing (the insights dock lists chats on every page load), polluting the
+	// diagnostics UI and misleading admins into granting chat:read — the very
+	// coupling this path must avoid.
 	canReadAllSessions := false
 	if enforce, err := s.authz.ShouldEnforce(ctx); err != nil {
 		s.logger.WarnContext(ctx, "could not determine RBAC enforcement for chat visibility; showing own sessions", attr.SlogError(err))
 	} else if enforce {
-		err := s.authz.Require(ctx, authz.ChatReadCheck(authCtx.ProjectID.String()))
-		var shareableErr *oops.ShareableError
-		switch {
-		case err == nil:
-			canReadAllSessions = true
-		case errors.As(err, &shareableErr) && shareableErr.Code == oops.CodeForbidden:
-			// Forbidden simply means the caller can only read their own sessions.
-		default:
-			// Any other error is unexpected; log it but still serve own sessions
-			// rather than failing the listing.
+		allowed, err := s.authz.Evaluate(ctx, authz.ChatReadCheck(authCtx.ProjectID.String()))
+		if err != nil {
+			// An unsatisfied grant yields (false, nil); a non-nil error is
+			// unexpected. Log it but still serve own sessions rather than
+			// failing the listing.
 			s.logger.WarnContext(ctx, "chat:read visibility check failed for chat listing; showing own sessions", attr.SlogError(err))
+		} else {
+			canReadAllSessions = allowed
 		}
 	}
 
@@ -1166,6 +1171,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		Model:          chatRequest.Model,
 		Stream:         false,
 		UsageSource:    source,
+		KeyType:        openrouter.KeyTypeChat,
 		ChatID:         completionChatID,
 		UserID:         userID,
 		ExternalUserID: authCtx.ExternalUserID,
@@ -1411,7 +1417,9 @@ func (s *Service) CreditUsage(ctx context.Context, payload *gen.CreditUsagePaylo
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	creditsUsed, creditLimit, err := s.openRouter.GetCreditsUsed(ctx, authCtx.ActiveOrganizationID)
+	// The dashboard's credit meter reports the chat key only; the internal
+	// key's budget is an operational concern, not a customer-facing one.
+	creditsUsed, creditLimit, err := s.openRouter.GetCreditsUsed(ctx, authCtx.ActiveOrganizationID, openrouter.KeyTypeChat)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get credit usage").LogError(ctx, s.logger)
 	}

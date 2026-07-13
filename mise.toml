@@ -230,7 +230,12 @@ GRAM_FUNCTIONS_LOCAL_RUNNER_ROOT = "{{config_root}}/local/functions"
 ########################################
 ## Gram Assistant runtime settings ##
 ########################################
-GRAM_ASSISTANT_RUNTIME_PROVIDER = "flyio"
+## Where assistant runtimes run.
+## Allowed values: local, flyio, gke.
+## The local provider starts runtime containers on demand on this machine's
+## Docker daemon. Build the image with `mise run build:assistants-runtime-image`.
+GRAM_ASSISTANT_RUNTIME_PROVIDER = "local"
+GRAM_ASSISTANT_RUNTIME_OCI_IMAGE = "gram-assistant-runtime"
 
 ##################
 ## MCP Registry ##

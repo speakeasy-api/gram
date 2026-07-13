@@ -255,15 +255,17 @@ func seedRemoteMCPEndpoint(t *testing.T, ctx context.Context, ti *testInstance, 
 	remoteServer = seedRemoteMCPServer(t, ctx, ti, projectID, upstreamURL, headers...)
 	mcpServerID, err := uuid.NewV7()
 	require.NoError(t, err)
+	issuerID := seedUserSessionIssuer(t, ctx, ti, projectID)
 	mcpServer, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ID:                mcpServerID,
-		ProjectID:         projectID,
-		Name:              conv.ToPGText("test mcp server"),
-		Slug:              conv.ToPGText("test-mcp-server-" + mcpServerID.String()[len(mcpServerID.String())-4:]),
-		EnvironmentID:     uuid.NullUUID{},
-		RemoteMcpServerID: uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
-		ToolsetID:         uuid.NullUUID{},
-		Visibility:        visibility,
+		ID:                  mcpServerID,
+		ProjectID:           projectID,
+		Name:                conv.ToPGText("test mcp server"),
+		Slug:                conv.ToPGText("test-mcp-server-" + mcpServerID.String()[len(mcpServerID.String())-4:]),
+		EnvironmentID:       uuid.NullUUID{},
+		RemoteMcpServerID:   uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
+		ToolsetID:           uuid.NullUUID{},
+		Visibility:          visibility,
+		UserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
 	})
 	require.NoError(t, err)
 

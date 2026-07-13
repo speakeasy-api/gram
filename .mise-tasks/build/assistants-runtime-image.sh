@@ -15,21 +15,13 @@ fi
 arch="${arch/aarch64/arm64}"
 arch="${arch/x86_64/amd64}"
 
-image="gram-assistant-runtime:dev"
+image="${GRAM_ASSISTANT_RUNTIME_OCI_IMAGE:-gram-assistant-runtime}:dev"
 
 echo "Building assistant runtime image for architecture(s): $arch"
 docker build --platform "linux/${arch}" -f ./agents/runtime-image/Dockerfile -t "${image}" .
 
-if [ -n "${GRAM_ASSISTANT_RUNTIME_OCI_IMAGE:-}" ] && [ "$arch" = "amd64" ]; then
-  fly_image="${GRAM_ASSISTANT_RUNTIME_OCI_IMAGE}:dev"
-  docker rmi "$fly_image" || true
-  docker tag "${image}" "$fly_image"
-  docker push "$fly_image"
-  echo ""
-  echo "Pushed image to Fly.io registry as:"
-  echo "$fly_image"
-  echo ""
-fi
-
 echo "Image available locally as:"
 echo "${image}"
+echo ""
+echo "The local assistant runtime provider picks it up on the next admission"
+echo "or recycle — no registry push needed."

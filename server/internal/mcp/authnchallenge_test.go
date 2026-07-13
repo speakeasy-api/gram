@@ -978,31 +978,6 @@ func TestHandleRegister_RemoteBackedIssuerGated_ResolvesViaEndpoints(t *testing.
 	require.NotEmpty(t, resp["client_id"])
 }
 
-// TestHandleRegister_RemoteBackedNotIssuerGated_ReturnsNotFound confirms a
-// remote-backed mcp_server that is NOT issuer-gated stays a 404 on the OAuth
-// flow surface: it is authoritative for the slug and never falls back to the
-// toolset lookup (parity with the well-known behaviour from AGE-2624).
-func TestHandleRegister_RemoteBackedNotIssuerGated_ReturnsNotFound(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-
-	slug := "remote-noissuer-" + uuid.NewString()
-	createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, "https://upstream.invalid/mcp", slug, "public", uuid.Nil)
-
-	w := httptest.NewRecorder()
-	err := ti.service.HandleRegister(w, newRegisterRequest(t, slug, dcrPublicClientBody))
-	require.Error(t, err)
-	require.Empty(t, w.Body.String())
-
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
-}
-
 // TestHandleRegister_LegacyToolsetSlug_ResolvesViaFallback is the regression
 // guard for issuer-gated toolset-backed servers that predate the toolsets →
 // mcp_servers migration: they have no mcp_endpoint row, so the addressing

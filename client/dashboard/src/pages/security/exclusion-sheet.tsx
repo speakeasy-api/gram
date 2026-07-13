@@ -26,13 +26,15 @@ import { invalidateAllRiskListResults } from "@gram/client/react-query/riskListR
 import { invalidateAllRiskListResultsByChat } from "@gram/client/react-query/riskListResultsByChat.js";
 import { invalidateAllRiskListResultsForAgent } from "@gram/client/react-query/riskListResultsForAgent.js";
 import { invalidateAllRiskOverview } from "@gram/client/react-query/riskOverview.js";
+import { useRiskSuggestExclusionMutation } from "@gram/client/react-query/riskSuggestExclusion.js";
 import { useRiskUpdateExclusionMutation } from "@gram/client/react-query/riskUpdateExclusion.js";
 import type { RiskExclusion } from "@gram/client/models/components/riskexclusion.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
+import { Loader2, Sparkles } from "lucide-react";
 import type { JSX } from "react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { BUILTIN_RULES_BY_CATEGORY } from "./detection-rules-data";
 import {
   type ExclusionFields,
   parseExclusionExpression,
@@ -40,6 +42,13 @@ import {
 } from "./exclusion-expression";
 
 export const GLOBAL_SCOPE = "__global__";
+
+// Rule ids the AI suggestion may reference in rule_id clauses. Built-ins only:
+// they cover the common asks ("email findings", "AWS keys") without an extra
+// fetch; custom rule ids can still be named in the prompt itself.
+const BUILTIN_RULE_ID_LIST = Object.values(BUILTIN_RULES_BY_CATEGORY)
+  .flat()
+  .map((rule) => rule.id);
 
 export type ExclusionSheetState =
   | { mode: "create"; initialExpression?: string; initialScope?: string }
@@ -229,6 +238,49 @@ function ExclusionForm({
   );
   const [enabled, setEnabled] = useState<boolean>(editing?.enabled ?? true);
   const [error, setError] = useState<string | null>(null);
+  const [askPrompt, setAskPrompt] = useState("");
+
+  // Dedicated exclusion-suggestion endpoint. The structured fields it returns
+  // are serialized through the same mapping the form parses on save, so a
+  // suggestion the user accepts untouched is guaranteed to round-trip.
+  const suggestMutation = useRiskSuggestExclusionMutation({
+    onSuccess: (data) => {
+      if (!data.matchType || !data.matchValue) {
+        toast.error("No suggestion came back. Try rewording your request.");
+        return;
+      }
+      setExpression(
+        serializeExclusionExpression({
+          matchType: data.matchType,
+          matchValue: data.matchValue,
+          ruleIdFilter: data.ruleIdFilter ?? "",
+          sourceFilter: data.sourceFilter ?? "",
+        }),
+      );
+      setError(null);
+    },
+    onError: (err) => {
+      const message =
+        err instanceof Error ? err.message : "Failed to generate suggestion";
+      toast.error(message);
+    },
+  });
+
+  const handleSuggest = () => {
+    const prompt = askPrompt.trim();
+    if (prompt.length < 3) {
+      toast.error("Describe what you want to stop flagging first.");
+      return;
+    }
+    suggestMutation.mutate({
+      request: {
+        suggestExclusionRequestBody: {
+          prompt,
+          knownRuleIds: BUILTIN_RULE_ID_LIST,
+        },
+      },
+    });
+  };
 
   const handleSave = () => {
     const parsed = parseExclusionExpression(expression);
@@ -260,6 +312,39 @@ function ExclusionForm({
               ))}
             </SelectContent>
           </Select>
+        </div>
+
+        <div className="space-y-2">
+          <Label>Suggest with AI</Label>
+          <TextArea
+            rows={2}
+            value={askPrompt}
+            onChange={setAskPrompt}
+            placeholder="e.g. stop flagging our shared test account jane.doe@acme.com in email findings"
+          />
+          <div className="flex items-center justify-between gap-3">
+            <Type className="text-muted-foreground" small>
+              Describe what to stop flagging. We'll write the criteria
+              expression, you tweak before saving.
+            </Type>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={
+                askPrompt.trim().length < 3 || suggestMutation.isPending
+              }
+              onClick={handleSuggest}
+            >
+              <Button.LeftIcon>
+                {suggestMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Sparkles className="h-4 w-4" />
+                )}
+              </Button.LeftIcon>
+              <Button.Text>Suggest with AI</Button.Text>
+            </Button>
+          </div>
         </div>
 
         <div className="space-y-2">

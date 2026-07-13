@@ -2,7 +2,7 @@
   "name": "@gram-ai/elements",
   "description": "Gram Elements is a library of UI primitives for building chat-like experiences for MCP Servers.",
   "type": "module",
-  "version": "1.42.0",
+  "version": "1.42.1",
   "main": "dist/index.js",
   "exports": {
     ".": {
@@ -228,7 +228,7 @@
     "vite": "catalog:",
     "vite-plugin-dts": "^5.0.3",
     "vite-plugin-turbosnap": "^1.0.3",
-    "vitest": "^4.1.9",
+    "vitest": "^4.1.10",
     "zustand": "^5.0.14"
   },
   "msw": {

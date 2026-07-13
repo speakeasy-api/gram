@@ -32,6 +32,7 @@ export const DEFAULT_CONTEXT_LIMIT = 200_000;
  */
 const MODEL_CONTEXT_LIMITS: Partial<Record<KnownModelId, number>> = {
   // Anthropic (1M tier where available, else 200K)
+  "anthropic/claude-fable-5": 1_000_000,
   "anthropic/claude-sonnet-5": 1_000_000,
   "anthropic/claude-opus-4.8": 1_000_000,
   "anthropic/claude-opus-4.7": 1_000_000,
@@ -39,10 +40,12 @@ const MODEL_CONTEXT_LIMITS: Partial<Record<KnownModelId, number>> = {
   "anthropic/claude-opus-4.5": 200_000,
   "anthropic/claude-sonnet-4.6": 1_000_000,
   "anthropic/claude-sonnet-4.5": 1_000_000,
-  "anthropic/claude-sonnet-4": 1_000_000,
   "anthropic/claude-haiku-4.5": 200_000,
 
   // OpenAI
+  "openai/gpt-5.6-sol": 1_050_000,
+  "openai/gpt-5.6-terra": 1_050_000,
+  "openai/gpt-5.6-luna": 1_050_000,
   "openai/gpt-5.5": 1_000_000,
   "openai/gpt-5.5-pro": 1_000_000,
   "openai/gpt-5.4": 1_000_000,
@@ -51,21 +54,15 @@ const MODEL_CONTEXT_LIMITS: Partial<Record<KnownModelId, number>> = {
   "openai/gpt-5.3-codex": 400_000,
   "openai/gpt-5.1": 400_000,
   "openai/gpt-5": 400_000,
-  "openai/gpt-4.1": 1_000_000,
-  "openai/o4-mini": 200_000,
-  "openai/o3": 200_000,
 
   // Google
   "google/gemini-3.5-flash": 1_000_000,
   "google/gemini-3.1-pro-preview": 1_000_000,
   "google/gemini-3.1-flash-lite": 1_000_000,
-  "google/gemini-2.5-pro": 1_000_000,
-  "google/gemini-2.5-flash": 1_000_000,
 
   // Others
   "deepseek/deepseek-v4-pro": 1_000_000,
   "deepseek/deepseek-v4-flash": 1_000_000,
-  "deepseek/deepseek-r1": 128_000,
   "deepseek/deepseek-v3.2": 128_000,
   "meta-llama/llama-4-maverick": 1_000_000,
   "x-ai/grok-4.3": 1_000_000,

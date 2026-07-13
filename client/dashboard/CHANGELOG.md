@@ -1,5 +1,65 @@
 # dashboard
 
+## 0.87.0
+
+### Minor Changes
+
+- 4d22067: Add "Suggest with AI" to the exclusion create/edit form, backed by a new dedicated `risk.suggestExclusion` endpoint (separate from `risk.suggestCustomRules`). It returns structured match fields (match type, match value, rule id/source filters) that the dashboard serializes into the exclusion criteria expression — regex suggestions are validated (RE2 compile, length cap) server-side before they reach the form.
+- f3ea11b: Add the project-scoped Shadow MCP inventory listing API and generated client SDK support.
+
+### Patch Changes
+
+- 00ac3b8: Fix deletion of organization-level remote session clients, derive tunnel gateway URLs from the active environment, and detach remote identity providers without deleting shared clients.
+
+## 0.86.0
+
+### Minor Changes
+
+- b8e7fe0: Hook plugin browser sign-in is now opt-in per organization. By default, published plugins never open a browser: they authenticate with explicitly configured credentials, a previously cached key, or the organization-wide key, and the login helper prints manual setup instructions instead. Organization admins can re-enable the interactive browser sign-in from the org settings page.
+
+### Patch Changes
+
+- 78898af: Include Codex alongside Claude Code and Cursor in example agent lists across risk policies, logging, insights, and the connect-server dialog.
+- a29bea1: feat: expose `is_default` on the plugin API and use it in the dashboard instead of matching on the "Default" name/slug. The onboarding distribute-servers step and plugin card/detail pages previously identified the org's fallback plugin by string comparison (`name === "Default"` / `slug === "default"`), a proxy that predates the server's `is_default` column and unique-per-project index. Both now read the real `is_default` flag returned by `listPlugins`/`getPlugin`.
+- 7c637c7: Refresh the OpenRouter model list: add Claude Fable 5 (marked Expensive) and the GPT-5.6 series (Sol/Terra/Luna), replace the playground picker's "(Expensive)" label suffixes with a badge, and remove deprecated models (Claude Sonnet 4, GPT-4.1, o3, o4-mini, Gemini 2.5 Pro/Flash, DeepSeek R1).
+- 4a98092: Address review feedback from the OpenRouter model refresh: pin explicit per-provider fallback models in ResolveModel so de-listed or unknown models never silently resolve to a premium model (previously anthropic/\* fell back alphabetically to Claude Fable 5), give elements an explicit DEFAULT_MODEL (Claude Sonnet 5) instead of MODELS[0], and remove Gemini 3.5 Flash from the prompt-policy judge picker (the judge disables reasoning, which that model rejects).
+- Updated dependencies [7c637c7]
+- Updated dependencies [4a98092]
+  - @gram-ai/elements@1.42.1
+
+## 0.85.0
+
+### Minor Changes
+
+- da79525: Redesign the Plugins pages and add MCP server readiness surfacing:
+
+  - Marketplace card now reflects real setup state: an uninitialized/warning
+    variant (skeleton repo link, "Not published" badge, "Publish now"/"Add
+    collaborators" CTA) shown until the marketplace repo exists **and** has at
+    least one collaborator who has accepted their GitHub invite, distinct from
+    the connected/published state.
+  - Install flow reworked: a single "Install" dropdown (GitHub installation via
+    marketplace, preferred, or direct zip download) replaces the old split
+    button, on both the Plugins index and detail pages, and no longer disables
+    zip download just because the marketplace isn't set up yet.
+  - Default plugin gets special treatment (badge, description, auto-heal on
+    read for projects that predate the feature) and plugin membership no
+    longer N+1-queries its servers.
+  - New collapsible readiness bar on the MCP server ("x" route) sidebar,
+    summarizing Server URL / Authentication / Source / Included in Plugin
+    status with links to fix each.
+  - Server: `GetPublishStatus` now reports whether the marketplace repo has a
+    real (accepted, not just invited) collaborator, cached briefly to avoid
+    hitting GitHub's API on every dashboard poll, and invalidated immediately
+    after publishing adds one.
+
+### Patch Changes
+
+- da79525: Attach MCP servers to the Default plugin when they're enabled, not just when their first endpoint is created — remote MCP servers are created disabled with a pre-staged endpoint, so they previously never auto-attached and manually adding them failed with "mcp server is disabled or has no published endpoint". Also fixes creating a second endpoint for an already-attached server (previously failed on a duplicate-attach conflict), hides endpointless servers from the plugin's add-server picker, and asks for confirmation before removing a server's last address.
+- ae3fc4b: The billing page's Model breakdown now splits into "Risk Policy Analysis Model" — the platform's own risk-policy scanning inference, the metered unit of the TUM contracts — and "Completion Model" for user-facing completion surfaces (playground, elements, MCP chat, Slack). The "Sessions & messages" section and the risk-findings chart stacking are removed: billing meters the act of scanning observed traffic, not the customer's message population. Risk-analysis inference is attributed to the scanned user, so the User, Role, and Division breakdowns now report whose traffic was analyzed.
+- b06aa04: The enrollment page no longer shows 0 tokens and a stale last activity for employees whose telemetry rows split across identity keys: usage rows carrying a user id but no email now merge into the employee's email-keyed summary, linked AI accounts attach to that merged summary, and role breakdowns resolve those users instead of bucketing them as Unassigned. The employees and agents tables also render their pagination footer flush against the table instead of floating below a gap.
+- e3cf1d1: The hooks setup dialog's Claude Code instructions now install from your org's published plugin marketplace (with copyable commands and managed-settings snippets), instead of a public repository marketplace that carried no credentials. Publish status now reports the observability plugin slugs so install instructions always show the exact plugin name.
+
 ## 0.84.0
 
 ### Minor Changes

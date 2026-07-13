@@ -137,6 +137,10 @@ export type RiskPolicy = {
    */
   scopeInclude?: string | undefined;
   /**
+   * CVSS-style severity (0.1-10) the author assigns to findings this policy produces. Descriptive only; changing it does not re-scan messages. Defaults to 5.
+   */
+  score: number;
+  /**
    * Detection sources enabled for this policy.
    */
   sources: Array<string>;
@@ -205,6 +209,7 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
       prompt_injection_rules: z.optional(z.array(z.string())),
       scope_exempt: z.optional(z.string()),
       scope_include: z.optional(z.string()),
+      score: z._default(z.number(), 5),
       sources: z.array(z.string()),
       total_messages: z.int(),
       updated_at: z.pipe(

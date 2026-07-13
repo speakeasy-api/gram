@@ -3,14 +3,19 @@ package repo
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/Masterminds/squirrel"
+
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
 // validJSONPath matches safe dot-separated JSON paths for ClickHouse attribute access.
@@ -28,6 +33,12 @@ import (
 var validJSONPath = regexp.MustCompile(`^@?[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)*$`)
 
 const MaxClaudePromptCorrelationEditDistanceBytes = 65536
+
+// ErrInvalidShadowMCPInventoryURLCursor marks malformed shadow MCP inventory URL list cursors.
+var ErrInvalidShadowMCPInventoryURLCursor = errors.New("invalid shadow mcp inventory url cursor")
+
+// ErrInvalidShadowMCPInventoryUserCursor marks malformed shadow MCP inventory user list cursors.
+var ErrInvalidShadowMCPInventoryUserCursor = errors.New("invalid shadow mcp inventory user cursor")
 
 func userIdentifierExpr(col string) string {
 	return "if(telemetry_logs." + col + " != '', telemetry_logs." + col + ", telemetry_logs.user_email)"
@@ -280,65 +291,754 @@ func (q *Queries) InsertTelemetryLog(ctx context.Context, arg InsertTelemetryLog
 	return q.InsertTelemetryLogs(ctx, []InsertTelemetryLogParams{arg})
 }
 
-// InsertTelemetryLogs inserts telemetry log records into ClickHouse in a single
-// synchronous statement.
-//
-//nolint:wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+// InsertTelemetryLogs inserts telemetry log records using a server-side async
+// insert (async_insert=1, wait_for_async_insert=0). The call is fire-and-forget
+// from CH's perspective: it acks once the rows are queued in CH's async insert
+// buffer, not once they are committed to disk.
 func (q *Queries) InsertTelemetryLogs(ctx context.Context, args []InsertTelemetryLogParams) error {
+	return q.insertTelemetryLogsInto(ctx, "telemetry_logs", args)
+}
+
+type UpsertShadowMCPInventoryURLParams struct {
+	GramProjectID      string
+	CanonicalServerURL string
+	URLHost            string
+	ServerName         string
+	SeenAt             time.Time
+	FirstSeen          time.Time
+	LastSeen           time.Time
+	UpdatedAt          time.Time
+}
+
+type ListShadowMCPInventoryURLsParams struct {
+	GramProjectID string
+	Limit         int
+	Cursor        string
+}
+
+type ShadowMCPInventoryURLRow struct {
+	CanonicalServerURL string    `ch:"canonical_server_url"`
+	URLHost            string    `ch:"url_host"`
+	ServerName         string    `ch:"server_name"`
+	FirstSeen          time.Time `ch:"first_seen"`
+	LastSeen           time.Time `ch:"last_seen"`
+	LastCalledUnixNano int64     `ch:"last_called_unix_nano"`
+}
+
+type ListShadowMCPInventoryUsageParams struct {
+	GramProjectID       string
+	CanonicalServerURLs []string
+	Limit               int
+}
+
+type ShadowMCPInventoryUsageRow struct {
+	CanonicalServerURL string
+	ServerName         string
+	FirstCalled        *time.Time
+	LastCalled         *time.Time
+	CallCount          uint64
+	UserCount          uint64
+	TopUsers           []string
+}
+
+type ListShadowMCPInventoryUsersParams struct {
+	GramProjectID      string
+	CanonicalServerURL string
+	Limit              int
+	Cursor             string
+}
+
+type ShadowMCPInventoryUserRow struct {
+	UserKey    string
+	UserEmail  string
+	LastCalled time.Time
+	CallCount  uint64
+}
+
+type shadowMCPInventoryTraceUsageRow struct {
+	TraceID    string    `ch:"trace_id"`
+	ServerURL  string    `ch:"server_url"`
+	ServerName string    `ch:"server_name"`
+	UserKey    string    `ch:"user_key"`
+	UserEmail  string    `ch:"user_email"`
+	CalledAt   time.Time `ch:"called_at"`
+}
+
+type shadowMCPInventoryURLUpsert struct {
+	GramProjectID      string
+	CanonicalServerURL string
+	URLHost            string
+	ServerName         string
+	FirstSeen          time.Time
+	LastSeen           time.Time
+	UpdatedAt          time.Time
+}
+
+type shadowMCPInventoryURLCursor struct {
+	CanonicalServerURL string `json:"canonical_server_url"`
+	LastCalledUnixNano int64  `json:"last_called_unix_nano"`
+	LastSeenUnixNano   int64  `json:"last_seen_unix_nano"`
+}
+
+type rawShadowMCPInventoryURLCursor struct {
+	CanonicalServerURL string `json:"canonical_server_url"`
+	LastCalledUnixNano *int64 `json:"last_called_unix_nano"`
+	LastSeenUnixNano   int64  `json:"last_seen_unix_nano"`
+}
+
+type shadowMCPInventoryUserCursor struct {
+	UserKey            string `json:"user_key"`
+	LastCalledUnixNano int64  `json:"last_called_unix_nano"`
+	CallCount          uint64 `json:"call_count"`
+}
+
+func EncodeShadowMCPInventoryURLCursor(row ShadowMCPInventoryURLRow) (string, error) {
+	payload := shadowMCPInventoryURLCursor{
+		CanonicalServerURL: row.CanonicalServerURL,
+		LastCalledUnixNano: row.LastCalledUnixNano,
+		LastSeenUnixNano:   row.LastSeen.UTC().UnixNano(),
+	}
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("encoding shadow mcp inventory url cursor: %w", err)
+	}
+
+	return base64.RawURLEncoding.EncodeToString(data), nil
+}
+
+func decodeShadowMCPInventoryURLCursor(cursor string) (shadowMCPInventoryURLCursor, error) {
+	data, err := base64.RawURLEncoding.DecodeString(cursor)
+	if err != nil {
+		return shadowMCPInventoryURLCursor{}, fmt.Errorf("%w: decoding: %w", ErrInvalidShadowMCPInventoryURLCursor, err)
+	}
+
+	var rawPayload rawShadowMCPInventoryURLCursor
+	if err := json.Unmarshal(data, &rawPayload); err != nil {
+		return shadowMCPInventoryURLCursor{}, fmt.Errorf("%w: parsing: %w", ErrInvalidShadowMCPInventoryURLCursor, err)
+	}
+	if rawPayload.LastCalledUnixNano == nil {
+		return shadowMCPInventoryURLCursor{}, fmt.Errorf("%w: last called is required", ErrInvalidShadowMCPInventoryURLCursor)
+	}
+	payload := shadowMCPInventoryURLCursor{
+		CanonicalServerURL: rawPayload.CanonicalServerURL,
+		LastCalledUnixNano: *rawPayload.LastCalledUnixNano,
+		LastSeenUnixNano:   rawPayload.LastSeenUnixNano,
+	}
+	if payload.CanonicalServerURL == "" {
+		return shadowMCPInventoryURLCursor{}, fmt.Errorf("%w: canonical server url is required", ErrInvalidShadowMCPInventoryURLCursor)
+	}
+	if payload.LastSeenUnixNano == 0 {
+		return shadowMCPInventoryURLCursor{}, fmt.Errorf("%w: last seen is required", ErrInvalidShadowMCPInventoryURLCursor)
+	}
+
+	return payload, nil
+}
+
+func EncodeShadowMCPInventoryUserCursor(row ShadowMCPInventoryUserRow) (string, error) {
+	payload := shadowMCPInventoryUserCursor{
+		UserKey:            row.UserKey,
+		LastCalledUnixNano: row.LastCalled.UTC().UnixNano(),
+		CallCount:          row.CallCount,
+	}
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("encoding shadow mcp inventory user cursor: %w", err)
+	}
+
+	return base64.RawURLEncoding.EncodeToString(data), nil
+}
+
+func decodeShadowMCPInventoryUserCursor(cursor string) (shadowMCPInventoryUserCursor, error) {
+	data, err := base64.RawURLEncoding.DecodeString(cursor)
+	if err != nil {
+		return shadowMCPInventoryUserCursor{}, fmt.Errorf("%w: decoding: %w", ErrInvalidShadowMCPInventoryUserCursor, err)
+	}
+
+	var payload shadowMCPInventoryUserCursor
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return shadowMCPInventoryUserCursor{}, fmt.Errorf("%w: parsing: %w", ErrInvalidShadowMCPInventoryUserCursor, err)
+	}
+	if payload.UserKey == "" {
+		return shadowMCPInventoryUserCursor{}, fmt.Errorf("%w: user key is required", ErrInvalidShadowMCPInventoryUserCursor)
+	}
+	if payload.LastCalledUnixNano == 0 {
+		return shadowMCPInventoryUserCursor{}, fmt.Errorf("%w: last called is required", ErrInvalidShadowMCPInventoryUserCursor)
+	}
+	if payload.CallCount == 0 {
+		return shadowMCPInventoryUserCursor{}, fmt.Errorf("%w: call count is required", ErrInvalidShadowMCPInventoryUserCursor)
+	}
+
+	return payload, nil
+}
+
+// UpsertShadowMCPInventoryURLs merges the given rows with any existing
+// inventory rows and writes them using a server-side async insert
+// (fire-and-forget), same as InsertTelemetryLogs.
+func (q *Queries) UpsertShadowMCPInventoryURLs(ctx context.Context, args []UpsertShadowMCPInventoryURLParams) error {
 	if len(args) == 0 {
 		return nil
 	}
 
-	ctx = clickhouse.Context(ctx, clickhouse.WithAsync(false))
-
-	builder := sq.Insert("telemetry_logs").
-		Columns(
-			"id",
-			"time_unix_nano",
-			"observed_time_unix_nano",
-			"severity_text",
-			"body",
-			"trace_id",
-			"span_id",
-			"attributes",
-			"resource_attributes",
-			"gram_project_id",
-			"gram_deployment_id",
-			"gram_function_id",
-			"gram_urn",
-			"service_name",
-			"service_version",
-			"gram_chat_id",
-		)
-
+	upserts := make(map[string]*shadowMCPInventoryURLUpsert, len(args))
 	for _, arg := range args {
+		if arg.GramProjectID == "" || arg.CanonicalServerURL == "" {
+			continue
+		}
+		seenAt := arg.SeenAt
+		if seenAt.IsZero() {
+			seenAt = time.Now()
+		}
+		firstSeen := arg.FirstSeen
+		if firstSeen.IsZero() {
+			firstSeen = seenAt
+		}
+		lastSeen := arg.LastSeen
+		if lastSeen.IsZero() {
+			lastSeen = seenAt
+		}
+		if lastSeen.Before(firstSeen) {
+			firstSeen, lastSeen = lastSeen, firstSeen
+		}
+		updatedAt := arg.UpdatedAt
+		if updatedAt.IsZero() {
+			updatedAt = time.Now()
+		}
+
+		key := arg.GramProjectID + "\x00" + arg.CanonicalServerURL
+		upsert := upserts[key]
+		if upsert == nil {
+			upsert = &shadowMCPInventoryURLUpsert{
+				GramProjectID:      arg.GramProjectID,
+				CanonicalServerURL: arg.CanonicalServerURL,
+				URLHost:            arg.URLHost,
+				ServerName:         arg.ServerName,
+				FirstSeen:          firstSeen.UTC(),
+				LastSeen:           lastSeen.UTC(),
+				UpdatedAt:          updatedAt.UTC(),
+			}
+			upserts[key] = upsert
+			continue
+		}
+		if upsert.URLHost == "" {
+			upsert.URLHost = arg.URLHost
+		}
+		if arg.ServerName != "" {
+			upsert.ServerName = arg.ServerName
+		}
+		if firstSeen.Before(upsert.FirstSeen) {
+			upsert.FirstSeen = firstSeen.UTC()
+		}
+		if lastSeen.After(upsert.LastSeen) {
+			upsert.LastSeen = lastSeen.UTC()
+		}
+		if updatedAt.After(upsert.UpdatedAt) {
+			upsert.UpdatedAt = updatedAt.UTC()
+		}
+	}
+
+	if len(upserts) == 0 {
+		return nil
+	}
+
+	for _, upsert := range upserts {
+		existing, err := q.getShadowMCPInventoryURL(ctx, upsert.GramProjectID, upsert.CanonicalServerURL)
+		if err != nil {
+			return err
+		}
+		if existing == nil {
+			continue
+		}
+		if upsert.URLHost == "" {
+			upsert.URLHost = existing.URLHost
+		}
+		if upsert.ServerName == "" {
+			upsert.ServerName = existing.ServerName
+		}
+		if existing.FirstSeen.Before(upsert.FirstSeen) {
+			upsert.FirstSeen = existing.FirstSeen
+		}
+		if existing.LastSeen.After(upsert.LastSeen) {
+			upsert.LastSeen = existing.LastSeen
+		}
+	}
+
+	ctx = clickhouse.Context(ctx, clickhouse.WithAsync(false))
+	builder := sq.Insert("shadow_mcp_inventory_urls").
+		Columns(
+			"gram_project_id",
+			"canonical_server_url",
+			"url_host",
+			"server_name",
+			"first_seen",
+			"last_seen",
+			"updated_at",
+		)
+
+	for _, upsert := range upserts {
 		builder = builder.Values(
-			arg.ID,
-			arg.TimeUnixNano,
-			arg.ObservedTimeUnixNano,
-			arg.SeverityText,
-			arg.Body,
-			arg.TraceID,
-			arg.SpanID,
-			arg.Attributes,
-			arg.ResourceAttributes,
-			arg.GramProjectID,
-			arg.GramDeploymentID,
-			arg.GramFunctionID,
-			arg.GramURN,
-			arg.ServiceName,
-			arg.ServiceVersion,
-			arg.GramChatID,
+			upsert.GramProjectID,
+			upsert.CanonicalServerURL,
+			upsert.URLHost,
+			upsert.ServerName,
+			upsert.FirstSeen.UTC(),
+			upsert.LastSeen.UTC(),
+			upsert.UpdatedAt.UTC(),
 		)
 	}
 
-	query, queryArgs, err := builder.
-		ToSql()
+	query, queryArgs, err := builder.ToSql()
 	if err != nil {
-		return fmt.Errorf("building insert query: %w", err)
+		return fmt.Errorf("building shadow mcp inventory url upsert query: %w", err)
 	}
 
-	return q.conn.Exec(ctx, query, queryArgs...)
+	if err := q.conn.Exec(ctx, query, queryArgs...); err != nil {
+		return fmt.Errorf("upserting shadow mcp inventory urls: %w", err)
+	}
+
+	return nil
+}
+
+func (q *Queries) getShadowMCPInventoryURL(ctx context.Context, projectID string, canonicalURL string) (*ShadowMCPInventoryURLRow, error) {
+	sb := sq.Select(
+		"canonical_server_url",
+		"max(url_host) AS url_host",
+		"argMaxIf(server_name, updated_at, server_name != '') AS server_name",
+		"min(first_seen) AS first_seen",
+		"max(last_seen) AS last_seen",
+	).
+		From("shadow_mcp_inventory_urls").
+		Where("gram_project_id = ?", projectID).
+		Where("canonical_server_url = ?", canonicalURL).
+		GroupBy("gram_project_id", "canonical_server_url").
+		Limit(1)
+
+	query, queryArgs, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building shadow mcp inventory url lookup query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, queryArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("querying shadow mcp inventory url lookup: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return nil, fmt.Errorf("iterating shadow mcp inventory url lookup rows: %w", err)
+		}
+		return nil, nil
+	}
+
+	var row ShadowMCPInventoryURLRow
+	if err := rows.ScanStruct(&row); err != nil {
+		return nil, fmt.Errorf("scanning shadow mcp inventory url lookup row: %w", err)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating shadow mcp inventory url lookup rows: %w", err)
+	}
+
+	return &row, nil
+}
+
+func (q *Queries) ListShadowMCPInventoryURLs(ctx context.Context, arg ListShadowMCPInventoryURLsParams) ([]ShadowMCPInventoryURLRow, error) {
+	limit := clampShadowMCPInventoryLimit(arg.Limit)
+	var cursor shadowMCPInventoryURLCursor
+	if arg.Cursor != "" {
+		var err error
+		cursor, err = decodeShadowMCPInventoryURLCursor(arg.Cursor)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	inventoryRows := sq.Select(
+		"canonical_server_url",
+		"max(url_host) AS url_host",
+		"argMaxIf(server_name, updated_at, server_name != '') AS server_name",
+		"min(first_seen) AS first_seen",
+		"max(last_seen) AS last_seen",
+	).
+		From("shadow_mcp_inventory_urls").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		GroupBy("gram_project_id", "canonical_server_url")
+
+	traceUsageRows := sq.Select("trace_id").
+		Column("replaceRegexpOne(max(mcp_server_url), ?, '') AS canonical_server_url", "[?#].*$").
+		Column("max(start_time_unix_nano) AS called_at_unix_nano").
+		From("trace_summaries").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		GroupBy("trace_id").
+		Having("canonical_server_url != ''")
+
+	traceUsageSQL, traceUsageArgs, err := traceUsageRows.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building shadow mcp inventory usage ordering query: %w", err)
+	}
+
+	inventoryRowsWithUsage := sq.Select(
+		"inventory_urls.canonical_server_url",
+		"inventory_urls.url_host",
+		"inventory_urls.server_name",
+		"inventory_urls.first_seen",
+		"inventory_urls.last_seen",
+		"maxIf(ifNull(trace_usage.called_at_unix_nano, 0), ifNull(trace_usage.canonical_server_url, '') != '') AS last_called_unix_nano",
+	).
+		FromSelect(inventoryRows, "inventory_urls").
+		LeftJoin(fmt.Sprintf(
+			"(%s) AS trace_usage ON trace_usage.canonical_server_url = inventory_urls.canonical_server_url",
+			traceUsageSQL,
+		), traceUsageArgs...).
+		GroupBy(
+			"inventory_urls.canonical_server_url",
+			"inventory_urls.url_host",
+			"inventory_urls.server_name",
+			"inventory_urls.first_seen",
+			"inventory_urls.last_seen",
+		)
+
+	sb := sq.Select(
+		"canonical_server_url",
+		"url_host",
+		"server_name",
+		"first_seen",
+		"last_seen",
+		"last_called_unix_nano",
+	).
+		FromSelect(inventoryRowsWithUsage, "inventory_urls").
+		Limit(limit)
+
+	if arg.Cursor != "" {
+		lastSeen := time.Unix(0, cursor.LastSeenUnixNano).UTC()
+		sb = sb.Where(squirrel.Or{
+			squirrel.Expr("last_called_unix_nano < ?", cursor.LastCalledUnixNano),
+			squirrel.And{
+				squirrel.Expr("last_called_unix_nano = ?", cursor.LastCalledUnixNano),
+				squirrel.Or{
+					squirrel.Expr("last_seen < ?", lastSeen),
+					squirrel.And{
+						squirrel.Expr("last_seen = ?", lastSeen),
+						squirrel.Expr("canonical_server_url > ?", cursor.CanonicalServerURL),
+					},
+				},
+			},
+		})
+	}
+
+	sb = sb.OrderBy("last_called_unix_nano DESC", "last_seen DESC", "canonical_server_url ASC")
+
+	query, queryArgs, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building shadow mcp inventory url query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, queryArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("querying shadow mcp inventory urls: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	inventoryURLs := make([]ShadowMCPInventoryURLRow, 0)
+	for rows.Next() {
+		var row ShadowMCPInventoryURLRow
+		if err := rows.ScanStruct(&row); err != nil {
+			return nil, fmt.Errorf("scanning shadow mcp inventory url row: %w", err)
+		}
+		inventoryURLs = append(inventoryURLs, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating shadow mcp inventory url rows: %w", err)
+	}
+
+	return inventoryURLs, nil
+}
+
+func (q *Queries) ListShadowMCPInventoryUsage(ctx context.Context, arg ListShadowMCPInventoryUsageParams) ([]ShadowMCPInventoryUsageRow, error) {
+	traceRows, err := q.listShadowMCPInventoryTraceUsage(ctx, arg.GramProjectID, arg.CanonicalServerURLs, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+
+	canonicalURLSet := shadowMCPInventoryCanonicalURLSet(arg.CanonicalServerURLs)
+	usageByURL := make(map[string]*ShadowMCPInventoryUsageRow)
+	usersByURL := make(map[string]map[string]*ShadowMCPInventoryUserRow)
+	for _, traceRow := range traceRows {
+		invURL, ok := shadowmcp.CanonicalizeInventoryURL(traceRow.ServerURL)
+		if !ok {
+			continue
+		}
+		if len(canonicalURLSet) > 0 && !canonicalURLSet[invURL.CanonicalURL] {
+			continue
+		}
+		usage := usageByURL[invURL.CanonicalURL]
+		if usage == nil {
+			firstCalled := traceRow.CalledAt
+			lastCalled := traceRow.CalledAt
+			usage = &ShadowMCPInventoryUsageRow{
+				CanonicalServerURL: invURL.CanonicalURL,
+				ServerName:         traceRow.ServerName,
+				FirstCalled:        &firstCalled,
+				LastCalled:         &lastCalled,
+				CallCount:          0,
+				UserCount:          0,
+				TopUsers:           nil,
+			}
+			usageByURL[invURL.CanonicalURL] = usage
+		}
+		if traceRow.ServerName != "" {
+			usage.ServerName = traceRow.ServerName
+		}
+		if usage.FirstCalled == nil || traceRow.CalledAt.Before(*usage.FirstCalled) {
+			firstCalled := traceRow.CalledAt
+			usage.FirstCalled = &firstCalled
+		}
+		if usage.LastCalled == nil || traceRow.CalledAt.After(*usage.LastCalled) {
+			lastCalled := traceRow.CalledAt
+			usage.LastCalled = &lastCalled
+		}
+		usage.CallCount++
+
+		if traceRow.UserKey == "" {
+			continue
+		}
+		users := usersByURL[invURL.CanonicalURL]
+		if users == nil {
+			users = make(map[string]*ShadowMCPInventoryUserRow)
+			usersByURL[invURL.CanonicalURL] = users
+		}
+		user := users[traceRow.UserKey]
+		if user == nil {
+			user = &ShadowMCPInventoryUserRow{
+				UserKey:    traceRow.UserKey,
+				UserEmail:  shadowMCPInventoryEmailValue(traceRow.UserEmail, traceRow.UserKey),
+				LastCalled: traceRow.CalledAt,
+				CallCount:  0,
+			}
+			users[traceRow.UserKey] = user
+		}
+		if user.UserEmail == "" {
+			user.UserEmail = shadowMCPInventoryEmailValue(traceRow.UserEmail, traceRow.UserKey)
+		}
+		user.CallCount++
+		if traceRow.CalledAt.After(user.LastCalled) {
+			user.LastCalled = traceRow.CalledAt
+		}
+	}
+
+	usageRows := make([]ShadowMCPInventoryUsageRow, 0, len(usageByURL))
+	for canonicalURL, usage := range usageByURL {
+		users := sortedShadowMCPInventoryUsers(usersByURL[canonicalURL])
+		usage.UserCount = uint64(len(users))
+		topUsers := make([]string, 0, min(len(users), 5))
+		for i := 0; i < len(users) && i < 5; i++ {
+			topUsers = append(topUsers, users[i].UserKey)
+		}
+		usage.TopUsers = topUsers
+		usageRows = append(usageRows, *usage)
+	}
+	sort.Slice(usageRows, func(i, j int) bool {
+		return usageRows[i].CanonicalServerURL < usageRows[j].CanonicalServerURL
+	})
+
+	return usageRows, nil
+}
+
+func (q *Queries) ListShadowMCPInventoryUsers(ctx context.Context, arg ListShadowMCPInventoryUsersParams) ([]ShadowMCPInventoryUserRow, error) {
+	var cursor shadowMCPInventoryUserCursor
+	if arg.Cursor != "" {
+		var err error
+		cursor, err = decodeShadowMCPInventoryUserCursor(arg.Cursor)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	traceRows, err := q.listShadowMCPInventoryTraceUsage(ctx, arg.GramProjectID, []string{arg.CanonicalServerURL}, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+
+	users := make(map[string]*ShadowMCPInventoryUserRow)
+	for _, traceRow := range traceRows {
+		invURL, ok := shadowmcp.CanonicalizeInventoryURL(traceRow.ServerURL)
+		if !ok || invURL.CanonicalURL != arg.CanonicalServerURL || traceRow.UserKey == "" {
+			continue
+		}
+		user := users[traceRow.UserKey]
+		if user == nil {
+			user = &ShadowMCPInventoryUserRow{
+				UserKey:    traceRow.UserKey,
+				UserEmail:  shadowMCPInventoryEmailValue(traceRow.UserEmail, traceRow.UserKey),
+				LastCalled: traceRow.CalledAt,
+				CallCount:  0,
+			}
+			users[traceRow.UserKey] = user
+		}
+		if user.UserEmail == "" {
+			user.UserEmail = shadowMCPInventoryEmailValue(traceRow.UserEmail, traceRow.UserKey)
+		}
+		user.CallCount++
+		if traceRow.CalledAt.After(user.LastCalled) {
+			user.LastCalled = traceRow.CalledAt
+		}
+	}
+
+	userRows := sortedShadowMCPInventoryUsers(users)
+	if arg.Cursor != "" {
+		userRows = shadowMCPInventoryUsersAfterCursor(userRows, cursor)
+	}
+	limit := clampShadowMCPInventoryLimitInt(arg.Limit)
+	if len(userRows) > limit {
+		userRows = userRows[:limit]
+	}
+	return userRows, nil
+}
+
+func (q *Queries) listShadowMCPInventoryTraceUsage(ctx context.Context, projectID string, canonicalServerURLs []string, limit int) ([]shadowMCPInventoryTraceUsageRow, error) {
+	sb := sq.Select(
+		"trace_id",
+		"max(mcp_server_url) AS server_url",
+		"max(tool_source) AS server_name",
+		"if(max(trace_summaries.user_email) != '', max(trace_summaries.user_email), max(trace_summaries.user_id)) AS user_key",
+		"max(trace_summaries.user_email) AS user_email",
+		"fromUnixTimestamp64Nano(max(start_time_unix_nano)) AS called_at",
+	).
+		From("trace_summaries").
+		Where("gram_project_id = ?", projectID).
+		GroupBy("trace_id").
+		Having("server_url != ''").
+		OrderBy("max(start_time_unix_nano) DESC", "trace_id ASC")
+
+	if len(canonicalServerURLs) > 0 {
+		predicates := make(squirrel.Or, 0, len(canonicalServerURLs))
+		for _, canonicalURL := range canonicalServerURLs {
+			if canonicalURL == "" {
+				continue
+			}
+			predicates = append(predicates, squirrel.Or{
+				squirrel.Expr("server_url = ?", canonicalURL),
+				squirrel.Expr("startsWith(server_url, ?)", canonicalURL+"?"),
+				squirrel.Expr("startsWith(server_url, ?)", canonicalURL+"#"),
+			})
+		}
+		if len(predicates) > 0 {
+			sb = sb.Having(predicates)
+		}
+	} else {
+		sb = sb.Limit(clampShadowMCPInventoryUsageTraceLimit(limit))
+	}
+
+	query, queryArgs, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building shadow mcp inventory trace usage query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, queryArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("querying shadow mcp inventory trace usage: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	traceRows := make([]shadowMCPInventoryTraceUsageRow, 0)
+	for rows.Next() {
+		var row shadowMCPInventoryTraceUsageRow
+		if err := rows.ScanStruct(&row); err != nil {
+			return nil, fmt.Errorf("scanning shadow mcp inventory trace usage row: %w", err)
+		}
+		traceRows = append(traceRows, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating shadow mcp inventory trace usage rows: %w", err)
+	}
+
+	return traceRows, nil
+}
+
+func shadowMCPInventoryCanonicalURLSet(canonicalServerURLs []string) map[string]bool {
+	if len(canonicalServerURLs) == 0 {
+		return nil
+	}
+	out := make(map[string]bool, len(canonicalServerURLs))
+	for _, canonicalURL := range canonicalServerURLs {
+		if canonicalURL != "" {
+			out[canonicalURL] = true
+		}
+	}
+	return out
+}
+
+func sortedShadowMCPInventoryUsers(users map[string]*ShadowMCPInventoryUserRow) []ShadowMCPInventoryUserRow {
+	userRows := make([]ShadowMCPInventoryUserRow, 0, len(users))
+	for _, user := range users {
+		userRows = append(userRows, *user)
+	}
+	sort.Slice(userRows, func(i, j int) bool {
+		if userRows[i].CallCount != userRows[j].CallCount {
+			return userRows[i].CallCount > userRows[j].CallCount
+		}
+		if !userRows[i].LastCalled.Equal(userRows[j].LastCalled) {
+			return userRows[i].LastCalled.After(userRows[j].LastCalled)
+		}
+		return userRows[i].UserKey < userRows[j].UserKey
+	})
+	return userRows
+}
+
+func shadowMCPInventoryEmailValue(userEmail, userKey string) string {
+	if userEmail != "" {
+		return userEmail
+	}
+	if strings.Contains(userKey, "@") {
+		return userKey
+	}
+	return ""
+}
+
+func shadowMCPInventoryUsersAfterCursor(userRows []ShadowMCPInventoryUserRow, cursor shadowMCPInventoryUserCursor) []ShadowMCPInventoryUserRow {
+	cursorLastCalled := time.Unix(0, cursor.LastCalledUnixNano).UTC()
+	for i, row := range userRows {
+		switch {
+		case row.CallCount < cursor.CallCount:
+			return userRows[i:]
+		case row.CallCount > cursor.CallCount:
+			continue
+		case row.LastCalled.Before(cursorLastCalled):
+			return userRows[i:]
+		case row.LastCalled.After(cursorLastCalled):
+			continue
+		case row.UserKey > cursor.UserKey:
+			return userRows[i:]
+		}
+	}
+	return nil
+}
+
+func clampShadowMCPInventoryLimit(limit int) uint64 {
+	return uint64(clampShadowMCPInventoryLimitInt(limit)) // #nosec G115 -- clamped to 1..500 by clampShadowMCPInventoryLimitInt.
+}
+
+func clampShadowMCPInventoryLimitInt(limit int) int {
+	switch {
+	case limit <= 0:
+		return 50
+	case limit > 500:
+		return 500
+	default:
+		return limit
+	}
+}
+
+func clampShadowMCPInventoryUsageTraceLimit(limit int) uint64 {
+	switch {
+	case limit <= 0:
+		return 5000
+	case limit > 50000:
+		return 50000
+	default:
+		return uint64(limit)
+	}
 }
 
 // ListTelemetryLogsParams contains the parameters for listing telemetry logs.

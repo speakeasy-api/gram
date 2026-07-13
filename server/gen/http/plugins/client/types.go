@@ -104,6 +104,8 @@ type GetPluginResponseBody struct {
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Optional description.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether this is the project's fallback plugin that new servers attach to.
+	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of role/user assignments.
@@ -127,6 +129,8 @@ type CreatePluginResponseBody struct {
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Optional description.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether this is the project's fallback plugin that new servers attach to.
+	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of role/user assignments.
@@ -150,6 +154,8 @@ type UpdatePluginResponseBody struct {
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Optional description.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether this is the project's fallback plugin that new servers attach to.
+	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of role/user assignments.
@@ -279,6 +285,11 @@ type UpdateMarketplaceSettingsResponseBody struct {
 	// Whether the marketplace was automatically republished to GitHub as part of
 	// this update.
 	Republished *bool `form:"republished,omitempty" json:"republished,omitempty" xml:"republished,omitempty"`
+	// True when the new name reached the MCP plugins and marketplace manifests but
+	// the observability (hooks) plugin could not be updated yet because the
+	// organization is not approved for the latest hooks version; it will update
+	// automatically once the organization is rolled forward.
+	HooksUpdateDeferred *bool `form:"hooks_update_deferred,omitempty" json:"hooks_update_deferred,omitempty" xml:"hooks_update_deferred,omitempty"`
 }
 
 // ListPluginsUnauthorizedResponseBody is the type of the "plugins" service
@@ -3257,6 +3268,8 @@ type PluginResponseBody struct {
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Optional description.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether this is the project's fallback plugin that new servers attach to.
+	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of role/user assignments.
@@ -3598,6 +3611,7 @@ func NewGetPluginPluginOK(body *GetPluginResponseBody) *plugins.Plugin {
 		Name:            *body.Name,
 		Slug:            *body.Slug,
 		Description:     body.Description,
+		IsDefault:       body.IsDefault,
 		ServerCount:     body.ServerCount,
 		AssignmentCount: body.AssignmentCount,
 		CreatedAt:       *body.CreatedAt,
@@ -3785,6 +3799,7 @@ func NewCreatePluginPluginCreated(body *CreatePluginResponseBody) *plugins.Plugi
 		Name:            *body.Name,
 		Slug:            *body.Slug,
 		Description:     body.Description,
+		IsDefault:       body.IsDefault,
 		ServerCount:     body.ServerCount,
 		AssignmentCount: body.AssignmentCount,
 		CreatedAt:       *body.CreatedAt,
@@ -3972,6 +3987,7 @@ func NewUpdatePluginPluginOK(body *UpdatePluginResponseBody) *plugins.Plugin {
 		Name:            *body.Name,
 		Slug:            *body.Slug,
 		Description:     body.Description,
+		IsDefault:       body.IsDefault,
 		ServerCount:     body.ServerCount,
 		AssignmentCount: body.AssignmentCount,
 		CreatedAt:       *body.CreatedAt,
@@ -5926,7 +5942,8 @@ func NewGetMarketplaceSettingsGatewayError(body *GetMarketplaceSettingsGatewayEr
 // "updateMarketplaceSettings" endpoint result from a HTTP "OK" response.
 func NewUpdateMarketplaceSettingsResultOK(body *UpdateMarketplaceSettingsResponseBody) *plugins.UpdateMarketplaceSettingsResult {
 	v := &plugins.UpdateMarketplaceSettingsResult{
-		Republished: *body.Republished,
+		Republished:         *body.Republished,
+		HooksUpdateDeferred: body.HooksUpdateDeferred,
 	}
 	v.Settings = unmarshalMarketplaceSettingsResultResponseBodyToPluginsMarketplaceSettingsResult(body.Settings)
 

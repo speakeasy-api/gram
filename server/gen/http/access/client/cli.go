@@ -616,6 +616,121 @@ func BuildListShadowMCPAccessRulesPayload(accessListShadowMCPAccessRulesDisposit
 	return v, nil
 }
 
+// BuildListShadowMCPInventoryPayload builds the payload for the access
+// listShadowMCPInventory endpoint from CLI flags.
+func BuildListShadowMCPInventoryPayload(accessListShadowMCPInventoryProjectID string, accessListShadowMCPInventoryLimit string, accessListShadowMCPInventoryCursor string, accessListShadowMCPInventorySessionToken string) (*access.ListShadowMCPInventoryPayload, error) {
+	var err error
+	var projectID string
+	{
+		projectID = accessListShadowMCPInventoryProjectID
+		err = goa.MergeErrors(err, goa.ValidateFormat("project_id", projectID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var limit int
+	{
+		if accessListShadowMCPInventoryLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(accessListShadowMCPInventoryLimit, 10, strconv.IntSize)
+			limit = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+			}
+			if limit > 200 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 200, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var cursor *string
+	{
+		if accessListShadowMCPInventoryCursor != "" {
+			cursor = &accessListShadowMCPInventoryCursor
+		}
+	}
+	var sessionToken *string
+	{
+		if accessListShadowMCPInventorySessionToken != "" {
+			sessionToken = &accessListShadowMCPInventorySessionToken
+		}
+	}
+	v := &access.ListShadowMCPInventoryPayload{}
+	v.ProjectID = projectID
+	v.Limit = limit
+	v.Cursor = cursor
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildListShadowMCPInventoryUsersPayload builds the payload for the access
+// listShadowMCPInventoryUsers endpoint from CLI flags.
+func BuildListShadowMCPInventoryUsersPayload(accessListShadowMCPInventoryUsersProjectID string, accessListShadowMCPInventoryUsersServerURL string, accessListShadowMCPInventoryUsersLimit string, accessListShadowMCPInventoryUsersCursor string, accessListShadowMCPInventoryUsersSessionToken string) (*access.ListShadowMCPInventoryUsersPayload, error) {
+	var err error
+	var projectID string
+	{
+		projectID = accessListShadowMCPInventoryUsersProjectID
+		err = goa.MergeErrors(err, goa.ValidateFormat("project_id", projectID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var serverURL string
+	{
+		serverURL = accessListShadowMCPInventoryUsersServerURL
+		err = goa.MergeErrors(err, goa.ValidateFormat("server_url", serverURL, goa.FormatURI))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var limit int
+	{
+		if accessListShadowMCPInventoryUsersLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(accessListShadowMCPInventoryUsersLimit, 10, strconv.IntSize)
+			limit = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+			}
+			if limit > 200 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 200, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var cursor *string
+	{
+		if accessListShadowMCPInventoryUsersCursor != "" {
+			cursor = &accessListShadowMCPInventoryUsersCursor
+		}
+	}
+	var sessionToken *string
+	{
+		if accessListShadowMCPInventoryUsersSessionToken != "" {
+			sessionToken = &accessListShadowMCPInventoryUsersSessionToken
+		}
+	}
+	v := &access.ListShadowMCPInventoryUsersPayload{}
+	v.ProjectID = projectID
+	v.ServerURL = serverURL
+	v.Limit = limit
+	v.Cursor = cursor
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildCreateShadowMCPAccessRulePayload builds the payload for the access
 // createShadowMCPAccessRule endpoint from CLI flags.
 func BuildCreateShadowMCPAccessRulePayload(accessCreateShadowMCPAccessRuleBody string, accessCreateShadowMCPAccessRuleSessionToken string) (*access.CreateShadowMCPAccessRulePayload, error) {

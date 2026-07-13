@@ -30,10 +30,7 @@ import {
   HooksNumberMetricsRequest,
   HooksNumberMetricsSecurity,
 } from "../models/operations/hooksnumbermetrics.js";
-import {
-  IngestHookEventRequest,
-  IngestHookEventSecurity,
-} from "../models/operations/ingesthookevent.js";
+import { IngestHookEventRequest } from "../models/operations/ingesthookevent.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Hooks extends ClientSDK {
@@ -100,13 +97,11 @@ export class Hooks extends ClientSDK {
    */
   async ingest(
     request: IngestHookEventRequest,
-    security?: IngestHookEventSecurity | undefined,
     options?: RequestOptions,
   ): Promise<IngestHookResult> {
     return unwrapAsync(hooksIngest(
       this,
       request,
-      security,
       options,
     ));
   }

@@ -50,6 +50,8 @@ trackedFiles:
   src/funcs/accessListScopes.ts: {}
   src/funcs/accessListShadowMCPAccessRules.ts: {}
   src/funcs/accessListShadowMCPApprovalRequests.ts: {}
+  src/funcs/accessListShadowMCPInventory.ts: {}
+  src/funcs/accessListShadowMCPInventoryUsers.ts: {}
   src/funcs/accessResolveChallenge.ts: {}
   src/funcs/accessUpdateMemberRoles.ts: {}
   src/funcs/accessUpdateRole.ts: {}
@@ -305,6 +307,7 @@ trackedFiles:
   src/funcs/riskExclusionsDelete.ts: {}
   src/funcs/riskExclusionsList.ts: {}
   src/funcs/riskExclusionsListBuiltinExclusions.ts: {}
+  src/funcs/riskExclusionsSuggest.ts: {}
   src/funcs/riskExclusionsUpdate.ts: {}
   src/funcs/riskExprCompile.ts: {}
   src/funcs/riskOverviewGet.ts: {}
@@ -610,6 +613,7 @@ trackedFiles:
   src/models/components/hookingestevent.ts: {}
   src/models/components/hookingestsession.ts: {}
   src/models/components/hookingestsource.ts: {}
+  src/models/components/hookmcpattributionentry.ts: {}
   src/models/components/hookmcpdata.ts: {}
   src/models/components/hookmessagedata.ts: {}
   src/models/components/hooknotificationdata.ts: {}
@@ -690,6 +694,8 @@ trackedFiles:
   src/models/components/listsessionsresult.ts: {}
   src/models/components/listshadowmcpaccessrulesresult.ts: {}
   src/models/components/listshadowmcpapprovalrequestsresult.ts: {}
+  src/models/components/listshadowmcpinventoryresult.ts: {}
+  src/models/components/listshadowmcpinventoryusersresult.ts: {}
   src/models/components/listsourcesresult.ts: {}
   src/models/components/listsyncedusersresult.ts: {}
   src/models/components/listtoolfiltersresult.ts: {}
@@ -895,6 +901,9 @@ trackedFiles:
   src/models/components/shadowmcpaccessrule.ts: {}
   src/models/components/shadowmcpapprovaldecisionresult.ts: {}
   src/models/components/shadowmcpapprovalrequest.ts: {}
+  src/models/components/shadowmcpinventoryrequestsummary.ts: {}
+  src/models/components/shadowmcpinventoryserver.ts: {}
+  src/models/components/shadowmcpinventoryuser.ts: {}
   src/models/components/skillbreakdownrow.ts: {}
   src/models/components/skillsummary.ts: {}
   src/models/components/skilltimeseriespoint.ts: {}
@@ -903,6 +912,8 @@ trackedFiles:
   src/models/components/submitriskblockfeedbackrequestbody.ts: {}
   src/models/components/suggestcustomdetectionrulerequestbody.ts: {}
   src/models/components/suggestcustomdetectionruleresult.ts: {}
+  src/models/components/suggestexclusionrequestbody.ts: {}
+  src/models/components/suggestexclusionresult.ts: {}
   src/models/components/syncedagentuser.ts: {}
   src/models/components/telemetrylogrecord.ts: {}
   src/models/components/telemetrywindowpayload.ts: {}
@@ -1276,6 +1287,8 @@ trackedFiles:
   src/models/operations/listsessions.ts: {}
   src/models/operations/listshadowmcpaccessrules.ts: {}
   src/models/operations/listshadowmcpapprovalrequests.ts: {}
+  src/models/operations/listshadowmcpinventory.ts: {}
+  src/models/operations/listshadowmcpinventoryusers.ts: {}
   src/models/operations/listsyncedagentusers.ts: {}
   src/models/operations/listtemplates.ts: {}
   src/models/operations/listtools.ts: {}
@@ -1357,6 +1370,7 @@ trackedFiles:
   src/models/operations/submitfeedback.ts: {}
   src/models/operations/submitriskblockfeedback.ts: {}
   src/models/operations/suggestcustomdetectionrule.ts: {}
+  src/models/operations/suggestexclusion.ts: {}
   src/models/operations/switchauthscopes.ts: {}
   src/models/operations/testdetectionrule.ts: {}
   src/models/operations/triggerriskanalysis.ts: {}
@@ -1839,6 +1853,7 @@ trackedFiles:
   src/react-query/riskSaveEvalReview.ts: {}
   src/react-query/riskSubmitBlockFeedback.ts: {}
   src/react-query/riskSuggestCustomRule.ts: {}
+  src/react-query/riskSuggestExclusion.ts: {}
   src/react-query/riskTestDetectionRule.ts: {}
   src/react-query/riskUnmaskResult.ts: {}
   src/react-query/riskUpdateCustomDetectionRule.ts: {}
@@ -1882,6 +1897,10 @@ trackedFiles:
   src/react-query/shadowMCPAccessRules.ts: {}
   src/react-query/shadowMCPApprovalRequests.core.ts: {}
   src/react-query/shadowMCPApprovalRequests.ts: {}
+  src/react-query/shadowMCPInventory.core.ts: {}
+  src/react-query/shadowMCPInventory.ts: {}
+  src/react-query/shadowMCPInventoryUsers.core.ts: {}
+  src/react-query/shadowMCPInventoryUsers.ts: {}
   src/react-query/switchScopes.ts: {}
   src/react-query/syncedAgentUsers.core.ts: {}
   src/react-query/syncedAgentUsers.ts: {}
@@ -2606,10 +2625,10 @@ examples:
   createRiskPolicy:
     speakeasy-default-create-risk-policy:
       requestBody:
-        application/json: {"action": "flag", "audience_type": "everyone", "policy_type": "standard", "presidio_score_threshold": 0.75}
+        application/json: {"action": "flag", "audience_type": "everyone", "policy_type": "standard", "presidio_score_threshold": 0.75, "score": 5}
       responses:
         "200":
-          application/json: {"action": "flag", "audience_principal_urns": ["<value 1>", "<value 2>", "<value 3>"], "audience_type": "everyone", "auto_name": false, "created_at": "2026-11-27T08:06:34.693Z", "enabled": true, "id": "8fa1564d-044e-4c61-89b8-7bbe97a778ca", "name": "<value>", "pending_messages": 291308, "policy_type": "standard", "presidio_score_threshold": 0.75, "project_id": "e48ffff0-4e01-4690-a5b9-223e3363e5a2", "sources": ["<value 1>"], "total_messages": 415653, "updated_at": "2026-02-03T05:39:04.851Z", "version": 985427}
+          application/json: {"action": "flag", "audience_principal_urns": ["<value 1>", "<value 2>", "<value 3>"], "audience_type": "everyone", "auto_name": false, "created_at": "2026-11-27T08:06:34.693Z", "enabled": true, "id": "8fa1564d-044e-4c61-89b8-7bbe97a778ca", "name": "<value>", "pending_messages": 291308, "policy_type": "standard", "presidio_score_threshold": 0.75, "project_id": "e48ffff0-4e01-4690-a5b9-223e3363e5a2", "score": 5, "sources": ["<value 1>"], "total_messages": 415653, "updated_at": "2026-02-03T05:39:04.851Z", "version": 985427}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -3702,7 +3721,7 @@ examples:
     speakeasy-default-get-product-features:
       responses:
         "200":
-          application/json: {"authz_challenge_logging_enabled": false, "logs_enabled": false, "observability_mode_enabled": false, "scim_enabled": false, "session_capture_enabled": true, "sso_enabled": false, "tool_io_logs_enabled": true, "webhooks": true}
+          application/json: {"authz_challenge_logging_enabled": false, "hooks_browser_login_enabled": false, "logs_enabled": false, "observability_mode_enabled": false, "scim_enabled": false, "session_capture_enabled": true, "sso_enabled": false, "tool_io_logs_enabled": true, "webhooks": true}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -3838,7 +3857,7 @@ examples:
           id: "8fbf5ca1-aa4d-403a-a226-2071123a9a6b"
       responses:
         "200":
-          application/json: {"action": "flag", "audience_principal_urns": ["<value 1>", "<value 2>"], "audience_type": "everyone", "auto_name": true, "created_at": "2024-02-15T21:20:30.313Z", "enabled": true, "id": "0f8bca1d-18d7-471f-8408-5b7191c93c99", "name": "<value>", "pending_messages": 267392, "policy_type": "standard", "presidio_score_threshold": 0.75, "project_id": "7b79acf3-929f-4814-9cda-ff0d4f950b72", "sources": ["<value 1>", "<value 2>"], "total_messages": 752197, "updated_at": "2026-10-17T00:54:10.479Z", "version": 138155}
+          application/json: {"action": "flag", "audience_principal_urns": ["<value 1>", "<value 2>"], "audience_type": "everyone", "auto_name": true, "created_at": "2024-02-15T21:20:30.313Z", "enabled": true, "id": "0f8bca1d-18d7-471f-8408-5b7191c93c99", "name": "<value>", "pending_messages": 267392, "policy_type": "standard", "presidio_score_threshold": 0.75, "project_id": "7b79acf3-929f-4814-9cda-ff0d4f950b72", "score": 5, "sources": ["<value 1>", "<value 2>"], "total_messages": 752197, "updated_at": "2026-10-17T00:54:10.479Z", "version": 138155}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -4669,7 +4688,7 @@ examples:
     speakeasy-default-list-risk-policies:
       responses:
         "200":
-          application/json: {"policies": [{"action": "flag", "audience_principal_urns": ["<value 1>", "<value 2>", "<value 3>"], "audience_type": "everyone", "auto_name": false, "created_at": "2026-08-06T06:28:44.327Z", "enabled": false, "id": "7b0becde-53bf-4685-a74f-3cb84422ca25", "name": "<value>", "pending_messages": 203949, "policy_type": "standard", "project_id": "198766cc-028d-4e70-8fc4-d9ef15fb1a6a", "sources": ["<value 1>", "<value 2>"], "total_messages": 276564, "updated_at": "2025-08-21T17:12:52.240Z", "version": 358057}]}
+          application/json: {"policies": [{"action": "flag", "audience_principal_urns": ["<value 1>", "<value 2>", "<value 3>"], "audience_type": "everyone", "auto_name": false, "created_at": "2026-08-06T06:28:44.327Z", "enabled": false, "id": "7b0becde-53bf-4685-a74f-3cb84422ca25", "name": "<value>", "pending_messages": 203949, "policy_type": "standard", "project_id": "198766cc-028d-4e70-8fc4-d9ef15fb1a6a", "score": 5, "sources": ["<value 1>", "<value 2>"], "total_messages": 276564, "updated_at": "2025-08-21T17:12:52.240Z", "version": 358057}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -4784,6 +4803,33 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  listShadowMCPInventory:
+    speakeasy-default-list-shadow-MCP-inventory:
+      parameters:
+        query:
+          project_id: "6b899ed5-f939-40c4-b6bc-8a61c885cf97"
+          limit: 50
+      responses:
+        "200":
+          application/json: {"servers": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  listShadowMCPInventoryUsers:
+    speakeasy-default-list-shadow-MCP-inventory-users:
+      parameters:
+        query:
+          project_id: "454ed70e-fcba-4241-bc9b-4f19ab7d47a5"
+          server_url: "https://trustworthy-pine.net"
+          limit: 50
+      responses:
+        "200":
+          application/json: {"users": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   listSlackApps:
     speakeasy-default-list-slack-apps:
       responses:
@@ -5676,6 +5722,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  suggestExclusion:
+    speakeasy-default-suggest-exclusion:
+      requestBody:
+        application/json: {"prompt": "<value>"}
+      responses:
+        "200":
+          application/json: {"match_type": "<value>", "match_value": "<value>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   switchAuthScopes:
     speakeasy-default-switch-auth-scopes:
       responses:
@@ -6003,10 +6060,10 @@ examples:
   updateRiskPolicy:
     speakeasy-default-update-risk-policy:
       requestBody:
-        application/json: {"id": "843674e6-50ce-48e3-8373-0f97e164413d", "name": "<value>", "presidio_score_threshold": 0.75}
+        application/json: {"id": "843674e6-50ce-48e3-8373-0f97e164413d", "name": "<value>", "presidio_score_threshold": 0.75, "score": 5}
       responses:
         "200":
-          application/json: {"action": "flag", "audience_principal_urns": ["<value 1>", "<value 2>"], "audience_type": "everyone", "auto_name": true, "created_at": "2024-08-16T09:14:30.128Z", "enabled": false, "id": "8cfa981a-1dce-4a60-b3a5-be6272d6685f", "name": "<value>", "pending_messages": 625941, "policy_type": "standard", "presidio_score_threshold": 0.75, "project_id": "7cc9a5e0-4efa-4e61-87ad-977f4945e432", "sources": ["<value 1>", "<value 2>", "<value 3>"], "total_messages": 272683, "updated_at": "2025-10-31T18:54:42.086Z", "version": 171926}
+          application/json: {"action": "flag", "audience_principal_urns": ["<value 1>", "<value 2>"], "audience_type": "everyone", "auto_name": true, "created_at": "2024-08-16T09:14:30.128Z", "enabled": false, "id": "8cfa981a-1dce-4a60-b3a5-be6272d6685f", "name": "<value>", "pending_messages": 625941, "policy_type": "standard", "presidio_score_threshold": 0.75, "project_id": "7cc9a5e0-4efa-4e61-87ad-977f4945e432", "score": 5, "sources": ["<value 1>", "<value 2>", "<value 3>"], "total_messages": 272683, "updated_at": "2025-10-31T18:54:42.086Z", "version": 171926}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { McpIcon } from "@/components/ui/mcp-icon";
+import { Badge } from "@speakeasy-api/moonshine";
 
 interface ToolsetInfo {
   name: string;
@@ -456,7 +457,14 @@ export function PlaygroundConfigPanel({
                   <SelectContent>
                     {AVAILABLE_MODELS.map((m) => (
                       <SelectItem key={m.value} value={m.value}>
-                        {m.label}
+                        <span className="flex items-center gap-2">
+                          {m.label}
+                          {m.expensive && (
+                            <Badge size="sm" variant="warning" background>
+                              <Badge.Text>Expensive</Badge.Text>
+                            </Badge>
+                          )}
+                        </span>
                       </SelectItem>
                     ))}
                   </SelectContent>

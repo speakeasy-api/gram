@@ -11,6 +11,7 @@
     "/client/dashboard/src/components/tools-badge.tsx",
     "/client/dashboard/src/lib/constants.ts",
     "/client/dashboard/src/sdk/**",
+    "/hooks/sdk/**",
     "/elements/docs/**",
     "/infra/gen/**",
     "/infra/gen/**/*",

@@ -2,6 +2,8 @@ import { InputDialog } from "@/components/input-dialog";
 import { Page } from "@/components/page-layout";
 import { MemberFacepile } from "@/components/member-facepile";
 import { ProjectAvatar } from "@/components/project-menu";
+import { DEFAULT_DATE_RANGE_PRESET } from "@/components/observe/useDateRangeFilter";
+import { buildProjectOverviewQuery } from "@/components/project/projectOverviewQuery";
 import { RequireScope } from "@/components/require-scope";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -20,6 +22,7 @@ import { useLocalStorageState } from "@/hooks/useLocalStorageState";
 import { useProjectFavorites } from "@/hooks/useProjectFavorites";
 import { useRBAC } from "@/hooks/useRBAC";
 import { dateTimeFormatters } from "@/lib/dates";
+import { getPreferredProject } from "@/lib/preferredProject";
 import { cn } from "@/lib/utils";
 import { ChallengesEmptyState } from "@/pages/access/ChallengesTab";
 import {
@@ -31,9 +34,12 @@ import type { AccessMember } from "@gram/client/models/components/accessmember.j
 import type { AuditLog } from "@gram/client/models/components/auditlog.js";
 import type { ChallengeBucket } from "@gram/client/models/components/challengebucket.js";
 import { Outcome } from "@gram/client/models/operations/listchallengebuckets.js";
+import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useAuditLogs } from "@gram/client/react-query/auditLogs.js";
 import { useChallengeBuckets } from "@gram/client/react-query/challengeBuckets.js";
 import { useMembers } from "@gram/client/react-query/members.js";
+import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -55,7 +61,7 @@ import {
   Star,
   UserPlus,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 
 import { getActorLabel, renderVerb } from "@/lib/audit-log-format";
@@ -110,6 +116,37 @@ function OrgHomeInner() {
   const { favoriteSet, isFavorite, toggleFavorite } = useProjectFavorites(
     organization.id,
   );
+
+  // Warm the overview cache for the one project the user is most likely to
+  // open next (last visited, else `default`). Same feature gate as
+  // ProjectDashboard; staleTime dedupes re-runs and the fetch on navigation.
+  const gramClient = useGramContext();
+  const queryClient = useQueryClient();
+  const { data: featuresData } = useProductFeatures();
+  const logsEnabled = featuresData?.logsEnabled === true;
+  const prefetchProject =
+    getPreferredProject(organization.projects) ??
+    organization.projects.find((p) => p.slug === "default") ??
+    organization.projects[0];
+  const prefetchProjectSlug = prefetchProject?.slug;
+  const organizationSlug = organization.slug;
+
+  useEffect(() => {
+    if (!logsEnabled || !prefetchProjectSlug || !organizationSlug) return;
+    void queryClient.prefetchQuery(
+      buildProjectOverviewQuery(gramClient, {
+        organization: organizationSlug,
+        project: prefetchProjectSlug,
+        range: { preset: DEFAULT_DATE_RANGE_PRESET },
+      }),
+    );
+  }, [
+    logsEnabled,
+    prefetchProjectSlug,
+    organizationSlug,
+    gramClient,
+    queryClient,
+  ]);
 
   // Fetch org-wide audit log once. We use it to drive (a) the left rail
   // preview, (b) each project's "most recent action", and (c) the facepile
@@ -215,7 +252,6 @@ function OrgHomeInner() {
 
   const renderProjectItem = (project: OrgProject) => {
     const props = {
-      key: project.id,
       project,
       latestLog: latestActionByProjectSlug.get(project.slug),
       facepile: getFacepileMembers(project.slug),
@@ -223,9 +259,9 @@ function OrgHomeInner() {
       onToggleFavorite: () => toggleFavorite(project.id),
     };
     return viewMode === "grid" ? (
-      <ProjectCard {...props} />
+      <ProjectCard key={project.id} {...props} />
     ) : (
-      <ProjectRow {...props} />
+      <ProjectRow key={project.id} {...props} />
     );
   };
 

@@ -144,6 +144,12 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	Attribute("user_message", String, "Optional message shown to the end user when this policy blocks an action or surfaces a flagged finding. When unset, a default message is rendered.")
 	Attribute("prompt", String, "For prompt_based policies: the guardrail prompt the LLM judge evaluates each in-scope message against. Null for standard policies.")
 	Attribute("model_config", RiskPolicyModelConfig, "For prompt_based policies: per-policy LLM-judge model configuration. Null for standard policies.")
+	Attribute("score", Float64, "CVSS-style severity (0.1-10) the author assigns to findings this policy produces. Descriptive only; changing it does not re-scan messages. Defaults to 5.", func() {
+		Minimum(0.1)
+		Maximum(10)
+		Default(5)
+		Example(5)
+	})
 	Attribute("version", Int64, "Policy version, incremented on each update.")
 	Attribute("created_at", String, "When the policy was created.", func() {
 		Format(FormatDateTime)
@@ -154,7 +160,7 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	Attribute("pending_messages", Int64, "Number of messages not yet analyzed at the current policy version.")
 	Attribute("total_messages", Int64, "Total number of messages in the project.")
 
-	Required("id", "project_id", "name", "policy_type", "sources", "enabled", "action", "audience_type", "audience_principal_urns", "auto_name", "version", "created_at", "updated_at", "pending_messages", "total_messages")
+	Required("id", "project_id", "name", "policy_type", "sources", "enabled", "action", "audience_type", "audience_principal_urns", "auto_name", "score", "version", "created_at", "updated_at", "pending_messages", "total_messages")
 })
 
 var RiskCustomDetectionRule = Type("RiskCustomDetectionRule", func() {

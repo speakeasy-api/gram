@@ -490,6 +490,7 @@ var PluginModel = Type("Plugin", func() {
 	Attribute("name", String, "Display name.")
 	Attribute("slug", String, "URL-safe identifier, unique per org.")
 	Attribute("description", String, "Optional description.")
+	Attribute("is_default", Boolean, "Whether this is the project's fallback plugin that new servers attach to.")
 	Attribute("server_count", Int64, "Number of active servers in this plugin.")
 	Attribute("assignment_count", Int64, "Number of role/user assignments.")
 	Attribute("servers", ArrayOf(PluginServerModel), "Servers included in this plugin.")
@@ -620,4 +621,5 @@ var UpdateMarketplaceSettingsResult = Type("UpdateMarketplaceSettingsResult", fu
 
 	Attribute("settings", MarketplaceSettingsResult, "The updated marketplace settings.")
 	Attribute("republished", Boolean, "Whether the marketplace was automatically republished to GitHub as part of this update.")
+	Attribute("hooks_update_deferred", Boolean, "True when the new name reached the MCP plugins and marketplace manifests but the observability (hooks) plugin could not be updated yet because the organization is not approved for the latest hooks version; it will update automatically once the organization is rolled forward.")
 })

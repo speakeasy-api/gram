@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
@@ -211,6 +213,37 @@ func drainLimiter(t *testing.T, j *Judge, org string) {
 	}
 }
 
+// TestJudgeBillsInternalKeyAsRiskAnalysis pins the judge's billing identity:
+// the completion must carry the risk-analysis usage source, pay from the
+// org's internal OpenRouter key, and attribute to the scanned chat's owner.
+func TestJudgeBillsInternalKeyAsRiskAnalysis(t *testing.T) {
+	t.Parallel()
+
+	client := &successfulCompletionClient{
+		body:  `{"matched":false,"confidence":0.1,"rationale":"safe"}`,
+		usage: openrouter.Usage{},
+	}
+	j := newTestJudge(t, client)
+
+	verdict, err := j.Evaluate(t.Context(), promptpolicy.Input{
+		OrgID:     "org-b",
+		ProjectID: "proj",
+		UserID:    "user-scanned-1",
+		Prompt:    "flag secrets",
+		Message:   judgemessage.New(message.User, "", "hello"),
+		Config:    promptpolicy.Config{Model: "", Temperature: nil, FailOpen: true},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, verdict)
+
+	client.mu.Lock()
+	req := client.lastReq
+	client.mu.Unlock()
+	require.Equal(t, billing.ModelUsageSourceRiskAnalysis, req.UsageSource)
+	require.Equal(t, openrouter.KeyTypeInternal, req.KeyType)
+	require.Equal(t, "user-scanned-1", req.UserID)
+}
+
 // countingCompletionClient records how many times the completion path was hit,
 // so tests can assert a throttled Evaluate never reaches the LLM.
 type countingCompletionClient struct {
@@ -237,9 +270,15 @@ func (c *countingCompletionClient) CreateEmbeddings(_ context.Context, _ string,
 type successfulCompletionClient struct {
 	body  string
 	usage openrouter.Usage
+
+	mu      sync.Mutex
+	lastReq openrouter.ObjectCompletionRequest
 }
 
-func (c *successfulCompletionClient) GetObjectCompletion(_ context.Context, _ openrouter.ObjectCompletionRequest) (*openrouter.CompletionResponse, error) {
+func (c *successfulCompletionClient) GetObjectCompletion(_ context.Context, req openrouter.ObjectCompletionRequest) (*openrouter.CompletionResponse, error) {
+	c.mu.Lock()
+	c.lastReq = req
+	c.mu.Unlock()
 	content := or.CreateChatAssistantMessageContentStr(c.body)
 	msg := or.CreateChatMessagesAssistant(or.ChatAssistantMessage{
 		Role:    or.ChatAssistantMessageRoleAssistant,

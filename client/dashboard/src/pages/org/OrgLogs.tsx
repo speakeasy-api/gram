@@ -6,11 +6,12 @@ import { Type } from "@/components/ui/type";
 import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
 import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet";
 import { Stack } from "@speakeasy-api/moonshine";
-import { Eye, FileText, Monitor, ShieldCheck } from "lucide-react";
+import { Eye, FileText, LogIn, Monitor, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { AIIntegrationsSection } from "./AIIntegrationsSection";
 import { OtelForwardingSection } from "./OtelForwardingSection";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
+import { handleAPIError } from "@/lib/errors";
 
 export default function OrgLogs(): JSX.Element {
   return (
@@ -40,6 +41,9 @@ function OrgLogsInner() {
   const [observabilityModeEnabled, setObservabilityModeEnabled] = useState<
     boolean | null
   >(null);
+  const [hooksBrowserLoginEnabled, setHooksBrowserLoginEnabled] = useState<
+    boolean | null
+  >(null);
 
   const effectiveLogsEnabled =
     logsEnabled ?? featuresData?.logsEnabled ?? false;
@@ -49,6 +53,8 @@ function OrgLogsInner() {
     sessionCaptureEnabled ?? featuresData?.sessionCaptureEnabled ?? false;
   const effectiveObservabilityModeEnabled =
     observabilityModeEnabled ?? featuresData?.observabilityModeEnabled ?? false;
+  const effectiveHooksBrowserLoginEnabled =
+    hooksBrowserLoginEnabled ?? featuresData?.hooksBrowserLoginEnabled ?? false;
 
   const { mutate: setLogsFeature, status: logsMutationStatus } =
     useFeaturesSetMutation({
@@ -63,7 +69,16 @@ function OrgLogsInner() {
           setSessionCaptureEnabled(enabled);
         } else if (featureName === FeatureName.ObservabilityMode) {
           setObservabilityModeEnabled(enabled);
+        } else if (featureName === FeatureName.HooksBrowserLogin) {
+          setHooksBrowserLoginEnabled(enabled);
         }
+      },
+      onError: (error) => {
+        // Surfaces, among others, the phased-rollout block when an org toggles
+        // observability mode before it's approved for the latest hooks version.
+        // On error the optimistic state above never runs, so the switch reverts
+        // to the server value.
+        handleAPIError(error, "Failed to update setting");
       },
     });
 
@@ -118,6 +133,17 @@ function OrgLogsInner() {
       request: {
         setProductFeatureRequestBody: {
           featureName: FeatureName.ObservabilityMode,
+          enabled,
+        },
+      },
+    });
+  };
+
+  const handleSetHooksBrowserLogin = (enabled: boolean) => {
+    setLogsFeature({
+      request: {
+        setProductFeatureRequestBody: {
+          featureName: FeatureName.HooksBrowserLogin,
           enabled,
         },
       },
@@ -208,8 +234,8 @@ function OrgLogsInner() {
                 className="text-muted-foreground ml-6 text-sm"
               >
                 Capture user prompts and assistant responses from agents like
-                Cursor, Claude Code, and more. Sessions appear in the Agent
-                Sessions tab.
+                Cursor, Claude Code, Codex, and more. Sessions appear in the
+                Agent Sessions tab.
               </Type>
             </Stack>
             {!featuresLoading && (
@@ -249,6 +275,37 @@ function OrgLogsInner() {
                   onCheckedChange={handleSetObservabilityMode}
                   disabled={isMutatingLogs}
                   aria-label="Enable observability mode"
+                />
+              </RequireScope>
+            )}
+          </Stack>
+
+          <div className="border-border border-t" />
+
+          <Stack direction="horizontal" justify="space-between" align="center">
+            <Stack gap={1}>
+              <Stack direction="horizontal" align="center" gap={2}>
+                <LogIn className="text-muted-foreground h-4 w-4" />
+                <Type variant="body" className="font-medium">
+                  Hook Browser Sign-In
+                </Type>
+              </Stack>
+              <Type
+                variant="body"
+                className="text-muted-foreground ml-6 text-sm"
+              >
+                Let hook plugins sign users in through the browser to record
+                events under their own identity. When off, plugins use the
+                organization key or explicitly configured credentials.
+              </Type>
+            </Stack>
+            {!featuresLoading && (
+              <RequireScope scope="org:admin" level="component">
+                <Switch
+                  checked={effectiveHooksBrowserLoginEnabled}
+                  onCheckedChange={handleSetHooksBrowserLogin}
+                  disabled={isMutatingLogs}
+                  aria-label="Enable hook browser sign-in"
                 />
               </RequireScope>
             )}

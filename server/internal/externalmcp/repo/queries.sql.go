@@ -434,6 +434,7 @@ SELECT
   t.id,
   t.tool_urn,
   e.slug,
+  t.header_definitions,
   t.read_only_hint,
   t.destructive_hint,
   t.idempotent_hint,
@@ -452,13 +453,14 @@ type GetExternalMCPToolDefinitionsByURNsParams struct {
 }
 
 type GetExternalMCPToolDefinitionsByURNsRow struct {
-	ID              uuid.UUID
-	ToolUrn         string
-	Slug            string
-	ReadOnlyHint    pgtype.Bool
-	DestructiveHint pgtype.Bool
-	IdempotentHint  pgtype.Bool
-	OpenWorldHint   pgtype.Bool
+	ID                uuid.UUID
+	ToolUrn           string
+	Slug              string
+	HeaderDefinitions []byte
+	ReadOnlyHint      pgtype.Bool
+	DestructiveHint   pgtype.Bool
+	IdempotentHint    pgtype.Bool
+	OpenWorldHint     pgtype.Bool
 }
 
 func (q *Queries) GetExternalMCPToolDefinitionsByURNs(ctx context.Context, arg GetExternalMCPToolDefinitionsByURNsParams) ([]GetExternalMCPToolDefinitionsByURNsRow, error) {
@@ -474,6 +476,7 @@ func (q *Queries) GetExternalMCPToolDefinitionsByURNs(ctx context.Context, arg G
 			&i.ID,
 			&i.ToolUrn,
 			&i.Slug,
+			&i.HeaderDefinitions,
 			&i.ReadOnlyHint,
 			&i.DestructiveHint,
 			&i.IdempotentHint,

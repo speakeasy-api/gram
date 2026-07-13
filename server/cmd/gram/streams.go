@@ -144,7 +144,7 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("embedded descriptor set is empty: cannot generate pubsub topology")
 			}
 
-			guardianPolicy, err := newGuardianPolicy(c, tracerProvider)
+			guardianPolicy, err := newGuardianPolicy(c, logger, tracerProvider, meterProvider)
 			if err != nil {
 				return err
 			}

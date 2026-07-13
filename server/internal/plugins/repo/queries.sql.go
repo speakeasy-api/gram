@@ -527,6 +527,56 @@ func (q *Queries) IsOrganizationFeatureEnabled(ctx context.Context, arg IsOrgani
 	return enabled, err
 }
 
+const listOrgPluginPublishTargets = `-- name: ListOrgPluginPublishTargets :many
+SELECT
+  c.project_id,
+  k.created_by_user_id
+FROM plugin_github_connections c
+JOIN projects p ON p.id = c.project_id AND p.deleted IS FALSE
+JOIN LATERAL (
+  SELECT created_by_user_id
+  FROM api_keys
+  WHERE project_id = c.project_id
+    AND deleted IS FALSE
+    AND name LIKE 'plugins-mcp-%'
+  ORDER BY created_at DESC
+  LIMIT 1
+) k ON TRUE
+WHERE p.organization_id = $1
+ORDER BY c.project_id ASC
+`
+
+type ListOrgPluginPublishTargetsRow struct {
+	ProjectID       uuid.UUID
+	CreatedByUserID string
+}
+
+// Lists every project in one organization that has a GitHub plugin connection,
+// with the actor user for each (the creator of the project's most recent
+// plugins-mcp API key), so an org-level setting change (e.g. observability mode)
+// can be republished to all of the org's marketplaces. Like
+// ListPluginPublishCandidates this is a deliberate cross-project sweep, but it is
+// constrained to a single organization rather than scanning globally.
+func (q *Queries) ListOrgPluginPublishTargets(ctx context.Context, organizationID string) ([]ListOrgPluginPublishTargetsRow, error) {
+	rows, err := q.db.Query(ctx, listOrgPluginPublishTargets, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrgPluginPublishTargetsRow
+	for rows.Next() {
+		var i ListOrgPluginPublishTargetsRow
+		if err := rows.Scan(&i.ProjectID, &i.CreatedByUserID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPluginAssignments = `-- name: ListPluginAssignments :many
 SELECT id, plugin_id, organization_id, principal_urn, created_at, updated_at
 FROM plugin_assignments
@@ -1157,8 +1207,8 @@ func (q *Queries) UpdatePluginServer(ctx context.Context, arg UpdatePluginServer
 }
 
 const upsertGitHubConnection = `-- name: UpsertGitHubConnection :one
-INSERT INTO plugin_github_connections (project_id, installation_id, repo_owner, repo_name, marketplace_token, published_mcp_fingerprints, published_hooks_version)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO plugin_github_connections (project_id, installation_id, repo_owner, repo_name, marketplace_token, published_mcp_fingerprints, published_hooks_version, published_hooks_config)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 ON CONFLICT (project_id) DO UPDATE
   SET installation_id = EXCLUDED.installation_id,
       repo_owner = EXCLUDED.repo_owner,
@@ -1166,6 +1216,7 @@ ON CONFLICT (project_id) DO UPDATE
       marketplace_token = COALESCE(plugin_github_connections.marketplace_token, EXCLUDED.marketplace_token),
       published_mcp_fingerprints = EXCLUDED.published_mcp_fingerprints,
       published_hooks_version = EXCLUDED.published_hooks_version,
+      published_hooks_config = EXCLUDED.published_hooks_config,
       updated_at = clock_timestamp()
 RETURNING id, project_id, installation_id, repo_owner, repo_name, marketplace_token, published_fingerprint, published_mcp_fingerprints, published_hooks_version, published_hooks_config, created_at, updated_at
 `
@@ -1178,16 +1229,20 @@ type UpsertGitHubConnectionParams struct {
 	MarketplaceToken         pgtype.Text
 	PublishedMcpFingerprints []byte
 	PublishedHooksVersion    pgtype.Text
+	PublishedHooksConfig     []byte
 }
 
 // Inserts or refreshes a project's GitHub connection. The marketplace_token
 // argument is the candidate token to use if no token is currently set; on
 // conflict the existing token is preserved via COALESCE so callers can pass a
 // freshly-generated token on every publish without overwriting prior state.
-// Token rotation goes through a separate query. published_mcp_fingerprints and
-// published_hooks_version record the per-plugin MCP content hashes and hooks
-// generator version just published; both are always overwritten so subsequent
-// rollout runs can detect independently whether the MCP or hooks component changed.
+// Token rotation goes through a separate query. published_mcp_fingerprints,
+// published_hooks_version, and published_hooks_config record the per-plugin MCP
+// content hashes, the hooks generator version, and the hook-output-affecting
+// config just published; all are always overwritten so subsequent rollout runs
+// can detect independently whether the MCP or hooks component changed (including
+// hooks config drift a version bump can't capture, e.g. a marketplace rename or
+// observability-mode toggle).
 func (q *Queries) UpsertGitHubConnection(ctx context.Context, arg UpsertGitHubConnectionParams) (PluginGithubConnection, error) {
 	row := q.db.QueryRow(ctx, upsertGitHubConnection,
 		arg.ProjectID,
@@ -1197,6 +1252,7 @@ func (q *Queries) UpsertGitHubConnection(ctx context.Context, arg UpsertGitHubCo
 		arg.MarketplaceToken,
 		arg.PublishedMcpFingerprints,
 		arg.PublishedHooksVersion,
+		arg.PublishedHooksConfig,
 	)
 	var i PluginGithubConnection
 	err := row.Scan(

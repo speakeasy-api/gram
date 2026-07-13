@@ -28,6 +28,12 @@ func hookAdapterFor(platform string) hookAdapterSpec {
 				{Native: "PostToolUseFailure", EventType: "tool.failed"},
 				{Native: "UserPromptSubmit", EventType: "prompt.submitted"},
 				{Native: "Stop", EventType: "assistant.responded"},
+				// SubagentStop is registered for the transcript-derived MCP
+				// attribution it carries (subagent transcripts are separate
+				// files, so Stop alone cannot cover subagent lanes). It maps
+				// to usage.reported: no chat-message persistence, no policy
+				// scan — a subagent's last message is not a user-facing turn.
+				{Native: "SubagentStop", EventType: "usage.reported"},
 				{Native: "SessionEnd", EventType: "session.ended"},
 				{Native: "Notification", EventType: "notification.reported"},
 			},
@@ -192,7 +198,10 @@ gram_hooks_json_value() {
 gram_hooks_json_top_level_value() {
   local input="$1"
   local key="$2"
-  printf '%%s' "$input" | awk -v target="$key" '
+  local replacement="${3-}"
+  local rewrite=0
+  [ "$#" -lt 3 ] || rewrite=1
+  printf '%%s' "$input" | awk -v target="$key" -v replacement="$replacement" -v rewrite="$rewrite" '
 function skip_ws(s, i, n, c) {
   n = length(s)
   while (i <= n) {
@@ -285,8 +294,19 @@ END {
           } else {
             stop = bare_end(json, start)
           }
-          if (stop > 0) print trim(substr(json, start, stop - start + 1))
-          exit
+          if (stop > 0) {
+            if (!rewrite) {
+              print trim(substr(json, start, stop - start + 1))
+              exit
+            }
+            matched_count++
+            if (matched_count == 1) {
+              matched_start = start
+              matched_stop = stop
+            }
+            i = stop + 1
+            continue
+          }
         }
       }
       i = key_end + 1
@@ -298,6 +318,9 @@ END {
       depth--
     }
     i++
+  }
+  if (rewrite && matched_count == 1) {
+    printf "%%s\"%%s\"%%s", substr(json, 1, matched_start - 1), replacement, substr(json, matched_stop + 1)
   }
 }'
 }
@@ -947,6 +970,7 @@ gram_hooks_cursor_backfill_prompt_if_missing() {
   prompt_members=$(gram_hooks_join_members \
     "$(gram_hooks_json_string_member "hook_event_name" "beforeSubmitPrompt")" \
     "$(gram_hooks_json_string_member "prompt" "$prompt")" \
+    "$(gram_hooks_json_string_member "user_email" "$(gram_hooks_json_string_value "$payload" "user_email")")" \
     "$(gram_hooks_json_string_member "conversation_id" "$(gram_hooks_json_string_value "$payload" "conversation_id")")" \
     "$(gram_hooks_json_string_member "generation_id" "$(gram_hooks_json_string_value "$payload" "generation_id")")" \
     "$(gram_hooks_json_string_member "session_id" "$session_id")" \
@@ -1010,7 +1034,8 @@ gram_hooks_build_canonical_payload() {
     "$(gram_hooks_json_string_member "adapter" "%s")" \
     "$(gram_hooks_json_string_member "adapter_version" "$(gram_hooks_first_string "$payload" "cursor_version" "codex_version" "version")")" \
     "$(gram_hooks_json_string_member "raw_event_name" "$native")" \
-    "$(gram_hooks_json_string_member "hostname" "$hostname")")
+    "$(gram_hooks_json_string_member "hostname" "$hostname")" \
+    "$(gram_hooks_json_string_member "user_email" "$(gram_hooks_json_string_value "$payload" "user_email")")")
   session_members=$(gram_hooks_join_members \
     "$(gram_hooks_json_string_member "id" "$session_id")" \
     "$(gram_hooks_json_string_member "turn_id" "$turn_id")" \
@@ -1168,7 +1193,18 @@ gram_hooks_canonical_data_members() {
     notification_members="\"notification\":{$notification_members}"
   fi
 
-  data_members=$(gram_hooks_join_members "$prompt" "$message_members" "$tool_members" "$mcp_members" "$usage_members" "$skill_name" "$notification_members")
+  # Transcript-derived MCP attribution (Claude Stop/SubagentStop/SessionEnd):
+  # the enrichment step attaches a ready-made JSON array; forward it verbatim.
+  local mcp_attribution_members=""
+  local mcp_attribution
+  mcp_attribution="$(gram_hooks_json_value "$payload" "mcp_attribution")"
+  case "$mcp_attribution" in
+    \[*)
+      mcp_attribution_members="\"mcp_attribution\":$mcp_attribution"
+      ;;
+  esac
+
+  data_members=$(gram_hooks_join_members "$prompt" "$message_members" "$tool_members" "$mcp_members" "$usage_members" "$skill_name" "$notification_members" "$mcp_attribution_members")
   printf '%%s' "$data_members"
 }
 

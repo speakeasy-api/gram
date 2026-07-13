@@ -94,6 +94,7 @@ import {
   policyMessageTypesForPayload,
   policyToCategories,
 } from "./policy-form";
+import { SeverityBadge } from "./risk-ui";
 import { CelExpressionField } from "./cel-field";
 import { useCelStatus } from "./use-cel-status";
 import { useDetectionRulesStore } from "./detection-rules-data";
@@ -130,9 +131,11 @@ import { formatUsageCost } from "@/pages/chatLogs/claudeUsage";
 // empty-string item value, so "" is mapped through this and back on change.
 const DEFAULT_MODEL_VALUE = "__default__";
 
+// Gemini 3.5 Flash is deliberately absent: the judge disables reasoning
+// (`reasoning.effort: "none"`), which the Gemini 3.5 generation rejects with a
+// 400 — every evaluation on it would fail into the policy's error mode.
 const JUDGE_MODELS: { value: string; label: string }[] = [
   { value: "", label: "Default (Gemini 3.1 Flash Lite)" },
-  { value: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash" },
   { value: "anthropic/claude-sonnet-4.6", label: "Claude Sonnet 4.6" },
   { value: "anthropic/claude-haiku-4.5", label: "Claude Haiku 4.5" },
 ];
@@ -663,6 +666,7 @@ function PromptPolicyEditor({
       : new Set<string>(),
   );
   const [userMessage, setUserMessage] = useState(policy?.userMessage ?? "");
+  const [score, setScore] = useState(policy?.score ?? 5);
   const [reviewVerdictFilter, setReviewVerdictFilter] =
     useState<EvalVerdict | null>(null);
 
@@ -677,6 +681,7 @@ function PromptPolicyEditor({
       scopeExempt !== (policy.scopeExempt ?? "") ||
       action !== (policy.action ?? "flag") ||
       userMessage !== (policy.userMessage ?? "") ||
+      score !== (policy.score ?? 5) ||
       audienceType !==
         (policy.audienceType === "targeted" ? "targeted" : "everyone") ||
       !sameSet(
@@ -760,6 +765,7 @@ function PromptPolicyEditor({
           ...scopePayload(),
           ...actionPayload(),
           userMessage,
+          score,
           autoName,
         },
       },
@@ -778,6 +784,7 @@ function PromptPolicyEditor({
           ...scopePayload(),
           ...actionPayload(),
           ...(userMessage.trim() ? { userMessage } : {}),
+          score,
           autoName,
         },
       },
@@ -880,6 +887,8 @@ function PromptPolicyEditor({
           setAudiencePrincipalUrns={setAudiencePrincipalUrns}
           userMessage={userMessage}
           setUserMessage={setUserMessage}
+          score={score}
+          setScore={setScore}
         />
       )}
 
@@ -894,6 +903,7 @@ function PromptPolicyEditor({
           scopeInclude={scopeInclude}
           scopeExempt={scopeExempt}
           action={action}
+          score={score}
           audienceType={audienceType}
           audiencePrincipalCount={audiencePrincipalUrns.size}
           verdicts={evalReview.verdicts}
@@ -1169,6 +1179,51 @@ function ScopeStep({
 
 // Shared Action step — identical for prompt and standard: flag/block picker,
 // audience, and the block-time custom message.
+// Severity assigns a CVSS-style score (0.1–10, default 5) to the policy.
+// Findings inherit it at read time to render a severity badge. Pure metadata —
+// changing it never re-scans or regenerates findings.
+const SEVERITY_MIN = 0.1;
+const SEVERITY_MAX = 10;
+
+function SeveritySection({
+  score,
+  setScore,
+}: {
+  score: number;
+  setScore: React.Dispatch<React.SetStateAction<number>>;
+}): JSX.Element {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <Label className="text-sm font-medium">Severity</Label>
+        <Stack direction="horizontal" gap={2} align="center">
+          <Type small mono>
+            {score.toFixed(1)}
+          </Type>
+          <SeverityBadge score={score} />
+        </Stack>
+      </div>
+      <Type small muted>
+        Rate how severe this policy's findings are, from {SEVERITY_MIN} to{" "}
+        {SEVERITY_MAX}. Findings surface this as a severity badge; it does not
+        change what the policy detects.
+      </Type>
+      <div className="pt-3">
+        <Slider
+          value={score}
+          onChange={(v) =>
+            setScore(Math.max(SEVERITY_MIN, Math.min(SEVERITY_MAX, v)))
+          }
+          min={SEVERITY_MIN}
+          max={SEVERITY_MAX}
+          step={0.1}
+          ticks={[SEVERITY_MIN, 4, 7, 9, SEVERITY_MAX]}
+        />
+      </div>
+    </div>
+  );
+}
+
 function ActionStep({
   action,
   setAction,
@@ -1178,6 +1233,8 @@ function ActionStep({
   setAudiencePrincipalUrns,
   userMessage,
   setUserMessage,
+  score,
+  setScore,
   flagOnlySelected = false,
 }: {
   action: PolicyAction;
@@ -1190,47 +1247,54 @@ function ActionStep({
   setAudiencePrincipalUrns: React.Dispatch<React.SetStateAction<Set<string>>>;
   userMessage: string;
   setUserMessage: React.Dispatch<React.SetStateAction<string>>;
+  score: number;
+  setScore: React.Dispatch<React.SetStateAction<number>>;
   flagOnlySelected?: boolean;
 }): JSX.Element {
   return (
-    <Card>
-      <SectionHeader description="Choose how the policy responds when it fires, and who it applies to." />
-      <Stack gap={5}>
-        <ActionPicker
-          formAction={action}
-          setFormAction={setAction}
-          flagOnlySelected={flagOnlySelected}
-        />
-        <PolicyAudiencePicker
-          formAudienceType={audienceType}
-          setFormAudienceType={setAudienceType}
-          selectedAudiencePrincipalUrns={audiencePrincipalUrns}
-          setSelectedAudiencePrincipalUrns={setAudiencePrincipalUrns}
-        />
-        {action !== "flag" && (
-          <div className="space-y-2">
-            <Label className="text-sm font-medium">
-              {action === "warn" ? "Warning message" : "Custom Message"}
-            </Label>
-            <p className="text-muted-foreground text-xs">
-              {action === "warn"
-                ? "Shown to the user when this policy warns on a tool call or prompt. Supports %{match}, %{entity}, %{policy}, and %{rule} placeholders, substituted at warn time. Leave blank to use the default message."
-                : "Shown to the user when this policy blocks a tool call or prompt. Leave blank to use the default message."}
-            </p>
-            <TextArea
-              value={userMessage}
-              onChange={setUserMessage}
-              placeholder={
-                action === "warn"
-                  ? "e.g. %{match} looks sensitive. Acknowledge to proceed."
-                  : "e.g. This action was blocked by your organization's security policy. Contact your admin for help."
-              }
-              rows={3}
-            />
-          </div>
-        )}
-      </Stack>
-    </Card>
+    <div className="space-y-4">
+      <Card>
+        <SeveritySection score={score} setScore={setScore} />
+      </Card>
+      <Card>
+        <SectionHeader description="Choose how the policy responds when it fires, and who it applies to." />
+        <Stack gap={5}>
+          <ActionPicker
+            formAction={action}
+            setFormAction={setAction}
+            flagOnlySelected={flagOnlySelected}
+          />
+          <PolicyAudiencePicker
+            formAudienceType={audienceType}
+            setFormAudienceType={setAudienceType}
+            selectedAudiencePrincipalUrns={audiencePrincipalUrns}
+            setSelectedAudiencePrincipalUrns={setAudiencePrincipalUrns}
+          />
+          {action !== "flag" && (
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">
+                {action === "warn" ? "Warning message" : "Custom Message"}
+              </Label>
+              <p className="text-muted-foreground text-xs">
+                {action === "warn"
+                  ? "Shown to the user when this policy warns on a tool call or prompt. Supports %{match}, %{entity}, %{policy}, and %{rule} placeholders, substituted at warn time. Leave blank to use the default message."
+                  : "Shown to the user when this policy blocks a tool call or prompt. Leave blank to use the default message."}
+              </p>
+              <TextArea
+                value={userMessage}
+                onChange={setUserMessage}
+                placeholder={
+                  action === "warn"
+                    ? "e.g. %{match} looks sensitive. Acknowledge to proceed."
+                    : "e.g. This action was blocked by your organization's security policy. Contact your admin for help."
+                }
+                rows={3}
+              />
+            </div>
+          )}
+        </Stack>
+      </Card>
+    </div>
   );
 }
 
@@ -1577,6 +1641,7 @@ function PromptReview({
   scopeInclude,
   scopeExempt,
   action,
+  score,
   audienceType,
   audiencePrincipalCount,
   verdicts,
@@ -1592,6 +1657,7 @@ function PromptReview({
   scopeInclude: string;
   scopeExempt: string;
   action: PolicyAction;
+  score: number;
   audienceType: "everyone" | "targeted";
   audiencePrincipalCount: number;
   verdicts: Map<string, EvalVerdict>;
@@ -1643,6 +1709,9 @@ function PromptReview({
                   ? "Warn"
                   : "Flag"}
             </Badge>
+          </SummaryRow>
+          <SummaryRow label="Severity">
+            <SeverityBadge score={score} />
           </SummaryRow>
           <SummaryRow label="Audience">
             <Type small>
@@ -2750,6 +2819,7 @@ function StandardPolicyEditor({
         policy.audienceType === "targeted"
           ? new Set(policy.audiencePrincipalUrns ?? [])
           : new Set<string>(),
+      score: policy.score ?? 5,
     };
   }, [policy]);
 
@@ -2794,6 +2864,7 @@ function StandardPolicyEditor({
   const [customizeCategory, setCustomizeCategory] =
     useState<RuleCategory | null>(null);
   const [detectionExpanded, setDetectionExpanded] = useState(true);
+  const [score, setScore] = useState(policy?.score ?? 5);
 
   // ── Derived state ──
   const includeCelStatus = useCelStatus(
@@ -2840,6 +2911,7 @@ function StandardPolicyEditor({
       !sameSet(selectedCustomRuleIds, orig.customRuleIds) ||
       !sameSet(selectedCategories, orig.categories) ||
       approvedDomains !== orig.approvedDomains ||
+      score !== orig.score ||
       !sameSet(audiencePrincipalUrns, orig.audiencePrincipalUrns));
 
   const updateMutation = useRiskPoliciesUpdateMutation({
@@ -2933,6 +3005,7 @@ function StandardPolicyEditor({
             audiencePrincipalUrns: principals,
             autoName,
             userMessage,
+            score,
             ...(identityActive ? { approvedEmailDomains } : {}),
           },
         },
@@ -2956,6 +3029,7 @@ function StandardPolicyEditor({
             audiencePrincipalUrns: principals,
             autoName,
             ...(userMessage.trim() ? { userMessage } : {}),
+            score,
             ...(identityActive ? { approvedEmailDomains } : {}),
           },
         },
@@ -3066,6 +3140,8 @@ function StandardPolicyEditor({
             setAudiencePrincipalUrns={setAudiencePrincipalUrns}
             userMessage={userMessage}
             setUserMessage={setUserMessage}
+            score={score}
+            setScore={setScore}
             flagOnlySelected={flagOnlySelected}
           />
         )}
@@ -3080,6 +3156,7 @@ function StandardPolicyEditor({
             scopeInclude={scopeInclude}
             scopeExempt={scopeExempt}
             action={action}
+            score={score}
             audienceType={audienceType}
             audiencePrincipalCount={audiencePrincipalUrns.size}
           />
@@ -3114,6 +3191,7 @@ function StandardReview({
   scopeInclude,
   scopeExempt,
   action,
+  score,
   audienceType,
   audiencePrincipalCount,
 }: {
@@ -3125,6 +3203,7 @@ function StandardReview({
   scopeInclude: string;
   scopeExempt: string;
   action: PolicyAction;
+  score: number;
   audienceType: "everyone" | "targeted";
   audiencePrincipalCount: number;
 }): JSX.Element {
@@ -3182,6 +3261,9 @@ function StandardReview({
           <Badge variant={action === "flag" ? "neutral" : "warning"}>
             {action === "block" ? "Block" : action === "warn" ? "Warn" : "Flag"}
           </Badge>
+        </SummaryRow>
+        <SummaryRow label="Severity">
+          <SeverityBadge score={score} />
         </SummaryRow>
         <SummaryRow label="Audience">
           <Type small>
