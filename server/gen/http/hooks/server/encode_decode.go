@@ -765,20 +765,6 @@ func DecodeIngestRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.
 			idempotencyKey = &idempotencyKeyRaw
 		}
 		payload = NewIngestPayload(&body, apikeyToken, projectSlugInput, idempotencyKey)
-		if payload.ApikeyToken != nil {
-			if strings.Contains(*payload.ApikeyToken, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
-				payload.ApikeyToken = &cred
-			}
-		}
-		if payload.ProjectSlugInput != nil {
-			if strings.Contains(*payload.ProjectSlugInput, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
-				payload.ProjectSlugInput = &cred
-			}
-		}
 
 		return payload, nil
 	}
@@ -1393,6 +1379,7 @@ func unmarshalHookIngestSourceRequestBodyToHooksHookIngestSource(v *HookIngestSo
 		AdapterVersion: v.AdapterVersion,
 		RawEventName:   v.RawEventName,
 		Hostname:       v.Hostname,
+		UserEmail:      v.UserEmail,
 	}
 
 	return res
@@ -1453,6 +1440,16 @@ func unmarshalHookIngestDataRequestBodyToHooksHookIngestData(v *HookIngestDataRe
 	}
 	if v.Notification != nil {
 		res.Notification = unmarshalHookNotificationDataRequestBodyToHooksHookNotificationData(v.Notification)
+	}
+	if v.McpAttribution != nil {
+		res.McpAttribution = make([]*hooks.HookMCPAttributionEntry, len(v.McpAttribution))
+		for i, val := range v.McpAttribution {
+			if val == nil {
+				res.McpAttribution[i] = nil
+				continue
+			}
+			res.McpAttribution[i] = unmarshalHookMCPAttributionEntryRequestBodyToHooksHookMCPAttributionEntry(val)
+		}
 	}
 
 	return res
@@ -1569,6 +1566,22 @@ func unmarshalHookNotificationDataRequestBodyToHooksHookNotificationData(v *Hook
 		Type:    v.Type,
 		Title:   v.Title,
 		Message: v.Message,
+	}
+
+	return res
+}
+
+// unmarshalHookMCPAttributionEntryRequestBodyToHooksHookMCPAttributionEntry
+// builds a value of type *hooks.HookMCPAttributionEntry from a value of type
+// *HookMCPAttributionEntryRequestBody.
+func unmarshalHookMCPAttributionEntryRequestBodyToHooksHookMCPAttributionEntry(v *HookMCPAttributionEntryRequestBody) *hooks.HookMCPAttributionEntry {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.HookMCPAttributionEntry{
+		RequestID: *v.RequestID,
+		McpServer: v.McpServer,
+		McpTool:   v.McpTool,
 	}
 
 	return res

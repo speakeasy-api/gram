@@ -14,6 +14,19 @@ export function getServerURL(): string {
   return __GRAM_SERVER_URL__ ?? window.location.origin;
 }
 
+// tunnel.speakeasy.com in prod, tunnel-pr-N.<env> in previews (single label
+// keeps the wildcard cert valid), tunnel.<host> otherwise.
+export function tunnelGatewayURL(): string {
+  const server = new URL(getServerURL());
+  const host =
+    server.host === "app.getgram.ai"
+      ? "tunnel.speakeasy.com"
+      : /^pr-\d+\./.test(server.host)
+        ? `tunnel-${server.host}`
+        : `tunnel.${server.host}`;
+  return `${server.protocol === "http:" ? "ws" : "wss"}://${host}/connect`;
+}
+
 // __PLAYGROUND_PROXY_URL__ is the dashboard origin in dev (so browser-side MCP
 // requests can ride the vite proxy and ferry cookies the Vercel AI SDK can't
 // forward across origins), and undefined in prod. Consumed by the playground

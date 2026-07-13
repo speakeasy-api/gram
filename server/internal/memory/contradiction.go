@@ -100,8 +100,10 @@ func (s *MemoryService) detectContradiction(ctx context.Context, orgID, projectI
 		Temperature:    contradictionTemperature,
 		JSONSchema:     &jsonSchemaConfig,
 		UsageSource:    billing.ModelUsageSourceGram,
+		KeyType:        openrouter.KeyTypeInternal,
 		UserID:         "",
 		ExternalUserID: "",
+		UserEmail:      "",
 		HTTPMetadata:   nil,
 	}
 

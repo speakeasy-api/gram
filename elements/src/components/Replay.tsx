@@ -29,7 +29,7 @@ import {
   type Cassette,
   type ReplayOptions,
 } from "@/lib/cassette";
-import { MODELS } from "@/lib/models";
+import { DEFAULT_MODEL } from "@/lib/models";
 import { cn } from "@/lib/utils";
 import { recommended } from "@/plugins";
 import type { ElementsConfig } from "@/types";
@@ -104,7 +104,7 @@ export const Replay = ({
     () => ({
       config,
       setModel: () => {},
-      model: MODELS[0],
+      model: DEFAULT_MODEL,
       isExpanded: false,
       setIsExpanded: () => {},
       isOpen: true,

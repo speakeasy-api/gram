@@ -1,4 +1,4 @@
-export type PolicyAction = "flag" | "block";
+export type PolicyAction = "flag" | "block" | "warn";
 
 export type PolicyMessageType =
   | "user_message"
@@ -91,7 +91,7 @@ export const RULE_CATEGORY_META: Record<
   shadow_mcp: {
     label: "Shadow MCP",
     description:
-      "Tool calls in Cursor and Claude Code that don't come from a Speakeasy-issued MCP server. Requires Speakeasy hooks to be installed on the agent.",
+      "Tool calls in Cursor, Claude Code, and Codex that don't come from a Speakeasy-issued MCP server. Requires Speakeasy hooks to be installed on the agent.",
     icon: "shield-off",
   },
   destructive_tool: {

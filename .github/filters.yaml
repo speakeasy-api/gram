@@ -27,17 +27,26 @@ cli:
   - "server/design/**"
   - "server/gen/**"
 
+hooks:
+  - ".github/**"
+  - "go.mod"
+  - "go.sum"
+  - "hooks/**"
+  - ".mise-tasks/build/hooks.sh"
+  - ".mise-tasks/test/hooks.sh"
+
 tsframework:
   - "ts-framework/**"
 
 sdk:
-  - "client/sdk/**"
+  - "client/dashboard/src/sdk/**"
   - "package.json"
   - "pnpm-lock.yaml"
 
 sdk-gen:
   - ".speakeasy/workflow.yaml"
-  - "client/sdk/.speakeasy/gen.yaml"
+  - "client/dashboard/src/sdk/.speakeasy/gen.yaml"
+  - "hooks/sdk/.speakeasy/gen.yaml"
   - "mise.toml"
   - "overlays/**"
   - "server/gen/http/openapi3.yaml"

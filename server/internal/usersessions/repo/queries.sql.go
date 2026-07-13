@@ -195,7 +195,7 @@ VALUES (
     $3,
     $4
 )
-RETURNING id, project_id, slug, authn_challenge_mode, session_duration, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, slug, authn_challenge_mode, session_duration, classification, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateUserSessionIssuerParams struct {
@@ -219,6 +219,7 @@ func (q *Queries) CreateUserSessionIssuer(ctx context.Context, arg CreateUserSes
 		&i.Slug,
 		&i.AuthnChallengeMode,
 		&i.SessionDuration,
+		&i.Classification,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -246,10 +247,27 @@ func (q *Queries) DeleteRemoteSessionClientAttachmentsForUserSessionIssuer(ctx c
 }
 
 const deleteUserSessionIssuer = `-- name: DeleteUserSessionIssuer :one
-UPDATE user_session_issuers
+UPDATE user_session_issuers AS issuer
 SET deleted_at = clock_timestamp()
-WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
-RETURNING id, project_id, slug, authn_challenge_mode, session_duration, created_at, updated_at, deleted_at, deleted
+WHERE issuer.id = $1
+  AND issuer.project_id = $2
+  AND issuer.deleted IS FALSE
+  AND NOT EXISTS (
+    SELECT 1
+    FROM mcp_servers AS server
+    WHERE server.project_id = $2
+      AND server.user_session_issuer_id = issuer.id
+      AND server.deleted IS FALSE
+
+    UNION ALL
+
+    SELECT 1
+    FROM toolsets AS toolset
+    WHERE toolset.project_id = $2
+      AND toolset.user_session_issuer_id = issuer.id
+      AND toolset.deleted IS FALSE
+  )
+RETURNING issuer.id, issuer.project_id, issuer.slug, issuer.authn_challenge_mode, issuer.session_duration, issuer.classification, issuer.created_at, issuer.updated_at, issuer.deleted_at, issuer.deleted
 `
 
 type DeleteUserSessionIssuerParams struct {
@@ -257,6 +275,8 @@ type DeleteUserSessionIssuerParams struct {
 	ProjectID uuid.UUID
 }
 
+// Recheck active owners in the write so an owner added after the handler's
+// preflight check prevents the issuer from being soft-deleted.
 func (q *Queries) DeleteUserSessionIssuer(ctx context.Context, arg DeleteUserSessionIssuerParams) (UserSessionIssuer, error) {
 	row := q.db.QueryRow(ctx, deleteUserSessionIssuer, arg.ID, arg.ProjectID)
 	var i UserSessionIssuer
@@ -266,6 +286,7 @@ func (q *Queries) DeleteUserSessionIssuer(ctx context.Context, arg DeleteUserSes
 		&i.Slug,
 		&i.AuthnChallengeMode,
 		&i.SessionDuration,
+		&i.Classification,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -522,7 +543,7 @@ func (q *Queries) GetUserSessionConsentByID(ctx context.Context, arg GetUserSess
 }
 
 const getUserSessionIssuerByID = `-- name: GetUserSessionIssuerByID :one
-SELECT id, project_id, slug, authn_challenge_mode, session_duration, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, slug, authn_challenge_mode, session_duration, classification, created_at, updated_at, deleted_at, deleted
 FROM user_session_issuers
 WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
 `
@@ -541,6 +562,7 @@ func (q *Queries) GetUserSessionIssuerByID(ctx context.Context, arg GetUserSessi
 		&i.Slug,
 		&i.AuthnChallengeMode,
 		&i.SessionDuration,
+		&i.Classification,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -550,7 +572,7 @@ func (q *Queries) GetUserSessionIssuerByID(ctx context.Context, arg GetUserSessi
 }
 
 const getUserSessionIssuerBySlug = `-- name: GetUserSessionIssuerBySlug :one
-SELECT id, project_id, slug, authn_challenge_mode, session_duration, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, slug, authn_challenge_mode, session_duration, classification, created_at, updated_at, deleted_at, deleted
 FROM user_session_issuers
 WHERE slug = $1 AND project_id = $2 AND deleted IS FALSE
 `
@@ -569,6 +591,7 @@ func (q *Queries) GetUserSessionIssuerBySlug(ctx context.Context, arg GetUserSes
 		&i.Slug,
 		&i.AuthnChallengeMode,
 		&i.SessionDuration,
+		&i.Classification,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -754,7 +777,7 @@ func (q *Queries) ListUserSessionConsentsByProjectID(ctx context.Context, arg Li
 }
 
 const listUserSessionIssuersByProjectID = `-- name: ListUserSessionIssuersByProjectID :many
-SELECT id, project_id, slug, authn_challenge_mode, session_duration, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, slug, authn_challenge_mode, session_duration, classification, created_at, updated_at, deleted_at, deleted
 FROM user_session_issuers
 WHERE project_id = $1
   AND deleted IS FALSE
@@ -784,6 +807,7 @@ func (q *Queries) ListUserSessionIssuersByProjectID(ctx context.Context, arg Lis
 			&i.Slug,
 			&i.AuthnChallengeMode,
 			&i.SessionDuration,
+			&i.Classification,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -1302,7 +1326,7 @@ SET
     session_duration = COALESCE($3::interval, session_duration),
     updated_at = clock_timestamp()
 WHERE id = $4 AND project_id = $5 AND deleted IS FALSE
-RETURNING id, project_id, slug, authn_challenge_mode, session_duration, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, slug, authn_challenge_mode, session_duration, classification, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateUserSessionIssuerParams struct {
@@ -1328,10 +1352,43 @@ func (q *Queries) UpdateUserSessionIssuer(ctx context.Context, arg UpdateUserSes
 		&i.Slug,
 		&i.AuthnChallengeMode,
 		&i.SessionDuration,
+		&i.Classification,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const userSessionIssuerHasActiveOwner = `-- name: UserSessionIssuerHasActiveOwner :one
+SELECT EXISTS (
+    SELECT 1
+    FROM mcp_servers AS server
+    WHERE server.project_id = $1
+      AND server.user_session_issuer_id = $2::uuid
+      AND server.deleted IS FALSE
+
+    UNION ALL
+
+    SELECT 1
+    FROM toolsets AS toolset
+    WHERE toolset.project_id = $1
+      AND toolset.user_session_issuer_id = $2::uuid
+      AND toolset.deleted IS FALSE
+)
+`
+
+type UserSessionIssuerHasActiveOwnerParams struct {
+	ProjectID           uuid.UUID
+	UserSessionIssuerID uuid.UUID
+}
+
+// An issuer can be referenced by an MCP server or toolset. Only delete it once
+// no active owner remains.
+func (q *Queries) UserSessionIssuerHasActiveOwner(ctx context.Context, arg UserSessionIssuerHasActiveOwnerParams) (bool, error) {
+	row := q.db.QueryRow(ctx, userSessionIssuerHasActiveOwner, arg.ProjectID, arg.UserSessionIssuerID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }

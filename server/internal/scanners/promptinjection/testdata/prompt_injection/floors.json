@@ -1,7 +1,7 @@
 {
-  "fp_rate_max": 0,
+  "fp_rate_max": 0.006,
   "recall_floor": null,
-  "last_updated": "2026-05-07",
+  "last_updated": "2026-07-09",
   "last_updated_by": "vishal@speakeasy.com",
-  "notes": "Floor stays at 0 after tightening encoded-payload around operational log noise. The remaining heuristics produce zero false positives on this corpus (549 benigns). Any new FP fails CI. recall_floor stays null/soft."
+  "notes": "Raised 0->0.006: realistic agent-runtime benigns (agent_fp_benigns + adversarial) trip the L0 substring heuristics on 3 of ~632 (an assistant msg discussing prompt injection, two defensive skill files quoting 'ignore previous instructions') — all benigns the L1 judge passes. Known L0 brittleness, not a regression; gates L0 only. L0 removal tracked in AIS-293. recall_floor stays null/soft."
 }

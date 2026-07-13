@@ -41,7 +41,7 @@ var _ = Service("risk", func() {
 			Attribute("scope_include", String, "CEL scope predicate: the policy evaluates a message only when this boolean expression is true (in addition to message_types). Omit/empty means all messages are in scope.")
 			Attribute("scope_exempt", String, "CEL exemption predicate: the policy is skipped for a message when this boolean expression is true. Omit/empty means no inline exemption.")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
-			Attribute("action", String, "Policy action: flag or block.", func() {
+			Attribute("action", String, "Policy action: flag, warn (challenge), or block.", func() {
 				shared.RiskPolicyActionEnum()
 				Default("flag")
 			})
@@ -54,6 +54,12 @@ var _ = Service("risk", func() {
 			Attribute("user_message", String, "Optional message shown to end users when this policy blocks an action or surfaces a flagged finding.")
 			Attribute("prompt", String, "For prompt_based policies: the guardrail prompt the LLM judge evaluates each in-scope message against. Required when policy_type is prompt_based.")
 			Attribute("model_config", shared.RiskPolicyModelConfig, "For prompt_based policies: per-policy LLM-judge model configuration.")
+			Attribute("score", Float64, "CVSS-style severity (0.1-10) assigned to findings this policy produces. Omit to apply the default (5).", func() {
+				Minimum(0.1)
+				Maximum(10)
+				Default(5)
+				Example(5)
+			})
 		})
 
 		Result(shared.RiskPolicy)
@@ -177,7 +183,7 @@ var _ = Service("risk", func() {
 			Attribute("scope_include", String, "CEL scope predicate (in addition to message_types). Omit to preserve the current value; send empty to clear.")
 			Attribute("scope_exempt", String, "CEL exemption predicate. Omit to preserve the current value; send empty to clear.")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
-			Attribute("action", String, "Policy action: flag or block.", func() {
+			Attribute("action", String, "Policy action: flag, warn (challenge), or block.", func() {
 				shared.RiskPolicyActionEnum()
 			})
 			Attribute("audience_type", String, "Policy audience type: everyone or targeted. Omit to preserve the current audience type.", func() {
@@ -188,6 +194,11 @@ var _ = Service("risk", func() {
 			Attribute("user_message", String, "Optional message shown to end users when this policy blocks an action or surfaces a flagged finding. Send an empty string to clear.")
 			Attribute("prompt", String, "For prompt_based policies: the guardrail prompt the LLM judge evaluates each in-scope message against. Omit to preserve the current value.")
 			Attribute("model_config", shared.RiskPolicyModelConfig, "For prompt_based policies: per-policy LLM-judge model configuration. Omit to preserve the current value.")
+			Attribute("score", Float64, "CVSS-style severity (0.1-10) assigned to findings this policy produces. Omit to preserve the current value.", func() {
+				Minimum(0.1)
+				Maximum(10)
+				Example(5)
+			})
 			Required("id", "name")
 		})
 
@@ -620,6 +631,101 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-group", "risk.policyBypassRequests")
 		Meta("openapi:extension:x-speakeasy-name-override", "create")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskCreatePolicyBypassRequest", "type": "mutation"}`)
+	})
+
+	Method("acknowledgeRiskPolicyChallenge", func() {
+		Description("Acknowledge a risk policy warn/challenge from a warning-link token. Records the acknowledgement so the user's retried action proceeds; self-service (no admin approval).")
+		Security(security.Session)
+
+		Payload(func() {
+			security.SessionPayload()
+			Attribute("ack_token", String, "Acknowledgement token generated when a warn policy challenged the action.")
+			Required("ack_token")
+		})
+
+		Result(func() {
+			Attribute("acknowledged", Boolean, "Whether the challenge is now acknowledged.")
+			Attribute("policy_name", String, "The policy that issued the warning.")
+			Attribute("expires_at", String, "RFC3339 time until which the acknowledgement suppresses re-challenge.", func() {
+				Format(FormatDateTime)
+			})
+			Required("acknowledged")
+		})
+
+		HTTP(func() {
+			POST("/rpc/risk.acknowledgePolicyChallenge")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "acknowledgeRiskPolicyChallenge")
+		Meta("openapi:extension:x-speakeasy-group", "risk.policyChallenges")
+		Meta("openapi:extension:x-speakeasy-name-override", "acknowledge")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskAcknowledgePolicyChallenge", "type": "mutation"}`)
+	})
+
+	Method("getRiskPolicyChallenge", func() {
+		Description("Fetch the details of a risk policy warn/challenge from a warning-link token, WITHOUT acknowledging it. Powers the approval page (shows what was flagged and Approve/Deny actions).")
+		Security(security.Session)
+
+		Payload(func() {
+			security.SessionPayload()
+			Attribute("ack_token", String, "Acknowledgement token generated when a warn policy challenged the action.")
+			Required("ack_token")
+		})
+
+		Result(func() {
+			Attribute("policy_name", String, "The policy that issued the warning.")
+			Attribute("tool_name", String, "The tool the challenge applies to, if any.")
+			Attribute("message", String, "Human-facing challenge message describing what was flagged.")
+			Attribute("expires_at", String, "RFC3339 time the acknowledgement link expires.", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("acknowledged", Boolean, "Whether this challenge has already been acknowledged.")
+			Required("message", "acknowledged")
+		})
+
+		HTTP(func() {
+			POST("/rpc/risk.getPolicyChallenge")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getRiskPolicyChallenge")
+		Meta("openapi:extension:x-speakeasy-group", "risk.policyChallenges")
+		Meta("openapi:extension:x-speakeasy-name-override", "get")
+		// mutation, not query: the token is a POST body (it is sensitive, so it
+		// cannot live in a GET URL). The generated query cache key is built from
+		// URL/query params only and would omit the body, so two different tokens
+		// in one session would collide on the same key and return stale data.
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskGetPolicyChallenge", "type": "mutation"}`)
+	})
+
+	Method("declineRiskPolicyChallenge", func() {
+		Description("Decline a risk policy warn/challenge from a warning-link token: invalidate the link and mark the challenge declined. The blocked action stays blocked.")
+		Security(security.Session)
+
+		Payload(func() {
+			security.SessionPayload()
+			Attribute("ack_token", String, "Acknowledgement token generated when a warn policy challenged the action.")
+			Required("ack_token")
+		})
+
+		Result(func() {
+			Attribute("declined", Boolean, "Whether the challenge is now declined.")
+			Required("declined")
+		})
+
+		HTTP(func() {
+			POST("/rpc/risk.declinePolicyChallenge")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "declineRiskPolicyChallenge")
+		Meta("openapi:extension:x-speakeasy-group", "risk.policyChallenges")
+		Meta("openapi:extension:x-speakeasy-name-override", "decline")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskDeclinePolicyChallenge", "type": "mutation"}`)
 	})
 
 	Method("getRiskBlock", func() {
@@ -1161,6 +1267,37 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskSuggestCustomRule", "type": "mutation"}`)
 	})
 
+	Method("suggestExclusion", func() {
+		Description("Suggest a risk exclusion (match_type, match_value, filters) from a natural-language prompt describing findings an operator wants to stop flagging. Calls the configured LLM with a JSON-schema constrained response so the dashboard can prefill the create exclusion form.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("prompt", String, "Natural-language description of the findings to stop flagging.", func() {
+				MinLength(3)
+				MaxLength(500)
+			})
+			Attribute("known_rule_ids", ArrayOf(String), "Built-in and custom rule ids the suggestion may reference in rule_id filters.")
+			Required("prompt")
+		})
+
+		Result(SuggestExclusionResult)
+
+		HTTP(func() {
+			POST("/rpc/risk.suggestExclusion")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "suggestExclusion")
+		Meta("openapi:extension:x-speakeasy-group", "risk.exclusions")
+		Meta("openapi:extension:x-speakeasy-name-override", "suggest")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskSuggestExclusion", "type": "mutation"}`)
+	})
+
 	Method("testDetectionRule", func() {
 		Description("Run a single detection rule against pasted sample text and return any matches. Reuses the same scanner code (gitleaks, Presidio, prompt-injection, custom regex) that the analyzer runs in production so the playground match shape mirrors the chat-message path.")
 
@@ -1385,6 +1522,14 @@ var SuggestCustomDetectionRuleResult = Type("SuggestCustomDetectionRuleResult", 
 		Enum("info", "low", "medium", "high", "critical")
 	})
 	Required("rule_id", "title", "description", "regex", "severity")
+})
+
+var SuggestExclusionResult = Type("SuggestExclusionResult", func() {
+	Attribute("match_type", String, "How match_value is interpreted (exact, regex, rule_id, source, entity_type).")
+	Attribute("match_value", String, "The value matched against findings, interpreted per match_type.")
+	Attribute("rule_id_filter", String, "Only apply within this rule_id. Empty means any.")
+	Attribute("source_filter", String, "Only apply within this source. Empty means any.")
+	Required("match_type", "match_value")
 })
 
 var TestDetectionRuleMatch = Type("TestDetectionRuleMatch", func() {

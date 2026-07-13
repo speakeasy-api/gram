@@ -16,6 +16,9 @@ INSERT INTO remote_session_issuers (
     token_endpoint,
     registration_endpoint,
     jwks_uri,
+    service_documentation,
+    op_policy_uri,
+    op_tos_uri,
     scopes_supported,
     grant_types_supported,
     response_types_supported,
@@ -35,6 +38,9 @@ VALUES (
     @token_endpoint,
     @registration_endpoint,
     @jwks_uri,
+    @service_documentation,
+    @op_policy_uri,
+    @op_tos_uri,
     @scopes_supported,
     @grant_types_supported,
     @response_types_supported,
@@ -104,6 +110,18 @@ SET
     jwks_uri = CASE
         WHEN sqlc.narg('jwks_uri')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('jwks_uri'), jwks_uri)
+    END,
+    service_documentation = CASE
+        WHEN sqlc.narg('service_documentation')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('service_documentation'), service_documentation)
+    END,
+    op_policy_uri = CASE
+        WHEN sqlc.narg('op_policy_uri')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('op_policy_uri'), op_policy_uri)
+    END,
+    op_tos_uri = CASE
+        WHEN sqlc.narg('op_tos_uri')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('op_tos_uri'), op_tos_uri)
     END,
     scopes_supported = COALESCE(sqlc.narg('scopes_supported')::text[], scopes_supported),
     grant_types_supported = COALESCE(sqlc.narg('grant_types_supported')::text[], grant_types_supported),
@@ -655,6 +673,18 @@ SET
         WHEN sqlc.narg('jwks_uri')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('jwks_uri'), jwks_uri)
     END,
+    service_documentation = CASE
+        WHEN sqlc.narg('service_documentation')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('service_documentation'), service_documentation)
+    END,
+    op_policy_uri = CASE
+        WHEN sqlc.narg('op_policy_uri')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('op_policy_uri'), op_policy_uri)
+    END,
+    op_tos_uri = CASE
+        WHEN sqlc.narg('op_tos_uri')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('op_tos_uri'), op_tos_uri)
+    END,
     scopes_supported = COALESCE(sqlc.narg('scopes_supported')::text[], scopes_supported),
     grant_types_supported = COALESCE(sqlc.narg('grant_types_supported')::text[], grant_types_supported),
     response_types_supported = COALESCE(sqlc.narg('response_types_supported')::text[], response_types_supported),
@@ -943,6 +973,18 @@ SET
     jwks_uri = CASE
         WHEN sqlc.narg('jwks_uri')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('jwks_uri'), jwks_uri)
+    END,
+    service_documentation = CASE
+        WHEN sqlc.narg('service_documentation')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('service_documentation'), service_documentation)
+    END,
+    op_policy_uri = CASE
+        WHEN sqlc.narg('op_policy_uri')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('op_policy_uri'), op_policy_uri)
+    END,
+    op_tos_uri = CASE
+        WHEN sqlc.narg('op_tos_uri')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('op_tos_uri'), op_tos_uri)
     END,
     scopes_supported = COALESCE(sqlc.narg('scopes_supported')::text[], scopes_supported),
     grant_types_supported = COALESCE(sqlc.narg('grant_types_supported')::text[], grant_types_supported),

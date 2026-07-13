@@ -1,22 +1,10 @@
-[**@gram-ai/elements v1.41.0**](../README.md)
+[**@gram-ai/elements v1.42.1**](../README.md)
 
 ***
 
 [@gram-ai/elements](../globals.md) / ElementsConfig
 
 # Interface: ElementsConfig
-
-The top level configuration object for the Elements library.
-
-## Example
-
-```ts
-const config: ElementsConfig = {
-  mcp: 'https://app.getgram.ai/mcp/your-mcp-slug',
-  projectSlug: 'my-project',
-  systemPrompt: 'You are a helpful assistant.',
-}
-```
 
 ## Properties
 
@@ -25,6 +13,31 @@ const config: ElementsConfig = {
 > `optional` **systemPrompt?**: `string`
 
 The system prompt to use for the Elements library.
+
+***
+
+### resolveLink?
+
+> `optional` **resolveLink?**: [`LinkResolver`](../type-aliases/LinkResolver.md)
+
+Resolves a markdown link `href` authored by the assistant to a real
+destination — used to turn inline entity references (e.g. an MCP server or
+risk policy a reply mentions) into clickable links into the host app.
+
+Elements is agnostic to the link scheme: return a [ResolvedLink](ResolvedLink.md) to
+rewrite the link (optionally opening a new tab), `{ href: null }` to drop a
+recognised-but-unresolvable reference, or `null` to leave it as-is.
+
+***
+
+### linkComponent?
+
+> `optional` **linkComponent?**: [`MarkdownLinkComponent`](../type-aliases/MarkdownLinkComponent.md)
+
+Optional `<a>`-shaped component used to render links inside assistant
+markdown — supply the host's design-system link (e.g. a Moonshine `Link`)
+so assistant replies match the rest of the app. Elements falls back to a
+plain `<a>` when omitted.
 
 ***
 

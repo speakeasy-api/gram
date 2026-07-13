@@ -7,7 +7,7 @@
 [tools]
 "aqua:ariga/atlas" = "1.0.0"
 "github:speakeasy-api/openapi" = "1.24.0"
-"github:speakeasy-api/speakeasy" = "1.788.0"
+"github:speakeasy-api/speakeasy" = "1.789.1"
 "github:FiloSottile/mkcert" = "1.4.4"
 apko = "1.2.20"
 flyctl = "0.4.62"
@@ -18,7 +18,7 @@ gum = "0.17.0"
 jq = "1.8.2"
 melange = "0.55.0"
 nodejs = "24.16.0"
-"github:pnpm/pnpm" = "11.9.0"
+"github:pnpm/pnpm" = "11.10.0"
 watchexec = "2.5.1"
 uv = "0.11.25"
 yq = "4.53.3"
@@ -230,7 +230,12 @@ GRAM_FUNCTIONS_LOCAL_RUNNER_ROOT = "{{config_root}}/local/functions"
 ########################################
 ## Gram Assistant runtime settings ##
 ########################################
-GRAM_ASSISTANT_RUNTIME_PROVIDER = "flyio"
+## Where assistant runtimes run.
+## Allowed values: local, flyio, gke.
+## The local provider starts runtime containers on demand on this machine's
+## Docker daemon. Build the image with `mise run build:assistants-runtime-image`.
+GRAM_ASSISTANT_RUNTIME_PROVIDER = "local"
+GRAM_ASSISTANT_RUNTIME_OCI_IMAGE = "gram-assistant-runtime"
 
 ##################
 ## MCP Registry ##

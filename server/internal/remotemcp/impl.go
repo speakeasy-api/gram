@@ -102,13 +102,6 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid url").LogError(ctx, logger)
 	}
 
-	// Validate header inputs
-	for _, h := range payload.Headers {
-		if err := validateHeaderInput(h, false); err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid header").LogError(ctx, logger)
-		}
-	}
-
 	// Generate the server ID up front so the slug can include its suffix and
 	// the row can be inserted in a single statement (no insert-then-update).
 	serverID, err := uuid.NewV7()
@@ -135,7 +128,6 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
-	headersRepo := NewHeaders(s.logger, dbtx, s.headers.enc)
 
 	server, err := txRepo.CreateServer(ctx, repo.CreateServerParams{
 		ID:            serverID,
@@ -153,31 +145,13 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 		return nil, oops.E(oops.CodeUnexpected, err, "create remote mcp server").LogError(ctx, logger)
 	}
 
-	var headerRows []repo.RemoteMcpServerHeader
-	for _, h := range payload.Headers {
-		row, err := headersRepo.CreateHeader(ctx, repo.CreateHeaderParams{
-			RemoteMcpServerID:      server.ID,
-			Name:                   h.Name,
-			Description:            conv.PtrToPGText(h.Description),
-			IsRequired:             conv.PtrValOr(h.IsRequired, false),
-			IsSecret:               conv.PtrValOr(h.IsSecret, false),
-			Value:                  conv.PtrToPGTextEmpty(h.Value),
-			ValueFromRequestHeader: conv.PtrToPGTextEmpty(h.ValueFromRequestHeader),
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "create remote mcp server header").LogError(ctx, logger)
-		}
-
-		headerRows = append(headerRows, row)
-	}
-
 	if err := s.audit.LogRemoteMcpServerCreate(ctx, dbtx, audit.LogRemoteMcpServerCreateEvent{
 		OrganizationID:     authCtx.ActiveOrganizationID,
 		ProjectID:          *authCtx.ProjectID,
 		Actor:              urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
 		ActorDisplayName:   authCtx.Email,
 		ActorSlug:          nil,
-		RemoteMcpServerID:  server.ID,
+		RemoteMcpServerURN: urn.NewRemoteMcpServer(server.ID),
 		RemoteMcpServerURL: server.Url,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log remote mcp server creation").LogError(ctx, logger)
@@ -187,7 +161,7 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
-	return mv.BuildRemoteMcpServerView(server, headerRows), nil
+	return mv.BuildRemoteMcpServerView(server), nil
 }
 
 func (s *Service) ListServers(ctx context.Context, payload *gen.ListServersPayload) (*gen.ListServersResult, error) {
@@ -200,33 +174,14 @@ func (s *Service) ListServers(ctx context.Context, payload *gen.ListServersPaylo
 		return nil, err
 	}
 
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
-	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
-
-	txRepo := repo.New(dbtx)
-	headersRepo := NewHeaders(s.logger, dbtx, s.headers.enc)
-
-	servers, err := txRepo.ListServersByProjectID(ctx, *authCtx.ProjectID)
+	servers, err := repo.New(s.db).ListServersByProjectID(ctx, *authCtx.ProjectID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list remote mcp servers").LogError(ctx, s.logger)
 	}
 
-	serverIDs := make([]uuid.UUID, len(servers))
-	for i, server := range servers {
-		serverIDs[i] = server.ID
-	}
-
-	headersByServerID, err := headersRepo.ListHeadersByServerIDs(ctx, serverIDs, true)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list remote mcp server headers").LogError(ctx, s.logger)
-	}
-
 	result := make([]*types.RemoteMcpServer, 0, len(servers))
 	for _, server := range servers {
-		result = append(result, mv.BuildRemoteMcpServerView(server, headersByServerID[server.ID]))
+		result = append(result, mv.BuildRemoteMcpServerView(server))
 	}
 
 	return &gen.ListServersResult{RemoteMcpServers: result}, nil
@@ -251,27 +206,21 @@ func (s *Service) GetServer(ctx context.Context, payload *gen.GetServerPayload) 
 		return nil, oops.E(oops.CodeBadRequest, nil, "id and slug are mutually exclusive").LogError(ctx, s.logger)
 	}
 
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
-	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
-
-	txRepo := repo.New(dbtx)
-	headersRepo := NewHeaders(s.logger, dbtx, s.headers.enc)
+	dbRepo := repo.New(s.db)
 
 	var server repo.RemoteMcpServer
+	var err error
 	if idProvided {
 		serverID, parseErr := uuid.Parse(*payload.ID)
 		if parseErr != nil {
 			return nil, oops.E(oops.CodeBadRequest, parseErr, "invalid server id").LogError(ctx, s.logger)
 		}
-		server, err = txRepo.GetServerByID(ctx, repo.GetServerByIDParams{
+		server, err = dbRepo.GetServerByID(ctx, repo.GetServerByIDParams{
 			ID:        serverID,
 			ProjectID: *authCtx.ProjectID,
 		})
 	} else {
-		server, err = txRepo.GetServerBySlug(ctx, repo.GetServerBySlugParams{
+		server, err = dbRepo.GetServerBySlug(ctx, repo.GetServerBySlugParams{
 			Slug:      conv.ToPGText(*payload.Slug),
 			ProjectID: *authCtx.ProjectID,
 		})
@@ -284,12 +233,7 @@ func (s *Service) GetServer(ctx context.Context, payload *gen.GetServerPayload) 
 		return nil, oops.E(oops.CodeUnexpected, err, "get remote mcp server").LogError(ctx, s.logger)
 	}
 
-	headers, err := headersRepo.ListHeaders(ctx, server.ID, true)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list remote mcp server headers").LogError(ctx, s.logger)
-	}
-
-	return mv.BuildRemoteMcpServerView(server, headers), nil
+	return mv.BuildRemoteMcpServerView(server), nil
 }
 
 func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPayload) (*types.RemoteMcpServer, error) {
@@ -315,13 +259,6 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 		}
 	}
 
-	// Validate header inputs (allow secret headers to omit value on updates to preserve existing)
-	for _, h := range payload.Headers {
-		if err := validateHeaderInput(h, true); err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid header").LogError(ctx, logger)
-		}
-	}
-
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
@@ -329,7 +266,6 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
-	headersRepo := NewHeaders(s.logger, dbtx, s.headers.enc)
 
 	// Fetch current state for before-snapshot
 	existingServer, err := txRepo.GetServerByID(ctx, repo.GetServerByIDParams{
@@ -344,12 +280,7 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 		return nil, oops.E(oops.CodeUnexpected, err, "get remote mcp server").LogError(ctx, logger)
 	}
 
-	beforeHeaders, err := headersRepo.ListHeaders(ctx, existingServer.ID, true)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list headers for before snapshot").LogError(ctx, logger)
-	}
-
-	beforeView := mv.BuildRemoteMcpServerView(existingServer, beforeHeaders)
+	beforeView := mv.BuildRemoteMcpServerView(existingServer)
 
 	// Resolve name: nil = leave existing, "" = clear, value = trimmed value.
 	name := existingServer.Name
@@ -366,7 +297,6 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 		return nil, oops.E(oops.CodeUnexpected, err, "compute server slug").LogError(ctx, logger)
 	}
 
-	// Update server fields
 	updatedServer, err := txRepo.UpdateServer(ctx, repo.UpdateServerParams{
 		ID:            serverID,
 		ProjectID:     *authCtx.ProjectID,
@@ -383,85 +313,7 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 		return nil, oops.E(oops.CodeUnexpected, err, "update remote mcp server").LogError(ctx, logger)
 	}
 
-	// Reconcile headers: nil means leave unchanged, non-nil is the desired state.
-	if payload.Headers != nil {
-		// Fetch raw headers (with encrypted values intact) for secret value preservation
-		rawHeaders, err := txRepo.ListHeadersByServerID(ctx, serverID)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "list raw headers for preservation").LogError(ctx, logger)
-		}
-
-		rawByName := make(map[string]repo.RemoteMcpServerHeader, len(rawHeaders))
-		for _, rh := range rawHeaders {
-			rawByName[rh.Name] = rh
-		}
-
-		// Build set of desired header names
-		desiredNames := make(map[string]struct{}, len(payload.Headers))
-		for _, h := range payload.Headers {
-			desiredNames[h.Name] = struct{}{}
-		}
-
-		// Upsert all desired headers
-		for _, h := range payload.Headers {
-			isSecret := conv.PtrValOr(h.IsSecret, false)
-			value := conv.PtrToPGTextEmpty(h.Value)
-
-			// When value is omitted for an existing secret header, preserve the
-			// stored encrypted value by passing it directly to the repo (bypassing
-			// the encryption wrapper which would double-encrypt).
-			if !value.Valid && isSecret {
-				if existing, ok := rawByName[h.Name]; ok && existing.IsSecret && existing.Value.Valid {
-					_, err := txRepo.UpsertHeader(ctx, repo.UpsertHeaderParams{
-						RemoteMcpServerID:      serverID,
-						Name:                   h.Name,
-						Description:            conv.PtrToPGText(h.Description),
-						IsRequired:             conv.PtrValOr(h.IsRequired, false),
-						IsSecret:               isSecret,
-						Value:                  existing.Value,
-						ValueFromRequestHeader: conv.PtrToPGTextEmpty(h.ValueFromRequestHeader),
-					})
-					if err != nil {
-						return nil, oops.E(oops.CodeUnexpected, err, "upsert remote mcp server header").LogError(ctx, logger)
-					}
-
-					continue
-				}
-
-				return nil, oops.E(oops.CodeBadRequest, fmt.Errorf("header %q: new secret header must provide a value", h.Name), "invalid header").LogError(ctx, logger)
-			}
-
-			_, err := headersRepo.UpsertHeader(ctx, repo.UpsertHeaderParams{
-				RemoteMcpServerID:      serverID,
-				Name:                   h.Name,
-				Description:            conv.PtrToPGText(h.Description),
-				IsRequired:             conv.PtrValOr(h.IsRequired, false),
-				IsSecret:               isSecret,
-				Value:                  value,
-				ValueFromRequestHeader: conv.PtrToPGTextEmpty(h.ValueFromRequestHeader),
-			})
-			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "upsert remote mcp server header").LogError(ctx, logger)
-			}
-		}
-
-		// Remove any existing headers not in the desired set
-		for _, existing := range beforeHeaders {
-			if _, keep := desiredNames[existing.Name]; !keep {
-				if err := headersRepo.DeleteHeader(ctx, serverID, existing.Name); err != nil {
-					return nil, oops.E(oops.CodeUnexpected, err, "delete remote mcp server header").LogError(ctx, logger)
-				}
-			}
-		}
-	}
-
-	// Fetch updated state for after-snapshot
-	afterHeaders, err := headersRepo.ListHeaders(ctx, updatedServer.ID, true)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list headers for after snapshot").LogError(ctx, logger)
-	}
-
-	afterView := mv.BuildRemoteMcpServerView(updatedServer, afterHeaders)
+	afterView := mv.BuildRemoteMcpServerView(updatedServer)
 
 	if err := s.audit.LogRemoteMcpServerUpdate(ctx, dbtx, audit.LogRemoteMcpServerUpdateEvent{
 		OrganizationID:     authCtx.ActiveOrganizationID,
@@ -469,7 +321,7 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 		Actor:              urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
 		ActorDisplayName:   authCtx.Email,
 		ActorSlug:          nil,
-		RemoteMcpServerID:  updatedServer.ID,
+		RemoteMcpServerURN: urn.NewRemoteMcpServer(updatedServer.ID),
 		RemoteMcpServerURL: updatedServer.Url,
 		SnapshotBefore:     beforeView,
 		SnapshotAfter:      afterView,
@@ -537,7 +389,13 @@ func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPay
 
 	txRepo := repo.New(dbtx)
 
-	if err := txRepo.DeleteHeadersByServerID(ctx, serverID); err != nil {
+	// The FK's ON DELETE CASCADE only fires for hard deletes, so soft-delete the
+	// headers explicitly. This runs before the parent row is tombstoned so the
+	// query's project subselect can still see it.
+	if err := txRepo.DeleteHeadersByServerID(ctx, repo.DeleteHeadersByServerIDParams{
+		RemoteMcpServerID: serverID,
+		ProjectID:         *authCtx.ProjectID,
+	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "delete remote mcp server headers").LogError(ctx, logger)
 	}
 
@@ -553,16 +411,338 @@ func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPay
 		return oops.E(oops.CodeUnexpected, err, "delete remote mcp server").LogError(ctx, logger)
 	}
 
+	// Deliberately no per-header audit event for the cascade. The parent's
+	// remote-mcp:delete entry already accounts for the headers going away, and
+	// one entry per header would bury that signal under detail nobody asked for.
+	// Headers removed on their own still emit remote-mcp-server-header:delete.
 	if err := s.audit.LogRemoteMcpServerDelete(ctx, dbtx, audit.LogRemoteMcpServerDeleteEvent{
 		OrganizationID:     authCtx.ActiveOrganizationID,
 		ProjectID:          *authCtx.ProjectID,
 		Actor:              urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
 		ActorDisplayName:   authCtx.Email,
 		ActorSlug:          nil,
-		RemoteMcpServerID:  deleted.ID,
+		RemoteMcpServerURN: urn.NewRemoteMcpServer(deleted.ID),
 		RemoteMcpServerURL: deleted.Url,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "log remote mcp server deletion").LogError(ctx, logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
+	}
+
+	return nil
+}
+
+func (s *Service) ListServerHeaders(ctx context.Context, payload *gen.ListServerHeadersPayload) (*gen.ListServerHeadersResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	serverID, err := uuid.Parse(payload.RemoteMcpServerID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid server id").LogError(ctx, s.logger)
+	}
+
+	// Resolve the parent first so an unknown server, or one owned by another
+	// project, is a 404 rather than an indistinguishable empty list.
+	if _, err := repo.New(s.db).GetServerByID(ctx, repo.GetServerByIDParams{
+		ID:        serverID,
+		ProjectID: *authCtx.ProjectID,
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "remote mcp server not found").LogError(ctx, s.logger)
+		}
+
+		return nil, oops.E(oops.CodeUnexpected, err, "get remote mcp server").LogError(ctx, s.logger)
+	}
+
+	headers, err := s.headers.ListServerHeaders(ctx, serverID, *authCtx.ProjectID, true)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list remote mcp server headers").LogError(ctx, s.logger)
+	}
+
+	return &gen.ListServerHeadersResult{Headers: mv.BuildRemoteMcpServerHeaderListView(headers)}, nil
+}
+
+func (s *Service) GetServerHeader(ctx context.Context, payload *gen.GetServerHeaderPayload) (*types.RemoteMcpServerHeader, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	headerID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid header id").LogError(ctx, s.logger)
+	}
+
+	header, err := s.headers.GetServerHeader(ctx, headerID, *authCtx.ProjectID, true)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "remote mcp server header not found").LogError(ctx, s.logger)
+		}
+
+		return nil, oops.E(oops.CodeUnexpected, err, "get remote mcp server header").LogError(ctx, s.logger)
+	}
+
+	return mv.BuildRemoteMcpServerHeaderView(header), nil
+}
+
+func (s *Service) CreateServerHeader(ctx context.Context, payload *gen.CreateServerHeaderPayload) (*types.RemoteMcpServerHeader, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
+
+	serverID, err := uuid.Parse(payload.RemoteMcpServerID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid server id").LogError(ctx, logger)
+	}
+
+	isSecret := conv.PtrValOr(payload.IsSecret, false)
+	if err := validateHeaderValueSource(payload.Name, payload.Value, payload.ValueFromRequestHeader, isSecret); err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid header").LogError(ctx, logger)
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	txRepo := repo.New(dbtx)
+	headersRepo := NewHeaders(s.logger, dbtx, s.headers.enc)
+
+	// Resolve the parent up front so a missing server is a 404 rather than an
+	// empty insert, and so the audit event can carry the server's URL.
+	server, err := txRepo.GetServerByID(ctx, repo.GetServerByIDParams{
+		ID:        serverID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "remote mcp server not found").LogError(ctx, logger)
+		}
+
+		return nil, oops.E(oops.CodeUnexpected, err, "get remote mcp server").LogError(ctx, logger)
+	}
+
+	header, err := headersRepo.CreateServerHeader(ctx, repo.CreateServerHeaderParams{
+		RemoteMcpServerID:      server.ID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   payload.Name,
+		Description:            conv.PtrToPGText(payload.Description),
+		IsRequired:             conv.PtrValOr(payload.IsRequired, false),
+		IsSecret:               isSecret,
+		Value:                  conv.PtrToPGTextEmpty(payload.Value),
+		ValueFromRequestHeader: conv.PtrToPGTextEmpty(payload.ValueFromRequestHeader),
+	})
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return nil, oops.E(oops.CodeConflict, err, "header name already in use on this remote mcp server").LogError(ctx, logger)
+		}
+
+		return nil, oops.E(oops.CodeUnexpected, err, "create remote mcp server header").LogError(ctx, logger)
+	}
+
+	if err := s.audit.LogRemoteMcpServerHeaderCreate(ctx, dbtx, audit.LogRemoteMcpServerHeaderCreateEvent{
+		OrganizationID:            authCtx.ActiveOrganizationID,
+		ProjectID:                 *authCtx.ProjectID,
+		Actor:                     urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:          authCtx.Email,
+		ActorSlug:                 nil,
+		RemoteMcpServerHeaderURN:  urn.NewRemoteMcpServerHeader(header.ID),
+		RemoteMcpServerHeaderName: header.Name,
+		RemoteMcpServerURN:        urn.NewRemoteMcpServer(server.ID),
+		RemoteMcpServerURL:        server.Url,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log remote mcp server header creation").LogError(ctx, logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
+	}
+
+	return mv.BuildRemoteMcpServerHeaderView(header), nil
+}
+
+func (s *Service) UpdateServerHeader(ctx context.Context, payload *gen.UpdateServerHeaderPayload) (*types.RemoteMcpServerHeader, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
+
+	headerID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid header id").LogError(ctx, logger)
+	}
+
+	isSecret := conv.PtrValOr(payload.IsSecret, false)
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	txRepo := repo.New(dbtx)
+	headersRepo := NewHeaders(s.logger, dbtx, s.headers.enc)
+
+	existing, err := headersRepo.GetServerHeader(ctx, headerID, *authCtx.ProjectID, true)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "remote mcp server header not found").LogError(ctx, logger)
+		}
+
+		return nil, oops.E(oops.CodeUnexpected, err, "get remote mcp server header").LogError(ctx, logger)
+	}
+
+	// Omitting value on a header that is already a secret preserves the stored
+	// value. Everything else is a full replace of the mutable fields.
+	hasValue := payload.Value != nil && *payload.Value != ""
+	hasValueFromRequestHeader := payload.ValueFromRequestHeader != nil && *payload.ValueFromRequestHeader != ""
+	preserveStoredValue := isSecret && !hasValue && !hasValueFromRequestHeader && existing.IsSecret && existing.Value.Valid
+
+	if !preserveStoredValue {
+		if err := validateHeaderValueSource(payload.Name, payload.Value, payload.ValueFromRequestHeader, isSecret); err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid header").LogError(ctx, logger)
+		}
+	}
+
+	server, err := txRepo.GetServerByID(ctx, repo.GetServerByIDParams{
+		ID:        existing.RemoteMcpServerID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get remote mcp server").LogError(ctx, logger)
+	}
+
+	beforeView := mv.BuildRemoteMcpServerHeaderView(existing)
+
+	header, err := headersRepo.UpdateServerHeader(ctx, repo.UpdateServerHeaderParams{
+		ID:                     headerID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   payload.Name,
+		Description:            conv.PtrToPGText(payload.Description),
+		IsRequired:             conv.PtrValOr(payload.IsRequired, false),
+		IsSecret:               isSecret,
+		SetValue:               !preserveStoredValue,
+		Value:                  conv.PtrToPGTextEmpty(payload.Value),
+		ValueFromRequestHeader: conv.PtrToPGTextEmpty(payload.ValueFromRequestHeader),
+	})
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return nil, oops.E(oops.CodeConflict, err, "header name already in use on this remote mcp server").LogError(ctx, logger)
+		}
+
+		return nil, oops.E(oops.CodeUnexpected, err, "update remote mcp server header").LogError(ctx, logger)
+	}
+
+	afterView := mv.BuildRemoteMcpServerHeaderView(header)
+
+	if err := s.audit.LogRemoteMcpServerHeaderUpdate(ctx, dbtx, audit.LogRemoteMcpServerHeaderUpdateEvent{
+		OrganizationID:                      authCtx.ActiveOrganizationID,
+		ProjectID:                           *authCtx.ProjectID,
+		Actor:                               urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:                    authCtx.Email,
+		ActorSlug:                           nil,
+		RemoteMcpServerHeaderURN:            urn.NewRemoteMcpServerHeader(header.ID),
+		RemoteMcpServerHeaderName:           header.Name,
+		RemoteMcpServerURN:                  urn.NewRemoteMcpServer(server.ID),
+		RemoteMcpServerURL:                  server.Url,
+		RemoteMcpServerHeaderSnapshotBefore: beforeView,
+		RemoteMcpServerHeaderSnapshotAfter:  afterView,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log remote mcp server header update").LogError(ctx, logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
+	}
+
+	return afterView, nil
+}
+
+func (s *Service) DeleteServerHeader(ctx context.Context, payload *gen.DeleteServerHeaderPayload) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return err
+	}
+
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
+
+	headerID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, err, "invalid header id").LogError(ctx, logger)
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	txRepo := repo.New(dbtx)
+
+	deleted, err := txRepo.DeleteServerHeader(ctx, repo.DeleteServerHeaderParams{
+		ID:        headerID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+
+		return oops.E(oops.CodeUnexpected, err, "delete remote mcp server header").LogError(ctx, logger)
+	}
+
+	server, err := txRepo.GetServerByID(ctx, repo.GetServerByIDParams{
+		ID:        deleted.RemoteMcpServerID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "get remote mcp server").LogError(ctx, logger)
+	}
+
+	if err := s.audit.LogRemoteMcpServerHeaderDelete(ctx, dbtx, audit.LogRemoteMcpServerHeaderDeleteEvent{
+		OrganizationID:            authCtx.ActiveOrganizationID,
+		ProjectID:                 *authCtx.ProjectID,
+		Actor:                     urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:          authCtx.Email,
+		ActorSlug:                 nil,
+		RemoteMcpServerHeaderURN:  urn.NewRemoteMcpServerHeader(deleted.ID),
+		RemoteMcpServerHeaderName: deleted.Name,
+		RemoteMcpServerURN:        urn.NewRemoteMcpServer(server.ID),
+		RemoteMcpServerURL:        server.Url,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "log remote mcp server header deletion").LogError(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
@@ -599,25 +779,21 @@ func validateURL(ctx context.Context, policy *guardian.Policy, rawURL string) er
 	return nil
 }
 
-// validateHeaderInput checks that exactly one of value or value_from_request_header is provided.
-// When preserveNullSecretValue is true (updates), secret headers may omit value to preserve
-// the existing stored value.
-func validateHeaderInput(h *gen.HeaderInput, preserveNullSecretValue bool) error {
-	hasValue := h.Value != nil && *h.Value != ""
-	hasValueFromRequestHeader := h.ValueFromRequestHeader != nil && *h.ValueFromRequestHeader != ""
-	isSecret := h.IsSecret != nil && *h.IsSecret
-
-	// For updates, secret headers can omit value to preserve the existing stored value
-	if preserveNullSecretValue && isSecret && !hasValue && !hasValueFromRequestHeader {
-		return nil
-	}
+// validateHeaderValueSource checks that exactly one of value or
+// value_from_request_header is provided, mirroring the
+// remote_mcp_server_headers_value_source_check constraint, and that a
+// pass-through header is not marked secret. Callers that want to preserve an
+// existing secret's stored value skip this check entirely; see UpdateServerHeader.
+func validateHeaderValueSource(name string, value *string, valueFromRequestHeader *string, isSecret bool) error {
+	hasValue := value != nil && *value != ""
+	hasValueFromRequestHeader := valueFromRequestHeader != nil && *valueFromRequestHeader != ""
 
 	if hasValue == hasValueFromRequestHeader {
-		return fmt.Errorf("header %q must specify exactly one of value or value_from_request_header", h.Name)
+		return fmt.Errorf("header %q must specify exactly one of value or value_from_request_header", name)
 	}
 
 	if hasValueFromRequestHeader && isSecret {
-		return fmt.Errorf("header %q: pass-through headers cannot be marked as secret", h.Name)
+		return fmt.Errorf("header %q: pass-through headers cannot be marked as secret", name)
 	}
 
 	return nil

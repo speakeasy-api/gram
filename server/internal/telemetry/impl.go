@@ -433,7 +433,9 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 	}
 
 	users := make([]*telem_gen.UserSummary, len(items))
+	rawUserIDsByKey := make(map[string][]string, len(items))
 	for i, item := range items {
+		rawUserIDsByKey[item.UserID] = item.RawUserIDs
 		// Build per-tool breakdown from the 3 maps
 		tools := make([]*telem_gen.ToolUsage, 0, len(item.ToolCounts))
 		for urn, count := range item.ToolCounts {
@@ -486,7 +488,7 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 	// user_id — external ids don't map to a directory owner.
 	if payload.UserType != "external" {
 		if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
-			s.attachUserAccounts(ctx, authCtx.ActiveOrganizationID, users)
+			s.attachUserAccounts(ctx, authCtx.ActiveOrganizationID, users, rawUserIDsByKey)
 		}
 	}
 
@@ -498,13 +500,24 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 }
 
 // attachUserAccounts populates UserSummary.Accounts from the user_accounts
-// directory for the given internal user ids. Best-effort: a lookup failure
-// leaves accounts empty rather than failing the listing.
-func (s *Service) attachUserAccounts(ctx context.Context, orgID string, users []*telem_gen.UserSummary) {
+// directory. The directory is keyed by raw gram user id while summaries are
+// keyed email-first, so each summary is looked up under its group key plus every
+// raw user_id folded into it (rawUserIDsByKey, keyed by summary group key).
+// Best-effort: a lookup failure leaves accounts empty rather than failing the
+// listing.
+func (s *Service) attachUserAccounts(ctx context.Context, orgID string, users []*telem_gen.UserSummary, rawUserIDsByKey map[string][]string) {
+	summaryByID := make(map[string]*telem_gen.UserSummary, len(users))
 	userIDs := make([]string, 0, len(users))
 	for _, u := range users {
-		if u.UserID != "" {
-			userIDs = append(userIDs, u.UserID)
+		for _, id := range append([]string{u.UserID}, rawUserIDsByKey[u.UserID]...) {
+			if id == "" {
+				continue
+			}
+			if _, ok := summaryByID[id]; ok {
+				continue
+			}
+			summaryByID[id] = u
+			userIDs = append(userIDs, id)
 		}
 	}
 	if len(userIDs) == 0 {
@@ -520,9 +533,12 @@ func (s *Service) attachUserAccounts(ctx context.Context, orgID string, users []
 		return
 	}
 
-	byUser := make(map[string][]*telem_gen.UserAccount, len(rows))
 	for _, row := range rows {
 		if !row.UserID.Valid || row.UserID.String == "" {
+			continue
+		}
+		summary, ok := summaryByID[row.UserID.String]
+		if !ok {
 			continue
 		}
 		var lastSeen *string
@@ -531,7 +547,7 @@ func (s *Service) attachUserAccounts(ctx context.Context, orgID string, users []
 			lastSeen = &ns
 		}
 		idStr := row.ID.String()
-		byUser[row.UserID.String] = append(byUser[row.UserID.String], &telem_gen.UserAccount{
+		summary.Accounts = append(summary.Accounts, &telem_gen.UserAccount{
 			ID:               &idStr,
 			Provider:         row.Provider,
 			Email:            conv.FromPGText[string](row.Email),
@@ -539,12 +555,6 @@ func (s *Service) attachUserAccounts(ctx context.Context, orgID string, users []
 			ExternalOrgID:    conv.FromPGText[string](row.ExternalOrgID),
 			LastSeenUnixNano: lastSeen,
 		})
-	}
-
-	for _, u := range users {
-		if accts, ok := byUser[u.UserID]; ok {
-			u.Accounts = accts
-		}
 	}
 }
 
@@ -641,9 +651,18 @@ func (s *Service) searchUsersByRole(ctx context.Context, payload *telem_gen.Sear
 
 	const unassignedRoleID = "unassigned"
 	for _, item := range items {
+		// Role assignments are keyed by raw gram user id while summaries are keyed
+		// email-first, so fall back to the raw ids folded into the summary.
 		ri := roleInfo{id: unassignedRoleID, name: "Unassigned"}
 		if r, ok := userToRole[item.UserID]; ok {
 			ri = r
+		} else {
+			for _, rawID := range item.RawUserIDs {
+				if r, ok := userToRole[rawID]; ok {
+					ri = r
+					break
+				}
+			}
 		}
 		agg, exists := aggByRole[ri.id]
 		if !exists {
@@ -1539,139 +1558,34 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 		metricsMode = "session"
 	}
 
-	// These queries hit two databases. The PostgreSQL pool is safe for concurrent
-	// use, so each PG query runs in its own goroutine. The shared ClickHouse
-	// connection races when queried concurrently with itself, so every ClickHouse
-	// query runs sequentially in a single lane. Total latency is the slower of
-	// (serial ClickHouse total) and (slowest PostgreSQL query) rather than the sum
-	// of every query.
+	// These queries hit two database pools. Each pool is safe for concurrent use,
+	// so independent queries run concurrently. The ClickHouse helper keeps its
+	// orchestration and query-level tracing together.
 	var (
 		chatMetrics           chatRepo.GetChatMetricsSummaryRow
-		toolMetrics           *repo.OverviewSummary
 		chatMetricsComparison chatRepo.GetChatMetricsSummaryRow
-		toolMetricsComparison *repo.OverviewSummary
-		activeServersRaw      *repo.ActiveCounts
-		topServers            []repo.TopServer
+		clickHouseResult      projectOverviewClickHouseResult
 		serverNameOverrides   []hooksRepo.ListHooksServerNameOverridesRow
 
 		// Session-mode (PostgreSQL) results; only populated when sessionMode is true.
 		activeUsersCountPG int64
 		topUsersPG         []chatRepo.GetTopUsersByMessagesRow
 		llmClientsPG       []chatRepo.GetLLMClientBreakdownByMessagesRow
-
-		// Tool-call-mode (ClickHouse) results; only populated when sessionMode is false.
-		topUsersCH   []repo.TopUser
-		llmClientsCH []repo.LLMClientUsage
 	)
 
 	eg, egCtx := errgroup.WithContext(ctx)
 
-	// ClickHouse lane: a single goroutine runs every ClickHouse query in sequence.
-	// The shared clickhouse.Conn does not tolerate concurrent queries against
-	// itself, so these must not be split across goroutines.
 	eg.Go(func() error {
 		var fetchErr error
-
-		// Tool call metrics (no filters): current and comparison periods.
-		toolMetrics, fetchErr = s.chRepo.GetOverviewSummary(egCtx, repo.GetOverviewSummaryParams{
-			GramProjectID:     projectID,
-			TimeStart:         timeStart,
-			TimeEnd:           timeEnd,
-			UserID:            "",
-			ExternalUserID:    "",
-			APIKeyID:          "",
-			ToolsetSlug:       "",
-			RemoteMCPServerID: "",
-			MCPServerID:       "",
-			EventSource:       "",
-			HookSource:        "",
-			AccountType:       "",
-			ExternalOrgID:     "",
+		clickHouseResult, fetchErr = fetchProjectOverviewClickHouse(egCtx, s.tracer, s.chRepo, projectOverviewClickHouseParams{
+			projectID:       projectID,
+			timeStart:       timeStart,
+			timeEnd:         timeEnd,
+			comparisonStart: comparisonStart,
+			comparisonEnd:   comparisonEnd,
+			sessionMode:     sessionMode,
 		})
-		if fetchErr != nil {
-			return oops.E(oops.CodeUnexpected, fetchErr, "error retrieving tool call metrics")
-		}
-
-		toolMetricsComparison, fetchErr = s.chRepo.GetOverviewSummary(egCtx, repo.GetOverviewSummaryParams{
-			GramProjectID:     projectID,
-			TimeStart:         comparisonStart,
-			TimeEnd:           comparisonEnd,
-			UserID:            "",
-			ExternalUserID:    "",
-			APIKeyID:          "",
-			ToolsetSlug:       "",
-			RemoteMCPServerID: "",
-			MCPServerID:       "",
-			EventSource:       "",
-			HookSource:        "",
-			AccountType:       "",
-			ExternalOrgID:     "",
-		})
-		if fetchErr != nil {
-			return oops.E(oops.CodeUnexpected, fetchErr, "error retrieving comparison tool call metrics")
-		}
-
-		// Active server count from hooks data. In tool-call mode this same row also
-		// yields the active user count (resolved after Wait).
-		activeServersRaw, fetchErr = s.chRepo.GetActiveCounts(egCtx, repo.GetActiveCountsParams{
-			GramProjectID:  projectID,
-			TimeStart:      timeStart,
-			TimeEnd:        timeEnd,
-			ExternalUserID: "",
-			APIKeyID:       "",
-			ToolsetSlug:    "",
-			SessionMode:    sessionMode,
-		})
-		if fetchErr != nil {
-			return oops.E(oops.CodeUnexpected, fetchErr, "error retrieving active server counts")
-		}
-
-		// Top servers from hooks data.
-		topServers, fetchErr = s.chRepo.GetTopServers(egCtx, repo.GetTopServersParams{
-			GramProjectID:  projectID,
-			TimeStart:      timeStart,
-			TimeEnd:        timeEnd,
-			ExternalUserID: "",
-			APIKeyID:       "",
-			ToolsetSlug:    "",
-			Limit:          10,
-		})
-		if fetchErr != nil {
-			return oops.E(oops.CodeUnexpected, fetchErr, "error retrieving top servers")
-		}
-
-		// In tool-call mode, top users and the LLM client breakdown also come from
-		// ClickHouse. In session mode they come from PostgreSQL (separate lanes).
-		if !sessionMode {
-			topUsersCH, fetchErr = s.chRepo.GetTopUsers(egCtx, repo.GetTopUsersParams{
-				GramProjectID:  projectID,
-				TimeStart:      timeStart,
-				TimeEnd:        timeEnd,
-				ExternalUserID: "",
-				APIKeyID:       "",
-				ToolsetSlug:    "",
-				Limit:          10,
-				SessionMode:    false,
-			})
-			if fetchErr != nil {
-				return oops.E(oops.CodeUnexpected, fetchErr, "error retrieving top users from CH")
-			}
-
-			llmClientsCH, fetchErr = s.chRepo.GetLLMClientBreakdown(egCtx, repo.GetLLMClientBreakdownParams{
-				GramProjectID:  projectID,
-				TimeStart:      timeStart,
-				TimeEnd:        timeEnd,
-				ExternalUserID: "",
-				APIKeyID:       "",
-				ToolsetSlug:    "",
-				SessionMode:    false,
-			})
-			if fetchErr != nil {
-				return oops.E(oops.CodeUnexpected, fetchErr, "error retrieving LLM client breakdown from CH")
-			}
-		}
-
-		return nil
+		return fetchErr
 	})
 
 	// PostgreSQL lanes: the pgxpool is safe for concurrent use, so fan these out.
@@ -1758,7 +1672,7 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 	}
 
 	// Resolve active counts and top lists now that every query has returned.
-	activeServersCount := int64(activeServersRaw.ActiveServersCount) //nolint:gosec // Bounded count that won't overflow int64
+	activeServersCount := int64(clickHouseResult.activeCounts.ActiveServersCount) //nolint:gosec // Bounded count that won't overflow int64
 	var activeUsersCount int64
 	var topUsers []*telem_gen.TopUser
 	var llmClientBreakdown []*telem_gen.LLMClientUsage
@@ -1767,9 +1681,9 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 		topUsers = toTopUsersFromPG(topUsersPG)
 		llmClientBreakdown = toLLMClientUsageFromPG(llmClientsPG)
 	} else {
-		activeUsersCount = int64(activeServersRaw.ActiveUsersCount) //nolint:gosec // Bounded count that won't overflow int64
-		topUsers = toTopUsers(topUsersCH)
-		llmClientBreakdown = toLLMClientUsage(llmClientsCH)
+		activeUsersCount = int64(clickHouseResult.activeCounts.ActiveUsersCount) //nolint:gosec // Bounded count that won't overflow int64
+		topUsers = toTopUsers(clickHouseResult.topUsers)
+		llmClientBreakdown = toLLMClientUsage(clickHouseResult.llmClients)
 	}
 
 	// Build a map for quick lookup: raw_server_name -> display_name
@@ -1779,13 +1693,13 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 	}
 
 	// Apply overrides to top servers
-	topServersWithOverrides := applyServerNameOverrides(topServers, overrideMap)
+	topServersWithOverrides := applyServerNameOverrides(clickHouseResult.topServers, overrideMap)
 
 	// Convert to API types - build summaries with nested fields
 	return &telem_gen.GetProjectOverviewResult{
 		Summary: buildProjectOverviewSummary(
 			chatMetrics,
-			toolMetrics,
+			clickHouseResult.toolMetrics,
 			activeServersCount,
 			activeUsersCount,
 			topUsers,
@@ -1794,7 +1708,7 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 		),
 		Comparison: buildProjectOverviewSummary(
 			chatMetricsComparison,
-			toolMetricsComparison,
+			clickHouseResult.toolMetricsComparison,
 			0, // Don't need active counts for comparison
 			0,
 			nil, // Don't need top lists for comparison
@@ -2515,6 +2429,11 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 		targetTypes = append(targetTypes, string(targetType))
 	}
 
+	statuses := make([]string, 0, len(payload.Statuses))
+	for _, status := range payload.Statuses {
+		statuses = append(statuses, string(status))
+	}
+
 	userFilters := make([]repo.ToolUsageUserFilter, 0, len(payload.UserFilters))
 	for _, filter := range payload.UserFilters {
 		if filter == nil {
@@ -2556,6 +2475,7 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 		UserFilters:        userFilters,
 		HookSources:        payload.HookSources,
 		AccountType:        conv.PtrValOr(payload.AccountType, ""),
+		Statuses:           statuses,
 		Query:              conv.PtrValOr(payload.Query, ""),
 		Filters:            toRepoAttributeFilters(payload.Filters),
 		SortOrder:          params.sortOrder,
@@ -2645,17 +2565,19 @@ func (s *Service) toolUsageHostedMCPMatchers(ctx context.Context, projectID uuid
 }
 
 func (s *Service) toolUsageMCPServerMatchers(ctx context.Context, projectID uuid.UUID) ([]repo.MCPServerMatcher, error) {
-	servers, err := mcpserversRepo.New(s.db).ListMCPServersByProjectID(ctx, mcpserversRepo.ListMCPServersByProjectIDParams{
-		ProjectID:           projectID,
-		RemoteMcpServerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		TunneledMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		ToolsetID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-	})
+	// Include soft-deleted servers: tool_source on telemetry rows is the
+	// backend remote/tunneled server id, which outlives the mcp_servers row.
+	// Matching against deleted servers keeps a deleted (or recreated) server's
+	// historical calls classified as their true type instead of falling through
+	// to shadow_mcp_server. The query returns live servers first so a source id
+	// shared by a live and a deleted server resolves to the live one.
+	servers, err := mcpserversRepo.New(s.db).ListMCPServersForTelemetryByProjectID(ctx, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("list project MCP servers: %w", err)
 	}
 
 	matchers := make([]repo.MCPServerMatcher, 0, len(servers))
+	seen := make(map[string]struct{}, len(servers))
 	for _, server := range servers {
 		targetType := repo.ToolUsageTargetTypeHostedMCP
 		sourceID := ""
@@ -2668,6 +2590,13 @@ func (s *Service) toolUsageMCPServerMatchers(ctx context.Context, projectID uuid
 		default:
 			continue
 		}
+
+		// Keep the first matcher for a source id (a live server, given the
+		// query ordering); drop later duplicates from deleted/recreated rows.
+		if _, ok := seen[sourceID]; ok {
+			continue
+		}
+		seen[sourceID] = struct{}{}
 
 		targetID := server.ID.String()
 		if server.Slug.Valid && server.Slug.String != "" {

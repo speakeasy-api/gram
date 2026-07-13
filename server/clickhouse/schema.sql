@@ -101,6 +101,54 @@ CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_account_type ON telemetry_logs
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_provider ON telemetry_logs (provider) TYPE set(0) GRANULARITY 4;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_billing_mode ON telemetry_logs (billing_mode) TYPE set(0) GRANULARITY 4;
 
+-- telemetry_logs_staging parks Claude OTEL api_request rows whose inline MCP
+-- attribution was redacted (mcp_server.name = 'custom') until the
+-- transcript-derived attribution for the request arrives via hooks (or a
+-- timeout passes). Its physical columns match telemetry_logs so rows can be
+-- re-inserted verbatim, but it deliberately carries only two materialized
+-- columns (request_id, the attribution join key, and chat_id for manual
+-- inspection) — telemetry_logs' other materialized columns are recomputed at
+-- insert time when the row is promoted. A scheduled sweep scans staging per
+-- project every two minutes, rewrites attributes.mcp_server.name /
+-- attributes.mcp_tool.name for rows whose tuple arrived, and inserts them
+-- into telemetry_logs — the moment attribute_metrics_summaries_mv fires —
+-- then deletes them here. Rows keep their id across promotion, so
+-- telemetry_logs itself is the exactly-once ledger. The short TTL is a
+-- cleanup backstop only (measured from observation time, since the promotion
+-- timeout is too): the 30-minute timeout promotes stragglers verbatim long
+-- before it.
+CREATE TABLE IF NOT EXISTS telemetry_logs_staging (
+    id UUID DEFAULT generateUUIDv7() COMMENT 'Unique identifier for the log entry, preserved when the row is promoted to telemetry_logs.',
+    time_unix_nano Int64 COMMENT 'Unix time (ns) when the event occurred measured by the origin clock.' CODEC(Delta, ZSTD),
+    observed_time_unix_nano Int64 COMMENT 'Unix time (ns) when the event was observed by the collection system.' CODEC(Delta, ZSTD),
+    observed_timestamp DateTime64(9) DEFAULT fromUnixTimestamp64Nano(observed_time_unix_nano) COMMENT 'Human-readable timestamp derived from observed_time_unix_nano.',
+    severity_text LowCardinality(Nullable(String)) COMMENT 'Text representation of severity (DEBUG, INFO, WARN, ERROR, FATAL).',
+    body String COMMENT 'The primary log message extracted from the log record.' CODEC(ZSTD),
+    trace_id Nullable(FixedString(32)) COMMENT 'W3C trace ID linking related logs across services.',
+    span_id Nullable(FixedString(16)) COMMENT 'W3C span ID for specific operation within a trace.',
+    attributes JSON COMMENT 'Additional attributes about the specific event occurrence.' CODEC(ZSTD),
+    resource_attributes JSON COMMENT 'Attributes describing the resource that generated this log.' CODEC(ZSTD),
+    gram_project_id UUID COMMENT 'Project ID (denormalized from resource_attributes).',
+    gram_deployment_id Nullable(UUID) COMMENT 'Deployment ID (denormalized from resource_attributes).',
+    gram_function_id Nullable(UUID) COMMENT 'Function ID that generated the log (null for HTTP logs).',
+    gram_urn String COMMENT 'The Gram URN (e.g. claude-code:otel:logs).',
+    service_name LowCardinality(String) COMMENT 'Logical service name.',
+    service_version Nullable(String) COMMENT 'Service version.',
+    gram_chat_id Nullable(String) COMMENT 'The Chat ID (Claude session id) associated with the log.',
+    chat_id String MATERIALIZED toString(attributes.gen_ai.conversation.id) COMMENT 'Chat ID (materialized from attributes.gen_ai.conversation.id) — the promotion worker scopes by this.',
+    request_id String MATERIALIZED toString(attributes.request_id) COMMENT 'Claude API request id (materialized from attributes.request_id) — the attribution join key.'
+) ENGINE = MergeTree
+PARTITION BY toYYYYMMDD(fromUnixTimestamp64Nano(time_unix_nano))
+ORDER BY (gram_project_id, time_unix_nano, id)
+TTL fromUnixTimestamp64Nano(observed_time_unix_nano) + INTERVAL 2 DAY
+SETTINGS index_granularity = 8192
+COMMENT 'Holding pen for Claude OTEL api_request rows with redacted (custom) MCP attribution, awaiting transcript-derived attribution before promotion into telemetry_logs.';
+
+-- Promotion scans by project (the sorting key prefix); this index only
+-- serves ad-hoc per-session inspection of staged rows, mirroring the
+-- bloom-filter treatment chat_id gets on telemetry_logs.
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_staging_chat_id ON telemetry_logs_staging (chat_id) TYPE bloom_filter(0.01) GRANULARITY 1;
+
 CREATE TABLE IF NOT EXISTS trace_summaries (
     -- Key cols
     trace_id FixedString(32),
@@ -212,6 +260,19 @@ SELECT
 FROM telemetry_logs
 WHERE trace_id IS NOT NULL AND trace_id != '' AND NOT startsWith(telemetry_logs.gram_urn, 'urn:uuid:')
 GROUP BY trace_id, gram_project_id;
+
+CREATE TABLE IF NOT EXISTS shadow_mcp_inventory_urls (
+    gram_project_id UUID,
+    canonical_server_url String,
+    url_host String,
+    server_name String,
+    first_seen DateTime64(9, 'UTC'),
+    last_seen DateTime64(9, 'UTC'),
+    updated_at DateTime64(9, 'UTC')
+) ENGINE = ReplacingMergeTree(updated_at)
+ORDER BY (gram_project_id, canonical_server_url)
+SETTINGS index_granularity = 8192
+COMMENT 'Project-scoped Shadow MCP inventory URLs and display metadata';
 
 CREATE TABLE IF NOT EXISTS metrics_summaries (
     -- Key columns
@@ -397,8 +458,13 @@ CREATE TABLE IF NOT EXISTS attribute_metrics_summaries (
     -- Cost
     total_cost AggregateFunction(sumIf, Float64, UInt8),
 
-    -- Tool call count
+    -- Tool call count. total_tool_calls counts rows (legacy; kept warm during
+    -- the expand-contract transition), unique_tool_calls dedups by the call's
+    -- identity (Claude tool_use_id / gen_ai.tool.call.id) so re-emitted events
+    -- cannot double-count. Readers use unique_tool_calls; total_tool_calls is
+    -- contracted in a later migration.
     total_tool_calls AggregateFunction(countIf, UInt8),
+    unique_tool_calls AggregateFunction(uniqExactIf, String, UInt8),
 
     -- AI account classification (gram.account_type): 'team' | 'personal' | ''
     -- (unclassified); AI provider (gram.provider): 'anthropic' | 'openai' |
@@ -437,36 +503,58 @@ SETTINGS index_granularity = 8192
 COMMENT 'Pre-aggregated cost/token/usage metrics broken down by user-identity and request dimensions, powering the generic telemetry.query analytics endpoint.';
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS attribute_metrics_summaries_mv TO attribute_metrics_summaries AS
--- Cutoff separates live MV ingestion from one-time historical backfill.
+-- Provenance-first ingestion: only rows from the three agent surfaces are
+-- admitted. Claude data comes exclusively from the Claude OTEL log stream
+-- (api_request rows for usage, tool_result rows for tool calls); Codex and
+-- Cursor come from their usage-metrics rows plus completed tool-call hook
+-- rows. Everything else — Gram-hosted chat completions, claude-code:usage
+-- metric rows (which duplicate api_request usage), Claude hook rows, MCP hook
+-- rows — is excluded so cost attribution never mixes sources.
+-- Keep the predicates in sync with the session* constants in
+-- server/internal/telemetry/repo/sessions.go, which apply the same
+-- classification to raw telemetry_logs.
 WITH
+    -- Cutoff separates live MV ingestion from one-time historical backfill.
     toUnixTimestamp64Nano(toDateTime64('2026-06-20 00:00:00', 9, 'UTC')) AS attribute_metrics_cutoff_unix_nano,
-    -- Claude emits one api_request row with model, token, cost, and attribution
-    -- fields. Do not count legacy claude-code:usage rows for Claude cost.
+    -- Every persisted Claude OTEL log row carries this URN (stamped at ingest).
+    (gram_urn = 'claude-code:otel:logs') AS is_claude_otel_row,
+    -- Claude emits one api_request row per turn with model, token, cost, and
+    -- attribution fields — the sole Claude usage source.
     (
-        chat_id != ''
+        is_claude_otel_row
+        AND chat_id != ''
         AND toString(attributes.prompt.id) != ''
         AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')
-        AND (
-            service_name = 'claude-code'
-            OR toString(resource_attributes.service.name) = 'claude-code'
-            OR startsWith(body, 'claude_code.')
-        )
     ) AS is_claude_api_request,
+    -- Claude emits one tool_result row per completed tool call (carrying
+    -- tool_use_id) — the sole Claude tool-call source; Claude hook rows are
+    -- not counted.
     (
-        startsWith(gram_urn, 'codex:usage')
-        OR startsWith(gram_urn, 'cursor:usage')
-        OR (
-            toString(attributes.gen_ai.operation.name) = 'chat'
-            AND toString(attributes.gen_ai.usage.cost) != ''
-            AND NOT is_claude_api_request
-            AND NOT startsWith(gram_urn, 'claude-code:usage')
-        )
-    ) AS is_generic_usage_row,
+        is_claude_otel_row
+        AND (toString(attributes.event.name) = 'tool_result' OR body = 'claude_code.tool_result')
+    ) AS is_claude_tool_result,
+    (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage')) AS is_agent_usage_row,
+    -- Codex/Cursor have no OTEL log stream; their tool calls arrive as hook
+    -- rows, one PostToolUse/PostToolUseFailure row per completed call. The
+    -- hook.event guard is required: every call also emits a PreToolUse row
+    -- with the same gram.tool.name. Provider names (the usage-metrics rows'
+    -- tool.name) are excluded — they are not tool calls.
     (
-        toString(attributes.gram.tool.name) != ''
+        toString(attributes.gram.hook.source) IN ('codex', 'cursor')
+        AND toString(attributes.gram.tool.name) != ''
         AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor')
-    ) AS is_tool_row,
-    (is_tool_row AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')) AS is_completed_tool_call
+        AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')
+    ) AS is_agent_tool_call,
+    (is_claude_tool_result OR is_agent_tool_call) AS is_counted_tool_call,
+    -- Dedup identity per tool call: Claude tool_result rows carry tool_use_id,
+    -- Cursor/unified-ingest hook rows carry gen_ai.tool.call.id. Rows with no
+    -- call id fall back to the row id, degrading to count-per-row rather than
+    -- collapsing distinct calls into one.
+    multiIf(
+        toString(attributes.tool_use_id) != '', toString(attributes.tool_use_id),
+        toString(attributes.gen_ai.tool.call.id) != '', toString(attributes.gen_ai.tool.call.id),
+        toString(id)
+    ) AS tool_call_dedup_id
 SELECT
     gram_project_id,
     toStartOfHour(fromUnixTimestamp64Nano(time_unix_nano)) AS time_bucket,
@@ -493,25 +581,24 @@ SELECT
     arraySort(JSONExtract(ifNull(toJSONString(attributes.user.groups), '[]'), 'Array(String)')) AS groups,
 
     -- Cardinality
-    uniqExactIfState(toString(attributes.gen_ai.conversation.id), toString(attributes.gen_ai.conversation.id) != '' AND (is_claude_api_request OR is_generic_usage_row)) AS total_chats,
+    uniqExactIfState(toString(attributes.gen_ai.conversation.id), toString(attributes.gen_ai.conversation.id) != '' AND (is_claude_api_request OR is_agent_usage_row)) AS total_chats,
 
     -- Token sums
-    sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens))), is_claude_api_request OR is_generic_usage_row) AS total_input_tokens,
-    sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.output_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens))), is_claude_api_request OR is_generic_usage_row) AS total_output_tokens,
-    sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)) + toInt64OrZero(toString(attributes.output_tokens)) + toInt64OrZero(toString(attributes.cache_read_tokens)) + toInt64OrZero(toString(attributes.cache_creation_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens))), is_claude_api_request OR is_generic_usage_row) AS total_tokens,
-    sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.cache_read_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens))), is_claude_api_request OR is_generic_usage_row) AS cache_read_input_tokens,
-    sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.cache_creation_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), is_claude_api_request OR is_generic_usage_row) AS cache_creation_input_tokens,
+    sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens))), is_claude_api_request OR is_agent_usage_row) AS total_input_tokens,
+    sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.output_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens))), is_claude_api_request OR is_agent_usage_row) AS total_output_tokens,
+    sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)) + toInt64OrZero(toString(attributes.output_tokens)) + toInt64OrZero(toString(attributes.cache_read_tokens)) + toInt64OrZero(toString(attributes.cache_creation_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens))), is_claude_api_request OR is_agent_usage_row) AS total_tokens,
+    sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.cache_read_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens))), is_claude_api_request OR is_agent_usage_row) AS cache_read_input_tokens,
+    sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.cache_creation_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), is_claude_api_request OR is_agent_usage_row) AS cache_creation_input_tokens,
 
     -- Cost
-    sumIfState(if(is_claude_api_request, multiIf(toString(attributes.cost_usd) != '', toFloat64OrZero(toString(attributes.cost_usd)), toString(attributes.cost_usd_micros) != '', toFloat64OrZero(toString(attributes.cost_usd_micros)) / 1000000, 0), toFloat64OrZero(toString(attributes.gen_ai.usage.cost))), is_claude_api_request OR is_generic_usage_row) AS total_cost,
+    sumIfState(if(is_claude_api_request, multiIf(toString(attributes.cost_usd) != '', toFloat64OrZero(toString(attributes.cost_usd)), toString(attributes.cost_usd_micros) != '', toFloat64OrZero(toString(attributes.cost_usd_micros)) / 1000000, 0), toFloat64OrZero(toString(attributes.gen_ai.usage.cost))), is_claude_api_request OR is_agent_usage_row) AS total_cost,
 
-    -- Tool-call count. Tool calls in a session — Gram and non-Gram alike — are
-    -- reported via agent hooks as one PostToolUse / PostToolUseFailure row per
-    -- call (carrying gram.tool.name). The hook.event guard is required: every
-    -- tool call also emits a PreToolUse row with the same gram.tool.name, so a
-    -- bare `tool.name != ''` count would double-count. Provider names (the
-    -- usage-metrics rows' tool.name) are excluded — they are not tool calls.
-    countIfState(is_completed_tool_call) AS total_tool_calls,
+    -- Tool-call counts: Claude tool_result rows plus Codex/Cursor completed
+    -- tool-call hook rows. unique_tool_calls dedups by call identity and is
+    -- what readers consume; total_tool_calls counts rows and is kept warm
+    -- until it is contracted.
+    countIfState(is_counted_tool_call) AS total_tool_calls,
+    uniqExactIfState(tool_call_dedup_id, is_counted_tool_call) AS unique_tool_calls,
 
     -- Account-type + provider + billing-mode + attribution dimensions (grouped;
     -- appended to the sort key so each billing/attribution combination remains
@@ -525,11 +612,12 @@ SELECT
     if(is_claude_api_request, toString(attributes.mcp_server.name), '') AS mcp_server_name,
     if(is_claude_api_request, toString(attributes.mcp_tool.name), '') AS mcp_tool_name
 FROM telemetry_logs
--- Admit Claude api_request rows, generic usage/cost-bearing rows, and tool-call
--- hook rows. Tool rows carry no token/cost fields, so they only contribute to
--- total_tool_calls.
+-- Admit only the three agent surfaces: Claude OTEL api_request/tool_result
+-- rows, Codex/Cursor usage rows, and Codex/Cursor completed tool-call hook
+-- rows. Tool rows carry no token/cost fields, so they only contribute to the
+-- tool-call counts.
 WHERE time_unix_nano >= attribute_metrics_cutoff_unix_nano
-  AND (is_claude_api_request OR is_generic_usage_row OR is_tool_row)
+  AND (is_claude_api_request OR is_claude_tool_result OR is_agent_usage_row OR is_agent_tool_call)
 GROUP BY
     gram_project_id,
     time_bucket,
@@ -557,6 +645,12 @@ CREATE TABLE IF NOT EXISTS chat_token_summaries (
     gram_project_id UUID,
     chat_id String,
     time_bucket DateTime('UTC'),
+    -- The consuming surface (gram.hook.source) the chat's rows carry. Billing
+    -- reads scope token sums to the registered billed completion surfaces
+    -- (billing.ModelUsageSources in Go); unregistered surfaces (e.g.
+    -- "assistants" until BYOK) are tagged but not billed. Rows aggregated
+    -- before this dimension existed carry '' and are grandfathered as billed.
+    hook_source String,
 
     -- Token usage reported for the chat during the bucket (rows carrying
     -- gen_ai.usage.total_tokens, including OTEL-forwarded metrics)
@@ -568,7 +662,11 @@ CREATE TABLE IF NOT EXISTS chat_token_summaries (
     -- tokens-under-management billing.
     stored_event_count SimpleAggregateFunction(sum, UInt64)
 ) ENGINE = AggregatingMergeTree
-ORDER BY (gram_project_id, chat_id, time_bucket)
+-- PRIMARY KEY stays the pre-hook_source prefix: MODIFY ORDER BY can only
+-- extend the sort key, never the primary key, so the split must be explicit
+-- here to match the live table.
+PRIMARY KEY (gram_project_id, chat_id, time_bucket)
+ORDER BY (gram_project_id, chat_id, time_bucket, hook_source)
 TTL time_bucket + INTERVAL 730 DAY
 SETTINGS index_granularity = 8192
 COMMENT 'Per-chat daily token usage and stored-session evidence, retained beyond the raw telemetry TTL to support tokens-under-management billing across historical billing cycles';
@@ -580,6 +678,7 @@ SELECT
     -- Force UTC so the daily billing bucket boundary never shifts with the
     -- server timezone (fromUnixTimestamp64Nano defaults to the server tz).
     toStartOfDay(fromUnixTimestamp64Nano(time_unix_nano, 'UTC')) AS time_bucket,
+    hook_source,
     sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') AS total_tokens,
     toUInt64(countIf(
         startsWith(gram_urn, 'tools:')
@@ -589,7 +688,58 @@ SELECT
     )) AS stored_event_count
 FROM telemetry_logs
 WHERE chat_id != ''
-GROUP BY gram_project_id, chat_id, time_bucket;
+GROUP BY gram_project_id, chat_id, time_bucket, hook_source;
+
+-- tum_breakdown_summaries is the DIMENSIONED billing aggregate: the same
+-- gen_ai completion rows chat_token_summaries (the billing record) sums,
+-- broken down by consuming surface and user identity so the billing page's
+-- breakdowns can report the billed population exactly. Reads apply the same
+-- read-time stored-session qualification (via chat_token_summaries) and
+-- registry-driven source scoping (billing.ModelUsageSources). Identity
+-- dimensions are stamped on completion rows at emit time by the telemetry
+-- logger's directory snapshot. attribute_metrics_summaries is provenance-
+-- first (agent-fleet surfaces only) and no longer carries these rows.
+CREATE TABLE IF NOT EXISTS tum_breakdown_summaries (
+    -- Key columns
+    gram_project_id UUID,
+    chat_id String,
+    time_bucket DateTime('UTC'),
+    hook_source String,
+    model String,
+    user_email String,
+    division_name String,
+    roles Array(String),
+
+    -- Billed token split for the slice (input + output = total for
+    -- completion rows; they carry no cache attributes).
+    input_tokens SimpleAggregateFunction(sum, Int64),
+    output_tokens SimpleAggregateFunction(sum, Int64),
+    total_tokens SimpleAggregateFunction(sum, Int64)
+) ENGINE = AggregatingMergeTree
+ORDER BY (gram_project_id, time_bucket, chat_id, hook_source, model, user_email, division_name, roles)
+TTL time_bucket + INTERVAL 730 DAY
+SETTINGS index_granularity = 8192
+COMMENT 'Per-chat daily billed token usage broken down by consuming surface and user identity, retained beyond the raw telemetry TTL to power the billing page breakdowns across historical billing cycles';
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS tum_breakdown_summaries_mv TO tum_breakdown_summaries AS
+SELECT
+    gram_project_id,
+    chat_id,
+    -- Force UTC so the daily billing bucket boundary never shifts with the
+    -- server timezone (fromUnixTimestamp64Nano defaults to the server tz).
+    toStartOfDay(fromUnixTimestamp64Nano(time_unix_nano, 'UTC')) AS time_bucket,
+    hook_source,
+    toString(attributes.gen_ai.response.model) AS model,
+    user_email,
+    toString(attributes.user.attributes.division_name) AS division_name,
+    arraySort(JSONExtract(ifNull(toJSONString(attributes.user.roles), '[]'), 'Array(String)')) AS roles,
+    sum(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens))) AS input_tokens,
+    sum(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens))) AS output_tokens,
+    sum(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens))) AS total_tokens
+FROM telemetry_logs
+WHERE chat_id != ''
+  AND toString(attributes.gen_ai.usage.total_tokens) != ''
+GROUP BY gram_project_id, chat_id, time_bucket, hook_source, model, user_email, division_name, roles;
 
 CREATE TABLE IF NOT EXISTS attribute_keys (
     gram_project_id UUID,

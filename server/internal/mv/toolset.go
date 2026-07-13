@@ -13,6 +13,8 @@ import (
 	"github.com/ettle/strcase"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/samber/lo"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -56,222 +58,466 @@ type externalMCPHeaderDefinition struct {
 	Placeholder *string `json:"placeholder,omitempty"`
 }
 
-func DescribeToolsetEntry(
+func groupDefinitionsByToolsetURN[T any](
+	urnsByToolsetID map[uuid.UUID][]string,
+	definitions []T,
+	urnOf func(T) string,
+) map[uuid.UUID][]T {
+	toolsetIDsByURN := make(map[string][]uuid.UUID)
+	for toolsetID, urns := range urnsByToolsetID {
+		for _, urn := range urns {
+			toolsetIDsByURN[urn] = append(toolsetIDsByURN[urn], toolsetID)
+		}
+	}
+
+	result := make(map[uuid.UUID][]T, len(urnsByToolsetID))
+	for _, definition := range definitions {
+		for _, toolsetID := range toolsetIDsByURN[urnOf(definition)] {
+			result[toolsetID] = append(result[toolsetID], definition)
+		}
+	}
+
+	return result
+}
+
+func selectHTTPDefinitionsByToolset(
+	toolUrnsByToolsetID map[uuid.UUID][]string,
+	definitions []tr.FindHttpToolEntriesByUrnRow,
+) map[uuid.UUID][]tr.FindHttpToolEntriesByUrnRow {
+	grouped := groupDefinitionsByToolsetURN(
+		toolUrnsByToolsetID,
+		definitions,
+		func(definition tr.FindHttpToolEntriesByUrnRow) string { return definition.ToolUrn.String() },
+	)
+
+	result := make(map[uuid.UUID][]tr.FindHttpToolEntriesByUrnRow, len(grouped))
+	for toolsetID, toolsetDefinitions := range grouped {
+		seenNames := make(map[string]struct{}, len(toolsetDefinitions))
+		for _, definition := range toolsetDefinitions {
+			if _, ok := seenNames[definition.Name]; ok {
+				continue
+			}
+			seenNames[definition.Name] = struct{}{}
+			result[toolsetID] = append(result[toolsetID], definition)
+		}
+	}
+
+	return result
+}
+
+func validateToolsetEntriesInputs(projectID ProjectID, toolsets []tsr.Toolset) error {
+	pid := uuid.UUID(projectID)
+	if pid == uuid.Nil {
+		return errors.New("project ID must be set")
+	}
+	if len(toolsets) == 0 {
+		return nil
+	}
+
+	organizationID := toolsets[0].OrganizationID
+	for _, toolset := range toolsets {
+		if toolset.ProjectID != pid {
+			return errors.New("DescribeToolsetEntries requires all toolsets to belong to the same project")
+		}
+		if toolset.OrganizationID != organizationID {
+			return errors.New("DescribeToolsetEntries requires all toolsets to belong to the same organization")
+		}
+	}
+
+	return nil
+}
+
+// DescribeToolsetEntries builds the full ToolsetEntry view for every given
+// toolset in a fixed number of DB round trips, regardless of toolset count.
+// It replicates DescribeToolsetEntry's per-field logic exactly, but fetches
+// every query kind once across the union of all toolsets' tool/resource URNs
+// instead of once per toolset, running independent queries concurrently via
+// errgroup (mirroring GetToolsetsSummary's existing pattern below) instead
+// of one after another.
+func DescribeToolsetEntries(
 	ctx context.Context,
 	logger *slog.Logger,
-	tx DBTX,
+	db *pgxpool.Pool,
 	projectID ProjectID,
-	toolsetSlug ToolsetSlug,
+	toolsets []tsr.Toolset,
 	platformExtras ...platformtools.ExternalTool,
-) (*types.ToolsetEntry, error) {
-	toolsetRepo := tsr.New(tx)
-	toolsRepo := tr.New(tx)
-	variationsRepo := vr.New(tx)
-	templatesRepo := templatesR.New(tx)
+) ([]*types.ToolsetEntry, error) {
 	pid := uuid.UUID(projectID)
-
-	if err := inv.Check(
-		"describe toolset inputs",
-		"project id is set", pid != uuid.Nil,
-		"toolset slug is set", toolsetSlug != "",
-	); err != nil {
-		return nil, oops.E(oops.CodeInvariantViolation, err, "not enough information to describe toolset").LogError(ctx, logger)
+	if err := validateToolsetEntriesInputs(projectID, toolsets); err != nil {
+		return nil, oops.E(oops.CodeInvariantViolation, err, "invalid DescribeToolsetEntries inputs").LogError(ctx, logger)
+	}
+	if len(toolsets) == 0 {
+		return []*types.ToolsetEntry{}, nil
 	}
 
-	toolset, err := toolsetRepo.GetToolset(ctx, tsr.GetToolsetParams{
-		Slug:      conv.ToLower(toolsetSlug),
-		ProjectID: pid,
+	toolsetRepo := tsr.New(db)
+	toolsRepo := tr.New(db)
+	variationsRepo := vr.New(db)
+	templatesRepo := templatesR.New(db)
+	externalmcpRepo := externalmcpR.New(db)
+	resourcesRepo := resourcesR.New(db)
+	mcpmetadataRepo := mcpmetadataR.New(db)
+
+	toolsetIDs := make([]uuid.UUID, len(toolsets))
+	for i, ts := range toolsets {
+		toolsetIDs[i] = ts.ID
+	}
+	organizationID := toolsets[0].OrganizationID
+
+	// Wave 0: every query that needs nothing but toolsetIDs/projectID/
+	// organizationID — none of these depend on each other's results, so run
+	// them concurrently.
+	versionsCh := make(chan []tsr.ToolsetVersion, 1)
+	originsCh := make(chan []tsr.GetToolsetOriginsByToolsetIDsRow, 1)
+	promptTemplateRowsCh := make(chan []tsr.GetPromptTemplatesForToolsetsRow, 1)
+	displayNameRowsCh := make(chan []mcpmetadataR.GetHeaderDisplayNamesByToolsetIDsRow, 1)
+
+	eg0, eg0Ctx := errgroup.WithContext(ctx)
+	eg0.Go(func() error {
+		defer close(versionsCh)
+		rows, err := toolsetRepo.GetLatestToolsetVersionsBatch(eg0Ctx, toolsetIDs)
+		if err != nil {
+			return fmt.Errorf("batch toolset versions: %w", err)
+		}
+		versionsCh <- rows
+		return nil
 	})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").LogError(ctx, logger)
-	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to load toolset").LogError(ctx, logger)
+	eg0.Go(func() error {
+		defer close(originsCh)
+		rows, err := toolsetRepo.GetToolsetOriginsByToolsetIDs(eg0Ctx, tsr.GetToolsetOriginsByToolsetIDsParams{
+			ToolsetIds:     toolsetIDs,
+			OrganizationID: organizationID,
+		})
+		if err != nil {
+			return fmt.Errorf("batch toolset origins: %w", err)
+		}
+		originsCh <- rows
+		return nil
+	})
+	eg0.Go(func() error {
+		defer close(promptTemplateRowsCh)
+		rows, err := toolsetRepo.GetPromptTemplatesForToolsets(eg0Ctx, tsr.GetPromptTemplatesForToolsetsParams{ProjectID: pid, ToolsetIds: toolsetIDs})
+		if err != nil {
+			return fmt.Errorf("batch prompt templates: %w", err)
+		}
+		promptTemplateRowsCh <- rows
+		return nil
+	})
+	eg0.Go(func() error {
+		defer close(displayNameRowsCh)
+		rows, err := mcpmetadataRepo.GetHeaderDisplayNamesByToolsetIDs(eg0Ctx, mcpmetadataR.GetHeaderDisplayNamesByToolsetIDsParams{ProjectID: pid, ToolsetIds: toolsetIDs})
+		if err != nil {
+			return fmt.Errorf("batch header display names: %w", err)
+		}
+		displayNameRowsCh <- rows
+		return nil
+	})
+	if err := eg0.Wait(); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to batch fetch toolset metadata").LogError(ctx, logger)
 	}
 
-	// Get tool URNs and resource URNs from latest toolset version
-	var toolUrns []string
-	var resourceUrns []string
-	latestVersion, err := toolsetRepo.GetLatestToolsetVersion(ctx, toolset.ID)
-	if err == nil {
-		toolUrns = make([]string, len(latestVersion.ToolUrns))
-		for i, urn := range latestVersion.ToolUrns {
-			toolUrns[i] = urn.String()
-		}
-		resourceUrns = make([]string, len(latestVersion.ResourceUrns))
-		for i, urn := range latestVersion.ResourceUrns {
-			resourceUrns[i] = urn.String()
-		}
+	versions := <-versionsCh
+	origins := <-originsCh
+	ptrows := <-promptTemplateRowsCh
+	displayNameRows := <-displayNameRowsCh
+
+	// Pure Go from here to the start of wave 1 — no DB calls, just turning
+	// wave 0's results into lookup maps and the tool/resource URN unions
+	// wave 1 needs.
+	versionByToolsetID := make(map[uuid.UUID]tsr.ToolsetVersion, len(versions))
+	for _, v := range versions {
+		versionByToolsetID[v.ToolsetID] = v
 	}
 
-	toolsetOrigin, err := getToolsetOrigin(ctx, logger, toolsetRepo, toolset.OrganizationID, toolset.ID)
+	toolUrnsByToolsetID := make(map[uuid.UUID][]string, len(toolsets))
+	resourceUrnsByToolsetID := make(map[uuid.UUID][]string, len(toolsets))
+	allToolUrnsSet := make(map[string]bool)
+	allResourceUrnsSet := make(map[string]bool)
+	for _, ts := range toolsets {
+		v, ok := versionByToolsetID[ts.ID]
+		if !ok {
+			continue
+		}
+
+		toolUrns := make([]string, len(v.ToolUrns))
+		for i, u := range v.ToolUrns {
+			toolUrns[i] = u.String()
+		}
+		toolUrns = lo.Uniq(toolUrns)
+		toolUrnsByToolsetID[ts.ID] = toolUrns
+		for _, toolUrn := range toolUrns {
+			allToolUrnsSet[toolUrn] = true
+		}
+
+		resourceUrns := make([]string, len(v.ResourceUrns))
+		for i, u := range v.ResourceUrns {
+			resourceUrns[i] = u.String()
+		}
+		resourceUrns = lo.Uniq(resourceUrns)
+		resourceUrnsByToolsetID[ts.ID] = resourceUrns
+		for _, resourceUrn := range resourceUrns {
+			allResourceUrnsSet[resourceUrn] = true
+		}
+	}
+	allToolUrns := slices.Collect(maps.Keys(allToolUrnsSet))
+	allResourceUrns := slices.Collect(maps.Keys(allResourceUrnsSet))
+
+	externalMCPUrnsSet := make(map[string]bool)
+	for _, toolUrn := range allToolUrns {
+		var parsedUrn urn.Tool
+		if err := parsedUrn.UnmarshalText([]byte(toolUrn)); err == nil && parsedUrn.Kind == urn.ToolKindExternalMCP {
+			externalMCPUrnsSet[toolUrn] = true
+		}
+	}
+	externalMCPUrns := slices.Collect(maps.Keys(externalMCPUrnsSet))
+
+	originsByToolsetID := make(map[uuid.UUID]*types.ToolsetOrigin, len(origins))
+	for _, o := range origins {
+		originsByToolsetID[o.ToolsetID] = &types.ToolsetOrigin{RegistrySpecifier: o.RegistrySpecifier}
+	}
+
+	promptTemplateRowsByToolsetID := make(map[uuid.UUID][]tsr.GetPromptTemplatesForToolsetsRow)
+	for _, pt := range ptrows {
+		promptTemplateRowsByToolsetID[pt.ToolsetID] = append(promptTemplateRowsByToolsetID[pt.ToolsetID], pt)
+	}
+
+	// mcp_metadata is scoped per toolset — never let one toolset's display
+	// names leak into another's assembly (see Task 2's rationale).
+	headerDisplayNamesByToolsetID := make(map[uuid.UUID]map[string]string, len(toolsets))
+	for _, row := range displayNameRows {
+		if !row.ToolsetID.Valid {
+			continue
+		}
+		names := make(map[string]string)
+		if len(row.HeaderDisplayNames) > 0 {
+			_ = json.Unmarshal(row.HeaderDisplayNames, &names)
+		}
+		headerDisplayNamesByToolsetID[row.ToolsetID.UUID] = names
+	}
+
+	// Wave 1: everything keyed off the tool/resource URN unions wave 0 just
+	// produced. Each of these queries is independent of the others (none
+	// consumes another's result), so run them concurrently too. Postgres
+	// handles `= ANY('{}')` on an empty array fine (zero rows, no error), so
+	// no length guards are needed before firing these — same as
+	// GetToolsetsSummary's unconditional calls below.
+	httpDefsCh := make(chan []tr.FindHttpToolEntriesByUrnRow, 1)
+	variationsCh := make(chan []vr.ToolVariation, 1)
+	funcDefsCh := make(chan []tr.FindFunctionToolEntriesByUrnRow, 1)
+	promptDefsCh := make(chan []templatesR.PeekTemplatesByUrnsRow, 1)
+	resourceDefsCh := make(chan []resourcesR.FindFunctionResourceEntriesByUrnRow, 1)
+	externalMCPDefsCh := make(chan []externalmcpR.GetExternalMCPToolDefinitionsByURNsRow, 1)
+
+	eg1, eg1Ctx := errgroup.WithContext(ctx)
+	eg1.Go(func() error {
+		defer close(httpDefsCh)
+		rows, err := toolsRepo.FindHttpToolEntriesByUrn(eg1Ctx, tr.FindHttpToolEntriesByUrnParams{ProjectID: pid, Urns: allToolUrns})
+		if err != nil {
+			return fmt.Errorf("batch http tools: %w", err)
+		}
+		httpDefsCh <- rows
+		return nil
+	})
+	eg1.Go(func() error {
+		defer close(variationsCh)
+		rows, err := variationsRepo.FindGlobalVariationsByToolURNs(eg1Ctx, vr.FindGlobalVariationsByToolURNsParams{ProjectID: pid, ToolUrns: allToolUrns})
+		if err != nil {
+			return fmt.Errorf("batch tool variations: %w", err)
+		}
+		variationsCh <- rows
+		return nil
+	})
+	eg1.Go(func() error {
+		defer close(funcDefsCh)
+		rows, err := toolsRepo.FindFunctionToolEntriesByUrn(eg1Ctx, tr.FindFunctionToolEntriesByUrnParams{ProjectID: pid, Urns: allToolUrns})
+		if err != nil {
+			return fmt.Errorf("batch function tools: %w", err)
+		}
+		funcDefsCh <- rows
+		return nil
+	})
+	eg1.Go(func() error {
+		defer close(promptDefsCh)
+		rows, err := templatesRepo.PeekTemplatesByUrns(eg1Ctx, templatesR.PeekTemplatesByUrnsParams{ProjectID: pid, Urns: allToolUrns})
+		if err != nil {
+			return fmt.Errorf("batch prompt-type tools: %w", err)
+		}
+		promptDefsCh <- rows
+		return nil
+	})
+	eg1.Go(func() error {
+		defer close(resourceDefsCh)
+		rows, err := resourcesRepo.FindFunctionResourceEntriesByUrn(eg1Ctx, resourcesR.FindFunctionResourceEntriesByUrnParams{ProjectID: pid, Urns: allResourceUrns})
+		if err != nil {
+			return fmt.Errorf("batch resources: %w", err)
+		}
+		resourceDefsCh <- rows
+		return nil
+	})
+	eg1.Go(func() error {
+		defer close(externalMCPDefsCh)
+		rows, err := externalmcpRepo.GetExternalMCPToolDefinitionsByURNs(eg1Ctx, externalmcpR.GetExternalMCPToolDefinitionsByURNsParams{ProjectID: pid, ToolUrns: externalMCPUrns})
+		if err != nil {
+			return fmt.Errorf("batch external mcp tools: %w", err)
+		}
+		externalMCPDefsCh <- rows
+		return nil
+	})
+	if err := eg1.Wait(); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to batch fetch toolset tool definitions").LogError(ctx, logger)
+	}
+
+	httpDefs := <-httpDefsCh
+	allVariations := <-variationsCh
+	funcToolDefs := <-funcDefsCh
+	promptToolDefs := <-promptDefsCh
+	resourceDefs := <-resourceDefsCh
+	externalMCPDefs := <-externalMCPDefsCh
+
+	urnToVariedName := make(map[string]string, len(allVariations))
+	for _, variation := range allVariations {
+		n := conv.FromPGText[string](variation.Name)
+		if n == nil || *n == "" {
+			continue
+		}
+		urnToVariedName[variation.SrcToolUrn.String()] = *n
+	}
+
+	httpDefsByToolsetID := selectHTTPDefinitionsByToolset(toolUrnsByToolsetID, httpDefs)
+	funcDefByUrn := make(map[string]tr.FindFunctionToolEntriesByUrnRow, len(funcToolDefs))
+	for _, def := range funcToolDefs {
+		funcDefByUrn[def.ToolUrn.String()] = def
+	}
+	funcDefsByToolsetID := groupDefinitionsByToolsetURN(
+		toolUrnsByToolsetID,
+		funcToolDefs,
+		func(definition tr.FindFunctionToolEntriesByUrnRow) string {
+			return definition.ToolUrn.String()
+		},
+	)
+	promptDefByUrn := make(map[string]templatesR.PeekTemplatesByUrnsRow, len(promptToolDefs))
+	for _, pt := range promptToolDefs {
+		promptDefByUrn[pt.ToolUrn.String()] = pt
+	}
+	resourceDefsByToolsetID := groupDefinitionsByToolsetURN(
+		resourceUrnsByToolsetID,
+		resourceDefs,
+		func(definition resourcesR.FindFunctionResourceEntriesByUrnRow) string {
+			return definition.ResourceUrn.String()
+		},
+	)
+	externalMCPDefByUrn := make(map[string]externalmcpR.GetExternalMCPToolDefinitionsByURNsRow, len(externalMCPDefs))
+	for _, d := range externalMCPDefs {
+		externalMCPDefByUrn[d.ToolUrn] = d
+	}
+
+	// Wave 2: security/server definitions depend on wave 1's httpDefs (need
+	// their DeploymentID/OpenAPIv3DocumentID/Security columns), so this runs
+	// after wave 1 — nothing left to parallelize it with at this point.
+	allEnvLookups := make([]ToolEnvLookupParams, 0, len(httpDefs))
+	for _, def := range httpDefs {
+		allEnvLookups = append(allEnvLookups, ToolEnvLookupParams{
+			DeploymentID:        def.DeploymentID,
+			OpenAPIv3DocumentID: def.Openapiv3DocumentID,
+			Security:            def.Security,
+			ServerEnvVar:        def.ServerEnvVar,
+		})
+	}
+	securityEntriesByKey, err := fetchHTTPSecurityDefinitions(ctx, db, allEnvLookups)
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get environment variables for toolsets").LogError(ctx, logger)
 	}
 
-	var tools []*types.ToolEntry
-	var securityVars []*types.SecurityVariable
-	var serverVars []*types.ServerVariable
-	var functionEnvVars []*types.FunctionEnvironmentVariable
-	var externalMCPHeaderDefinitions []*types.ExternalMCPHeaderDefinition
-	if len(toolUrns) > 0 {
-		definitions, err := toolsRepo.FindHttpToolEntriesByUrn(ctx, tr.FindHttpToolEntriesByUrnParams{
-			ProjectID: pid,
-			Urns:      toolUrns,
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to list tools in toolset").LogError(ctx, logger)
+	// Assemble each toolset's entry from the shared, pre-fetched results —
+	// pure Go, no DB calls in this loop.
+	result := make([]*types.ToolsetEntry, 0, len(toolsets))
+	for _, toolset := range toolsets {
+		toolUrns := toolUrnsByToolsetID[toolset.ID]
+		resourceUrns := resourceUrnsByToolsetID[toolset.ID]
+
+		var tools []*types.ToolEntry
+		if len(toolUrns) > 0 {
+			tools = make([]*types.ToolEntry, 0, len(toolUrns))
 		}
-
-		allVariations, err := variationsRepo.FindGlobalVariationsByToolURNs(ctx, vr.FindGlobalVariationsByToolURNsParams{
-			ProjectID: pid,
-			ToolUrns:  toolUrns,
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to list global tool variations").LogError(ctx, logger)
-		}
-
-		urnToVariedName := make(map[string]string)
-		for _, variation := range allVariations {
-			n := conv.FromPGText[string](variation.Name)
-			if n == nil || *n == "" {
-				continue
-			}
-
-			urnToVariedName[variation.SrcToolUrn.String()] = *n
-		}
-
-		tools = make([]*types.ToolEntry, 0, len(definitions))
-		envQueries := make([]toolEnvLookupParams, 0, len(definitions))
-		seen := make(map[string]bool, 0)
-		for _, def := range definitions {
-			if _, ok := seen[def.Name]; ok {
-				continue
-			}
-			seen[def.Name] = true
-
-			name := conv.Default(urnToVariedName[def.ToolUrn.String()], def.Name)
-
-			tool := &types.ToolEntry{
-				Type:        types.ToolType(urn.ToolKindHTTP),
-				ID:          def.ID.String(),
-				Name:        name,
-				ToolUrn:     def.ToolUrn.String(),
-				Annotations: conv.AnnotationsFromColumns(def.ReadOnlyHint, def.DestructiveHint, def.IdempotentHint, def.OpenWorldHint),
-				HTTPMethod:  &def.HttpMethod,
-			}
-
-			envQueries = append(envQueries, toolEnvLookupParams{
-				deploymentID:        def.DeploymentID,
-				openapiv3DocumentID: def.Openapiv3DocumentID,
-				security:            def.Security,
-				serverEnvVar:        def.ServerEnvVar,
-			})
-
-			tools = append(tools, tool)
-		}
-
-		funcTools, err := toolsRepo.FindFunctionToolEntriesByUrn(ctx, tr.FindFunctionToolEntriesByUrnParams{
-			ProjectID: pid,
-			Urns:      toolUrns,
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to list function tools in toolset").LogError(ctx, logger)
-		}
-		for _, tool := range funcTools {
-			tools = append(tools, &types.ToolEntry{
-				Type:        types.ToolType(urn.ToolKindFunction),
-				ID:          tool.ID.String(),
-				Name:        tool.Name,
-				ToolUrn:     tool.ToolUrn.String(),
-				Annotations: conv.AnnotationsFromColumns(tool.ReadOnlyHint, tool.DestructiveHint, tool.IdempotentHint, tool.OpenWorldHint),
-				HTTPMethod:  nil,
-			})
-
-			envVars, err := extractFunctionEnvVars(ctx, logger, tool.Variables, tool.AuthInput)
+		var functionEnvVars []*types.FunctionEnvironmentVariable
+		var externalMCPHeaderDefinitions []*types.ExternalMCPHeaderDefinition
+		toolsetEnvLookups := make([]ToolEnvLookupParams, 0, len(toolUrns))
+		for _, def := range funcDefsByToolsetID[toolset.ID] {
+			envVars, err := extractFunctionEnvVars(ctx, logger, def.Variables, def.AuthInput)
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "failed to extract function environment variables").LogError(ctx, logger)
 			}
 			functionEnvVars = append(functionEnvVars, envVars...)
 		}
 
-		promptTools, err := templatesRepo.PeekTemplatesByUrns(ctx, templatesR.PeekTemplatesByUrnsParams{
-			ProjectID: pid,
-			Urns:      toolUrns,
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to get prompt templates").LogError(ctx, logger)
-		}
-
-		for _, pt := range promptTools {
+		for _, def := range httpDefsByToolsetID[toolset.ID] {
+			name := conv.Default(urnToVariedName[def.ToolUrn.String()], def.Name)
 			tools = append(tools, &types.ToolEntry{
-				Type:        types.ToolType(urn.ToolKindPrompt),
-				ID:          pt.ID.String(),
-				Name:        pt.Name,
-				ToolUrn:     pt.ToolUrn.String(),
-				Annotations: nil,
-				HTTPMethod:  nil,
+				Type:        types.ToolType(urn.ToolKindHTTP),
+				ID:          def.ID.String(),
+				Name:        name,
+				ToolUrn:     def.ToolUrn.String(),
+				Annotations: conv.AnnotationsFromColumns(def.ReadOnlyHint, def.DestructiveHint, def.IdempotentHint, def.OpenWorldHint),
+				HTTPMethod:  &def.HttpMethod,
+			})
+			toolsetEnvLookups = append(toolsetEnvLookups, ToolEnvLookupParams{
+				DeploymentID:        def.DeploymentID,
+				OpenAPIv3DocumentID: def.Openapiv3DocumentID,
+				Security:            def.Security,
+				ServerEnvVar:        def.ServerEnvVar,
 			})
 		}
 
-		tools = append(tools, platformtools.FindToolEntries(toolUrns, platformExtras...)...)
-
-		// Fetch external MCP tool entries
-		externalmcpRepo := externalmcpR.New(tx)
-		// Filter toolUrns to find externalmcp URNs
-		externalMCPUrns := make([]string, 0)
 		for _, toolUrn := range toolUrns {
-			var parsedUrn urn.Tool
-			if err := parsedUrn.UnmarshalText([]byte(toolUrn)); err == nil {
-				if parsedUrn.Kind == urn.ToolKindExternalMCP {
-					externalMCPUrns = append(externalMCPUrns, toolUrn)
+			if def, ok := funcDefByUrn[toolUrn]; ok {
+				tools = append(tools, &types.ToolEntry{
+					Type:        types.ToolType(urn.ToolKindFunction),
+					ID:          def.ID.String(),
+					Name:        def.Name,
+					ToolUrn:     def.ToolUrn.String(),
+					Annotations: conv.AnnotationsFromColumns(def.ReadOnlyHint, def.DestructiveHint, def.IdempotentHint, def.OpenWorldHint),
+					HTTPMethod:  nil,
+				})
+				continue
+			}
+
+			if pt, ok := promptDefByUrn[toolUrn]; ok {
+				tools = append(tools, &types.ToolEntry{
+					Type:        types.ToolType(urn.ToolKindPrompt),
+					ID:          pt.ID.String(),
+					Name:        pt.Name,
+					ToolUrn:     pt.ToolUrn.String(),
+					Annotations: nil,
+					HTTPMethod:  nil,
+				})
+				continue
+			}
+
+			if def, ok := externalMCPDefByUrn[toolUrn]; ok {
+				tools = append(tools, &types.ToolEntry{
+					Type:        types.ToolType(urn.ToolKindExternalMCP),
+					ID:          def.ID.String(),
+					Name:        def.Slug + ":proxy",
+					ToolUrn:     def.ToolUrn,
+					Annotations: conv.AnnotationsFromColumns(def.ReadOnlyHint, def.DestructiveHint, def.IdempotentHint, def.OpenWorldHint),
+					HTTPMethod:  nil,
+				})
+				headerDefs, err := extractExternalMCPHeaderDefinitions(ctx, logger, def.HeaderDefinitions, def.Slug)
+				if err != nil {
+					return nil, oops.E(oops.CodeUnexpected, err, "failed to extract external mcp header definitions").LogError(ctx, logger)
 				}
+				externalMCPHeaderDefinitions = append(externalMCPHeaderDefinitions, headerDefs...)
 			}
 		}
-		for _, toolUrn := range externalMCPUrns {
-			externalMCPTool, err := externalmcpRepo.GetExternalMCPToolDefinitionByURN(ctx, externalmcpR.GetExternalMCPToolDefinitionByURNParams{
-				ToolUrn:   toolUrn,
-				ProjectID: pid,
-			})
-			if err != nil {
-				continue // Skip if not found
-			}
-			tools = append(tools, &types.ToolEntry{
-				Type:        types.ToolType(urn.ToolKindExternalMCP),
-				ID:          externalMCPTool.ID.String(),
-				Name:        externalMCPTool.Slug + ":proxy",
-				ToolUrn:     externalMCPTool.ToolUrn,
-				Annotations: conv.AnnotationsFromColumns(externalMCPTool.ReadOnlyHint, externalMCPTool.DestructiveHint, externalMCPTool.IdempotentHint, externalMCPTool.OpenWorldHint),
-				HTTPMethod:  nil,
-			})
-
-			headerDefs, err := extractExternalMCPHeaderDefinitions(ctx, logger, externalMCPTool.HeaderDefinitions, externalMCPTool.Slug)
-			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "failed to extract external mcp header definitions").LogError(ctx, logger)
-			}
-			externalMCPHeaderDefinitions = append(externalMCPHeaderDefinitions, headerDefs...)
-
+		if len(toolUrns) > 0 {
+			tools = append(tools, platformtools.FindToolEntries(toolUrns, platformExtras...)...)
 		}
 
-		securityVars, serverVars, err = environmentVariablesForTools(ctx, tx, toolset.ID, envQueries)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to get environment variables for toolset").LogError(ctx, logger)
+		var resources []*types.ResourceEntry
+		if len(resourceUrns) > 0 {
+			resources = make([]*types.ResourceEntry, 0, len(resourceUrns))
 		}
-	}
-
-	var resources []*types.ResourceEntry
-	if len(resourceUrns) > 0 {
-		resourcesRepo := resourcesR.New(tx)
-		functionResourceEntries, err := resourcesRepo.FindFunctionResourceEntriesByUrn(ctx, resourcesR.FindFunctionResourceEntriesByUrnParams{
-			ProjectID: pid,
-			Urns:      resourceUrns,
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to list resources in toolset").LogError(ctx, logger)
-		}
-
-		resources = make([]*types.ResourceEntry, 0, len(functionResourceEntries))
-		for _, resource := range functionResourceEntries {
+		for _, resource := range resourceDefsByToolsetID[toolset.ID] {
 			resources = append(resources, &types.ResourceEntry{
 				Type:        string(urn.ResourceKindFunction),
 				ID:          resource.ID.String(),
@@ -279,58 +525,57 @@ func DescribeToolsetEntry(
 				URI:         resource.Uri,
 				ResourceUrn: resource.ResourceUrn.String(),
 			})
-
 			envVars, err := extractFunctionEnvVars(ctx, logger, resource.Variables, nil)
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "failed to extract function environment variables from resource").LogError(ctx, logger)
 			}
 			functionEnvVars = append(functionEnvVars, envVars...)
 		}
-	}
 
-	ptrows, err := toolsetRepo.GetPromptTemplatesForToolset(ctx, tsr.GetPromptTemplatesForToolsetParams{
-		ProjectID: pid,
-		ToolsetID: toolset.ID,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to get prompt templates for toolset").LogError(ctx, logger)
-	}
+		var securityVars []*types.SecurityVariable
+		var serverVars []*types.ServerVariable
+		if len(toolUrns) > 0 {
+			securityVars, serverVars = AssembleEnvironmentVariablesForToolset(toolsetEnvLookups, securityEntriesByKey, headerDisplayNamesByToolsetID[toolset.ID])
+		}
 
-	promptTemplates := make([]*types.PromptTemplateEntry, 0, len(ptrows))
-	for _, pt := range ptrows {
-		promptTemplates = append(promptTemplates, &types.PromptTemplateEntry{
-			ID:   pt.ID.String(),
-			Name: types.Slug(pt.Name),
-			Kind: new(parseKind(pt)),
+		promptTemplates := make([]*types.PromptTemplateEntry, 0, len(promptTemplateRowsByToolsetID[toolset.ID]))
+		for _, pt := range promptTemplateRowsByToolsetID[toolset.ID] {
+			promptTemplates = append(promptTemplates, &types.PromptTemplateEntry{
+				ID:   pt.ID.String(),
+				Name: types.Slug(pt.Name),
+				Kind: new(conv.PtrValOrEmpty(conv.FromPGText[string](pt.Kind), "prompt")),
+			})
+		}
+
+		result = append(result, &types.ToolsetEntry{
+			ID:                           toolset.ID.String(),
+			OrganizationID:               toolset.OrganizationID,
+			ProjectID:                    toolset.ProjectID.String(),
+			Name:                         toolset.Name,
+			Slug:                         types.Slug(toolset.Slug),
+			DefaultEnvironmentSlug:       conv.FromPGText[types.Slug](toolset.DefaultEnvironmentSlug),
+			SecurityVariables:            securityVars,
+			ServerVariables:              serverVars,
+			FunctionEnvironmentVariables: dedupeFunctionEnvVars(functionEnvVars),
+			ExternalMcpHeaderDefinitions: dedupeExternalMCPHeaderDefinitions(externalMCPHeaderDefinitions),
+			Description:                  conv.FromPGText[string](toolset.Description),
+			McpSlug:                      conv.FromPGText[types.Slug](toolset.McpSlug),
+			McpEnabled:                   &toolset.McpEnabled,
+			ToolSelectionMode:            toolset.ToolSelectionMode,
+			CustomDomainID:               conv.FromNullableUUID(toolset.CustomDomainID),
+			McpIsPublic:                  &toolset.McpIsPublic,
+			Origin:                       originsByToolsetID[toolset.ID],
+			CreatedAt:                    toolset.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt:                    toolset.UpdatedAt.Time.Format(time.RFC3339),
+			Tools:                        tools,
+			PromptTemplates:              promptTemplates,
+			ToolUrns:                     toolUrns,
+			Resources:                    resources,
+			ResourceUrns:                 resourceUrns,
 		})
 	}
 
-	return &types.ToolsetEntry{
-		ID:                           toolset.ID.String(),
-		OrganizationID:               toolset.OrganizationID,
-		ProjectID:                    toolset.ProjectID.String(),
-		Name:                         toolset.Name,
-		Slug:                         types.Slug(toolset.Slug),
-		DefaultEnvironmentSlug:       conv.FromPGText[types.Slug](toolset.DefaultEnvironmentSlug),
-		SecurityVariables:            securityVars,
-		ServerVariables:              serverVars,
-		FunctionEnvironmentVariables: dedupeFunctionEnvVars(functionEnvVars),
-		ExternalMcpHeaderDefinitions: dedupeExternalMCPHeaderDefinitions(externalMCPHeaderDefinitions),
-		Description:                  conv.FromPGText[string](toolset.Description),
-		McpSlug:                      conv.FromPGText[types.Slug](toolset.McpSlug),
-		McpEnabled:                   &toolset.McpEnabled,
-		ToolSelectionMode:            toolset.ToolSelectionMode,
-		CustomDomainID:               conv.FromNullableUUID(toolset.CustomDomainID),
-		McpIsPublic:                  &toolset.McpIsPublic,
-		Origin:                       toolsetOrigin,
-		CreatedAt:                    toolset.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:                    toolset.UpdatedAt.Time.Format(time.RFC3339),
-		Tools:                        tools,
-		PromptTemplates:              promptTemplates,
-		ToolUrns:                     toolUrns,
-		Resources:                    resources,
-		ResourceUrns:                 resourceUrns,
-	}, nil
+	return result, nil
 }
 
 // DescribeToolset builds the full view of a toolset including its tools with
@@ -933,7 +1178,7 @@ func readToolsetTools(
 
 		tools = make([]*types.Tool, 0, len(definitions))
 		seen := make(map[string]bool, 0)
-		envQueries := make([]toolEnvLookupParams, 0, len(definitions))
+		envQueries := make([]ToolEnvLookupParams, 0, len(definitions))
 		for _, def := range definitions {
 			if _, ok := seen[def.HttpToolDefinition.Name]; ok {
 				continue
@@ -994,11 +1239,11 @@ func readToolsetTools(
 				),
 			}
 
-			envQueries = append(envQueries, toolEnvLookupParams{
-				deploymentID:        def.HttpToolDefinition.DeploymentID,
-				openapiv3DocumentID: def.HttpToolDefinition.Openapiv3DocumentID,
-				security:            def.HttpToolDefinition.Security,
-				serverEnvVar:        def.HttpToolDefinition.ServerEnvVar,
+			envQueries = append(envQueries, ToolEnvLookupParams{
+				DeploymentID:        def.HttpToolDefinition.DeploymentID,
+				OpenAPIv3DocumentID: def.HttpToolDefinition.Openapiv3DocumentID,
+				Security:            def.HttpToolDefinition.Security,
+				ServerEnvVar:        def.HttpToolDefinition.ServerEnvVar,
 			})
 
 			tools = append(tools, &types.Tool{
@@ -1381,53 +1626,62 @@ func extractFunctionEnvVars(ctx context.Context, logger *slog.Logger, variableDa
 	return functionEnvVars, nil
 }
 
-type toolEnvLookupParams struct {
+// ToolEnvLookupParams captures the fields of a resolved tool needed to
+// determine its security and server environment variable requirements.
+type ToolEnvLookupParams struct {
 	// The deployment ID of the tool.
-	deploymentID uuid.UUID
+	DeploymentID uuid.UUID
 
 	// The OpenAPI document ID of the tool, if the tool came from an OpenAPI source.
-	openapiv3DocumentID uuid.NullUUID
+	OpenAPIv3DocumentID uuid.NullUUID
 
 	// The security requirements for the tool.
-	security []byte
+	Security []byte
 
 	// The server environment variable for the tool if available.
-	serverEnvVar string
+	ServerEnvVar string
 }
 
-func environmentVariablesForTools(ctx context.Context, tx DBTX, toolsetID uuid.UUID, tools []toolEnvLookupParams) ([]*types.SecurityVariable, []*types.ServerVariable, error) {
+// SecurityDefinitionKey identifies a single http_security row by the same
+// dimensions GetHTTPSecurityDefinitions filters on. A bare security "key"
+// (e.g. "bearerAuth") is only unique within one (deployment, OpenAPI
+// document) pair — two different OpenAPI sources in the same project can
+// legitimately define a scheme with the same name backed by different
+// env vars, so resolving purely by key risks handing one tool's security
+// variable to a different tool's (and toolset's) same-named-but-different
+// scheme.
+type SecurityDefinitionKey struct {
+	DeploymentID        uuid.UUID
+	OpenAPIv3DocumentID uuid.NullUUID
+	Key                 string
+}
+
+func fetchHTTPSecurityDefinitions(ctx context.Context, tx DBTX, tools []ToolEnvLookupParams) (map[SecurityDefinitionKey]tsr.HttpSecurity, error) {
 	if len(tools) == 0 {
-		return []*types.SecurityVariable{}, []*types.ServerVariable{}, nil
+		return map[SecurityDefinitionKey]tsr.HttpSecurity{}, nil
 	}
 
 	toolsetRepo := tsr.New(tx)
-	mcpmetadataRepo := mcpmetadataR.New(tx)
 
 	securityKeysMap := make(map[string]bool)
-	serverEnvVarsMap := make(map[string]bool)
+	uniqueDeploymentIDs := make(map[uuid.UUID]bool)
+	uniqueOpenAPIv3DocumentIDs := make(map[uuid.UUID]bool)
 	for _, tool := range tools {
-		securityKeys, _, err := security.ParseHTTPToolSecurityKeys(tool.security)
+		securityKeys, _, err := security.ParseHTTPToolSecurityKeys(tool.Security)
 		if err != nil {
-			return nil, nil, fmt.Errorf("http tool security keys: %w", err)
+			return nil, fmt.Errorf("http tool security keys: %w", err)
 		}
 
 		for _, key := range securityKeys {
 			securityKeysMap[key] = true
 		}
 
-		if tool.serverEnvVar != "" {
-			serverEnvVarsMap[tool.serverEnvVar] = true
+		uniqueDeploymentIDs[tool.DeploymentID] = true
+		if tool.OpenAPIv3DocumentID.Valid {
+			uniqueOpenAPIv3DocumentIDs[tool.OpenAPIv3DocumentID.UUID] = true
 		}
 	}
 
-	uniqueDeploymentIDs := make(map[uuid.UUID]bool)
-	uniqueOpenAPIv3DocumentIDs := make(map[uuid.UUID]bool)
-	for _, tool := range tools {
-		uniqueDeploymentIDs[tool.deploymentID] = true
-		if tool.openapiv3DocumentID.Valid {
-			uniqueOpenAPIv3DocumentIDs[tool.openapiv3DocumentID.UUID] = true
-		}
-	}
 	openapiv3DocumentIDs := slices.Collect(maps.Keys(uniqueOpenAPIv3DocumentIDs))
 	if openapiv3DocumentIDs == nil {
 		openapiv3DocumentIDs = []uuid.UUID{}
@@ -1435,40 +1689,80 @@ func environmentVariablesForTools(ctx context.Context, tx DBTX, toolsetID uuid.U
 
 	securityEntries, err := toolsetRepo.GetHTTPSecurityDefinitions(ctx, tsr.GetHTTPSecurityDefinitionsParams{
 		SecurityKeys:         slices.Collect(maps.Keys(securityKeysMap)),
-		DeploymentIds:        slices.Collect(maps.Keys(uniqueDeploymentIDs)), // all selected tools share the same deployment
+		DeploymentIds:        slices.Collect(maps.Keys(uniqueDeploymentIDs)),
 		Openapiv3DocumentIds: openapiv3DocumentIDs,
 	})
 	if err != nil {
-		return nil, nil, fmt.Errorf("read toolset security definitions: %w", err)
+		return nil, fmt.Errorf("read toolset security definitions: %w", err)
 	}
 
-	// Fetch header display names from MCP metadata (if available)
-	headerDisplayNames := make(map[string]string)
-	if toolsetID != uuid.Nil {
-		displayNamesJSON, err := mcpmetadataRepo.GetHeaderDisplayNames(ctx, uuid.NullUUID{UUID: toolsetID, Valid: true})
-		if err == nil && len(displayNamesJSON) > 0 {
-			// Parse the JSONB data into a map
-			_ = json.Unmarshal(displayNamesJSON, &headerDisplayNames)
-		}
-		// If no MCP metadata exists or error occurs, we just use empty map (no display names)
-	}
-
-	// Build security variables map to avoid duplicates
-	securityVarsMap := make(map[string]*types.SecurityVariable)
+	byKey := make(map[SecurityDefinitionKey]tsr.HttpSecurity, len(securityEntries))
 	for _, entry := range securityEntries {
-		key := entry.Key
-		if _, exists := securityVarsMap[key]; !exists {
-			// Look up display name from MCP metadata
-			// Display names are keyed by env var name, so we check each env var
+		k := SecurityDefinitionKey{
+			DeploymentID:        entry.DeploymentID,
+			OpenAPIv3DocumentID: entry.Openapiv3DocumentID,
+			Key:                 entry.Key,
+		}
+		if _, exists := byKey[k]; !exists {
+			byKey[k] = entry
+		}
+	}
+
+	return byKey, nil
+}
+
+// AssembleEnvironmentVariablesForToolset builds a toolset's security and
+// server environment variables from already-fetched, project-wide security
+// definitions. It is pure (no DB access) so a single toolset's tools can be
+// re-assembled cheaply once the definitions are fetched once for every
+// toolset being described. headerDisplayNames must be the calling toolset's
+// own display-name overrides (mcp_metadata is scoped per toolset) — passing
+// another toolset's map here would silently misattribute display names.
+func AssembleEnvironmentVariablesForToolset(
+	tools []ToolEnvLookupParams,
+	securityEntriesByKey map[SecurityDefinitionKey]tsr.HttpSecurity,
+	headerDisplayNames map[string]string,
+) ([]*types.SecurityVariable, []*types.ServerVariable) {
+	if len(tools) == 0 {
+		return []*types.SecurityVariable{}, []*types.ServerVariable{}
+	}
+
+	serverEnvVarsMap := make(map[string]bool)
+	securityVarsMap := make(map[string]*types.SecurityVariable)
+	for _, tool := range tools {
+		securityKeys, _, err := security.ParseHTTPToolSecurityKeys(tool.Security)
+		if err != nil {
+			continue
+		}
+
+		// Resolve each key against THIS tool's own (deployment, document) pair
+		// — never another tool's — so a same-named security scheme defined in
+		// two different OpenAPI sources never gets cross-wired. First tool
+		// wins for a given key within this toolset (a pre-existing,
+		// intra-toolset tie-break ambiguity, unrelated to this fix).
+		for _, key := range securityKeys {
+			if _, exists := securityVarsMap[key]; exists {
+				continue
+			}
+
+			entry, ok := securityEntriesByKey[SecurityDefinitionKey{
+				DeploymentID:        tool.DeploymentID,
+				OpenAPIv3DocumentID: tool.OpenAPIv3DocumentID,
+				Key:                 key,
+			}]
+			if !ok {
+				continue
+			}
+
 			var displayName *string
 			for _, envVar := range entry.EnvVariables {
 				if dn, ok := headerDisplayNames[envVar]; ok && dn != "" {
 					displayName = &dn
-					break // Use first matching display name
+					break
 				}
 			}
 
-			securityVar := &types.SecurityVariable{
+			securityVarsMap[key] = &types.SecurityVariable{
 				ID:           entry.ID.String(),
 				Type:         conv.FromPGText[string](entry.Type),
 				Name:         entry.Name.String,
@@ -1480,12 +1774,13 @@ func environmentVariablesForTools(ctx context.Context, tx DBTX, toolsetID uuid.U
 				OauthFlows:   entry.OauthFlows,
 				EnvVariables: entry.EnvVariables,
 			}
+		}
 
-			securityVarsMap[key] = securityVar
+		if tool.ServerEnvVar != "" {
+			serverEnvVarsMap[tool.ServerEnvVar] = true
 		}
 	}
 
-	// Build server variables
 	var serverVars []*types.ServerVariable
 	if len(serverEnvVarsMap) > 0 {
 		serverVars = append(serverVars, &types.ServerVariable{
@@ -1494,7 +1789,30 @@ func environmentVariablesForTools(ctx context.Context, tx DBTX, toolsetID uuid.U
 		})
 	}
 
-	return slices.Collect(maps.Values(securityVarsMap)), serverVars, nil
+	return slices.Collect(maps.Values(securityVarsMap)), serverVars
+}
+
+func environmentVariablesForTools(ctx context.Context, tx DBTX, toolsetID uuid.UUID, tools []ToolEnvLookupParams) ([]*types.SecurityVariable, []*types.ServerVariable, error) {
+	if len(tools) == 0 {
+		return []*types.SecurityVariable{}, []*types.ServerVariable{}, nil
+	}
+
+	securityEntriesByKey, err := fetchHTTPSecurityDefinitions(ctx, tx, tools)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	headerDisplayNames := make(map[string]string)
+	if toolsetID != uuid.Nil {
+		mcpmetadataRepo := mcpmetadataR.New(tx)
+		displayNamesJSON, err := mcpmetadataRepo.GetHeaderDisplayNames(ctx, uuid.NullUUID{UUID: toolsetID, Valid: true})
+		if err == nil && len(displayNamesJSON) > 0 {
+			_ = json.Unmarshal(displayNamesJSON, &headerDisplayNames)
+		}
+	}
+
+	securityVars, serverVars := AssembleEnvironmentVariablesForToolset(tools, securityEntriesByKey, headerDisplayNames)
+	return securityVars, serverVars, nil
 }
 
 // dedupeFunctionEnvVars returns function environment variables deduplicated by name.
@@ -1558,13 +1876,4 @@ func dedupeExternalMCPHeaderDefinitions(definitions []*types.ExternalMCPHeaderDe
 		deduped = append(deduped, definition)
 	}
 	return deduped
-}
-
-const defaultPromptTemplateKind = "prompt"
-
-func parseKind(pt tsr.GetPromptTemplatesForToolsetRow) string {
-	rawKind := conv.FromPGText[string](pt.Kind)
-	kind := conv.PtrValOrEmpty(rawKind, defaultPromptTemplateKind)
-
-	return kind
 }

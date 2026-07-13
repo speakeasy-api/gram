@@ -338,46 +338,65 @@ func FindToolDescriptor(toolURN urn.Tool, extras ...ExternalTool) (ToolDescripto
 	return zero, false
 }
 
-func FindToolEntries(toolURNs []string, extras ...ExternalTool) []*types.ToolEntry {
-	entries := make([]*types.ToolEntry, 0, len(toolURNs))
-	seen := make(map[string]struct{}, len(toolURNs))
+func indexToolDescriptors(extras ...ExternalTool) map[string]ToolDescriptor {
+	all := ListPlatformTools(extras...)
+	descriptorsByURN := make(map[string]ToolDescriptor, len(all))
+	for _, descriptor := range all {
+		toolURN := descriptor.ToolURN().String()
+		if _, exists := descriptorsByURN[toolURN]; exists {
+			continue
+		}
+		descriptorsByURN[toolURN] = descriptor
+	}
+	return descriptorsByURN
+}
+
+func findToolDescriptors(toolURNs []string, extras ...ExternalTool) []ToolDescriptor {
+	var found []ToolDescriptor
+	var seen map[string]struct{}
+	var descriptorsByURN map[string]ToolDescriptor
 	for _, rawURN := range toolURNs {
 		var toolURN urn.Tool
 		if err := toolURN.UnmarshalText([]byte(rawURN)); err != nil {
 			continue
 		}
-		descriptor, ok := FindToolDescriptor(toolURN, extras...)
+		if toolURN.Kind != urn.ToolKindPlatform {
+			continue
+		}
+		if descriptorsByURN == nil {
+			descriptorsByURN = indexToolDescriptors(extras...)
+		}
+		descriptor, ok := descriptorsByURN[toolURN.String()]
 		if !ok {
 			continue
 		}
-		if _, ok := seen[descriptor.ToolURN().String()]; ok {
+		descriptorURN := descriptor.ToolURN().String()
+		if _, ok := seen[descriptorURN]; ok {
 			continue
 		}
-		seen[descriptor.ToolURN().String()] = struct{}{}
+		if seen == nil {
+			seen = make(map[string]struct{}, len(descriptorsByURN))
+		}
+		seen[descriptorURN] = struct{}{}
+		found = append(found, descriptor)
+	}
+	return found
+}
+
+func FindToolEntries(toolURNs []string, extras ...ExternalTool) []*types.ToolEntry {
+	descriptors := findToolDescriptors(toolURNs, extras...)
+	entries := make([]*types.ToolEntry, 0, len(descriptors))
+	for _, descriptor := range descriptors {
 		entries = append(entries, descriptor.ToToolEntry())
 	}
-
 	return entries
 }
 
 func FindTypedTools(projectID uuid.UUID, toolURNs []string, extras ...ExternalTool) []*types.Tool {
-	tools := make([]*types.Tool, 0, len(toolURNs))
-	seen := make(map[string]struct{}, len(toolURNs))
-	for _, rawURN := range toolURNs {
-		var toolURN urn.Tool
-		if err := toolURN.UnmarshalText([]byte(rawURN)); err != nil {
-			continue
-		}
-		descriptor, ok := FindToolDescriptor(toolURN, extras...)
-		if !ok {
-			continue
-		}
-		if _, ok := seen[descriptor.ToolURN().String()]; ok {
-			continue
-		}
-		seen[descriptor.ToolURN().String()] = struct{}{}
+	descriptors := findToolDescriptors(toolURNs, extras...)
+	tools := make([]*types.Tool, 0, len(descriptors))
+	for _, descriptor := range descriptors {
 		tools = append(tools, descriptor.ToTool(projectID))
 	}
-
 	return tools
 }

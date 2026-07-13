@@ -92,6 +92,21 @@ func CreateRiskPolicyBypassRequestRiskPath() string {
 	return "/rpc/risk.createPolicyBypassRequest"
 }
 
+// AcknowledgeRiskPolicyChallengeRiskPath returns the URL path to the risk service acknowledgeRiskPolicyChallenge HTTP endpoint.
+func AcknowledgeRiskPolicyChallengeRiskPath() string {
+	return "/rpc/risk.acknowledgePolicyChallenge"
+}
+
+// GetRiskPolicyChallengeRiskPath returns the URL path to the risk service getRiskPolicyChallenge HTTP endpoint.
+func GetRiskPolicyChallengeRiskPath() string {
+	return "/rpc/risk.getPolicyChallenge"
+}
+
+// DeclineRiskPolicyChallengeRiskPath returns the URL path to the risk service declineRiskPolicyChallenge HTTP endpoint.
+func DeclineRiskPolicyChallengeRiskPath() string {
+	return "/rpc/risk.declinePolicyChallenge"
+}
+
 // GetRiskBlockRiskPath returns the URL path to the risk service getRiskBlock HTTP endpoint.
 func GetRiskBlockRiskPath() string {
 	return "/rpc/risk.getBlock"
@@ -175,6 +190,11 @@ func DeleteRiskExclusionRiskPath() string {
 // SuggestCustomDetectionRuleRiskPath returns the URL path to the risk service suggestCustomDetectionRule HTTP endpoint.
 func SuggestCustomDetectionRuleRiskPath() string {
 	return "/rpc/risk.suggestCustomRules"
+}
+
+// SuggestExclusionRiskPath returns the URL path to the risk service suggestExclusion HTTP endpoint.
+func SuggestExclusionRiskPath() string {
+	return "/rpc/risk.suggestExclusion"
 }
 
 // TestDetectionRuleRiskPath returns the URL path to the risk service testDetectionRule HTTP endpoint.

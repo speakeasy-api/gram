@@ -196,19 +196,141 @@ var _ = Service("remoteMcp", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "deleteServer")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteRemoteMcpServer"}`)
 	})
-})
 
-var HeaderInput = Type("HeaderInput", func() {
-	Description("Input for a remote MCP server header")
+	Method("listServerHeaders", func() {
+		Description("List the headers configured for a remote MCP server")
 
-	Attribute("name", String, "The header name")
-	Attribute("description", String, "Description of the header")
-	Attribute("is_required", Boolean, "Whether the header is required")
-	Attribute("is_secret", Boolean, "Whether the header value is a secret")
-	Attribute("value", String, "Static header value (mutually exclusive with value_from_request_header)")
-	Attribute("value_from_request_header", String, "Name of the inbound request header to pass through (mutually exclusive with value)")
+		Payload(func() {
+			Attribute("remote_mcp_server_id", String, "The ID of the remote MCP server", func() {
+				Format(FormatUUID)
+			})
+			Required("remote_mcp_server_id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
 
-	Required("name")
+		Result(ListServerHeadersResult)
+
+		HTTP(func() {
+			GET("/rpc/remoteMcp.listServerHeaders")
+			Param("remote_mcp_server_id")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listRemoteMcpServerHeaders")
+		Meta("openapi:extension:x-speakeasy-name-override", "listServerHeaders")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RemoteMcpServerHeaders"}`)
+	})
+
+	Method("getServerHeader", func() {
+		Description("Get a remote MCP server header by ID")
+
+		Payload(func() {
+			Attribute("id", String, "The ID of the header", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(RemoteMcpServerHeader)
+
+		HTTP(func() {
+			GET("/rpc/remoteMcp.getServerHeader")
+			Param("id")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getRemoteMcpServerHeader")
+		Meta("openapi:extension:x-speakeasy-name-override", "getServerHeader")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetRemoteMcpServerHeader"}`)
+	})
+
+	Method("createServerHeader", func() {
+		Description("Create a header on a remote MCP server")
+
+		Payload(func() {
+			Extend(CreateServerHeaderForm)
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(RemoteMcpServerHeader)
+
+		HTTP(func() {
+			POST("/rpc/remoteMcp.createServerHeader")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "createRemoteMcpServerHeader")
+		Meta("openapi:extension:x-speakeasy-name-override", "createServerHeader")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateRemoteMcpServerHeader"}`)
+	})
+
+	Method("updateServerHeader", func() {
+		Description("Update a remote MCP server header")
+
+		Payload(func() {
+			Extend(UpdateServerHeaderForm)
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(RemoteMcpServerHeader)
+
+		HTTP(func() {
+			POST("/rpc/remoteMcp.updateServerHeader")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "updateRemoteMcpServerHeader")
+		Meta("openapi:extension:x-speakeasy-name-override", "updateServerHeader")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateRemoteMcpServerHeader"}`)
+	})
+
+	Method("deleteServerHeader", func() {
+		Description("Delete a remote MCP server header")
+
+		Payload(func() {
+			Attribute("id", String, "The ID of the header to delete", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		HTTP(func() {
+			DELETE("/rpc/remoteMcp.deleteServerHeader")
+			Param("id")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "deleteRemoteMcpServerHeader")
+		Meta("openapi:extension:x-speakeasy-name-override", "deleteServerHeader")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteRemoteMcpServerHeader"}`)
+	})
 })
 
 var CreateServerForm = Type("CreateServerForm", func() {
@@ -219,13 +341,12 @@ var CreateServerForm = Type("CreateServerForm", func() {
 		Format(FormatURI)
 	})
 	Attribute("transport_type", String, "The transport type for the remote MCP server (e.g. streamable-http)")
-	Attribute("headers", ArrayOf(HeaderInput), "Headers to send when proxying requests to the remote server")
 
-	Required("url", "transport_type", "headers")
+	Required("url", "transport_type")
 })
 
 var UpdateServerForm = Type("UpdateServerForm", func() {
-	Description("Form for updating a remote MCP server. When headers is provided, it represents the complete desired set of headers — any existing headers not in the list will be removed.")
+	Description("Form for updating a remote MCP server")
 
 	Attribute("id", String, "The ID of the remote MCP server to update")
 	Attribute("name", String, "Optional human-readable name. Pass an empty string to clear the existing name.")
@@ -233,9 +354,40 @@ var UpdateServerForm = Type("UpdateServerForm", func() {
 		Format(FormatURI)
 	})
 	Attribute("transport_type", String, "The transport type for the remote MCP server")
-	Attribute("headers", ArrayOf(HeaderInput), "The complete desired set of headers. Omit to leave headers unchanged. Provide an empty array to remove all headers.")
 
 	Required("id")
+})
+
+var CreateServerHeaderForm = Type("CreateServerHeaderForm", func() {
+	Description("Form for creating a header on a remote MCP server. Exactly one of value or value_from_request_header must be provided.")
+
+	Attribute("remote_mcp_server_id", String, "The ID of the remote MCP server to add the header to", func() {
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "The header name")
+	Attribute("description", String, "Description of the header")
+	Attribute("is_required", Boolean, "Whether the header is required. Defaults to false.")
+	Attribute("is_secret", Boolean, "Whether the header value is a secret. Defaults to false. Incompatible with value_from_request_header.")
+	Attribute("value", String, "Static header value (mutually exclusive with value_from_request_header)")
+	Attribute("value_from_request_header", String, "Name of the inbound request header to pass through (mutually exclusive with value)")
+
+	Required("remote_mcp_server_id", "name")
+})
+
+var UpdateServerHeaderForm = Type("UpdateServerHeaderForm", func() {
+	Description("Form for updating a remote MCP server header. Replaces every mutable field, so omitted optional fields are reset to their defaults. The one exception is value: omitting it for a header that is already secret preserves the stored value rather than clearing it.")
+
+	Attribute("id", String, "The ID of the header to update", func() {
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "The header name")
+	Attribute("description", String, "Description of the header")
+	Attribute("is_required", Boolean, "Whether the header is required. Defaults to false.")
+	Attribute("is_secret", Boolean, "Whether the header value is a secret. Defaults to false. Incompatible with value_from_request_header.")
+	Attribute("value", String, "Static header value (mutually exclusive with value_from_request_header). Omit on an existing secret header to preserve its stored value.")
+	Attribute("value_from_request_header", String, "Name of the inbound request header to pass through (mutually exclusive with value)")
+
+	Required("id", "name")
 })
 
 var ProtectedResourceMetadata = Type("ProtectedResourceMetadata", func() {
@@ -306,7 +458,6 @@ var RemoteMcpServer = Type("RemoteMcpServer", func() {
 		Format(FormatURI)
 	})
 	Attribute("transport_type", String, "The transport type for the remote MCP server")
-	Attribute("headers", ArrayOf(RemoteMcpServerHeader), "Headers configured for this remote MCP server")
 	Attribute("created_at", String, func() {
 		Description("When the remote MCP server was created")
 		Format(FormatDateTime)
@@ -316,7 +467,7 @@ var RemoteMcpServer = Type("RemoteMcpServer", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "project_id", "url", "transport_type", "headers", "created_at", "updated_at")
+	Required("id", "project_id", "url", "transport_type", "created_at", "updated_at")
 })
 
 var RemoteMcpServerHeader = Type("RemoteMcpServerHeader", func() {
@@ -350,4 +501,11 @@ var ListServersResult = Type("ListServersResult", func() {
 
 	Attribute("remote_mcp_servers", ArrayOf(RemoteMcpServer))
 	Required("remote_mcp_servers")
+})
+
+var ListServerHeadersResult = Type("ListServerHeadersResult", func() {
+	Description("Result type for listing the headers of a remote MCP server")
+
+	Attribute("headers", ArrayOf(RemoteMcpServerHeader))
+	Required("headers")
 })

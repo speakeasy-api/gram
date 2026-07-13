@@ -531,6 +531,96 @@ func (q *Queries) GetPromptTemplatesForToolset(ctx context.Context, arg GetPromp
 	return items, nil
 }
 
+const getPromptTemplatesForToolsets = `-- name: GetPromptTemplatesForToolsets :many
+WITH ranked_templates AS (
+  SELECT
+    pt.id, pt.tool_urn, pt.project_id, pt.history_id, pt.predecessor_id, pt.name, pt.description, pt.arguments, pt.prompt, pt.engine, pt.kind, pt.tools_hint, pt.tool_urns_hint, pt.created_at, pt.updated_at, pt.deleted_at, pt.deleted,
+    ROW_NUMBER() OVER (PARTITION BY pt.history_id ORDER BY pt.id DESC) as rn
+  FROM prompt_templates pt
+  WHERE project_id = $2
+    AND pt.deleted IS FALSE
+)
+SELECT rel.toolset_id, rel.id as tp_id, rt.id, rt.tool_urn, rt.project_id, rt.history_id, rt.predecessor_id, rt.name, rt.description, rt.arguments, rt.prompt, rt.engine, rt.kind, rt.tools_hint, rt.tool_urns_hint, rt.created_at, rt.updated_at, rt.deleted_at, rt.deleted, rt.rn
+FROM toolset_prompts rel
+JOIN ranked_templates rt ON (
+  (rel.prompt_template_id IS NOT NULL AND rt.id = rel.prompt_template_id)
+  OR
+  (rel.prompt_template_id IS NULL AND rt.history_id = rel.prompt_history_id AND rt.rn = 1)
+)
+WHERE rel.toolset_id = ANY($1::uuid[])
+  AND rel.project_id = $2
+ORDER BY rel.toolset_id, rel.prompt_name
+`
+
+type GetPromptTemplatesForToolsetsParams struct {
+	ToolsetIds []uuid.UUID
+	ProjectID  uuid.UUID
+}
+
+type GetPromptTemplatesForToolsetsRow struct {
+	ToolsetID     uuid.UUID
+	TpID          uuid.UUID
+	ID            uuid.UUID
+	ToolUrn       string
+	ProjectID     uuid.UUID
+	HistoryID     uuid.UUID
+	PredecessorID uuid.NullUUID
+	Name          string
+	Description   pgtype.Text
+	Arguments     []byte
+	Prompt        string
+	Engine        pgtype.Text
+	Kind          pgtype.Text
+	ToolsHint     []string
+	ToolUrnsHint  []string
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+	DeletedAt     pgtype.Timestamptz
+	Deleted       bool
+	Rn            int64
+}
+
+func (q *Queries) GetPromptTemplatesForToolsets(ctx context.Context, arg GetPromptTemplatesForToolsetsParams) ([]GetPromptTemplatesForToolsetsRow, error) {
+	rows, err := q.db.Query(ctx, getPromptTemplatesForToolsets, arg.ToolsetIds, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetPromptTemplatesForToolsetsRow
+	for rows.Next() {
+		var i GetPromptTemplatesForToolsetsRow
+		if err := rows.Scan(
+			&i.ToolsetID,
+			&i.TpID,
+			&i.ID,
+			&i.ToolUrn,
+			&i.ProjectID,
+			&i.HistoryID,
+			&i.PredecessorID,
+			&i.Name,
+			&i.Description,
+			&i.Arguments,
+			&i.Prompt,
+			&i.Engine,
+			&i.Kind,
+			&i.ToolsHint,
+			&i.ToolUrnsHint,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+			&i.Rn,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getToolset = `-- name: GetToolset :one
 SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
 FROM toolsets
@@ -880,6 +970,58 @@ func (q *Queries) GetToolsetOriginByToolsetID(ctx context.Context, arg GetToolse
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const getToolsetOriginsByToolsetIDs = `-- name: GetToolsetOriginsByToolsetIDs :many
+SELECT
+    id
+  , toolset_id
+  , origin_registry_specifier AS registry_specifier
+  , created_at
+  , updated_at
+FROM toolset_origins
+WHERE toolset_id = ANY($1::uuid[])
+  AND organization_id = $2
+  AND deleted IS FALSE
+`
+
+type GetToolsetOriginsByToolsetIDsParams struct {
+	ToolsetIds     []uuid.UUID
+	OrganizationID string
+}
+
+type GetToolsetOriginsByToolsetIDsRow struct {
+	ID                uuid.UUID
+	ToolsetID         uuid.UUID
+	RegistrySpecifier string
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+}
+
+func (q *Queries) GetToolsetOriginsByToolsetIDs(ctx context.Context, arg GetToolsetOriginsByToolsetIDsParams) ([]GetToolsetOriginsByToolsetIDsRow, error) {
+	rows, err := q.db.Query(ctx, getToolsetOriginsByToolsetIDs, arg.ToolsetIds, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetToolsetOriginsByToolsetIDsRow
+	for rows.Next() {
+		var i GetToolsetOriginsByToolsetIDsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ToolsetID,
+			&i.RegistrySpecifier,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getToolsetPromptTemplateNames = `-- name: GetToolsetPromptTemplateNames :many

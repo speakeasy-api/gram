@@ -101,7 +101,22 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 	if hookEvent != nil {
 		switch ev := hookEvent.(type) {
 		case *hookevents.BeforeToolUse:
-			if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil {
+			// Acknowledged warn is excluded from the enforcement block so it
+			// falls through to the shadow-MCP guard below: an ack clears the
+			// risk challenge but must never bypass unapproved-toolset validation.
+			if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil && (scanResult.Action != "warn" || !s.warnAcknowledged(ctx, ev.Event, scanResult, ev.ToolName)) {
+				// Unacknowledged warn → warning + ack link (challenge, not a
+				// durable block page). No ack link buildable → fall through to block.
+				if scanResult.Action == "warn" {
+					// Codex surfaces a single reason (the CLI user reads it), so use
+					// the human-facing framing that carries the ack link.
+					if _, warnUserReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, ev.ToolName); ok {
+						blockReason = fmt.Sprintf("Speakeasy challenged this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
+						userReason = warnUserReason
+						blockPolicyID = scanResult.PolicyID
+						break
+					}
+				}
 				blockReason = fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 				userReason = renderUserBlockReason(scanResult.UserMessage, blockReason)
 				isToolCallBlock = true
@@ -180,12 +195,26 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 				}
 			}
 		case *hookevents.PermissionRequest:
-			if scanResult := s.scanPermissionRequestForEnforcement(ctx, ev); scanResult != nil {
+			// Acknowledged warn is excluded so it clears without a block; an
+			// unacknowledged warn is challenged (deny + ack link), not
+			// hard-blocked with the raw user_message — consistent with tool calls.
+			if scanResult := s.scanPermissionRequestForEnforcement(ctx, ev); scanResult != nil &&
+				(scanResult.Action != "warn" || !s.warnAcknowledged(ctx, ev.Event, scanResult, ev.ToolName)) {
+				if scanResult.Action == "warn" {
+					if _, warnUserReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, ev.ToolName); ok {
+						blockReason = fmt.Sprintf("Speakeasy challenged this permission request: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
+						userReason = warnUserReason
+						blockPolicyID = scanResult.PolicyID
+						break
+					}
+				}
 				blockReason = fmt.Sprintf("Speakeasy blocked this permission request: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 				userReason = renderUserBlockReason(scanResult.UserMessage, blockReason)
 			}
 		case *hookevents.UserPromptSubmit:
-			if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil {
+			// warn never hard-blocks at prompt submit (no confirmation primitive
+			// here); it defers to the follow-on tool call. Matches Claude/Cursor.
+			if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil && scanResult.Action != "warn" {
 				blockReason = fmt.Sprintf("Speakeasy blocked this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 				userReason = renderUserBlockReason(scanResult.UserMessage, blockReason)
 			}
@@ -239,7 +268,7 @@ func (s *Service) recordCodexHook(ctx context.Context, payload *gen.CodexPayload
 	}
 
 	if payload.HookEventName == "SessionStart" {
-		s.captureCodexMCPListSnapshot(ctx, payload)
+		s.captureCodexMCPListSnapshot(ctx, payload, metadata.GramOrgID, metadata.ProjectID)
 		if metadata.SessionID != "" && metadata.UserEmail != "" {
 			if err := s.cache.Set(ctx, sessionCacheKey(metadata.SessionID), *metadata, 24*time.Hour); err != nil {
 				s.logger.WarnContext(ctx, "failed to cache Codex session metadata",
@@ -280,7 +309,7 @@ func (s *Service) recordCodexHook(ctx context.Context, payload *gen.CodexPayload
 // sessionMCPListCacheKey, sharing the snapshot shape and cache key with the
 // Claude flows so downstream matching and telemetry enrichment work
 // unchanged.
-func (s *Service) captureCodexMCPListSnapshot(ctx context.Context, payload *gen.CodexPayload) {
+func (s *Service) captureCodexMCPListSnapshot(ctx context.Context, payload *gen.CodexPayload, orgID string, projectID string) {
 	if payload.SessionID == nil || *payload.SessionID == "" || payload.AdditionalData == nil {
 		return
 	}
@@ -296,7 +325,9 @@ func (s *Service) captureCodexMCPListSnapshot(ctx context.Context, payload *gen.
 			attr.SlogError(err),
 			attr.SlogGenAIConversationID(*payload.SessionID),
 		)
+		return
 	}
+	s.upsertShadowMCPInventoryURLs(ctx, orgID, projectID, *payload.SessionID, entries)
 }
 
 func (s *Service) codexSessionMetadata(ctx context.Context, payload *gen.CodexPayload, orgID, projectID string) *SessionMetadata {

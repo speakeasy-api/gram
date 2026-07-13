@@ -746,6 +746,61 @@ function FleetIdentity() {
   );
 }
 
+// SetupPanel is the device-agent page body: install steps + identity setup.
+// Per-user "who's running the agent" now lives on the Employee Enrollment page
+// (Observe) as a Device Agent column, rather than a tab here.
+function SetupPanel() {
+  return (
+    <>
+      <Page.Section>
+        <Page.Section.Title stage="preview">
+          Install the agent
+        </Page.Section.Title>
+        <Page.Section.Description>
+          The Speakeasy device agent runs on-device and enforces your org's
+          required AI-tool plugins and MCP configuration, then reports
+          compliance back to Speakeasy.
+        </Page.Section.Description>
+        <Page.Section.Body>
+          <InstallAgent />
+        </Page.Section.Body>
+      </Page.Section>
+
+      <Page.Section>
+        <Page.Section.Title>Set the user's identity</Page.Section.Title>
+        <Page.Section.Description>
+          How the agent learns who's on the device. Fleet is the recommended
+          path for an org; personal enrollment is handy for testing.
+        </Page.Section.Description>
+        <Page.Section.Body>
+          <Tabs defaultValue="fleet" className="gap-6">
+            <TabsList className="grid h-auto w-full items-stretch gap-4 bg-transparent p-0 @2xl/main:grid-cols-2">
+              <SetupTab
+                value="fleet"
+                icon="building-2"
+                title="Fleet (MDM)"
+                desc="Deploy a managed.json so IT sets identity centrally — no per-user step."
+              />
+              <SetupTab
+                value="personal"
+                icon="user"
+                title="Personal / PoC"
+                desc="Each user signs in once with speakeasy enroll. Good for testing."
+              />
+            </TabsList>
+            <TabsContent value="fleet" className="pt-2">
+              <FleetIdentity />
+            </TabsContent>
+            <TabsContent value="personal" className="pt-2">
+              <ManualIdentity />
+            </TabsContent>
+          </Tabs>
+        </Page.Section.Body>
+      </Page.Section>
+    </>
+  );
+}
+
 export default function DeviceAgent(): React.JSX.Element | null {
   const telemetry = useTelemetry();
   const isDeviceAgentEnabled = telemetry.isFeatureEnabled("gram-device-agent");
@@ -766,51 +821,7 @@ export default function DeviceAgent(): React.JSX.Element | null {
       </Page.Header>
       <Page.Body>
         <RequireScope scope={["org:read", "org:admin"]} level="page">
-          <Page.Section>
-            <Page.Section.Title stage="preview">
-              Install the agent
-            </Page.Section.Title>
-            <Page.Section.Description>
-              The Speakeasy device agent runs on-device and enforces your org's
-              required AI-tool plugins and MCP configuration, then reports
-              compliance back to Speakeasy.
-            </Page.Section.Description>
-            <Page.Section.Body>
-              <InstallAgent />
-            </Page.Section.Body>
-          </Page.Section>
-
-          <Page.Section>
-            <Page.Section.Title>Set the user's identity</Page.Section.Title>
-            <Page.Section.Description>
-              How the agent learns who's on the device. Fleet is the recommended
-              path for an org; personal enrollment is handy for testing.
-            </Page.Section.Description>
-            <Page.Section.Body>
-              <Tabs defaultValue="fleet" className="gap-6">
-                <TabsList className="grid h-auto w-full items-stretch gap-4 bg-transparent p-0 @2xl/main:grid-cols-2">
-                  <SetupTab
-                    value="fleet"
-                    icon="building-2"
-                    title="Fleet (MDM)"
-                    desc="Deploy a managed.json so IT sets identity centrally — no per-user step."
-                  />
-                  <SetupTab
-                    value="personal"
-                    icon="user"
-                    title="Personal / PoC"
-                    desc="Each user signs in once with speakeasy enroll. Good for testing."
-                  />
-                </TabsList>
-                <TabsContent value="fleet" className="pt-2">
-                  <FleetIdentity />
-                </TabsContent>
-                <TabsContent value="personal" className="pt-2">
-                  <ManualIdentity />
-                </TabsContent>
-              </Tabs>
-            </Page.Section.Body>
-          </Page.Section>
+          <SetupPanel />
         </RequireScope>
       </Page.Body>
     </Page>

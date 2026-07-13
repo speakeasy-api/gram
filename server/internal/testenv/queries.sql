@@ -31,6 +31,12 @@ SELECT *
 FROM function_tool_definitions
 WHERE deployment_id = @deployment_id;
 
+-- name: SetFunctionToolVariables :exec
+UPDATE function_tool_definitions
+SET variables = @variables
+WHERE id = @id
+  AND project_id = @project_id;
+
 -- name: CountFunctionsAccess :one
 SELECT count(id)
 FROM functions_access
@@ -123,3 +129,9 @@ INSERT INTO organization_metadata (
 -- Test-only fixture for seeding membership counts.
 INSERT INTO organization_user_relationships (organization_id, user_id)
 VALUES (@organization_id, sqlc.narg('user_id')::text);
+
+-- name: ForceSoftDeleteUserSessionIssuer :exec
+-- Test-only fixture for defensive paths that handle a dangling soft-delete FK.
+UPDATE user_session_issuers
+SET deleted_at = clock_timestamp()
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;

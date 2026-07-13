@@ -1,0 +1,140 @@
+import { NavButton, NavGroupProvider } from "@/components/nav-menu";
+import { SidebarFooterAction } from "@/components/sidebar-footer-action";
+import { SidebarMenu, SidebarMenuItem } from "@/components/ui/sidebar";
+import { useSidebar } from "@/components/ui/sidebar-context";
+import { Type } from "@/components/ui/type";
+import { cn } from "@/lib/utils";
+import { ArrowLeft } from "lucide-react";
+import * as React from "react";
+
+export function McpSidebarInfoLabel({
+  children,
+}: {
+  children: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <Type
+      variant="small"
+      muted
+      className="font-mono text-xs tracking-wide uppercase"
+    >
+      {children}
+    </Type>
+  );
+}
+
+function SidebarDivider({ className }: { className: string }) {
+  return (
+    <li aria-hidden="true" className={className}>
+      <div className="border-border border-t" />
+    </li>
+  );
+}
+
+// The card title aligns with its own inner p-3 padding (pl-5); the nav items
+// align with NavButton's own px-2 padding stacked on SidebarMenu's px-2 (pl-4).
+function SidebarEyebrow({
+  children,
+  align,
+}: {
+  children: React.ReactNode;
+  align: "card" | "items";
+}) {
+  return (
+    <li
+      className={cn(
+        "pt-1 pr-2 group-data-[collapsible=icon]:hidden",
+        align === "card" ? "pb-1 pl-5" : "pb-2 pl-4",
+      )}
+    >
+      <McpSidebarInfoLabel>{children}</McpSidebarInfoLabel>
+    </li>
+  );
+}
+
+export type McpSidebarNavItem = {
+  key: string;
+  title: string;
+  titleNode?: React.ReactNode;
+  Icon: React.ComponentType<{ className?: string }>;
+  href: string;
+  active: boolean;
+};
+
+export function McpSidebarNavShell({
+  backHref,
+  topTitle,
+  topContent,
+  cardContent,
+  items,
+}: {
+  backHref: string;
+  /** Eyebrow label for topContent, styled like "At a glance". */
+  topTitle?: string;
+  /** Rendered above the "At a glance" card, e.g. a readiness summary. */
+  topContent?: React.ReactNode;
+  cardContent?: React.ReactNode;
+  items: McpSidebarNavItem[];
+}): React.JSX.Element {
+  const activeItemTitle = items.find((item) => item.active)?.title;
+  const { state } = useSidebar();
+  const isCollapsed = state === "collapsed";
+
+  return (
+    <NavGroupProvider activeItem={activeItemTitle}>
+      <SidebarMenu className="gap-1 px-2 group-data-[collapsible=icon]:px-0">
+        <SidebarMenuItem>
+          <SidebarFooterAction
+            to={backHref}
+            icon={ArrowLeft}
+            label="Back to all servers"
+          />
+        </SidebarMenuItem>
+
+        <SidebarDivider className="mt-3 mb-2 px-1" />
+
+        {topContent && (
+          <>
+            {topTitle && (
+              <SidebarEyebrow align="card">{topTitle}</SidebarEyebrow>
+            )}
+            <li className="pt-2 pb-4 group-data-[collapsible=icon]:hidden">
+              {topContent}
+            </li>
+            <SidebarDivider className="mb-2 group-data-[collapsible=icon]:hidden" />
+          </>
+        )}
+
+        <SidebarEyebrow align="card">At a glance</SidebarEyebrow>
+
+        {cardContent && (
+          <li className="pt-2 pb-4 group-data-[collapsible=icon]:hidden">
+            <div className="bg-card border-border dark:bg-neutral-950 flex flex-col gap-3 rounded-lg border px-4 py-3 shadow-md">
+              {cardContent}
+            </div>
+          </li>
+        )}
+
+        <SidebarDivider className="mb-2 group-data-[collapsible=icon]:hidden" />
+
+        <SidebarEyebrow align="items">Configuration</SidebarEyebrow>
+
+        {items.map((item) => (
+          <SidebarMenuItem
+            key={item.key}
+            className="pl-2 group-data-[collapsible=icon]:pl-0"
+          >
+            <NavButton
+              title={item.title}
+              titleNode={item.titleNode}
+              href={item.href}
+              active={item.active}
+              Icon={item.Icon}
+              tooltip={isCollapsed ? item.title : undefined}
+            />
+          </SidebarMenuItem>
+        ))}
+      </SidebarMenu>
+    </NavGroupProvider>
+  );
+}

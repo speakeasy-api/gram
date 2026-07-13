@@ -58,13 +58,26 @@ WHERE project_id = @project_id
   AND (sqlc.narg('toolset_id')::uuid IS NULL OR toolset_id = sqlc.narg('toolset_id')::uuid)
 ORDER BY created_at DESC;
 
+-- name: ListMCPServersForTelemetryByProjectID :many
+-- Includes soft-deleted servers so tool-usage telemetry can classify historical
+-- rows whose backing MCP server has since been deleted (or recreated). The
+-- backend source ids (remote_mcp_server_id / tunneled_mcp_server_id) recorded on
+-- telemetry rows outlive the mcp_servers row, so matching against deleted rows
+-- keeps a call's target_type stable instead of falling through to
+-- shadow_mcp_server. Live servers are ordered first so a source id shared by a
+-- live and a deleted server resolves to the live one.
+SELECT id, name, slug, remote_mcp_server_id, tunneled_mcp_server_id
+FROM mcp_servers
+WHERE project_id = @project_id
+ORDER BY deleted ASC, created_at DESC;
+
 -- name: UpdateMCPServer :one
 UPDATE mcp_servers
 SET
     name = @name,
     slug = @slug,
     environment_id = @environment_id,
-    user_session_issuer_id = @user_session_issuer_id,
+    user_session_issuer_id = COALESCE(sqlc.narg('user_session_issuer_id'), user_session_issuer_id),
     remote_mcp_server_id = @remote_mcp_server_id,
     tunneled_mcp_server_id = @tunneled_mcp_server_id,
     toolset_id = @toolset_id,

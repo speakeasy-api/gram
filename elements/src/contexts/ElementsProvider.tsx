@@ -8,7 +8,7 @@ import { useMCPTools } from "@/hooks/useMCPTools";
 import { useToolApproval } from "@/hooks/useToolApproval";
 import { getApiUrl } from "@/lib/api";
 import { initErrorTracking, trackError } from "@/lib/errorTracking";
-import { MODELS } from "@/lib/models";
+import { DEFAULT_MODEL } from "@/lib/models";
 import {
   clearFrontendToolApprovalConfig,
   getEnabledTools,
@@ -60,6 +60,7 @@ import {
 } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { ChatIdContext } from "./ChatIdContext";
+import { MarkdownLinkProvider } from "./MarkdownLinkContext";
 import {
   ConnectionStatusProvider,
   useConnectionStatusOptional,
@@ -200,7 +201,7 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
   const toolApproval = useToolApproval();
 
   const [model, setModel] = useState<Model>(
-    config.model?.defaultModel ?? MODELS[0],
+    config.model?.defaultModel ?? DEFAULT_MODEL,
   );
   const [isExpanded, setIsExpanded] = useState(
     config.modal?.defaultExpanded ?? false,
@@ -897,7 +898,14 @@ export const ElementsProvider = (
     <QueryClientProvider client={queryClient}>
       <ConnectionStatusProvider>
         <ToolApprovalProvider>
-          <ElementsProviderInner {...props} />
+          <MarkdownLinkProvider
+            value={{
+              resolveLink: props.config.resolveLink,
+              LinkComponent: props.config.linkComponent,
+            }}
+          >
+            <ElementsProviderInner {...props} />
+          </MarkdownLinkProvider>
         </ToolApprovalProvider>
       </ConnectionStatusProvider>
     </QueryClientProvider>

@@ -6,6 +6,40 @@ INSERT INTO plugins (organization_id, project_id, name, slug, description)
 VALUES (@organization_id, @project_id, @name, @slug, sqlc.narg('description'))
 RETURNING *;
 
+-- name: CreateDefaultPlugin :one
+-- Creates the project's fallback plugin (new servers land here absent explicit
+-- routing to a named plugin). Called once, in the same transaction as project
+-- creation. plugins_project_id_is_default_key enforces at most one per project.
+INSERT INTO plugins (organization_id, project_id, name, slug, is_default)
+VALUES (@organization_id, @project_id, 'Default', 'default', TRUE)
+RETURNING *;
+
+-- name: GetDefaultPlugin :one
+-- Used by AttachToDefaultPlugin to find the fallback plugin new servers get
+-- auto-attached to. No rows is expected for projects that predate the
+-- Default-plugin feature; callers treat pgx.ErrNoRows as a no-op.
+SELECT *
+FROM plugins
+WHERE organization_id = @organization_id
+  AND project_id = @project_id
+  AND is_default IS TRUE
+  AND deleted IS FALSE;
+
+-- name: PromoteToDefaultPlugin :one
+-- Self-heals projects that already have a plugin sitting on the reserved
+-- "default" slug (e.g. created manually before this feature shipped) by
+-- flagging it as the project's is_default plugin. Called by
+-- EnsureDefaultPlugin when CreateDefaultPlugin loses to
+-- plugins_organization_id_project_id_slug_key instead of the is_default race.
+UPDATE plugins
+SET is_default = TRUE,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND project_id = @project_id
+  AND slug = 'default'
+  AND deleted IS FALSE
+RETURNING *;
+
 -- name: GetPlugin :one
 SELECT *
 FROM plugins
@@ -54,6 +88,18 @@ WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE;
 
+-- name: GetPluginServerByBackend :one
+-- Look up a live plugin server by its backend (toolset or mcp_server).
+-- Used by AttachToDefaultPlugin to no-op on already-attached servers before
+-- inserting: a duplicate insert can trip the (plugin_id, display_name)
+-- unique index rather than a backend one, and either way the failed
+-- statement aborts the caller's surrounding transaction.
+SELECT * FROM plugin_servers
+WHERE plugin_id = @plugin_id
+  AND toolset_id IS NOT DISTINCT FROM sqlc.narg('toolset_id')::uuid
+  AND mcp_server_id IS NOT DISTINCT FROM sqlc.narg('mcp_server_id')::uuid
+  AND deleted IS FALSE;
+
 -- name: AddPluginServer :one
 -- Inserts a plugin server backed by exactly one of a toolset or an mcp_server.
 -- The plugin_servers backend-exclusivity CHECK enforces the XOR; callers must
@@ -94,6 +140,19 @@ FROM plugin_servers
 WHERE plugin_id = @plugin_id
   AND deleted IS FALSE
 ORDER BY sort_order ASC, created_at ASC;
+
+-- name: ListPluginServersByPluginIDs :many
+-- Batch variant of ListPluginServers for callers that need every server for
+-- a set of plugins (e.g. ListPlugins) without one round-trip per plugin.
+-- Joins plugins and scopes by project_id as defense-in-depth, so this stays
+-- safe even if a future caller passes plugin IDs it hasn't already scoped.
+SELECT plugin_servers.*
+FROM plugin_servers
+JOIN plugins ON plugins.id = plugin_servers.plugin_id
+WHERE plugin_servers.plugin_id = ANY(@plugin_ids::uuid[])
+  AND plugins.project_id = @project_id
+  AND plugin_servers.deleted IS FALSE
+ORDER BY plugin_servers.plugin_id, plugin_servers.sort_order ASC, plugin_servers.created_at ASC;
 
 -- name: UpdatePluginServer :one
 UPDATE plugin_servers
@@ -224,27 +283,46 @@ FROM plugin_github_connections
 WHERE project_id = @project_id;
 
 -- name: ListPluginPublishCandidates :many
--- Lists projects with a GitHub plugin connection for the automated generator
--- rollout, paginated by project_id (pass the zero UUID to start). Each row
--- carries the user that created the project's most recent plugins-mcp API key,
--- used as the publish actor. This is a deliberate cross-project sweep, so unlike
--- the tenant-scoped queries it is not constrained to a single project_id.
+-- Lists candidates for the automated generator rollout, paginated by
+-- project_id (pass the zero UUID to start): the union of (a) projects that
+-- have published before (a plugin_github_connections row exists) -- the
+-- original rollout population, kept so an already-connected project isn't
+-- silently dropped just because it predates the Default-plugin feature and
+-- has had no new attach activity since -- and (b) projects with a Default
+-- plugin, published or not. (b) is the periodic safety net for the
+-- best-effort initial-publish trigger fired inline by
+-- CreateProject/toolsets/mcpendpoints: if that enqueue is ever lost (e.g. a
+-- crash between commit and enqueue), this sweep picks it up within one tick
+-- instead of leaving it stuck until a human notices. Republishing an
+-- unchanged project is cheap -- SkipIfUnchanged short-circuits on the
+-- fingerprint check before any GitHub/key work. Each row carries the user
+-- that created the project's most recent plugins-mcp API key as the
+-- publish actor, falling back to 'system' for a project that has never
+-- published (no such key exists yet). This is a deliberate cross-project
+-- sweep, so unlike the tenant-scoped queries it is not constrained to a
+-- single project_id. The after_project_id filter is applied inside each
+-- UNION branch rather than the outer query -- sqlc's analyzer can't resolve
+-- an outer WHERE referencing the derived table's alias once a LATERAL join
+-- follows it ("table alias does not exist").
 SELECT
-  c.project_id,
-  k.created_by_user_id
-FROM plugin_github_connections c
-JOIN projects p ON p.id = c.project_id AND p.deleted IS FALSE
-JOIN LATERAL (
+  cp.project_id,
+  COALESCE(k.created_by_user_id, 'system') AS created_by_user_id
+FROM (
+  SELECT c.project_id FROM plugin_github_connections c WHERE c.project_id > @after_project_id
+  UNION
+  SELECT dp.project_id FROM plugins dp WHERE dp.is_default IS TRUE AND dp.deleted IS FALSE AND dp.project_id > @after_project_id
+) cp
+JOIN projects p ON p.id = cp.project_id AND p.deleted IS FALSE
+LEFT JOIN LATERAL (
   SELECT created_by_user_id
   FROM api_keys
-  WHERE project_id = c.project_id
+  WHERE project_id = cp.project_id
     AND deleted IS FALSE
     AND name LIKE 'plugins-mcp-%'
   ORDER BY created_at DESC
   LIMIT 1
 ) k ON TRUE
-WHERE c.project_id > @after_project_id
-ORDER BY c.project_id ASC
+ORDER BY cp.project_id ASC
 LIMIT @result_limit;
 
 -- name: GetGitHubConnectionByMarketplaceToken :one
@@ -259,19 +337,44 @@ WHERE marketplace_token = @marketplace_token;
 -- argument is the candidate token to use if no token is currently set; on
 -- conflict the existing token is preserved via COALESCE so callers can pass a
 -- freshly-generated token on every publish without overwriting prior state.
--- Token rotation goes through a separate query. published_fingerprint is the
--- content hash of the packages just published and is always overwritten, so
--- subsequent rollout runs can detect when nothing changed.
-INSERT INTO plugin_github_connections (project_id, installation_id, repo_owner, repo_name, marketplace_token, published_fingerprint)
-VALUES (@project_id, @installation_id, @repo_owner, @repo_name, @marketplace_token, @published_fingerprint)
+-- Token rotation goes through a separate query. published_mcp_fingerprints,
+-- published_hooks_version, and published_hooks_config record the per-plugin
+-- MCP content hashes, the hooks generator version, and the org-level hooks
+-- settings just published; all are always overwritten so subsequent rollout
+-- runs can detect independently whether the MCP or hooks component changed.
+INSERT INTO plugin_github_connections (project_id, installation_id, repo_owner, repo_name, marketplace_token, published_mcp_fingerprints, published_hooks_version, published_hooks_config)
+VALUES (@project_id, @installation_id, @repo_owner, @repo_name, @marketplace_token, @published_mcp_fingerprints, @published_hooks_version, @published_hooks_config)
 ON CONFLICT (project_id) DO UPDATE
   SET installation_id = EXCLUDED.installation_id,
       repo_owner = EXCLUDED.repo_owner,
       repo_name = EXCLUDED.repo_name,
       marketplace_token = COALESCE(plugin_github_connections.marketplace_token, EXCLUDED.marketplace_token),
-      published_fingerprint = EXCLUDED.published_fingerprint,
+      published_mcp_fingerprints = EXCLUDED.published_mcp_fingerprints,
+      published_hooks_version = EXCLUDED.published_hooks_version,
+      published_hooks_config = EXCLUDED.published_hooks_config,
       updated_at = clock_timestamp()
 RETURNING *;
+
+-- name: GetGitHubConnectionOwner :one
+-- Resolves which project currently owns a given installation/repo pair, and
+-- whether that project has since been soft-deleted. Used to self-heal a
+-- plugin_github_connections_installation_repo_key conflict on
+-- UpsertGitHubConnection: a soft-deleted project's repo claim is stale (soft
+-- deletes never clean up this table) and can be reclaimed by whichever
+-- active project computes the same repo name next.
+SELECT c.project_id, p.deleted AS project_deleted
+FROM plugin_github_connections c
+JOIN projects p ON p.id = c.project_id
+WHERE c.installation_id = @installation_id
+  AND LOWER(c.repo_owner) = LOWER(@repo_owner)
+  AND LOWER(c.repo_name) = LOWER(@repo_name);
+
+-- name: DeleteGitHubConnection :exec
+-- Hard-deletes a project's GitHub connection row. plugin_github_connections
+-- has no soft-delete column of its own; used only to reclaim a stale row left
+-- behind by a soft-deleted project (see GetGitHubConnectionOwner) so its repo
+-- slot can be reused by the project that now legitimately claims it.
+DELETE FROM plugin_github_connections WHERE project_id = @project_id;
 
 -- name: GetMarketplaceSettings :one
 SELECT *

@@ -24,12 +24,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 )
 
-// OpenRouterKeyRefresher defines the interface for managing openrouter key refresh workflows
-type OpenRouterKeyRefresher interface {
-	ScheduleOpenRouterKeyRefresh(ctx context.Context, orgID string) error
-	CancelOpenRouterKeyRefreshWorkflow(ctx context.Context, orgID string) error
-}
-
 // Service implements organization feature management operations.
 type Service struct {
 	tracer       trace.Tracer
@@ -183,6 +177,7 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 		SsoEnabled:                   isEnabled(FeatureSSO),
 		ScimEnabled:                  isEnabled(FeatureSCIM),
 		ObservabilityModeEnabled:     isEnabled(FeatureObservabilityMode),
+		HooksBrowserLoginEnabled:     isEnabled(FeatureHooksBrowserLogin),
 	}, nil
 }
 

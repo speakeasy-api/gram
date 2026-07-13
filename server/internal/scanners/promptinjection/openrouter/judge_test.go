@@ -36,7 +36,35 @@ func req(texts ...string) promptinjection.Request {
 			ToolCalls:   nil,
 		}
 	}
-	return promptinjection.Request{Messages: msgs, OrgID: "org-a", ProjectID: "proj"}
+	return promptinjection.Request{Messages: msgs, OrgID: "org-a", ProjectID: "proj", UserIDs: nil}
+}
+
+// TestClassifyBillsInternalKeyAndAttributesScannedUser pins the PI judge's
+// billing identity: internal OpenRouter key, per-message scanned-user
+// attribution.
+func TestClassifyBillsInternalKeyAndAttributesScannedUser(t *testing.T) {
+	t.Parallel()
+	client := &fakeCompletionClient{responder: func(string) string {
+		return `{"is_attack":false,"confidence":0.5,"rationale":"benign"}`
+	}}
+	c := newEngine(t, client)
+
+	in := req("first payload", "second payload")
+	in.UserIDs = []string{"user-1", "user-2"}
+	out, err := c.Classify(t.Context(), in)
+	require.NoError(t, err)
+	require.Len(t, out, 2)
+
+	client.mu.Lock()
+	keyTypes := append([]openrouter.KeyType(nil), client.keyTypes...)
+	userIDs := append([]string(nil), client.userIDs...)
+	client.mu.Unlock()
+	require.Len(t, keyTypes, 2)
+	for _, kt := range keyTypes {
+		require.Equal(t, openrouter.KeyTypeInternal, kt)
+	}
+	require.ElementsMatch(t, []string{"user-1", "user-2"}, userIDs,
+		"each judge call carries the scanned message's owner")
 }
 
 func TestClassifyFlagsInjectionVerdict(t *testing.T) {
@@ -182,8 +210,10 @@ type fakeCompletionClient struct {
 	err       error
 	responder func(text string) string
 
-	mu      sync.Mutex
-	prompts []string
+	mu       sync.Mutex
+	prompts  []string
+	keyTypes []openrouter.KeyType
+	userIDs  []string
 }
 
 func (c *fakeCompletionClient) lastPrompt() string {
@@ -195,17 +225,24 @@ func (c *fakeCompletionClient) lastPrompt() string {
 	return c.prompts[len(c.prompts)-1]
 }
 
-func (c *fakeCompletionClient) GetObjectCompletion(_ context.Context, request openrouter.ObjectCompletionRequest) (*openrouter.CompletionResponse, error) {
+func (c *fakeCompletionClient) GetCompletion(_ context.Context, request openrouter.CompletionRequest) (*openrouter.CompletionResponse, error) {
 	c.calls.Add(1)
+	// The judge sends [system, user]; the user message carries the payload JSON.
+	prompt := ""
+	if n := len(request.Messages); n > 0 {
+		prompt = openrouter.GetText(request.Messages[n-1])
+	}
 	c.mu.Lock()
-	c.prompts = append(c.prompts, request.Prompt)
+	c.prompts = append(c.prompts, prompt)
+	c.keyTypes = append(c.keyTypes, request.KeyType)
+	c.userIDs = append(c.userIDs, request.UserID)
 	c.mu.Unlock()
 	if c.err != nil {
 		return nil, c.err
 	}
 
 	var p judgePayload
-	_ = json.Unmarshal([]byte(request.Prompt), &p)
+	_ = json.Unmarshal([]byte(prompt), &p)
 	resp := `{"is_attack":false,"confidence":0,"rationale":"ok"}`
 	if c.responder != nil {
 		resp = c.responder(p.Message.Body)
@@ -218,7 +255,7 @@ func (c *fakeCompletionClient) GetObjectCompletion(_ context.Context, request op
 	return &openrouter.CompletionResponse{Message: &msg}, nil
 }
 
-func (c *fakeCompletionClient) GetCompletion(_ context.Context, _ openrouter.CompletionRequest) (*openrouter.CompletionResponse, error) {
+func (c *fakeCompletionClient) GetObjectCompletion(_ context.Context, _ openrouter.ObjectCompletionRequest) (*openrouter.CompletionResponse, error) {
 	return nil, errors.New("not implemented")
 }
 

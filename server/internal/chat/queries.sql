@@ -562,6 +562,64 @@ WHERE id = ANY(@ids::uuid[])
   AND project_id = ANY(@project_ids::uuid[])
   AND deleted IS FALSE;
 
+-- name: SumMessageTokenStatsByDay :many
+-- Daily message-level token stats for the billing details table
+-- (telemetry.queryTumDetails): tokens in messages carrying at least one
+-- active risk finding (same active-finding semantics as ListChats'
+-- risk_counts), and tokens in tool-call messages — tool results (role 'tool')
+-- plus messages carrying a non-empty tool_calls array, mirroring the
+-- getTraceEntryType classification in GetChatEntryTotals. Bucketed by the
+-- message's UTC day so the series lines up with the ClickHouse daily
+-- aggregates.
+SELECT
+  (date_trunc('day', cm.created_at AT TIME ZONE 'utc'))::timestamp AS day,
+  COALESCE(SUM(cm.total_tokens) FILTER (WHERE rm.chat_message_id IS NOT NULL), 0)::bigint AS risky_message_tokens,
+  COALESCE(SUM(cm.total_tokens) FILTER (WHERE
+    cm.role = 'tool'
+    OR CASE
+      WHEN cm.tool_calls IS NULL THEN false
+      WHEN jsonb_typeof(cm.tool_calls) = 'array'
+        THEN jsonb_array_length(cm.tool_calls) > 0
+      -- Some rows store tool_calls double-encoded (a JSON string holding the
+      -- array); treat any non-empty/non-"[]" string as carrying tool calls.
+      WHEN jsonb_typeof(cm.tool_calls) = 'string'
+        THEN btrim(cm.tool_calls #>> '{}') NOT IN ('', '[]', 'null')
+      ELSE false
+    END
+  ), 0)::bigint AS tool_message_tokens
+FROM chat_messages cm
+LEFT JOIN (
+  SELECT DISTINCT rr.chat_message_id
+  FROM risk_results rr
+  JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+  WHERE rr.project_id = ANY(@project_ids::uuid[])
+    AND rr.found IS TRUE
+    AND rr.excluded_at IS NULL
+    AND rr.false_positive_at IS NULL
+) rm ON rm.chat_message_id = cm.id
+WHERE cm.project_id = ANY(@project_ids::uuid[])
+  AND cm.created_at >= @from_time
+  AND cm.created_at < @to_time
+GROUP BY 1
+ORDER BY 1;
+
+-- name: ListRiskyChatIDs :many
+-- Distinct chats with at least one active risk finding created in the window,
+-- for the token-by-risk breakdown (telemetry.queryRiskTokens). Mirrors the
+-- risk_counts semantics used by ListChats: a finding counts only while found,
+-- not excluded, not marked false-positive, and its policy is enabled and not
+-- deleted.
+SELECT DISTINCT cm.chat_id
+FROM risk_results rr
+JOIN chat_messages cm ON cm.id = rr.chat_message_id
+JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+WHERE rr.project_id = ANY(@project_ids::uuid[])
+  AND rr.found IS TRUE
+  AND rr.excluded_at IS NULL
+  AND rr.false_positive_at IS NULL
+  AND rr.created_at >= @from_time
+  AND rr.created_at < @to_time;
+
 -- name: ListChatMessages :many
 SELECT * FROM chat_messages 
 WHERE chat_id = @chat_id AND (project_id IS NULL OR project_id = @project_id::uuid) 
@@ -1055,16 +1113,12 @@ WHERE c.project_id = @project_id
   AND m.created_at <= @time_end;
 
 -- name: GetChatMetricsSummary :one
-WITH chat_stats AS (
+-- Aggregate the requested chat window first so resolution selection does not
+-- sort unrelated project history for empty or narrow windows.
+WITH chat_stats AS MATERIALIZED (
   SELECT
     c.id as chat_id,
-    MIN(m.created_at) as first_message_at,
-    MAX(m.created_at) as last_message_at,
-    EXTRACT(EPOCH FROM (MAX(m.created_at) - MIN(m.created_at))) * 1000 as duration_ms,
-    COALESCE(
-      (SELECT resolution FROM chat_resolutions WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1),
-      ''
-    ) as resolution_status
+    EXTRACT(EPOCH FROM (MAX(m.created_at) - MIN(m.created_at))) * 1000 as duration_ms
   FROM chats c
   INNER JOIN chat_messages m ON m.chat_id = c.id
   WHERE c.project_id = @project_id
@@ -1072,14 +1126,24 @@ WITH chat_stats AS (
     AND m.created_at >= @time_start
     AND m.created_at <= @time_end
   GROUP BY c.id
+),
+latest_resolutions AS (
+  SELECT DISTINCT ON (cr.chat_id)
+    cr.chat_id,
+    cr.resolution
+  FROM chat_resolutions cr
+  INNER JOIN chat_stats cs ON cs.chat_id = cr.chat_id
+  WHERE cr.project_id = @project_id
+  ORDER BY cr.chat_id, cr.created_at DESC
 )
 SELECT
   COUNT(*)::bigint as total_chats,
-  COALESCE(SUM(CASE WHEN resolution_status = 'success' THEN 1 ELSE 0 END), 0)::bigint as resolved_chats,
-  COALESCE(SUM(CASE WHEN resolution_status = 'failure' THEN 1 ELSE 0 END), 0)::bigint as failed_chats,
-  COALESCE(AVG(duration_ms), 0)::double precision as avg_session_duration_ms,
-  COALESCE(AVG(CASE WHEN resolution_status != '' THEN duration_ms END), 0)::double precision as avg_resolution_time_ms
-FROM chat_stats;
+  COALESCE(SUM(CASE WHEN COALESCE(latest_resolutions.resolution, '') = 'success' THEN 1 ELSE 0 END), 0)::bigint as resolved_chats,
+  COALESCE(SUM(CASE WHEN COALESCE(latest_resolutions.resolution, '') = 'failure' THEN 1 ELSE 0 END), 0)::bigint as failed_chats,
+  COALESCE(AVG(chat_stats.duration_ms), 0)::double precision as avg_session_duration_ms,
+  COALESCE(AVG(CASE WHEN COALESCE(latest_resolutions.resolution, '') != '' THEN chat_stats.duration_ms END), 0)::double precision as avg_resolution_time_ms
+FROM chat_stats
+LEFT JOIN latest_resolutions ON latest_resolutions.chat_id = chat_stats.chat_id;
 
 -- name: CreateChatMessageWithToolCalls :exec
 -- Inserts a single chat_messages row with optional tool_calls JSON,

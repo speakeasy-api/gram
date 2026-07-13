@@ -2,6 +2,7 @@ package billing
 
 import (
 	"context"
+	"slices"
 )
 
 type ToolCallType string
@@ -16,13 +17,70 @@ const (
 
 type ModelUsageSource string
 
-const (
-	ModelUsageSourcePlayground ModelUsageSource = "playground"
-	ModelUsageSourceAssistants ModelUsageSource = "assistants"
-	ModelUsageSourceElements   ModelUsageSource = "elements"
-	ModelUsageSourceGram       ModelUsageSource = "gram"
-	ModelUsageSourceSlack      ModelUsageSource = "slack"
+// modelUsageSources accumulates every source registered below, so the full
+// set can be iterated without a second hand-maintained list.
+var modelUsageSources []ModelUsageSource
+
+func registerModelUsageSource(s ModelUsageSource) ModelUsageSource {
+	modelUsageSources = append(modelUsageSources, s)
+	return s
+}
+
+// The surfaces whose LLM completions run through Gram's server — the
+// population billed as tokens under management. Registering a source here is
+// its single point of declaration: it names the identifier AND adds it to
+// ModelUsageSources, which the billing page's telemetry reads iterate to
+// scope analytics to the billed population. Completion telemetry is tagged
+// with these values (gram.hook.source); agent-fleet telemetry observed via
+// OTEL (claude-code, cursor, codex, …) is not billed and is never registered
+// here.
+var (
+	ModelUsageSourcePlayground = registerModelUsageSource("playground")
+	ModelUsageSourceElements   = registerModelUsageSource("elements")
+	ModelUsageSourceGram       = registerModelUsageSource("gram")
+	ModelUsageSourceSlack      = registerModelUsageSource("slack")
+
+	// ModelUsageSourceRiskAnalysis tags the platform's own risk-policy
+	// analysis inference (risk judge, prompt-injection scanner). Scanning is
+	// the metered unit of the enterprise TUM contracts — the act of securing
+	// observed agent traffic — so this source is registered (billed) even
+	// though no end user initiates the completions. The billing page reports
+	// it as its own "Risk policy analysis model" section, separate from
+	// user-facing completion surfaces.
+	//
+	// Callers tagging gram or risk-analysis (platform-initiated inference)
+	// must also set openrouter.KeyTypeInternal on the completion request so
+	// the usage bills against the org's internal OpenRouter key, not the
+	// customer-facing chat key's monthly cap. For risk-analysis the unified
+	// client rejects a chat-key pairing at request initialization; gram stays
+	// convention-only because the completions proxy legitimately accepts a
+	// client-supplied gram source on the chat key (Elements).
+	ModelUsageSourceRiskAnalysis = registerModelUsageSource("risk-analysis")
 )
+
+// ModelUsageSourceAssistants tags assistants completions in telemetry but is
+// deliberately NOT registered above: Speakeasy covers assistants inference
+// today, so it must not count toward the billed population. Keeping the tag
+// (instead of dropping the constant) is what keeps those completions OUT —
+// an untagged completion normalizes to "gram" and would re-enter the billed
+// scope. Move it into the registered block when customers can BYOK
+// (see the "BYOK for Assistants" Linear project).
+const ModelUsageSourceAssistants ModelUsageSource = "assistants"
+
+// ModelUsageSources lists every registered completion surface.
+func ModelUsageSources() []ModelUsageSource {
+	return slices.Clone(modelUsageSources)
+}
+
+// ModelUsageSourceStrings lists every registered completion surface as plain
+// strings, the shape the telemetry hook_source filters take.
+func ModelUsageSourceStrings() []string {
+	out := make([]string, len(modelUsageSources))
+	for i, s := range modelUsageSources {
+		out[i] = string(s)
+	}
+	return out
+}
 
 type ModelUsageEvent struct {
 	OrganizationSlug      string

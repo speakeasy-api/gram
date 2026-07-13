@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -72,6 +73,7 @@ type WorkerOptions struct {
 	BillingRepository              billing.Repository
 	RedisClient                    *redis.Client
 	CacheAdapter                   cache.Cache
+	EmailService                   *email.Service
 	PosthogClient                  *posthog.Posthog
 	FunctionsDeployer              functions.Deployer
 	FunctionsVersion               functions.RunnerVersion
@@ -132,6 +134,7 @@ func ForDeploymentProcessing(
 		TelemetryRepo:                  nil,
 		TriggersApp:                    nil,
 		CacheAdapter:                   nil,
+		EmailService:                   nil,
 		AssistantsCore:                 nil,
 		TemporalEnv:                    nil,
 		PIIScanner:                     nil,
@@ -184,6 +187,7 @@ func NewTemporalWorker(
 		TelemetryRepo:                  nil,
 		TriggersApp:                    nil,
 		CacheAdapter:                   nil,
+		EmailService:                   nil,
 		AssistantsCore:                 nil,
 		TemporalEnv:                    env,
 		PIIScanner:                     nil,
@@ -226,6 +230,7 @@ func NewTemporalWorker(
 			TelemetryRepo:                  conv.Default(o.TelemetryRepo, opts.TelemetryRepo),
 			TriggersApp:                    conv.Default(o.TriggersApp, opts.TriggersApp),
 			CacheAdapter:                   conv.Default(o.CacheAdapter, opts.CacheAdapter),
+			EmailService:                   conv.Default(o.EmailService, opts.EmailService),
 			AssistantsCore:                 conv.Default(o.AssistantsCore, opts.AssistantsCore),
 			TemporalEnv:                    conv.Default(o.TemporalEnv, opts.TemporalEnv),
 			PIIScanner:                     conv.Default(o.PIIScanner, opts.PIIScanner),
@@ -302,6 +307,7 @@ func NewTemporalWorker(
 		opts.TelemetryRepo,
 		opts.TriggersApp,
 		opts.CacheAdapter,
+		opts.EmailService,
 		opts.AssistantsCore,
 		opts.PIIScanner,
 		opts.PIScanner,
@@ -333,11 +339,15 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.FirePlatformUsageMetrics)
 	temporalWorker.RegisterActivity(activities.GetAIIntegrationsCandidates)
 	temporalWorker.RegisterActivity(activities.RefreshBillingUsage)
+	temporalWorker.RegisterActivity(activities.SnapshotBillingCycleUsage)
+	temporalWorker.RegisterActivity(activities.ForwardTokenUsageToPostHog)
 	temporalWorker.RegisterActivity(activities.GetAllOrganizations)
 	temporalWorker.RegisterActivity(activities.ValidateDeployment)
 	temporalWorker.RegisterActivity(activities.GenerateToolsetEmbeddings)
 	temporalWorker.RegisterActivity(activities.GenerateChatTitle)
 	temporalWorker.RegisterActivity(activities.CorrelateClaudePrompts)
+	temporalWorker.RegisterActivity(activities.PromoteStagedTelemetry)
+	temporalWorker.RegisterActivity(activities.ListStagedTelemetryProjects)
 	temporalWorker.RegisterActivity(activities.SegmentChat)
 	temporalWorker.RegisterActivity(activities.DeleteChatResolutions)
 	temporalWorker.RegisterActivity(activities.AnalyzeSegment)
@@ -401,6 +411,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(IndexToolsetWorkflow)
 	temporalWorker.RegisterWorkflow(GenerateChatTitleWorkflow)
 	temporalWorker.RegisterWorkflow(CorrelateClaudePromptsWorkflow)
+	temporalWorker.RegisterWorkflow(PromoteStagedTelemetryWorkflow)
+	temporalWorker.RegisterWorkflow(StagedTelemetrySweepWorkflow)
 	temporalWorker.RegisterWorkflow(AnalyzeChatResolutionsWorkflow)
 	temporalWorker.RegisterWorkflow(DelayedChatResolutionAnalysisWorkflow)
 	// Trigger workflows
@@ -431,6 +443,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(ProcessOutboxWorkflow)
 	temporalWorker.RegisterWorkflow(OutboxGCWorkflow)
 	temporalWorker.RegisterWorkflow(PluginGeneratorRolloutWorkflow)
+	temporalWorker.RegisterWorkflow(PluginInitialPublishWorkflow)
 
 	if err := AddPlatformUsageMetricsSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
@@ -488,6 +501,10 @@ func NewTemporalWorker(
 
 	if err := AddOutboxGCSchedule(context.Background(), env); err != nil {
 		logger.ErrorContext(context.Background(), "failed to add outbox gc schedule", attr.SlogError(err))
+	}
+
+	if err := AddStagedTelemetrySweepSchedule(context.Background(), env); err != nil {
+		logger.ErrorContext(context.Background(), "failed to add staged telemetry sweep schedule", attr.SlogError(err))
 	}
 
 	if opts.PluginPublisher != nil {

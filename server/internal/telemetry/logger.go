@@ -142,13 +142,38 @@ func (l *Logger) Log(ctx context.Context, params LogParams) {
 }
 
 func (l *Logger) LogBulk(ctx context.Context, params []LogParams) error {
+	logParams := l.buildBulkParams(ctx, params)
+	if len(logParams) == 0 {
+		return nil
+	}
+	if err := repo.New(l.chConn).InsertTelemetryLogs(l.shutdownCtx(), logParams); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "insert telemetry logs")
+	}
+	return nil
+}
+
+// LogBulkStaging writes rows to telemetry_logs_staging instead of
+// telemetry_logs — the holding pen for Claude api_request rows with redacted
+// (custom) MCP attribution. Rows go through the exact same feature checks,
+// scrubbing, and hydration as LogBulk, so a promoted row is byte-identical to
+// what a direct insert would have produced apart from the patched attribution.
+func (l *Logger) LogBulkStaging(ctx context.Context, params []LogParams) error {
+	logParams := l.buildBulkParams(ctx, params)
+	if len(logParams) == 0 {
+		return nil
+	}
+	if err := repo.New(l.chConn).InsertTelemetryLogsStaging(l.shutdownCtx(), logParams); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "insert staged telemetry logs")
+	}
+	return nil
+}
+
+func (l *Logger) buildBulkParams(ctx context.Context, params []LogParams) []repo.InsertTelemetryLogParams {
 	if len(params) == 0 {
 		return nil
 	}
 
 	shutdownCtx := l.shutdownCtx()
-
-	chRepo := repo.New(l.chConn)
 
 	logParams := make([]repo.InsertTelemetryLogParams, 0, len(params))
 	logsEnabledByOrg := make(map[string]bool)
@@ -199,13 +224,7 @@ func (l *Logger) LogBulk(ctx context.Context, params []LogParams) error {
 		logParams = append(logParams, *logParam)
 	}
 
-	if len(logParams) == 0 {
-		return nil
-	}
-	if err := chRepo.InsertTelemetryLogs(shutdownCtx, logParams); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "insert telemetry logs")
-	}
-	return nil
+	return logParams
 }
 
 // hydrateUserInfo fills the directory-derived parts of the row's UserInfo

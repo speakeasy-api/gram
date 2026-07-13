@@ -1,8 +1,10 @@
-speakeasyVersion: 1.788.0
+speakeasyVersion: 1.789.1
 sources: {}
 targets:
     gram-internal:
         source: Gram-Internal
+    hooks-go:
+        source: Hooks-Ingest
 workflow:
     workflowVersion: 1.0.0
     speakeasyVersion: pinned
@@ -22,8 +24,24 @@ workflow:
             output: .speakeasy/openapi-public.yaml
             registry:
                 location: registry.speakeasyapi.dev/gram/gram/gram-public-api-description
+        Hooks-Ingest:
+            inputs:
+                - location: server/gen/http/openapi3.yaml
+            overlays:
+                - location: overlays/goa.yaml
+            transformations:
+                - filterOperations:
+                    operations: ingestHookEvent
+                - removeUnused: true
+            output: .speakeasy/openapi-hooks.yaml
     targets:
         gram-internal:
             target: typescript
             source: Gram-Internal
-            output: client/sdk
+            output: client/dashboard/src/sdk
+        hooks-go:
+            target: go
+            source: Hooks-Ingest
+            output: hooks/sdk
+            testing:
+                enabled: false

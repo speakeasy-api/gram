@@ -44,6 +44,7 @@ export type NamedAsset =
       name?: string | null;
       url: string;
       type: "remotemcp";
+      transportType?: string;
     }
   | {
       id: string;

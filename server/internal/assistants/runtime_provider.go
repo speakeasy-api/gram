@@ -14,6 +14,7 @@ import (
 const (
 	RuntimeProviderFlyIO = runtimeBackendFlyIO
 	RuntimeProviderGKE   = runtimeBackendGKE
+	RuntimeProviderLocal = runtimeBackendLocal
 
 	defaultFlyRuntimeRegion = "us"
 	defaultFlyRuntimePrefix = "gram-asst"
@@ -23,6 +24,7 @@ type RuntimeBackendConfig struct {
 	Provider string
 	Fly      FlyRuntimeConfig
 	GKE      GKERuntimeConfig
+	Local    LocalRuntimeConfig
 }
 
 type FlyRuntimeConfig struct {
@@ -76,9 +78,9 @@ func (c FlyRuntimeConfig) Validate() error {
 // NewRuntimeBackend assembles a runtimeRouter over every configured backend and
 // targets config.Provider for new admissions. A backend is constructed when its
 // config is present — Fly when an API token is set, GKE when an in-cluster
-// kubernetes client is injected — so the two can run side by side (e.g. target
-// GKE while still tearing down Fly-backed rows). The target backend must be
-// among those constructed.
+// kubernetes client is injected, local when running in the local environment —
+// so several can run side by side (e.g. target GKE while still tearing down
+// Fly-backed rows). The target backend must be among those constructed.
 func NewRuntimeBackend(logger *slog.Logger, tracerProvider trace.TracerProvider, httpPolicy *guardian.Policy, config RuntimeBackendConfig) (RuntimeBackend, error) {
 	backends := map[string]RuntimeBackend{}
 
@@ -102,6 +104,20 @@ func NewRuntimeBackend(logger *slog.Logger, tracerProvider trace.TracerProvider,
 			guardian.WithAllowedCIDRBlocks(config.GKE.RunnerCIDRBlocks...),
 		)
 		backends[runtimeBackendGKE] = NewGKERuntimeBackend(logger, tracerProvider, gkeClient, config.GKE)
+	}
+
+	if config.Local.Enabled {
+		if err := config.Local.Validate(); err != nil {
+			return nil, fmt.Errorf("invalid local assistant runtime config: %w", err)
+		}
+		// Containers publish the runner guest port on a loopback ephemeral
+		// port, which the default egress policy blocks. Allowlist loopback for
+		// this one client only — the policy's global enforcement is unchanged.
+		localClient := httpPolicy.PooledClient(
+			guardian.WithDefaultRetryConfig(),
+			guardian.WithAllowedCIDRBlocks(localRuntimeLoopbackCIDRs...),
+		)
+		backends[runtimeBackendLocal] = NewLocalRuntimeBackend(logger, tracerProvider, localClient, newDockerCLIEngine(config.Local.GuestPort), config.Local)
 	}
 
 	router, err := newRuntimeRouter(config.Provider, backends)

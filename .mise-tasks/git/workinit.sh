@@ -42,11 +42,8 @@ if ! mise run install:pnpm --offline; then
   mise run install:pnpm
 fi
 
-# Build the workspace packages the dashboard's type-check depends on. Both
-# @gram/client (esm/) and @gram-ai/elements (dist/) have gitignored build
-# output that nothing else in worktree init produces, so tsc can't resolve
-# their types until they're built.
-mise run build:internal-sdk
+# Build the workspace packages the dashboard's type-check depends on since these
+# are gitignored and not carried over to new worktrees.
 mise run build:elements
 
 suffix=$(LC_ALL=C tr -dc 'a-z0-9' < /dev/urandom | head -c 4)

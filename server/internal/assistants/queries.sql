@@ -909,14 +909,12 @@ WHERE id = @runtime_id
   AND state = @active_state
   AND deleted IS FALSE;
 
--- name: ListActiveAssistantRuntimesForImageRecycle :many
--- Returns live v2 runtime rows that carry backend metadata so a deploy-time
--- sweep can roll their machines onto the current runtime image. Only `active`
--- rows qualify: `starting` rows are mid-boot and already pull the current
--- image, while expiring/stopped rows are torn down or recycled lazily on the
--- next admission. Rows orphaned by a deleted assistant are excluded: they
--- belong to the deleted-assistant janitor, and recycling them would bump
--- updated_at and postpone the inactivity-based reap.
+-- name: ListActiveAssistantRuntimes :many
+-- Returns live v2 runtime rows that carry backend metadata for runtime
+-- reconciliation sweeps. Only `active` rows qualify: `starting` rows are
+-- mid-boot, while expiring/stopped rows are already being torn down or await
+-- re-admission. Rows orphaned by a deleted assistant belong to the
+-- deleted-assistant janitor and are excluded here.
 SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.backend, r.backend_metadata_json, r.state, r.warm_until
 FROM assistant_runtimes r
 WHERE r.state = @active_state
