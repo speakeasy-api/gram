@@ -568,6 +568,7 @@ type Environment struct {
 type EnvironmentEntry struct {
 	Name          string
 	Value         string
+	IsSecret      bool
 	EnvironmentID uuid.UUID
 	CreatedAt     pgtype.Timestamptz
 	UpdatedAt     pgtype.Timestamptz
@@ -949,6 +950,20 @@ type McpServer struct {
 	UpdatedAt             pgtype.Timestamptz
 	DeletedAt             pgtype.Timestamptz
 	Deleted               bool
+}
+
+type ModelProviderKey struct {
+	ID              uuid.UUID
+	OrganizationID  string
+	ProjectID       uuid.UUID
+	Slot            string
+	Provider        string
+	ApiKeyEncrypted string
+	Enabled         bool
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
 }
 
 type OauthProxyClientInfo struct {

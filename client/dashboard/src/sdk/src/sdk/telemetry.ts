@@ -437,7 +437,7 @@ export class Telemetry extends ClientSDK {
    * queryTumDetails telemetry
    *
    * @remarks
-   * Org-scoped daily usage details for the billing page's metrics table, computed in one pass: token type sums, session/tool-call/active-user counts, attribution slices (MCP tools, skills, unattributed users), and message-level stats (tokens in messages with active risk findings, tokens in tool-call messages).
+   * Org-scoped daily usage details for the billing page, computed in one pass: the tokens-under-management daily token-type split (observed agent traffic; cache reads excluded) and per-dimension breakdowns over the same population.
    */
   async queryTumDetails(
     request: QueryTumDetailsRequest,

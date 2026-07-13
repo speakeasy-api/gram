@@ -5,7 +5,8 @@ import { unwrapAsync } from "@gram/client/types/fp";
 import { type BillingPeriod, periodStaleTime } from "./billing-cycles";
 
 // Shared query definitions for the TUM billing section, each scoped to one
-// period (a billing cycle or a custom range) and an optional project. Kept in
+// period (a billing cycle or a custom range), always org-wide — per-project
+// visibility comes from the Project breakdown, not a request filter. Kept in
 // a non-component module so the consuming component files satisfy the
 // react-refresh "only export components" rule. The generated SDK hooks key
 // their cache on gramSession only, so these definitions drive useQuery
@@ -13,9 +14,9 @@ import { type BillingPeriod, periodStaleTime } from "./billing-cycles";
 // telemetry is immutable) via periodStaleTime.
 //
 // The request lands on a billing-page-specific endpoint that scopes its
-// reads server-side to the billed completion population (see
-// billing.ModelUsageSources on the server) — the client carries no knowledge
-// of what is billed.
+// reads server-side to the tokens-under-management population (observed
+// agent traffic; see the server's QueryTumDetails) — the client carries no
+// knowledge of what is billed.
 
 export type PeriodScope = {
   client: GramCore;
@@ -24,8 +25,6 @@ export type PeriodScope = {
   // an org switch could serve another org's cached data for the same dates.
   orgId: string;
   period: BillingPeriod;
-  // Optional project scope; null spans the whole organization.
-  projectId: string | null;
 };
 
 export type PeriodQuery<T> = {
@@ -37,7 +36,7 @@ export type PeriodQuery<T> = {
 
 function periodQuery<T>(
   name: string,
-  { orgId, period, projectId }: PeriodScope,
+  { orgId, period }: PeriodScope,
   extraKeys: string[],
   queryFn: () => Promise<T>,
 ): PeriodQuery<T> {
@@ -48,7 +47,6 @@ function periodQuery<T>(
       period.start.toISOString(),
       period.end.toISOString(),
       ...extraKeys,
-      projectId ?? "all",
     ],
     staleTime: periodStaleTime(period),
     throwOnError: false,
@@ -66,7 +64,6 @@ export function tumDetailsQuery(
         telemetryWindowPayload: {
           from: scope.period.start,
           to: scope.period.end,
-          projectId: scope.projectId ?? undefined,
         },
       }),
     ),

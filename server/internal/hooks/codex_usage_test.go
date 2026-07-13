@@ -98,14 +98,38 @@ func TestExtractCodexUsage_TokenBearingEvent(t *testing.T) {
 	assert.Equal(t, "019e8c0e-740b-7113-b261-71fc14a82fb0", p.ConversationID)
 	assert.Equal(t, "gpt-5.4-mini", p.Model)
 	assert.Equal(t, "dev@example.com", p.UserEmail)
-	assert.Equal(t, int64(92728), p.InputTokens)
+	// Codex's input_token_count (92728) INCLUDES cached_token_count (68992);
+	// extraction normalizes to the disjoint gen_ai.usage shape, so InputTokens
+	// is the uncached remainder — matching what input means on Claude and
+	// Cursor rows.
+	assert.Equal(t, int64(92728-68992), p.InputTokens)
 	assert.Equal(t, int64(1441), p.OutputTokens)
 	assert.Equal(t, int64(68992), p.CachedTokens)
 	assert.Equal(t, int64(1170), p.ReasoningTokens)
-	// tool_token_count is captured verbatim and happens to equal input+output.
+	// tool_token_count is captured verbatim and happens to equal the raw
+	// (cache-inclusive) input + output.
 	assert.Equal(t, int64(94169), p.ToolTokens)
-	assert.Equal(t, p.InputTokens+p.OutputTokens, p.ToolTokens)
 	assert.Equal(t, int64(1780468942284000000), p.TimestampNano)
+}
+
+func TestExtractCodexUsage_CachedNeverExceedsInput(t *testing.T) {
+	t.Parallel()
+
+	// Defensive clamp: a malformed event reporting more cached than input
+	// tokens must not produce negative input.
+	rec := &gen.OTELLogRecord{
+		Attributes: []*gen.OTELAttribute{
+			strAttr("event.name", codexSSEEventName),
+			strAttr("event.kind", codexResponseCompletedKind),
+			strAttr("input_token_count", "100"),
+			strAttr("cached_token_count", "250"),
+			strAttr("conversation.id", "conv-clamp"),
+		},
+	}
+	points := extractCodexUsage(codexLogsPayload(rec))
+	require.Len(t, points, 1)
+	assert.Equal(t, int64(0), points[0].InputTokens)
+	assert.Equal(t, int64(100), points[0].CachedTokens)
 }
 
 func TestExtractCodexUsage_SkipsRecordsWithoutUsage(t *testing.T) {

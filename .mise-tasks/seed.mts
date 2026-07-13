@@ -2786,14 +2786,11 @@ async function seedObservabilityData(init: {
   const GROUP_POOL = ["platform", "growth", "enterprise", "core"];
   // The consuming surface (gram.hook.source) for chat rows — the hook_source
   // dimension on telemetry.query. (The hooks seeding block below has its own
-  // HOOK_SOURCES list for hook events.) Mixes agent-fleet surfaces with
-  // billed gram surfaces (playground/gram) so the billing page — which
-  // scopes to registered billing.ModelUsageSources — has data locally.
-  // "assistants" is deliberately absent from the billed slots: it is
-  // unregistered (Speakeasy covers assistants inference until BYOK). Known
-  // seed gap vs prod: fleet sessions here emit gen_ai.usage rows (billed),
-  // while prod fleet telemetry reports tokens in agent-native namespaces
-  // only.
+  // HOOK_SOURCES list for hook events.) Mixes observed agent surfaces
+  // (claude-code, cowork, cursor, codex — the tokens-under-management
+  // population the billing page counts) with Gram-hosted surfaces
+  // (playground/gram — excluded from TUM, so the billing page's exclusion
+  // path has local data to prove itself against too).
   const CHAT_HOOK_SOURCES = [
     "claude-code",
     "cursor",
@@ -3656,43 +3653,50 @@ async function seedObservabilityData(init: {
 
       const sessionRows: string[] = [toolRow];
 
-      // A slice of anthropic-surface sessions re-emits its usage the way real
-      // Claude ingestion does: a claude-code:usage row carrying the session
-      // total (feeds chat_token_summaries / TUM but is excluded from the
-      // generic attribute_metrics path) plus api_request rows that split the
-      // tokens across attribution contexts (skill / MCP server + tool), so the
-      // skill and MCP breakdowns have real token data. Everything else keeps
-      // the single generic chat-completion usage row.
+      // Anthropic-surface sessions emit usage the way real Claude ingestion
+      // does: a claude-code:usage row carrying the session total (feeds
+      // chat_token_summaries but is excluded from attribute_metrics as a
+      // duplicate) plus api_request rows — the SOLE Claude usage source the
+      // provenance-first attribute_metrics MV admits (gram_urn must be the
+      // ingest-stamped claude-code:otel:logs). A slice of sessions splits its
+      // tokens across attribution contexts (skill / MCP server + tool) so the
+      // skill and MCP breakdowns have real token data.
       const claudeSurface =
         hookSource === "claude-code" || hookSource === "cowork";
       const attributed = claudeSurface && r() < 0.6;
-      if (attributed) {
+      if (claudeSurface) {
         const claudeModel =
           r() < 0.65 ? "claude-sonnet-4-6" : "claude-haiku-4-5";
-        const [mcpServer, mcpTools] =
-          MCP_ATTRIBUTIONS[Math.floor(r() * MCP_ATTRIBUTIONS.length)];
-        const mcpTool = mcpTools[Math.floor(r() * mcpTools.length)];
-        const skillName =
-          SKILL_ATTRIBUTIONS[Math.floor(r() * SKILL_ATTRIBUTIONS.length)];
 
         // Which attribution contexts this session used, and how the session's
         // tokens split across them (the plain turn always dominates).
-        const patternRoll = r();
         const attributions: string[] = [""];
-        if (patternRoll < 0.45) {
-          attributions.push(
-            `"mcp_server.name": "${mcpServer}", "mcp_tool.name": "${mcpTool}", `,
-          );
-        } else if (patternRoll < 0.75) {
-          attributions.push(`"skill.name": "${skillName}", `);
-        } else {
-          attributions.push(
-            `"mcp_server.name": "${mcpServer}", "mcp_tool.name": "${mcpTool}", `,
-            `"skill.name": "${skillName}", `,
-          );
+        if (attributed) {
+          const [mcpServer, mcpTools] =
+            MCP_ATTRIBUTIONS[Math.floor(r() * MCP_ATTRIBUTIONS.length)];
+          const mcpTool = mcpTools[Math.floor(r() * mcpTools.length)];
+          const skillName =
+            SKILL_ATTRIBUTIONS[Math.floor(r() * SKILL_ATTRIBUTIONS.length)];
+          const patternRoll = r();
+          if (patternRoll < 0.45) {
+            attributions.push(
+              `"mcp_server.name": "${mcpServer}", "mcp_tool.name": "${mcpTool}", `,
+            );
+          } else if (patternRoll < 0.75) {
+            attributions.push(`"skill.name": "${skillName}", `);
+          } else {
+            attributions.push(
+              `"mcp_server.name": "${mcpServer}", "mcp_tool.name": "${mcpTool}", `,
+              `"skill.name": "${skillName}", `,
+            );
+          }
         }
-        const fractions =
-          attributions.length === 2 ? [0.6, 0.4] : [0.5, 0.3, 0.2];
+        const FRACTIONS: Record<number, number[]> = {
+          1: [1],
+          2: [0.6, 0.4],
+          3: [0.5, 0.3, 0.2],
+        };
+        const fractions = FRACTIONS[attributions.length]!;
 
         sessionRows.push(
           `(${timeNano + BigInt(1_000_000_000)}, ${timeNano + BigInt(1_000_000_000)}, 'INFO', 'claude_code.usage', '${traceId}', '{"gen_ai.conversation.id": "${chatId}", "gen_ai.usage.total_tokens": ${totalTokens}, "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", ${uaFrag}}', '{"service.name": "claude-code"}', '${projectId}', 'claude-code:usage/tokens', 'claude-code', '${chatId}')`,
@@ -3716,12 +3720,24 @@ async function seedObservabilityData(init: {
           ).toFixed(6);
           const rowNano = timeNano + BigInt((2 + i) * 1_000_000_000);
           sessionRows.push(
-            `(${rowNano}, ${rowNano}, 'INFO', 'claude_code.api_request', '${traceId}', '{${acctFrag}"event.name": "api_request", "prompt.id": "prompt-${dayNum}-${s}-${i}", "gen_ai.conversation.id": "${chatId}", "model": "${claudeModel}", "input_tokens": ${rowIn}, "output_tokens": ${rowOut}, "cache_read_tokens": ${rowRead}, "cache_creation_tokens": ${rowWrite}, "cost_usd": ${rowCost}, ${attrFrag}"gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", ${uaFrag}}', '{"service.name": "claude-code"}', '${projectId}', 'claude-code:api_request', 'claude-code', '${chatId}')`,
+            `(${rowNano}, ${rowNano}, 'INFO', 'claude_code.api_request', '${traceId}', '{${acctFrag}"event.name": "api_request", "prompt.id": "prompt-${dayNum}-${s}-${i}", "gen_ai.conversation.id": "${chatId}", "model": "${claudeModel}", "input_tokens": ${rowIn}, "output_tokens": ${rowOut}, "cache_read_tokens": ${rowRead}, "cache_creation_tokens": ${rowWrite}, "cost_usd": ${rowCost}, ${attrFrag}"gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", ${uaFrag}}', '{"service.name": "claude-code"}', '${projectId}', 'claude-code:otel:logs', 'claude-code', '${chatId}')`,
           );
         });
+      } else if (hookSource === "codex" || hookSource === "cursor") {
+        // Codex/Cursor usage-metrics row, matching real agent ingestion: the
+        // gram_urn's ${surface}:usage prefix is the provenance signal the
+        // attribute_metrics MV admits these rows on.
+        sessionRows.push(
+          `(${timeNano + BigInt(2_000_000_000)}, ${timeNano + BigInt(2_000_000_000)}, 'INFO', 'Agent usage', '${traceId}', '{${acctFrag}"gen_ai.operation.name": "chat", "gen_ai.conversation.id": "${chatId}", "gen_ai.usage.input_tokens": ${inputTokens}, "gen_ai.usage.output_tokens": ${outputTokens}, "gen_ai.usage.cache_read.input_tokens": ${cacheReadTokens}, "gen_ai.usage.cache_creation.input_tokens": ${cacheCreationTokens}, "gen_ai.usage.total_tokens": ${totalTokens}, "gen_ai.usage.cost": ${cost}, "gen_ai.response.model": "${model}", "gen_ai.provider.name": "${provider}", "gram.resource.urn": "${hookSource}:usage:metrics", "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", ${uaFrag}}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', '${hookSource}:usage:metrics', '${hookSource}', '${chatId}')`,
+        );
       } else {
-        // Token/cost usage row: feeds attribute_metrics_summaries (costs page)
-        // and chat_token_summaries (tokens under management).
+        // Gram-hosted surfaces (playground, gram): a generic completion row.
+        // Feeds chat_token_summaries; post-cutoff it is deliberately ABSENT
+        // from attribute_metrics_summaries (Gram-spent inference is not
+        // observed traffic), while pre-cutoff history reaches the aggregate
+        // via the old-rules backfill below — mirroring the retained Gram rows
+        // production carries from before the provenance-first cutover, which
+        // the billing reads must exclude.
         sessionRows.push(
           `(${timeNano + BigInt(2_000_000_000)}, ${timeNano + BigInt(2_000_000_000)}, 'INFO', 'Chat completion', '${traceId}', '{${acctFrag}"gen_ai.operation.name": "chat", "gen_ai.conversation.id": "${chatId}", "gen_ai.usage.input_tokens": ${inputTokens}, "gen_ai.usage.output_tokens": ${outputTokens}, "gen_ai.usage.cache_read.input_tokens": ${cacheReadTokens}, "gen_ai.usage.cache_creation.input_tokens": ${cacheCreationTokens}, "gen_ai.usage.total_tokens": ${totalTokens}, "gen_ai.usage.cost": ${cost}, "gen_ai.response.model": "${model}", "gen_ai.provider.name": "${provider}", "gram.resource.urn": "agents:chat:completion", "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", "http.response.status_code": 200, ${uaFrag}}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', 'agents:chat:completion', 'gram-mcp-gateway', '${chatId}')`,
         );
@@ -4234,12 +4250,17 @@ async function seedObservabilityData(init: {
 // MV's live-ingestion cutoff. attribute_metrics_summaries_mv skips rows before
 // 2026-06-20 (production data that old was backfilled once, out of band), so
 // seeded history from before the cutoff would never reach the costs page
-// without this. Mirrors the MV query in server/clickhouse/schema.sql
-// (attribute_metrics_summaries_mv) with the cutoff condition replaced by the
-// caller's time predicate and a project filter — keep the two in sync when
-// the MV changes. `sourceTable` must be telemetry_logs or a clone of it (the
-// query relies on its materialized columns); `timePredicate` may reference
-// attribute_metrics_cutoff_unix_nano from the WITH clause.
+// without this.
+//
+// DELIBERATELY mirrors the PRE-provenance-first MV rules (the ones
+// production's out-of-band backfill ran with), NOT the current MV: that is
+// how production's aggregate actually looks — pre-cutoff history includes
+// Gram-hosted completion rows (playground/gram hook_source) that the
+// tokens-under-management reads must exclude at read time. Seeding with the
+// same rules keeps local data an honest replica of that. `sourceTable` must
+// be telemetry_logs or a clone of it (the query relies on its materialized
+// columns); `timePredicate` may reference attribute_metrics_cutoff_unix_nano
+// from the WITH clause.
 function attributeMetricsBackfillSQL(
   projectId: string,
   sourceTable: string,

@@ -130,7 +130,7 @@ VALUES (
     unnest($2::text[]),
     unnest($3::text[])
 )
-RETURNING name, value, environment_id, created_at, updated_at
+RETURNING name, value, is_secret, environment_id, created_at, updated_at
 `
 
 type CreateEnvironmentEntriesParams struct {
@@ -151,6 +151,7 @@ func (q *Queries) CreateEnvironmentEntries(ctx context.Context, arg CreateEnviro
 		if err := rows.Scan(
 			&i.Name,
 			&i.Value,
+			&i.IsSecret,
 			&i.EnvironmentID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -378,7 +379,7 @@ func (q *Queries) GetEnvironmentForToolset(ctx context.Context, arg GetEnvironme
 }
 
 const listEnvironmentEntries = `-- name: ListEnvironmentEntries :many
-SELECT ee.name, ee.value, ee.environment_id, ee.created_at, ee.updated_at
+SELECT ee.name, ee.value, ee.is_secret, ee.environment_id, ee.created_at, ee.updated_at
 FROM environment_entries ee
 INNER JOIN environments e ON ee.environment_id = e.id
 WHERE
@@ -404,6 +405,7 @@ func (q *Queries) ListEnvironmentEntries(ctx context.Context, arg ListEnvironmen
 		if err := rows.Scan(
 			&i.Name,
 			&i.Value,
+			&i.IsSecret,
 			&i.EnvironmentID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -586,7 +588,7 @@ ON CONFLICT (environment_id, name)
 DO UPDATE SET
     value = EXCLUDED.value,
     updated_at = now()
-RETURNING name, value, environment_id, created_at, updated_at
+RETURNING name, value, is_secret, environment_id, created_at, updated_at
 `
 
 type UpsertEnvironmentEntryParams struct {
@@ -601,6 +603,7 @@ func (q *Queries) UpsertEnvironmentEntry(ctx context.Context, arg UpsertEnvironm
 	err := row.Scan(
 		&i.Name,
 		&i.Value,
+		&i.IsSecret,
 		&i.EnvironmentID,
 		&i.CreatedAt,
 		&i.UpdatedAt,

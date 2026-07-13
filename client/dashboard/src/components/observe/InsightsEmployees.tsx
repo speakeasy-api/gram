@@ -696,7 +696,14 @@ function EmployeeTable({
         : []),
       {
         key: "accounts",
-        header: "Accounts",
+        header: (
+          <span className="flex items-center gap-1">
+            Accounts
+            <SimpleTooltip tooltip="The AI provider accounts (Claude, Codex, Cursor) each employee has been seen using, labelled team or personal. Accounts are linked automatically from tool activity, so this stays blank until an employee is seen using a recognized account.">
+              <Info className="text-muted-foreground size-3 shrink-0" />
+            </SimpleTooltip>
+          </span>
+        ),
         sortable: true,
         sortLabel: "Accounts",
         // Personal-holders first (ascending), then more accounts before fewer,
