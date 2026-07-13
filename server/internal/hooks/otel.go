@@ -129,6 +129,8 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 			attr.SlogAuthUserEmail(session.UserEmail),
 		)
 
+		_, metadataErr := s.getSessionMetadata(ctx, completeMetadata.SessionID)
+
 		// Attribute the account: classify team vs personal, link it to the
 		// owning employee (directly for team accounts, via the device bridge for
 		// personal ones), and persist the account entity. Failures are
@@ -174,6 +176,17 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 			if err := s.cache.Set(ctx, sessionCacheKey(completeMetadata.SessionID), completeMetadata, 24*time.Hour); err != nil {
 				sessionLogger.ErrorContext(ctx, "Failed to store session metadata",
 					attr.SlogEvent("claude_logs_cache_set_failed"),
+					attr.SlogError(err),
+				)
+			}
+		}
+		if metadataErr != nil {
+			entries, err := s.getCachedMCPList(ctx, completeMetadata.SessionID)
+			if err == nil {
+				s.upsertShadowMCPInventoryURLs(ctx, completeMetadata.GramOrgID, completeMetadata.ProjectID, completeMetadata.SessionID, entries)
+			} else {
+				sessionLogger.WarnContext(ctx, "failed to read cached MCP list for shadow inventory capture",
+					attr.SlogEvent("claude_otel_mcp_list_cache_miss"),
 					attr.SlogError(err),
 				)
 			}

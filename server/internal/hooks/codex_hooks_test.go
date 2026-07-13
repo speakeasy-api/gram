@@ -84,7 +84,7 @@ func TestCodex_PreToolUse_ShadowMCPBlocksExternalMetaTool(t *testing.T) {
 		Source:        "local",
 		PluginName:    "",
 		Name:          "platform-logs",
-		URL:           "https://chat.speakeasy.com/mcp/speakeasy-team-62awx",
+		URL:           "https://external.example.com/mcp/speakeasy-team-62awx",
 		Command:       "",
 		Transport:     "HTTP",
 		Status:        "unknown",
@@ -108,7 +108,7 @@ func TestCodex_PreToolUse_ShadowMCPBlocksExternalMetaTool(t *testing.T) {
 	require.Equal(t, "deny", *result.Decision)
 	require.NotNil(t, result.Reason)
 	require.Contains(t, *result.Reason, "not Gram-hosted")
-	require.Contains(t, *result.Reason, "https://chat.speakeasy.com/mcp/speakeasy-team-62awx")
+	require.Contains(t, *result.Reason, "https://external.example.com/mcp/speakeasy-team-62awx")
 	require.Contains(t, *result.Reason, "Request access:")
 }
 
