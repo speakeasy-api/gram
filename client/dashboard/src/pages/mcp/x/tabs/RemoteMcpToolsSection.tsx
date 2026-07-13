@@ -75,7 +75,7 @@ export function RemoteMcpToolsSection(
       {({ reset }) => (
         <ErrorBoundary
           onReset={reset}
-          FallbackComponent={(fallbackProps) => (
+          fallbackRender={(fallbackProps) => (
             <RemoteMcpToolsErrorFallback
               {...fallbackProps}
               isIssuerGated={props.isIssuerGated}
@@ -117,13 +117,18 @@ function RemoteMcpToolsErrorFallback({
   const error = toError(rawError);
   handleError(error, { silent: true });
 
-  // A server with no authentication configured can't list its tools — the
-  // connection is rejected upstream before any tools come back. Rather than a
-  // generic failure, guide the user to set up authentication first.
+  // A server with no authentication configured usually can't list its tools —
+  // the connection is rejected upstream before any tools come back. Rather
+  // than a generic failure, guide the user to set up authentication first.
+  // Retry stays available since a non-issuer-gated server with a public
+  // upstream can also land here on a transient failure.
   if (!isIssuerGated) {
     return (
       <ToolsSectionShell>
-        <EmptyState message="This server has no authentication configured yet. Set up an identity provider so its tools can be listed.">
+        <EmptyState
+          message="This server has no authentication configured yet. Set up an identity provider so its tools can be listed."
+          onRetry={resetErrorBoundary}
+        >
           {authSettingsHref ? (
             <Button variant="secondary" asChild>
               <Link to={authSettingsHref}>
