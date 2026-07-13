@@ -241,8 +241,11 @@ WHERE remote_session_client_id = @remote_session_client_id
   AND user_session_issuer_id = @user_session_issuer_id;
 
 -- name: DeleteUserSessionIssuerAttachmentsForRemoteSessionClient :exec
-DELETE FROM remote_session_client_user_session_issuers
-WHERE remote_session_client_id = @remote_session_client_id;
+DELETE FROM remote_session_client_user_session_issuers AS link
+USING remote_session_clients AS c
+WHERE link.remote_session_client_id = c.id
+  AND c.id = @remote_session_client_id
+  AND c.project_id = @project_id;
 
 -- name: GetRemoteSessionClientForClientMetadataDocument :one
 -- Public CIMD document endpoint lookup. Intentionally NOT project-scoped: the

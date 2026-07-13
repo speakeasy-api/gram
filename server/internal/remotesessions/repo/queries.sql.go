@@ -618,12 +618,20 @@ func (q *Queries) DeleteRemoteSessionIssuer(ctx context.Context, arg DeleteRemot
 }
 
 const deleteUserSessionIssuerAttachmentsForRemoteSessionClient = `-- name: DeleteUserSessionIssuerAttachmentsForRemoteSessionClient :exec
-DELETE FROM remote_session_client_user_session_issuers
-WHERE remote_session_client_id = $1
+DELETE FROM remote_session_client_user_session_issuers AS link
+USING remote_session_clients AS c
+WHERE link.remote_session_client_id = c.id
+  AND c.id = $1
+  AND c.project_id = $2
 `
 
-func (q *Queries) DeleteUserSessionIssuerAttachmentsForRemoteSessionClient(ctx context.Context, remoteSessionClientID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteUserSessionIssuerAttachmentsForRemoteSessionClient, remoteSessionClientID)
+type DeleteUserSessionIssuerAttachmentsForRemoteSessionClientParams struct {
+	RemoteSessionClientID uuid.UUID
+	ProjectID             uuid.NullUUID
+}
+
+func (q *Queries) DeleteUserSessionIssuerAttachmentsForRemoteSessionClient(ctx context.Context, arg DeleteUserSessionIssuerAttachmentsForRemoteSessionClientParams) error {
+	_, err := q.db.Exec(ctx, deleteUserSessionIssuerAttachmentsForRemoteSessionClient, arg.RemoteSessionClientID, arg.ProjectID)
 	return err
 }
 

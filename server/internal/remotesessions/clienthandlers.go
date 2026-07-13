@@ -1016,7 +1016,13 @@ func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.De
 		return oops.E(oops.CodeUnexpected, err, "delete remote session client").LogError(ctx, logger)
 	}
 
-	if err := txRepo.DeleteUserSessionIssuerAttachmentsForRemoteSessionClient(ctx, deleted.ID); err != nil {
+	if err := txRepo.DeleteUserSessionIssuerAttachmentsForRemoteSessionClient(
+		ctx,
+		repo.DeleteUserSessionIssuerAttachmentsForRemoteSessionClientParams{
+			RemoteSessionClientID: deleted.ID,
+			ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
+		},
+	); err != nil {
 		return oops.E(
 			oops.CodeUnexpected,
 			err,
