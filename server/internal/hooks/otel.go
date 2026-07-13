@@ -323,6 +323,7 @@ func (s *Service) writeClaudeOTELLogsToClickHouse(ctx context.Context, payload *
 	}
 
 	params := make([]telemetry.LogParams, 0)
+	stagedParams := make([]telemetry.LogParams, 0)
 	correlationSessionIDs := make(map[string]struct{})
 	for _, resourceLog := range payload.ResourceLogs {
 		if resourceLog == nil {
@@ -391,12 +392,29 @@ func (s *Service) writeClaudeOTELLogsToClickHouse(ctx context.Context, payload *
 				}
 
 				timestamp, observedTimestamp := otelLogTimestamps(logRecord)
-				params = append(params, telemetry.WithOTELMetadata(telemetry.LogParams{
+				logParams := telemetry.WithOTELMetadata(telemetry.LogParams{
 					Timestamp:  timestamp,
 					ToolInfo:   claudeOTELLogToolInfo(orgID, parsedProjectID.String()),
 					UserInfo:   userInfo,
 					Attributes: logAttrs,
-				}, observedTimestamp, resourceAttrs))
+				}, observedTimestamp, resourceAttrs)
+
+				// Claude redacts user-configured MCP server/tool names to
+				// "custom" on api_request rows. Those rows park in
+				// telemetry_logs_staging until the transcript-derived
+				// attribution for their request_id arrives via the
+				// Stop/SubagentStop hooks (or the promotion timeout passes);
+				// the scheduled sweep then rewrites the names and inserts
+				// into telemetry_logs so attribute_metrics_summaries_mv
+				// aggregates the true attribution. The sweep scans staging
+				// per project and joins tuples per request id, so even
+				// sessionless redacted rows are reachable. Everything else
+				// writes through.
+				if isRedactedClaudeAPIRequest(logAttrs) {
+					stagedParams = append(stagedParams, logParams)
+					continue
+				}
+				params = append(params, logParams)
 			}
 		}
 	}
@@ -405,9 +423,24 @@ func (s *Service) writeClaudeOTELLogsToClickHouse(ctx context.Context, payload *
 		s.logger.ErrorContext(ctx, "failed to write Claude OTEL logs to ClickHouse", attr.SlogError(err))
 		return
 	}
+	if err := s.telemetryLogger.LogBulkStaging(ctx, stagedParams); err != nil {
+		s.logger.ErrorContext(ctx, "failed to write staged Claude OTEL logs to ClickHouse", attr.SlogError(err))
+		return
+	}
 	for sessionID := range correlationSessionIDs {
 		s.scheduleClaudePromptCorrelation(ctx, parsedProjectID, sessionIDToUUID(sessionID), sessionID)
 	}
+}
+
+// isRedactedClaudeAPIRequest reports whether this OTEL log row is a Claude
+// api_request whose inline MCP attribution Claude redacted to "custom" —
+// exactly the rows the staging/promotion path exists for.
+func isRedactedClaudeAPIRequest(logAttrs map[attr.Key]any) bool {
+	if stringAttr(logAttrs, attribute.Key("mcp_server.name")) != "custom" {
+		return false
+	}
+	return stringAttr(logAttrs, attribute.Key("event.name")) == "api_request" ||
+		stringAttr(logAttrs, attr.LogBodyKey) == "claude_code.api_request"
 }
 
 func shouldTriggerClaudePromptCorrelation(logAttrs map[attr.Key]any) bool {

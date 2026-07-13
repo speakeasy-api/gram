@@ -228,6 +228,14 @@ var HookNotificationData = Type("HookNotificationData", func() {
 	Attribute("message", String, "Notification message.")
 })
 
+var HookMCPAttributionEntry = Type("HookMCPAttributionEntry", func() {
+	Description("Transcript-derived MCP attribution for one model API request. Claude redacts user-configured MCP server names to 'custom' on its OTEL telemetry, but records the real names in the local session transcript; hooks ship them here so ingest can restore the redacted names.")
+	Required("request_id")
+	Attribute("request_id", String, "Provider API request identifier (e.g. Claude's req_*) the attribution applies to.")
+	Attribute("mcp_server", String, "Unredacted MCP server name from the transcript.")
+	Attribute("mcp_tool", String, "Unredacted MCP tool name from the transcript.")
+})
+
 var HookIngestData = Type("HookIngestData", func() {
 	Description("Feature-specific payloads. Hooks populate only the blocks needed for the event.")
 	Attribute("prompt", HookPromptData)
@@ -237,6 +245,7 @@ var HookIngestData = Type("HookIngestData", func() {
 	Attribute("message", HookMessageData)
 	Attribute("skill", HookSkillData)
 	Attribute("notification", HookNotificationData)
+	Attribute("mcp_attribution", ArrayOf(HookMCPAttributionEntry), "Transcript-derived per-request MCP attribution (Claude Stop/SubagentStop).")
 })
 
 var IngestHookPayload = Type("IngestHookPayload", func() {

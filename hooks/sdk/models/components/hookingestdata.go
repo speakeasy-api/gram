@@ -10,6 +10,8 @@ import (
 type HookIngestData struct {
 	// MCP feature payload.
 	Mcp *HookMCPData `json:"mcp,omitzero"`
+	// Transcript-derived per-request MCP attribution (Claude Stop/SubagentStop).
+	McpAttribution []HookMCPAttributionEntry `json:"mcp_attribution,omitzero"`
 	// Assistant/user message payload.
 	Message *HookMessageData `json:"message,omitzero"`
 	// Local agent notification payload.
@@ -40,6 +42,13 @@ func (h *HookIngestData) GetMcp() *HookMCPData {
 		return nil
 	}
 	return h.Mcp
+}
+
+func (h *HookIngestData) GetMcpAttribution() []HookMCPAttributionEntry {
+	if h == nil {
+		return nil
+	}
+	return h.McpAttribution
 }
 
 func (h *HookIngestData) GetMessage() *HookMessageData {

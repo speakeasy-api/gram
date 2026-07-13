@@ -254,7 +254,7 @@ const mcpGeneratorVersion = "9"
 //
 // The Plugin Generate Check CI workflow requires the relevant one of these two
 // constants to change whenever generate.go does.
-const hooksGeneratorVersion = "12"
+const hooksGeneratorVersion = "13"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -377,6 +377,7 @@ var ClaudeObservabilityHookEvents = []string{
 	"SessionEnd",
 	"UserPromptSubmit",
 	"Stop",
+	"SubagentStop",
 	"Notification",
 }
 
@@ -2713,6 +2714,9 @@ fi
 if type gram_hooks_enrich_claude_mcp_payload >/dev/null 2>&1; then
   provider_payload="$(gram_hooks_enrich_claude_mcp_payload "$provider_payload")"
 fi
+if type gram_hooks_enrich_claude_transcript_attribution >/dev/null 2>&1; then
+  provider_payload="$(gram_hooks_enrich_claude_transcript_attribution "$provider_payload")"
+fi
 
 # gram_hooks_emit_login_nudge injects a once-per-session UserPromptSubmit
 # additionalContext telling Claude the hooks are unauthenticated and where the
@@ -3005,6 +3009,75 @@ gram_hooks_enrich_claude_mcp_payload() {
 
   printf '%s' "$input" | jq -c --arg name "$matched_name" --arg identity "$server_identity" --arg url "$matched_url" \
     '. + {mcp_server_name: $name, server_identity: $identity, url: $url, mcp_server_url: $url}' 2>/dev/null || printf '%s' "$input"
+}
+
+# gram_hooks_claude_transcript_attribution_from reads a Claude session
+# transcript (JSONL) and prints a compact JSON array of per-request MCP
+# attribution entries. Assistant rows carry requestId plus the UNREDACTED
+# attributionMcpServer / attributionMcpTool names that Claude masks to
+# "custom" on its OTEL telemetry; the server joins these on request_id to
+# restore the redacted names on staged telemetry rows.
+gram_hooks_claude_transcript_attribution_from() {
+  local path="$1"
+  [ -n "$path" ] && [ -r "$path" ] || return 0
+  # First pass streams the JSONL line-by-line (no slurp of a potentially
+  # large transcript); the second pass slurps only the tiny filtered set to
+  # dedupe by request id (the last row for a request wins, matching how the
+  # transcript finalizes attribution). Required fields must be non-empty
+  # strings and a malformed tool coerces to "" — Stop is a blocking hook, so
+  # one malformed transcript row must skip, not poison the ingest payload.
+  jq -c 'select(.type == "assistant"
+                and ((.requestId | type) == "string" and .requestId != "")
+                and ((.attributionMcpServer | type) == "string" and .attributionMcpServer != ""))
+         | {request_id: .requestId, mcp_server: .attributionMcpServer,
+            mcp_tool: (if (.attributionMcpTool | type) == "string" then .attributionMcpTool else "" end)}' \
+    "$path" 2>/dev/null | jq -c -s 'group_by(.request_id) | map(last)' 2>/dev/null
+}
+
+gram_hooks_enrich_claude_transcript_attribution() {
+  local input="$1"
+  if ! command -v jq >/dev/null 2>&1; then
+    printf '%s' "$input"
+    return
+  fi
+  local event path
+  event=$(printf '%s' "$input" | jq -r '.hook_event_name // empty' 2>/dev/null) || event=""
+  case "$event" in
+    Stop|SessionEnd)
+      # Stop runs at every turn boundary; SessionEnd runs once at teardown.
+      # Claude writes a turn's final api_request attribution to the transcript
+      # a beat after Stop fires, so Stop reliably captures every request except
+      # that turn's last one. A later Stop re-reads the whole transcript and
+      # backfills the previous turn's straggler (extraction is idempotent), but
+      # a session's final turn has no next Stop — SessionEnd, firing after the
+      # transcript is finalized, is the backstop that recovers it.
+      path=$(printf '%s' "$input" | jq -r '.transcript_path // empty' 2>/dev/null) || path=""
+      ;;
+    SubagentStop)
+      # Subagent transcripts live in separate files; the payload points at
+      # the subagent's own transcript.
+      path=$(printf '%s' "$input" | jq -r '.agent_transcript_path // .transcript_path // empty' 2>/dev/null) || path=""
+      ;;
+    *)
+      printf '%s' "$input"
+      return
+      ;;
+  esac
+  local attribution
+  attribution="$(gram_hooks_claude_transcript_attribution_from "$path")"
+  case "$attribution" in
+    \[*)
+      ;;
+    *)
+      printf '%s' "$input"
+      return
+      ;;
+  esac
+  if [ "$attribution" = "[]" ]; then
+    printf '%s' "$input"
+    return
+  fi
+  printf '%s' "$input" | jq -c --argjson attribution "$attribution" '. + {mcp_attribution: $attribution}' 2>/dev/null || printf '%s' "$input"
 }
 `
 }
