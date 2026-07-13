@@ -79,10 +79,16 @@ type PromoteStagedTelemetryResult struct {
 	Rewritten int
 	// Remaining counts rows left in staging awaiting a tuple or the timeout.
 	Remaining int
+	// Deduped counts rows the dedup guard skipped because an earlier
+	// (crashed) pass already inserted them into telemetry_logs; this pass
+	// only finished their staging delete. Progress all the same: the
+	// workflow's drain loop keeps going when a pass deduped rows even
+	// though it inserted nothing, since the next page may be promotable.
+	Deduped int
 }
 
 func (p *PromoteStagedTelemetry) Do(ctx context.Context, args PromoteStagedTelemetryArgs) (*PromoteStagedTelemetryResult, error) {
-	result := &PromoteStagedTelemetryResult{Promoted: 0, Rewritten: 0, Remaining: 0}
+	result := &PromoteStagedTelemetryResult{Promoted: 0, Rewritten: 0, Remaining: 0, Deduped: 0}
 
 	rows, err := p.telemetry.ListStagedTelemetryLogs(ctx, args.ProjectID.String())
 	if err != nil {
@@ -200,8 +206,11 @@ func (p *PromoteStagedTelemetry) Do(ctx context.Context, args PromoteStagedTelem
 	}
 
 	// Count only rows this pass actually inserted: rows the dedup guard
-	// skipped were promoted by an earlier crashed pass, not this one.
+	// skipped were promoted by an earlier crashed pass, not this one — they
+	// surface in Deduped so the drain loop still sees the progress made by
+	// finishing their staging delete.
 	result.Promoted = len(insert)
+	result.Deduped = len(promote) - len(insert)
 	for _, row := range insert {
 		if rewrittenByID[row.ID] {
 			result.Rewritten++

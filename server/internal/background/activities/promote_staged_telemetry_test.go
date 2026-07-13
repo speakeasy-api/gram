@@ -280,19 +280,25 @@ func TestPromoteStagedTelemetry_DedupSkipsAlreadyPromotedRows(t *testing.T) {
 
 	// Run the (idempotent) pass until staging drains. The dedup guard skips
 	// the insert, so Promoted stays 0 — the row was promoted by the earlier
-	// (simulated) crashed pass. Generous budget: a pass that reaches the
-	// delete blocks on a ClickHouse lightweight-delete mutation, so one
-	// iteration can take seconds.
+	// (simulated) crashed pass — but the cleanup must surface as Deduped so
+	// the workflow drain loop counts it as progress. Generous budget: a pass
+	// that reaches the delete blocks on a ClickHouse lightweight-delete
+	// mutation, so one iteration can take seconds.
+	sawDeduped := false
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {
 		result, err := act.Do(ctx, activities.PromoteStagedTelemetryArgs{ProjectID: projectID})
 		assert.NoError(collect, err)
 		if err == nil && result != nil {
 			assert.Equal(collect, 0, result.Promoted, "dedup guard must not count skipped rows as promoted")
+			if result.Deduped > 0 {
+				sawDeduped = true
+			}
 		}
 		staged, err := queries.ListStagedTelemetryLogs(ctx, projectID.String())
 		assert.NoError(collect, err)
 		assert.Empty(collect, staged)
 	}, 20*time.Second, 50*time.Millisecond)
+	require.True(t, sawDeduped, "the pass that cleaned up the crashed promotion must report it as Deduped")
 
 	// Exactly one copy in telemetry_logs (no double insert)…
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {

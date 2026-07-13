@@ -71,11 +71,14 @@ func PromoteStagedTelemetryWorkflow(ctx workflow.Context, params PromoteStagedTe
 	})
 
 	// Drain loop: each pass handles one capped page of the project's staged
-	// rows, oldest first. A pass that promoted nothing means the head of the
-	// queue is rows still awaiting their tuples (or staging is empty) —
-	// re-scanning immediately would reread the same page, so yield until the
-	// next sweep tick. The pass budget bounds one run's work; anything
-	// beyond it surfaces on the next tick.
+	// rows, oldest first. A pass makes progress when it removed rows from
+	// staging — by inserting them (Promoted) or by finishing the delete of
+	// rows an earlier crashed pass already inserted (Deduped) — so later
+	// pages may now be reachable and the loop continues. A pass with
+	// neither means the head of the queue is rows still awaiting their
+	// tuples (or staging is empty): re-scanning immediately would reread
+	// the same page, so yield until the next sweep tick. The pass budget
+	// bounds one run's work; anything beyond it surfaces on the next tick.
 	var a *Activities
 	for range promoteStagedTelemetryMaxPasses {
 		var result activities.PromoteStagedTelemetryResult
@@ -86,7 +89,7 @@ func PromoteStagedTelemetryWorkflow(ctx workflow.Context, params PromoteStagedTe
 		).Get(ctx, &result); err != nil {
 			return fmt.Errorf("promote staged telemetry: %w", err)
 		}
-		if result.Promoted == 0 {
+		if result.Promoted == 0 && result.Deduped == 0 {
 			break
 		}
 	}
