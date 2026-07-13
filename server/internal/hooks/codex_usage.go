@@ -38,8 +38,10 @@ type codexUsageDataPoint struct {
 	OutputTokens    int64
 	CachedTokens    int64
 	ReasoningTokens int64
-	// ToolTokens is Codex's tool_token_count, stored verbatim for fidelity. It
-	// equals InputTokens + OutputTokens, so it never feeds a total downstream.
+	// ToolTokens is Codex's tool_token_count, stored verbatim for fidelity.
+	// It equals the RAW (cache-inclusive) input + output — NOT this struct's
+	// InputTokens, which is normalized to the uncached remainder — so it must
+	// never feed a total downstream.
 	ToolTokens    int64
 	TimestampNano int64
 }
@@ -125,7 +127,14 @@ func codexUsageFromRecord(rec *gen.OTELLogRecord) (codexUsageDataPoint, bool) {
 	// excludes cache reads, which land in cache_read.input_tokens). Normalize
 	// here so a codex row's input means the same thing as a Claude or Cursor
 	// row's everywhere downstream — tokens-under-management's cache exclusion
-	// depends on it.
+	// depends on it. Malformed counts are clamped into 0 <= cached <= input
+	// so bad client data can never INCREASE usage.
+	if input < 0 {
+		input = 0
+	}
+	if cached < 0 {
+		cached = 0
+	}
 	if cached > input {
 		cached = input
 	}

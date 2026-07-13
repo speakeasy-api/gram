@@ -316,10 +316,14 @@ export function TumDetailsTable({
     if (!billedCycle) return 1;
     const analyticsTotal = data?.totals?.totalTokens ?? 0;
     if (analyticsTotal === 0) return 1;
-    // A sealed zero-token cycle is a known zero: scale everything to 0 so
+    // A CLOSED zero-token cycle is a known zero: scale everything to 0 so
     // the Total row matches the card even when live analytics recomputed
-    // nonzero tokens after the seal.
-    if (billedCycle.tokens === 0) return 0;
+    // nonzero tokens after the seal. The active cycle is exempt — its card
+    // total is a live number that can trail the details query by a refetch,
+    // and a transient zero must not blank real traffic.
+    if (billedCycle.tokens === 0) {
+      return billedCycle.current ? 1 : 0;
+    }
     return billedCycle.tokens / analyticsTotal;
   }, [data, billedCycle]);
 
