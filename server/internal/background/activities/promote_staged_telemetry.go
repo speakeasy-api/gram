@@ -7,8 +7,9 @@ package activities
 // unredacted (request_id -> server/tool) tuples from the local transcript
 // into Redis. One promotion pass, per project:
 //
-//  1. Load the project's staged rows (oldest first, capped — the next
-//     scheduled pass picks up the rest).
+//  1. Load the project's staged rows (oldest first, capped — the promotion
+//     workflow's drain loop runs further passes while pages keep promoting,
+//     and the next sweep tick picks up anything beyond its budget).
 //  2. Per row: tuple in Redis -> patch attributes.mcp_server.name /
 //     attributes.mcp_tool.name; no tuple but row older than the timeout ->
 //     promote verbatim (stays "custom" — today's behavior); otherwise leave

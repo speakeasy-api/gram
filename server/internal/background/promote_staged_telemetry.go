@@ -7,9 +7,12 @@ package background
 // then a promotion pass rewrites the names and moves them into
 // telemetry_logs. The sweep schedule below is the sole trigger: every two
 // minutes it lists the projects with staged rows and fans out one promotion
-// pass per project. Passes are serialized per project by the promotion
-// workflow ID (the activity's read-check-insert dedup guard assumes a single
-// writer), and the schedule's overlap policy keeps sweeps from stacking.
+// workflow per project, each of which drains page after page (up to
+// promoteStagedTelemetryMaxPasses) rather than one page per tick — so a
+// backlogged project cannot sit unscanned until its Redis tuples expire.
+// Passes are serialized per project by the promotion workflow ID (the
+// activity's read-check-insert dedup guard assumes a single writer), and the
+// schedule's overlap policy keeps sweeps from stacking.
 
 import (
 	"context"
@@ -28,10 +31,20 @@ import (
 )
 
 const (
-	// Comfortably above the activity's worst-case retry window (~195s with
-	// three 60s attempts and backoff) so a slow final attempt is not cut off
-	// by the workflow deadline.
-	promoteStagedTelemetryWorkflowRunTimeout = 4 * time.Minute
+	// promoteStagedTelemetryMaxPasses bounds how many capped pages (see
+	// stagedTelemetryRowsLimit) one workflow run drains before yielding to
+	// the next sweep tick. It multiplies a backlogged project's drain rate
+	// well past any plausible staging inflow, so queued rows are scanned
+	// long before their attribution tuples expire in Redis, while still
+	// bounding one run's work.
+	promoteStagedTelemetryMaxPasses = 10
+
+	// Sized for a healthy full drain (promoteStagedTelemetryMaxPasses pages
+	// at seconds each) plus one activity execution's worst-case retry window
+	// (~195s with three 60s attempts and backoff). A pathological run that
+	// still overshoots is cut off safely: passes are idempotent and the next
+	// sweep tick resumes where it stopped.
+	promoteStagedTelemetryWorkflowRunTimeout = 10 * time.Minute
 
 	stagedTelemetrySweepScheduleID = "v1:staged-telemetry-sweep-schedule"
 	stagedTelemetrySweepWorkflowID = stagedTelemetrySweepScheduleID + "/scheduled"
@@ -57,14 +70,25 @@ func PromoteStagedTelemetryWorkflow(ctx workflow.Context, params PromoteStagedTe
 		},
 	})
 
+	// Drain loop: each pass handles one capped page of the project's staged
+	// rows, oldest first. A pass that promoted nothing means the head of the
+	// queue is rows still awaiting their tuples (or staging is empty) —
+	// re-scanning immediately would reread the same page, so yield until the
+	// next sweep tick. The pass budget bounds one run's work; anything
+	// beyond it surfaces on the next tick.
 	var a *Activities
-	var result activities.PromoteStagedTelemetryResult
-	if err := workflow.ExecuteActivity(
-		ctx,
-		a.PromoteStagedTelemetry,
-		activities.PromoteStagedTelemetryArgs(params),
-	).Get(ctx, &result); err != nil {
-		return fmt.Errorf("promote staged telemetry: %w", err)
+	for range promoteStagedTelemetryMaxPasses {
+		var result activities.PromoteStagedTelemetryResult
+		if err := workflow.ExecuteActivity(
+			ctx,
+			a.PromoteStagedTelemetry,
+			activities.PromoteStagedTelemetryArgs(params),
+		).Get(ctx, &result); err != nil {
+			return fmt.Errorf("promote staged telemetry: %w", err)
+		}
+		if result.Promoted == 0 {
+			break
+		}
 	}
 	return nil
 }

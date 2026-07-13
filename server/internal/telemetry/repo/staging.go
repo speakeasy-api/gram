@@ -53,9 +53,11 @@ type StagedTelemetryLogRow struct {
 }
 
 // stagedTelemetryRowsLimit bounds one promotion pass's batch so a large
-// backlog cannot outlast the activity timeout. Oldest rows come first, so
-// anything beyond the cap is picked up by the next scheduled pass (every 2
-// minutes) rather than starved.
+// backlog cannot outlast the activity timeout. Oldest rows come first, and
+// the promotion workflow drains page after page within one run (see
+// promoteStagedTelemetryMaxPasses in the background package), so a backlog
+// deeper than one page is scanned long before tuples expire rather than
+// waiting one page per sweep tick.
 const stagedTelemetryRowsLimit = 1000
 
 // InsertTelemetryLogsStaging inserts telemetry log records into the staging
