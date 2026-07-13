@@ -16,6 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { CHART_COLORS, OTHER_COLOR, type StackMode } from "./breakdown-options";
+import { ToggleButton } from "./toggle-button";
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ChartTooltip, Legend);
 
@@ -190,32 +191,6 @@ function stacksByTokenType(
     label: t.label,
     byBucket: bucketPointValues(points, granularity, t.value),
   })).filter((s) => [...s.byBucket.values()].some((v) => v > 0));
-}
-
-function ToggleButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}): JSX.Element {
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      onClick={onClick}
-      className={cn(
-        "rounded px-2 py-0.5 text-xs transition-colors",
-        active
-          ? "bg-muted text-foreground font-medium"
-          : "text-muted-foreground hover:text-foreground",
-      )}
-    >
-      {children}
-    </button>
-  );
 }
 
 // The header info copy for the panel.

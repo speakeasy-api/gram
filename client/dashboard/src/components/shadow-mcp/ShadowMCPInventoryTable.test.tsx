@@ -460,6 +460,27 @@ function mockShadowMCPInventory({
   });
 }
 
+// The action sheet enables its submit button only after an effect seeds the
+// selected policy IDs, so clicking as soon as the sheet opens races that
+// effect's re-render (flaky under CI load). Wait for the enabled button.
+async function clickEnabledSheetSubmit(name: string) {
+  await waitFor(() => {
+    expect(
+      (
+        within(screen.getByTestId("shadow-mcp-action-sheet")).getByRole(
+          "button",
+          { name },
+        ) as HTMLButtonElement
+      ).disabled,
+    ).toBe(false);
+  });
+  fireEvent.click(
+    within(screen.getByTestId("shadow-mcp-action-sheet")).getByRole("button", {
+      name,
+    }),
+  );
+}
+
 describe("ShadowMCPInventoryTable", () => {
   beforeEach(() => {
     for (const mock of Object.values(mocks)) {
@@ -900,22 +921,7 @@ describe("ShadowMCPInventoryTable", () => {
         screen.getByRole("heading", { name: "Add Allow Rule" }),
       ).toBeTruthy();
     });
-    await waitFor(() => {
-      expect(
-        (
-          within(screen.getByTestId("shadow-mcp-action-sheet")).getByRole(
-            "button",
-            { name: "Add Allow Rule" },
-          ) as HTMLButtonElement
-        ).disabled,
-      ).toBe(false);
-    });
-    fireEvent.click(
-      within(screen.getByTestId("shadow-mcp-action-sheet")).getByRole(
-        "button",
-        { name: "Add Allow Rule" },
-      ),
-    );
+    await clickEnabledSheetSubmit("Add Allow Rule");
 
     await waitFor(() => {
       expect(upsertPolicyBypass).toHaveBeenCalledWith({
@@ -1100,11 +1106,7 @@ describe("ShadowMCPInventoryTable", () => {
         screen.getByRole("heading", { name: "Add Allow Rule" }),
       ).toBeTruthy();
     });
-    const actionSheet = screen.getByTestId("shadow-mcp-action-sheet");
-    const submitButton = within(actionSheet).getByRole("button", {
-      name: "Add Allow Rule",
-    });
-    fireEvent.click(submitButton);
+    await clickEnabledSheetSubmit("Add Allow Rule");
 
     await waitFor(() => {
       expect(allowServer).toHaveBeenCalled();
@@ -1162,12 +1164,7 @@ describe("ShadowMCPInventoryTable", () => {
         screen.getByRole("heading", { name: "Review Request" }),
       ).toBeTruthy();
     });
-    fireEvent.click(
-      within(screen.getByTestId("shadow-mcp-action-sheet")).getByRole(
-        "button",
-        { name: "Approve Request" },
-      ),
-    );
+    await clickEnabledSheetSubmit("Approve Request");
 
     await waitFor(() => {
       expect(resolveInventoryRequest).toHaveBeenCalledWith({
