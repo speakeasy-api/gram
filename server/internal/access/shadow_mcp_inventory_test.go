@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
@@ -17,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	telemetryRepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -119,19 +119,14 @@ func TestService_ListShadowMCPInventory_ComposesInventoryUsageAndPolicyState(t *
 		RequestedAt:    now.Add(-4 * time.Minute),
 	})
 
-	var result *gen.ListShadowMCPInventoryResult
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		var err error
-		result, err = ti.service.ListShadowMCPInventory(ctx, &gen.ListShadowMCPInventoryPayload{
-			ProjectID: projectID,
-			Limit:     10,
-		})
-		require.NoError(c, err)
-		require.Len(c, result.Servers, 2)
-		speakeasy := shadowMCPInventoryServerByURL(result.Servers, "https://mcp.speakeasy.com/mcp")
-		require.NotNil(c, speakeasy)
-		require.Equal(c, 3, speakeasy.ObservedUseCount)
-	}, 5*time.Second, 100*time.Millisecond)
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	result, err := ti.service.ListShadowMCPInventory(ctx, &gen.ListShadowMCPInventoryPayload{
+		ProjectID: projectID,
+		Limit:     10,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Servers, 2)
 
 	require.Nil(t, result.NextCursor)
 	require.Len(t, result.Servers, 2)
@@ -199,16 +194,14 @@ func TestService_ListShadowMCPInventory_CursorPagination(t *testing.T) {
 		}))
 	}
 
-	var firstPage *gen.ListShadowMCPInventoryResult
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		var err error
-		firstPage, err = ti.service.ListShadowMCPInventory(ctx, &gen.ListShadowMCPInventoryPayload{
-			ProjectID: projectID,
-			Limit:     2,
-		})
-		require.NoError(c, err)
-		require.Len(c, firstPage.Servers, 2)
-	}, 5*time.Second, 100*time.Millisecond)
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	firstPage, err := ti.service.ListShadowMCPInventory(ctx, &gen.ListShadowMCPInventoryPayload{
+		ProjectID: projectID,
+		Limit:     2,
+	})
+	require.NoError(t, err)
+	require.Len(t, firstPage.Servers, 2)
 	require.NotNil(t, firstPage.NextCursor)
 
 	secondPage, err := ti.service.ListShadowMCPInventory(ctx, &gen.ListShadowMCPInventoryPayload{
@@ -243,16 +236,14 @@ func TestService_ListShadowMCPInventory_ServerNameIsOptional(t *testing.T) {
 		},
 	}))
 
-	var result *gen.ListShadowMCPInventoryResult
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		var err error
-		result, err = ti.service.ListShadowMCPInventory(ctx, &gen.ListShadowMCPInventoryPayload{
-			ProjectID: projectID,
-			Limit:     10,
-		})
-		require.NoError(c, err)
-		require.Len(c, result.Servers, 1)
-	}, 5*time.Second, 100*time.Millisecond)
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	result, err := ti.service.ListShadowMCPInventory(ctx, &gen.ListShadowMCPInventoryPayload{
+		ProjectID: projectID,
+		Limit:     10,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Servers, 1)
 
 	require.Nil(t, result.Servers[0].ServerName)
 }
