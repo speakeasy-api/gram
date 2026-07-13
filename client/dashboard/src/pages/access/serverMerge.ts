@@ -15,7 +15,7 @@
  * is the only place that decides which id a mcp_servers row contributes.
  */
 
-export interface ServerTool {
+interface ServerTool {
   id: string;
   name: string;
   type: string;
