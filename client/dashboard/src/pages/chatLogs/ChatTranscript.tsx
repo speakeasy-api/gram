@@ -32,7 +32,7 @@ import {
   DropdownMenuTrigger,
   Icon,
 } from "@speakeasy-api/moonshine";
-import { MessageContent, type SectionMatch, ToolUI } from "@gram-ai/elements";
+import { MessageContent, type SectionMatch, ToolUI } from "@/elements";
 import type { ClaudeToolUsage } from "@gram/client/models/components/claudetoolusage.js";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import {

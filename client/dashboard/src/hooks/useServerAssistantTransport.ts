@@ -6,7 +6,7 @@ import { useOrganization } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { isNotFoundError } from "@/lib/route-errors";
 import { createServerAssistantTransport } from "@/lib/ServerAssistantTransport";
-import type { ElementsTransportFactory } from "@gram-ai/elements";
+import type { ElementsTransportFactory } from "@/elements";
 
 export interface UseServerAssistantTransportResult {
   /**

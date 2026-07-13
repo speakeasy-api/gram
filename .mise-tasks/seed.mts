@@ -79,7 +79,6 @@ type Asset = {
 } & (
   | ({
       type: "openapi";
-      storybookDefault?: boolean;
     } & ({ filename: string } | { url: string }))
   | {
       type: "functions";
@@ -109,7 +108,6 @@ const SEED_PROJECTS: {
         type: "openapi",
         slug: "ecommerce-api",
         url: "https://gram-mcp-storybook.vercel.app/openapi",
-        storybookDefault: true,
       },
       {
         type: "openapi",
@@ -336,12 +334,6 @@ async function seed() {
 
       // Collect tool URNs for observability seeding
       projectToolUrns[projectSlug].push(...toolset.toolUrns);
-
-      if (asset.type === "openapi" && asset.storybookDefault) {
-        await $`mise set --file mise.local.toml \
-        VITE_GRAM_ELEMENTS_STORYBOOK_PROJECT_SLUG=${projectSlug} \
-        VITE_GRAM_ELEMENTS_STORYBOOK_MCP_URL=${toolset.mcpURL}`;
-      }
     }
   }
 

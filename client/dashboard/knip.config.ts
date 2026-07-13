@@ -14,6 +14,9 @@ const config: KnipConfig = {
     // re-export). No import sites by design.
     "src/lib.d.ts",
     "src/sdk/**/*",
+    // Inlined Gram Elements library (formerly @gram-ai/elements). Its public
+    // surface is wider than what the dashboard consumes today.
+    "src/elements/**/*",
   ],
   ignoreDependencies: [
     // Consumed via CSS @import inside @speakeasy-api/moonshine; knip's

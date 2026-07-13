@@ -57,7 +57,7 @@ import {
   TimeRangePicker,
   type DateRangePreset,
   getPresetRange,
-} from "@gram-ai/elements";
+} from "@/elements";
 import { useSlugs } from "@/contexts/Sdk";
 import { formatDateRangeLabel } from "@/components/observe/useDateRangeFilter";
 import {

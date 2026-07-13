@@ -9,7 +9,7 @@ import {
 import { Link, Outlet, useNavigate, useParams } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { useAssistantRuntime, useAssistantState } from "@assistant-ui/react";
-import { ActiveChatTitle, Chat } from "@gram-ai/elements";
+import { ActiveChatTitle, Chat } from "@/elements";
 import {
   ChevronLeft,
   Home,

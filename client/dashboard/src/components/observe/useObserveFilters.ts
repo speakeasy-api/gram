@@ -1,4 +1,4 @@
-import { getPresetRange, type DateRangePreset } from "@gram-ai/elements";
+import { getPresetRange, type DateRangePreset } from "@/elements";
 import { telemetryGetHooksSummary } from "@gram/client/funcs/telemetryGetHooksSummary";
 import type { TypesToInclude } from "@gram/client/models/components/gethookssummarypayload.js";
 import { useCallback, useMemo } from "react";

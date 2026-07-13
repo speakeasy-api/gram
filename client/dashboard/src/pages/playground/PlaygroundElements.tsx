@@ -18,7 +18,7 @@ import {
   ChatHistory,
   GramElementsProvider,
   type Model,
-} from "@gram-ai/elements";
+} from "@/elements";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate.js";
 import { useGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
 import { useListEnvironments } from "@gram/client/react-query/listEnvironments.js";

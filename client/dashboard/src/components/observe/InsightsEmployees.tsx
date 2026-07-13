@@ -39,7 +39,7 @@ import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import { useSyncedAgentUsers } from "@gram/client/react-query/syncedAgentUsers.js";
 import { unwrapAsync } from "@gram/client/types/fp";
-import { type DateRangePreset, getPresetRange } from "@gram-ai/elements";
+import { type DateRangePreset, getPresetRange } from "@/elements";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Info } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";

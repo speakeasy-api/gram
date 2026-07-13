@@ -23,11 +23,7 @@ import { useSlugs } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { cn, getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
-import {
-  Chat,
-  GramElementsProvider,
-  type ElementsConfig,
-} from "@gram-ai/elements";
+import { Chat, GramElementsProvider, type ElementsConfig } from "@/elements";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate";
 import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";

@@ -4,12 +4,11 @@ description: Use the Playwright MCP browser to capture a demo (screenshots or a 
 metadata:
   relevant_files:
     - "client/dashboard/**"
-    - "elements/**"
 ---
 
 # Demos for frontend PRs
 
-When a PR contains a user-visible frontend change (dropdowns, dialogs, toolbars, filters, any interaction behavior in `client/dashboard` or `elements`), capture a short demo of the change working and post it as a PR comment — proactively, without being asked. It shows reviewers the behavior instantly in a way a text description of click sequences cannot.
+When a PR contains a user-visible frontend change (dropdowns, dialogs, toolbars, filters, any interaction behavior in `client/dashboard`), capture a short demo of the change working and post it as a PR comment — proactively, without being asked. It shows reviewers the behavior instantly in a way a text description of click sequences cannot.
 
 Demo **only the changed interaction**. Do not tour the whole page.
 

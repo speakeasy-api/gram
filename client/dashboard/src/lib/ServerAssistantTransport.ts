@@ -1,7 +1,7 @@
 import { assistantsSendMessage } from "@gram/client/funcs/assistantsSendMessage";
 import { chatLoad } from "@gram/client/funcs/chatLoad";
 import type { GramCore } from "@gram/client/core";
-import { sleep, type ElementsTransportContext } from "@gram-ai/elements";
+import { sleep, type ElementsTransportContext } from "@/elements";
 import {
   type ChatTransport,
   createUIMessageStream,

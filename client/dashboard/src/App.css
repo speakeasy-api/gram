@@ -1,10 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "tw-shimmer";
-/* Scan the elements package so Tailwind generates the utility classes its
- * compiled components use (e.g. the dark slate JSON viewer) — they live in
- * node_modules and aren't picked up by the default dashboard-src scan. */
-@source "../node_modules/@gram-ai/elements/dist";
 @reference "../node_modules/@speakeasy-api/moonshine/src/global.css";
 
 @custom-variant dark (&:where(.dark, .dark *));
