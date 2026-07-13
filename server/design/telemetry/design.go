@@ -335,7 +335,7 @@ var _ = Service("telemetry", func() {
 	Method("queryTumDetails", func() {
 		Description("Org-scoped daily usage details for the billing page, computed in one pass: the tokens-under-management daily token-type split (observed agent traffic; cache reads excluded) and per-dimension breakdowns over the same population.")
 
-		// Org-scoped like queryRiskTokens; project_id optionally narrows the
+		// Org-scoped like telemetry.query; project_id optionally narrows the
 		// slice to one of the caller's projects.
 		Security(security.Session)
 
