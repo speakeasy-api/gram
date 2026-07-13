@@ -126,9 +126,27 @@ func IsModelAllowed(model string) bool {
 	return allowList[model]
 }
 
-// ResolveModel returns the model as-is if it's in the allowlist.
-// Otherwise, it returns the first allowed model (sorted alphabetically)
-// from the same provider. Returns empty string if no fallback is found.
+// providerFallbacks pins the model an unknown or de-listed model resolves to,
+// per provider. Without this, ResolveModel's alphabetical fallback silently
+// upgrades callers to whatever sorts first — for Anthropic that is the
+// premium-priced claude-fable-5. Each entry names the provider's
+// standard-cost workhorse; keep it allowlisted (enforced by tests).
+var providerFallbacks = map[string]string{
+	"anthropic":  "anthropic/claude-sonnet-5",
+	"openai":     "openai/gpt-5.6-terra",
+	"google":     "google/gemini-3.5-flash",
+	"deepseek":   "deepseek/deepseek-v4-flash",
+	"meta-llama": "meta-llama/llama-4-maverick",
+	"x-ai":       "x-ai/grok-4.3",
+	"qwen":       "qwen/qwen3.7-max",
+	"moonshotai": "moonshotai/kimi-k2.6",
+	"mistralai":  "mistralai/mistral-medium-3-5",
+}
+
+// ResolveModel returns the model as-is if it's in the allowlist. Otherwise, it
+// returns the provider's pinned fallback from providerFallbacks, or — for
+// providers without a pin — the first allowed model sorted alphabetically.
+// Returns empty string if no fallback is found.
 func ResolveModel(model string) string {
 	if allowList[model] {
 		return model
@@ -137,6 +155,10 @@ func ResolveModel(model string) string {
 	provider, _, ok := strings.Cut(model, "/")
 	if !ok || provider == "" {
 		return ""
+	}
+
+	if fallback := providerFallbacks[provider]; fallback != "" && allowList[fallback] {
+		return fallback
 	}
 
 	prefix := provider + "/"
