@@ -22,6 +22,7 @@ import { accessListScopes } from "../funcs/accessListScopes.js";
 import { accessListShadowMCPAccessRules } from "../funcs/accessListShadowMCPAccessRules.js";
 import { accessListShadowMCPApprovalRequests } from "../funcs/accessListShadowMCPApprovalRequests.js";
 import { accessListShadowMCPInventory } from "../funcs/accessListShadowMCPInventory.js";
+import { accessListShadowMCPInventoryUsers } from "../funcs/accessListShadowMCPInventoryUsers.js";
 import { accessResolveChallenge } from "../funcs/accessResolveChallenge.js";
 import { accessUpdateMemberRoles } from "../funcs/accessUpdateMemberRoles.js";
 import { accessUpdateRole } from "../funcs/accessUpdateRole.js";
@@ -37,6 +38,7 @@ import { ListScopesResult } from "../models/components/listscopesresult.js";
 import { ListShadowMCPAccessRulesResult } from "../models/components/listshadowmcpaccessrulesresult.js";
 import { ListShadowMCPApprovalRequestsResult } from "../models/components/listshadowmcpapprovalrequestsresult.js";
 import { ListShadowMCPInventoryResult } from "../models/components/listshadowmcpinventoryresult.js";
+import { ListShadowMCPInventoryUsersResult } from "../models/components/listshadowmcpinventoryusersresult.js";
 import { ListUserGrantsResult } from "../models/components/listusergrantsresult.js";
 import { RBACStatus } from "../models/components/rbacstatus.js";
 import { ResolveChallengesResult } from "../models/components/resolvechallengesresult.js";
@@ -124,6 +126,10 @@ import {
   ListShadowMCPInventoryRequest,
   ListShadowMCPInventorySecurity,
 } from "../models/operations/listshadowmcpinventory.js";
+import {
+  ListShadowMCPInventoryUsersRequest,
+  ListShadowMCPInventoryUsersSecurity,
+} from "../models/operations/listshadowmcpinventoryusers.js";
 import {
   ResolveChallengeRequest,
   ResolveChallengeSecurity,
@@ -478,6 +484,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListShadowMCPInventoryResult> {
     return unwrapAsync(accessListShadowMCPInventory(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listShadowMCPInventoryUsers access
+   *
+   * @remarks
+   * List users with observed telemetry usage for one project-scoped Shadow MCP server URL.
+   */
+  async listShadowMCPInventoryUsers(
+    request: ListShadowMCPInventoryUsersRequest,
+    security?: ListShadowMCPInventoryUsersSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListShadowMCPInventoryUsersResult> {
+    return unwrapAsync(accessListShadowMCPInventoryUsers(
       this,
       request,
       security,

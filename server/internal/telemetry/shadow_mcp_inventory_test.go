@@ -350,11 +350,76 @@ func TestListShadowMCPInventoryUsers_FromTelemetry(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, users, 2)
 	require.Equal(t, "ada@example.com", users[0].UserKey)
+	require.Equal(t, "ada@example.com", users[0].UserEmail)
 	require.EqualValues(t, 2, users[0].CallCount)
 	require.Equal(t, base.Add(time.Minute), users[0].LastCalled)
 	require.Equal(t, "grace@example.com", users[1].UserKey)
+	require.Equal(t, "grace@example.com", users[1].UserEmail)
 	require.EqualValues(t, 1, users[1].CallCount)
 	require.Equal(t, base.Add(2*time.Minute), users[1].LastCalled)
+}
+
+func TestListShadowMCPInventoryUsers_Paginates(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	projectID := uuid.NewString()
+	base := time.Date(2026, 6, 29, 14, 30, 0, 0, time.UTC)
+
+	insertHistoricalShadowMCPCall(t, ctx, ti, historicalShadowMCPCall{
+		ProjectID:  projectID,
+		ServerURL:  "https://mcp.speakeasy.com/mcp?token=secret",
+		ServerName: "Speakeasy",
+		UserEmail:  "ada@example.com",
+		ObservedAt: base,
+	})
+	insertHistoricalShadowMCPCall(t, ctx, ti, historicalShadowMCPCall{
+		ProjectID:  projectID,
+		ServerURL:  "https://mcp.speakeasy.com/mcp",
+		ServerName: "Speakeasy",
+		UserEmail:  "ada@example.com",
+		ObservedAt: base.Add(time.Minute),
+	})
+	insertHistoricalShadowMCPCall(t, ctx, ti, historicalShadowMCPCall{
+		ProjectID:  projectID,
+		ServerURL:  "https://mcp.speakeasy.com/mcp",
+		ServerName: "Speakeasy",
+		UserEmail:  "grace@example.com",
+		ObservedAt: base.Add(2 * time.Minute),
+	})
+	insertHistoricalShadowMCPCall(t, ctx, ti, historicalShadowMCPCall{
+		ProjectID:  projectID,
+		ServerURL:  "https://mcp.speakeasy.com/mcp",
+		ServerName: "Speakeasy",
+		UserEmail:  "linus@example.com",
+		ObservedAt: base.Add(3 * time.Minute),
+	})
+
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	firstPage, err := ti.chClient.ListShadowMCPInventoryUsers(ctx, telemetryRepo.ListShadowMCPInventoryUsersParams{
+		GramProjectID:      projectID,
+		CanonicalServerURL: "https://mcp.speakeasy.com/mcp",
+		Limit:              2,
+	})
+	require.NoError(t, err)
+	require.Len(t, firstPage, 2)
+
+	require.Equal(t, "ada@example.com", firstPage[0].UserKey)
+	require.Equal(t, "linus@example.com", firstPage[1].UserKey)
+	cursor, err := telemetryRepo.EncodeShadowMCPInventoryUserCursor(firstPage[1])
+	require.NoError(t, err)
+
+	secondPage, err := ti.chClient.ListShadowMCPInventoryUsers(ctx, telemetryRepo.ListShadowMCPInventoryUsersParams{
+		GramProjectID:      projectID,
+		CanonicalServerURL: "https://mcp.speakeasy.com/mcp",
+		Limit:              2,
+		Cursor:             cursor,
+	})
+	require.NoError(t, err)
+	require.Len(t, secondPage, 1)
+
+	require.Equal(t, "grace@example.com", secondPage[0].UserKey)
 }
 
 func TestLoggerUpsertShadowMCPInventoryURLs(t *testing.T) {
