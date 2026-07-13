@@ -12,6 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -622,6 +624,71 @@ func TestService_DeleteShadowMCPInventoryPolicyBypass_RevokesApprovedRequestAndA
 	require.Equal(t, 1, state.RequestCount)
 	require.NotNil(t, state.LatestRequest)
 	require.Equal(t, requestID, state.LatestRequest.ID)
+}
+
+func TestService_DeleteShadowMCPInventoryPolicyBypass_AuditsRevokedApprovedRequest(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	projectID := authCtx.ProjectID.String()
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+
+	serverURL := "https://mcp.example.com/mcp"
+	policy := createShadowMCPInventoryPolicy(t, ctx, ti, shadowMCPInventoryPolicyInput{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID,
+		Name:           "Block Shadow MCP",
+		Action:         "block",
+	})
+	requestID := createShadowMCPInventoryBypassRequest(t, ctx, ti, shadowMCPInventoryBypassRequestInput{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID,
+		PolicyID:       policy.ID.String(),
+		ServerURL:      serverURL,
+		RequesterID:    authCtx.UserID,
+		RequesterEmail: "alex@example.com",
+	})
+	_, err := riskrepo.New(ti.conn).UpdateRiskPolicyBypassRequestStatus(ctx, riskrepo.UpdateRiskPolicyBypassRequestStatusParams{
+		Status:               shadowMCPInventoryBypassStatusApproved,
+		DecidedBy:            conv.ToPGText(authCtx.UserID),
+		GrantedPrincipalUrns: []string{authz.AllUsersPrincipal().String()},
+		ID:                   uuid.MustParse(requestID),
+		ProjectID:            uuid.MustParse(projectID),
+	})
+	require.NoError(t, err)
+	grantShadowMCPInventoryBypass(t, ctx, ti, authCtx.ActiveOrganizationID, policy.ID.String(), serverURL)
+
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskPolicyBypassRequestRevoke)
+	require.NoError(t, err)
+
+	_, err = ti.service.DeleteShadowMCPInventoryPolicyBypass(ctx, &gen.DeleteShadowMCPInventoryPolicyBypassPayload{
+		ProjectID: projectID,
+		ServerURL: serverURL,
+	})
+	require.NoError(t, err)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskPolicyBypassRequestRevoke)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
+
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionRiskPolicyBypassRequestRevoke)
+	require.NoError(t, err)
+	require.Equal(t, policy.Name, record.SubjectDisplay)
+
+	metadata, err := audittest.DecodeAuditData(record.Metadata)
+	require.NoError(t, err)
+	require.Equal(t, requestID, metadata["request_id"])
+	require.Equal(t, shadowMCPInventoryBypassStatusApproved, metadata["previous_status"])
+	require.Equal(t, shadowMCPInventoryBypassStatusRevoked, metadata["current_status"])
+
+	beforeSnapshot, err := audittest.DecodeAuditData(record.BeforeSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, shadowMCPInventoryBypassStatusApproved, beforeSnapshot["status"])
+
+	afterSnapshot, err := audittest.DecodeAuditData(record.AfterSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, shadowMCPInventoryBypassStatusRevoked, afterSnapshot["status"])
 }
 
 func TestService_DeleteShadowMCPInventoryPolicyBypass_RemovesStaleURLGrants(t *testing.T) {

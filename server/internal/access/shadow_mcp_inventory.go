@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -216,7 +217,7 @@ func (s *Service) DeleteShadowMCPInventoryPolicyBypass(ctx context.Context, payl
 	if _, err := s.replaceShadowMCPInventoryURLBypassGrants(ctx, dbtx, ac.ActiveOrganizationID, projectID, inventoryURL.CanonicalURL, nil); err != nil {
 		return nil, err
 	}
-	if err := s.revokeShadowMCPInventoryURLRequests(ctx, dbtx, projectID, inventoryURL.CanonicalURL, ac.UserID); err != nil {
+	if err := s.revokeShadowMCPInventoryURLRequests(ctx, dbtx, ac, projectID, inventoryURL.CanonicalURL); err != nil {
 		return nil, err
 	}
 
@@ -549,17 +550,17 @@ func (s *Service) resolveShadowMCPInventoryURLRequests(
 func (s *Service) revokeShadowMCPInventoryURLRequests(
 	ctx context.Context,
 	db riskrepo.DBTX,
+	authCtx *contextvalues.AuthContext,
 	projectID uuid.UUID,
 	canonicalURL string,
-	revokedBy string,
 ) error {
 	policies, err := s.shadowMCPInventoryProjectPolicies(ctx, db, projectID)
 	if err != nil {
 		return err
 	}
-	policyIDs := make(map[string]struct{}, len(policies))
+	policiesByID := make(map[string]riskrepo.RiskPolicy, len(policies))
 	for _, policy := range policies {
-		policyIDs[policy.ID.String()] = struct{}{}
+		policiesByID[policy.ID.String()] = policy
 	}
 
 	q := riskrepo.New(db)
@@ -573,7 +574,8 @@ func (s *Service) revokeShadowMCPInventoryURLRequests(
 	}
 
 	for _, request := range requests {
-		if _, ok := policyIDs[request.RiskPolicyID.String()]; !ok {
+		policy, ok := policiesByID[request.RiskPolicyID.String()]
+		if !ok {
 			continue
 		}
 		if conv.FromPGTextOrEmpty[string](request.TargetKind) != shadowMCPInventoryBypassTargetKind {
@@ -586,17 +588,62 @@ func (s *Service) revokeShadowMCPInventoryURLRequests(
 		if dimensions[authz.SelectorKeyServerURL] != canonicalURL {
 			continue
 		}
-		if _, err := q.UpdateRiskPolicyBypassRequestStatus(ctx, riskrepo.UpdateRiskPolicyBypassRequestStatusParams{
+		updated, err := q.UpdateRiskPolicyBypassRequestStatus(ctx, riskrepo.UpdateRiskPolicyBypassRequestStatusParams{
 			Status:               shadowMCPInventoryBypassStatusRevoked,
-			DecidedBy:            conv.ToPGText(revokedBy),
+			DecidedBy:            conv.ToPGText(authCtx.UserID),
 			GrantedPrincipalUrns: []string{},
 			ID:                   request.ID,
 			ProjectID:            projectID,
-		}); err != nil {
+		})
+		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "revoke shadow mcp inventory request").LogError(ctx, s.logger)
+		}
+
+		if err := s.audit.LogRiskPolicyBypassRequestRevoke(ctx, db, audit.LogRiskPolicyBypassRequestEvent{
+			OrganizationID:                    authCtx.ActiveOrganizationID,
+			ProjectID:                         projectID,
+			Actor:                             urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName:                  authCtx.Email,
+			ActorSlug:                         nil,
+			RiskPolicyID:                      request.RiskPolicyID,
+			RiskPolicyName:                    policy.Name,
+			PolicyBypassRequestSnapshotBefore: shadowMCPInventoryBypassRequestAuditSnapshot(request, dimensions),
+			PolicyBypassRequestSnapshotAfter:  shadowMCPInventoryBypassRequestAuditSnapshot(updated, dimensions),
+			Metadata: &audit.RiskPolicyBypassRequestMetadata{
+				RequestID:            updated.ID.String(),
+				TargetKind:           conv.FromPGTextOrEmpty[string](updated.TargetKind),
+				TargetKey:            conv.FromPGTextOrEmpty[string](updated.TargetKey),
+				TargetDimensions:     maps.Clone(dimensions),
+				RequesterUserID:      updated.RequesterUserID,
+				GrantedPrincipalURNs: slices.Clone(updated.GrantedPrincipalUrns),
+				PreviousStatus:       request.Status,
+				CurrentStatus:        updated.Status,
+			},
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "log shadow mcp inventory request revocation").LogError(ctx, s.logger)
 		}
 	}
 	return nil
+}
+
+func shadowMCPInventoryBypassRequestAuditSnapshot(request riskrepo.RiskPolicyBypassRequest, dimensions map[string]string) *audit.RiskPolicyBypassRequestSnapshot {
+	return &audit.RiskPolicyBypassRequestSnapshot{
+		ID:                   request.ID.String(),
+		PolicyID:             request.RiskPolicyID.String(),
+		TargetKind:           conv.FromPGText[string](request.TargetKind),
+		TargetLabel:          conv.FromPGText[string](request.TargetLabel),
+		TargetKey:            conv.FromPGText[string](request.TargetKey),
+		TargetDimensions:     maps.Clone(dimensions),
+		RequesterUserID:      request.RequesterUserID,
+		RequesterEmail:       conv.FromPGText[string](request.RequesterEmail),
+		Note:                 conv.FromPGText[string](request.Note),
+		Status:               request.Status,
+		DecidedBy:            conv.FromPGText[string](request.DecidedBy),
+		GrantedPrincipalURNs: slices.Clone(request.GrantedPrincipalUrns),
+		DecidedAt:            conv.PtrEmpty(conv.FromPGTimestamptz(request.DecidedAt)),
+		CreatedAt:            conv.FromPGTimestamptz(request.CreatedAt),
+		UpdatedAt:            conv.FromPGTimestamptz(request.UpdatedAt),
+	}
 }
 
 func shadowMCPInventoryPrincipalStrings(principals []urn.Principal) []string {
