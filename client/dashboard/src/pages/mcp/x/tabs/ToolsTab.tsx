@@ -26,6 +26,7 @@ export function ToolsTab({
         isResolvingUrl={loading}
         mcpServerId={mcpServer.id}
         isIssuerGated={!!mcpServer.userSessionIssuerId}
+        isDisabled={mcpServer.visibility === "disabled"}
       />
     </div>
   );

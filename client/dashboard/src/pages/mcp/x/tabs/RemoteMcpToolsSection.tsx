@@ -35,6 +35,8 @@ type RemoteMcpToolsSectionProps = {
   mcpServerId: string | undefined;
   /** Whether the server is issuer-gated (has a user_session_issuer). */
   isIssuerGated: boolean;
+  /** Disabled servers cannot serve MCP requests. */
+  isDisabled: boolean;
 };
 
 /**
@@ -54,6 +56,14 @@ type RemoteMcpToolsSectionProps = {
 export function RemoteMcpToolsSection(
   props: RemoteMcpToolsSectionProps,
 ): JSX.Element {
+  if (props.isDisabled) {
+    return (
+      <ToolsSectionShell>
+        <EmptyState message="Enable this server to load its tools." />
+      </ToolsSectionShell>
+    );
+  }
+
   return (
     <QueryErrorResetBoundary>
       {({ reset }) => (
@@ -76,7 +86,7 @@ function ToolsSectionShell({ children }: { children: ReactNode }): JSX.Element {
         Tools
       </Heading>
       <Type muted small className="mb-5">
-        Tools exposed by this remote MCP server.
+        Tools exposed by this MCP server.
       </Type>
       {children}
     </section>
