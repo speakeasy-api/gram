@@ -29,8 +29,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
-	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 // runWellKnown invokes the supplied xmcp well-known handler with the chi
@@ -319,7 +319,7 @@ func TestHandleWellKnownOAuthServerMetadata_IssuerGatedRemoteBackend_DanglingIss
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
 
-	_, err = usersessions_repo.New(ti.conn).DeleteUserSessionIssuer(ctx, usersessions_repo.DeleteUserSessionIssuerParams{
+	err = testrepo.New(ti.conn).ForceSoftDeleteUserSessionIssuer(ctx, testrepo.ForceSoftDeleteUserSessionIssuerParams{
 		ID:        issuerID,
 		ProjectID: *authCtx.ProjectID,
 	})

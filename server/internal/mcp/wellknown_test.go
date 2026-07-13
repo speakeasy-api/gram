@@ -27,8 +27,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
-	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 // runMCPWellKnown invokes a /mcp well-known handler with the chi `mcpSlug`
@@ -264,7 +264,7 @@ func TestHandleGetAuthorizationServer_IssuerGatedRemoteBackend_DanglingIssuerFK(
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
 
-	_, err = usersessionsrepo.New(ti.conn).DeleteUserSessionIssuer(ctx, usersessionsrepo.DeleteUserSessionIssuerParams{
+	err = testrepo.New(ti.conn).ForceSoftDeleteUserSessionIssuer(ctx, testrepo.ForceSoftDeleteUserSessionIssuerParams{
 		ID:        issuerID,
 		ProjectID: *authCtx.ProjectID,
 	})
