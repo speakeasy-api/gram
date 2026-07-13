@@ -624,7 +624,7 @@ func mintAccessTokenForSeededEndpoint(
 	require.NoError(t, err)
 	project, err := projectsrepo.New(ti.conn).GetProjectByID(ctx, mcpServer.ProjectID)
 	require.NoError(t, err)
-	endpoint := mcp.NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, project.OrganizationID)
+	endpoint := mcp.NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, project.OrganizationID, mcpServer.UserSessionIssuerID.UUID)
 
 	require.True(t, mcpServer.UserSessionIssuerID.Valid, "remote-backed seeds always carry an issuer")
 	subject := urn.NewAnonymousSubject(uuid.NewString())

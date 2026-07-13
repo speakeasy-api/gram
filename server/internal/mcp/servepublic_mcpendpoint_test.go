@@ -295,7 +295,7 @@ func mintIssuerBearerForEndpoint(
 		CustomDomainID: uuid.NullUUID{},
 	})
 	require.NoError(t, err)
-	endpoint := mcp.NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, organizationID)
+	endpoint := mcp.NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, organizationID, mcpServer.UserSessionIssuerID.UUID)
 
 	clientID := "test-client-" + uuid.NewString()
 	redirectURI := "http://localhost:3000/callback"
