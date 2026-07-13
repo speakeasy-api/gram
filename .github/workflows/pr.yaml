@@ -1480,6 +1480,52 @@ jobs:
         if: success()
         run: pnpm store prune
 
+  client-test:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    needs: [changes, sdk-gen-check]
+    if: |
+      !cancelled() &&
+      needs.sdk-gen-check.result != 'failure' &&
+      needs.changes.outputs.client == 'true'
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
+
+      - name: Setup Mise
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        with:
+          install: true
+          cache: true
+          env: false
+
+      - name: Prepare GitHub Actions environment
+        run: mise run github
+
+      - name: Cache PNPM
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: ${{ env.GH_CACHE_PNPM_KEY }}
+          restore-keys: |
+            ${{ env.GH_CACHE_PNPM_KEY }}
+            ${{ env.GH_CACHE_PNPM_KEY_PARTIAL }}
+          path: |
+            ${{ env.PNPM_STORE_PATH }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Elements dependency
+        run: pnpm build
+        working-directory: elements
+
+      - name: Test
+        run: pnpm test
+        working-directory: client/dashboard
+
+      - name: Prune PNPM store
+        if: success()
+        run: pnpm store prune
+
   sdk-gen-check:
     name: Check SDK is up-to-date
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -1919,6 +1965,7 @@ jobs:
       - docker-build-client
       - docker-build-pystreams
       - client-build-lint
+      - client-test
       - sdk-gen-check
       - cli-build-lint
       - hooks-build-test
