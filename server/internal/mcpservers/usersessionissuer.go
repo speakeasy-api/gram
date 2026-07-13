@@ -20,8 +20,8 @@ const (
 	userSessionResourceSlugSuffixLen = 8
 )
 
-// Keep this aligned with buildUserSessionResourceSlug in the dashboard. It
-// preserves the issuer naming used before issuer creation moved server-side.
+// Match buildUserSessionResourceSlug in the dashboard so server- and
+// client-created issuers use the same slug format.
 func buildUserSessionResourceSlug(baseSlug string) (string, error) {
 	suffix, err := conv.GenerateRandomSlug(userSessionResourceSlugSuffixLen)
 	if err != nil {

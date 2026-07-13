@@ -1384,9 +1384,8 @@ type UserSessionIssuerHasActiveOwnerParams struct {
 	UserSessionIssuerID uuid.UUID
 }
 
-// MCP servers created by the management API own a dedicated issuer, but
-// legacy data may share one with another server or toolset. Only cascade an
-// issuer delete once no active owner remains.
+// An issuer can be referenced by an MCP server or toolset. Only delete it once
+// no active owner remains.
 func (q *Queries) UserSessionIssuerHasActiveOwner(ctx context.Context, arg UserSessionIssuerHasActiveOwnerParams) (bool, error) {
 	row := q.db.QueryRow(ctx, userSessionIssuerHasActiveOwner, arg.ProjectID, arg.UserSessionIssuerID)
 	var exists bool

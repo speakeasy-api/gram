@@ -665,8 +665,8 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 	}
 
 	// Remote- and tunneled-backed servers own the issuer minted with them.
-	// Legacy rows may share an issuer with another server or toolset, so only
-	// cascade once this deletion leaves the issuer without an active owner.
+	// An issuer may also be referenced by another server or toolset, so only
+	// cascade once this deletion leaves it without an active owner.
 	if deleted.UserSessionIssuerID.Valid {
 		userSessionsRepo := usersessionsrepo.New(dbtx)
 		hasActiveOwner, err := userSessionsRepo.UserSessionIssuerHasActiveOwner(ctx, usersessionsrepo.UserSessionIssuerHasActiveOwnerParams{
@@ -684,8 +684,7 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 			})
 			switch {
 			case errors.Is(err, pgx.ErrNoRows):
-				// The issuer was already soft-deleted independently. The MCP
-				// server still needs to remain deletable.
+				// A missing issuer must not block server deletion.
 			case err != nil:
 				return oops.E(oops.CodeUnexpected, err, "delete mcp server issuer").LogError(ctx, logger)
 			default:

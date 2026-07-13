@@ -68,9 +68,8 @@ WHERE issuer.id = @id
 RETURNING issuer.*;
 
 -- name: UserSessionIssuerHasActiveOwner :one
--- MCP servers created by the management API own a dedicated issuer, but
--- legacy data may share one with another server or toolset. Only cascade an
--- issuer delete once no active owner remains.
+-- An issuer can be referenced by an MCP server or toolset. Only delete it once
+-- no active owner remains.
 SELECT EXISTS (
     SELECT 1
     FROM mcp_servers AS server
