@@ -1,8 +1,10 @@
 package mcpservers_test
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_servers"
@@ -11,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 func TestCreateMcpServer_RemoteMcpBackend(t *testing.T) {
@@ -170,6 +173,17 @@ func TestCreateMcpServer_RemoteMintsUserSessionIssuerWhenOmitted(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result.UserSessionIssuerID)
 	require.NotEmpty(t, *result.UserSessionIssuerID)
+	require.NotNil(t, result.Slug)
+
+	issuerID, err := uuid.Parse(*result.UserSessionIssuerID)
+	require.NoError(t, err)
+	issuer, err := usersessionsrepo.New(ti.conn).GetUserSessionIssuerByID(ctx, usersessionsrepo.GetUserSessionIssuerByIDParams{
+		ID:        issuerID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.LessOrEqual(t, len(issuer.Slug), 40)
+	require.True(t, strings.HasPrefix(issuer.Slug, *result.Slug+"-"))
 }
 
 func TestCreateMcpServer_TunneledMintsUserSessionIssuerWhenOmitted(t *testing.T) {
