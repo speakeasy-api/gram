@@ -1,7 +1,7 @@
 import "@speakeasy-api/moonshine/moonshine.css";
 import "./App.css"; // Import this second to override certain values in moonshine.css
 
-import { NuqsAdapter } from "nuqs/adapters/react-router/v7";
+import { NuqsAdapter } from "nuqs/adapters/react-router/v8";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider as LocalTooltipProvider } from "@/components/ui/tooltip";
 import { FontTexture, WebGLCanvas } from "@/components/webgl";
