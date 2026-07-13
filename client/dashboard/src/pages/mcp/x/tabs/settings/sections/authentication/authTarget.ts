@@ -32,8 +32,6 @@ export type AuthTarget = {
 };
 
 export function useMcpServerAuthTarget(mcpServer: McpServer): AuthTarget {
-  const client = useSdkClient();
-
   return useMemo(
     () => ({
       slug: mcpServer.slug ?? "mcp",
@@ -46,7 +44,7 @@ export function useMcpServerAuthTarget(mcpServer: McpServer): AuthTarget {
         ]);
       },
     }),
-    [client, mcpServer],
+    [mcpServer],
   );
 }
 
