@@ -106,7 +106,7 @@ class PresidioHandler:
                 # exception *type* is logged: an error string or traceback could
                 # echo the scanned content, which this handler never emits (see the
                 # detection log below).
-                self.logger.error(
+                self.logger.warning(
                     "presidio scan failed",
                     request_id=message.request_id,
                     reply_urn=message.reply_urn,
