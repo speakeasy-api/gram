@@ -42,7 +42,7 @@ export function PluginAssignmentsSheet({
         side="right"
         className="flex w-full flex-col gap-0 sm:max-w-md"
       >
-        <SheetHeader>
+        <SheetHeader className="px-6 pt-6">
           <SheetTitle>Manage assignments</SheetTitle>
           <SheetDescription>
             Choose who receives <strong>{pluginName}</strong>. Assignments apply
@@ -177,7 +177,7 @@ function AssignmentsEditor({
 
   return (
     <>
-      <div className="flex-1 overflow-y-auto py-4">
+      <div className="flex-1 overflow-y-auto px-6 py-4">
         <label className="mb-2 block text-sm font-medium">
           Assigned principals
         </label>
@@ -196,7 +196,7 @@ function AssignmentsEditor({
           assignments deliver once the recipient runs the device agent.
         </Type>
       </div>
-      <SheetFooter>
+      <SheetFooter className="px-6 pb-6">
         <Button
           variant="secondary"
           onClick={() => onOpenChange(false)}
