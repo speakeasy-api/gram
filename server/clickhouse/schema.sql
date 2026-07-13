@@ -706,6 +706,11 @@ CREATE TABLE IF NOT EXISTS tum_breakdown_summaries (
     user_email String,
     division_name String,
     roles Array(String),
+    -- The risk policy whose scan produced a risk-analysis judge completion
+    -- (attributes.gram.risk.policy_id, stamped by the scanners). '' for
+    -- non-scanning rows and for judge rows ingested before the dimension
+    -- existed — no backfill is possible, the attribute was never emitted.
+    risk_policy_id String,
 
     -- Billed token split for the slice (input + output = total for
     -- completion rows; they carry no cache attributes).
@@ -713,7 +718,11 @@ CREATE TABLE IF NOT EXISTS tum_breakdown_summaries (
     output_tokens SimpleAggregateFunction(sum, Int64),
     total_tokens SimpleAggregateFunction(sum, Int64)
 ) ENGINE = AggregatingMergeTree
-ORDER BY (gram_project_id, time_bucket, chat_id, hook_source, model, user_email, division_name, roles)
+-- PRIMARY KEY is the pre-risk_policy_id sort key: ALTER MODIFY ORDER BY can
+-- only extend the sort key, never the primary key, so the split must be
+-- explicit here to match the live table.
+PRIMARY KEY (gram_project_id, time_bucket, chat_id, hook_source, model, user_email, division_name, roles)
+ORDER BY (gram_project_id, time_bucket, chat_id, hook_source, model, user_email, division_name, roles, risk_policy_id)
 TTL time_bucket + INTERVAL 730 DAY
 SETTINGS index_granularity = 8192
 COMMENT 'Per-chat daily billed token usage broken down by consuming surface and user identity, retained beyond the raw telemetry TTL to power the billing page breakdowns across historical billing cycles';
@@ -730,13 +739,14 @@ SELECT
     user_email,
     toString(attributes.user.attributes.division_name) AS division_name,
     arraySort(JSONExtract(ifNull(toJSONString(attributes.user.roles), '[]'), 'Array(String)')) AS roles,
+    toString(attributes.gram.risk.policy_id) AS risk_policy_id,
     sum(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens))) AS input_tokens,
     sum(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens))) AS output_tokens,
     sum(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens))) AS total_tokens
 FROM telemetry_logs
 WHERE chat_id != ''
   AND toString(attributes.gen_ai.usage.total_tokens) != ''
-GROUP BY gram_project_id, chat_id, time_bucket, hook_source, model, user_email, division_name, roles;
+GROUP BY gram_project_id, chat_id, time_bucket, hook_source, model, user_email, division_name, roles, risk_policy_id;
 
 CREATE TABLE IF NOT EXISTS attribute_keys (
     gram_project_id UUID,
