@@ -40,6 +40,9 @@ function ClaudeInstallContent({
     marketplaceUrl && marketplaceName
       ? JSON.stringify(
           {
+            env: {
+              FORCE_AUTOUPDATE_PLUGINS: "1",
+            },
             extraKnownMarketplaces: {
               [marketplaceName]: {
                 autoUpdate: true,
