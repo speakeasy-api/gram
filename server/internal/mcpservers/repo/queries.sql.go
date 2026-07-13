@@ -347,7 +347,7 @@ SET
     name = $1,
     slug = $2,
     environment_id = $3,
-    user_session_issuer_id = $4,
+    user_session_issuer_id = COALESCE($4, user_session_issuer_id),
     remote_mcp_server_id = $5,
     tunneled_mcp_server_id = $6,
     toolset_id = $7,

@@ -289,12 +289,33 @@ func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.Dele
 
 	txRepo := repo.New(dbtx)
 
+	hasActiveOwner, err := txRepo.UserSessionIssuerHasActiveOwner(ctx, repo.UserSessionIssuerHasActiveOwnerParams{
+		ProjectID:           *authCtx.ProjectID,
+		UserSessionIssuerID: id,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "check user session issuer ownership").LogError(ctx, logger)
+	}
+	if hasActiveOwner {
+		return oops.E(oops.CodeConflict, nil, "user session issuer is still in use by an active MCP server or toolset")
+	}
+
 	deleted, err := txRepo.DeleteUserSessionIssuer(ctx, repo.DeleteUserSessionIssuerParams{
 		ID:        id,
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
+			hasActiveOwner, ownerErr := txRepo.UserSessionIssuerHasActiveOwner(ctx, repo.UserSessionIssuerHasActiveOwnerParams{
+				ProjectID:           *authCtx.ProjectID,
+				UserSessionIssuerID: id,
+			})
+			if ownerErr != nil {
+				return oops.E(oops.CodeUnexpected, ownerErr, "recheck user session issuer ownership").LogError(ctx, logger)
+			}
+			if hasActiveOwner {
+				return oops.E(oops.CodeConflict, nil, "user session issuer is still in use by an active MCP server or toolset")
+			}
 			return oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, logger)
 		}
 		return oops.E(oops.CodeUnexpected, err, "delete user session issuer").LogError(ctx, logger)

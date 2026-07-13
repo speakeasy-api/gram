@@ -15,6 +15,7 @@ import {
 } from "@gram/client/react-query/getMcpServer.js";
 import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
+import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
 import { useUpdateMcpServerMutation } from "@gram/client/react-query/updateMcpServer.js";
 import { Alert, Button, Dialog, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
@@ -35,7 +36,6 @@ function mcpServerVisibilityUpdateForm(
     tunneledMcpServerId: mcpServer.tunneledMcpServerId ?? undefined,
     toolsetId: mcpServer.toolsetId ?? undefined,
     environmentId: mcpServer.environmentId ?? undefined,
-    userSessionIssuerId: mcpServer.userSessionIssuerId ?? undefined,
     toolVariationsGroupId: mcpServer.toolVariationsGroupId ?? undefined,
     visibility,
   };
@@ -306,6 +306,7 @@ function DeleteMcpServerDialogContent({
       await Promise.all([
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
         invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
+        invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
       ]);
       toast.success("MCP server deleted");
       onSuccess();

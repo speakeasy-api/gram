@@ -25,10 +25,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/testmcp"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -145,27 +147,14 @@ func TestServeMCP_DisabledReturns404(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, rr.Code)
 }
 
-func TestServeMCP_PublicRemoteBackend_AnonymousForwardsUpstream(t *testing.T) {
+// An unauthenticated caller gets the OAuth challenge even on a public
+// server; the authenticated pass-through is covered by the test below.
+func TestServeMCP_PublicRemoteBackend_UnauthenticatedChallenged(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 
-	mockServer := testmcp.NewStreamableHTTPServer(t, &testmcp.Server{
-		Tools: []testmcp.Tool{{
-			Name:        "get_weather",
-			Description: "Get current weather for a location",
-			InputSchema: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"location": map[string]any{"type": "string"},
-				},
-				"required": []any{"location"},
-			},
-			Response: testmcp.ToolResponse{
-				Content: []map[string]any{{"type": "text", "text": "San Francisco: sunny, 72F"}},
-			},
-		}},
-	})
+	mockServer := testmcp.NewStreamableHTTPServer(t, &testmcp.Server{Tools: nil})
 	t.Cleanup(mockServer.Close)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -174,19 +163,39 @@ func TestServeMCP_PublicRemoteBackend_AnonymousForwardsUpstream(t *testing.T) {
 
 	slug, _, _ := seedRemoteMCPEndpoint(t, ctx, ti, *authCtx.ProjectID, mockServer.URL, "public")
 
-	// Public + no external OAuth + no caller-supplied token: the server is
-	// open to anonymous traffic.
-	initResp := runHandler(t, ctx, ti, http.MethodPost, slug, "", []byte(initializeBody))
+	rr := runHandler(t, ctx, ti, http.MethodPost, slug, "", []byte(initializeBody))
+	require.Equal(t, http.StatusUnauthorized, rr.Code)
+	require.NotEmpty(t, rr.Header().Get("WWW-Authenticate"))
+}
+
+// TestServeMCP_PublicRemoteBackend_IssuerTokenForwardsUpstream: with a minted
+// issuer-gated bearer, a public remote-backed request proxies through and the
+// upstream Mcp-Session-Id is relayed back to the caller.
+func TestServeMCP_PublicRemoteBackend_IssuerTokenForwardsUpstream(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	mockServer := testmcp.NewStreamableHTTPServer(t, &testmcp.Server{Tools: nil})
+	t.Cleanup(mockServer.Close)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	slug, mcpServer, _ := seedRemoteMCPEndpoint(t, ctx, ti, *authCtx.ProjectID, mockServer.URL, "public")
+	token := mintAccessTokenForSeededEndpoint(t, ctx, ti, slug, mcpServer)
+
+	initResp := runHandler(t, ctx, ti, http.MethodPost, slug, bearer(token), []byte(initializeBody))
 	require.Equal(t, http.StatusOK, initResp.Code, "initialize body=%s", initResp.Body.String())
 
 	sessionID := initResp.Header().Get("Mcp-Session-Id")
 	require.NotEmpty(t, sessionID, "proxy must relay Mcp-Session-Id from upstream")
 }
 
-// API key callers bypass RBAC (they have their own scoping); a private
-// mcp_server in the API key's own org is reachable as long as the key's
-// principal authenticates.
-func TestServeMCP_PrivateRemoteBackend_APIKeySameOrgReachable(t *testing.T) {
+// The issuer gate accepts only user-session JWTs, so a Gram API key — even
+// one in the server's own org — is rejected with an OAuth challenge.
+func TestServeMCP_PrivateRemoteBackend_APIKeyRejectedWithChallenge(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -202,7 +211,8 @@ func TestServeMCP_PrivateRemoteBackend_APIKeySameOrgReachable(t *testing.T) {
 	key := seedAPIKey(t, ctx, ti, authCtx.ActiveOrganizationID, authCtx.UserID, authCtx.ProjectID, []string{auth.APIKeyScopeConsumer.String()})
 
 	rr := runHandler(t, ctx, ti, http.MethodPost, slug, bearer(key), []byte(initializeBody))
-	require.Equal(t, http.StatusOK, rr.Code, "body=%s", rr.Body.String())
+	require.Equal(t, http.StatusUnauthorized, rr.Code, "body=%s", rr.Body.String())
+	require.NotEmpty(t, rr.Header().Get("WWW-Authenticate"))
 }
 
 func TestServeMCP_PublicRemoteBackend_AppliesStaticSecretHeader(t *testing.T) {
@@ -224,14 +234,15 @@ func TestServeMCP_PublicRemoteBackend_AppliesStaticSecretHeader(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	slug, _, _ := seedRemoteMCPEndpoint(t, ctx, ti, *authCtx.ProjectID, upstream.URL, "public", remotemcprepo.CreateServerHeaderParams{
+	slug, mcpServer, _ := seedRemoteMCPEndpoint(t, ctx, ti, *authCtx.ProjectID, upstream.URL, "public", remotemcprepo.CreateServerHeaderParams{
 		Name:       "X-Upstream-Api-Key",
 		Value:      pgtype.Text{String: "upstream-secret", Valid: true},
 		IsRequired: true,
 		IsSecret:   true,
 	})
+	token := mintAccessTokenForSeededEndpoint(t, ctx, ti, slug, mcpServer)
 
-	rr := runHandler(t, ctx, ti, http.MethodPost, slug, "", []byte(initializeBody))
+	rr := runHandler(t, ctx, ti, http.MethodPost, slug, bearer(token), []byte(initializeBody))
 	<-done
 	require.Equal(t, http.StatusOK, rr.Code)
 	require.Equal(t, "upstream-secret", gotAPIKey, "secret static header must be decrypted and forwarded")
@@ -256,29 +267,28 @@ func TestServeMCP_PublicRemoteBackend_DeleteForwardsSessionTermination(t *testin
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	slug, _, _ := seedRemoteMCPEndpoint(t, ctx, ti, *authCtx.ProjectID, upstream.URL, "public")
+	slug, mcpServer, _ := seedRemoteMCPEndpoint(t, ctx, ti, *authCtx.ProjectID, upstream.URL, "public")
+	token := mintAccessTokenForSeededEndpoint(t, ctx, ti, slug, mcpServer)
 
-	rr := runHandlerWithHeaders(t, ctx, ti, http.MethodDelete, slug, "", nil, map[string]string{"Mcp-Session-Id": "abc-session"})
+	rr := runHandlerWithHeaders(t, ctx, ti, http.MethodDelete, slug, bearer(token), nil, map[string]string{"Mcp-Session-Id": "abc-session"})
 	<-done
 	require.Equal(t, http.StatusNoContent, rr.Code)
 	require.Equal(t, http.MethodDelete, gotMethod)
 	require.Equal(t, "abc-session", gotSession)
 }
 
-// Private mcp_server: the caller's Authorization is a Gram API key used
-// for identity auth and must never reach the upstream MCP server.
-func TestServeMCP_PrivateRemoteBackend_StripsAuthorizationFromUpstream(t *testing.T) {
+// A Gram API key is rejected at the issuer gate, so no request — and
+// therefore no Gram credential — ever reaches the upstream.
+func TestServeMCP_PrivateRemoteBackend_APIKeyNeverReachesUpstream(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 
-	var gotAuth string
-	done := make(chan struct{}, 1)
+	upstreamCalled := false
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotAuth = r.Header.Get("Authorization")
+		upstreamCalled = true
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{}}`))
-		done <- struct{}{}
 	}))
 	t.Cleanup(upstream.Close)
 
@@ -290,14 +300,14 @@ func TestServeMCP_PrivateRemoteBackend_StripsAuthorizationFromUpstream(t *testin
 	key := seedAPIKey(t, ctx, ti, authCtx.ActiveOrganizationID, authCtx.UserID, authCtx.ProjectID, []string{auth.APIKeyScopeConsumer.String()})
 
 	rr := runHandler(t, ctx, ti, http.MethodPost, slug, bearer(key), []byte(initializeBody))
-	<-done
-	require.Equal(t, http.StatusOK, rr.Code, "body=%s", rr.Body.String())
-	require.Empty(t, gotAuth, "Gram API key must never leak to the remote MCP server")
+	require.Equal(t, http.StatusUnauthorized, rr.Code, "body=%s", rr.Body.String())
+	require.False(t, upstreamCalled, "Gram API key must never leak to the remote MCP server")
 }
 
-// Public mcp_server with no external_oauth_server_id and no caller auth:
-// upstream sees no Authorization header (nothing to forward).
-func TestServeMCP_PublicRemoteBackend_NoCallerAuthSendsNoAuthorizationUpstream(t *testing.T) {
+// Public mcp_server with an issuer-gated bearer: the proxy strips the inbound
+// Authorization, so the upstream sees none (the issuer has no
+// remote_session_clients bound, so there is nothing to forward either).
+func TestServeMCP_PublicRemoteBackend_IssuerTokenSendsNoAuthorizationUpstream(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -316,29 +326,26 @@ func TestServeMCP_PublicRemoteBackend_NoCallerAuthSendsNoAuthorizationUpstream(t
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	slug, _, _ := seedRemoteMCPEndpoint(t, ctx, ti, *authCtx.ProjectID, upstream.URL, "public")
+	slug, mcpServer, _ := seedRemoteMCPEndpoint(t, ctx, ti, *authCtx.ProjectID, upstream.URL, "public")
+	token := mintAccessTokenForSeededEndpoint(t, ctx, ti, slug, mcpServer)
 
-	rr := runHandler(t, ctx, ti, http.MethodPost, slug, "", []byte(initializeBody))
+	rr := runHandler(t, ctx, ti, http.MethodPost, slug, bearer(token), []byte(initializeBody))
 	<-done
 	require.Equal(t, http.StatusOK, rr.Code, "body=%s", rr.Body.String())
-	require.Empty(t, gotAuth)
+	require.Empty(t, gotAuth, "issuer-gated bearer must never leak to the remote MCP server")
 }
 
-// Public mcp_server (no external OAuth) + caller Bearer that authenticates
-// as a Gram identity: the token was probed as a Gram credential and must
-// not be forwarded upstream.
-func TestServeMCP_PublicRemoteBackend_GramAPIKeyStripsAuthorizationFromUpstream(t *testing.T) {
+// Public variant of the API-key rejection above.
+func TestServeMCP_PublicRemoteBackend_GramAPIKeyNeverReachesUpstream(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 
-	var gotAuth string
-	done := make(chan struct{}, 1)
+	upstreamCalled := false
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotAuth = r.Header.Get("Authorization")
+		upstreamCalled = true
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{}}`))
-		done <- struct{}{}
 	}))
 	t.Cleanup(upstream.Close)
 
@@ -350,15 +357,13 @@ func TestServeMCP_PublicRemoteBackend_GramAPIKeyStripsAuthorizationFromUpstream(
 	key := seedAPIKey(t, ctx, ti, authCtx.ActiveOrganizationID, authCtx.UserID, authCtx.ProjectID, []string{auth.APIKeyScopeConsumer.String()})
 
 	rr := runHandler(t, ctx, ti, http.MethodPost, slug, bearer(key), []byte(initializeBody))
-	<-done
-	require.Equal(t, http.StatusOK, rr.Code, "body=%s", rr.Body.String())
-	require.Empty(t, gotAuth, "Gram API key must never leak even on a public mcp_server")
+	require.Equal(t, http.StatusUnauthorized, rr.Code, "body=%s", rr.Body.String())
+	require.False(t, upstreamCalled, "Gram API key must never leak even on a public mcp_server")
 }
 
-// Same-org cross-project access to a private mcp_server is allowed: the
-// org-membership check passes (caller and server share the active org)
-// and the API key bypasses RBAC scope checking. This mirrors /mcp.
-func TestServeMCP_PrivateRemoteBackend_SameOrgCrossProjectReachable(t *testing.T) {
+// The gate only accepts user-session JWTs, so org membership never enters
+// the picture: same-org cross-project API keys are rejected too.
+func TestServeMCP_PrivateRemoteBackend_SameOrgCrossProjectAPIKeyRejected(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -374,11 +379,10 @@ func TestServeMCP_PrivateRemoteBackend_SameOrgCrossProjectReachable(t *testing.T
 	key := seedAPIKey(t, ctx, ti, authCtx.ActiveOrganizationID, authCtx.UserID, authCtx.ProjectID, []string{auth.APIKeyScopeConsumer.String()})
 
 	rr := runHandler(t, ctx, ti, http.MethodPost, slug, bearer(key), []byte(initializeBody))
-	require.Equal(t, http.StatusOK, rr.Code, "body=%s", rr.Body.String())
+	require.Equal(t, http.StatusUnauthorized, rr.Code, "body=%s", rr.Body.String())
 }
 
-// Cross-org access to a private mcp_server is rejected at the org-membership
-// gate before RBAC even runs, matching /mcp behavior.
+// A foreign org's API key gets 401 just like a same-org one.
 func TestServeMCP_PrivateRemoteBackend_CrossOrgReturns401(t *testing.T) {
 	t.Parallel()
 
@@ -404,7 +408,7 @@ func TestServeMCP_PrivateRemoteBackend_CrossOrgReturns401(t *testing.T) {
 	slug, _, _ := seedRemoteMCPEndpoint(t, ctx, ti, otherProjectID, mockServer.URL, "private")
 
 	// API key is in the original (caller's) org; mcp_server is in a foreign
-	// org. The org-membership check rejects.
+	// org. The issuer gate rejects the non-JWT bearer outright.
 	key := seedAPIKey(t, ctx, ti, authCtx.ActiveOrganizationID, authCtx.UserID, authCtx.ProjectID, []string{auth.APIKeyScopeConsumer.String()})
 
 	rr := runHandler(t, ctx, ti, http.MethodPost, slug, bearer(key), []byte(initializeBody))
@@ -602,6 +606,29 @@ func TestServeMCP_IssuerGatedRemoteBackend_HappyPath(t *testing.T) {
 	require.Equal(t, http.StatusOK, rr.Code, "ServeMCP should proxy through; body=%s", rr.Body.String())
 	require.Equal(t, http.MethodPost, gotMethod)
 	require.Empty(t, gotAuth, "remote proxy strips inbound Authorization; no upstream remote_session is configured")
+}
+
+func mintAccessTokenForSeededEndpoint(
+	t *testing.T,
+	ctx context.Context,
+	ti *testInstance,
+	slug string,
+	mcpServer mcpserversrepo.McpServer,
+) string {
+	t.Helper()
+
+	mcpEndpoint, err := mcpendpointsrepo.New(ti.conn).GetMCPEndpointByCustomDomainAndSlug(ctx, mcpendpointsrepo.GetMCPEndpointByCustomDomainAndSlugParams{
+		Slug:           slug,
+		CustomDomainID: uuid.NullUUID{},
+	})
+	require.NoError(t, err)
+	project, err := projectsrepo.New(ti.conn).GetProjectByID(ctx, mcpServer.ProjectID)
+	require.NoError(t, err)
+	endpoint := mcp.NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, project.OrganizationID)
+
+	require.True(t, mcpServer.UserSessionIssuerID.Valid, "remote-backed seeds always carry an issuer")
+	subject := urn.NewAnonymousSubject(uuid.NewString())
+	return mintIssuerGatedAccessToken(t, ctx, ti, slug, endpoint, mcpServer.UserSessionIssuerID.UUID, subject)
 }
 
 // mintIssuerGatedAccessToken drives ServeToken with a synthesised
@@ -1101,7 +1128,7 @@ func TestRequireUserSessionIssuer_DanglingFKReturnsNotFound(t *testing.T) {
 
 	// Soft-delete the issuer. GetUserSessionIssuerByID filters on
 	// `deleted IS FALSE`, so the next call must miss.
-	_, err = usersessionsrepo.New(ti.conn).DeleteUserSessionIssuer(ctx, usersessionsrepo.DeleteUserSessionIssuerParams{
+	err = testrepo.New(ti.conn).ForceSoftDeleteUserSessionIssuer(ctx, testrepo.ForceSoftDeleteUserSessionIssuerParams{
 		ID:        issuerID,
 		ProjectID: *authCtx.ProjectID,
 	})
@@ -1195,9 +1222,10 @@ func TestServeMCP_PublicRemoteBackend_GetForwardsToUpstream(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	slug, _, _ := seedRemoteMCPEndpoint(t, ctx, ti, *authCtx.ProjectID, upstream.URL, "public")
+	slug, mcpServer, _ := seedRemoteMCPEndpoint(t, ctx, ti, *authCtx.ProjectID, upstream.URL, "public")
+	token := mintAccessTokenForSeededEndpoint(t, ctx, ti, slug, mcpServer)
 
-	rr := runHandlerWithHeaders(t, ctx, ti, http.MethodGet, slug, "", nil, map[string]string{"Mcp-Session-Id": "sse-session-1"})
+	rr := runHandlerWithHeaders(t, ctx, ti, http.MethodGet, slug, bearer(token), nil, map[string]string{"Mcp-Session-Id": "sse-session-1"})
 	select {
 	case <-done:
 	case <-time.After(5 * time.Second):
@@ -1241,18 +1269,19 @@ func TestServeMCP_PublicRemoteBackend_ToolsCallForwardsToUpstream(t *testing.T) 
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	slug, _, _ := seedRemoteMCPEndpoint(t, ctx, ti, *authCtx.ProjectID, mockServer.URL, "public")
+	slug, mcpServer, _ := seedRemoteMCPEndpoint(t, ctx, ti, *authCtx.ProjectID, mockServer.URL, "public")
+	token := mintAccessTokenForSeededEndpoint(t, ctx, ti, slug, mcpServer)
 
 	// Initialize first to get a session id, then drive a tools/call on
 	// that session so the proxy's per-tool interceptor pipeline gets to
 	// run.
-	initResp := runHandler(t, ctx, ti, http.MethodPost, slug, "", []byte(initializeBody))
+	initResp := runHandler(t, ctx, ti, http.MethodPost, slug, bearer(token), []byte(initializeBody))
 	require.Equal(t, http.StatusOK, initResp.Code, "initialize body=%s", initResp.Body.String())
 	sessionID := initResp.Header().Get("Mcp-Session-Id")
 	require.NotEmpty(t, sessionID)
 
 	toolsCallBody := []byte(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"echo","arguments":{"message":"hello"}}}`)
-	rr := runHandlerWithHeaders(t, ctx, ti, http.MethodPost, slug, "", toolsCallBody, map[string]string{"Mcp-Session-Id": sessionID})
+	rr := runHandlerWithHeaders(t, ctx, ti, http.MethodPost, slug, bearer(token), toolsCallBody, map[string]string{"Mcp-Session-Id": sessionID})
 	require.Equal(t, http.StatusOK, rr.Code, "tools/call body=%s", rr.Body.String())
 	require.Contains(t, rr.Body.String(), "echoed", "upstream tool response must be relayed back")
 }

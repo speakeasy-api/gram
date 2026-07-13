@@ -130,6 +130,23 @@ func (q *Queries) ForceSoftDeleteChat(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
+const forceSoftDeleteUserSessionIssuer = `-- name: ForceSoftDeleteUserSessionIssuer :exec
+UPDATE user_session_issuers
+SET deleted_at = clock_timestamp()
+WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
+`
+
+type ForceSoftDeleteUserSessionIssuerParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Test-only fixture for defensive paths that handle a dangling soft-delete FK.
+func (q *Queries) ForceSoftDeleteUserSessionIssuer(ctx context.Context, arg ForceSoftDeleteUserSessionIssuerParams) error {
+	_, err := q.db.Exec(ctx, forceSoftDeleteUserSessionIssuer, arg.ID, arg.ProjectID)
+	return err
+}
+
 const getDeploymentFunctionInfraOverrides = `-- name: GetDeploymentFunctionInfraOverrides :many
 SELECT memory_mib_override, scale_override FROM deployments_functions WHERE deployment_id = $1
 `

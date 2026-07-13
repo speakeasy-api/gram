@@ -17,6 +17,7 @@ import (
 	telemetryRepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	tunneledmcpRepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -558,6 +559,14 @@ func createTunneledMCPServerFixture(t *testing.T, ctx context.Context, ti *testI
 	})
 	require.NoError(t, err)
 
+	issuer, err := usersessionsrepo.New(ti.conn).CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{
+		ProjectID:          *authCtx.ProjectID,
+		Slug:               "usi-" + uuid.NewString()[:8],
+		AuthnChallengeMode: "interactive",
+		SessionDuration:    pgtype.Interval{Microseconds: time.Hour.Microseconds(), Days: 0, Months: 0, Valid: true},
+	})
+	require.NoError(t, err)
+
 	mcpServerID := uuid.New()
 	server, err := mcpserversRepo.New(ti.conn).CreateMCPServer(ctx, mcpserversRepo.CreateMCPServerParams{
 		ID:                    mcpServerID,
@@ -565,7 +574,7 @@ func createTunneledMCPServerFixture(t *testing.T, ctx context.Context, ti *testI
 		Name:                  pgtype.Text{String: p.name, Valid: true},
 		Slug:                  pgtype.Text{String: p.slug, Valid: true},
 		EnvironmentID:         uuid.NullUUID{},
-		UserSessionIssuerID:   uuid.NullUUID{},
+		UserSessionIssuerID:   uuid.NullUUID{UUID: issuer.ID, Valid: true},
 		RemoteMcpServerID:     uuid.NullUUID{},
 		TunneledMcpServerID:   uuid.NullUUID{UUID: source.ID, Valid: true},
 		ToolsetID:             uuid.NullUUID{},

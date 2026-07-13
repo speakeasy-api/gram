@@ -8,6 +8,7 @@ import { invalidateAllListTunneledMcpServerConnections } from "@gram/client/reac
 import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { invalidateAllTunneledMcpServers } from "@gram/client/react-query/tunneledMcpServers.js";
+import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
 import {
   useMutation,
   useQueryClient,
@@ -83,6 +84,7 @@ export function useCreateTunneledMcpSource(): UseMutationResult<
         invalidateAllTunneledMcpServers(queryClient, { refetchType: "all" }),
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
         invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
+        invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
       ]);
     },
   });
@@ -117,6 +119,7 @@ export function useLinkMcpServerToTunneled(): UseMutationResult<
       await Promise.all([
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
         invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
+        invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
       ]);
     },
   });
@@ -205,6 +208,7 @@ export function useDeleteTunneledMcpSource(): UseMutationResult<
         }),
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
         invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
+        invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
       ]);
     },
   });
