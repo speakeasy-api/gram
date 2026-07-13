@@ -29,6 +29,7 @@ import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers";
 import { useMembers } from "@gram/client/react-query/members";
 import { useRoles } from "@gram/client/react-query/roles";
+import { useSyncedAgentUsers } from "@gram/client/react-query/syncedAgentUsers.js";
 import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
 import {
   Badge,
@@ -50,6 +51,7 @@ import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { PluginServer } from "@gram/client/models/components/pluginserver.js";
 import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import { useSdkClient } from "@/contexts/Sdk";
+import { useTelemetry } from "@/contexts/Telemetry";
 import { toast } from "sonner";
 import { DEFAULT_PLUGIN_DESCRIPTION } from "./default-plugin";
 import { downloadPluginPackage } from "./downloadPluginPackage";
@@ -142,6 +144,20 @@ export default function PluginDetail(): JSX.Element | null {
     () => memberMapByUrn(membersData?.members ?? []),
     [membersData?.members],
   );
+
+  // Assignments only gate delivery for the device agent (agent.getPlugins);
+  // marketplace installs (Claude/Cursor/Codex) ship every published plugin. So
+  // only surface the section for device-agent orgs: those enrolled in the
+  // program (the gram-device-agent flag) or with devices that have actually
+  // synced. When the flag is on we already show it, so only probe syncs when
+  // it's off — that call is org-admin gated and unneeded otherwise.
+  const isDeviceAgentEnabled =
+    useTelemetry().isFeatureEnabled("gram-device-agent") ?? false;
+  const { data: deviceSyncData } = useSyncedAgentUsers(undefined, undefined, {
+    enabled: !isDeviceAgentEnabled,
+  });
+  const showAssignments =
+    isDeviceAgentEnabled || (deviceSyncData?.users?.length ?? 0) > 0;
 
   // Invalidate publish status too so the dirty/up-to-date affordance reflects
   // the edit the moment a mutation lands.
@@ -563,61 +579,71 @@ export default function PluginDetail(): JSX.Element | null {
           )}
         </div>
 
-        {/* Assignments section */}
-        <div className="mb-3 flex items-center gap-3">
-          <div className="border-border flex-1 border-t" />
-          <div className="flex shrink-0 items-center gap-2">
-            <Type
-              small
-              muted
-              className="font-mono text-xs tracking-wide uppercase"
-            >
-              Assignments
-            </Type>
-            {assignments.length > 0 && (
-              <span className="bg-muted text-muted-foreground rounded-full px-1.5 py-0.5 text-xs font-medium tabular-nums">
-                {assignments.length}
-              </span>
-            )}
-          </div>
-          <div className="border-border flex-1 border-t" />
-        </div>
-        <div className="mb-3 flex justify-end">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => setIsAssignmentsOpen(true)}
-          >
-            <Button.LeftIcon>
-              <Icon name="users" className="h-4 w-4" />
-            </Button.LeftIcon>
-            <Button.Text>Manage assignments</Button.Text>
-          </Button>
-        </div>
-        <div className="mb-8">
-          {assignments.length === 0 ? (
-            <Stack
-              gap={2}
-              className="border-border rounded-xl border py-8"
-              align="center"
-              justify="center"
-            >
-              <Type variant="body" muted>
-                Not assigned to anyone yet
+        {/* Assignments only affect device-agent delivery, so the section is
+            hidden for marketplace-only orgs (see showAssignments). */}
+        {showAssignments && (
+          <>
+            <div className="mb-3 flex items-center gap-3">
+              <div className="border-border flex-1 border-t" />
+              <div className="flex shrink-0 items-center gap-2">
+                <Type
+                  small
+                  muted
+                  className="font-mono text-xs tracking-wide uppercase"
+                >
+                  Assignments
+                </Type>
+                {assignments.length > 0 && (
+                  <span className="bg-muted text-muted-foreground rounded-full px-1.5 py-0.5 text-xs font-medium tabular-nums">
+                    {assignments.length}
+                  </span>
+                )}
+              </div>
+              <div className="border-border flex-1 border-t" />
+            </div>
+            <div className="mb-3 flex items-center justify-between gap-4">
+              <Type small muted className="max-w-md">
+                Controls delivery to devices running the Speakeasy agent.
+                Marketplace installs (Claude, Cursor, Codex) receive every
+                published plugin regardless.
               </Type>
-              <Type small muted>
-                Assign this plugin to roles, users, or emails to deliver it to
-                their devices.
-              </Type>
-            </Stack>
-          ) : (
-            <PluginAssignmentsList
-              assignments={assignments}
-              roleByUrn={roleByUrn}
-              memberByUrn={memberByUrn}
-            />
-          )}
-        </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setIsAssignmentsOpen(true)}
+              >
+                <Button.LeftIcon>
+                  <Icon name="users" className="h-4 w-4" />
+                </Button.LeftIcon>
+                <Button.Text>Manage assignments</Button.Text>
+              </Button>
+            </div>
+            <div className="mb-8">
+              {assignments.length === 0 ? (
+                <Stack
+                  gap={2}
+                  className="border-border rounded-xl border py-8"
+                  align="center"
+                  justify="center"
+                >
+                  <Type variant="body" muted>
+                    Not assigned to anyone yet
+                  </Type>
+                  <Type small muted>
+                    Assign this plugin to roles, users, or emails to deliver it
+                    to their devices.
+                  </Type>
+                </Stack>
+              ) : (
+                <PluginAssignmentsList
+                  assignments={assignments}
+                  roleByUrn={roleByUrn}
+                  memberByUrn={memberByUrn}
+                />
+              )}
+            </div>
+          </>
+        )}
 
         {/* Skills section — no plugin support yet, coming soon */}
         <div className="mb-3 flex items-center gap-3">
