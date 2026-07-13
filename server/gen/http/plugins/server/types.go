@@ -104,6 +104,8 @@ type GetPluginResponseBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Optional description.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether this is the project's fallback plugin that new servers attach to.
+	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of role/user assignments.
@@ -127,6 +129,8 @@ type CreatePluginResponseBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Optional description.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether this is the project's fallback plugin that new servers attach to.
+	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of role/user assignments.
@@ -150,6 +154,8 @@ type UpdatePluginResponseBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Optional description.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether this is the project's fallback plugin that new servers attach to.
+	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of role/user assignments.
@@ -3252,6 +3258,8 @@ type PluginResponseBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Optional description.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether this is the project's fallback plugin that new servers attach to.
+	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of role/user assignments.
@@ -3332,6 +3340,7 @@ func NewGetPluginResponseBody(res *plugins.Plugin) *GetPluginResponseBody {
 		Name:            res.Name,
 		Slug:            res.Slug,
 		Description:     res.Description,
+		IsDefault:       res.IsDefault,
 		ServerCount:     res.ServerCount,
 		AssignmentCount: res.AssignmentCount,
 		CreatedAt:       res.CreatedAt,
@@ -3368,6 +3377,7 @@ func NewCreatePluginResponseBody(res *plugins.Plugin) *CreatePluginResponseBody 
 		Name:            res.Name,
 		Slug:            res.Slug,
 		Description:     res.Description,
+		IsDefault:       res.IsDefault,
 		ServerCount:     res.ServerCount,
 		AssignmentCount: res.AssignmentCount,
 		CreatedAt:       res.CreatedAt,
@@ -3404,6 +3414,7 @@ func NewUpdatePluginResponseBody(res *plugins.Plugin) *UpdatePluginResponseBody 
 		Name:            res.Name,
 		Slug:            res.Slug,
 		Description:     res.Description,
+		IsDefault:       res.IsDefault,
 		ServerCount:     res.ServerCount,
 		AssignmentCount: res.AssignmentCount,
 		CreatedAt:       res.CreatedAt,

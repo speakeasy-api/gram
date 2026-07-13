@@ -96,9 +96,7 @@ export function DistributeServersStep({
   // Default-plugin membership: map its toolset-backed servers back to catalog
   // registry specifiers so we can flag servers that are already distributed.
   const { data: pluginsData } = usePlugins();
-  const defaultPlugin = pluginsData?.plugins.find(
-    (p) => p.name === DEFAULT_PLUGIN_NAME,
-  );
+  const defaultPlugin = pluginsData?.plugins.find((p) => p.isDefault);
   const { data: defaultPluginFull } = usePlugin(
     { id: defaultPlugin?.id ?? "" },
     undefined,
@@ -217,7 +215,7 @@ export function DistributeServersStep({
 
       const { plugins } = await client.plugins.listPlugins();
       const plugin =
-        plugins.find((p) => p.name === DEFAULT_PLUGIN_NAME) ??
+        plugins.find((p) => p.isDefault) ??
         (await client.plugins.createPlugin({
           createPluginForm: { name: DEFAULT_PLUGIN_NAME },
         }));
