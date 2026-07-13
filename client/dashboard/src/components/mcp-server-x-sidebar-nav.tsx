@@ -205,6 +205,9 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
         {isRemoteBacked && (
           <McpSidebarInfoLabel>Remote MCP</McpSidebarInfoLabel>
         )}
+        {isTunneledBacked && (
+          <McpSidebarInfoLabel>Tunneled MCP</McpSidebarInfoLabel>
+        )}
       </div>
 
       <div className="flex flex-col gap-1.5">
