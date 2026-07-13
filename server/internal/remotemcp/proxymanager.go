@@ -16,7 +16,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
-	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 )
 
 // ProxyManager builds configured remote-MCP proxies wired up with the
@@ -109,13 +108,20 @@ func (f *ProxyManager) Build(
 	server *remotemcprepo.RemoteMcpServer,
 	mcpServerID string,
 	headers []remotemcprepo.RemoteMcpServerHeader,
-	attachedEnv *toolconfig.CaseInsensitiveEnv,
 	visibility string,
 	projectID string,
 	upstreamAuth string,
 	wwwAuthenticate string,
 ) *proxy.Proxy {
-	configured := configuredHeadersFromRepo(headers, attachedEnv)
+	configured := make([]proxy.ConfiguredHeader, 0, len(headers))
+	for _, h := range headers {
+		configured = append(configured, proxy.ConfiguredHeader{
+			Name:                   h.Name,
+			StaticValue:            h.Value.String,
+			ValueFromRequestHeader: h.ValueFromRequestHeader.String,
+			IsRequired:             h.IsRequired,
+		})
+	}
 
 	return f.BuildTarget(logger, proxy.ServerIdentity{
 		RemoteMCPServerID:   server.ID.String(),

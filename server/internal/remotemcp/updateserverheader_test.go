@@ -226,66 +226,6 @@ func TestUpdateServerHeader_BothValuesRejected(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
-// Switching a static header to environment-sourced persists the empty-value
-// sentinel rather than NULLing value (which the CHECK would reject without a
-// request-header source).
-func TestUpdateServerHeader_StaticToEnvSourced(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-	server := createTestServer(t, ctx, ti)
-
-	created, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Api-Key", func(p *gen.CreateServerHeaderPayload) {
-		p.Value = new("static")
-	}))
-	require.NoError(t, err)
-
-	updated, err := ti.service.UpdateServerHeader(ctx, newUpdateServerHeaderPayload(created.ID, "X-Api-Key", nil))
-	require.NoError(t, err)
-	require.False(t, updated.IsSecret)
-	require.Nil(t, updated.ValueFromRequestHeader)
-	require.NotNil(t, updated.Value)
-	require.Empty(t, *updated.Value)
-
-	requireStoredEnvSourcedValue(t, ctx, ti, server.ID, "X-Api-Key")
-}
-
-func TestUpdateServerHeader_PassThroughToEnvSourced(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-	server := createTestServer(t, ctx, ti)
-
-	created, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Api-Key", func(p *gen.CreateServerHeaderPayload) {
-		p.ValueFromRequestHeader = new("X-Inbound")
-	}))
-	require.NoError(t, err)
-
-	updated, err := ti.service.UpdateServerHeader(ctx, newUpdateServerHeaderPayload(created.ID, "X-Api-Key", nil))
-	require.NoError(t, err)
-	require.NotNil(t, updated.Value)
-	require.Empty(t, *updated.Value)
-	require.Nil(t, updated.ValueFromRequestHeader)
-
-	requireStoredEnvSourcedValue(t, ctx, ti, server.ID, "X-Api-Key")
-}
-
-func TestUpdateServerHeader_SecretToEnvSourced(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-	server := createTestServer(t, ctx, ti)
-	created := createSecretHeader(t, ctx, ti, server.ID, "Authorization", "Bearer token")
-
-	updated, err := ti.service.UpdateServerHeader(ctx, newUpdateServerHeaderPayload(created.ID, "Authorization", nil))
-	require.NoError(t, err)
-	require.False(t, updated.IsSecret)
-	require.NotNil(t, updated.Value)
-	require.Empty(t, *updated.Value)
-
-	requireStoredEnvSourcedValue(t, ctx, ti, server.ID, "Authorization")
-}
-
 // Renaming onto a sibling header's name must conflict, not 500.
 func TestUpdateServerHeader_RenameOntoExistingNameConflicts(t *testing.T) {
 	t.Parallel()

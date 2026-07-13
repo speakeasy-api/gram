@@ -519,10 +519,6 @@ func (s *Service) CreateServerHeader(ctx context.Context, payload *gen.CreateSer
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid header").LogError(ctx, logger)
 	}
 
-	hasValue := payload.Value != nil && *payload.Value != ""
-	hasValueFromRequestHeader := payload.ValueFromRequestHeader != nil && *payload.ValueFromRequestHeader != ""
-	isEnvSourced := !isSecret && !hasValue && !hasValueFromRequestHeader
-
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
@@ -553,7 +549,7 @@ func (s *Service) CreateServerHeader(ctx context.Context, payload *gen.CreateSer
 		Description:            conv.PtrToPGText(payload.Description),
 		IsRequired:             conv.PtrValOr(payload.IsRequired, false),
 		IsSecret:               isSecret,
-		Value:                  headerValuePGText(payload.Value, isEnvSourced),
+		Value:                  conv.PtrToPGTextEmpty(payload.Value),
 		ValueFromRequestHeader: conv.PtrToPGTextEmpty(payload.ValueFromRequestHeader),
 	})
 	if err != nil {
@@ -645,8 +641,6 @@ func (s *Service) UpdateServerHeader(ctx context.Context, payload *gen.UpdateSer
 
 	beforeView := mv.BuildRemoteMcpServerHeaderView(existing)
 
-	isEnvSourced := !isSecret && !hasValue && !hasValueFromRequestHeader
-
 	header, err := headersRepo.UpdateServerHeader(ctx, repo.UpdateServerHeaderParams{
 		ID:                     headerID,
 		ProjectID:              *authCtx.ProjectID,
@@ -655,7 +649,7 @@ func (s *Service) UpdateServerHeader(ctx context.Context, payload *gen.UpdateSer
 		IsRequired:             conv.PtrValOr(payload.IsRequired, false),
 		IsSecret:               isSecret,
 		SetValue:               !preserveStoredValue,
-		Value:                  headerValuePGText(payload.Value, isEnvSourced),
+		Value:                  conv.PtrToPGTextEmpty(payload.Value),
 		ValueFromRequestHeader: conv.PtrToPGTextEmpty(payload.ValueFromRequestHeader),
 	})
 	if err != nil {
@@ -785,39 +779,16 @@ func validateURL(ctx context.Context, policy *guardian.Policy, rawURL string) er
 	return nil
 }
 
-// headerValuePGText stores the static value for a header. Env-sourced headers
-// persist value=” (non-null) so the DB CHECK holds and the serve path can
-// detect the opt-in (ADR-0002).
-//
-// ponytail: name-matched env source; add value_from_environment_variable column if decoupling is ever asked for
-func headerValuePGText(value *string, isEnvSourced bool) pgtype.Text {
-	if isEnvSourced {
-		return pgtype.Text{String: "", Valid: true}
-	}
-
-	return conv.PtrToPGTextEmpty(value)
-}
-
 // validateHeaderValueSource checks that exactly one of value or
 // value_from_request_header is provided, mirroring the
 // remote_mcp_server_headers_value_source_check constraint, and that a
-// pass-through header is not marked secret. A non-secret header with neither
-// source opts into the fronting server's attached environment (ADR-0002).
-// Callers that want to preserve an existing secret's stored value skip this
-// check entirely; see UpdateServerHeader.
+// pass-through header is not marked secret. Callers that want to preserve an
+// existing secret's stored value skip this check entirely; see UpdateServerHeader.
 func validateHeaderValueSource(name string, value *string, valueFromRequestHeader *string, isSecret bool) error {
 	hasValue := value != nil && *value != ""
 	hasValueFromRequestHeader := valueFromRequestHeader != nil && *valueFromRequestHeader != ""
 
-	if !hasValue && !hasValueFromRequestHeader {
-		if isSecret {
-			return fmt.Errorf("header %q: a secret header must specify a value", name)
-		}
-
-		return nil // env-sourced
-	}
-
-	if hasValue && hasValueFromRequestHeader {
+	if hasValue == hasValueFromRequestHeader {
 		return fmt.Errorf("header %q must specify exactly one of value or value_from_request_header", name)
 	}
 
