@@ -1424,6 +1424,20 @@ gram_hooks_codex_auth_file_email() {
   return 1
 }
 
+gram_hooks_codex_stop_process() {
+  local pid="$1"
+  local watchdog
+  kill "$pid" >/dev/null 2>&1 || true
+  # A TERM-ignoring app-server must not turn best-effort attribution into an
+  # unbounded hook stall. The watchdog bounds wait, then is canceled when the
+  # child exits normally during the grace period.
+  (sleep 0.5; kill -9 "$pid" >/dev/null 2>&1 || true) &
+  watchdog=$!
+  wait "$pid" >/dev/null 2>&1 || true
+  kill "$watchdog" >/dev/null 2>&1 || true
+  wait "$watchdog" >/dev/null 2>&1 || true
+}
+
 gram_hooks_codex_app_server_email() {
   local codex_bin work_dir input_fifo output_file pid elapsed timeout_tenths
   local response result account email
@@ -1447,8 +1461,7 @@ gram_hooks_codex_app_server_email() {
   done
   if ! grep -q '"id"[[:space:]]*:[[:space:]]*71001' "$output_file" 2>/dev/null; then
     exec 9>&-
-    kill "$pid" >/dev/null 2>&1 || true
-    wait "$pid" >/dev/null 2>&1 || true
+    gram_hooks_codex_stop_process "$pid"
     rm -rf "$work_dir"
     return 1
   fi
@@ -1462,8 +1475,7 @@ gram_hooks_codex_app_server_email() {
     elapsed=$((elapsed + 1))
   done
   exec 9>&-
-  kill "$pid" >/dev/null 2>&1 || true
-  wait "$pid" >/dev/null 2>&1 || true
+  gram_hooks_codex_stop_process "$pid"
 
   response="$(grep '"id"[[:space:]]*:[[:space:]]*71002' "$output_file" 2>/dev/null | tail -n 1)"
   rm -rf "$work_dir"

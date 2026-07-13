@@ -138,9 +138,10 @@ func (s *Service) resolveCanonicalActor(ctx context.Context, payload *gen.Ingest
 		// A self-reported email that matches no Gram user cannot key
 		// user-scoped policies; recover a complete identity instead of
 		// running unattributed. For shared plugin keys the session metadata
-		// cache may already link this session to a user (OTEL path or device
-		// bridge). A personal key already identifies the developer, so their
-		// events keep the owner identity, exactly as when no email is
+		// cache may already link this session to a user (an earlier canonical
+		// SessionStart hook, the OTEL path, or the device bridge). A personal
+		// key already identifies the developer, so their events keep the owner
+		// identity, exactly as when no email is
 		// self-reported. Either way policy enforcement and the recorded rows
 		// stay on one identity.
 		if strings.HasPrefix(authCtx.APIKeyName, auth.PluginAPIKeyNamePrefix) {
@@ -415,6 +416,18 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 	// hook row and the chat persistence below stamp the same AI-account
 	// attribution.
 	metadata := s.canonicalSessionMetadata(ctx, payload, authCtx, actor)
+	if strings.TrimSpace(payload.Event.Type) == "session.started" &&
+		metadata.SessionID != "" && (metadata.UserID != "" || metadata.UserEmail != "") {
+		if err := s.cache.Set(ctx, sessionCacheKey(metadata.SessionID), metadata, 24*time.Hour); err != nil {
+			s.logger.WarnContext(ctx, "failed to cache canonical hook session identity",
+				attr.SlogEvent("hooks_ingest_session_cache_failed"),
+				attr.SlogError(err),
+				attr.SlogGenAIConversationID(metadata.SessionID),
+				attr.SlogOrganizationID(metadata.GramOrgID),
+				attr.SlogProjectID(metadata.ProjectID),
+			)
+		}
+	}
 	s.writeCanonicalTelemetry(ctx, payload, authCtx, &metadata, timestamp, blockReason)
 	if err := s.persistCanonicalConversationEvent(ctx, payload, authCtx, &metadata); err != nil {
 		s.logger.WarnContext(ctx, "failed to persist canonical hook conversation event",

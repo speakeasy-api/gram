@@ -428,6 +428,38 @@ func TestResolveCanonicalActor_SharedPluginKeyDoesNotUseOwnerIdentity(t *testing
 	require.Equal(t, selfEmail, actor.Email, "self-reported email attributes shared-key events")
 }
 
+func TestIngest_CachesSelfReportedActorForLaterSharedKeyEvents(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	authCtx.APIKeyName = "plugins-hooks-20260713-codex"
+
+	userID := "user_codex_session_actor"
+	userEmail := "codex-session@example.com"
+	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, userID, userEmail)
+
+	sessionID := "canonical-codex-session-" + uuid.NewString()
+	started := canonicalIngestPayload("codex", "session.started", sessionID)
+	started.Source.UserEmail = &userEmail
+	result, err := ti.service.Ingest(ctx, started)
+	require.NoError(t, err)
+	require.Equal(t, "allow", result.Decision)
+
+	var cached SessionMetadata
+	require.NoError(t, ti.service.cache.Get(ctx, sessionCacheKey(sessionID), &cached))
+	require.Equal(t, userID, cached.UserID)
+	require.Equal(t, userEmail, cached.UserEmail)
+
+	later := canonicalIngestPayload("codex", "tool.requested", sessionID)
+	actor := ti.service.resolveCanonicalActor(ctx, later, authCtx)
+	require.Equal(t, userID, actor.UserID,
+		"later shared-key events must recover the actor learned at SessionStart")
+	require.Equal(t, userEmail, actor.Email)
+}
+
 func TestCanonicalShadowMCPEvidence_PrefersStdioCommand(t *testing.T) {
 	t.Parallel()
 

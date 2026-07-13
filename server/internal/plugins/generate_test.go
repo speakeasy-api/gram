@@ -4168,6 +4168,30 @@ gram_enrich_identity_payload '{"hook_event_name":"PreToolUse","session_id":"sess
 	require.NotContains(t, parts[1], "user_email", "Codex account lookup should run only once at SessionStart")
 }
 
+func TestCodexIdentityStopProcessIsBounded(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "identity.sh"), renderCodexIdentityScript(), 0o755))
+	driver := `#!/usr/bin/env bash
+. ./identity.sh
+ready="$PWD/ready"
+bash -c 'trap "" TERM; : > "$1"; end=$((SECONDS + 5)); while [ "$SECONDS" -lt "$end" ]; do :; done' _ "$ready" &
+pid=$!
+while [ ! -e "$ready" ]; do sleep 0.01; done
+gram_hooks_codex_stop_process "$pid"
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "driver.sh"), []byte(driver), 0o755))
+
+	started := time.Now()
+	cmd := exec.Command("bash", "driver.sh")
+	cmd.Dir = dir
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+	require.Less(t, time.Since(started), 3*time.Second,
+		"a TERM-ignoring Codex process must be killed before hook identity resolution can stall")
+}
+
 func TestCodexIdentityFallsBackAcrossBothAuthJWTs(t *testing.T) {
 	t.Parallel()
 
