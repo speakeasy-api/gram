@@ -17,7 +17,6 @@ export const HookEventName = {
   PostToolUseFailure: "PostToolUseFailure",
   UserPromptSubmit: "UserPromptSubmit",
   Stop: "Stop",
-  SubagentStop: "SubagentStop",
   SessionEnd: "SessionEnd",
   Notification: "Notification",
 } as const;

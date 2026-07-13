@@ -40941,7 +40941,6 @@ components:
             - PostToolUseFailure
             - UserPromptSubmit
             - Stop
-            - SubagentStop
             - SessionEnd
             - Notification
         is_interrupt:
