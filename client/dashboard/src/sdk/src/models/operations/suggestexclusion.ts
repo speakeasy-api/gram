@@ -138,9 +138,7 @@ export function suggestExclusionSecurityToJSON(
   suggestExclusionSecurity: SuggestExclusionSecurity,
 ): string {
   return JSON.stringify(
-    SuggestExclusionSecurity$outboundSchema.parse(
-      suggestExclusionSecurity,
-    ),
+    SuggestExclusionSecurity$outboundSchema.parse(suggestExclusionSecurity),
   );
 }
 
@@ -177,8 +175,6 @@ export function suggestExclusionRequestToJSON(
   suggestExclusionRequest: SuggestExclusionRequest,
 ): string {
   return JSON.stringify(
-    SuggestExclusionRequest$outboundSchema.parse(
-      suggestExclusionRequest,
-    ),
+    SuggestExclusionRequest$outboundSchema.parse(suggestExclusionRequest),
   );
 }
