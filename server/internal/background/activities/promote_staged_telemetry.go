@@ -112,11 +112,20 @@ func (p *PromoteStagedTelemetry) Do(ctx context.Context, args PromoteStagedTelem
 	cutoff := p.now().Add(-p.timeout)
 	promote := make([]telemetryrepo.InsertTelemetryLogParams, 0, len(rows))
 	rewrittenByID := make(map[string]bool, len(rows))
-	// Memoize tuple lookups so each distinct request id costs one Redis
-	// round-trip even when several staged rows share it. seen guards against
-	// duplicate staged copies of the same row id (a retried ingest insert on
-	// an engine without a dedup window) entering the promote list twice.
-	tuples := make(map[string]*telemetry.MCPAttributionTuple, len(rows))
+	// Memoize tuple lookups so each distinct lookup costs one Redis
+	// round-trip even when several staged rows share it. The memo key must
+	// mirror the Redis key's (org, request id) scope: a pass is per-project
+	// so two real orgs never meet in one batch, but a row staged before
+	// org_id existed carries an empty org, and memoizing its nil result
+	// under the request id alone would starve a later row whose populated
+	// org does have a tuple. seen guards against duplicate staged copies of
+	// the same row id (a retried ingest insert on an engine without a dedup
+	// window) entering the promote list twice.
+	type tupleKey struct {
+		orgID     string
+		requestID string
+	}
+	tuples := make(map[tupleKey]*telemetry.MCPAttributionTuple, len(rows))
 	seen := make(map[string]struct{}, len(rows))
 	for _, row := range rows {
 		if _, dup := seen[row.ID]; dup {
@@ -128,10 +137,11 @@ func (p *PromoteStagedTelemetry) Do(ctx context.Context, args PromoteStagedTelem
 		// wrote the tuple and the OTEL exporter key that staged this row can
 		// resolve different projects (org-wide plugin keys), but both agree
 		// on the org, which the row carries as a materialized column.
-		tuple, ok := tuples[row.RequestID]
+		key := tupleKey{orgID: row.OrgID, requestID: row.RequestID}
+		tuple, ok := tuples[key]
 		if !ok {
 			tuple = p.lookupTuple(ctx, row.OrgID, row.RequestID)
-			tuples[row.RequestID] = tuple
+			tuples[key] = tuple
 		}
 
 		attributes := row.Attributes

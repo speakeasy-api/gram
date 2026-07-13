@@ -199,6 +199,78 @@ func TestPromoteStagedTelemetry_IgnoresTupleFromAnotherOrg(t *testing.T) {
 		"another org's tuple must never be applied to this org's staged row")
 }
 
+// TestPromoteStagedTelemetry_ScopesTupleMemoizationByOrg pins the in-pass
+// memoization to the Redis key's (org, request id) scope. A row staged before
+// the org_id column existed carries an empty org; processed first, its nil
+// lookup must not be memoized under the request id alone, or a later row with
+// the same request id and a populated org would never see its tuple and would
+// eventually promote verbatim.
+func TestPromoteStagedTelemetry_ScopesTupleMemoizationByOrg(t *testing.T) {
+	t.Parallel()
+
+	ctx, act, queries, cacheAdapter := newPromoteStagedTelemetryHarness(t)
+
+	projectID := uuid.New()
+	orgID := "org-" + uuid.NewString()
+	sessionID := "promo-session-memo"
+	requestID := "req_memo_1"
+	orglessRowID := uuid.NewString()
+	orgRowID := uuid.NewString()
+	observed := time.Now().UTC().Add(-time.Minute)
+
+	// Older row first in the pass (rows are ordered by observed time): the
+	// empty-org copy must be scanned before the populated-org copy.
+	insertStagedRowForTest(t, ctx, queries, stagedRowFixture{
+		id:        orglessRowID,
+		projectID: projectID,
+		orgID:     "",
+		sessionID: sessionID,
+		requestID: requestID,
+		observed:  observed,
+	})
+	insertStagedRowForTest(t, ctx, queries, stagedRowFixture{
+		id:        orgRowID,
+		projectID: projectID,
+		orgID:     orgID,
+		sessionID: sessionID,
+		requestID: requestID,
+		observed:  observed.Add(time.Second),
+	})
+	require.NoError(t, cacheAdapter.Set(ctx,
+		telemetry.MCPAttributionTupleKey(orgID, requestID),
+		telemetry.MCPAttributionTuple{Server: "workos-public", Tool: "whoami"},
+		telemetry.MCPAttributionTupleTTL,
+	))
+
+	// The org-scoped row must promote rewritten; the org-less row has no
+	// reachable tuple and stays awaiting the timeout.
+	var promotedPass *activities.PromoteStagedTelemetryResult
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		result, err := act.Do(ctx, activities.PromoteStagedTelemetryArgs{ProjectID: projectID})
+		assert.NoError(collect, err)
+		if err == nil && result != nil && result.Promoted > 0 {
+			promotedPass = result
+		}
+		assert.NotNil(collect, promotedPass)
+	}, 5*time.Second, 50*time.Millisecond)
+	require.Equal(t, 1, promotedPass.Promoted)
+	require.Equal(t, 1, promotedPass.Rewritten)
+	require.Equal(t, 1, promotedPass.Remaining)
+
+	var logs []telemetryrepo.TelemetryLog
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		logs = listPromotedLogs(t, ctx, queries, projectID, observed)
+		assert.Len(collect, logs, 1)
+	}, 3*time.Second, 50*time.Millisecond)
+	require.Equal(t, orgRowID, logs[0].ID)
+	require.Contains(t, logs[0].Attributes, "workos-public")
+
+	staged, err := queries.ListStagedTelemetryLogs(ctx, projectID.String())
+	require.NoError(t, err)
+	require.Len(t, staged, 1)
+	require.Equal(t, orglessRowID, staged[0].ID)
+}
+
 func TestPromoteStagedTelemetry_LeavesFreshRowsAwaitingTuple(t *testing.T) {
 	t.Parallel()
 
