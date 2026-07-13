@@ -61,7 +61,15 @@ function AverageStat({ cycle }: { cycle: BillingCycle }): JSX.Element {
               : "Averaged over the full cycle."
           }
         >
-          <Info className="size-3" />
+          {/* A real button so the explanation is reachable by keyboard
+              focus, not just pointer hover. */}
+          <button
+            type="button"
+            aria-label="How the average is calculated"
+            className="inline-flex shrink-0 cursor-help"
+          >
+            <Info aria-hidden className="size-3" />
+          </button>
         </SimpleTooltip>
       </span>
       <span className="text-xl font-semibold tabular-nums">
