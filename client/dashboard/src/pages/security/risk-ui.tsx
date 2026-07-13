@@ -126,7 +126,11 @@ export function SeverityScore({
   if (score == null) {
     return <span className="text-muted-foreground text-sm">-</span>;
   }
-  const rating = scoreToRating(score);
+  // Rate on the rounded value we actually display, so a score sitting just below
+  // a band boundary (e.g. 3.96 → shown as "4.0") never renders the number in a
+  // color that disagrees with the band its displayed value falls in.
+  const displayed = Math.round(score * 10) / 10;
+  const rating = scoreToRating(displayed);
   return (
     <SeverityBadgeBase
       variant={SEVERITY_BADGE_VARIANT[rating]}
@@ -134,7 +138,7 @@ export function SeverityScore({
       className={cn("tabular-nums", className)}
       tooltip={`${SEVERITY_RATING_LABEL[rating]} severity`}
     >
-      {score.toFixed(1)}
+      {displayed.toFixed(1)}
     </SeverityBadgeBase>
   );
 }

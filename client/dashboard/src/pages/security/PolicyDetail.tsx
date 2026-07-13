@@ -901,6 +901,7 @@ function PromptPolicyEditor({
           scopeInclude={scopeInclude}
           scopeExempt={scopeExempt}
           action={action}
+          score={score}
           audienceType={audienceType}
           audiencePrincipalCount={audiencePrincipalUrns.size}
           verdicts={evalReview.verdicts}
@@ -1638,6 +1639,7 @@ function PromptReview({
   scopeInclude,
   scopeExempt,
   action,
+  score,
   audienceType,
   audiencePrincipalCount,
   verdicts,
@@ -1653,6 +1655,7 @@ function PromptReview({
   scopeInclude: string;
   scopeExempt: string;
   action: PolicyAction;
+  score: number;
   audienceType: "everyone" | "targeted";
   audiencePrincipalCount: number;
   verdicts: Map<string, EvalVerdict>;
@@ -1704,6 +1707,9 @@ function PromptReview({
                   ? "Warn"
                   : "Flag"}
             </Badge>
+          </SummaryRow>
+          <SummaryRow label="Severity">
+            <SeverityBadge score={score} />
           </SummaryRow>
           <SummaryRow label="Audience">
             <Type small>
@@ -3148,6 +3154,7 @@ function StandardPolicyEditor({
             scopeInclude={scopeInclude}
             scopeExempt={scopeExempt}
             action={action}
+            score={score}
             audienceType={audienceType}
             audiencePrincipalCount={audiencePrincipalUrns.size}
           />
@@ -3182,6 +3189,7 @@ function StandardReview({
   scopeInclude,
   scopeExempt,
   action,
+  score,
   audienceType,
   audiencePrincipalCount,
 }: {
@@ -3193,6 +3201,7 @@ function StandardReview({
   scopeInclude: string;
   scopeExempt: string;
   action: PolicyAction;
+  score: number;
   audienceType: "everyone" | "targeted";
   audiencePrincipalCount: number;
 }): JSX.Element {
@@ -3250,6 +3259,9 @@ function StandardReview({
           <Badge variant={action === "flag" ? "neutral" : "warning"}>
             {action === "block" ? "Block" : action === "warn" ? "Warn" : "Flag"}
           </Badge>
+        </SummaryRow>
+        <SummaryRow label="Severity">
+          <SeverityBadge score={score} />
         </SummaryRow>
         <SummaryRow label="Audience">
           <Type small>
