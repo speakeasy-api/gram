@@ -24,11 +24,6 @@ export const MODEL_KEY_SLOTS: ModelKeySlot[] = [
     description: "Completions from the dashboard playground.",
   },
   {
-    slot: "elements",
-    name: "Elements",
-    description: "Chat completions served through Elements embeds.",
-  },
-  {
     slot: "assistants",
     name: "Assistants",
     description: "Completions from assistant runs and triggers.",
