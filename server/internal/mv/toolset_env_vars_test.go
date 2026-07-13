@@ -102,9 +102,8 @@ func TestAssembleEnvironmentVariablesForToolset_DisambiguatesSameKeyAcrossDocume
 func TestAssembleEnvironmentVariablesForToolset_StableSortedOrder(t *testing.T) {
 	t.Parallel()
 
-	// Ordering previously fell out of Go map iteration, which is randomized
-	// per call, so the API shuffled variables on every request and the
-	// dashboard env vars table reordered on each refresh (AGE-2985).
+	// Regression test for AGE-2985: ordering previously fell out of randomized
+	// Go map iteration, so the API shuffled variables on every request.
 	securityEntriesByKey := map[mv.SecurityDefinitionKey]tsr.HttpSecurity{
 		{Key: "zulu"}:  {ID: uuid.New(), Key: "zulu", EnvVariables: []string{"ZULU_KEY"}},
 		{Key: "mike"}:  {ID: uuid.New(), Key: "mike", EnvVariables: []string{"MIKE_KEY"}},

@@ -1789,8 +1789,6 @@ func AssembleEnvironmentVariablesForToolset(
 		})
 	}
 
-	// Sort by security key so variables come back in a stable order across
-	// requests — map iteration order is randomized per call.
 	securityVars := make([]*types.SecurityVariable, 0, len(securityVarsMap))
 	for _, key := range slices.Sorted(maps.Keys(securityVarsMap)) {
 		securityVars = append(securityVars, securityVarsMap[key])
