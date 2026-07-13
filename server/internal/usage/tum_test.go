@@ -29,6 +29,18 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
 
+// attributeMetricsPostCutoff is a fixed instant several days after the
+// attribute_metrics_summaries MV ingestion cutoff (2026-07-14 00:00:00 UTC; see
+// server/clickhouse/schema.sql). Tests that drive rows through the MV and read
+// them back over an explicit window must timestamp every row at/after the
+// cutoff, or the MV drops it. The margin (not merely cutoff+1h) is deliberate:
+// day-granular tests seed buckets a day or more earlier than this instant, and
+// those earlier buckets must still clear the cutoff. Pinning to a fixed instant
+// keeps these tests independent of the wall clock. Tests that instead read the
+// *active billing cycle* (anchored to real now) cannot use this — they seed the
+// aggregate table directly at time.Now() via insertObservedClaudeAggregateRow.
+var attributeMetricsPostCutoff = time.Date(2026, time.July, 20, 1, 0, 0, 0, time.UTC)
+
 // newTUMTestService builds a usage service with the dependencies the TUM
 // endpoints need: Postgres (billing metadata, projects), ClickHouse
 // (telemetry), and an audit logger. It seeds an organization_metadata row so
@@ -176,8 +188,45 @@ func insertRetainedGramAggregateRow(t *testing.T, conn driver.Conn, projectID st
 			uniqExactIfState(toString(''), toUInt8(0)) AS unique_tool_calls,
 			'' AS account_type, '' AS provider, '' AS billing_mode,
 			'' AS query_source, '' AS skill_name, '' AS agent_name,
-			'' AS mcp_server_name, '' AS mcp_tool_name
+			'' AS mcp_server_name, '' AS mcp_tool_name,
+			toUInt8(0) AS generation, toUInt8(1) AS is_active
 	`, projectID, timestamp.UnixNano(), hookSource, tokens, tokens)
+	require.NoError(t, err)
+}
+
+// insertObservedClaudeAggregateRow seeds attribute_metrics_summaries directly
+// with an ADMITTED Claude session row (hook_source claude-code), the tokens
+// landing as input so the TUM measure counts exactly tokens. Unlike
+// insertObservedClaudeRow it bypasses the MV — and therefore the MV's
+// ingestion cutoff — so billing reads anchored to the real wall clock (the
+// active-cycle service/activity paths) see the tokens regardless of where the
+// cutoff sits relative to now. generation 0 / is_active 1 match a live MV row.
+func insertObservedClaudeAggregateRow(t *testing.T, conn driver.Conn, projectID string, timestamp time.Time, tokens int64) {
+	t.Helper()
+
+	err := conn.Exec(t.Context(), `
+		INSERT INTO attribute_metrics_summaries
+		SELECT
+			toUUID(?) AS gram_project_id,
+			toStartOfHour(fromUnixTimestamp64Nano(?)) AS time_bucket,
+			'' AS department_name, '' AS job_title, '' AS employee_type,
+			'' AS division_name, '' AS cost_center_name,
+			'' AS user_email, 'claude-4.6' AS model, 'claude-code' AS hook_source,
+			[]::Array(String) AS roles, []::Array(String) AS groups,
+			uniqExactIfState(toString('observed-chat'), toUInt8(1)) AS total_chats,
+			sumIfState(toInt64(?), toUInt8(1)) AS total_input_tokens,
+			sumIfState(toInt64(0), toUInt8(1)) AS total_output_tokens,
+			sumIfState(toInt64(?), toUInt8(1)) AS total_tokens,
+			sumIfState(toInt64(0), toUInt8(1)) AS cache_read_input_tokens,
+			sumIfState(toInt64(0), toUInt8(1)) AS cache_creation_input_tokens,
+			sumIfState(toFloat64(0), toUInt8(1)) AS total_cost,
+			countIfState(toUInt8(0)) AS total_tool_calls,
+			uniqExactIfState(toString(''), toUInt8(0)) AS unique_tool_calls,
+			'' AS account_type, '' AS provider, '' AS billing_mode,
+			'' AS query_source, '' AS skill_name, '' AS agent_name,
+			'' AS mcp_server_name, '' AS mcp_tool_name,
+			toUInt8(0) AS generation, toUInt8(1) AS is_active
+	`, projectID, timestamp.UnixNano(), tokens, tokens)
 	require.NoError(t, err)
 }
 
@@ -187,8 +236,9 @@ func TestGetTokensUnderManagementQuery_ExcludesCacheReads(t *testing.T) {
 	_, _, chConn, projectID := newTUMTestService(t, "org-tum-query")
 
 	// The read buckets by UTC day, so the window is day-aligned and the
-	// out-of-window rows sit several days back.
-	now := time.Now().UTC()
+	// out-of-window rows sit several days back. Fixed at a post-cutoff instant
+	// so the MV admits the rows regardless of the wall clock.
+	now := attributeMetricsPostCutoff
 	dayStart := now.Truncate(24 * time.Hour)
 	windowStart := dayStart.Add(-2 * 24 * time.Hour)
 	windowEnd := dayStart.Add(24 * time.Hour)
@@ -234,7 +284,8 @@ func TestGetTokensUnderManagementQuery_DailyBreakdown(t *testing.T) {
 
 	_, _, chConn, projectID := newTUMTestService(t, "org-tum-daily")
 
-	now := time.Now().UTC()
+	// Post-cutoff instant so the MV admits these rows regardless of wall clock.
+	now := attributeMetricsPostCutoff
 	dayStart := now.Truncate(24 * time.Hour)
 	windowStart := dayStart.Add(-2 * 24 * time.Hour)
 	windowEnd := dayStart.Add(24 * time.Hour)
@@ -315,10 +366,12 @@ func TestGetTokensUnderManagement_CountsObservedTraffic(t *testing.T) {
 	// Timestamps sit at "now" so they always land inside the active cycle.
 	now := time.Now().UTC()
 
-	// Observed agent traffic: counted. The retained Gram-hosted rows (a
+	// Observed agent traffic: counted. Seeded directly (not through the MV) so
+	// it lands in the real-now active cycle this service read is scoped to,
+	// independent of the MV ingestion cutoff. The retained Gram-hosted rows (a
 	// playground completion and pre-tagging '' history) must be excluded by
 	// the service's exclusion list.
-	insertObservedClaudeRow(t, chConn, projectID.String(), now, 450, 0, 0, 0)
+	insertObservedClaudeAggregateRow(t, chConn, projectID.String(), now, 450)
 	insertRetainedGramAggregateRow(t, chConn, projectID.String(), now, "playground", 9000)
 	insertRetainedGramAggregateRow(t, chConn, projectID.String(), now, "", 7000)
 
@@ -485,7 +538,9 @@ func TestGetTokensUnderManagementQuery_ExcludesGramHostedSources(t *testing.T) {
 
 	_, _, chConn, projectID := newTUMTestService(t, "org-tum-billed-sources")
 
-	now := time.Now().UTC()
+	// Post-cutoff instant so the MV admits the observed rows regardless of wall
+	// clock; the direct-seeded retained rows are unaffected by the cutoff.
+	now := attributeMetricsPostCutoff
 	dayStart := now.Truncate(24 * time.Hour)
 	windowStart := dayStart.Add(-2 * 24 * time.Hour)
 	windowEnd := dayStart.Add(24 * time.Hour)
