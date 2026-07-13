@@ -33,6 +33,17 @@ export const MODEL_KEY_SLOTS: ModelKeySlot[] = [
     name: "Assistants",
     description: "Completions from assistant runs and triggers.",
   },
+  {
+    slot: "risk-policy",
+    name: "Risk policy judge",
+    description:
+      "Prompt-based risk policy evaluations of observed agent traffic.",
+  },
+  {
+    slot: "prompt-injection",
+    name: "Prompt injection classifier",
+    description: "Prompt injection scanning of observed agent traffic.",
+  },
 ];
 
 export type KeySource = "custom" | "inherited" | "platform";
