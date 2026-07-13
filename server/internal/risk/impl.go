@@ -417,6 +417,8 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		UserMessage:          conv.PtrToPGTextEmpty(payload.UserMessage),
 		Prompt:               prompt,
 		ModelConfig:          modelConfig,
+		// Create payload applies the Goa Default(5), so Score always carries a value.
+		Score: pgtype.Float8{Float64: payload.Score, Valid: true},
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create risk policy").LogError(ctx, s.logger)
@@ -795,6 +797,9 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		UserMessage:          userMessage,
 		Prompt:               prompt,
 		ModelConfig:          modelConfig,
+		// Omit (nil) preserves the current score; the query COALESCEs to the
+		// existing column value. Never contributes to the version bump.
+		Score: conv.PtrToPGFloat8(payload.Score),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "update risk policy").LogError(ctx, s.logger)
@@ -2906,6 +2911,7 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 		UserMessage:            conv.FromPGText[string](row.UserMessage),
 		Prompt:                 conv.FromPGText[string](row.Prompt),
 		ModelConfig:            unmarshalModelConfig(row.ModelConfig),
+		Score:                  row.Score,
 		Version:                row.Version,
 		CreatedAt:              row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:              row.UpdatedAt.Time.Format(time.RFC3339),
@@ -2941,6 +2947,7 @@ func policyRowSnapshotWithAudience(row repo.RiskPolicy, audiencePrincipalURNs []
 		UserMessage:            conv.FromPGText[string](row.UserMessage),
 		Prompt:                 conv.FromPGText[string](row.Prompt),
 		ModelConfig:            unmarshalModelConfig(row.ModelConfig),
+		Score:                  row.Score,
 		Version:                row.Version,
 		CreatedAt:              row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:              row.UpdatedAt.Time.Format(time.RFC3339),

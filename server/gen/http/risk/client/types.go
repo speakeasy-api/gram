@@ -69,6 +69,9 @@ type CreateRiskPolicyRequestBody struct {
 	Prompt *string `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
 	// For prompt_based policies: per-policy LLM-judge model configuration.
 	ModelConfig *RiskPolicyModelConfigRequestBody `form:"model_config,omitempty" json:"model_config,omitempty" xml:"model_config,omitempty"`
+	// CVSS-style severity (0.1-10) assigned to findings this policy produces. Omit
+	// to apply the default (5).
+	Score float64 `form:"score" json:"score" xml:"score"`
 }
 
 // UpdateRiskPolicyRequestBody is the type of the "risk" service
@@ -127,6 +130,9 @@ type UpdateRiskPolicyRequestBody struct {
 	// For prompt_based policies: per-policy LLM-judge model configuration. Omit to
 	// preserve the current value.
 	ModelConfig *RiskPolicyModelConfigRequestBody `form:"model_config,omitempty" json:"model_config,omitempty" xml:"model_config,omitempty"`
+	// CVSS-style severity (0.1-10) assigned to findings this policy produces. Omit
+	// to preserve the current value.
+	Score *float64 `form:"score,omitempty" json:"score,omitempty" xml:"score,omitempty"`
 }
 
 // UnmaskRiskResultRequestBody is the type of the "risk" service
@@ -415,6 +421,10 @@ type CreateRiskPolicyResponseBody struct {
 	// For prompt_based policies: per-policy LLM-judge model configuration. Null
 	// for standard policies.
 	ModelConfig *RiskPolicyModelConfigResponseBody `form:"model_config,omitempty" json:"model_config,omitempty" xml:"model_config,omitempty"`
+	// CVSS-style severity (0.1-10) the author assigns to findings this policy
+	// produces. Descriptive only; changing it does not re-scan messages. Defaults
+	// to 5.
+	Score *float64 `form:"score,omitempty" json:"score,omitempty" xml:"score,omitempty"`
 	// Policy version, incremented on each update.
 	Version *int64 `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 	// When the policy was created.
@@ -510,6 +520,10 @@ type GetRiskPolicyResponseBody struct {
 	// For prompt_based policies: per-policy LLM-judge model configuration. Null
 	// for standard policies.
 	ModelConfig *RiskPolicyModelConfigResponseBody `form:"model_config,omitempty" json:"model_config,omitempty" xml:"model_config,omitempty"`
+	// CVSS-style severity (0.1-10) the author assigns to findings this policy
+	// produces. Descriptive only; changing it does not re-scan messages. Defaults
+	// to 5.
+	Score *float64 `form:"score,omitempty" json:"score,omitempty" xml:"score,omitempty"`
 	// Policy version, incremented on each update.
 	Version *int64 `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 	// When the policy was created.
@@ -589,6 +603,10 @@ type UpdateRiskPolicyResponseBody struct {
 	// For prompt_based policies: per-policy LLM-judge model configuration. Null
 	// for standard policies.
 	ModelConfig *RiskPolicyModelConfigResponseBody `form:"model_config,omitempty" json:"model_config,omitempty" xml:"model_config,omitempty"`
+	// CVSS-style severity (0.1-10) the author assigns to findings this policy
+	// produces. Descriptive only; changing it does not re-scan messages. Defaults
+	// to 5.
+	Score *float64 `form:"score,omitempty" json:"score,omitempty" xml:"score,omitempty"`
 	// Policy version, incremented on each update.
 	Version *int64 `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 	// When the policy was created.
@@ -9100,6 +9118,10 @@ type RiskPolicyResponseBody struct {
 	// For prompt_based policies: per-policy LLM-judge model configuration. Null
 	// for standard policies.
 	ModelConfig *RiskPolicyModelConfigResponseBody `form:"model_config,omitempty" json:"model_config,omitempty" xml:"model_config,omitempty"`
+	// CVSS-style severity (0.1-10) the author assigns to findings this policy
+	// produces. Descriptive only; changing it does not re-scan messages. Defaults
+	// to 5.
+	Score *float64 `form:"score,omitempty" json:"score,omitempty" xml:"score,omitempty"`
 	// Policy version, incremented on each update.
 	Version *int64 `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 	// When the policy was created.
@@ -9519,6 +9541,7 @@ func NewCreateRiskPolicyRequestBody(p *risk.CreateRiskPolicyPayload) *CreateRisk
 		AutoName:               p.AutoName,
 		UserMessage:            p.UserMessage,
 		Prompt:                 p.Prompt,
+		Score:                  p.Score,
 	}
 	{
 		var zero string
@@ -9589,6 +9612,12 @@ func NewCreateRiskPolicyRequestBody(p *risk.CreateRiskPolicyPayload) *CreateRisk
 	if p.ModelConfig != nil {
 		body.ModelConfig = marshalTypesRiskPolicyModelConfigToRiskPolicyModelConfigRequestBody(p.ModelConfig)
 	}
+	{
+		var zero float64
+		if body.Score == zero {
+			body.Score = 5
+		}
+	}
 	return body
 }
 
@@ -9607,6 +9636,7 @@ func NewUpdateRiskPolicyRequestBody(p *risk.UpdateRiskPolicyPayload) *UpdateRisk
 		AutoName:               p.AutoName,
 		UserMessage:            p.UserMessage,
 		Prompt:                 p.Prompt,
+		Score:                  p.Score,
 	}
 	if p.Sources != nil {
 		body.Sources = make([]string, len(p.Sources))
@@ -9953,6 +9983,7 @@ func NewCreateRiskPolicyRiskPolicyOK(body *CreateRiskPolicyResponseBody) *types.
 		AutoName:               *body.AutoName,
 		UserMessage:            body.UserMessage,
 		Prompt:                 body.Prompt,
+		Score:                  *body.Score,
 		Version:                *body.Version,
 		CreatedAt:              *body.CreatedAt,
 		UpdatedAt:              *body.UpdatedAt,
@@ -10511,6 +10542,7 @@ func NewGetRiskPolicyRiskPolicyOK(body *GetRiskPolicyResponseBody) *types.RiskPo
 		AutoName:               *body.AutoName,
 		UserMessage:            body.UserMessage,
 		Prompt:                 body.Prompt,
+		Score:                  *body.Score,
 		Version:                *body.Version,
 		CreatedAt:              *body.CreatedAt,
 		UpdatedAt:              *body.UpdatedAt,
@@ -10735,6 +10767,7 @@ func NewUpdateRiskPolicyRiskPolicyOK(body *UpdateRiskPolicyResponseBody) *types.
 		AutoName:               *body.AutoName,
 		UserMessage:            body.UserMessage,
 		Prompt:                 body.Prompt,
+		Score:                  *body.Score,
 		Version:                *body.Version,
 		CreatedAt:              *body.CreatedAt,
 		UpdatedAt:              *body.UpdatedAt,
@@ -17163,6 +17196,9 @@ func ValidateCreateRiskPolicyResponseBody(body *CreateRiskPolicyResponseBody) (e
 	if body.AutoName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("auto_name", "body"))
 	}
+	if body.Score == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("score", "body"))
+	}
 	if body.Version == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
 	}
@@ -17207,6 +17243,16 @@ func ValidateCreateRiskPolicyResponseBody(body *CreateRiskPolicyResponseBody) (e
 	if body.AudienceType != nil {
 		if !(*body.AudienceType == "everyone" || *body.AudienceType == "targeted") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.audience_type", *body.AudienceType, []any{"everyone", "targeted"}))
+		}
+	}
+	if body.Score != nil {
+		if *body.Score < 0.1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.score", *body.Score, 0.1, true))
+		}
+	}
+	if body.Score != nil {
+		if *body.Score > 10 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.score", *body.Score, 10, false))
 		}
 	}
 	if body.CreatedAt != nil {
@@ -17286,6 +17332,9 @@ func ValidateGetRiskPolicyResponseBody(body *GetRiskPolicyResponseBody) (err err
 	if body.AutoName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("auto_name", "body"))
 	}
+	if body.Score == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("score", "body"))
+	}
 	if body.Version == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
 	}
@@ -17330,6 +17379,16 @@ func ValidateGetRiskPolicyResponseBody(body *GetRiskPolicyResponseBody) (err err
 	if body.AudienceType != nil {
 		if !(*body.AudienceType == "everyone" || *body.AudienceType == "targeted") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.audience_type", *body.AudienceType, []any{"everyone", "targeted"}))
+		}
+	}
+	if body.Score != nil {
+		if *body.Score < 0.1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.score", *body.Score, 0.1, true))
+		}
+	}
+	if body.Score != nil {
+		if *body.Score > 10 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.score", *body.Score, 10, false))
 		}
 	}
 	if body.CreatedAt != nil {
@@ -17374,6 +17433,9 @@ func ValidateUpdateRiskPolicyResponseBody(body *UpdateRiskPolicyResponseBody) (e
 	if body.AutoName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("auto_name", "body"))
 	}
+	if body.Score == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("score", "body"))
+	}
 	if body.Version == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
 	}
@@ -17418,6 +17480,16 @@ func ValidateUpdateRiskPolicyResponseBody(body *UpdateRiskPolicyResponseBody) (e
 	if body.AudienceType != nil {
 		if !(*body.AudienceType == "everyone" || *body.AudienceType == "targeted") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.audience_type", *body.AudienceType, []any{"everyone", "targeted"}))
+		}
+	}
+	if body.Score != nil {
+		if *body.Score < 0.1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.score", *body.Score, 0.1, true))
+		}
+	}
+	if body.Score != nil {
+		if *body.Score > 10 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.score", *body.Score, 10, false))
 		}
 	}
 	if body.CreatedAt != nil {
@@ -28610,6 +28682,9 @@ func ValidateRiskPolicyResponseBody(body *RiskPolicyResponseBody) (err error) {
 	if body.AutoName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("auto_name", "body"))
 	}
+	if body.Score == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("score", "body"))
+	}
 	if body.Version == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
 	}
@@ -28654,6 +28729,16 @@ func ValidateRiskPolicyResponseBody(body *RiskPolicyResponseBody) (err error) {
 	if body.AudienceType != nil {
 		if !(*body.AudienceType == "everyone" || *body.AudienceType == "targeted") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.audience_type", *body.AudienceType, []any{"everyone", "targeted"}))
+		}
+	}
+	if body.Score != nil {
+		if *body.Score < 0.1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.score", *body.Score, 0.1, true))
+		}
+	}
+	if body.Score != nil {
+		if *body.Score > 10 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.score", *body.Score, 10, false))
 		}
 	}
 	if body.CreatedAt != nil {

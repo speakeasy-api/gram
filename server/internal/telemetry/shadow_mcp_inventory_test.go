@@ -101,16 +101,24 @@ func TestShadowMCPInventoryUsage_FromTelemetry(t *testing.T) {
 		ObservedAt: base.Add(3 * time.Minute),
 	})
 
-	usage := requireShadowMCPInventoryUsageEventually(ctx, t, ti, telemetryRepo.ListShadowMCPInventoryUsageParams{
-		GramProjectID: projectID,
-		Limit:         50,
-	}, 1)
+	// All three calls collapse into one canonical URL, so waiting on the row
+	// count alone would pass as soon as the first async insert flushes. Wait
+	// for the full call count so the assertions below see complete data.
+	var usage []telemetryRepo.ShadowMCPInventoryUsageRow
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		var err error
+		usage, err = ti.chClient.ListShadowMCPInventoryUsage(ctx, telemetryRepo.ListShadowMCPInventoryUsageParams{
+			GramProjectID: projectID,
+			Limit:         50,
+		})
+		require.NoError(c, err)
+		require.Len(c, usage, 1)
+		require.EqualValues(c, 3, usage[0].CallCount)
+	}, 5*time.Second, 100*time.Millisecond)
 
-	require.Len(t, usage, 1)
 	assert.Equal(t, "https://mcp.speakeasy.com/mcp", usage[0].CanonicalServerURL)
 	require.NotNil(t, usage[0].LastCalled)
 	assert.Equal(t, base.Add(2*time.Minute), *usage[0].LastCalled)
-	assert.EqualValues(t, 3, usage[0].CallCount)
 	assert.EqualValues(t, 2, usage[0].UserCount)
 	assert.Equal(t, []string{"ada@example.com", "grace@example.com"}, usage[0].TopUsers)
 }
@@ -365,26 +373,6 @@ func requireShadowMCPInventoryURLsEventually(
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		var err error
 		rows, err = ti.chClient.ListShadowMCPInventoryURLs(ctx, params)
-		require.NoError(c, err)
-		require.Len(c, rows, wantLen)
-	}, 5*time.Second, 100*time.Millisecond)
-
-	return rows
-}
-
-func requireShadowMCPInventoryUsageEventually(
-	ctx context.Context,
-	t *testing.T,
-	ti *testInstance,
-	params telemetryRepo.ListShadowMCPInventoryUsageParams,
-	wantLen int,
-) []telemetryRepo.ShadowMCPInventoryUsageRow {
-	t.Helper()
-
-	var rows []telemetryRepo.ShadowMCPInventoryUsageRow
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		var err error
-		rows, err = ti.chClient.ListShadowMCPInventoryUsage(ctx, params)
 		require.NoError(c, err)
 		require.Len(c, rows, wantLen)
 	}, 5*time.Second, 100*time.Millisecond)
