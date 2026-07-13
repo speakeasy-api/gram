@@ -142,23 +142,22 @@ func insertTUMTelemetryRow(t *testing.T, ctx context.Context, queries *telemetry
 	require.NoError(t, err)
 }
 
-// insertStoredSession inserts token-usage rows plus a tool-call row for a chat
-// so the session qualifies as "stored" and counts toward TUM.
+// insertStoredSession inserts an observed Claude Code api_request row — the
+// tokens-under-management population (attribute_metrics_summaries). The
+// tokens land as input so the TUM measure counts exactly totalTokens.
 func insertStoredSession(t *testing.T, ctx context.Context, queries *telemetryrepo.Queries, projectID string, timestamp time.Time, totalTokens int) {
 	t.Helper()
 
-	chatID := uuid.NewString()
-	insertTUMTelemetryRow(t, ctx, queries, projectID, timestamp, "chat:completion", map[string]any{
-		"gen_ai.conversation.id":     chatID,
-		"gen_ai.usage.input_tokens":  totalTokens / 2,
-		"gen_ai.usage.output_tokens": totalTokens - totalTokens/2,
-		"gen_ai.usage.total_tokens":  totalTokens,
-		"gram.resource.urn":          "chat:completion",
-	})
-	insertTUMTelemetryRow(t, ctx, queries, projectID, timestamp, "tools:http:petstore:listPets", map[string]any{
-		"gen_ai.conversation.id":    chatID,
-		"gram.tool.urn":             "tools:http:petstore:listPets",
-		"http.response.status_code": 200,
+	insertTUMTelemetryRow(t, ctx, queries, projectID, timestamp, "claude-code:otel:logs", map[string]any{
+		"gen_ai.conversation.id": uuid.NewString(),
+		"prompt.id":              uuid.NewString(),
+		"event.name":             "api_request",
+		"input_tokens":           totalTokens,
+		"output_tokens":          0,
+		"cache_read_tokens":      0,
+		"cache_creation_tokens":  0,
+		"model":                  "claude-4.6",
+		"gram.hook.source":       "claude-code",
 	})
 }
 

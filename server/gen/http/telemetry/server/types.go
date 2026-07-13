@@ -4989,31 +4989,37 @@ type RiskTokensPointResponseBody struct {
 type TumDetailsPointResponseBody struct {
 	// Bucket start time in Unix nanoseconds (string for JS precision)
 	BucketTimeUnixNano string `form:"bucket_time_unix_nano" json:"bucket_time_unix_nano" xml:"bucket_time_unix_nano"`
-	// Billed input tokens
+	// Observed input tokens (cache reads excluded)
 	InputTokens int64 `form:"input_tokens" json:"input_tokens" xml:"input_tokens"`
-	// Billed output tokens
+	// Observed output tokens
 	OutputTokens int64 `form:"output_tokens" json:"output_tokens" xml:"output_tokens"`
-	// Billed tokens under management
+	// Observed cache-write tokens — prompt content entering the provider cache,
+	// counted once
+	CacheCreationTokens int64 `form:"cache_creation_tokens" json:"cache_creation_tokens" xml:"cache_creation_tokens"`
+	// Tokens under management: input + output + cache writes
 	TotalTokens int64 `form:"total_tokens" json:"total_tokens" xml:"total_tokens"`
 }
 
 // TumDetailsTotalsResponseBody is used to define fields on response body types.
 type TumDetailsTotalsResponseBody struct {
-	// Billed input tokens
+	// Observed input tokens (cache reads excluded)
 	InputTokens int64 `form:"input_tokens" json:"input_tokens" xml:"input_tokens"`
-	// Billed output tokens
+	// Observed output tokens
 	OutputTokens int64 `form:"output_tokens" json:"output_tokens" xml:"output_tokens"`
-	// Billed tokens under management
+	// Observed cache-write tokens — prompt content entering the provider cache,
+	// counted once
+	CacheCreationTokens int64 `form:"cache_creation_tokens" json:"cache_creation_tokens" xml:"cache_creation_tokens"`
+	// Tokens under management: input + output + cache writes
 	TotalTokens int64 `form:"total_tokens" json:"total_tokens" xml:"total_tokens"`
 }
 
 // TumDetailsBreakdownResponseBody is used to define fields on response body
 // types.
 type TumDetailsBreakdownResponseBody struct {
-	// The breakdown dimension key (hook_source, risk_analysis_model,
-	// completion_model, division_name, role). The two model keys partition the
-	// billed population: risk_analysis_model covers the platform's risk-policy
-	// scanning inference, completion_model covers user-facing completion surfaces.
+	// The breakdown dimension key (model, hook_source, provider, account_type,
+	// email, division_name, department_name, role, project_id) — the public
+	// telemetry dimension identifiers, so the same keys work as telemetry.query
+	// filters. project_id rows carry project UUIDs; clients map them to names.
 	Key string `form:"key" json:"key" xml:"key"`
 	// Top values by tokens in descending order, with the remainder rolled into
 	// 'Other'
