@@ -354,7 +354,6 @@ trackedFiles:
   src/funcs/telemetryListSessions.ts: {}
   src/funcs/telemetryListToolUsageTraces.ts: {}
   src/funcs/telemetryQuery.ts: {}
-  src/funcs/telemetryQueryRiskTokens.ts: {}
   src/funcs/telemetryQueryTumDetails.ts: {}
   src/funcs/telemetrySearchChats.ts: {}
   src/funcs/telemetrySearchLogs.ts: {}
@@ -812,7 +811,6 @@ trackedFiles:
   src/models/components/querypayload.ts: {}
   src/models/components/querypoint.ts: {}
   src/models/components/queryresult.ts: {}
-  src/models/components/queryrisktokensresult.ts: {}
   src/models/components/queryrow.ts: {}
   src/models/components/queryseries.ts: {}
   src/models/components/rbacstatus.ts: {}
@@ -862,7 +860,6 @@ trackedFiles:
   src/models/components/risksegment.ts: {}
   src/models/components/riskspan.ts: {}
   src/models/components/riskspanredacted.ts: {}
-  src/models/components/risktokenspoint.ts: {}
   src/models/components/riskunmaskresultresult.ts: {}
   src/models/components/riskuserbreakdownresult.ts: {}
   src/models/components/role.ts: {}
@@ -1331,7 +1328,6 @@ trackedFiles:
   src/models/operations/publish.ts: {}
   src/models/operations/publishplugins.ts: {}
   src/models/operations/query.ts: {}
-  src/models/operations/queryrisktokens.ts: {}
   src/models/operations/querytumdetails.ts: {}
   src/models/operations/receiveworkoswebhook.ts: {}
   src/models/operations/redeploydeployment.ts: {}
@@ -1930,8 +1926,6 @@ trackedFiles:
   src/react-query/telemetryCaptureEvent.ts: {}
   src/react-query/telemetryQuery.core.ts: {}
   src/react-query/telemetryQuery.ts: {}
-  src/react-query/telemetryQueryRiskTokens.core.ts: {}
-  src/react-query/telemetryQueryRiskTokens.ts: {}
   src/react-query/telemetryQueryTumDetails.core.ts: {}
   src/react-query/telemetryQueryTumDetails.ts: {}
   src/react-query/template.core.ts: {}
