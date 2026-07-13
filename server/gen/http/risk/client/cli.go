@@ -1901,13 +1901,18 @@ func BuildSuggestCustomDetectionRulePayload(riskSuggestCustomDetectionRuleBody s
 	{
 		err = json.Unmarshal([]byte(riskSuggestCustomDetectionRuleBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"existing_rule_ids\": [\n         \"abc123\"\n      ],\n      \"prompt\": \"aaa\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"existing_rule_ids\": [\n         \"abc123\"\n      ],\n      \"prompt\": \"aaa\",\n      \"target\": \"exclusion\"\n   }'")
 		}
 		if utf8.RuneCountInString(body.Prompt) < 3 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.prompt", body.Prompt, utf8.RuneCountInString(body.Prompt), 3, true))
 		}
 		if utf8.RuneCountInString(body.Prompt) > 500 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.prompt", body.Prompt, utf8.RuneCountInString(body.Prompt), 500, false))
+		}
+		if body.Target != nil {
+			if !(*body.Target == "detection" || *body.Target == "exclusion") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target", *body.Target, []any{"detection", "exclusion"}))
+			}
 		}
 		if err != nil {
 			return nil, err
@@ -1933,6 +1938,7 @@ func BuildSuggestCustomDetectionRulePayload(riskSuggestCustomDetectionRuleBody s
 	}
 	v := &risk.SuggestCustomDetectionRulePayload{
 		Prompt: body.Prompt,
+		Target: body.Target,
 	}
 	if body.ExistingRuleIds != nil {
 		v.ExistingRuleIds = make([]string, len(body.ExistingRuleIds))

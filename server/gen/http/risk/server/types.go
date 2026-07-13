@@ -302,11 +302,15 @@ type UpdateRiskExclusionRequestBody struct {
 // SuggestCustomDetectionRuleRequestBody is the type of the "risk" service
 // "suggestCustomDetectionRule" endpoint HTTP request body.
 type SuggestCustomDetectionRuleRequestBody struct {
-	// Natural-language description of what the rule should detect.
+	// Natural-language description of what the rule should detect (or, for
+	// exclusions, suppress).
 	Prompt *string `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
-	// Existing built-in and custom rule ids the suggested id must avoid colliding
-	// with.
+	// Existing built-in and custom rule ids. Detection suggestions must avoid
+	// colliding with them; exclusion suggestions may reference them in rule_id
+	// filters.
 	ExistingRuleIds []string `form:"existing_rule_ids,omitempty" json:"existing_rule_ids,omitempty" xml:"existing_rule_ids,omitempty"`
+	// Which surface the suggestion prefills: `detection` (default) or `exclusion`.
+	Target *string `form:"target,omitempty" json:"target,omitempty" xml:"target,omitempty"`
 }
 
 // TestDetectionRuleRequestBody is the type of the "risk" service
@@ -1141,6 +1145,16 @@ type SuggestCustomDetectionRuleResponseBody struct {
 	Regex string `form:"regex" json:"regex" xml:"regex"`
 	// Suggested severity level.
 	Severity string `form:"severity" json:"severity" xml:"severity"`
+	// For exclusion suggestions: how exclusion_match_value is interpreted (exact,
+	// regex, rule_id, source, entity_type).
+	ExclusionMatchType *string `form:"exclusion_match_type,omitempty" json:"exclusion_match_type,omitempty" xml:"exclusion_match_type,omitempty"`
+	// For exclusion suggestions: the value matched against findings, interpreted
+	// per exclusion_match_type.
+	ExclusionMatchValue *string `form:"exclusion_match_value,omitempty" json:"exclusion_match_value,omitempty" xml:"exclusion_match_value,omitempty"`
+	// For exclusion suggestions: only apply within this rule_id. Empty means any.
+	ExclusionRuleIDFilter *string `form:"exclusion_rule_id_filter,omitempty" json:"exclusion_rule_id_filter,omitempty" xml:"exclusion_rule_id_filter,omitempty"`
+	// For exclusion suggestions: only apply within this source. Empty means any.
+	ExclusionSourceFilter *string `form:"exclusion_source_filter,omitempty" json:"exclusion_source_filter,omitempty" xml:"exclusion_source_filter,omitempty"`
 }
 
 // TestDetectionRuleResponseBody is the type of the "risk" service
@@ -10422,12 +10436,16 @@ func NewUpdateRiskExclusionResponseBody(res *types.RiskExclusion) *UpdateRiskExc
 // service.
 func NewSuggestCustomDetectionRuleResponseBody(res *risk.SuggestCustomDetectionRuleResult) *SuggestCustomDetectionRuleResponseBody {
 	body := &SuggestCustomDetectionRuleResponseBody{
-		RuleID:        res.RuleID,
-		Title:         res.Title,
-		Description:   res.Description,
-		DetectionExpr: res.DetectionExpr,
-		Regex:         res.Regex,
-		Severity:      res.Severity,
+		RuleID:                res.RuleID,
+		Title:                 res.Title,
+		Description:           res.Description,
+		DetectionExpr:         res.DetectionExpr,
+		Regex:                 res.Regex,
+		Severity:              res.Severity,
+		ExclusionMatchType:    res.ExclusionMatchType,
+		ExclusionMatchValue:   res.ExclusionMatchValue,
+		ExclusionRuleIDFilter: res.ExclusionRuleIDFilter,
+		ExclusionSourceFilter: res.ExclusionSourceFilter,
 	}
 	return body
 }
@@ -17294,6 +17312,7 @@ func NewDeleteRiskExclusionPayload(id string, apikeyToken *string, sessionToken 
 func NewSuggestCustomDetectionRulePayload(body *SuggestCustomDetectionRuleRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.SuggestCustomDetectionRulePayload {
 	v := &risk.SuggestCustomDetectionRulePayload{
 		Prompt: *body.Prompt,
+		Target: body.Target,
 	}
 	if body.ExistingRuleIds != nil {
 		v.ExistingRuleIds = make([]string, len(body.ExistingRuleIds))
@@ -17707,6 +17726,11 @@ func ValidateSuggestCustomDetectionRuleRequestBody(body *SuggestCustomDetectionR
 	if body.Prompt != nil {
 		if utf8.RuneCountInString(*body.Prompt) > 500 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.prompt", *body.Prompt, utf8.RuneCountInString(*body.Prompt), 500, false))
+		}
+	}
+	if body.Target != nil {
+		if !(*body.Target == "detection" || *body.Target == "exclusion") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target", *body.Target, []any{"detection", "exclusion"}))
 		}
 	}
 	return

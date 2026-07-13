@@ -300,11 +300,15 @@ type UpdateRiskExclusionRequestBody struct {
 // SuggestCustomDetectionRuleRequestBody is the type of the "risk" service
 // "suggestCustomDetectionRule" endpoint HTTP request body.
 type SuggestCustomDetectionRuleRequestBody struct {
-	// Natural-language description of what the rule should detect.
+	// Natural-language description of what the rule should detect (or, for
+	// exclusions, suppress).
 	Prompt string `form:"prompt" json:"prompt" xml:"prompt"`
-	// Existing built-in and custom rule ids the suggested id must avoid colliding
-	// with.
+	// Existing built-in and custom rule ids. Detection suggestions must avoid
+	// colliding with them; exclusion suggestions may reference them in rule_id
+	// filters.
 	ExistingRuleIds []string `form:"existing_rule_ids,omitempty" json:"existing_rule_ids,omitempty" xml:"existing_rule_ids,omitempty"`
+	// Which surface the suggestion prefills: `detection` (default) or `exclusion`.
+	Target *string `form:"target,omitempty" json:"target,omitempty" xml:"target,omitempty"`
 }
 
 // TestDetectionRuleRequestBody is the type of the "risk" service
@@ -1139,6 +1143,16 @@ type SuggestCustomDetectionRuleResponseBody struct {
 	Regex *string `form:"regex,omitempty" json:"regex,omitempty" xml:"regex,omitempty"`
 	// Suggested severity level.
 	Severity *string `form:"severity,omitempty" json:"severity,omitempty" xml:"severity,omitempty"`
+	// For exclusion suggestions: how exclusion_match_value is interpreted (exact,
+	// regex, rule_id, source, entity_type).
+	ExclusionMatchType *string `form:"exclusion_match_type,omitempty" json:"exclusion_match_type,omitempty" xml:"exclusion_match_type,omitempty"`
+	// For exclusion suggestions: the value matched against findings, interpreted
+	// per exclusion_match_type.
+	ExclusionMatchValue *string `form:"exclusion_match_value,omitempty" json:"exclusion_match_value,omitempty" xml:"exclusion_match_value,omitempty"`
+	// For exclusion suggestions: only apply within this rule_id. Empty means any.
+	ExclusionRuleIDFilter *string `form:"exclusion_rule_id_filter,omitempty" json:"exclusion_rule_id_filter,omitempty" xml:"exclusion_rule_id_filter,omitempty"`
+	// For exclusion suggestions: only apply within this source. Empty means any.
+	ExclusionSourceFilter *string `form:"exclusion_source_filter,omitempty" json:"exclusion_source_filter,omitempty" xml:"exclusion_source_filter,omitempty"`
 }
 
 // TestDetectionRuleResponseBody is the type of the "risk" service
@@ -9913,6 +9927,7 @@ func NewUpdateRiskExclusionRequestBody(p *risk.UpdateRiskExclusionPayload) *Upda
 func NewSuggestCustomDetectionRuleRequestBody(p *risk.SuggestCustomDetectionRulePayload) *SuggestCustomDetectionRuleRequestBody {
 	body := &SuggestCustomDetectionRuleRequestBody{
 		Prompt: p.Prompt,
+		Target: p.Target,
 	}
 	if p.ExistingRuleIds != nil {
 		body.ExistingRuleIds = make([]string, len(p.ExistingRuleIds))
@@ -16178,12 +16193,16 @@ func NewDeleteRiskExclusionGatewayError(body *DeleteRiskExclusionGatewayErrorRes
 // "suggestCustomDetectionRule" endpoint result from a HTTP "OK" response.
 func NewSuggestCustomDetectionRuleResultOK(body *SuggestCustomDetectionRuleResponseBody) *risk.SuggestCustomDetectionRuleResult {
 	v := &risk.SuggestCustomDetectionRuleResult{
-		RuleID:        *body.RuleID,
-		Title:         *body.Title,
-		Description:   *body.Description,
-		DetectionExpr: body.DetectionExpr,
-		Regex:         *body.Regex,
-		Severity:      *body.Severity,
+		RuleID:                *body.RuleID,
+		Title:                 *body.Title,
+		Description:           *body.Description,
+		DetectionExpr:         body.DetectionExpr,
+		Regex:                 *body.Regex,
+		Severity:              *body.Severity,
+		ExclusionMatchType:    body.ExclusionMatchType,
+		ExclusionMatchValue:   body.ExclusionMatchValue,
+		ExclusionRuleIDFilter: body.ExclusionRuleIDFilter,
+		ExclusionSourceFilter: body.ExclusionSourceFilter,
 	}
 
 	return v

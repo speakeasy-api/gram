@@ -119,9 +119,10 @@ type Service interface {
 	// Delete a risk exclusion. Previously suppressed findings are restored.
 	DeleteRiskExclusion(context.Context, *DeleteRiskExclusionPayload) (err error)
 	// Suggest a custom detection rule (rule_id, title, description, regex,
-	// severity) from a natural-language prompt. Calls the configured LLM with a
-	// JSON-schema constrained response so the dashboard can prefill the create
-	// form.
+	// severity) or, with target `exclusion`, an exclusion rule (match_type,
+	// match_value, filters) from a natural-language prompt. Calls the configured
+	// LLM with a JSON-schema constrained response so the dashboard can prefill the
+	// create form.
 	SuggestCustomDetectionRule(context.Context, *SuggestCustomDetectionRulePayload) (res *SuggestCustomDetectionRuleResult, err error)
 	// Run a single detection rule against pasted sample text and return any
 	// matches. Reuses the same scanner code (gitleaks, Presidio, prompt-injection,
@@ -1046,11 +1047,15 @@ type SuggestCustomDetectionRulePayload struct {
 	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
-	// Natural-language description of what the rule should detect.
+	// Natural-language description of what the rule should detect (or, for
+	// exclusions, suppress).
 	Prompt string
-	// Existing built-in and custom rule ids the suggested id must avoid colliding
-	// with.
+	// Existing built-in and custom rule ids. Detection suggestions must avoid
+	// colliding with them; exclusion suggestions may reference them in rule_id
+	// filters.
 	ExistingRuleIds []string
+	// Which surface the suggestion prefills: `detection` (default) or `exclusion`.
+	Target *string
 }
 
 // SuggestCustomDetectionRuleResult is the result type of the risk service
@@ -1069,6 +1074,16 @@ type SuggestCustomDetectionRuleResult struct {
 	Regex string
 	// Suggested severity level.
 	Severity string
+	// For exclusion suggestions: how exclusion_match_value is interpreted (exact,
+	// regex, rule_id, source, entity_type).
+	ExclusionMatchType *string
+	// For exclusion suggestions: the value matched against findings, interpreted
+	// per exclusion_match_type.
+	ExclusionMatchValue *string
+	// For exclusion suggestions: only apply within this rule_id. Empty means any.
+	ExclusionRuleIDFilter *string
+	// For exclusion suggestions: only apply within this source. Empty means any.
+	ExclusionSourceFilter *string
 }
 
 type TestDetectionRuleMatch struct {

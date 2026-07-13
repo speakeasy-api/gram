@@ -29427,7 +29427,7 @@ paths:
                 type: mutation
     /rpc/risk.suggestCustomRules:
         post:
-            description: Suggest a custom detection rule (rule_id, title, description, regex, severity) from a natural-language prompt. Calls the configured LLM with a JSON-schema constrained response so the dashboard can prefill the create form.
+            description: Suggest a custom detection rule (rule_id, title, description, regex, severity) or, with target `exclusion`, an exclusion rule (match_type, match_value, filters) from a natural-language prompt. Calls the configured LLM with a JSON-schema constrained response so the dashboard can prefill the create form.
             operationId: suggestCustomDetectionRule
             parameters:
                 - allowEmptyValue: true
@@ -52966,12 +52966,18 @@ components:
                     type: array
                     items:
                         type: string
-                    description: Existing built-in and custom rule ids the suggested id must avoid colliding with.
+                    description: Existing built-in and custom rule ids. Detection suggestions must avoid colliding with them; exclusion suggestions may reference them in rule_id filters.
                 prompt:
                     type: string
-                    description: Natural-language description of what the rule should detect.
+                    description: Natural-language description of what the rule should detect (or, for exclusions, suppress).
                     minLength: 3
                     maxLength: 500
+                target:
+                    type: string
+                    description: 'Which surface the suggestion prefills: `detection` (default) or `exclusion`.'
+                    enum:
+                        - detection
+                        - exclusion
             required:
                 - prompt
         SuggestCustomDetectionRuleResult:
@@ -52983,6 +52989,18 @@ components:
                 detection_expr:
                     type: string
                     description: Suggested CEL detection predicate.
+                exclusion_match_type:
+                    type: string
+                    description: 'For exclusion suggestions: how exclusion_match_value is interpreted (exact, regex, rule_id, source, entity_type).'
+                exclusion_match_value:
+                    type: string
+                    description: 'For exclusion suggestions: the value matched against findings, interpreted per exclusion_match_type.'
+                exclusion_rule_id_filter:
+                    type: string
+                    description: 'For exclusion suggestions: only apply within this rule_id. Empty means any.'
+                exclusion_source_filter:
+                    type: string
+                    description: 'For exclusion suggestions: only apply within this source. Empty means any.'
                 regex:
                     type: string
                     description: Deprecated legacy regex suggestion; superseded by detection_expr. Present for backward compatibility.

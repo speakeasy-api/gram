@@ -2046,6 +2046,21 @@ func (s *Service) SuggestCustomDetectionRule(ctx context.Context, payload *gen.S
 		return nil, oops.E(oops.CodeInvalid, nil, "prompt is required")
 	}
 
+	// The exclusion form shares this endpoint (target `exclusion`) so both
+	// create surfaces ride the same LLM plumbing and fallback behavior.
+	if conv.PtrValOr(payload.Target, "detection") == "exclusion" {
+		if s.completionClient == nil {
+			s.logger.WarnContext(ctx, "completion client not configured; returning heuristic exclusion suggestion")
+			return heuristicExclusionSuggestion(prompt), nil
+		}
+		suggestion, err := s.suggestExclusionViaLLM(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID, conv.PtrValOr(authCtx.Email, ""), prompt, payload.ExistingRuleIds)
+		if err != nil {
+			s.logger.WarnContext(ctx, "openrouter exclusion suggestion failed; returning heuristic suggestion", attr.SlogError(err))
+			return heuristicExclusionSuggestion(prompt), nil
+		}
+		return suggestion, nil
+	}
+
 	if s.completionClient == nil {
 		s.logger.WarnContext(ctx, "completion client not configured; returning heuristic suggestion")
 		return heuristicCustomRuleSuggestion(prompt, payload.ExistingRuleIds), nil
@@ -2079,13 +2094,43 @@ func heuristicCustomRuleSuggestion(prompt string, existingIDs []string) *gen.Sug
 	}
 
 	return &gen.SuggestCustomDetectionRuleResult{
-		RuleID:        ruleID,
-		Title:         title,
-		Description:   strings.TrimSpace(prompt),
-		DetectionExpr: nil,
-		Regex:         "",
-		Severity:      "medium",
+		RuleID:                ruleID,
+		Title:                 title,
+		Description:           strings.TrimSpace(prompt),
+		DetectionExpr:         nil,
+		Regex:                 "",
+		Severity:              "medium",
+		ExclusionMatchType:    nil,
+		ExclusionMatchValue:   nil,
+		ExclusionRuleIDFilter: nil,
+		ExclusionSourceFilter: nil,
 	}
+}
+
+// exclusionSuggestionResult wraps structured exclusion fields in the shared
+// suggestion result. The detection-only fields stay blank; severity is
+// required by the result schema so it carries a benign "info".
+func exclusionSuggestionResult(matchType, matchValue, ruleIDFilter, sourceFilter string) *gen.SuggestCustomDetectionRuleResult {
+	return &gen.SuggestCustomDetectionRuleResult{
+		RuleID:                "",
+		Title:                 "",
+		Description:           "",
+		DetectionExpr:         nil,
+		Regex:                 "",
+		Severity:              "info",
+		ExclusionMatchType:    &matchType,
+		ExclusionMatchValue:   &matchValue,
+		ExclusionRuleIDFilter: conv.PtrEmpty(ruleIDFilter),
+		ExclusionSourceFilter: conv.PtrEmpty(sourceFilter),
+	}
+}
+
+// heuristicExclusionSuggestion is the deterministic fallback when the LLM is
+// unavailable: treat the prompt as the literal value to suppress. Usually
+// wrong as-is, but it prefills an editable expression rather than dead-ending
+// the operator (mirrors heuristicCustomRuleSuggestion).
+func heuristicExclusionSuggestion(prompt string) *gen.SuggestCustomDetectionRuleResult {
+	return exclusionSuggestionResult("exact", strings.TrimSpace(prompt), "", "")
 }
 
 var slugStripRE = regexp.MustCompile(`[^a-z0-9]+`)
@@ -2339,13 +2384,135 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 	}
 
 	return &gen.SuggestCustomDetectionRuleResult{
-		RuleID:        parsed.RuleID,
-		Title:         parsed.Title,
-		Description:   parsed.Description,
-		DetectionExpr: conv.PtrEmpty(parsed.DetectionExpr),
-		Regex:         "",
-		Severity:      parsed.Severity,
+		RuleID:                parsed.RuleID,
+		Title:                 parsed.Title,
+		Description:           parsed.Description,
+		DetectionExpr:         conv.PtrEmpty(parsed.DetectionExpr),
+		Regex:                 "",
+		Severity:              parsed.Severity,
+		ExclusionMatchType:    nil,
+		ExclusionMatchValue:   nil,
+		ExclusionRuleIDFilter: nil,
+		ExclusionSourceFilter: nil,
 	}, nil
+}
+
+// Match types the exclusion suggestion may return; mirrors the enum the
+// create/update exclusion payloads accept (shared.RiskExclusionMatchTypeEnum).
+var exclusionMatchTypeAllow = map[string]bool{
+	"exact":       true,
+	"regex":       true,
+	"rule_id":     true,
+	"source":      true,
+	"entity_type": true,
+}
+
+func (s *Service) suggestExclusionViaLLM(ctx context.Context, orgID, projectID, userID, userEmail, userPrompt string, knownRuleIDs []string) (*gen.SuggestCustomDetectionRuleResult, error) {
+	systemPrompt := `You are a security-rules assistant for a runtime risk detection product.
+
+Given a single natural-language description of findings an operator wants to stop flagging, return a JSON object the dashboard uses to prefill a "create exclusion" form. An exclusion suppresses matching findings retroactively and going forward.
+
+Each finding carries: the matched text ("match", e.g. the detected email address or token), the id of the rule that flagged it ("rule_id", e.g. "pii.email_address", "secret.aws_access_token", "custom.acme_token"), and the detector source ("source", e.g. "gitleaks", "presidio", "prompt_injection", "custom").
+
+Fields:
+- "match_type": how match_value is compared, one of:
+  - "exact"       — the finding's matched text equals match_value. Use when the operator names one specific value.
+  - "regex"       — match_value is an RE2 regex (max 512 chars) matched against the finding's matched text. Use for families of values (test accounts, sandbox tokens, name variants). No lookarounds or backreferences (unsupported in RE2).
+  - "rule_id"     — suppress every finding from the rule id in match_value.
+  - "source"      — suppress every finding from the detector source in match_value.
+  - "entity_type" — suppress a Presidio PII entity type; match_value is the UPPER_SNAKE entity name (e.g. "EMAIL_ADDRESS").
+- "match_value": the value compared per match_type.
+- "rule_id_filter": only suppress when the finding's rule_id equals this — use it to narrow an exact/regex match to one rule. Empty string means any rule.
+- "source_filter": only suppress when the finding's source equals this. Empty string means any source.
+
+Prefer the narrowest exclusion that satisfies the request: an exact value over a regex, and set rule_id_filter when the operator names a specific rule or data type. The known rule ids are provided for choosing rule_id values and filters.
+
+Output ONLY the JSON object. No prose, no markdown fences.`
+
+	knownList := strings.Join(knownRuleIDs, ", ")
+	if knownList == "" {
+		knownList = "(none)"
+	}
+	userMessage := fmt.Sprintf("Operator request: %s\n\nKnown rule ids: %s", userPrompt, knownList)
+
+	strict := false
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"match_type":     map[string]any{"type": "string", "enum": []string{"exact", "regex", "rule_id", "source", "entity_type"}},
+			"match_value":    map[string]any{"type": "string", "minLength": 1, "maxLength": exclusionRegexMaxLength},
+			"rule_id_filter": map[string]any{"type": "string", "maxLength": 200},
+			"source_filter":  map[string]any{"type": "string", "maxLength": 200},
+		},
+		"required":             []string{"match_type", "match_value", "rule_id_filter", "source_filter"},
+		"additionalProperties": false,
+	}
+
+	jsonSchema := or.ChatJSONSchemaConfig{
+		Name:        "risk_exclusion_suggestion",
+		Schema:      schema,
+		Description: nil,
+		Strict:      optionalnullable.From(&strict),
+	}
+
+	suggestCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
+	temperature := 0.2
+	response, err := s.completionClient.GetObjectCompletion(suggestCtx, openrouter.ObjectCompletionRequest{
+		OrgID:        orgID,
+		ProjectID:    projectID,
+		Model:        "",
+		SystemPrompt: systemPrompt,
+		Prompt:       userMessage,
+		Temperature:  &temperature,
+		UsageSource:  billing.ModelUsageSourceGram,
+		KeyType:      openrouter.KeyTypeInternal,
+		// The admin who asked for the suggestion — this completion is
+		// user-initiated, so usage attributes to them, not "(unset)".
+		UserID:         userID,
+		ExternalUserID: "",
+		UserEmail:      userEmail,
+		HTTPMetadata:   nil,
+		JSONSchema:     &jsonSchema,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("openrouter object completion: %w", err)
+	}
+	if response == nil || response.Message == nil {
+		return nil, fmt.Errorf("empty completion response")
+	}
+
+	raw := strings.TrimSpace(openrouter.GetText(*response.Message))
+	if raw == "" {
+		return nil, fmt.Errorf("empty completion content")
+	}
+
+	var parsed struct {
+		MatchType    string `json:"match_type"`
+		MatchValue   string `json:"match_value"`
+		RuleIDFilter string `json:"rule_id_filter"`
+		SourceFilter string `json:"source_filter"`
+	}
+	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+		return nil, fmt.Errorf("parse llm response: %w", err)
+	}
+
+	parsed.MatchType = strings.ToLower(strings.TrimSpace(parsed.MatchType))
+	parsed.MatchValue = strings.TrimSpace(parsed.MatchValue)
+	parsed.RuleIDFilter = strings.TrimSpace(parsed.RuleIDFilter)
+	parsed.SourceFilter = strings.TrimSpace(parsed.SourceFilter)
+
+	if !exclusionMatchTypeAllow[parsed.MatchType] {
+		return nil, fmt.Errorf("model returned invalid match_type %q", parsed.MatchType)
+	}
+	// Same gate the create/update exclusion handlers apply: non-empty value,
+	// and a regex must compile (RE2) and fit the length cap.
+	if err := validateExclusionMatchValue(parsed.MatchType, parsed.MatchValue); err != nil {
+		return nil, fmt.Errorf("model returned invalid match_value: %w", err)
+	}
+
+	return exclusionSuggestionResult(parsed.MatchType, parsed.MatchValue, parsed.RuleIDFilter, parsed.SourceFilter), nil
 }
 
 // TestDetectionRule runs a single detection rule against pasted sample text

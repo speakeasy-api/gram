@@ -1237,17 +1237,20 @@ var _ = Service("risk", func() {
 	})
 
 	Method("suggestCustomDetectionRule", func() {
-		Description("Suggest a custom detection rule (rule_id, title, description, regex, severity) from a natural-language prompt. Calls the configured LLM with a JSON-schema constrained response so the dashboard can prefill the create form.")
+		Description("Suggest a custom detection rule (rule_id, title, description, regex, severity) or, with target `exclusion`, an exclusion rule (match_type, match_value, filters) from a natural-language prompt. Calls the configured LLM with a JSON-schema constrained response so the dashboard can prefill the create form.")
 
 		Payload(func() {
 			security.ByKeyPayload()
 			security.SessionPayload()
 			security.ProjectPayload()
-			Attribute("prompt", String, "Natural-language description of what the rule should detect.", func() {
+			Attribute("prompt", String, "Natural-language description of what the rule should detect (or, for exclusions, suppress).", func() {
 				MinLength(3)
 				MaxLength(500)
 			})
-			Attribute("existing_rule_ids", ArrayOf(String), "Existing built-in and custom rule ids the suggested id must avoid colliding with.")
+			Attribute("existing_rule_ids", ArrayOf(String), "Existing built-in and custom rule ids. Detection suggestions must avoid colliding with them; exclusion suggestions may reference them in rule_id filters.")
+			Attribute("target", String, "Which surface the suggestion prefills: `detection` (default) or `exclusion`.", func() {
+				Enum("detection", "exclusion")
+			})
 			Required("prompt")
 		})
 
@@ -1490,6 +1493,13 @@ var SuggestCustomDetectionRuleResult = Type("SuggestCustomDetectionRuleResult", 
 	Attribute("severity", String, "Suggested severity level.", func() {
 		Enum("info", "low", "medium", "high", "critical")
 	})
+	// Exclusion suggestions (target `exclusion`) populate the structured
+	// exclusion fields instead of the detection fields above; the dashboard
+	// serializes them into its exclusion criteria expression.
+	Attribute("exclusion_match_type", String, "For exclusion suggestions: how exclusion_match_value is interpreted (exact, regex, rule_id, source, entity_type).")
+	Attribute("exclusion_match_value", String, "For exclusion suggestions: the value matched against findings, interpreted per exclusion_match_type.")
+	Attribute("exclusion_rule_id_filter", String, "For exclusion suggestions: only apply within this rule_id. Empty means any.")
+	Attribute("exclusion_source_filter", String, "For exclusion suggestions: only apply within this source. Empty means any.")
 	Required("rule_id", "title", "description", "regex", "severity")
 })
 
