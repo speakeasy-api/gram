@@ -44,7 +44,7 @@ const (
 	// (~195s with three 60s attempts and backoff). A pathological run that
 	// still overshoots is cut off safely: passes are idempotent and the next
 	// sweep tick resumes where it stopped.
-	promoteStagedTelemetryWorkflowRunTimeout = 10 * time.Minute
+	promoteStagedTelemetryWorkflowRunTimeout = 35 * time.Minute
 
 	stagedTelemetrySweepScheduleID = "v1:staged-telemetry-sweep-schedule"
 	stagedTelemetrySweepWorkflowID = stagedTelemetrySweepScheduleID + "/scheduled"
