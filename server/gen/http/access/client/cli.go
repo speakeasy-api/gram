@@ -731,6 +731,129 @@ func BuildListShadowMCPInventoryUsersPayload(accessListShadowMCPInventoryUsersPr
 	return v, nil
 }
 
+// BuildUpsertShadowMCPInventoryPolicyBypassPayload builds the payload for the
+// access upsertShadowMCPInventoryPolicyBypass endpoint from CLI flags.
+func BuildUpsertShadowMCPInventoryPolicyBypassPayload(accessUpsertShadowMCPInventoryPolicyBypassBody string, accessUpsertShadowMCPInventoryPolicyBypassSessionToken string) (*access.UpsertShadowMCPInventoryPolicyBypassPayload, error) {
+	var err error
+	var body UpsertShadowMCPInventoryPolicyBypassRequestBody
+	{
+		err = json.Unmarshal([]byte(accessUpsertShadowMCPInventoryPolicyBypassBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"policy_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"server_url\": \"https://example.com/foo\"\n   }'")
+		}
+		if body.PolicyIds == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("policy_ids", "body"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", body.ProjectID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.server_url", body.ServerURL, goa.FormatURI))
+		for _, e := range body.PolicyIds {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.policy_ids[*]", e, goa.FormatUUID))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if accessUpsertShadowMCPInventoryPolicyBypassSessionToken != "" {
+			sessionToken = &accessUpsertShadowMCPInventoryPolicyBypassSessionToken
+		}
+	}
+	v := &access.UpsertShadowMCPInventoryPolicyBypassPayload{
+		ProjectID: body.ProjectID,
+		ServerURL: body.ServerURL,
+	}
+	if body.PolicyIds != nil {
+		v.PolicyIds = make([]string, len(body.PolicyIds))
+		for i, val := range body.PolicyIds {
+			v.PolicyIds[i] = val
+		}
+	} else {
+		v.PolicyIds = []string{}
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildDeleteShadowMCPInventoryPolicyBypassPayload builds the payload for the
+// access deleteShadowMCPInventoryPolicyBypass endpoint from CLI flags.
+func BuildDeleteShadowMCPInventoryPolicyBypassPayload(accessDeleteShadowMCPInventoryPolicyBypassProjectID string, accessDeleteShadowMCPInventoryPolicyBypassServerURL string, accessDeleteShadowMCPInventoryPolicyBypassSessionToken string) (*access.DeleteShadowMCPInventoryPolicyBypassPayload, error) {
+	var err error
+	var projectID string
+	{
+		projectID = accessDeleteShadowMCPInventoryPolicyBypassProjectID
+		err = goa.MergeErrors(err, goa.ValidateFormat("project_id", projectID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var serverURL string
+	{
+		serverURL = accessDeleteShadowMCPInventoryPolicyBypassServerURL
+		err = goa.MergeErrors(err, goa.ValidateFormat("server_url", serverURL, goa.FormatURI))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if accessDeleteShadowMCPInventoryPolicyBypassSessionToken != "" {
+			sessionToken = &accessDeleteShadowMCPInventoryPolicyBypassSessionToken
+		}
+	}
+	v := &access.DeleteShadowMCPInventoryPolicyBypassPayload{}
+	v.ProjectID = projectID
+	v.ServerURL = serverURL
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildResolveShadowMCPInventoryRequestPayload builds the payload for the
+// access resolveShadowMCPInventoryRequest endpoint from CLI flags.
+func BuildResolveShadowMCPInventoryRequestPayload(accessResolveShadowMCPInventoryRequestBody string, accessResolveShadowMCPInventoryRequestSessionToken string) (*access.ResolveShadowMCPInventoryRequestPayload, error) {
+	var err error
+	var body ResolveShadowMCPInventoryRequestRequestBody
+	{
+		err = json.Unmarshal([]byte(accessResolveShadowMCPInventoryRequestBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"decision\": \"deny\",\n      \"policy_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"server_url\": \"https://example.com/foo\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", body.ProjectID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.server_url", body.ServerURL, goa.FormatURI))
+		if !(body.Decision == "allow" || body.Decision == "deny") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.decision", body.Decision, []any{"allow", "deny"}))
+		}
+		for _, e := range body.PolicyIds {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.policy_ids[*]", e, goa.FormatUUID))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if accessResolveShadowMCPInventoryRequestSessionToken != "" {
+			sessionToken = &accessResolveShadowMCPInventoryRequestSessionToken
+		}
+	}
+	v := &access.ResolveShadowMCPInventoryRequestPayload{
+		ProjectID: body.ProjectID,
+		ServerURL: body.ServerURL,
+		Decision:  access.ShadowMCPInventoryRequestDecision(body.Decision),
+	}
+	if body.PolicyIds != nil {
+		v.PolicyIds = make([]string, len(body.PolicyIds))
+		for i, val := range body.PolicyIds {
+			v.PolicyIds[i] = val
+		}
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildCreateShadowMCPAccessRulePayload builds the payload for the access
 // createShadowMCPAccessRule endpoint from CLI flags.
 func BuildCreateShadowMCPAccessRulePayload(accessCreateShadowMCPAccessRuleBody string, accessCreateShadowMCPAccessRuleSessionToken string) (*access.CreateShadowMCPAccessRulePayload, error) {

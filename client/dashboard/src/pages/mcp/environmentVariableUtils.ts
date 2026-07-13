@@ -82,6 +82,28 @@ export const getEditingValue = (
   return getValueForEnvironment(envVar, selectedEnvironmentView);
 };
 
+// Decide what to persist for a system-state variable on save. Loaded values
+// are server-redacted (e.g. "sup*****"), so writing one back would replace the
+// stored secret with the mask. Only a value the user actually typed (one that
+// differs from the loaded redacted value) is an update; clearing a previously
+// set value is a removal; anything else must not touch the stored value.
+export type SystemValueSaveOp =
+  | { kind: "update"; value: string }
+  | { kind: "remove" }
+  | { kind: "skip" };
+
+export const getSystemValueSaveOp = (
+  editingValue: string | undefined,
+  loadedValue: string,
+): SystemValueSaveOp => {
+  if (editingValue === undefined) return { kind: "skip" };
+  if (!editingValue) {
+    return loadedValue ? { kind: "remove" } : { kind: "skip" };
+  }
+  if (editingValue === loadedValue) return { kind: "skip" };
+  return { kind: "update", value: editingValue };
+};
+
 // Check if an environment has all required variables configured
 export const environmentHasAllRequiredVariables = (
   environmentSlug: string,

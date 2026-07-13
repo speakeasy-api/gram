@@ -37,6 +37,7 @@ trackedFiles:
   src/funcs/accessCreateShadowMCPApprovalRequest.ts: {}
   src/funcs/accessDeleteRole.ts: {}
   src/funcs/accessDeleteShadowMCPAccessRule.ts: {}
+  src/funcs/accessDeleteShadowMCPInventoryPolicyBypass.ts: {}
   src/funcs/accessDenyShadowMCPApprovalRequest.ts: {}
   src/funcs/accessDisableRBAC.ts: {}
   src/funcs/accessEnableRBAC.ts: {}
@@ -53,9 +54,11 @@ trackedFiles:
   src/funcs/accessListShadowMCPInventory.ts: {}
   src/funcs/accessListShadowMCPInventoryUsers.ts: {}
   src/funcs/accessResolveChallenge.ts: {}
+  src/funcs/accessResolveShadowMCPInventoryRequest.ts: {}
   src/funcs/accessUpdateMemberRoles.ts: {}
   src/funcs/accessUpdateRole.ts: {}
   src/funcs/accessUpdateShadowMCPAccessRule.ts: {}
+  src/funcs/accessUpsertShadowMCPInventoryPolicyBypass.ts: {}
   src/funcs/adminRemoteSessionsCreateGlobalClient.ts: {}
   src/funcs/adminRemoteSessionsCreateGlobalIssuer.ts: {}
   src/funcs/adminRemoteSessionsDeleteGlobalClient.ts: {}
@@ -825,6 +828,7 @@ trackedFiles:
   src/models/components/rendertemplateresult.ts: {}
   src/models/components/resolvechallengeform.ts: {}
   src/models/components/resolvechallengesresult.ts: {}
+  src/models/components/resolveshadowmcpinventoryrequestform.ts: {}
   src/models/components/resource.ts: {}
   src/models/components/resourceentry.ts: {}
   src/models/components/responsefilter.ts: {}
@@ -901,8 +905,10 @@ trackedFiles:
   src/models/components/shadowmcpaccessrule.ts: {}
   src/models/components/shadowmcpapprovaldecisionresult.ts: {}
   src/models/components/shadowmcpapprovalrequest.ts: {}
+  src/models/components/shadowmcpinventorypolicybypassform.ts: {}
   src/models/components/shadowmcpinventoryrequestsummary.ts: {}
   src/models/components/shadowmcpinventoryserver.ts: {}
+  src/models/components/shadowmcpinventoryurlstate.ts: {}
   src/models/components/shadowmcpinventoryuser.ts: {}
   src/models/components/skillbreakdownrow.ts: {}
   src/models/components/skillsummary.ts: {}
@@ -1126,6 +1132,7 @@ trackedFiles:
   src/models/operations/deleterole.ts: {}
   src/models/operations/deleteservernameoverride.ts: {}
   src/models/operations/deleteshadowmcpaccessrule.ts: {}
+  src/models/operations/deleteshadowmcpinventorypolicybypass.ts: {}
   src/models/operations/deletesourceenvironmentlink.ts: {}
   src/models/operations/deletetemplate.ts: {}
   src/models/operations/deletetoolset.ts: {}
@@ -1330,6 +1337,7 @@ trackedFiles:
   src/models/operations/rendertemplate.ts: {}
   src/models/operations/rendertemplatebyid.ts: {}
   src/models/operations/resolvechallenge.ts: {}
+  src/models/operations/resolveshadowmcpinventoryrequest.ts: {}
   src/models/operations/resumetriggerinstance.ts: {}
   src/models/operations/revokeallorganizationremotesessionclientsessions.ts: {}
   src/models/operations/revokeapikey.ts: {}
@@ -1417,6 +1425,7 @@ trackedFiles:
   src/models/operations/upsertglobalvariation.ts: {}
   src/models/operations/upsertotelforwardingconfig.ts: {}
   src/models/operations/upsertservernameoverride.ts: {}
+  src/models/operations/upsertshadowmcpinventorypolicybypass.ts: {}
   src/models/operations/validateapikey.ts: {}
   src/models/operations/verifyonboardinghookssetup.ts: {}
   src/models/operations/verifyremotemcpurl.ts: {}
@@ -1532,6 +1541,7 @@ trackedFiles:
   src/react-query/deleteRemoteSessionIssuer.ts: {}
   src/react-query/deleteRole.ts: {}
   src/react-query/deleteShadowMCPAccessRule.ts: {}
+  src/react-query/deleteShadowMCPInventoryPolicyBypass.ts: {}
   src/react-query/deleteSourceEnvironmentLink.ts: {}
   src/react-query/deleteTemplate.ts: {}
   src/react-query/deleteToolset.ts: {}
@@ -1791,6 +1801,7 @@ trackedFiles:
   src/react-query/renderTemplateByID.core.ts: {}
   src/react-query/renderTemplateByID.ts: {}
   src/react-query/resolveChallenge.ts: {}
+  src/react-query/resolveShadowMCPInventoryRequest.ts: {}
   src/react-query/resumeTrigger.ts: {}
   src/react-query/revokeAPIKey.ts: {}
   src/react-query/revokeAllOrganizationRemoteSessionClientSessions.ts: {}
@@ -1963,6 +1974,7 @@ trackedFiles:
   src/react-query/upsertAllowedOrigin.ts: {}
   src/react-query/upsertGlobalVariation.ts: {}
   src/react-query/upsertOtelForwardingConfig.ts: {}
+  src/react-query/upsertShadowMCPInventoryPolicyBypass.ts: {}
   src/react-query/userSessionClient.core.ts: {}
   src/react-query/userSessionClient.ts: {}
   src/react-query/userSessionClients.core.ts: {}
@@ -3077,6 +3089,19 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  deleteShadowMCPInventoryPolicyBypass:
+    speakeasy-default-delete-shadow-MCP-inventory-policy-bypass:
+      parameters:
+        query:
+          project_id: "ac6f45fc-b275-4d5d-81ea-f8ef6b0baf3a"
+          server_url: "https://buzzing-marketplace.org"
+      responses:
+        "200":
+          application/json: {"access": "<value>", "allowed_policy_ids": [], "request_count": 626288}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   deleteSlackApp:
     speakeasy-default-delete-slack-app:
       parameters:
@@ -5140,7 +5165,7 @@ examples:
         application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-26T10:00:00Z"}
       responses:
         "200":
-          application/json: {"breakdowns": [{"key": "<key>", "rows": []}], "interval_seconds": 788271, "points": [], "totals": {"input_tokens": 970099, "output_tokens": 419661, "total_tokens": 804391}}
+          application/json: {"breakdowns": [{"key": "<key>", "rows": []}], "interval_seconds": 788271, "points": [], "totals": {"cache_creation_tokens": 788271, "input_tokens": 970099, "output_tokens": 419661, "total_tokens": 804391}}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -5267,6 +5292,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  resolveShadowMCPInventoryRequest:
+    speakeasy-default-resolve-shadow-MCP-inventory-request:
+      requestBody:
+        application/json: {"decision": "allow", "project_id": "5f38bdf2-2935-4580-835b-fdb3d2efbe12", "server_url": "https://cautious-mentor.info/"}
+      responses:
+        "200":
+          application/json: {"access": "<value>", "allowed_policy_ids": [], "request_count": 542291}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   resumeTriggerInstance:
     speakeasy-default-resume-trigger-instance:
       parameters:
@@ -6268,6 +6304,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  upsertShadowMCPInventoryPolicyBypass:
+    speakeasy-default-upsert-shadow-MCP-inventory-policy-bypass:
+      requestBody:
+        application/json: {"policy_ids": ["92586e60-6d33-4c76-a5e5-af013a5ee61d", "677121fa-8354-4d19-a93c-f878f9f95e7e", "7d29c701-114f-413b-a76c-88ba5148d8a3"], "project_id": "bd69a861-a0ae-4610-9749-3a5ff32e8aa1", "server_url": "https://electric-community.com"}
+      responses:
+        "200":
+          application/json: {"access": "<value>", "allowed_policy_ids": ["<value 1>", "<value 2>"], "request_count": 626109}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   validateAPIKey:
     speakeasy-default-validate-API-key:
       responses:

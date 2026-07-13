@@ -779,34 +779,44 @@ func TestQuery_TopNRollupIntoOther(t *testing.T) {
 	require.True(t, hasOther)
 }
 
-// insertChatEvidenceRow inserts a chat event row without token attributes —
-// the stored-session evidence the billed queries qualify chats on.
-func insertChatEvidenceRow(t *testing.T, ctx context.Context, projectID string, timestamp time.Time, chatID string) {
+// insertRetainedGramAggregateRow seeds attribute_metrics_summaries directly
+// with a Gram-hosted completion row, the shape RETAINED from before the
+// provenance-first MV cutover stopped admitting Gram completions. The
+// tokens-under-management reads must exclude these at read time — that
+// exclusion is untestable through the MV (it no longer ingests such rows),
+// hence the direct aggregate-state insert.
+func insertRetainedGramAggregateRow(t *testing.T, ctx context.Context, projectID string, timestamp time.Time, hookSource string, tokens int64) {
 	t.Helper()
 
 	conn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	id, err := uuid.NewV7()
-	require.NoError(t, err)
-
-	attributes := map[string]any{"gen_ai.conversation.id": chatID}
-	attrsJSON, err := json.Marshal(attributes)
-	require.NoError(t, err)
-
 	err = conn.Exec(ctx, `
-		INSERT INTO telemetry_logs (
-			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
-			trace_id, span_id, attributes, resource_attributes,
-			gram_project_id, gram_urn, service_name
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), "INFO", "chat message",
-		nil, nil, string(attrsJSON), "{}",
-		projectID, "chat:message", "gram-server")
+		INSERT INTO attribute_metrics_summaries
+		SELECT
+			toUUID(?) AS gram_project_id,
+			toStartOfHour(fromUnixTimestamp64Nano(?)) AS time_bucket,
+			'' AS department_name, '' AS job_title, '' AS employee_type,
+			'' AS division_name, '' AS cost_center_name,
+			'' AS user_email, 'gram-model' AS model, ? AS hook_source,
+			[]::Array(String) AS roles, []::Array(String) AS groups,
+			uniqExactIfState(toString('retained-chat'), toUInt8(1)) AS total_chats,
+			sumIfState(toInt64(?), toUInt8(1)) AS total_input_tokens,
+			sumIfState(toInt64(0), toUInt8(1)) AS total_output_tokens,
+			sumIfState(toInt64(?), toUInt8(1)) AS total_tokens,
+			sumIfState(toInt64(0), toUInt8(1)) AS cache_read_input_tokens,
+			sumIfState(toInt64(0), toUInt8(1)) AS cache_creation_input_tokens,
+			sumIfState(toFloat64(0), toUInt8(1)) AS total_cost,
+			countIfState(toUInt8(0)) AS total_tool_calls,
+			uniqExactIfState(toString(''), toUInt8(0)) AS unique_tool_calls,
+			'' AS account_type, '' AS provider, '' AS billing_mode,
+			'' AS query_source, '' AS skill_name, '' AS agent_name,
+			'' AS mcp_server_name, '' AS mcp_tool_name
+	`, projectID, timestamp.UnixNano(), hookSource, tokens, tokens)
 	require.NoError(t, err)
 }
 
-func TestQueryTumDetails_CountsOnlyBilledCompletions(t *testing.T) {
+func TestQueryTumDetails_CountsOnlyObservedTraffic(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestLogsService(t)
@@ -823,51 +833,25 @@ func TestQueryTumDetails_CountsOnlyBilledCompletions(t *testing.T) {
 	now := time.Date(2026, time.June, 20, 1, 0, 0, 0, time.UTC)
 	ts := now.Add(-10 * time.Minute)
 
-	// A billed completion (playground, a registered usage source) with stored
-	// evidence, next to two populations that must not appear anywhere in the
-	// billing details: an assistants completion (Speakeasy covers assistants
-	// inference until BYOK, so the surface is deliberately unregistered) and
-	// a Claude Code fleet api_request observed via OTEL (agent-native token
-	// attributes, never part of the billed population).
-	playgroundChat := uuid.NewString()
-	assistantsChat := uuid.NewString()
-	insertAttributeGramCompletionLog(t, ctx, projectID, ts, playgroundChat, 0.42, 1000, "anthropic/claude-4.6", "playground", "user@example.com", "Engineering", []string{"dev"})
-	insertChatEvidenceRow(t, ctx, projectID, ts, playgroundChat)
-	insertAttributeGramCompletionLog(t, ctx, projectID, ts, assistantsChat, 0.13, 555, "openai/gpt-5.4", "assistants", "assistant@example.com", "Engineering", nil)
-	insertChatEvidenceRow(t, ctx, projectID, ts, assistantsChat)
-	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, ts, uuid.NewString(), 1.5, 999999, 0, 0, 0, "claude-4.6", "fleet@example.com", "Engineering", nil, "main", "", "", "", "")
+	// The tokens-under-management population: observed agent traffic. A
+	// Claude session with a huge cached prefix (input, output, and cache
+	// writes count — cache reads are excluded) and a Codex usage row.
+	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, ts, uuid.NewString(), 1.5, 1000, 200, 50000, 300, "claude-4.6", "fleet@example.com", "Engineering", []string{"dev"}, "main", "", "", "", "")
+	insertAttributeUsageLog(t, ctx, projectID, ts, uuid.NewString(), 0.2, 400, "gpt-5.4-codex", "codex", "codex@example.com", "Engineering", nil)
 
-	// The platform's scanning inference, billed under its own model section:
-	// a judge completion carrying the dedicated risk-analysis source (and the
-	// scanned user's identity), plus a legacy internal row from before the
-	// source existed — gram-tagged with the nil chat id, classified by the
-	// grandfather fingerprint.
-	riskChat := uuid.NewString()
-	nilChat := "00000000-0000-0000-0000-000000000000"
-	insertAttributeGramCompletionLog(t, ctx, projectID, ts, riskChat, 0.01, 300, "google/gemini-3.1-flash-lite", "risk-analysis", "scanned@example.com", "Engineering", nil)
-	insertChatEvidenceRow(t, ctx, projectID, ts, riskChat)
-	insertAttributeGramCompletionLog(t, ctx, projectID, ts, nilChat, 0.01, 70, "google/gemini-3.1-flash-lite", "gram", "", "", nil)
-	insertChatEvidenceRow(t, ctx, projectID, ts, nilChat)
+	// Gram-hosted completion rows retained in the aggregate from before the
+	// provenance-first cutover: a user-facing playground chat and the
+	// platform's scanning inference. Both are Gram-spent inference — never
+	// tokens under management — and must not appear anywhere in the details.
+	insertRetainedGramAggregateRow(t, ctx, projectID, ts, "playground", 777)
+	insertRetainedGramAggregateRow(t, ctx, projectID, ts, "risk-analysis", 333)
 
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	// Wait until BOTH gram completions materialized in the billing aggregate
-	// (the assistants chat included) so the exclusion assertions below cannot
-	// pass vacuously against a half-ingested view.
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-	require.Eventually(t, func() bool {
-		row := chConn.QueryRow(ctx,
-			"SELECT count(DISTINCT chat_id) FROM tum_breakdown_summaries WHERE gram_project_id = ? AND chat_id IN (?, ?, ?, ?)",
-			projectID, playgroundChat, assistantsChat, riskChat, nilChat)
-		var chats uint64
-		if err := row.Scan(&chats); err != nil {
-			return false
-		}
-		return chats == 4
-	}, 10*time.Second, 200*time.Millisecond)
-
+	// The retained rows are direct aggregate inserts (visible immediately), so
+	// the totals below can only converge once BOTH observed rows materialized
+	// AND the exclusion holds — it cannot pass vacuously.
 	var result *gen.TumDetailsResult
 	require.Eventually(t, func() bool {
 		res, resErr := ti.service.QueryTumDetails(ctx, &gen.QueryTumDetailsPayload{
@@ -880,18 +864,18 @@ func TestQueryTumDetails_CountsOnlyBilledCompletions(t *testing.T) {
 			return false
 		}
 		result = res
-		// The stored-evidence rows qualify the chats asynchronously too.
-		return res.Totals.TotalTokens == 1370
+		return res.Totals.TotalTokens == 1900
 	}, 10*time.Second, 200*time.Millisecond)
 
-	require.Equal(t, int64(1370), result.Totals.InputTokens, "the fixture reports all tokens as input")
-	require.Equal(t, int64(0), result.Totals.OutputTokens)
+	require.Equal(t, int64(1400), result.Totals.InputTokens)
+	require.Equal(t, int64(200), result.Totals.OutputTokens)
+	require.Equal(t, int64(300), result.Totals.CacheCreationTokens)
 
 	var pointSum int64
 	for _, p := range result.Points {
 		pointSum += p.TotalTokens
 	}
-	require.Equal(t, int64(1370), pointSum, "daily points must only count the billed completions")
+	require.Equal(t, int64(1900), pointSum, "daily points must only count the observed traffic, minus cache reads")
 
 	rowsByKey := map[string]map[string]int64{}
 	for _, b := range result.Breakdowns {
@@ -900,20 +884,22 @@ func TestQueryTumDetails_CountsOnlyBilledCompletions(t *testing.T) {
 			rowsByKey[b.Key][row.Value] = row.TotalTokens
 		}
 	}
-	require.Equal(t, map[string]int64{"playground": 1000, "risk-analysis": 300, "gram": 70}, rowsByKey["hook_source"],
-		"the source breakdown holds exactly the billed surfaces")
-	// The two model sections partition the billed population: user-facing
-	// completions vs the platform's scanning inference (declared tag and the
-	// grandfathered nil-chat gram row alike).
-	require.Equal(t, map[string]int64{"anthropic/claude-4.6": 1000}, rowsByKey["completion_model"])
-	require.Equal(t, map[string]int64{"google/gemini-3.1-flash-lite": 370}, rowsByKey["risk_analysis_model"])
-	// Scanned-user attribution flows into the billed rows, but a per-user
-	// (email) cut is deliberately not served to the billing page yet.
-	require.NotContains(t, rowsByKey, "email")
-	require.Equal(t, map[string]int64{"dev": 1000}, rowsByKey["role"])
-	// The fixture carries no division attribute; the tokens land on the ''
+	require.Equal(t, map[string]int64{"claude-code": 1500, "codex": 400}, rowsByKey["hook_source"],
+		"the agent breakdown holds exactly the observed surfaces — no Gram-hosted rows")
+	require.Equal(t, map[string]int64{"claude-4.6": 1500, "gpt-5.4-codex": 400}, rowsByKey["model"])
+	require.Equal(t, map[string]int64{"anthropic": 1500, "": 400}, rowsByKey["provider"])
+	require.Equal(t, map[string]int64{"team": 1500, "": 400}, rowsByKey["account_type"])
+	// Observed traffic attributes to the session's user.
+	require.Equal(t, map[string]int64{"fleet@example.com": 1500, "codex@example.com": 400}, rowsByKey["email"])
+	require.Equal(t, map[string]int64{"Engineering": 1900}, rowsByKey["department_name"])
+	// Role-less traffic (the codex row) lands on the '' row rather than
+	// vanishing from the section (arrayJoin on an empty array emits nothing).
+	require.Equal(t, map[string]int64{"dev": 1500, "": 400}, rowsByKey["role"])
+	// The fixtures carry no division attribute; the tokens land on the ''
 	// row (labeled by the frontend).
-	require.Equal(t, map[string]int64{"": 1370}, rowsByKey["division_name"])
+	require.Equal(t, map[string]int64{"": 1900}, rowsByKey["division_name"])
+	// Project rows carry the project UUID; the frontend maps it to a name.
+	require.Equal(t, map[string]int64{projectID: 1900}, rowsByKey["project_id"])
 }
 
 func TestQueryTumDetails_IncludesDeletedProjects(t *testing.T) {
@@ -943,12 +929,8 @@ func TestQueryTumDetails_IncludesDeletedProjects(t *testing.T) {
 	now := time.Date(2026, time.June, 20, 1, 0, 0, 0, time.UTC)
 	ts := now.Add(-10 * time.Minute)
 
-	liveChat := uuid.NewString()
-	doomedChat := uuid.NewString()
-	insertAttributeGramCompletionLog(t, ctx, projectID, ts, liveChat, 0.42, 1000, "anthropic/claude-4.6", "playground", "user@example.com", "Engineering", nil)
-	insertChatEvidenceRow(t, ctx, projectID, ts, liveChat)
-	insertAttributeGramCompletionLog(t, ctx, doomed.ID.String(), ts, doomedChat, 0.2, 250, "anthropic/claude-4.6", "playground", "user@example.com", "Engineering", nil)
-	insertChatEvidenceRow(t, ctx, doomed.ID.String(), ts, doomedChat)
+	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, ts, uuid.NewString(), 0.42, 1000, 0, 0, 0, "claude-4.6", "user@example.com", "Engineering", nil, "main", "", "", "", "")
+	insertAttributeClaudeAPIRequestLog(t, ctx, doomed.ID.String(), ts, uuid.NewString(), 0.2, 250, 0, 0, 0, "claude-4.6", "user@example.com", "Engineering", nil, "main", "", "", "", "")
 
 	_, err = projectsrepo.New(ti.conn).DeleteProject(ctx, doomed.ID)
 	require.NoError(t, err)
