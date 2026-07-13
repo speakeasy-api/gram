@@ -697,7 +697,8 @@ func TestQuery_AttributesClaudeAPIRequestByMCPAndSkill(t *testing.T) {
 	require.InDelta(t, 0.40, row.Measures.TotalCost, 1e-9)
 	require.Equal(t, int64(10), row.Measures.TotalInputTokens)
 	require.Equal(t, int64(2), row.Measures.TotalOutputTokens)
-	require.Equal(t, int64(20), row.Measures.TotalTokens)
+	// input + output + cache writes; the 3 cache-read tokens are excluded.
+	require.Equal(t, int64(17), row.Measures.TotalTokens)
 	require.Equal(t, int64(3), row.Measures.CacheReadInputTokens)
 	require.Equal(t, int64(5), row.Measures.CacheCreationInputTokens)
 	require.ElementsMatch(t, []string{"git-skill"}, row.DimensionValues["skill_name"])
