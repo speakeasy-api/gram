@@ -41,6 +41,7 @@ import (
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 	variationsrepo "github.com/speakeasy-api/gram/server/internal/variations/repo"
 )
 
@@ -660,6 +661,61 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 			Slug:             endpoint.Slug,
 		}); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "log mcp endpoint deletion").LogError(ctx, logger)
+		}
+	}
+
+	// Remote- and tunneled-backed servers own the issuer minted with them.
+	// Legacy rows may share an issuer with another server or toolset, so only
+	// cascade once this deletion leaves the issuer without an active owner.
+	if deleted.UserSessionIssuerID.Valid {
+		userSessionsRepo := usersessionsrepo.New(dbtx)
+		hasActiveOwner, err := userSessionsRepo.UserSessionIssuerHasActiveOwner(ctx, usersessionsrepo.UserSessionIssuerHasActiveOwnerParams{
+			ProjectID:           *authCtx.ProjectID,
+			UserSessionIssuerID: deleted.UserSessionIssuerID.UUID,
+		})
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "check user session issuer ownership").LogError(ctx, logger)
+		}
+
+		if !hasActiveOwner {
+			deletedIssuer, err := userSessionsRepo.DeleteUserSessionIssuer(ctx, usersessionsrepo.DeleteUserSessionIssuerParams{
+				ID:        deleted.UserSessionIssuerID.UUID,
+				ProjectID: *authCtx.ProjectID,
+			})
+			switch {
+			case errors.Is(err, pgx.ErrNoRows):
+				// The issuer was already soft-deleted independently. The MCP
+				// server still needs to remain deletable.
+			case err != nil:
+				return oops.E(oops.CodeUnexpected, err, "delete mcp server issuer").LogError(ctx, logger)
+			default:
+				if err := userSessionsRepo.DeleteRemoteSessionClientAttachmentsForUserSessionIssuer(ctx, usersessionsrepo.DeleteRemoteSessionClientAttachmentsForUserSessionIssuerParams{
+					UserSessionIssuerID: deletedIssuer.ID,
+					ProjectID:           *authCtx.ProjectID,
+				}); err != nil {
+					return oops.E(oops.CodeUnexpected, err, "delete mcp server issuer client attachments").LogError(ctx, logger)
+				}
+
+				if _, err := userSessionsRepo.SoftDeleteUserSessionsByIssuerID(ctx, deletedIssuer.ID); err != nil {
+					return oops.E(oops.CodeUnexpected, err, "delete mcp server issuer sessions").LogError(ctx, logger)
+				}
+
+				if _, err := userSessionsRepo.SoftDeleteUserSessionConsentsByIssuerID(ctx, deletedIssuer.ID); err != nil {
+					return oops.E(oops.CodeUnexpected, err, "delete mcp server issuer consents").LogError(ctx, logger)
+				}
+
+				if err := s.audit.LogUserSessionIssuerDelete(ctx, dbtx, audit.LogUserSessionIssuerDeleteEvent{
+					OrganizationID:       authCtx.ActiveOrganizationID,
+					ProjectID:            *authCtx.ProjectID,
+					Actor:                urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+					ActorDisplayName:     authCtx.Email,
+					ActorSlug:            nil,
+					UserSessionIssuerURN: urn.NewUserSessionIssuer(deletedIssuer.ID),
+					Slug:                 deletedIssuer.Slug,
+				}); err != nil {
+					return oops.E(oops.CodeUnexpected, err, "log mcp server issuer deletion").LogError(ctx, logger)
+				}
+			}
 		}
 	}
 

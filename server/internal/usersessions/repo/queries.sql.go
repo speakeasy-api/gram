@@ -1341,3 +1341,36 @@ func (q *Queries) UpdateUserSessionIssuer(ctx context.Context, arg UpdateUserSes
 	)
 	return i, err
 }
+
+const userSessionIssuerHasActiveOwner = `-- name: UserSessionIssuerHasActiveOwner :one
+SELECT EXISTS (
+    SELECT 1
+    FROM mcp_servers AS server
+    WHERE server.project_id = $1
+      AND server.user_session_issuer_id = $2::uuid
+      AND server.deleted IS FALSE
+
+    UNION ALL
+
+    SELECT 1
+    FROM toolsets AS toolset
+    WHERE toolset.project_id = $1
+      AND toolset.user_session_issuer_id = $2::uuid
+      AND toolset.deleted IS FALSE
+)
+`
+
+type UserSessionIssuerHasActiveOwnerParams struct {
+	ProjectID           uuid.UUID
+	UserSessionIssuerID uuid.UUID
+}
+
+// MCP servers created by the management API own a dedicated issuer, but
+// legacy data may share one with another server or toolset. Only cascade an
+// issuer delete once no active owner remains.
+func (q *Queries) UserSessionIssuerHasActiveOwner(ctx context.Context, arg UserSessionIssuerHasActiveOwnerParams) (bool, error) {
+	row := q.db.QueryRow(ctx, userSessionIssuerHasActiveOwner, arg.ProjectID, arg.UserSessionIssuerID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}

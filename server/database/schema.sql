@@ -2984,7 +2984,7 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
   -- Remote and tunneled servers carry a Gram-as-AS issuer attached at create
   -- time for the server's lifetime, regardless of visibility. Toolset-backed
   -- servers are exempt (their auth lives on toolsets.user_session_issuer_id).
-  CONSTRAINT mcp_servers_issuer_required_check CHECK ((remote_mcp_server_id IS NULL AND tunneled_mcp_server_id IS NULL) OR user_session_issuer_id IS NOT NULL)
+  CONSTRAINT mcp_servers_issuer_required_check CHECK (deleted OR (remote_mcp_server_id IS NULL AND tunneled_mcp_server_id IS NULL) OR user_session_issuer_id IS NOT NULL)
 );
 
 CREATE INDEX IF NOT EXISTS mcp_servers_project_id_idx

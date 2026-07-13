@@ -48,6 +48,26 @@ SET deleted_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
+-- name: UserSessionIssuerHasActiveOwner :one
+-- MCP servers created by the management API own a dedicated issuer, but
+-- legacy data may share one with another server or toolset. Only cascade an
+-- issuer delete once no active owner remains.
+SELECT EXISTS (
+    SELECT 1
+    FROM mcp_servers AS server
+    WHERE server.project_id = sqlc.arg('project_id')
+      AND server.user_session_issuer_id = sqlc.arg('user_session_issuer_id')::uuid
+      AND server.deleted IS FALSE
+
+    UNION ALL
+
+    SELECT 1
+    FROM toolsets AS toolset
+    WHERE toolset.project_id = sqlc.arg('project_id')
+      AND toolset.user_session_issuer_id = sqlc.arg('user_session_issuer_id')::uuid
+      AND toolset.deleted IS FALSE
+);
+
 -- name: DeleteRemoteSessionClientAttachmentsForUserSessionIssuer :exec
 DELETE FROM remote_session_client_user_session_issuers AS link
 USING user_session_issuers AS usi
