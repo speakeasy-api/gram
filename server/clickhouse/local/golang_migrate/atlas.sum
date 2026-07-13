@@ -1,4 +1,4 @@
-h1:3jwRNShK/IE2/fNVaI3dA9jmkXHEfGs7bQAfflMtD6k=
+h1:/nOQMb/d0L2Uotg/wszCSMuh2k+WX8LIfEmOQ1+K5mk=
 20251127155815_initial_golang_migrate.up.sql h1:fkATa14aucJEoldFi1VgW7TRT8gyC6NGe1Hq/OzXVuI=
 20251208142630_add-tool-logs-table.up.sql h1:cGJCiWBvLPFwOlpx0jYYLgdPZD21+gKSF/x4mVksBcI=
 20251209104438_add-id-col-to-tool-logs-table.up.sql h1:+Ubsl1ZKfeCZL9dBhohUnkBksKZj6nwdZSXm7WwowaE=
@@ -54,4 +54,5 @@ h1:3jwRNShK/IE2/fNVaI3dA9jmkXHEfGs7bQAfflMtD6k=
 20260709000641_provenance-first-attribute-metrics.up.sql h1:RXfFCI+1CjRTnNDikG52cqoa4+WSNenq4KgCjW5nv0w=
 20260710150001_shadow-mcp-inventory-urls.up.sql h1:/dMAeHWkPSnMHkNsTUle08RA2tXUex7qqGcLxgGk7Fk=
 20260713031549_telemetry-logs-staging.up.sql h1:OXRCOTGmSJhLDkRFxOodnXuf1COxVtzglHF9lNvjclk=
-20260713204907_staging-attribution-org-id.up.sql h1:esNppLBiSRyyj3Qu94Qu7CrlUpsh3P+GOiGGRTbW02s=
+20260713200607_attribute-metrics-tombstone-rollback.up.sql h1:novQH2dH347ntmWv9cKExXgXP9OXhxcsVs7gnnIWFJk=
+20260713204907_staging-attribution-org-id.up.sql h1:MBHfGI2HcHd4OXbPFQI4ORrkotmtTW+v81pypZ2/8KA=

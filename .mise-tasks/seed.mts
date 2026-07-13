@@ -3517,7 +3517,7 @@ async function seedObservabilityData(init: {
   // re-seeding regenerates identical rows for overlapping days — together with
   // the delete-before-insert preamble in chSQL this keeps re-runs idempotent.
   //
-  // attribute_metrics_summaries_mv only ingests rows at/after its 2026-06-20
+  // attribute_metrics_summaries_mv only ingests rows at/after its 2026-07-14
   // cutoff (see server/clickhouse/schema.sql), so pre-cutoff history reaches
   // the costs page via the backfill INSERT appended to chSQL below.
   // chat_token_summaries_mv has no cutoff: TUM history (the cycle picker +
@@ -4256,7 +4256,7 @@ async function seedObservabilityData(init: {
 
 // Backfills attribute_metrics_summaries for telemetry rows older than the
 // MV's live-ingestion cutoff. attribute_metrics_summaries_mv skips rows before
-// 2026-06-20 (production data that old was backfilled once, out of band), so
+// 2026-07-14 (production data that old is backfilled out of band), so
 // seeded history from before the cutoff would never reach the costs page
 // without this.
 //
@@ -4277,7 +4277,7 @@ function attributeMetricsBackfillSQL(
   return `
     INSERT INTO attribute_metrics_summaries (gram_project_id, time_bucket, department_name, job_title, employee_type, division_name, cost_center_name, user_email, model, hook_source, roles, groups, total_chats, total_input_tokens, total_output_tokens, total_tokens, cache_read_input_tokens, cache_creation_input_tokens, total_cost, total_tool_calls, account_type, provider, billing_mode, query_source, skill_name, agent_name, mcp_server_name, mcp_tool_name)
     WITH
-        toUnixTimestamp64Nano(toDateTime64('2026-06-20 00:00:00', 9, 'UTC')) AS attribute_metrics_cutoff_unix_nano,
+        toUnixTimestamp64Nano(toDateTime64('2026-07-14 00:00:00', 9, 'UTC')) AS attribute_metrics_cutoff_unix_nano,
         (
             chat_id != ''
             AND toString(attributes.prompt.id) != ''
@@ -4323,7 +4323,7 @@ function attributeMetricsBackfillSQL(
         uniqExactIfState(toString(attributes.gen_ai.conversation.id), toString(attributes.gen_ai.conversation.id) != '' AND (is_claude_api_request OR is_generic_usage_row)) AS total_chats,
         sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens))), is_claude_api_request OR is_generic_usage_row) AS total_input_tokens,
         sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.output_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens))), is_claude_api_request OR is_generic_usage_row) AS total_output_tokens,
-        sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)) + toInt64OrZero(toString(attributes.output_tokens)) + toInt64OrZero(toString(attributes.cache_read_tokens)) + toInt64OrZero(toString(attributes.cache_creation_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens))), is_claude_api_request OR is_generic_usage_row) AS total_tokens,
+        sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)) + toInt64OrZero(toString(attributes.output_tokens)) + toInt64OrZero(toString(attributes.cache_creation_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), is_claude_api_request OR is_generic_usage_row) AS total_tokens,
         sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.cache_read_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens))), is_claude_api_request OR is_generic_usage_row) AS cache_read_input_tokens,
         sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.cache_creation_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), is_claude_api_request OR is_generic_usage_row) AS cache_creation_input_tokens,
         sumIfState(if(is_claude_api_request, multiIf(toString(attributes.cost_usd) != '', toFloat64OrZero(toString(attributes.cost_usd)), toString(attributes.cost_usd_micros) != '', toFloat64OrZero(toString(attributes.cost_usd_micros)) / 1000000, 0), toFloat64OrZero(toString(attributes.gen_ai.usage.cost))), is_claude_api_request OR is_generic_usage_row) AS total_cost,

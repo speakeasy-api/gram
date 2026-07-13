@@ -1,4 +1,4 @@
-h1:75Ar1D1u8o71OWBejIYUDM6JVOI30Jz0oLFq0brnggU=
+h1:CYc0VjNZhLzprtG5B5wN8ob3WbRpJGOXZuuy2bTBI9s=
 20251013090028_initial.sql h1:I90GAjfJN/3i4nLe4AThT5OW/Qgc0+5LOI2jZ6WQZME=
 20251028141444_add_indexes.sql h1:CDwn2EdBZ7Nrn9hx5vYguR1ljlP5hTxiOI6n/I25Cpk=
 20251029120230_add_other_indexes.sql h1:3EtD+3hW8+s5me23va+BdfiIKmfQKOdv4glrQ34fle4=
@@ -62,3 +62,4 @@ h1:75Ar1D1u8o71OWBejIYUDM6JVOI30Jz0oLFq0brnggU=
 20260710150000_shadow-mcp-inventory-urls.sql h1:B3xXOhFpxCoOvOqwVXZUVezjbky75EwEw3ePfSLI4z8=
 20260713031544_telemetry-logs-staging.sql h1:ibENGxmwC3z6XqbovQWCeoSOMQkR55OVIsdy/mcJuCg=
 20260713200247_staging-attribution-org-id.sql h1:Ve6kZtHIOJOeuy/GIsTvy+mcxyaThDKmn+G5oF3QfyA=
+20260713200603_attribute-metrics-tombstone-rollback.sql h1:Ta0W3cE0k5O93hxh6BMYZuRpVfPJGY7drzG3bW/HBqI=

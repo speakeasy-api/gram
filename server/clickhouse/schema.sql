@@ -486,17 +486,43 @@ CREATE TABLE IF NOT EXISTS attribute_metrics_summaries (
     skill_name String,
     agent_name String,
     mcp_server_name String,
-    mcp_tool_name String
+    mcp_tool_name String,
+
+    -- Backfill rollback machinery (a keyed variant of the Altinity "delete
+    -- via tombstone column" pattern,
+    -- https://kb.altinity.com/altinity-kb-queries-and-syntax/delete-via-tombstone-column/):
+    --
+    -- generation is an IMMUTABLE sort-key discriminator separating coexisting
+    -- data generations: 0 = original/MV-ingested rows, 1 = the 2026-07 full
+    -- re-derive backfill (future backfills increment). Because it is part of
+    -- the sorting key, a backfill row never merges with the original row for
+    -- the same logical key — the two generations coexist untouched, which is
+    -- what makes rollback lossless. Sort-key columns cannot be ALTER UPDATEd,
+    -- which is why the mutable visibility switch is the separate non-key
+    -- column below.
+    --
+    -- is_active is the mutable tombstone switch: 1 = visible, 0 = hidden;
+    -- readers filter is_active = 1. Cutover/rollback flip it via ALTER UPDATE.
+    -- Mutation predicates must only reference sort-key columns (generation,
+    -- time_bucket) so rows with identical keys always carry the same flag and
+    -- merges can never combine a hidden row with a visible one.
+    --
+    -- The MV emits both columns explicitly as constants (generation 0, active) —
+    -- a TO-table MV inserts positionally, so the SELECT must produce every
+    -- target column; column defaults are not applied. Production runbook:
+    -- clickhouse/local/backfill/20260713000000_backfill-attribute-metrics-summaries.sql
+    generation UInt8,
+    is_active UInt8 DEFAULT 1
 ) ENGINE = AggregatingMergeTree
 -- Primary key stays the original 12 dimensions; account_type, provider,
--- billing_mode, and attribution dimensions are appended to ORDER BY only (the
--- sorting key). ALTER MODIFY ORDER BY extends the sorting key but leaves the
--- primary key as a prefix, so this must be declared explicitly here to match the
--- migrated table (otherwise a bare ORDER BY would imply the primary key includes
--- the appended dims, and atlas would see drift it can't reconcile — "modifying
--- primary key is not supported").
+-- billing_mode, attribution dimensions, and generation are appended to ORDER BY
+-- only (the sorting key). ALTER MODIFY ORDER BY extends the sorting key but
+-- leaves the primary key as a prefix, so this must be declared explicitly here
+-- to match the migrated table (otherwise a bare ORDER BY would imply the
+-- primary key includes the appended dims, and atlas would see drift it can't
+-- reconcile — "modifying primary key is not supported").
 PRIMARY KEY (gram_project_id, time_bucket, department_name, job_title, employee_type, division_name, cost_center_name, user_email, model, hook_source, roles, groups)
-ORDER BY (gram_project_id, time_bucket, department_name, job_title, employee_type, division_name, cost_center_name, user_email, model, hook_source, roles, groups, account_type, provider, billing_mode, query_source, skill_name, agent_name, mcp_server_name, mcp_tool_name)
+ORDER BY (gram_project_id, time_bucket, department_name, job_title, employee_type, division_name, cost_center_name, user_email, model, hook_source, roles, groups, account_type, provider, billing_mode, query_source, skill_name, agent_name, mcp_server_name, mcp_tool_name, generation)
 -- Retained beyond the standard 90-day telemetry window (matching
 -- chat_token_summaries) so the costs page can break down token usage across
 -- the same lookback that TUM billing reports cover.
@@ -517,7 +543,13 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS attribute_metrics_summaries_mv TO attribu
 -- classification to raw telemetry_logs.
 WITH
     -- Cutoff separates live MV ingestion from one-time historical backfill.
-    toUnixTimestamp64Nano(toDateTime64('2026-06-20 00:00:00', 9, 'UTC')) AS attribute_metrics_cutoff_unix_nano,
+    -- Rows with event time >= cutoff are the MV's; everything before it is
+    -- owned by the manual backfill (see
+    -- clickhouse/local/backfill/20260713000000_backfill-attribute-metrics-summaries.sql).
+    -- Must be a whole-hour boundary so time_bucket partitions cleanly between
+    -- the two writers, and should sit shortly (~1h) after the deploy that
+    -- ships it.
+    toUnixTimestamp64Nano(toDateTime64('2026-07-14 00:00:00', 9, 'UTC')) AS attribute_metrics_cutoff_unix_nano,
     -- Every persisted Claude OTEL log row carries this URN (stamped at ingest).
     (gram_urn = 'claude-code:otel:logs') AS is_claude_otel_row,
     -- Claude emits one api_request row per turn with model, token, cost, and
@@ -585,10 +617,16 @@ SELECT
     -- Cardinality
     uniqExactIfState(toString(attributes.gen_ai.conversation.id), toString(attributes.gen_ai.conversation.id) != '' AND (is_claude_api_request OR is_agent_usage_row)) AS total_chats,
 
-    -- Token sums
+    -- Token sums. total_tokens is input + output + cache WRITES — cache reads
+    -- are excluded, matching the tokens-under-management measure (a cache
+    -- read re-observes prompt content already counted when it entered the
+    -- cache; see tumMeasureExpr in server/internal/telemetry/repo). Both
+    -- branches sum the disjoint components rather than trusting a reported
+    -- total: Codex's gen_ai.usage.total_tokens includes cache reads and
+    -- Cursor usage rows report no total at all.
     sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens))), is_claude_api_request OR is_agent_usage_row) AS total_input_tokens,
     sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.output_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens))), is_claude_api_request OR is_agent_usage_row) AS total_output_tokens,
-    sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)) + toInt64OrZero(toString(attributes.output_tokens)) + toInt64OrZero(toString(attributes.cache_read_tokens)) + toInt64OrZero(toString(attributes.cache_creation_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens))), is_claude_api_request OR is_agent_usage_row) AS total_tokens,
+    sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)) + toInt64OrZero(toString(attributes.output_tokens)) + toInt64OrZero(toString(attributes.cache_creation_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), is_claude_api_request OR is_agent_usage_row) AS total_tokens,
     sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.cache_read_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens))), is_claude_api_request OR is_agent_usage_row) AS cache_read_input_tokens,
     sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.cache_creation_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), is_claude_api_request OR is_agent_usage_row) AS cache_creation_input_tokens,
 
@@ -612,7 +650,15 @@ SELECT
     if(is_claude_api_request, toString(attributes.skill.name), '') AS skill_name,
     if(is_claude_api_request, toString(attributes.agent.name), '') AS agent_name,
     if(is_claude_api_request, toString(attributes.mcp_server.name), '') AS mcp_server_name,
-    if(is_claude_api_request, toString(attributes.mcp_tool.name), '') AS mcp_tool_name
+    if(is_claude_api_request, toString(attributes.mcp_tool.name), '') AS mcp_tool_name,
+
+    -- Rollback machinery: MV rows are always generation 0 and active. These are
+    -- emitted explicitly (as constants) rather than relying on column defaults —
+    -- a TO-table MV inserts positionally with no column list, so the SELECT must
+    -- produce every target column or ingestion fails with a column-count
+    -- mismatch. Constants need no GROUP BY entry.
+    toUInt8(0) AS generation,
+    toUInt8(1) AS is_active
 FROM telemetry_logs
 -- Admit only the three agent surfaces: Claude OTEL api_request/tool_result
 -- rows, Codex/Cursor usage rows, and Codex/Cursor completed tool-call hook
