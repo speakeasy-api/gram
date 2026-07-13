@@ -324,7 +324,6 @@ func (s *Service) writeClaudeOTELLogsToClickHouse(ctx context.Context, payload *
 
 	params := make([]telemetry.LogParams, 0)
 	stagedParams := make([]telemetry.LogParams, 0)
-	stagedSessionIDs := make(map[string]struct{})
 	correlationSessionIDs := make(map[string]struct{})
 	for _, resourceLog := range payload.ResourceLogs {
 		if resourceLog == nil {
@@ -405,15 +404,14 @@ func (s *Service) writeClaudeOTELLogsToClickHouse(ctx context.Context, payload *
 				// telemetry_logs_staging until the transcript-derived
 				// attribution for their request_id arrives via the
 				// Stop/SubagentStop hooks (or the promotion timeout passes);
-				// promotion then rewrites the names and inserts into
-				// telemetry_logs so attribute_metrics_summaries_mv aggregates
-				// the true attribution. Everything else writes through —
-				// including sessionless redacted rows, because promotion is
-				// scoped by session id and a row it can never reach would sit
-				// in staging until the TTL discards it.
-				if sessionID != "" && isRedactedClaudeAPIRequest(logAttrs) {
+				// the scheduled sweep then rewrites the names and inserts
+				// into telemetry_logs so attribute_metrics_summaries_mv
+				// aggregates the true attribution. The sweep scans staging
+				// per project and joins tuples per request id, so even
+				// sessionless redacted rows are reachable. Everything else
+				// writes through.
+				if isRedactedClaudeAPIRequest(logAttrs) {
 					stagedParams = append(stagedParams, logParams)
-					stagedSessionIDs[sessionID] = struct{}{}
 					continue
 				}
 				params = append(params, logParams)
@@ -431,12 +429,6 @@ func (s *Service) writeClaudeOTELLogsToClickHouse(ctx context.Context, payload *
 	}
 	for sessionID := range correlationSessionIDs {
 		s.scheduleClaudePromptCorrelation(ctx, parsedProjectID, sessionIDToUUID(sessionID), sessionID)
-	}
-	// Attribution tuples may already be waiting (the Stop hook can beat the
-	// final OTEL export batch), so kick promotion for every session that just
-	// staged rows rather than waiting for the next hook or the sweep.
-	for sessionID := range stagedSessionIDs {
-		s.schedulePromoteStagedTelemetry(ctx, parsedProjectID, sessionID)
 	}
 }
 

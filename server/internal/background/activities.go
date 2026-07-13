@@ -71,6 +71,7 @@ type Activities struct {
 	firePlatformUsageMetrics        *activities.FirePlatformUsageMetrics
 	correlateClaudePrompts          *activities.CorrelateClaudePrompts
 	promoteStagedTelemetry          *activities.PromoteStagedTelemetry
+	listStagedTelemetryProjects     *activities.ListStagedTelemetryProjects
 	generateChatTitle               *activities.GenerateChatTitle
 	getAllOrganizations             *activities.GetAllOrganizations
 	processDeployment               *activities.ProcessDeployment
@@ -175,6 +176,7 @@ func NewActivities(
 		firePlatformUsageMetrics:        activities.NewFirePlatformUsageMetrics(logger, billingTracker),
 		correlateClaudePrompts:          activities.NewCorrelateClaudePrompts(logger, db, chConn),
 		promoteStagedTelemetry:          activities.NewPromoteStagedTelemetry(logger, chConn, cacheAdapter),
+		listStagedTelemetryProjects:     activities.NewListStagedTelemetryProjects(logger, chConn),
 		generateChatTitle:               activities.NewGenerateChatTitle(logger, db, chatClient),
 		getAllOrganizations:             activities.NewGetAllOrganizations(logger, db),
 		processDeployment:               activities.NewProcessDeployment(logger, tracerProvider, meterProvider, guardianPolicy, db, features, assetStorage, billingRepo, mcpRegistryClient),
@@ -344,12 +346,8 @@ func (a *Activities) PromoteStagedTelemetry(ctx context.Context, input activitie
 	return a.promoteStagedTelemetry.Do(ctx, input)
 }
 
-func (a *Activities) ListStagedTelemetrySessions(ctx context.Context) ([]activities.PromoteStagedTelemetryArgs, error) {
-	sessions, err := a.promoteStagedTelemetry.ListStagedSessions(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list staged telemetry sessions: %w", err)
-	}
-	return sessions, nil
+func (a *Activities) ListStagedTelemetryProjects(ctx context.Context) ([]activities.PromoteStagedTelemetryArgs, error) {
+	return a.listStagedTelemetryProjects.Do(ctx)
 }
 
 func (a *Activities) SegmentChat(ctx context.Context, input resolution_activities.SegmentChatArgs) (*resolution_activities.SegmentChatOutput, error) {

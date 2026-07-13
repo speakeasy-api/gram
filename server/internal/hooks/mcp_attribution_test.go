@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -24,7 +25,10 @@ func TestLogs_StagesRedactedClaudeAPIRequests(t *testing.T) {
 	chClient := enableHookTelemetryLogger(t, ctx, ti)
 	authCtx := hookAuthContext(t, ctx)
 
-	sessionID := "claude-staging-session-1"
+	// Staging is scanned per project and the fixture project is shared across
+	// test databases, so the ids must be unique to this run.
+	sessionID := "claude-staging-session-" + uuid.NewString()
+	stagedRequestID := "req_staged_" + uuid.NewString()
 	timestamp := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
 
 	err := ti.service.Logs(ctx, claudeLogsPayload(
@@ -37,7 +41,7 @@ func TestLogs_StagesRedactedClaudeAPIRequests(t *testing.T) {
 			Attributes: []*gen.OTELAttribute{
 				strAttr("session.id", sessionID),
 				strAttr("event.name", "api_request"),
-				strAttr("request_id", "req_staged_1"),
+				strAttr("request_id", stagedRequestID),
 				strAttr("mcp_server.name", "custom"),
 				strAttr("mcp_tool.name", "custom"),
 				strAttr("prompt.id", "prompt-1"),
@@ -70,21 +74,26 @@ func TestLogs_StagesRedactedClaudeAPIRequests(t *testing.T) {
 
 	logs := waitForHookLogs(t, ctx, chClient, authCtx.ProjectID.String(), claudeOTELLogsURN, timestamp, 2)
 	for _, log := range logs {
-		require.NotContains(t, log.Attributes, "req_staged_1", "redacted api_request must not write through")
+		require.NotContains(t, log.Attributes, stagedRequestID, "redacted api_request must not write through")
 	}
 
-	var staged []telemetryrepo.StagedTelemetryLogRow
+	// The staging listing is project-wide (and the fixture project persists
+	// across runs), so pick out this run's row by its unique request id.
+	var stagedRow *telemetryrepo.StagedTelemetryLogRow
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {
-		var err error
-		staged, err = chClient.ListStagedTelemetryLogs(ctx, authCtx.ProjectID.String(), sessionID)
+		staged, err := chClient.ListStagedTelemetryLogs(ctx, authCtx.ProjectID.String())
 		assert.NoError(collect, err)
-		assert.Len(collect, staged, 1)
+		for i := range staged {
+			if staged[i].RequestID == stagedRequestID {
+				stagedRow = &staged[i]
+			}
+		}
+		assert.NotNil(collect, stagedRow)
 	}, 3*time.Second, 50*time.Millisecond)
 
-	require.Equal(t, "req_staged_1", staged[0].RequestID)
-	require.Contains(t, staged[0].Attributes, `"custom"`)
-	require.NotNil(t, staged[0].GramChatID)
-	require.Equal(t, sessionID, *staged[0].GramChatID)
+	require.Contains(t, stagedRow.Attributes, `"custom"`)
+	require.NotNil(t, stagedRow.GramChatID)
+	require.Equal(t, sessionID, *stagedRow.GramChatID)
 }
 
 // TestIngest_CapturesMCPAttributionTuples verifies that a unified ingest

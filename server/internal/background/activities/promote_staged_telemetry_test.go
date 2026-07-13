@@ -120,7 +120,7 @@ func TestPromoteStagedTelemetry_RewritesWithTuple(t *testing.T) {
 	// (idempotent) pass until one reports the promotion.
 	var promotedPass *activities.PromoteStagedTelemetryResult
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {
-		result, err := act.Do(ctx, activities.PromoteStagedTelemetryArgs{ProjectID: projectID, SessionID: sessionID})
+		result, err := act.Do(ctx, activities.PromoteStagedTelemetryArgs{ProjectID: projectID})
 		assert.NoError(collect, err)
 		if err == nil && result != nil && result.Promoted > 0 {
 			promotedPass = result
@@ -142,7 +142,7 @@ func TestPromoteStagedTelemetry_RewritesWithTuple(t *testing.T) {
 	require.NotContains(t, logs[0].Attributes, `"custom"`)
 
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {
-		staged, err := queries.ListStagedTelemetryLogs(ctx, projectID.String(), sessionID)
+		staged, err := queries.ListStagedTelemetryLogs(ctx, projectID.String())
 		assert.NoError(collect, err)
 		assert.Empty(collect, staged)
 	}, 3*time.Second, 50*time.Millisecond)
@@ -168,7 +168,7 @@ func TestPromoteStagedTelemetry_LeavesFreshRowsAwaitingTuple(t *testing.T) {
 	var result *activities.PromoteStagedTelemetryResult
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {
 		var err error
-		result, err = act.Do(ctx, activities.PromoteStagedTelemetryArgs{ProjectID: projectID, SessionID: sessionID})
+		result, err = act.Do(ctx, activities.PromoteStagedTelemetryArgs{ProjectID: projectID})
 		assert.NoError(collect, err)
 		if result != nil {
 			assert.Equal(collect, 1, result.Remaining)
@@ -179,7 +179,7 @@ func TestPromoteStagedTelemetry_LeavesFreshRowsAwaitingTuple(t *testing.T) {
 	logs := listPromotedLogs(t, ctx, queries, projectID, observed)
 	require.Empty(t, logs, "row awaiting its tuple must not be promoted")
 
-	staged, err := queries.ListStagedTelemetryLogs(ctx, projectID.String(), sessionID)
+	staged, err := queries.ListStagedTelemetryLogs(ctx, projectID.String())
 	require.NoError(t, err)
 	require.Len(t, staged, 1)
 }
@@ -206,7 +206,7 @@ func TestPromoteStagedTelemetry_PromotesVerbatimAfterTimeout(t *testing.T) {
 	var result *activities.PromoteStagedTelemetryResult
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {
 		var err error
-		result, err = act.Do(ctx, activities.PromoteStagedTelemetryArgs{ProjectID: projectID, SessionID: sessionID})
+		result, err = act.Do(ctx, activities.PromoteStagedTelemetryArgs{ProjectID: projectID})
 		assert.NoError(collect, err)
 		if result != nil {
 			assert.Equal(collect, 1, result.Promoted)
@@ -273,7 +273,7 @@ func TestPromoteStagedTelemetry_DedupSkipsAlreadyPromotedRows(t *testing.T) {
 	// that sees nothing would satisfy the assertions below vacuously and the
 	// row would never be processed.
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {
-		staged, err := queries.ListStagedTelemetryLogs(ctx, projectID.String(), sessionID)
+		staged, err := queries.ListStagedTelemetryLogs(ctx, projectID.String())
 		assert.NoError(collect, err)
 		assert.Len(collect, staged, 1)
 	}, 5*time.Second, 50*time.Millisecond)
@@ -284,12 +284,12 @@ func TestPromoteStagedTelemetry_DedupSkipsAlreadyPromotedRows(t *testing.T) {
 	// delete blocks on a ClickHouse lightweight-delete mutation, so one
 	// iteration can take seconds.
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {
-		result, err := act.Do(ctx, activities.PromoteStagedTelemetryArgs{ProjectID: projectID, SessionID: sessionID})
+		result, err := act.Do(ctx, activities.PromoteStagedTelemetryArgs{ProjectID: projectID})
 		assert.NoError(collect, err)
 		if err == nil && result != nil {
 			assert.Equal(collect, 0, result.Promoted, "dedup guard must not count skipped rows as promoted")
 		}
-		staged, err := queries.ListStagedTelemetryLogs(ctx, projectID.String(), sessionID)
+		staged, err := queries.ListStagedTelemetryLogs(ctx, projectID.String())
 		assert.NoError(collect, err)
 		assert.Empty(collect, staged)
 	}, 20*time.Second, 50*time.Millisecond)
@@ -304,7 +304,7 @@ func TestPromoteStagedTelemetry_DedupSkipsAlreadyPromotedRows(t *testing.T) {
 
 	// …and staging finished its delete.
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {
-		staged, err := queries.ListStagedTelemetryLogs(ctx, projectID.String(), sessionID)
+		staged, err := queries.ListStagedTelemetryLogs(ctx, projectID.String())
 		assert.NoError(collect, err)
 		assert.Empty(collect, staged)
 	}, 3*time.Second, 50*time.Millisecond)

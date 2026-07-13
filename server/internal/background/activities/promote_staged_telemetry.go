@@ -5,22 +5,27 @@ package activities
 // Claude redacted their MCP attribution to "custom" (see the fork in
 // server/internal/hooks/otel.go); the Stop/SubagentStop hooks ship the
 // unredacted (request_id -> server/tool) tuples from the local transcript
-// into Redis. One promotion pass, per session:
+// into Redis. One promotion pass, per project:
 //
-//  1. Load every staged row for the session.
+//  1. Load the project's staged rows (oldest first, capped — the next
+//     scheduled pass picks up the rest).
 //  2. Per row: tuple in Redis -> patch attributes.mcp_server.name /
 //     attributes.mcp_tool.name; no tuple but row older than the timeout ->
 //     promote verbatim (stays "custom" — today's behavior); otherwise leave
-//     the row for a later trigger or the sweep.
-//  3. Dedup guard: drop rows whose id already exists in telemetry_logs.
-//     Promotion preserves the staged row's id, so telemetry_logs itself is
-//     the exactly-once ledger across crashes between insert and delete.
+//     the row for a later pass.
+//  3. Dedup guard: drop rows whose id already exists in telemetry_logs
+//     (sequentially-consistent read), so a retry after a crash between
+//     insert and delete does not re-insert.
 //  4. Insert the batch into telemetry_logs (this is when
-//     attribute_metrics_summaries_mv aggregates the row), then delete the
-//     promoted ids from staging.
+//     attribute_metrics_summaries_mv aggregates the row) with per-row
+//     insert_deduplication_tokens — on engines with an insert-dedup window
+//     the engine drops any duplicate the check could not see — then delete
+//     the promoted ids from staging.
 //
-// Passes are serialized per session by the promotion workflow's ID, so the
-// read-check-insert sequence has a single writer.
+// Passes are serialized per project by the promotion workflow's ID, so the
+// read-check-insert sequence normally has a single writer; the dedup token
+// covers the residual race of a timed-out activity attempt whose insert
+// lands after the retrying attempt's existence check.
 
 import (
 	"context"
@@ -62,7 +67,6 @@ func NewPromoteStagedTelemetry(logger *slog.Logger, chConn clickhouse.Conn, cach
 
 type PromoteStagedTelemetryArgs struct {
 	ProjectID uuid.UUID
-	SessionID string
 }
 
 type PromoteStagedTelemetryResult struct {
@@ -79,7 +83,7 @@ type PromoteStagedTelemetryResult struct {
 func (p *PromoteStagedTelemetry) Do(ctx context.Context, args PromoteStagedTelemetryArgs) (*PromoteStagedTelemetryResult, error) {
 	result := &PromoteStagedTelemetryResult{Promoted: 0, Rewritten: 0, Remaining: 0}
 
-	rows, err := p.telemetry.ListStagedTelemetryLogs(ctx, args.ProjectID.String(), args.SessionID)
+	rows, err := p.telemetry.ListStagedTelemetryLogs(ctx, args.ProjectID.String())
 	if err != nil {
 		return nil, fmt.Errorf("list staged telemetry logs: %w", err)
 	}
@@ -90,23 +94,35 @@ func (p *PromoteStagedTelemetry) Do(ctx context.Context, args PromoteStagedTelem
 	cutoff := p.now().Add(-p.timeout)
 	promote := make([]telemetryrepo.InsertTelemetryLogParams, 0, len(rows))
 	rewrittenByID := make(map[string]bool, len(rows))
+	// Memoize tuple lookups so each distinct request id costs one Redis
+	// round-trip even when several staged rows share it. seen guards against
+	// duplicate staged copies of the same row id (a retried ingest insert on
+	// an engine without a dedup window) entering the promote list twice.
+	tuples := make(map[string]*telemetry.MCPAttributionTuple, len(rows))
+	seen := make(map[string]struct{}, len(rows))
 	for _, row := range rows {
-		var tuple telemetry.MCPAttributionTuple
-		hasTuple := row.RequestID != "" &&
-			p.cache.Get(ctx, telemetry.MCPAttributionTupleKey(args.ProjectID.String(), row.RequestID), &tuple) == nil &&
-			tuple.Server != ""
+		if _, dup := seen[row.ID]; dup {
+			continue
+		}
+		seen[row.ID] = struct{}{}
+
+		tuple, ok := tuples[row.RequestID]
+		if !ok {
+			tuple = p.lookupTuple(ctx, args.ProjectID.String(), row.RequestID)
+			tuples[row.RequestID] = tuple
+		}
 
 		attributes := row.Attributes
 		switch {
-		case hasTuple:
-			patched, err := patchMCPAttribution(row.Attributes, tuple)
+		case tuple != nil:
+			patched, err := patchMCPAttribution(row.Attributes, *tuple)
 			if err != nil {
 				// A row whose JSON cannot be patched still promotes verbatim
 				// at the timeout; do not wedge the whole pass on it.
 				p.logger.WarnContext(ctx, "failed to patch staged telemetry attribution",
 					attr.SlogEvent("staged_telemetry_patch_failed"),
 					attr.SlogError(err),
-					attr.SlogGenAIConversationID(args.SessionID),
+					attr.SlogProjectID(args.ProjectID.String()),
 				)
 				result.Remaining++
 				continue
@@ -148,7 +164,9 @@ func (p *PromoteStagedTelemetry) Do(ctx context.Context, args PromoteStagedTelem
 	// Dedup guard: a crash after insert but before delete leaves the row in
 	// both tables; the retry must not insert (and double-count in the MVs)
 	// again. Ids are preserved across promotion, so existence in
-	// telemetry_logs marks the row done — finish its delete instead.
+	// telemetry_logs marks the row done — finish its delete instead. The
+	// insert below additionally carries per-row dedup tokens for races this
+	// read cannot see.
 	ids := make([]string, 0, len(promote))
 	minTime, maxTime := promote[0].TimeUnixNano, promote[0].TimeUnixNano
 	for _, row := range promote {
@@ -173,7 +191,7 @@ func (p *PromoteStagedTelemetry) Do(ctx context.Context, args PromoteStagedTelem
 		insert = append(insert, row)
 	}
 
-	if err := p.telemetry.InsertTelemetryLogs(ctx, insert); err != nil {
+	if err := p.telemetry.InsertPromotedTelemetryLogs(ctx, insert); err != nil {
 		return nil, fmt.Errorf("insert promoted telemetry logs: %w", err)
 	}
 	if err := p.telemetry.DeleteStagedTelemetryLogs(ctx, args.ProjectID.String(), ids); err != nil {
@@ -191,22 +209,21 @@ func (p *PromoteStagedTelemetry) Do(ctx context.Context, args PromoteStagedTelem
 	return result, nil
 }
 
-// ListStagedSessions lists the (project, session) pairs with rows waiting in
-// staging, for the sweep.
-func (p *PromoteStagedTelemetry) ListStagedSessions(ctx context.Context) ([]PromoteStagedTelemetryArgs, error) {
-	sessions, err := p.telemetry.ListStagedTelemetrySessions(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list staged telemetry sessions: %w", err)
+// lookupTuple fetches the transcript-derived attribution for one request id,
+// or nil when no usable tuple is stored (missing key, cache error, or an
+// empty server name).
+func (p *PromoteStagedTelemetry) lookupTuple(ctx context.Context, projectID string, requestID string) *telemetry.MCPAttributionTuple {
+	if requestID == "" {
+		return nil
 	}
-	out := make([]PromoteStagedTelemetryArgs, 0, len(sessions))
-	for _, session := range sessions {
-		projectID, err := uuid.Parse(session.ProjectID)
-		if err != nil {
-			continue
-		}
-		out = append(out, PromoteStagedTelemetryArgs{ProjectID: projectID, SessionID: session.SessionID})
+	var tuple telemetry.MCPAttributionTuple
+	if err := p.cache.Get(ctx, telemetry.MCPAttributionTupleKey(projectID, requestID), &tuple); err != nil {
+		return nil
 	}
-	return out, nil
+	if tuple.Server == "" {
+		return nil
+	}
+	return &tuple
 }
 
 // patchMCPAttribution rewrites mcp_server.name / mcp_tool.name inside the

@@ -5,10 +5,20 @@ package repo
 // the transcript-derived attribution for their request_id arrives via hooks
 // (or a timeout passes), then the promotion worker rewrites the attribution
 // inside the attributes JSON and inserts the row into telemetry_logs — the
-// moment attribute_metrics_summaries_mv fires — and deletes it here. Rows
-// keep their id across promotion, so telemetry_logs itself is the
-// exactly-once ledger: a promotion retry that finds the id already in
-// telemetry_logs skips the insert.
+// moment attribute_metrics_summaries_mv fires — and deletes it here.
+//
+// Duplicate protection is layered, because a duplicate insert would re-fire
+// the downstream MVs and double-count usage:
+//
+//  1. Promotion passes are serialized per project by the Temporal workflow ID.
+//  2. Rows keep their id across promotion, and a pass skips ids that already
+//     landed in telemetry_logs (a sequentially-consistent existence check, so
+//     a retry after a crash between insert and delete does not re-insert).
+//  3. Promotion inserts carry a per-row insert_deduplication_token, so on
+//     engines with an insert-dedup window (replicated/shared — i.e.
+//     production) even a race the check cannot see (e.g. a timed-out
+//     activity attempt whose insert lands after the retry's check) is
+//     dropped by the engine instead of double-counted.
 
 import (
 	"context"
@@ -42,16 +52,35 @@ type StagedTelemetryLogRow struct {
 	RequestID            string  `ch:"request_id"`
 }
 
-// StagedTelemetrySession identifies one session with rows waiting in staging.
-type StagedTelemetrySession struct {
-	ProjectID string `ch:"project_id"`
-	SessionID string `ch:"session_id"`
-}
+// stagedTelemetryRowsLimit bounds one promotion pass's batch so a large
+// backlog cannot outlast the activity timeout. Oldest rows come first, so
+// anything beyond the cap is picked up by the next scheduled pass (every 2
+// minutes) rather than starved.
+const stagedTelemetryRowsLimit = 1000
 
 // InsertTelemetryLogsStaging inserts telemetry log records into the staging
 // table in a single synchronous statement.
 func (q *Queries) InsertTelemetryLogsStaging(ctx context.Context, args []InsertTelemetryLogParams) error {
 	return q.insertTelemetryLogsInto(ctx, "telemetry_logs_staging", args)
+}
+
+// InsertPromotedTelemetryLogs moves staged rows into telemetry_logs, one
+// insert per row, each carrying a deterministic insert_deduplication_token
+// derived from the row id. On engines with an insert-dedup window
+// (replicated/shared — i.e. production) the engine drops a duplicate insert
+// of the same row even when it races past the promotion pass's existence
+// check, which keeps the downstream MVs from double-counting. Promotion
+// batches are tiny (a session's redacted rows), so per-row inserts are fine.
+func (q *Queries) InsertPromotedTelemetryLogs(ctx context.Context, args []InsertTelemetryLogParams) error {
+	for _, arg := range args {
+		tokenCtx := clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
+			"insert_deduplication_token": "promote:" + arg.ID,
+		}))
+		if err := q.insertTelemetryLogsInto(tokenCtx, "telemetry_logs", []InsertTelemetryLogParams{arg}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (q *Queries) insertTelemetryLogsInto(ctx context.Context, table string, args []InsertTelemetryLogParams) error {
@@ -114,9 +143,10 @@ func (q *Queries) insertTelemetryLogsInto(ctx context.Context, table string, arg
 	return nil
 }
 
-// ListStagedTelemetryLogs returns every staged row for one session, complete
-// enough to be re-inserted into telemetry_logs.
-func (q *Queries) ListStagedTelemetryLogs(ctx context.Context, projectID string, sessionID string) ([]StagedTelemetryLogRow, error) {
+// ListStagedTelemetryLogs returns staged rows for one project, oldest first
+// and capped at stagedTelemetryRowsLimit, complete enough to be re-inserted
+// into telemetry_logs.
+func (q *Queries) ListStagedTelemetryLogs(ctx context.Context, projectID string) ([]StagedTelemetryLogRow, error) {
 	sb := sq.Select(
 		"toString(id) AS id",
 		"time_unix_nano",
@@ -138,8 +168,8 @@ func (q *Queries) ListStagedTelemetryLogs(ctx context.Context, projectID string,
 	).
 		From("telemetry_logs_staging").
 		Where(squirrel.Eq{"gram_project_id": projectID}).
-		Where(squirrel.Eq{"chat_id": sessionID}).
-		OrderBy("time_unix_nano")
+		OrderBy("observed_time_unix_nano").
+		Limit(stagedTelemetryRowsLimit)
 
 	query, args, err := sb.ToSql()
 	if err != nil {
@@ -166,38 +196,39 @@ func (q *Queries) ListStagedTelemetryLogs(ctx context.Context, projectID string,
 	return result, nil
 }
 
-// stagedTelemetrySessionsLimit bounds one sweep's worth of sessions so a
-// large backlog cannot outlast the sweep workflow's run timeout. Promotion
-// drains staging, so sessions beyond the cap surface in the next sweep
-// (every 5 minutes) rather than starving.
-const stagedTelemetrySessionsLimit = 1000
+// stagedTelemetryProjectsLimit bounds one dispatch pass's fan-out so a large
+// backlog cannot outlast the dispatch workflow's run timeout. Promotion
+// drains staging, so projects beyond the cap surface in the next pass
+// (every 2 minutes) rather than starving.
+const stagedTelemetryProjectsLimit = 1000
 
-// ListStagedTelemetrySessions returns the distinct (project, session) pairs
-// with rows currently waiting in staging, for the sweep to re-trigger
-// promotion. Oldest sessions first, so timeout enforcement is not delayed by
-// newer arrivals when the limit kicks in.
-func (q *Queries) ListStagedTelemetrySessions(ctx context.Context) ([]StagedTelemetrySession, error) {
+// ListStagedTelemetryProjects returns the distinct project ids with rows
+// currently waiting in staging, for the scheduled dispatcher to fan out
+// per-project promotion. Projects with the oldest staged rows come first, so
+// timeout enforcement is not delayed by newer arrivals when the limit kicks
+// in.
+func (q *Queries) ListStagedTelemetryProjects(ctx context.Context) ([]string, error) {
 	query := fmt.Sprintf(
-		"SELECT toString(gram_project_id) AS project_id, chat_id AS session_id FROM telemetry_logs_staging WHERE chat_id != '' GROUP BY project_id, session_id ORDER BY min(observed_time_unix_nano) LIMIT %d",
-		stagedTelemetrySessionsLimit,
+		"SELECT toString(gram_project_id) AS project_id FROM telemetry_logs_staging GROUP BY project_id ORDER BY min(observed_time_unix_nano) LIMIT %d",
+		stagedTelemetryProjectsLimit,
 	)
 
 	rows, err := q.conn.Query(ctx, query)
 	if err != nil {
-		return nil, fmt.Errorf("querying staged telemetry sessions: %w", err)
+		return nil, fmt.Errorf("querying staged telemetry projects: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	var result []StagedTelemetrySession
+	var result []string
 	for rows.Next() {
-		var row StagedTelemetrySession
-		if err := rows.ScanStruct(&row); err != nil {
-			return nil, fmt.Errorf("scanning staged telemetry session row: %w", err)
+		var projectID string
+		if err := rows.Scan(&projectID); err != nil {
+			return nil, fmt.Errorf("scanning staged telemetry project id: %w", err)
 		}
-		result = append(result, row)
+		result = append(result, projectID)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterating staged telemetry session rows: %w", err)
+		return nil, fmt.Errorf("iterating staged telemetry project rows: %w", err)
 	}
 	return result, nil
 }
@@ -205,11 +236,17 @@ func (q *Queries) ListStagedTelemetrySessions(ctx context.Context) ([]StagedTele
 // ListExistingTelemetryLogIDs returns which of the given ids already exist in
 // telemetry_logs — the promotion dedup guard. The time window bounds the scan
 // to the batch's own range (promotion preserves time_unix_nano), keeping the
-// primary index effective.
+// primary index effective. The read demands sequential consistency so that on
+// replicated setups a retry cannot miss an insert acknowledged by another
+// replica moments earlier (harmless no-op on a single plain-MergeTree node).
 func (q *Queries) ListExistingTelemetryLogIDs(ctx context.Context, projectID string, ids []string, minTimeUnixNano int64, maxTimeUnixNano int64) ([]string, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
+
+	ctx = clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
+		"select_sequential_consistency": 1,
+	}))
 
 	sb := sq.Select("toString(id) AS id").
 		From("telemetry_logs").
