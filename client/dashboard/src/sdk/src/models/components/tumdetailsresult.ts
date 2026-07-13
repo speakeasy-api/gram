@@ -21,7 +21,7 @@ import {
 } from "./tumdetailstotals.js";
 
 /**
- * Result of the billing usage details query. Everything derives from the billed population (registered completion surfaces), matching the invoiced totals exactly.
+ * Result of the billing usage details query. Everything derives from the tokens-under-management population — observed agent traffic with cache tokens excluded — matching the billed totals exactly.
  */
 export type TumDetailsResult = {
   /**

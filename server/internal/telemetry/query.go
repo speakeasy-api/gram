@@ -251,28 +251,25 @@ func (s *Service) QueryRiskTokens(ctx context.Context, payload *telem_gen.QueryR
 }
 
 // tumBreakdownDims are the billing page's breakdown dimensions, in display
-// order. Each maps to a tum_breakdown_summaries expression (see
-// tumBreakdownDimExprs in the repo); the values match the telemetry
-// dimension identifiers the frontend picker uses. The model dimension is
-// split into the platform's risk-analysis inference (the metered unit of
-// the enterprise TUM contracts) versus user-facing completion surfaces.
-//
-// "email" is deliberately absent: scanned-user attribution now flows into
-// the billed rows (risk-analysis inference attributes to whose traffic was
-// scanned), and a per-user cut of that is not something we want to expose
-// on the billing page yet. The repo's dim expression stays plumbed —
-// re-adding the key here is the whole re-enable.
-var tumBreakdownDims = []string{"hook_source", "risk_analysis_model", "completion_model", "division_name", "role"}
+// order. Each maps to an attribute_metrics_summaries expression (see
+// tumBreakdownDimExprs in the repo); the values are the public telemetry
+// dimension identifiers the frontend picker uses. All the dimensions the
+// observed agent traffic genuinely carries are offered: the model and agent
+// surface of each session, the account's provider and team/personal
+// classification, the emit-time user-identity snapshot, and the project the
+// traffic was recorded under.
+var tumBreakdownDims = []string{"model", "hook_source", "provider", "account_type", "email", "division_name", "department_name", "role", "project_id"}
 
 // QueryTumDetails computes the billing page's usage details for a time range
-// in one request: the billed per-day token split and per-dimension
-// breakdowns. The backing queries run concurrently.
+// in one request: the tokens-under-management per-day token split and
+// per-dimension breakdowns. The backing queries run concurrently.
 //
-// Everything derives from billing-native sources — the dimensioned billing
-// aggregate (tum_breakdown_summaries) qualified and scoped exactly like
-// the billed totals (billing.ModelUsageSources), and chat message stats —
-// never the analytics aggregates, so the page reports the billed population
-// exactly.
+// Tokens under management are the agent traffic the platform OBSERVES from
+// the customer's users (Claude Code, Cursor, Codex sessions), excluding
+// cache reads — never the inference Gram itself spends (risk-policy judges,
+// hosted chat surfaces). Reads attribute_metrics_summaries scoped exactly
+// like the billed totals (same source exclusions and measure), so the page
+// reports the billed population exactly.
 func (s *Service) QueryTumDetails(ctx context.Context, payload *telem_gen.QueryTumDetailsPayload) (*telem_gen.TumDetailsResult, error) {
 	scope, err := s.resolveOrgQueryScope(ctx, payload.From, payload.To, payload.ProjectID)
 	if err != nil {
@@ -300,10 +297,10 @@ func (s *Service) QueryTumDetails(ctx context.Context, payload *telem_gen.QueryT
 	}
 
 	billedParams := repo.GetTokensUnderManagementParams{
-		ProjectIDs:        billedProjectIDs,
-		StartUnixNano:     timeStart,
-		EndUnixNano:       timeEnd,
-		BilledHookSources: billing.ModelUsageSourceStrings(),
+		ProjectIDs:          billedProjectIDs,
+		StartUnixNano:       timeStart,
+		EndUnixNano:         timeEnd,
+		ExcludedHookSources: billing.GramHostedHookSourceStrings(),
 	}
 
 	var (

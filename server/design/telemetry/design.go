@@ -358,7 +358,7 @@ var _ = Service("telemetry", func() {
 	})
 
 	Method("queryTumDetails", func() {
-		Description("Org-scoped daily usage details for the billing page's metrics table, computed in one pass: token type sums, session/tool-call/active-user counts, attribution slices (MCP tools, skills, unattributed users), and message-level stats (tokens in messages with active risk findings, tokens in tool-call messages).")
+		Description("Org-scoped daily usage details for the billing page, computed in one pass: the tokens-under-management daily token-type split (observed agent traffic; cache tokens excluded) and per-dimension breakdowns over the same population.")
 
 		// Org-scoped like queryRiskTokens; project_id optionally narrows the
 		// slice to one of the caller's projects.
@@ -1492,12 +1492,13 @@ var QueryRiskTokensResult = Type("QueryRiskTokensResult", func() {
 })
 
 // The per-metric fields shared by the daily points and the range totals.
-// Every measure comes from the dimensioned billing aggregate — never the
-// analytics aggregates — so the page reports exactly the billed population.
+// Every measure describes the observed agent traffic (the tokens-under-
+// management population) with cache tokens excluded on both sides, so
+// total_tokens = input + output.
 func tumDetailsMeasures() {
-	Attribute("input_tokens", Int64, "Billed input tokens")
-	Attribute("output_tokens", Int64, "Billed output tokens")
-	Attribute("total_tokens", Int64, "Billed tokens under management")
+	Attribute("input_tokens", Int64, "Observed input tokens (cache reads and writes excluded)")
+	Attribute("output_tokens", Int64, "Observed output tokens")
+	Attribute("total_tokens", Int64, "Tokens under management: input + output")
 	Required("input_tokens", "output_tokens", "total_tokens")
 }
 
@@ -1528,14 +1529,14 @@ var TumDetailsBreakdownRow = Type("TumDetailsBreakdownRow", func() {
 var TumDetailsBreakdown = Type("TumDetailsBreakdown", func() {
 	Description("Per-dimension billed token breakdown for the usage details table")
 
-	Attribute("key", String, "The breakdown dimension key (hook_source, risk_analysis_model, completion_model, division_name, role). The two model keys partition the billed population: risk_analysis_model covers the platform's risk-policy scanning inference, completion_model covers user-facing completion surfaces.")
+	Attribute("key", String, "The breakdown dimension key (model, hook_source, provider, account_type, email, division_name, department_name, role, project_id) — the public telemetry dimension identifiers, so the same keys work as telemetry.query filters. project_id rows carry project UUIDs; clients map them to names.")
 	Attribute("rows", ArrayOf(TumDetailsBreakdownRow), "Top values by tokens in descending order, with the remainder rolled into 'Other'")
 
 	Required("key", "rows")
 })
 
 var TumDetailsResult = Type("TumDetailsResult", func() {
-	Description("Result of the billing usage details query. Everything derives from the billed population (registered completion surfaces), matching the invoiced totals exactly.")
+	Description("Result of the billing usage details query. Everything derives from the tokens-under-management population — observed agent traffic with cache tokens excluded — matching the billed totals exactly.")
 
 	Attribute("interval_seconds", Int64, "Timeseries bucket width in seconds. Always 86400 — the details are bucketed daily.")
 	Attribute("points", ArrayOf(TumDetailsPoint), "Gap-filled daily buckets in ascending time order")

@@ -5640,12 +5640,39 @@ type GetTokensUnderManagementParams struct {
 	ProjectIDs    []string
 	StartUnixNano int64
 	EndUnixNano   int64
-	// BilledHookSources restricts the token sums to chats consumed through
-	// these surfaces (billing.ModelUsageSources). Rows aggregated before the
-	// hook_source dimension existed carry '' and are grandfathered as billed
-	// — sealed cycles beyond the migration's rewrite window keep their
-	// invoiced totals. Empty means no source scoping.
-	BilledHookSources []string
+	// ExcludedHookSources drops rows consumed through Gram-hosted completion
+	// surfaces (billing.GramHostedHookSourceStrings). Tokens under management
+	// are the agent traffic the platform OBSERVES coming from the customer's
+	// users (Claude Code, Cursor, Codex sessions) — never the inference Gram
+	// itself spends reacting to that traffic (risk-policy judges, playground
+	// and elements chats, title generation). The aggregate's provenance rules
+	// only admit observed traffic going forward; the exclusion also drops
+	// Gram completion rows retained from before that cutover. Empty means no
+	// exclusion.
+	ExcludedHookSources []string
+}
+
+// tumMeasureExpr is the tokens-under-management measure over
+// attribute_metrics_summaries: input + output. Cache tokens are deliberately
+// excluded on both sides — a cache read re-observes prompt content that was
+// already counted (and dwarfs everything else: agent sessions re-read their
+// whole cached prefix on every turn), and a cache write is the provider's
+// storage of that same prompt content, not additional user traffic.
+const tumMeasureExpr = "toInt64(sumIfMerge(total_input_tokens) + sumIfMerge(total_output_tokens))"
+
+// tumObservedBase applies the shared window and observed-population scoping
+// for tokens-under-management reads over attribute_metrics_summaries. The
+// aggregate is bucketed hourly; callers group to UTC days.
+func tumObservedBase(sb squirrel.SelectBuilder, arg GetTokensUnderManagementParams) squirrel.SelectBuilder {
+	sb = sb.
+		From("attribute_metrics_summaries").
+		Where(squirrel.Eq{"gram_project_id": arg.ProjectIDs}).
+		Where("time_bucket >= toStartOfDay(fromUnixTimestamp64Nano(?))", arg.StartUnixNano).
+		Where("time_bucket < fromUnixTimestamp64Nano(?)", arg.EndUnixNano)
+	if len(arg.ExcludedHookSources) > 0 {
+		sb = sb.Where(squirrel.NotEq{"hook_source": arg.ExcludedHookSources})
+	}
+	return sb
 }
 
 // billedHookSourceFilter scopes a chat_token_summaries read to the billed
@@ -5662,22 +5689,23 @@ func billedHookSourceFilter(sb squirrel.SelectBuilder, sources []string) squirre
 
 // TumDayBucket is one UTC day's worth of tokens under management.
 type TumDayBucket struct {
-	Day    time.Time `ch:"time_bucket"`
+	Day    time.Time `ch:"day_bucket"`
 	Tokens int64     `ch:"tokens"`
 }
 
-// GetTokensUnderManagementByDay sums token usage per UTC day for the billing
-// window, counting only sessions Gram has stored non-metrics data for (chats,
-// tool calls). OTEL forwarding can report token usage for an entire customer
-// org while Gram is installed for a subset of users, so a chat's tokens only
-// count when at least one non-metrics row (a tool call, a hook event, or any
-// row without a token-usage attribute) was recorded for it inside the window.
+// GetTokensUnderManagementByDay sums the tokens-under-management measure per
+// UTC day for the billing window: the observed agent traffic's input and
+// output tokens (cache tokens excluded — see tumMeasureExpr), scoped to the
+// observed population (see ExcludedHookSources).
 //
-// Reads the chat_token_summaries aggregate, which buckets by day and is
-// retained well beyond the raw telemetry TTL, so historical billing cycles
-// stay computable. Window boundaries are day-granular: the start rounds down
-// to its UTC day and the end is expected to be a UTC day boundary, which
-// billing cycle boundaries always are. Days without usage are omitted.
+// Reads the attribute_metrics_summaries aggregate — the provenance-first
+// fleet aggregate whose rows are, by construction, sessions the platform
+// observed (Claude api_request rows require a session and prompt id;
+// Codex/Cursor usage rows are session usage) — retained well beyond the raw
+// telemetry TTL, so historical billing cycles stay computable. Window
+// boundaries are day-granular: the start rounds down to its UTC day and the
+// end is expected to be a UTC day boundary, which billing cycle boundaries
+// always are. Days without usage are omitted.
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetTokensUnderManagementByDay(ctx context.Context, arg GetTokensUnderManagementParams) ([]TumDayBucket, error) {
@@ -5685,34 +5713,14 @@ func (q *Queries) GetTokensUnderManagementByDay(ctx context.Context, arg GetToke
 		return nil, nil
 	}
 
-	storedChats := sq.Select("DISTINCT chat_id").
-		From("chat_token_summaries").
-		Where(squirrel.Eq{"gram_project_id": arg.ProjectIDs}).
-		Where("time_bucket >= toStartOfDay(fromUnixTimestamp64Nano(?))", arg.StartUnixNano).
-		Where("time_bucket < fromUnixTimestamp64Nano(?)", arg.EndUnixNano).
-		Where("chat_id != ''").
-		Where("stored_event_count > 0")
-
-	storedChatsSQL, storedChatsArgs, err := storedChats.ToSql()
-	if err != nil {
-		return nil, fmt.Errorf("building tum stored chats subquery: %w", err)
-	}
-
-	sb := sq.Select(
-		"time_bucket",
-		"sum(total_tokens) AS tokens",
-	).
-		From("chat_token_summaries").
-		Where(squirrel.Eq{"gram_project_id": arg.ProjectIDs}).
-		Where("time_bucket >= toStartOfDay(fromUnixTimestamp64Nano(?))", arg.StartUnixNano).
-		Where("time_bucket < fromUnixTimestamp64Nano(?)", arg.EndUnixNano).
-		Where("chat_id != ''").
-		Where(squirrel.Expr("chat_id IN ("+storedChatsSQL+")", storedChatsArgs...)).
-		GroupBy("time_bucket").
-		OrderBy("time_bucket")
-	// The token sum is source-scoped; the stored-chats qualification above is
-	// not — stored evidence is chat-level, whatever surface recorded it.
-	sb = billedHookSourceFilter(sb, arg.BilledHookSources)
+	// The day alias must not shadow the hourly time_bucket source column
+	// (ILLEGAL_AGGREGATION — see the telemetry README gotcha).
+	sb := tumObservedBase(sq.Select(
+		"toStartOfDay(time_bucket) AS day_bucket",
+		tumMeasureExpr+" AS tokens",
+	), arg).
+		GroupBy("day_bucket").
+		OrderBy("day_bucket")
 
 	query, args, err := sb.ToSql()
 	if err != nil {
@@ -5740,52 +5748,19 @@ func (q *Queries) GetTokensUnderManagementByDay(ctx context.Context, arg GetToke
 	return buckets, nil
 }
 
-// billedStoredChatsSubquery builds the stored-session qualification subquery
-// on chat_token_summaries — the same rule the billed totals apply, so every
-// dimensioned read below describes exactly the billed population.
-func billedStoredChatsSubquery(arg GetTokensUnderManagementParams) (string, []any, error) {
-	sb := sq.Select("DISTINCT chat_id").
-		From("chat_token_summaries").
-		Where(squirrel.Eq{"gram_project_id": arg.ProjectIDs}).
-		Where("time_bucket >= toStartOfDay(fromUnixTimestamp64Nano(?))", arg.StartUnixNano).
-		Where("time_bucket < fromUnixTimestamp64Nano(?)", arg.EndUnixNano).
-		Where("chat_id != ''").
-		Where("stored_event_count > 0")
-	sql, args, err := sb.ToSql()
-	if err != nil {
-		return "", nil, fmt.Errorf("building tum stored chats subquery: %w", err)
-	}
-	return sql, args, nil
-}
-
-// tumBreakdownBase applies the shared window, qualification, and source
-// scoping for reads over tum_breakdown_summaries.
-func tumBreakdownBase(sb squirrel.SelectBuilder, arg GetTokensUnderManagementParams) (squirrel.SelectBuilder, error) {
-	storedChatsSQL, storedChatsArgs, err := billedStoredChatsSubquery(arg)
-	if err != nil {
-		return sb, err
-	}
-	sb = sb.
-		From("tum_breakdown_summaries").
-		Where(squirrel.Eq{"gram_project_id": arg.ProjectIDs}).
-		Where("time_bucket >= toStartOfDay(fromUnixTimestamp64Nano(?))", arg.StartUnixNano).
-		Where("time_bucket < fromUnixTimestamp64Nano(?)", arg.EndUnixNano).
-		Where(squirrel.Expr("chat_id IN ("+storedChatsSQL+")", storedChatsArgs...))
-	return billedHookSourceFilter(sb, arg.BilledHookSources), nil
-}
-
-// TumBreakdownDayBucket is one UTC day of billed tokens split
-// by type.
+// TumBreakdownDayBucket is one UTC day of tokens under management split by
+// type. TotalTokens is the TUM measure (input + output; cache tokens are
+// excluded from the population entirely).
 type TumBreakdownDayBucket struct {
-	Day          time.Time `ch:"time_bucket"`
-	InputTokens  int64     `ch:"input_tokens"`
-	OutputTokens int64     `ch:"output_tokens"`
-	TotalTokens  int64     `ch:"sum_total_tokens"`
+	Day          time.Time `ch:"day_bucket"`
+	InputTokens  int64     `ch:"sum_input_tokens"`
+	OutputTokens int64     `ch:"sum_output_tokens"`
+	TotalTokens  int64     `ch:"tum_tokens"`
 }
 
-// GetTumBreakdownTotalsByDay sums the billed completion token split per
-// UTC day, qualified and source-scoped identically to the billed totals.
-// Days without usage are omitted (callers gap-fill).
+// GetTumBreakdownTotalsByDay sums the tokens-under-management token-type
+// split per UTC day, scoped identically to the billed totals. Days without
+// usage are omitted (callers gap-fill).
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetTumBreakdownTotalsByDay(ctx context.Context, arg GetTokensUnderManagementParams) ([]TumBreakdownDayBucket, error) {
@@ -5793,18 +5768,16 @@ func (q *Queries) GetTumBreakdownTotalsByDay(ctx context.Context, arg GetTokensU
 		return nil, nil
 	}
 
-	// The total alias must NOT be "total_tokens": ClickHouse lets a SELECT
-	// alias shadow the source column (ILLEGAL_AGGREGATION).
-	sb, err := tumBreakdownBase(sq.Select(
-		"time_bucket",
-		"sum(input_tokens) AS input_tokens",
-		"sum(output_tokens) AS output_tokens",
-		"sum(total_tokens) AS sum_total_tokens",
-	), arg)
-	if err != nil {
-		return nil, err
-	}
-	sb = sb.GroupBy("time_bucket").OrderBy("time_bucket")
+	// Aliases must not shadow the source state columns (ILLEGAL_AGGREGATION —
+	// see the telemetry README gotcha).
+	sb := tumObservedBase(sq.Select(
+		"toStartOfDay(time_bucket) AS day_bucket",
+		"toInt64(sumIfMerge(total_input_tokens)) AS sum_input_tokens",
+		"toInt64(sumIfMerge(total_output_tokens)) AS sum_output_tokens",
+		tumMeasureExpr+" AS tum_tokens",
+	), arg).
+		GroupBy("day_bucket").
+		OrderBy("day_bucket")
 
 	query, args, err := sb.ToSql()
 	if err != nil {
@@ -5832,81 +5805,55 @@ func (q *Queries) GetTumBreakdownTotalsByDay(ctx context.Context, arg GetTokensU
 	return buckets, nil
 }
 
-// riskAnalysisRowPredicate classifies a billed row as the platform's own
-// risk-policy analysis inference — the metered unit of the enterprise TUM
-// contracts. Declared rows carry the dedicated source
-// (billing.ModelUsageSourceRiskAnalysis); the second clause grandfathers
-// rows emitted before that source existed, fingerprinted as internal
-// inference: gram/” source with the nil chat id (background workers run
-// completions outside any stored chat). Other internal nil-chat inference
-// (title generation, chat resolutions, memory) rides along under the same
-// clause — a deliberate simplification, it is a rounding error next to the
-// judges and is platform-side analysis either way.
-const riskAnalysisRowPredicate = "(hook_source = 'risk-analysis' OR (hook_source IN ('gram', '') AND chat_id = '00000000-0000-0000-0000-000000000000'))"
-
-// tumBreakdownDim describes one billing-page breakdown dimension: the
-// grouping expression over tum_breakdown_summaries, plus an optional row
-// filter for dimensions that slice the billed population (the two model
-// sections) rather than partition it by a column.
-type tumBreakdownDim struct {
-	expr   string
-	filter string
+// tumBreakdownDimExprs maps the billing page's breakdown dimensions to their
+// attribute_metrics_summaries grouping expressions. The keys are the public
+// telemetry dimension identifiers (see telemetryDimensionRegistry) so the
+// frontend picker and telemetry.query filters speak the same names. Roles
+// are multi-valued: a session's tokens count once under each held role, so
+// role rows overlap and can sum past the total.
+var tumBreakdownDimExprs = map[string]string{
+	"model":           "model",
+	"hook_source":     "hook_source",
+	"provider":        "provider",
+	"account_type":    "account_type",
+	"email":           "user_email",
+	"division_name":   "division_name",
+	"department_name": "department_name",
+	"role":            "arrayJoin(roles)",
+	// Values are project UUIDs; the dashboard maps them to project names.
+	"project_id": "toString(gram_project_id)",
 }
 
-// tumBreakdownDimExprs maps the billing page's breakdown dimensions to
-// their tum_breakdown_summaries expressions. Roles are multi-valued: a
-// session's tokens count once under each held role, so role rows overlap.
-// The model dimension is split in two: risk_analysis_model covers the
-// platform's scanning inference and completion_model covers user-facing
-// completion surfaces — together they partition the billed population.
-var tumBreakdownDimExprs = map[string]tumBreakdownDim{
-	"hook_source":         {expr: "hook_source", filter: ""},
-	"risk_analysis_model": {expr: "model", filter: riskAnalysisRowPredicate},
-	"completion_model":    {expr: "model", filter: "NOT " + riskAnalysisRowPredicate},
-	// email is plumbed but NOT in the service's tumBreakdownDims: a per-user
-	// cut of billed usage (which now includes scanned-user attribution of
-	// risk-analysis inference) is deliberately not exposed on the billing
-	// page yet.
-	"email":         {expr: "user_email", filter: ""},
-	"division_name": {expr: "division_name", filter: ""},
-	"role":          {expr: "arrayJoin(roles)", filter: ""},
-}
-
-// TumBreakdownDimDayBucket is one (UTC day, dimension value) slice of
-// billed tokens.
+// TumBreakdownDimDayBucket is one (UTC day, dimension value) slice of tokens
+// under management.
 type TumBreakdownDimDayBucket struct {
-	Day    time.Time `ch:"time_bucket"`
+	Day    time.Time `ch:"day_bucket"`
 	Value  string    `ch:"dim_value"`
 	Tokens int64     `ch:"tokens"`
 }
 
-// GetTumBreakdownDimByDay returns the billed daily token series per value
-// of one breakdown dimension, qualified and source-scoped identically to the
-// billed totals so the slices sum to them exactly (except the multi-valued
-// role dimension, whose rows overlap).
+// GetTumBreakdownDimByDay returns the daily tokens-under-management series
+// per value of one breakdown dimension, scoped identically to the billed
+// totals so the slices sum to them exactly (except the multi-valued role
+// dimension, whose rows overlap).
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetTumBreakdownDimByDay(ctx context.Context, arg GetTokensUnderManagementParams, dimension string) ([]TumBreakdownDimDayBucket, error) {
 	if len(arg.ProjectIDs) == 0 {
 		return nil, nil
 	}
-	dim, ok := tumBreakdownDimExprs[dimension]
+	expr, ok := tumBreakdownDimExprs[dimension]
 	if !ok {
 		return nil, fmt.Errorf("unsupported tum breakdown dimension: %q", dimension)
 	}
 
-	sb, err := tumBreakdownBase(sq.Select(
-		"time_bucket",
-		dim.expr+" AS dim_value",
-		"sum(total_tokens) AS tokens",
-	), arg)
-	if err != nil {
-		return nil, err
-	}
-	if dim.filter != "" {
-		sb = sb.Where(dim.filter)
-	}
-	sb = sb.GroupBy("time_bucket", "dim_value").OrderBy("time_bucket", "dim_value")
+	sb := tumObservedBase(sq.Select(
+		"toStartOfDay(time_bucket) AS day_bucket",
+		expr+" AS dim_value",
+		tumMeasureExpr+" AS tokens",
+	), arg).
+		GroupBy("day_bucket", "dim_value").
+		OrderBy("day_bucket", "dim_value")
 
 	query, args, err := sb.ToSql()
 	if err != nil {

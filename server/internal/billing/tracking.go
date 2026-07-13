@@ -26,14 +26,16 @@ func registerModelUsageSource(s ModelUsageSource) ModelUsageSource {
 	return s
 }
 
-// The surfaces whose LLM completions run through Gram's server — the
-// population billed as tokens under management. Registering a source here is
-// its single point of declaration: it names the identifier AND adds it to
-// ModelUsageSources, which the billing page's telemetry reads iterate to
-// scope analytics to the billed population. Completion telemetry is tagged
-// with these values (gram.hook.source); agent-fleet telemetry observed via
-// OTEL (claude-code, cursor, codex, …) is not billed and is never registered
-// here.
+// The surfaces whose LLM completions run through Gram's server — inference
+// GRAM spends (from the org's OpenRouter keys), as opposed to the agent
+// traffic the platform merely observes. Registering a source here is its
+// single point of declaration: it names the identifier AND adds it to
+// ModelUsageSources. Tokens-under-management billing counts the OBSERVED
+// agent traffic (claude-code, cursor, codex sessions seen via OTEL/hooks)
+// and uses this registry as its EXCLUSION list (see
+// GramHostedHookSourceStrings): Gram-spent inference — whether reactive
+// (risk-policy judges) or user-initiated (playground, elements) — is never
+// tokens under management.
 var (
 	ModelUsageSourcePlayground = registerModelUsageSource("playground")
 	ModelUsageSourceElements   = registerModelUsageSource("elements")
@@ -41,12 +43,9 @@ var (
 	ModelUsageSourceSlack      = registerModelUsageSource("slack")
 
 	// ModelUsageSourceRiskAnalysis tags the platform's own risk-policy
-	// analysis inference (risk judge, prompt-injection scanner). Scanning is
-	// the metered unit of the enterprise TUM contracts — the act of securing
-	// observed agent traffic — so this source is registered (billed) even
-	// though no end user initiates the completions. The billing page reports
-	// it as its own "Risk policy analysis model" section, separate from
-	// user-facing completion surfaces.
+	// analysis inference (risk judge, prompt-injection scanner) — the
+	// textbook case of tokens Gram spends REACTING to observed traffic, so
+	// it must never count as tokens under management.
 	//
 	// Callers tagging gram or risk-analysis (platform-initiated inference)
 	// must also set openrouter.KeyTypeInternal on the completion request so
@@ -59,12 +58,11 @@ var (
 )
 
 // ModelUsageSourceAssistants tags assistants completions in telemetry but is
-// deliberately NOT registered above: Speakeasy covers assistants inference
-// today, so it must not count toward the billed population. Keeping the tag
-// (instead of dropping the constant) is what keeps those completions OUT —
-// an untagged completion normalizes to "gram" and would re-enter the billed
-// scope. Move it into the registered block when customers can BYOK
-// (see the "BYOK for Assistants" Linear project).
+// deliberately NOT registered above: registration drives OpenRouter key
+// conventions and Polar metering exemptions for Gram-run surfaces, and
+// assistants inference is Speakeasy-covered today. It is still Gram-spent
+// inference, so GramHostedHookSourceStrings appends it to the TUM exclusion
+// list explicitly.
 const ModelUsageSourceAssistants ModelUsageSource = "assistants"
 
 // ModelUsageSources lists every registered completion surface.
@@ -80,6 +78,18 @@ func ModelUsageSourceStrings() []string {
 		out[i] = string(s)
 	}
 	return out
+}
+
+// GramHostedHookSourceStrings lists every hook_source value Gram-server-run
+// completions are tagged with: the registered surfaces plus the unregistered
+// assistants tag, plus ” for rows recorded before Gram completions were
+// tagged (observed agent traffic is always tagged at ingest — claude-code,
+// cursor, codex — so an untagged row can only be Gram-era history). This is
+// the tokens-under-management EXCLUSION list — billing counts observed agent
+// traffic, and everything Gram itself spends (reactive scanning inference
+// and user-initiated hosted chat alike) is out of scope.
+func GramHostedHookSourceStrings() []string {
+	return append(ModelUsageSourceStrings(), string(ModelUsageSourceAssistants), "")
 }
 
 type ModelUsageEvent struct {

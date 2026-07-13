@@ -17,15 +17,15 @@ export type TumDetailsPoint = {
    */
   bucketTimeUnixNano: string;
   /**
-   * Billed input tokens
+   * Observed input tokens (cache reads and writes excluded)
    */
   inputTokens: number;
   /**
-   * Billed output tokens
+   * Observed output tokens
    */
   outputTokens: number;
   /**
-   * Billed tokens under management
+   * Tokens under management: input + output
    */
   totalTokens: number;
 };

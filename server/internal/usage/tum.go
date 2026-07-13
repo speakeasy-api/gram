@@ -159,10 +159,10 @@ func (s *Service) buildTokensUnderManagement(ctx context.Context, authCtx *conte
 	history := make([]*gen.TUMPeriod, 0, len(cycles))
 	for _, cycle := range cycles {
 		days, err := s.telemetryRepo.GetTokensUnderManagementByDay(ctx, telemetryrepo.GetTokensUnderManagementParams{
-			ProjectIDs:        ids,
-			StartUnixNano:     cycle.Start.UnixNano(),
-			EndUnixNano:       cycle.End.UnixNano(),
-			BilledHookSources: billing.ModelUsageSourceStrings(),
+			ProjectIDs:          ids,
+			StartUnixNano:       cycle.Start.UnixNano(),
+			EndUnixNano:         cycle.End.UnixNano(),
+			ExcludedHookSources: billing.GramHostedHookSourceStrings(),
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to compute tokens under management").LogError(ctx, s.logger)

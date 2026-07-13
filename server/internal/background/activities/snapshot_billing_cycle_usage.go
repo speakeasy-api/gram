@@ -119,10 +119,10 @@ func (s *SnapshotBillingCycleUsage) snapshotOrganization(ctx context.Context, qu
 		}
 
 		days, err := s.telemetryRepo.GetTokensUnderManagementByDay(ctx, telemetryrepo.GetTokensUnderManagementParams{
-			ProjectIDs:        ids,
-			StartUnixNano:     cycle.Start.UnixNano(),
-			EndUnixNano:       cycle.End.UnixNano(),
-			BilledHookSources: billing.ModelUsageSourceStrings(),
+			ProjectIDs:          ids,
+			StartUnixNano:       cycle.Start.UnixNano(),
+			EndUnixNano:         cycle.End.UnixNano(),
+			ExcludedHookSources: billing.GramHostedHookSourceStrings(),
 		})
 		if err != nil {
 			return fmt.Errorf("compute tokens under management: %w", err)

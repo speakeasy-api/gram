@@ -16,7 +16,7 @@ import {
  */
 export type TumDetailsBreakdown = {
   /**
-   * The breakdown dimension key (hook_source, risk_analysis_model, completion_model, division_name, role). The two model keys partition the billed population: risk_analysis_model covers the platform's risk-policy scanning inference, completion_model covers user-facing completion surfaces.
+   * The breakdown dimension key (model, hook_source, provider, account_type, email, division_name, department_name, role, project_id) — the public telemetry dimension identifiers, so the same keys work as telemetry.query filters. project_id rows carry project UUIDs; clients map them to names.
    */
   key: string;
   /**

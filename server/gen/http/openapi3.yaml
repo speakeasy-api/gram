@@ -32331,7 +32331,7 @@ paths:
                 type: query
     /rpc/telemetry.queryTumDetails:
         post:
-            description: 'Org-scoped daily usage details for the billing page''s metrics table, computed in one pass: token type sums, session/tool-call/active-user counts, attribution slices (MCP tools, skills, unattributed users), and message-level stats (tokens in messages with active risk findings, tokens in tool-call messages).'
+            description: 'Org-scoped daily usage details for the billing page, computed in one pass: the tokens-under-management daily token-type split (observed agent traffic; cache tokens excluded) and per-dimension breakdowns over the same population.'
             operationId: queryTumDetails
             parameters:
                 - allowEmptyValue: true
@@ -54893,7 +54893,7 @@ components:
             properties:
                 key:
                     type: string
-                    description: 'The breakdown dimension key (hook_source, risk_analysis_model, completion_model, division_name, role). The two model keys partition the billed population: risk_analysis_model covers the platform''s risk-policy scanning inference, completion_model covers user-facing completion surfaces.'
+                    description: The breakdown dimension key (model, hook_source, provider, account_type, email, division_name, department_name, role, project_id) — the public telemetry dimension identifiers, so the same keys work as telemetry.query filters. project_id rows carry project UUIDs; clients map them to names.
                 rows:
                     type: array
                     items:
@@ -54932,15 +54932,15 @@ components:
                     description: Bucket start time in Unix nanoseconds (string for JS precision)
                 input_tokens:
                     type: integer
-                    description: Billed input tokens
+                    description: Observed input tokens (cache reads and writes excluded)
                     format: int64
                 output_tokens:
                     type: integer
-                    description: Billed output tokens
+                    description: Observed output tokens
                     format: int64
                 total_tokens:
                     type: integer
-                    description: Billed tokens under management
+                    description: 'Tokens under management: input + output'
                     format: int64
             description: One UTC day of billing usage details
             required:
@@ -54967,7 +54967,7 @@ components:
                     description: Gap-filled daily buckets in ascending time order
                 totals:
                     $ref: '#/components/schemas/TumDetailsTotals'
-            description: Result of the billing usage details query. Everything derives from the billed population (registered completion surfaces), matching the invoiced totals exactly.
+            description: Result of the billing usage details query. Everything derives from the tokens-under-management population — observed agent traffic with cache tokens excluded — matching the billed totals exactly.
             required:
                 - interval_seconds
                 - points
@@ -54978,15 +54978,15 @@ components:
             properties:
                 input_tokens:
                     type: integer
-                    description: Billed input tokens
+                    description: Observed input tokens (cache reads and writes excluded)
                     format: int64
                 output_tokens:
                     type: integer
-                    description: Billed output tokens
+                    description: Observed output tokens
                     format: int64
                 total_tokens:
                     type: integer
-                    description: Billed tokens under management
+                    description: 'Tokens under management: input + output'
                     format: int64
             description: Whole-range totals for the billing usage details
             required:

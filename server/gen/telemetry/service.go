@@ -49,11 +49,9 @@ type Service interface {
 	// with at least one active risk finding in the window versus all session
 	// tokens. Powers the token-usage panel's risk breakdown on the costs page.
 	QueryRiskTokens(context.Context, *QueryRiskTokensPayload) (res *QueryRiskTokensResult, err error)
-	// Org-scoped daily usage details for the billing page's metrics table,
-	// computed in one pass: token type sums, session/tool-call/active-user counts,
-	// attribution slices (MCP tools, skills, unattributed users), and
-	// message-level stats (tokens in messages with active risk findings, tokens in
-	// tool-call messages).
+	// Org-scoped daily usage details for the billing page, computed in one pass:
+	// the tokens-under-management daily token-type split (observed agent traffic;
+	// cache tokens excluded) and per-dimension breakdowns over the same population.
 	QueryTumDetails(context.Context, *QueryTumDetailsPayload) (res *TumDetailsResult, err error)
 	// Org-scoped list of individual chat sessions for a slice of usage, filtered
 	// by the same allowlisted dimensions as telemetry.query. Returns per-session
@@ -1673,10 +1671,10 @@ type TopUser struct {
 
 // Per-dimension billed token breakdown for the usage details table
 type TumDetailsBreakdown struct {
-	// The breakdown dimension key (hook_source, risk_analysis_model,
-	// completion_model, division_name, role). The two model keys partition the
-	// billed population: risk_analysis_model covers the platform's risk-policy
-	// scanning inference, completion_model covers user-facing completion surfaces.
+	// The breakdown dimension key (model, hook_source, provider, account_type,
+	// email, division_name, department_name, role, project_id) — the public
+	// telemetry dimension identifiers, so the same keys work as telemetry.query
+	// filters. project_id rows carry project UUIDs; clients map them to names.
 	Key string
 	// Top values by tokens in descending order, with the remainder rolled into
 	// 'Other'
@@ -1697,11 +1695,11 @@ type TumDetailsBreakdownRow struct {
 type TumDetailsPoint struct {
 	// Bucket start time in Unix nanoseconds (string for JS precision)
 	BucketTimeUnixNano string
-	// Billed input tokens
+	// Observed input tokens (cache reads and writes excluded)
 	InputTokens int64
-	// Billed output tokens
+	// Observed output tokens
 	OutputTokens int64
-	// Billed tokens under management
+	// Tokens under management: input + output
 	TotalTokens int64
 }
 
@@ -1721,11 +1719,11 @@ type TumDetailsResult struct {
 
 // Whole-range totals for the billing usage details
 type TumDetailsTotals struct {
-	// Billed input tokens
+	// Observed input tokens (cache reads and writes excluded)
 	InputTokens int64
-	// Billed output tokens
+	// Observed output tokens
 	OutputTokens int64
-	// Billed tokens under management
+	// Tokens under management: input + output
 	TotalTokens int64
 }
 
