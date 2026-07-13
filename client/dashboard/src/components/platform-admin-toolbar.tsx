@@ -7,14 +7,17 @@ import {
 import { useListToolsetsForOrg } from "@gram/client/react-query/listToolsetsForOrg.js";
 import {
   PlatformAdminFeaturesPanel,
+  PlatformAdminGlobalPanel,
   PlatformAdminInfoPanel,
   PlatformAdminOnboardingPanel,
 } from "./platform-admin-panel";
 import { Switch } from "./ui/switch";
+import { GlobalRSCsModal } from "./global-remote-session-clients";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ChevronDown,
   ChevronUp,
+  GlobeIcon,
   GripVertical,
   Info,
   Mail,
@@ -280,6 +283,7 @@ function PlatformAdminToolbarInner({ onHide }: { onHide: () => void }) {
   const [platformAdmin, setPlatformAdmin] = useState(
     () => localStorage.getItem(PLATFORM_ADMIN_KEY) === "1",
   );
+  const [globalRSCsOpen, setGlobalRSCsOpen] = useState(false);
   // Leftmost edge (px from viewport left) of any open right-anchored Sheet, or
   // null when none is open. Drives the shift that keeps the toolkit off panels'
   // footer buttons.
@@ -526,54 +530,35 @@ function PlatformAdminToolbarInner({ onHide }: { onHide: () => void }) {
       : 0;
 
   return createPortal(
-    <div
-      ref={rootRef}
-      className="pointer-events-auto fixed z-[99999] transition-transform duration-300 ease-out select-none"
-      style={
-        pos
-          ? { left: pos.x, top: pos.y }
-          : {
-              right: 16,
-              bottom: 16,
-              transform: toolbarShift
-                ? `translateX(-${toolbarShift}px)`
-                : undefined,
-            }
-      }
-    >
-      <div className={`
+    <>
+      <div
+        ref={rootRef}
+        className="pointer-events-auto fixed z-[99999] transition-transform duration-300 ease-out select-none"
+        style={
+          pos
+            ? { left: pos.x, top: pos.y }
+            : {
+                right: 16,
+                bottom: 16,
+                transform: toolbarShift
+                  ? `translateX(-${toolbarShift}px)`
+                  : undefined,
+              }
+        }
+      >
+        <div className={`
           w-80 rounded-xl border shadow-2xl backdrop-blur-md transition-all
           duration-200
           ${state.enabled ? "bg-background/98 border-foreground/15 dark:border-foreground/15 dark:bg-gray-950/98" : "border-border bg-white/98 dark:bg-gray-950/98"}
         `}>
-        {/* Header row */}
-        <div className={`
+          {/* Header row */}
+          <div className={`
             flex w-full items-center gap-2.5 px-3.5 py-2.5
             ${collapsed ? "rounded-xl" : "rounded-t-xl"}
           `}>
-          <button
-            type="button"
-            onPointerDown={onPointerDown}
-            onClick={() => {
-              if (hasDragged.current) {
-                hasDragged.current = false;
-                return;
-              }
-              setCollapsed((c) => !c);
-            }}
-            className="flex flex-1 cursor-grab items-center gap-2.5 active:cursor-grabbing"
-          >
-            <GripVertical className="text-muted-foreground/40 h-3.5 w-3.5 shrink-0" />
-            <span className="rounded bg-amber-100 px-1.5 py-0.5 font-mono text-[10px] font-semibold tracking-widest text-amber-700 dark:bg-amber-900/40 dark:text-amber-400">
-              DEV
-            </span>
-            <span className="text-muted-foreground text-xs font-semibold">
-              Developer Toolkit
-            </span>
-          </button>
-          <div className="ml-auto flex items-center gap-0.5">
             <button
               type="button"
+              onPointerDown={onPointerDown}
               onClick={() => {
                 if (hasDragged.current) {
                   hasDragged.current = false;
@@ -581,254 +566,321 @@ function PlatformAdminToolbarInner({ onHide }: { onHide: () => void }) {
                 }
                 setCollapsed((c) => !c);
               }}
-              className="text-muted-foreground hover:bg-accent hover:text-foreground rounded-full p-1 transition-colors"
+              className="flex flex-1 cursor-grab items-center gap-2.5 active:cursor-grabbing"
             >
-              {collapsed ? (
-                <ChevronUp className="h-3.5 w-3.5" />
-              ) : (
-                <ChevronDown className="h-3.5 w-3.5" />
-              )}
+              <GripVertical className="text-muted-foreground/40 h-3.5 w-3.5 shrink-0" />
+              <span className="rounded bg-amber-100 px-1.5 py-0.5 font-mono text-[10px] font-semibold tracking-widest text-amber-700 dark:bg-amber-900/40 dark:text-amber-400">
+                DEV
+              </span>
+              <span className="text-muted-foreground text-xs font-semibold">
+                Developer Toolkit
+              </span>
             </button>
-            <button
-              type="button"
-              title="Hide toolbar (Ctrl+Shift+D to restore)"
-              onClick={onHide}
-              className="text-muted-foreground hover:bg-accent hover:text-foreground rounded-full p-1 transition-colors"
-            >
-              <svg
-                width="10"
-                height="10"
-                viewBox="0 0 10 10"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-              >
-                <path d="M2 2l6 6M8 2l-6 6" />
-              </svg>
-            </button>
-          </div>
-        </div>
-
-        {/* Panel */}
-        {!collapsed && (
-          <div className="border-t border-inherit">
-            {/* Tab bar */}
-            <div className="flex overflow-x-auto border-b border-inherit px-2">
+            <div className="ml-auto flex items-center gap-0.5">
               <button
                 type="button"
-                onClick={() => setActiveTab("info")}
-                className={tabClass(activeTab === "info")}
+                onClick={() => {
+                  if (hasDragged.current) {
+                    hasDragged.current = false;
+                    return;
+                  }
+                  setCollapsed((c) => !c);
+                }}
+                className="text-muted-foreground hover:bg-accent hover:text-foreground rounded-full p-1 transition-colors"
               >
-                <Info className="h-3 w-3" />
-                Info
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab("rbac")}
-                className={tabClass(activeTab === "rbac")}
-              >
-                <Shield className="h-3 w-3" />
-                RBAC
-                {state.enabled && (
-                  <span className="bg-muted text-muted-foreground rounded px-1 py-px font-mono text-[9px] tabular-nums">
-                    {activeCount}/{SCOPE_DEFS.length}
-                  </span>
+                {collapsed ? (
+                  <ChevronUp className="h-3.5 w-3.5" />
+                ) : (
+                  <ChevronDown className="h-3.5 w-3.5" />
                 )}
               </button>
               <button
                 type="button"
-                onClick={() => setActiveTab("features")}
-                className={tabClass(activeTab === "features")}
+                title="Hide toolbar (Ctrl+Shift+D to restore)"
+                onClick={onHide}
+                className="text-muted-foreground hover:bg-accent hover:text-foreground rounded-full p-1 transition-colors"
               >
-                <SlidersHorizontal className="h-3 w-3" />
-                Features
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab("onboarding")}
-                className={tabClass(activeTab === "onboarding")}
-              >
-                <Mail className="h-3 w-3" />
-                Onboarding
+                <svg
+                  width="10"
+                  height="10"
+                  viewBox="0 0 10 10"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                >
+                  <path d="M2 2l6 6M8 2l-6 6" />
+                </svg>
               </button>
             </div>
+          </div>
 
-            {/* Info tab: org info + override, plus the dev impersonation toggle */}
-            {activeTab === "info" && (
-              <div className="max-h-[440px] space-y-2 overflow-y-auto px-3 py-3">
-                {/* Dev-only impersonation toggle: flips useIsPlatformAdmin
-                    locally so non-admins can exercise admin-gated UI. */}
-                {import.meta.env.DEV && (
-                  <div className="border-border bg-card flex items-center justify-between rounded-lg border px-3 py-2.5">
-                    <div className="flex items-center gap-2">
-                      <div
-                        className={`h-1.5 w-1.5 rounded-full ${platformAdmin ? "animate-pulse bg-amber-500" : "bg-muted-foreground/30"}`}
-                      />
-                      <span className="text-foreground text-xs font-medium">
-                        {platformAdmin
-                          ? "Platform admin active"
-                          : "Platform admin off"}
-                      </span>
-                    </div>
-                    <Switch
-                      checked={platformAdmin}
-                      onCheckedChange={(checked) => {
-                        setPlatformAdmin(checked);
-                        localStorage.setItem(
-                          PLATFORM_ADMIN_KEY,
-                          checked ? "1" : "0",
-                        );
-                        invalidate();
-                      }}
-                      aria-label="Toggle platform admin"
-                    />
-                  </div>
-                )}
-                <PlatformAdminInfoPanel />
-              </div>
-            )}
-
-            {/* Features tab: RBAC enable/disable + product feature toggles */}
-            {activeTab === "features" && (
-              <div className="max-h-[440px] overflow-y-auto px-3 py-3">
-                <PlatformAdminFeaturesPanel />
-              </div>
-            )}
-
-            {/* Onboarding tab: enterprise admin onboarding email */}
-            {activeTab === "onboarding" && (
-              <div className="max-h-[440px] overflow-y-auto px-3 py-3">
-                <PlatformAdminOnboardingPanel />
-              </div>
-            )}
-
-            {activeTab === "rbac" && (
-              <>
-                {/* Master toggle */}
-                <div className="flex items-center justify-between border-b border-inherit px-3.5 py-2.5">
-                  <div className="flex items-center gap-2">
-                    <div
-                      className={`h-1.5 w-1.5 rounded-full ${state.enabled ? "animate-pulse bg-emerald-500" : "bg-muted-foreground/30"}`}
-                    />
-                    <span className="text-foreground text-xs font-medium">
-                      {state.enabled ? "Override active" : "Override disabled"}
+          {/* Panel */}
+          {!collapsed && (
+            <div className="border-t border-inherit">
+              {/* Tab bar */}
+              <div className="flex overflow-x-auto border-b border-inherit px-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("info")}
+                  className={tabClass(activeTab === "info")}
+                >
+                  <Info className="h-3 w-3" />
+                  Info
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("rbac")}
+                  className={tabClass(activeTab === "rbac")}
+                >
+                  <Shield className="h-3 w-3" />
+                  RBAC
+                  {state.enabled && (
+                    <span className="bg-muted text-muted-foreground rounded px-1 py-px font-mono text-[9px] tabular-nums">
+                      {activeCount}/{SCOPE_DEFS.length}
                     </span>
-                  </div>
-                  <Switch
-                    checked={state.enabled}
-                    onCheckedChange={toggleEnabled}
-                    aria-label="Toggle RBAC override"
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("features")}
+                  className={tabClass(activeTab === "features")}
+                >
+                  <SlidersHorizontal className="h-3 w-3" />
+                  Features
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("onboarding")}
+                  className={tabClass(activeTab === "onboarding")}
+                >
+                  <Mail className="h-3 w-3" />
+                  Onboarding
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("global")}
+                  className={tabClass(activeTab === "global")}
+                >
+                  <GlobeIcon className="h-3 w-3" />
+                  Global
+                </button>
+              </div>
+
+              {/* Info tab: org info + override, plus the dev impersonation toggle */}
+              {activeTab === "info" && (
+                <div className="max-h-[440px] space-y-2 overflow-y-auto px-3 py-3">
+                  {/* Dev-only impersonation toggle: flips useIsPlatformAdmin
+                    locally so non-admins can exercise admin-gated UI. */}
+                  {import.meta.env.DEV && (
+                    <div className="border-border bg-card flex items-center justify-between rounded-lg border px-3 py-2.5">
+                      <div className="flex items-center gap-2">
+                        <div
+                          className={`h-1.5 w-1.5 rounded-full ${platformAdmin ? "animate-pulse bg-amber-500" : "bg-muted-foreground/30"}`}
+                        />
+                        <span className="text-foreground text-xs font-medium">
+                          {platformAdmin
+                            ? "Platform admin active"
+                            : "Platform admin off"}
+                        </span>
+                      </div>
+                      <Switch
+                        checked={platformAdmin}
+                        onCheckedChange={(checked) => {
+                          setPlatformAdmin(checked);
+                          localStorage.setItem(
+                            PLATFORM_ADMIN_KEY,
+                            checked ? "1" : "0",
+                          );
+                          invalidate();
+                        }}
+                        aria-label="Toggle platform admin"
+                      />
+                    </div>
+                  )}
+                  <PlatformAdminInfoPanel />
+                </div>
+              )}
+
+              {/* Features tab: RBAC enable/disable + product feature toggles */}
+              {activeTab === "features" && (
+                <div className="max-h-[440px] overflow-y-auto px-3 py-3">
+                  <PlatformAdminFeaturesPanel />
+                </div>
+              )}
+
+              {/* Onboarding tab: enterprise admin onboarding email */}
+              {activeTab === "onboarding" && (
+                <div className="max-h-[440px] overflow-y-auto px-3 py-3">
+                  <PlatformAdminOnboardingPanel />
+                </div>
+              )}
+
+              {/* Global tab: global remote IdPs section + modal launcher */}
+              {activeTab === "global" && (
+                <div className="max-h-[440px] overflow-y-auto px-3 py-3">
+                  <PlatformAdminGlobalPanel
+                    onManage={() => setGlobalRSCsOpen(true)}
                   />
                 </div>
+              )}
 
-                {/* Scope groups */}
-                <div
-                  className={`max-h-[400px] space-y-1 overflow-y-auto px-2 py-2 ${!state.enabled ? "pointer-events-none opacity-40" : ""}`}
-                >
-                  {GROUP_ORDER.map((group) => {
-                    const scopes = SCOPE_DEFS.filter(
-                      (s) => s.resourceType === group.key,
-                    );
-                    return (
-                      <div key={group.key}>
-                        <div className="px-2 pt-1.5 pb-1">
-                          <span className="text-muted-foreground text-[10px] font-semibold tracking-widest uppercase">
-                            {group.label}
-                          </span>
-                        </div>
-                        {scopes.map((def) => {
-                          const scopeState = state.scopes[def.scope] ?? {
-                            enabled: true,
-                            resources: null,
-                          };
-                          // Defensive: legacy localStorage may have entries without `resources`.
-                          // Use loose != null so both null and undefined skip the length read.
-                          const isRestricted =
-                            scopeState.resources != null &&
-                            scopeState.resources.length > 0;
-                          let knownResources: { id: string; label: string }[] =
-                            [];
-                          if (def.resourceType === "project") {
-                            knownResources = projectResources;
-                          } else if (def.resourceType === "mcp") {
-                            knownResources = mcpResources;
-                          }
+              {activeTab === "rbac" && (
+                <RBACOverridePanel
+                  state={state}
+                  onToggleEnabled={toggleEnabled}
+                  onToggleScope={toggleScope}
+                  onSetScopeResources={setScopeResources}
+                  onReset={() => {
+                    setState({ enabled: false, scopes: defaultScopeState() });
+                    invalidate();
+                  }}
+                  projectResources={projectResources}
+                  mcpResources={mcpResources}
+                />
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+      <GlobalRSCsModal open={globalRSCsOpen} onOpenChange={setGlobalRSCsOpen} />
+    </>,
+    document.body,
+  );
+}
 
-                          return (
-                            <div key={def.scope}>
-                              <div className={`
+// RBAC tab body: master override toggle, per-scope checkboxes grouped by
+// resource type, and a reset. Purely presentational — the override state and its
+// mutators are owned by PlatformAdminToolbarInner (state.enabled also drives the
+// container chrome and the tab-bar count badge, so it stays lifted).
+function RBACOverridePanel({
+  state,
+  onToggleEnabled,
+  onToggleScope,
+  onSetScopeResources,
+  onReset,
+  projectResources,
+  mcpResources,
+}: {
+  state: OverrideState;
+  onToggleEnabled: () => void;
+  onToggleScope: (scope: string) => void;
+  onSetScopeResources: (scope: string, resources: string[] | null) => void;
+  onReset: () => void;
+  projectResources: { id: string; label: string }[];
+  mcpResources: { id: string; label: string }[];
+}) {
+  return (
+    <>
+      {/* Master toggle */}
+      <div className="flex items-center justify-between border-b border-inherit px-3.5 py-2.5">
+        <div className="flex items-center gap-2">
+          <div
+            className={`h-1.5 w-1.5 rounded-full ${state.enabled ? "animate-pulse bg-emerald-500" : "bg-muted-foreground/30"}`}
+          />
+          <span className="text-foreground text-xs font-medium">
+            {state.enabled ? "Override active" : "Override disabled"}
+          </span>
+        </div>
+        <Switch
+          checked={state.enabled}
+          onCheckedChange={onToggleEnabled}
+          aria-label="Toggle RBAC override"
+        />
+      </div>
+
+      {/* Scope groups */}
+      <div
+        className={`max-h-[400px] space-y-1 overflow-y-auto px-2 py-2 ${!state.enabled ? "pointer-events-none opacity-40" : ""}`}
+      >
+        {GROUP_ORDER.map((group) => {
+          const scopes = SCOPE_DEFS.filter((s) => s.resourceType === group.key);
+          return (
+            <div key={group.key}>
+              <div className="px-2 pt-1.5 pb-1">
+                <span className="text-muted-foreground text-[10px] font-semibold tracking-widest uppercase">
+                  {group.label}
+                </span>
+              </div>
+              {scopes.map((def) => {
+                const scopeState = state.scopes[def.scope] ?? {
+                  enabled: true,
+                  resources: null,
+                };
+                // Defensive: legacy localStorage may have entries without `resources`.
+                // Use loose != null so both null and undefined skip the length read.
+                const isRestricted =
+                  scopeState.resources != null &&
+                  scopeState.resources.length > 0;
+                let knownResources: {
+                  id: string;
+                  label: string;
+                }[] = [];
+                if (def.resourceType === "project") {
+                  knownResources = projectResources;
+                } else if (def.resourceType === "mcp") {
+                  knownResources = mcpResources;
+                }
+
+                return (
+                  <div key={def.scope}>
+                    <div className={`
                               flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 transition-colors
                               ${scopeState.enabled ? "hover:bg-black/[0.04] dark:hover:bg-white/[0.04]" : ""}
-                            `} onClick={() => toggleScope(def.scope)}>
-                                <div className={`
+                            `} onClick={() => onToggleScope(def.scope)}>
+                      <div className={`
                                 flex h-3.5 w-3.5 items-center justify-center rounded border-[1.5px] text-[9px] transition-all
                                 ${scopeState.enabled ? "bg-foreground border-foreground text-background" : "border-muted-foreground/30 bg-transparent"}
                               `}>{scopeState.enabled && "✓"}</div>
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex items-center gap-1.5">
-                                    <span
-                                      className={`font-mono text-xs font-medium ${
-                                        scopeState.enabled
-                                          ? "text-foreground"
-                                          : "text-muted-foreground line-through"
-                                      }`}
-                                    >
-                                      {def.label}
-                                    </span>
-                                    {isRestricted && scopeState.enabled && (
-                                      <span className="rounded bg-blue-100 px-1 py-px text-[9px] font-medium text-blue-600 dark:bg-blue-900/50 dark:text-blue-400">
-                                        scoped
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-
-                              {scopeState.enabled &&
-                                knownResources.length > 0 && (
-                                  <ResourceDropdown
-                                    knownResources={knownResources}
-                                    selected={scopeState.resources}
-                                    onChange={(resources) =>
-                                      setScopeResources(def.scope, resources)
-                                    }
-                                  />
-                                )}
-                            </div>
-                          );
-                        })}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className={`font-mono text-xs font-medium ${
+                              scopeState.enabled
+                                ? "text-foreground"
+                                : "text-muted-foreground line-through"
+                            }`}
+                          >
+                            {def.label}
+                          </span>
+                          {isRestricted && scopeState.enabled && (
+                            <span className="rounded bg-blue-100 px-1 py-px text-[9px] font-medium text-blue-600 dark:bg-blue-900/50 dark:text-blue-400">
+                              scoped
+                            </span>
+                          )}
+                        </div>
                       </div>
-                    );
-                  })}
-                </div>
+                    </div>
 
-                {/* Footer */}
-                <div className="flex items-center justify-between border-t border-inherit px-3.5 py-2">
-                  <span className="text-muted-foreground text-[10px]">
-                    local only
-                  </span>
-                  <button
-                    type="button"
-                    className="text-muted-foreground hover:text-foreground text-[10px] transition-colors"
-                    onClick={() => {
-                      setState({
-                        enabled: false,
-                        scopes: defaultScopeState(),
-                      });
-                      invalidate();
-                    }}
-                  >
-                    Reset
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        )}
+                    {scopeState.enabled && knownResources.length > 0 && (
+                      <ResourceDropdown
+                        knownResources={knownResources}
+                        selected={scopeState.resources}
+                        onChange={(resources) =>
+                          onSetScopeResources(def.scope, resources)
+                        }
+                      />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
       </div>
-    </div>,
-    document.body,
+
+      {/* Footer */}
+      <div className="flex items-center justify-between border-t border-inherit px-3.5 py-2">
+        <span className="text-muted-foreground text-[10px]">local only</span>
+        <button
+          type="button"
+          className="text-muted-foreground hover:text-foreground text-[10px] transition-colors"
+          onClick={onReset}
+        >
+          Reset
+        </button>
+      </div>
+    </>
   );
 }
 
