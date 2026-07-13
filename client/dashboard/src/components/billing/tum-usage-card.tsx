@@ -1,4 +1,75 @@
+import { useState } from "react";
+import { Info } from "lucide-react";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { type BillingCycle } from "./billing-cycles";
+import { ToggleButton } from "./toggle-button";
+
+const HOUR_MS = 60 * 60 * 1000;
+
+// The selectable units for the average-rate stat.
+type AverageUnit = "hour" | "day" | "week";
+
+const AVERAGE_UNITS: { unit: AverageUnit; ms: number }[] = [
+  { unit: "hour", ms: HOUR_MS },
+  { unit: "day", ms: 24 * HOUR_MS },
+  { unit: "week", ms: 7 * 24 * HOUR_MS },
+];
+
+// The window the cycle's averages describe: the full cycle once it closes,
+// the elapsed portion while it's active (a whole-cycle denominator would
+// dilute the rate with days that haven't happened yet). Clamped to at least
+// an hour so a just-opened cycle doesn't extrapolate absurd rates.
+function averagingWindowMs(cycle: BillingCycle, now: number): number {
+  const end = cycle.current
+    ? Math.min(now, cycle.end.getTime())
+    : cycle.end.getTime();
+  return Math.max(end - cycle.start.getTime(), HOUR_MS);
+}
+
+// One average-rate figure with a unit switcher: the cycle's tokens expressed
+// per hour / day / week, defaulting to per day.
+function AverageStat({ cycle }: { cycle: BillingCycle }): JSX.Element {
+  const [unit, setUnit] = useState<AverageUnit>("day");
+  const windowMs = averagingWindowMs(cycle, Date.now());
+  const unitMs = AVERAGE_UNITS.find((u) => u.unit === unit)?.ms ?? HOUR_MS;
+  const average = Math.round((cycle.tokens * unitMs) / windowMs);
+  return (
+    <div className="flex flex-col gap-0.5">
+      {/* Pinned to the text-xs line height so the pill's chrome overflows
+          the label row instead of inflating it — this stat's label and value
+          stay aligned with the neighboring Stats. */}
+      <span className="text-muted-foreground flex h-4 items-center gap-1 text-xs">
+        Avg per
+        {/* Bordered so the units read as a clickable segmented control
+            rather than as part of the label text. */}
+        <span className="border-border flex items-center rounded-md border p-0.5">
+          {AVERAGE_UNITS.map((u) => (
+            <ToggleButton
+              key={u.unit}
+              active={unit === u.unit}
+              onClick={() => setUnit(u.unit)}
+            >
+              {u.unit}
+            </ToggleButton>
+          ))}
+        </span>
+        <SimpleTooltip
+          tooltip={
+            cycle.current
+              ? "Averaged over the elapsed portion of the active cycle."
+              : "Averaged over the full cycle."
+          }
+        >
+          <Info className="size-3" />
+        </SimpleTooltip>
+      </span>
+      <span className="text-xl font-semibold tabular-nums">
+        {average.toLocaleString()}
+      </span>
+    </div>
+  );
+}
 
 // One headline figure in the TUM usage card. The tone ties the number to its
 // meter segment: green for the included allowance, amber for overage.
@@ -38,12 +109,13 @@ function Stat({
  * around the meter, so nothing clips or collides at extreme overage ratios.
  */
 export function TumUsageCard({
-  tokens,
+  cycle,
   limit,
   label,
 }: {
-  // Billed TUM tokens for the selected cycle.
-  tokens: number;
+  // The billing cycle whose position the card shows — billed tokens plus the
+  // time window its per-unit averages are computed over.
+  cycle: BillingCycle;
   // Contracted monthly allowance; null when the org has no contracted cap.
   limit: number | null;
   // Which billing cycle these figures describe. Essential when the page is
@@ -51,6 +123,7 @@ export function TumUsageCard({
   // range's totals, and the label is what keeps that from reading as a bug.
   label: string;
 }): JSX.Element {
+  const tokens = cycle.tokens;
   const overage = limit != null ? Math.max(0, tokens - limit) : 0;
   // The meter spans max(usage, allowance): under the cap it reads as a
   // fill-toward-the-limit bar; over it, the amber overage segment grows.
@@ -67,7 +140,7 @@ export function TumUsageCard({
         {label}
       </div>
       <div className="flex flex-wrap items-start gap-x-10 gap-y-3">
-        <Stat label="Tokens consumed" value={tokens.toLocaleString()} />
+        <Stat label="Tokens Managed" value={tokens.toLocaleString()} />
         <Stat
           label="Included allowance"
           value={limit != null ? limit.toLocaleString() : "No limit"}
@@ -80,6 +153,7 @@ export function TumUsageCard({
             tone={overage > 0 ? "warning" : undefined}
           />
         )}
+        <AverageStat cycle={cycle} />
         {usedPercent != null && (
           <span
             className={cn(

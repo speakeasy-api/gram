@@ -351,7 +351,7 @@ export const TumUsageSection = (): JSX.Element => {
             </Stack>
             {cardCycle && (
               <TumUsageCard
-                tokens={cardCycle.tokens}
+                cycle={cardCycle}
                 limit={monthlyLimit}
                 // On a custom range the card still shows the WHOLE containing
                 // cycle's billing position — larger than the range's totals
