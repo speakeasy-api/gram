@@ -604,7 +604,7 @@ export default function PluginDetail(): JSX.Element | null {
               </Type>
             </Stack>
           ) : (
-            <div className="flex flex-wrap gap-2">
+            <div className="border-border flex flex-wrap gap-2 rounded-xl border p-4">
               {assignments.map((assignment) => (
                 <PrincipalBadge
                   key={assignment.id}
