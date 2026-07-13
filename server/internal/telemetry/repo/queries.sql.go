@@ -37,6 +37,9 @@ const MaxClaudePromptCorrelationEditDistanceBytes = 65536
 // ErrInvalidShadowMCPInventoryURLCursor marks malformed shadow MCP inventory URL list cursors.
 var ErrInvalidShadowMCPInventoryURLCursor = errors.New("invalid shadow mcp inventory url cursor")
 
+// ErrInvalidShadowMCPInventoryUserCursor marks malformed shadow MCP inventory user list cursors.
+var ErrInvalidShadowMCPInventoryUserCursor = errors.New("invalid shadow mcp inventory user cursor")
+
 func userIdentifierExpr(col string) string {
 	return "if(telemetry_logs." + col + " != '', telemetry_logs." + col + ", telemetry_logs.user_email)"
 }
@@ -342,10 +345,12 @@ type ListShadowMCPInventoryUsersParams struct {
 	GramProjectID      string
 	CanonicalServerURL string
 	Limit              int
+	Cursor             string
 }
 
 type ShadowMCPInventoryUserRow struct {
 	UserKey    string
+	UserEmail  string
 	LastCalled time.Time
 	CallCount  uint64
 }
@@ -355,6 +360,7 @@ type shadowMCPInventoryTraceUsageRow struct {
 	ServerURL  string    `ch:"server_url"`
 	ServerName string    `ch:"server_name"`
 	UserKey    string    `ch:"user_key"`
+	UserEmail  string    `ch:"user_email"`
 	CalledAt   time.Time `ch:"called_at"`
 }
 
@@ -378,6 +384,12 @@ type rawShadowMCPInventoryURLCursor struct {
 	CanonicalServerURL string `json:"canonical_server_url"`
 	LastCalledUnixNano *int64 `json:"last_called_unix_nano"`
 	LastSeenUnixNano   int64  `json:"last_seen_unix_nano"`
+}
+
+type shadowMCPInventoryUserCursor struct {
+	UserKey            string `json:"user_key"`
+	LastCalledUnixNano int64  `json:"last_called_unix_nano"`
+	CallCount          uint64 `json:"call_count"`
 }
 
 func EncodeShadowMCPInventoryURLCursor(row ShadowMCPInventoryURLRow) (string, error) {
@@ -418,6 +430,44 @@ func decodeShadowMCPInventoryURLCursor(cursor string) (shadowMCPInventoryURLCurs
 	}
 	if payload.LastSeenUnixNano == 0 {
 		return shadowMCPInventoryURLCursor{}, fmt.Errorf("%w: last seen is required", ErrInvalidShadowMCPInventoryURLCursor)
+	}
+
+	return payload, nil
+}
+
+func EncodeShadowMCPInventoryUserCursor(row ShadowMCPInventoryUserRow) (string, error) {
+	payload := shadowMCPInventoryUserCursor{
+		UserKey:            row.UserKey,
+		LastCalledUnixNano: row.LastCalled.UTC().UnixNano(),
+		CallCount:          row.CallCount,
+	}
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("encoding shadow mcp inventory user cursor: %w", err)
+	}
+
+	return base64.RawURLEncoding.EncodeToString(data), nil
+}
+
+func decodeShadowMCPInventoryUserCursor(cursor string) (shadowMCPInventoryUserCursor, error) {
+	data, err := base64.RawURLEncoding.DecodeString(cursor)
+	if err != nil {
+		return shadowMCPInventoryUserCursor{}, fmt.Errorf("%w: decoding: %w", ErrInvalidShadowMCPInventoryUserCursor, err)
+	}
+
+	var payload shadowMCPInventoryUserCursor
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return shadowMCPInventoryUserCursor{}, fmt.Errorf("%w: parsing: %w", ErrInvalidShadowMCPInventoryUserCursor, err)
+	}
+	if payload.UserKey == "" {
+		return shadowMCPInventoryUserCursor{}, fmt.Errorf("%w: user key is required", ErrInvalidShadowMCPInventoryUserCursor)
+	}
+	if payload.LastCalledUnixNano == 0 {
+		return shadowMCPInventoryUserCursor{}, fmt.Errorf("%w: last called is required", ErrInvalidShadowMCPInventoryUserCursor)
+	}
+	if payload.CallCount == 0 {
+		return shadowMCPInventoryUserCursor{}, fmt.Errorf("%w: call count is required", ErrInvalidShadowMCPInventoryUserCursor)
 	}
 
 	return payload, nil
@@ -762,10 +812,14 @@ func (q *Queries) ListShadowMCPInventoryUsage(ctx context.Context, arg ListShado
 		if user == nil {
 			user = &ShadowMCPInventoryUserRow{
 				UserKey:    traceRow.UserKey,
+				UserEmail:  shadowMCPInventoryEmailValue(traceRow.UserEmail, traceRow.UserKey),
 				LastCalled: traceRow.CalledAt,
 				CallCount:  0,
 			}
 			users[traceRow.UserKey] = user
+		}
+		if user.UserEmail == "" {
+			user.UserEmail = shadowMCPInventoryEmailValue(traceRow.UserEmail, traceRow.UserKey)
 		}
 		user.CallCount++
 		if traceRow.CalledAt.After(user.LastCalled) {
@@ -792,6 +846,15 @@ func (q *Queries) ListShadowMCPInventoryUsage(ctx context.Context, arg ListShado
 }
 
 func (q *Queries) ListShadowMCPInventoryUsers(ctx context.Context, arg ListShadowMCPInventoryUsersParams) ([]ShadowMCPInventoryUserRow, error) {
+	var cursor shadowMCPInventoryUserCursor
+	if arg.Cursor != "" {
+		var err error
+		cursor, err = decodeShadowMCPInventoryUserCursor(arg.Cursor)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	traceRows, err := q.listShadowMCPInventoryTraceUsage(ctx, arg.GramProjectID, []string{arg.CanonicalServerURL}, arg.Limit)
 	if err != nil {
 		return nil, err
@@ -807,10 +870,14 @@ func (q *Queries) ListShadowMCPInventoryUsers(ctx context.Context, arg ListShado
 		if user == nil {
 			user = &ShadowMCPInventoryUserRow{
 				UserKey:    traceRow.UserKey,
+				UserEmail:  shadowMCPInventoryEmailValue(traceRow.UserEmail, traceRow.UserKey),
 				LastCalled: traceRow.CalledAt,
 				CallCount:  0,
 			}
 			users[traceRow.UserKey] = user
+		}
+		if user.UserEmail == "" {
+			user.UserEmail = shadowMCPInventoryEmailValue(traceRow.UserEmail, traceRow.UserKey)
 		}
 		user.CallCount++
 		if traceRow.CalledAt.After(user.LastCalled) {
@@ -819,6 +886,9 @@ func (q *Queries) ListShadowMCPInventoryUsers(ctx context.Context, arg ListShado
 	}
 
 	userRows := sortedShadowMCPInventoryUsers(users)
+	if arg.Cursor != "" {
+		userRows = shadowMCPInventoryUsersAfterCursor(userRows, cursor)
+	}
 	limit := clampShadowMCPInventoryLimitInt(arg.Limit)
 	if len(userRows) > limit {
 		userRows = userRows[:limit]
@@ -831,7 +901,8 @@ func (q *Queries) listShadowMCPInventoryTraceUsage(ctx context.Context, projectI
 		"trace_id",
 		"max(mcp_server_url) AS server_url",
 		"max(tool_source) AS server_name",
-		"if(max(user_email) != '', max(user_email), max(user_id)) AS user_key",
+		"if(max(trace_summaries.user_email) != '', max(trace_summaries.user_email), max(trace_summaries.user_id)) AS user_key",
+		"max(trace_summaries.user_email) AS user_email",
 		"fromUnixTimestamp64Nano(max(start_time_unix_nano)) AS called_at",
 	).
 		From("trace_summaries").
@@ -913,6 +984,35 @@ func sortedShadowMCPInventoryUsers(users map[string]*ShadowMCPInventoryUserRow) 
 		return userRows[i].UserKey < userRows[j].UserKey
 	})
 	return userRows
+}
+
+func shadowMCPInventoryEmailValue(userEmail, userKey string) string {
+	if userEmail != "" {
+		return userEmail
+	}
+	if strings.Contains(userKey, "@") {
+		return userKey
+	}
+	return ""
+}
+
+func shadowMCPInventoryUsersAfterCursor(userRows []ShadowMCPInventoryUserRow, cursor shadowMCPInventoryUserCursor) []ShadowMCPInventoryUserRow {
+	cursorLastCalled := time.Unix(0, cursor.LastCalledUnixNano).UTC()
+	for i, row := range userRows {
+		switch {
+		case row.CallCount < cursor.CallCount:
+			return userRows[i:]
+		case row.CallCount > cursor.CallCount:
+			continue
+		case row.LastCalled.Before(cursorLastCalled):
+			return userRows[i:]
+		case row.LastCalled.After(cursorLastCalled):
+			continue
+		case row.UserKey > cursor.UserKey:
+			return userRows[i:]
+		}
+	}
+	return nil
 }
 
 func clampShadowMCPInventoryLimit(limit int) uint64 {

@@ -11,6 +11,7 @@ import { useState } from "react";
 import { AIIntegrationsSection } from "./AIIntegrationsSection";
 import { OtelForwardingSection } from "./OtelForwardingSection";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
+import { handleAPIError } from "@/lib/errors";
 
 export default function OrgLogs(): JSX.Element {
   return (
@@ -71,6 +72,13 @@ function OrgLogsInner() {
         } else if (featureName === FeatureName.HooksBrowserLogin) {
           setHooksBrowserLoginEnabled(enabled);
         }
+      },
+      onError: (error) => {
+        // Surfaces, among others, the phased-rollout block when an org toggles
+        // observability mode before it's approved for the latest hooks version.
+        // On error the optimistic state above never runs, so the switch reverts
+        // to the server value.
+        handleAPIError(error, "Failed to update setting");
       },
     });
 

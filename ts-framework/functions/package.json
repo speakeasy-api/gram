@@ -66,6 +66,6 @@
   },
   "devDependencies": {
     "@types/archiver": "^6.0.4",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.10"
   }
 }

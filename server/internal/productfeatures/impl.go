@@ -24,6 +24,24 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 )
 
+// PluginPublisher lets this service propagate org-level settings that change
+// generated plugin/hook output (currently observability mode) to the org's
+// published marketplaces. It is a narrow interface (rather than a direct
+// dependency on the plugins service) because the plugins package imports this
+// one, so importing it back would create a cycle; the concrete *plugins.Service
+// is injected as this interface in cmd/gram. Nil when plugin publishing is not
+// configured, in which case observability-mode changes are not gated or
+// republished here and the automated rollout propagates them instead.
+type PluginPublisher interface {
+	// HooksRolloutEligible reports whether the org is cleared for the current
+	// observability (hooks) version, i.e. whether a hook-output change can be
+	// published to it now.
+	HooksRolloutEligible(ctx context.Context, orgID, orgSlug string) bool
+	// RepublishOrganizationProjects republishes every connected project in the org
+	// so a changed org-level setting reaches its marketplaces.
+	RepublishOrganizationProjects(ctx context.Context, orgID string) error
+}
+
 // Service implements organization feature management operations.
 type Service struct {
 	tracer       trace.Tracer
@@ -33,6 +51,7 @@ type Service struct {
 	auth         *auth.Auth
 	authz        *authz.Engine
 	featureCache cache.TypedCacheObject[FeatureCache]
+	plugins      PluginPublisher
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -44,6 +63,7 @@ func NewService(
 	sessions *sessions.Manager,
 	redisClient *redis.Client,
 	authzEngine *authz.Engine,
+	pluginPublisher PluginPublisher,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("product_features"))
 
@@ -55,6 +75,7 @@ func NewService(
 		auth:         auth.New(logger, db, sessions, authzEngine),
 		authz:        authzEngine,
 		featureCache: cache.NewTypedObjectCache[FeatureCache](logger.With(attr.SlogCacheNamespace("productfeature")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
+		plugins:      pluginPublisher,
 	}
 }
 
@@ -77,16 +98,41 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 		return fmt.Errorf("require org admin: %w", err)
 	}
 
+	orgID := authCtx.ActiveOrganizationID
+
+	// Observability mode changes the generated observability (hooks) plugin output
+	// (every event becomes non-blocking). That output can only be regenerated at
+	// the current hooks generator version, so a toggle can't take effect for an org
+	// that isn't cleared for it. Reject the change up front — before writing the
+	// feature — so the persisted feature state never claims a hook behavior that
+	// isn't actually published. Only gate a real change, and only when plugin
+	// publishing is wired.
+	observabilityToggle := payload.FeatureName == string(FeatureObservabilityMode)
+	observabilityChanged := false
+	if observabilityToggle && s.plugins != nil {
+		current, ferr := s.repo.IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{
+			OrganizationID: orgID,
+			FeatureName:    payload.FeatureName,
+		})
+		if ferr != nil {
+			return oops.E(oops.CodeUnexpected, ferr, "check observability mode state").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
+		}
+		observabilityChanged = current != payload.Enabled
+		if observabilityChanged && !s.plugins.HooksRolloutEligible(ctx, orgID, authCtx.OrganizationSlug) {
+			return oops.E(oops.CodeConflict, nil, "can't change observability mode yet: your organization isn't approved for the latest observability hooks version. It will become available soon.")
+		}
+	}
+
 	var err error
 
 	if payload.Enabled {
 		err = s.repo.EnableFeature(ctx, repo.EnableFeatureParams{
-			OrganizationID: authCtx.ActiveOrganizationID,
+			OrganizationID: orgID,
 			FeatureName:    payload.FeatureName,
 		})
 	} else {
 		_, err = s.repo.DeleteFeature(ctx, repo.DeleteFeatureParams{
-			OrganizationID: authCtx.ActiveOrganizationID,
+			OrganizationID: orgID,
 			FeatureName:    payload.FeatureName,
 		})
 	}
@@ -96,7 +142,7 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 			err,
 			"failed to set organization feature flag %q",
 			payload.FeatureName,
-		).LogError(ctx, s.logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+		).LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
 	}
 
 	cacheEntry := FeatureCache{
@@ -111,6 +157,21 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 			attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
 			attr.SlogProductFeatureName(payload.FeatureName),
 		)
+	}
+
+	// Propagate an observability-mode change to the org's published marketplaces
+	// now. Eligibility was already verified above, so eligible orgs regenerate
+	// their hooks immediately. This is best-effort: on failure the feature is
+	// already written and the automated generator rollout republishes the org on
+	// its next tick (the config-hash signal detects the drift), so we log rather
+	// than fail the toggle.
+	if observabilityToggle && observabilityChanged && s.plugins != nil {
+		if repErr := s.plugins.RepublishOrganizationProjects(ctx, orgID); repErr != nil {
+			s.logger.WarnContext(ctx, "failed to republish org plugins after observability mode change; automated rollout will retry",
+				attr.SlogError(repErr),
+				attr.SlogOrganizationID(orgID),
+			)
+		}
 	}
 
 	return nil

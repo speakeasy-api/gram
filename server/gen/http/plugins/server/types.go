@@ -280,6 +280,11 @@ type UpdateMarketplaceSettingsResponseBody struct {
 	// Whether the marketplace was automatically republished to GitHub as part of
 	// this update.
 	Republished bool `form:"republished" json:"republished" xml:"republished"`
+	// True when the new name reached the MCP plugins and marketplace manifests but
+	// the observability (hooks) plugin could not be updated yet because the
+	// organization is not approved for the latest hooks version; it will update
+	// automatically once the organization is rolled forward.
+	HooksUpdateDeferred *bool `form:"hooks_update_deferred,omitempty" json:"hooks_update_deferred,omitempty" xml:"hooks_update_deferred,omitempty"`
 }
 
 // ListPluginsUnauthorizedResponseBody is the type of the "plugins" service
@@ -3536,7 +3541,8 @@ func NewGetMarketplaceSettingsResponseBody(res *plugins.MarketplaceSettingsResul
 // service.
 func NewUpdateMarketplaceSettingsResponseBody(res *plugins.UpdateMarketplaceSettingsResult) *UpdateMarketplaceSettingsResponseBody {
 	body := &UpdateMarketplaceSettingsResponseBody{
-		Republished: res.Republished,
+		Republished:         res.Republished,
+		HooksUpdateDeferred: res.HooksUpdateDeferred,
 	}
 	if res.Settings != nil {
 		body.Settings = marshalPluginsMarketplaceSettingsResultToMarketplaceSettingsResultResponseBody(res.Settings)

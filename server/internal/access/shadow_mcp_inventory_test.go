@@ -299,6 +299,104 @@ func TestService_ListShadowMCPInventory_InvalidCursorIsBadRequest(t *testing.T) 
 	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
 }
 
+func TestService_ListShadowMCPInventoryUsers_ReturnsPaginatedUsersForCanonicalURL(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	projectID := authCtx.ProjectID.String()
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+	now := time.Now().UTC()
+
+	insertShadowMCPInventoryTelemetry(t, ctx, ti, shadowMCPInventoryTelemetryInput{
+		ProjectID:  projectID,
+		ServerURL:  "https://mcp.speakeasy.com/mcp?token=one",
+		ServerName: "Speakeasy",
+		UserEmail:  "ada@example.com",
+		ObservedAt: now.Add(-30 * time.Minute),
+	})
+	insertShadowMCPInventoryTelemetry(t, ctx, ti, shadowMCPInventoryTelemetryInput{
+		ProjectID:  projectID,
+		ServerURL:  "https://mcp.speakeasy.com/mcp?token=two#ignored",
+		ServerName: "Speakeasy",
+		UserEmail:  "ada@example.com",
+		ObservedAt: now.Add(-20 * time.Minute),
+	})
+	insertShadowMCPInventoryTelemetry(t, ctx, ti, shadowMCPInventoryTelemetryInput{
+		ProjectID:  projectID,
+		ServerURL:  "https://mcp.speakeasy.com/mcp",
+		ServerName: "Speakeasy",
+		UserEmail:  "grace@example.com",
+		ObservedAt: now.Add(-10 * time.Minute),
+	})
+
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	firstPage, err := ti.service.ListShadowMCPInventoryUsers(ctx, &gen.ListShadowMCPInventoryUsersPayload{
+		ProjectID: projectID,
+		ServerURL: "https://mcp.speakeasy.com/mcp?token=ignored",
+		Limit:     1,
+	})
+	require.NoError(t, err)
+	require.Len(t, firstPage.Users, 1)
+	require.Equal(t, 2, firstPage.Users[0].ObservedUseCount)
+
+	require.NotNil(t, firstPage.NextCursor)
+	require.Equal(t, "ada@example.com", firstPage.Users[0].UserKey)
+	require.Nil(t, firstPage.Users[0].Name)
+	require.NotNil(t, firstPage.Users[0].Email)
+	require.Equal(t, "ada@example.com", *firstPage.Users[0].Email)
+	require.NotEmpty(t, firstPage.Users[0].LastCalled)
+
+	secondPage, err := ti.service.ListShadowMCPInventoryUsers(ctx, &gen.ListShadowMCPInventoryUsersPayload{
+		ProjectID: projectID,
+		ServerURL: "https://mcp.speakeasy.com/mcp",
+		Limit:     1,
+		Cursor:    firstPage.NextCursor,
+	})
+	require.NoError(t, err)
+	require.Len(t, secondPage.Users, 1)
+	require.Nil(t, secondPage.NextCursor)
+	require.Equal(t, "grace@example.com", secondPage.Users[0].UserKey)
+	require.NotNil(t, secondPage.Users[0].Email)
+	require.Equal(t, "grace@example.com", *secondPage.Users[0].Email)
+	require.Equal(t, 1, secondPage.Users[0].ObservedUseCount)
+}
+
+func TestService_ListShadowMCPInventoryUsers_EmptyUsageIsValid(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+
+	result, err := ti.service.ListShadowMCPInventoryUsers(ctx, &gen.ListShadowMCPInventoryUsersPayload{
+		ProjectID: authCtx.ProjectID.String(),
+		ServerURL: "https://unused.example.com/mcp",
+		Limit:     10,
+	})
+	require.NoError(t, err)
+	require.Empty(t, result.Users)
+	require.Nil(t, result.NextCursor)
+}
+
+func TestService_ListShadowMCPInventoryUsers_InvalidURLIsBadRequest(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+
+	_, err := ti.service.ListShadowMCPInventoryUsers(ctx, &gen.ListShadowMCPInventoryUsersPayload{
+		ProjectID: authCtx.ProjectID.String(),
+		ServerURL: "stdio-server",
+		Limit:     10,
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+}
+
 type shadowMCPInventoryTelemetryInput struct {
 	ProjectID  string
 	ServerURL  string
