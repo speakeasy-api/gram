@@ -132,7 +132,7 @@ const DEFAULT_MODEL_VALUE = "__default__";
 
 const JUDGE_MODELS: { value: string; label: string }[] = [
   { value: "", label: "Default (Gemini 3.1 Flash Lite)" },
-  { value: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash" },
+  { value: "google/gemini-3.5-flash", label: "Gemini 3.5 Flash" },
   { value: "anthropic/claude-sonnet-4.6", label: "Claude Sonnet 4.6" },
   { value: "anthropic/claude-haiku-4.5", label: "Claude Haiku 4.5" },
 ];
