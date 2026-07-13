@@ -351,6 +351,18 @@ func TestPromoteStagedTelemetry_DedupSkipsAlreadyPromotedRows(t *testing.T) {
 		assert.Len(collect, staged, 1)
 	}, 5*time.Second, 50*time.Millisecond)
 
+	// Also wait for the simulated crashed-promotion row to be visible in
+	// telemetry_logs. Otherwise a pass whose existence guard runs before the
+	// pre-insert is visible would treat the row as new and promote it (a second
+	// insert) instead of taking the dedup path, so the drain loop would report
+	// Promoted rather than Deduped.
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		existing, err := queries.ListExistingTelemetryLogIDs(ctx, projectID.String(),
+			[]string{rowID}, observed.Add(-time.Hour).UnixNano(), observed.Add(time.Hour).UnixNano())
+		assert.NoError(collect, err)
+		assert.Len(collect, existing, 1)
+	}, 5*time.Second, 50*time.Millisecond)
+
 	// Run the (idempotent) pass until staging drains. The dedup guard skips
 	// the insert, so Promoted stays 0 — the row was promoted by the earlier
 	// (simulated) crashed pass — but the cleanup must surface as Deduped so
