@@ -349,16 +349,16 @@ async def test_sync_publish_failure_is_swallowed_and_logged():
 
 @pytest.fixture
 def recorded_durations(monkeypatch):
-    """Capture every ``record_process_duration`` call as ``(seconds, outcome)``.
+    """Capture ``record_process_duration`` calls as ``(seconds, outcome, size_bucket)``.
 
     Patches the helper on the handler's ``metrics`` module so the per-message
     distribution recording is observable without standing up a real
     ``MeterProvider`` (which is a process-global singleton, awkward across tests).
     """
-    calls: list[tuple[float, str]] = []
+    calls: list[tuple[float, str, str]] = []
 
-    def _capture(seconds: float, outcome: str) -> None:
-        calls.append((seconds, outcome))
+    def _capture(seconds: float, outcome: str, size_bucket: str) -> None:
+        calls.append((seconds, outcome, size_bucket))
 
     monkeypatch.setattr(handler_mod.metrics, "record_process_duration", _capture)
     return calls
@@ -370,9 +370,10 @@ async def test_records_detected_outcome_when_findings_published(recorded_duratio
 
     await handler.handle(_message("a@b.com", request_id="req-1"), _meta())
 
-    (seconds, outcome) = recorded_durations[-1]
+    (seconds, outcome, size_bucket) = recorded_durations[-1]
     assert outcome == metrics.OUTCOME_DETECTED
     assert seconds >= 0.0
+    assert size_bucket == "0-1k"
 
 
 async def test_records_clean_outcome_when_nothing_detected(recorded_durations):
@@ -380,9 +381,10 @@ async def test_records_clean_outcome_when_nothing_detected(recorded_durations):
 
     await handler.handle(_message("nothing sensitive here"), _meta())
 
-    (seconds, outcome) = recorded_durations[-1]
+    (seconds, outcome, size_bucket) = recorded_durations[-1]
     assert outcome == metrics.OUTCOME_CLEAN
     assert seconds >= 0.0
+    assert size_bucket == "0-1k"
 
 
 async def test_records_error_outcome_when_scan_fails(recorded_durations):
@@ -390,7 +392,7 @@ async def test_records_error_outcome_when_scan_fails(recorded_durations):
 
     await handler.handle(_message("...", request_id="req-1"), _meta())
 
-    (seconds, outcome) = recorded_durations[-1]
+    (seconds, outcome, _) = recorded_durations[-1]
     assert outcome == metrics.OUTCOME_ERROR
     assert seconds >= 0.0
 
@@ -403,9 +405,19 @@ async def test_records_error_outcome_when_all_publishes_fail(recorded_durations)
 
     await handler.handle(_message("a@b.com", request_id="req-1"), _meta())
 
-    (seconds, outcome) = recorded_durations[-1]
+    (seconds, outcome, _) = recorded_durations[-1]
     assert outcome == metrics.OUTCOME_ERROR
     assert seconds >= 0.0
+
+
+async def test_records_size_bucket_from_content_length(recorded_durations):
+    # A 5000-char payload lands in the 1k-10k band regardless of outcome.
+    handler = _handler(FakeScanner([]))
+
+    await handler.handle(_message("x" * 5_000), _meta())
+
+    (_, _, size_bucket) = recorded_durations[-1]
+    assert size_bucket == "1k-10k"
 
 
 async def test_does_not_leak_content_or_values_to_logs():
