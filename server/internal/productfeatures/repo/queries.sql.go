@@ -61,6 +61,24 @@ func (q *Queries) EnableFeature(ctx context.Context, arg EnableFeatureParams) er
 	return err
 }
 
+const hasDeviceAgentSync = `-- name: HasDeviceAgentSync :one
+SELECT EXISTS (
+        SELECT 1
+        FROM device_agent_syncs
+        WHERE organization_id = $1
+) AS has_sync
+`
+
+// Whether any device has polled agent.getPlugins for the org — the member-
+// readable "org uses the device agent" signal (device_agent_syncs is written
+// only by the device-agent poll path).
+func (q *Queries) HasDeviceAgentSync(ctx context.Context, organizationID string) (bool, error) {
+	row := q.db.QueryRow(ctx, hasDeviceAgentSync, organizationID)
+	var has_sync bool
+	err := row.Scan(&has_sync)
+	return has_sync, err
+}
+
 const isFeatureEnabled = `-- name: IsFeatureEnabled :one
 SELECT EXISTS (
         SELECT 1

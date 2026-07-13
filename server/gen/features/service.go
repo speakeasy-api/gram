@@ -73,6 +73,10 @@ type GetProductFeaturesResult struct {
 	// Whether generated hook plugins may mint per-user keys via the interactive
 	// browser login
 	HooksBrowserLoginEnabled bool
+	// Whether the organization uses the device agent (any device has polled
+	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
+	// feature.
+	DeviceAgent bool
 }
 
 // SetProductFeaturePayload is the payload type of the features service

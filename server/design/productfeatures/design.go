@@ -30,7 +30,8 @@ var _ = Service("features", func() {
 			Attribute("scim_enabled", Boolean, "Whether SCIM/directory sync setup is enabled for the organization")
 			Attribute("observability_mode_enabled", Boolean, "Whether observability mode is enabled, making generated hook plugins fully non-blocking")
 			Attribute("hooks_browser_login_enabled", Boolean, "Whether generated hook plugins may mint per-user keys via the interactive browser login")
-			Required("logs_enabled", "tool_io_logs_enabled", "session_capture_enabled", "authz_challenge_logging_enabled", "webhooks", "sso_enabled", "scim_enabled", "observability_mode_enabled", "hooks_browser_login_enabled")
+			Attribute("device_agent", Boolean, "Whether the organization uses the device agent (any device has polled agent.getPlugins). Derived from device-agent syncs, not an admin-settable feature.")
+			Required("logs_enabled", "tool_io_logs_enabled", "session_capture_enabled", "authz_challenge_logging_enabled", "webhooks", "sso_enabled", "scim_enabled", "observability_mode_enabled", "hooks_browser_login_enabled", "device_agent")
 		})
 
 		HTTP(func() {

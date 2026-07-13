@@ -29,7 +29,7 @@ import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers";
 import { useMembers } from "@gram/client/react-query/members";
 import { useRoles } from "@gram/client/react-query/roles";
-import { useSyncedAgentUsers } from "@gram/client/react-query/syncedAgentUsers.js";
+import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
 import {
   Badge,
@@ -149,15 +149,13 @@ export default function PluginDetail(): JSX.Element | null {
   // marketplace installs (Claude/Cursor/Codex) ship every published plugin. So
   // only surface the section for device-agent orgs: those enrolled in the
   // program (the gram-device-agent flag) or with devices that have actually
-  // synced. When the flag is on we already show it, so only probe syncs when
-  // it's off — that call is org-admin gated and unneeded otherwise.
+  // synced (productFeatures.deviceAgent — member-readable, unlike the admin-only
+  // synced-users list, so non-admin viewers see the section too).
   const isDeviceAgentEnabled =
     useTelemetry().isFeatureEnabled("gram-device-agent") ?? false;
-  const { data: deviceSyncData } = useSyncedAgentUsers(undefined, undefined, {
-    enabled: !isDeviceAgentEnabled,
-  });
+  const { data: productFeatures } = useProductFeatures();
   const showAssignments =
-    isDeviceAgentEnabled || (deviceSyncData?.users?.length ?? 0) > 0;
+    isDeviceAgentEnabled || (productFeatures?.deviceAgent ?? false);
 
   // Invalidate publish status too so the dirty/up-to-date affordance reflects
   // the edit the moment a mutation lands.

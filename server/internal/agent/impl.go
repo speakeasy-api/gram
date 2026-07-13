@@ -86,6 +86,16 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 // creator): email → user_id, then RBAC role membership, produce the user:<id>,
 // user:all, and role:<...> principals. The email principal and the org wildcard
 // are always included so email- and everyone-scoped assignments still deliver.
+//
+// SECURITY (known limitation): the polling identity is the caller-supplied
+// payload.Email, which is NOT bound to the authenticated principal. Any holder
+// of an agent-scoped key for the org can therefore claim another member's email
+// and receive that member's role-/user-scoped plugins. This is accepted for now
+// because the device fleet shares a single org key (no genuine per-user device
+// credential exists yet — cliauth mints one org-wide "device-agent" key), so
+// the reported email is the only per-user signal available. Binding delivery to
+// an authenticated per-user identity is tracked separately and requires cliauth
+// to mint true per-user device keys first.
 func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload) (*gen.GetPluginsResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {

@@ -46,6 +46,10 @@ type GetProductFeaturesResponseBody struct {
 	// Whether generated hook plugins may mint per-user keys via the interactive
 	// browser login
 	HooksBrowserLoginEnabled bool `form:"hooks_browser_login_enabled" json:"hooks_browser_login_enabled" xml:"hooks_browser_login_enabled"`
+	// Whether the organization uses the device agent (any device has polled
+	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
+	// feature.
+	DeviceAgent bool `form:"device_agent" json:"device_agent" xml:"device_agent"`
 }
 
 // GetProductFeaturesUnauthorizedResponseBody is the type of the "features"
@@ -434,6 +438,7 @@ func NewGetProductFeaturesResponseBody(res *features.GetProductFeaturesResult) *
 		ScimEnabled:                  res.ScimEnabled,
 		ObservabilityModeEnabled:     res.ObservabilityModeEnabled,
 		HooksBrowserLoginEnabled:     res.HooksBrowserLoginEnabled,
+		DeviceAgent:                  res.DeviceAgent,
 	}
 	return body
 }

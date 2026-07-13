@@ -44,6 +44,10 @@ type GetProductFeaturesResponseBody struct {
 	// Whether generated hook plugins may mint per-user keys via the interactive
 	// browser login
 	HooksBrowserLoginEnabled *bool `form:"hooks_browser_login_enabled,omitempty" json:"hooks_browser_login_enabled,omitempty" xml:"hooks_browser_login_enabled,omitempty"`
+	// Whether the organization uses the device agent (any device has polled
+	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
+	// feature.
+	DeviceAgent *bool `form:"device_agent,omitempty" json:"device_agent,omitempty" xml:"device_agent,omitempty"`
 }
 
 // GetProductFeaturesUnauthorizedResponseBody is the type of the "features"
@@ -442,6 +446,7 @@ func NewGetProductFeaturesResultOK(body *GetProductFeaturesResponseBody) *featur
 		ScimEnabled:                  *body.ScimEnabled,
 		ObservabilityModeEnabled:     *body.ObservabilityModeEnabled,
 		HooksBrowserLoginEnabled:     *body.HooksBrowserLoginEnabled,
+		DeviceAgent:                  *body.DeviceAgent,
 	}
 
 	return v
@@ -776,6 +781,9 @@ func ValidateGetProductFeaturesResponseBody(body *GetProductFeaturesResponseBody
 	}
 	if body.HooksBrowserLoginEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("hooks_browser_login_enabled", "body"))
+	}
+	if body.DeviceAgent == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("device_agent", "body"))
 	}
 	return
 }

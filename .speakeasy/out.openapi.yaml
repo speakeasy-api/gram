@@ -44646,6 +44646,9 @@ components:
         authz_challenge_logging_enabled:
           type: boolean
           description: Whether authz challenge logging to ClickHouse is enabled
+        device_agent:
+          type: boolean
+          description: Whether the organization uses the device agent (any device has polled agent.getPlugins). Derived from device-agent syncs, not an admin-settable feature.
         hooks_browser_login_enabled:
           type: boolean
           description: Whether generated hook plugins may mint per-user keys via the interactive browser login
@@ -44680,6 +44683,7 @@ components:
         - scim_enabled
         - observability_mode_enabled
         - hooks_browser_login_enabled
+        - device_agent
     GetProjectForm:
       type: object
       properties:
