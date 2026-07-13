@@ -47,8 +47,8 @@ export function AuthenticationSection({
         <SettingsSection.Header>
           <SettingsSection.Title>Authentication</SettingsSection.Title>
           <SettingsSection.Description>
-            Configure the upstream identity provider and user session settings
-            for clients connecting to this server.
+            Configure user sessions and, when required, upstream identity
+            providers for clients connecting to this server.
           </SettingsSection.Description>
         </SettingsSection.Header>
         <SettingsSection.Panel>
