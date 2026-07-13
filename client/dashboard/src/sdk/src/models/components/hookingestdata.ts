@@ -5,6 +5,11 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import {
+  HookMCPAttributionEntry,
+  HookMCPAttributionEntry$Outbound,
+  HookMCPAttributionEntry$outboundSchema,
+} from "./hookmcpattributionentry.js";
+import {
   HookMCPData,
   HookMCPData$Outbound,
   HookMCPData$outboundSchema,
@@ -49,6 +54,10 @@ export type HookIngestData = {
    */
   mcp?: HookMCPData | undefined;
   /**
+   * Transcript-derived per-request MCP attribution (Claude Stop/SubagentStop).
+   */
+  mcpAttribution?: Array<HookMCPAttributionEntry> | undefined;
+  /**
    * Assistant/user message payload.
    */
   message?: HookMessageData | undefined;
@@ -77,6 +86,7 @@ export type HookIngestData = {
 /** @internal */
 export type HookIngestData$Outbound = {
   mcp?: HookMCPData$Outbound | undefined;
+  mcp_attribution?: Array<HookMCPAttributionEntry$Outbound> | undefined;
   message?: HookMessageData$Outbound | undefined;
   notification?: HookNotificationData$Outbound | undefined;
   prompt?: HookPromptData$Outbound | undefined;
@@ -92,6 +102,7 @@ export const HookIngestData$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     mcp: z.optional(HookMCPData$outboundSchema),
+    mcpAttribution: z.optional(z.array(HookMCPAttributionEntry$outboundSchema)),
     message: z.optional(HookMessageData$outboundSchema),
     notification: z.optional(HookNotificationData$outboundSchema),
     prompt: z.optional(HookPromptData$outboundSchema),
@@ -101,6 +112,7 @@ export const HookIngestData$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      mcpAttribution: "mcp_attribution",
       toolCall: "tool_call",
     });
   }),

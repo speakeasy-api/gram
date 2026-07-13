@@ -1454,6 +1454,16 @@ func unmarshalHookIngestDataRequestBodyToHooksHookIngestData(v *HookIngestDataRe
 	if v.Notification != nil {
 		res.Notification = unmarshalHookNotificationDataRequestBodyToHooksHookNotificationData(v.Notification)
 	}
+	if v.McpAttribution != nil {
+		res.McpAttribution = make([]*hooks.HookMCPAttributionEntry, len(v.McpAttribution))
+		for i, val := range v.McpAttribution {
+			if val == nil {
+				res.McpAttribution[i] = nil
+				continue
+			}
+			res.McpAttribution[i] = unmarshalHookMCPAttributionEntryRequestBodyToHooksHookMCPAttributionEntry(val)
+		}
+	}
 
 	return res
 }
@@ -1569,6 +1579,22 @@ func unmarshalHookNotificationDataRequestBodyToHooksHookNotificationData(v *Hook
 		Type:    v.Type,
 		Title:   v.Title,
 		Message: v.Message,
+	}
+
+	return res
+}
+
+// unmarshalHookMCPAttributionEntryRequestBodyToHooksHookMCPAttributionEntry
+// builds a value of type *hooks.HookMCPAttributionEntry from a value of type
+// *HookMCPAttributionEntryRequestBody.
+func unmarshalHookMCPAttributionEntryRequestBodyToHooksHookMCPAttributionEntry(v *HookMCPAttributionEntryRequestBody) *hooks.HookMCPAttributionEntry {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.HookMCPAttributionEntry{
+		RequestID: *v.RequestID,
+		McpServer: v.McpServer,
+		McpTool:   v.McpTool,
 	}
 
 	return res

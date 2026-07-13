@@ -346,6 +346,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.GenerateToolsetEmbeddings)
 	temporalWorker.RegisterActivity(activities.GenerateChatTitle)
 	temporalWorker.RegisterActivity(activities.CorrelateClaudePrompts)
+	temporalWorker.RegisterActivity(activities.PromoteStagedTelemetry)
+	temporalWorker.RegisterActivity(activities.ListStagedTelemetrySessions)
 	temporalWorker.RegisterActivity(activities.SegmentChat)
 	temporalWorker.RegisterActivity(activities.DeleteChatResolutions)
 	temporalWorker.RegisterActivity(activities.AnalyzeSegment)
@@ -409,6 +411,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(IndexToolsetWorkflow)
 	temporalWorker.RegisterWorkflow(GenerateChatTitleWorkflow)
 	temporalWorker.RegisterWorkflow(CorrelateClaudePromptsWorkflow)
+	temporalWorker.RegisterWorkflow(PromoteStagedTelemetryWorkflow)
+	temporalWorker.RegisterWorkflow(StagedTelemetrySweepWorkflow)
 	temporalWorker.RegisterWorkflow(AnalyzeChatResolutionsWorkflow)
 	temporalWorker.RegisterWorkflow(DelayedChatResolutionAnalysisWorkflow)
 	// Trigger workflows
@@ -497,6 +501,10 @@ func NewTemporalWorker(
 
 	if err := AddOutboxGCSchedule(context.Background(), env); err != nil {
 		logger.ErrorContext(context.Background(), "failed to add outbox gc schedule", attr.SlogError(err))
+	}
+
+	if err := AddStagedTelemetrySweepSchedule(context.Background(), env); err != nil {
+		logger.ErrorContext(context.Background(), "failed to add staged telemetry sweep schedule", attr.SlogError(err))
 	}
 
 	if opts.PluginPublisher != nil {

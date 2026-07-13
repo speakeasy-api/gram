@@ -101,6 +101,43 @@ CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_account_type ON telemetry_logs
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_provider ON telemetry_logs (provider) TYPE set(0) GRANULARITY 4;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_billing_mode ON telemetry_logs (billing_mode) TYPE set(0) GRANULARITY 4;
 
+-- telemetry_logs_staging is a column-for-column clone of telemetry_logs that
+-- parks Claude OTEL api_request rows whose inline MCP attribution was redacted
+-- (mcp_server.name = 'custom') until the transcript-derived attribution for
+-- the request arrives via hooks (or a timeout passes). The promotion worker
+-- rewrites attributes.mcp_server.name / attributes.mcp_tool.name and inserts
+-- the row into telemetry_logs — the moment attribute_metrics_summaries_mv
+-- fires — then deletes it here. Rows keep their id across promotion, so
+-- telemetry_logs itself is the exactly-once ledger. The short TTL is a
+-- cleanup backstop only: the 30-minute timeout sweep promotes stragglers
+-- verbatim long before it.
+CREATE TABLE IF NOT EXISTS telemetry_logs_staging (
+    id UUID DEFAULT generateUUIDv7() COMMENT 'Unique identifier for the log entry, preserved when the row is promoted to telemetry_logs.',
+    time_unix_nano Int64 COMMENT 'Unix time (ns) when the event occurred measured by the origin clock.' CODEC(Delta, ZSTD),
+    observed_time_unix_nano Int64 COMMENT 'Unix time (ns) when the event was observed by the collection system.' CODEC(Delta, ZSTD),
+    observed_timestamp DateTime64(9) DEFAULT fromUnixTimestamp64Nano(observed_time_unix_nano) COMMENT 'Human-readable timestamp derived from observed_time_unix_nano.',
+    severity_text LowCardinality(Nullable(String)) COMMENT 'Text representation of severity (DEBUG, INFO, WARN, ERROR, FATAL).',
+    body String COMMENT 'The primary log message extracted from the log record.' CODEC(ZSTD),
+    trace_id Nullable(FixedString(32)) COMMENT 'W3C trace ID linking related logs across services.',
+    span_id Nullable(FixedString(16)) COMMENT 'W3C span ID for specific operation within a trace.',
+    attributes JSON COMMENT 'Additional attributes about the specific event occurrence.' CODEC(ZSTD),
+    resource_attributes JSON COMMENT 'Attributes describing the resource that generated this log.' CODEC(ZSTD),
+    gram_project_id UUID COMMENT 'Project ID (denormalized from resource_attributes).',
+    gram_deployment_id Nullable(UUID) COMMENT 'Deployment ID (denormalized from resource_attributes).',
+    gram_function_id Nullable(UUID) COMMENT 'Function ID that generated the log (null for HTTP logs).',
+    gram_urn String COMMENT 'The Gram URN (e.g. claude-code:otel:logs).',
+    service_name LowCardinality(String) COMMENT 'Logical service name.',
+    service_version Nullable(String) COMMENT 'Service version.',
+    gram_chat_id Nullable(String) COMMENT 'The Chat ID (Claude session id) associated with the log.',
+    chat_id String MATERIALIZED toString(attributes.gen_ai.conversation.id) COMMENT 'Chat ID (materialized from attributes.gen_ai.conversation.id) — the promotion worker scopes by this.',
+    request_id String MATERIALIZED toString(attributes.request_id) COMMENT 'Claude API request id (materialized from attributes.request_id) — the attribution join key.'
+) ENGINE = MergeTree
+PARTITION BY toYYYYMMDD(fromUnixTimestamp64Nano(time_unix_nano))
+ORDER BY (gram_project_id, time_unix_nano, id)
+TTL fromUnixTimestamp64Nano(time_unix_nano) + INTERVAL 2 DAY
+SETTINGS index_granularity = 8192
+COMMENT 'Holding pen for Claude OTEL api_request rows with redacted (custom) MCP attribution, awaiting transcript-derived attribution before promotion into telemetry_logs.';
+
 CREATE TABLE IF NOT EXISTS trace_summaries (
     -- Key cols
     trace_id FixedString(32),

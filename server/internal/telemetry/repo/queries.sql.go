@@ -286,64 +286,7 @@ func (q *Queries) InsertTelemetryLog(ctx context.Context, arg InsertTelemetryLog
 // InsertTelemetryLogs inserts telemetry log records into ClickHouse in a single
 // synchronous statement.
 func (q *Queries) InsertTelemetryLogs(ctx context.Context, args []InsertTelemetryLogParams) error {
-	if len(args) == 0 {
-		return nil
-	}
-
-	ctx = clickhouse.Context(ctx, clickhouse.WithAsync(false))
-
-	builder := sq.Insert("telemetry_logs").
-		Columns(
-			"id",
-			"time_unix_nano",
-			"observed_time_unix_nano",
-			"severity_text",
-			"body",
-			"trace_id",
-			"span_id",
-			"attributes",
-			"resource_attributes",
-			"gram_project_id",
-			"gram_deployment_id",
-			"gram_function_id",
-			"gram_urn",
-			"service_name",
-			"service_version",
-			"gram_chat_id",
-		)
-
-	for _, arg := range args {
-		builder = builder.Values(
-			arg.ID,
-			arg.TimeUnixNano,
-			arg.ObservedTimeUnixNano,
-			arg.SeverityText,
-			arg.Body,
-			arg.TraceID,
-			arg.SpanID,
-			arg.Attributes,
-			arg.ResourceAttributes,
-			arg.GramProjectID,
-			arg.GramDeploymentID,
-			arg.GramFunctionID,
-			arg.GramURN,
-			arg.ServiceName,
-			arg.ServiceVersion,
-			arg.GramChatID,
-		)
-	}
-
-	query, queryArgs, err := builder.
-		ToSql()
-	if err != nil {
-		return fmt.Errorf("building insert query: %w", err)
-	}
-
-	if err := q.conn.Exec(ctx, query, queryArgs...); err != nil {
-		return fmt.Errorf("inserting telemetry logs: %w", err)
-	}
-
-	return nil
+	return q.insertTelemetryLogsInto(ctx, "telemetry_logs", args)
 }
 
 type UpsertShadowMCPInventoryURLParams struct {

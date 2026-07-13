@@ -70,6 +70,7 @@ type Activities struct {
 	fireOpenRouterCreditsMetrics    *activities.FireOpenRouterCreditsMetrics
 	firePlatformUsageMetrics        *activities.FirePlatformUsageMetrics
 	correlateClaudePrompts          *activities.CorrelateClaudePrompts
+	promoteStagedTelemetry          *activities.PromoteStagedTelemetry
 	generateChatTitle               *activities.GenerateChatTitle
 	getAllOrganizations             *activities.GetAllOrganizations
 	processDeployment               *activities.ProcessDeployment
@@ -173,6 +174,7 @@ func NewActivities(
 		fireOpenRouterCreditsMetrics:    activities.NewFireOpenRouterCreditsMetrics(logger, meterProvider),
 		firePlatformUsageMetrics:        activities.NewFirePlatformUsageMetrics(logger, billingTracker),
 		correlateClaudePrompts:          activities.NewCorrelateClaudePrompts(logger, db, chConn),
+		promoteStagedTelemetry:          activities.NewPromoteStagedTelemetry(logger, chConn, cacheAdapter),
 		generateChatTitle:               activities.NewGenerateChatTitle(logger, db, chatClient),
 		getAllOrganizations:             activities.NewGetAllOrganizations(logger, db),
 		processDeployment:               activities.NewProcessDeployment(logger, tracerProvider, meterProvider, guardianPolicy, db, features, assetStorage, billingRepo, mcpRegistryClient),
@@ -336,6 +338,18 @@ func (a *Activities) GenerateChatTitle(ctx context.Context, input activities.Gen
 
 func (a *Activities) CorrelateClaudePrompts(ctx context.Context, input activities.CorrelateClaudePromptsArgs) (*activities.CorrelateClaudePromptsResult, error) {
 	return a.correlateClaudePrompts.Do(ctx, input)
+}
+
+func (a *Activities) PromoteStagedTelemetry(ctx context.Context, input activities.PromoteStagedTelemetryArgs) (*activities.PromoteStagedTelemetryResult, error) {
+	return a.promoteStagedTelemetry.Do(ctx, input)
+}
+
+func (a *Activities) ListStagedTelemetrySessions(ctx context.Context) ([]activities.PromoteStagedTelemetryArgs, error) {
+	sessions, err := a.promoteStagedTelemetry.ListStagedSessions(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list staged telemetry sessions: %w", err)
+	}
+	return sessions, nil
 }
 
 func (a *Activities) SegmentChat(ctx context.Context, input resolution_activities.SegmentChatArgs) (*resolution_activities.SegmentChatOutput, error) {

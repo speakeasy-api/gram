@@ -277,6 +277,8 @@ type HookIngestData struct {
 	Message      *HookMessageData
 	Skill        *HookSkillData
 	Notification *HookNotificationData
+	// Transcript-derived per-request MCP attribution (Claude Stop/SubagentStop).
+	McpAttribution []*HookMCPAttributionEntry
 }
 
 // Canonical Gram feature event.
@@ -310,6 +312,20 @@ type HookIngestSource struct {
 	RawEventName *string
 	// Hostname of the machine that emitted the hook event.
 	Hostname *string
+}
+
+// Transcript-derived MCP attribution for one model API request. Claude redacts
+// user-configured MCP server names to 'custom' on its OTEL telemetry, but
+// records the real names in the local session transcript; hooks ship them here
+// so ingest can restore the redacted names.
+type HookMCPAttributionEntry struct {
+	// Provider API request identifier (e.g. Claude's req_*) the attribution
+	// applies to.
+	RequestID string
+	// Unredacted MCP server name from the transcript.
+	McpServer *string
+	// Unredacted MCP tool name from the transcript.
+	McpTool *string
 }
 
 // MCP feature payload.
