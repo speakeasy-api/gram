@@ -63,6 +63,7 @@ func newKeyTypeTestClient(t *testing.T) (*ChatClient, *mockProvisioner) {
 	provisioner := &mockProvisioner{apiKey: "test-api-key"}
 	client := newTestClientForServer(t, server)
 	client.provisioner = provisioner
+	client.keyResolver = &PlatformKeyResolver{Provisioner: provisioner}
 	return client, provisioner
 }
 

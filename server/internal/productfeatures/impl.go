@@ -239,6 +239,7 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 		ScimEnabled:                  isEnabled(FeatureSCIM),
 		ObservabilityModeEnabled:     isEnabled(FeatureObservabilityMode),
 		HooksBrowserLoginEnabled:     isEnabled(FeatureHooksBrowserLogin),
+		CustomModelKeysEnabled:       isEnabled(FeatureCustomModelKeys),
 	}, nil
 }
 
