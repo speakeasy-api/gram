@@ -9,7 +9,12 @@ const PREFERRED_PROJECT_KEY = "preferredProject";
 export function getPreferredProject<T extends { slug: string }>(
   projects: readonly T[],
 ): T | undefined {
-  const preferredSlug = localStorage.getItem(PREFERRED_PROJECT_KEY);
+  let preferredSlug: string | null = null;
+  try {
+    preferredSlug = localStorage.getItem(PREFERRED_PROJECT_KEY);
+  } catch {
+    // localStorage unavailable
+  }
   if (!preferredSlug) return undefined;
   return projects.find((p) => p.slug === preferredSlug);
 }
