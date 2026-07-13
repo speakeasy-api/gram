@@ -17,6 +17,6 @@
     "@types/node": "^22.20.0",
     "msw": "^2.14.6",
     "typescript": "catalog:",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.10"
   }
 }
