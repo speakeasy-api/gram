@@ -48918,6 +48918,9 @@ components:
                     type: string
                     description: Unique plugin identifier.
                     format: uuid
+                is_default:
+                    type: boolean
+                    description: Whether this is the project's fallback plugin that new servers attach to.
                 name:
                     type: string
                     description: Display name.

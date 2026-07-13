@@ -32,6 +32,10 @@ export type Plugin = {
    */
   id: string;
   /**
+   * Whether this is the project's fallback plugin that new servers attach to.
+   */
+  isDefault?: boolean | undefined;
+  /**
    * Display name.
    */
   name: string;
@@ -61,6 +65,7 @@ export const Plugin$inboundSchema: z.ZodMiniType<Plugin, unknown> = z.pipe(
     ),
     description: z.optional(z.string()),
     id: z.string(),
+    is_default: z.optional(z.boolean()),
     name: z.string(),
     server_count: z.optional(z.int()),
     servers: z.optional(z.array(PluginServer$inboundSchema)),
@@ -74,6 +79,7 @@ export const Plugin$inboundSchema: z.ZodMiniType<Plugin, unknown> = z.pipe(
     return remap$(v, {
       "assignment_count": "assignmentCount",
       "created_at": "createdAt",
+      "is_default": "isDefault",
       "server_count": "serverCount",
       "updated_at": "updatedAt",
     });
