@@ -247,10 +247,27 @@ func (q *Queries) DeleteRemoteSessionClientAttachmentsForUserSessionIssuer(ctx c
 }
 
 const deleteUserSessionIssuer = `-- name: DeleteUserSessionIssuer :one
-UPDATE user_session_issuers
+UPDATE user_session_issuers AS issuer
 SET deleted_at = clock_timestamp()
-WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
-RETURNING id, project_id, slug, authn_challenge_mode, session_duration, classification, created_at, updated_at, deleted_at, deleted
+WHERE issuer.id = $1
+  AND issuer.project_id = $2
+  AND issuer.deleted IS FALSE
+  AND NOT EXISTS (
+    SELECT 1
+    FROM mcp_servers AS server
+    WHERE server.project_id = $2
+      AND server.user_session_issuer_id = issuer.id
+      AND server.deleted IS FALSE
+
+    UNION ALL
+
+    SELECT 1
+    FROM toolsets AS toolset
+    WHERE toolset.project_id = $2
+      AND toolset.user_session_issuer_id = issuer.id
+      AND toolset.deleted IS FALSE
+  )
+RETURNING issuer.id, issuer.project_id, issuer.slug, issuer.authn_challenge_mode, issuer.session_duration, issuer.classification, issuer.created_at, issuer.updated_at, issuer.deleted_at, issuer.deleted
 `
 
 type DeleteUserSessionIssuerParams struct {
@@ -258,6 +275,8 @@ type DeleteUserSessionIssuerParams struct {
 	ProjectID uuid.UUID
 }
 
+// Recheck active owners in the write so an owner added after the handler's
+// preflight check prevents the issuer from being soft-deleted.
 func (q *Queries) DeleteUserSessionIssuer(ctx context.Context, arg DeleteUserSessionIssuerParams) (UserSessionIssuer, error) {
 	row := q.db.QueryRow(ctx, deleteUserSessionIssuer, arg.ID, arg.ProjectID)
 	var i UserSessionIssuer

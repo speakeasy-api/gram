@@ -43,10 +43,29 @@ WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
 -- name: DeleteUserSessionIssuer :one
-UPDATE user_session_issuers
+-- Recheck active owners in the write so an owner added after the handler's
+-- preflight check prevents the issuer from being soft-deleted.
+UPDATE user_session_issuers AS issuer
 SET deleted_at = clock_timestamp()
-WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
-RETURNING *;
+WHERE issuer.id = @id
+  AND issuer.project_id = @project_id
+  AND issuer.deleted IS FALSE
+  AND NOT EXISTS (
+    SELECT 1
+    FROM mcp_servers AS server
+    WHERE server.project_id = @project_id
+      AND server.user_session_issuer_id = issuer.id
+      AND server.deleted IS FALSE
+
+    UNION ALL
+
+    SELECT 1
+    FROM toolsets AS toolset
+    WHERE toolset.project_id = @project_id
+      AND toolset.user_session_issuer_id = issuer.id
+      AND toolset.deleted IS FALSE
+  )
+RETURNING issuer.*;
 
 -- name: UserSessionIssuerHasActiveOwner :one
 -- MCP servers created by the management API own a dedicated issuer, but
