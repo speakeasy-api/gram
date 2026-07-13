@@ -1514,6 +1514,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build Elements dependency
+        run: pnpm build
+        working-directory: elements
+
       - name: Test
         run: pnpm test
         working-directory: client/dashboard
