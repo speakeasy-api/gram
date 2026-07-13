@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -32,11 +33,36 @@ const (
 	APIKeyScopeAgent    APIKeyScope = iota
 )
 
-// PluginAPIKeyNamePrefix names the org-wide keys minted by the plugin publish
-// flow (e.g. "plugins-hooks-<ts>-<rand>"). Such a key is shared by every
-// machine the plugin is installed on, so its owner identity must never be
-// used to attribute individual events.
+// PluginAPIKeyNamePrefix is reserved for keys minted by plugin distribution
+// flows. Historical user-created keys may still carry this prefix, so callers
+// classifying org-wide hook keys must use IsOrgWidePluginHooksAPIKeyName.
 const PluginAPIKeyNamePrefix = "plugins-"
+
+// IsOrgWidePluginHooksAPIKeyName recognizes the names minted by plugin publish
+// and observability-download flows. Prefix-only checks are unsafe because API
+// key names were unrestricted before PluginAPIKeyNamePrefix became reserved;
+// a legacy personal hooks key may legitimately be named "plugins-hooks".
+func IsOrgWidePluginHooksAPIKeyName(name string) bool {
+	var suffix string
+	switch {
+	case strings.HasPrefix(name, PluginAPIKeyNamePrefix+"hooks-download-"):
+		suffix = strings.TrimPrefix(name, PluginAPIKeyNamePrefix+"hooks-download-")
+	case strings.HasPrefix(name, PluginAPIKeyNamePrefix+"hooks-"):
+		suffix = strings.TrimPrefix(name, PluginAPIKeyNamePrefix+"hooks-")
+	default:
+		return false
+	}
+
+	parts := strings.Split(suffix, "-")
+	if len(parts) != 3 || len(parts[2]) != 6 {
+		return false
+	}
+	if _, err := time.Parse("20060102-150405", parts[0]+"-"+parts[1]); err != nil {
+		return false
+	}
+	tokenSuffix, err := hex.DecodeString(parts[2])
+	return err == nil && len(tokenSuffix) == 3
+}
 
 var APIKeyScopes = map[string]APIKeyScope{
 	"invalid":  APIKeyScopeInvalid,

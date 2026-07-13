@@ -124,7 +124,7 @@ func (s *Service) resolveCanonicalActor(ctx context.Context, payload *gen.Ingest
 	}
 	selfReported := canonicalSourceUserEmail(payload)
 	if selfReported == "" {
-		if strings.HasPrefix(authCtx.APIKeyName, auth.PluginAPIKeyNamePrefix) {
+		if auth.IsOrgWidePluginHooksAPIKeyName(authCtx.APIKeyName) {
 			return s.cachedSessionActor(ctx, payload, authCtx)
 		}
 		return canonicalActor{UserID: authCtx.UserID, Email: tokenEmail}
@@ -146,7 +146,7 @@ func (s *Service) resolveCanonicalActor(ctx context.Context, payload *gen.Ingest
 		// identity, exactly as when no email is
 		// self-reported. Either way policy enforcement and the recorded rows
 		// stay on one identity.
-		if strings.HasPrefix(authCtx.APIKeyName, auth.PluginAPIKeyNamePrefix) {
+		if auth.IsOrgWidePluginHooksAPIKeyName(authCtx.APIKeyName) {
 			if cached := s.cachedSessionActor(ctx, payload, authCtx); cached.UserID != "" {
 				return cached
 			}

@@ -171,7 +171,7 @@ func TestIngest_ShadowMCPPolicyUsesCachedSessionIdentityForSharedKey(t *testing.
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
-	authCtx.APIKeyName = "plugins-hooks-20260708-abc123"
+	authCtx.APIKeyName = "plugins-hooks-20260708-120102-abc123"
 
 	cachedUserID := "user_cached_owner"
 	sessionID := "canonical-shadow-mcp-cached-identity"
@@ -220,7 +220,7 @@ func TestIngest_ShadowMCPPolicyRecoversCachedIdentityForUnresolvableSharedKeyEma
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
-	authCtx.APIKeyName = "plugins-hooks-20260708-abc123"
+	authCtx.APIKeyName = "plugins-hooks-20260708-120102-abc123"
 
 	cachedUserID := "user_cached_owner"
 	sessionID := "canonical-shadow-mcp-unresolvable-email"
@@ -432,7 +432,7 @@ func TestResolveCanonicalActor_SharedPluginKeyDoesNotUseOwnerIdentity(t *testing
 	payload := canonicalIngestPayload("claude", "prompt.submitted", "actor-test")
 
 	pluginKeyCtx := *authCtx
-	pluginKeyCtx.APIKeyName = "plugins-hooks-20260708-abc123"
+	pluginKeyCtx.APIKeyName = "plugins-hooks-20260708-120102-abc123"
 	actor := ti.service.resolveCanonicalActor(ctx, payload, &pluginKeyCtx)
 	require.Empty(t, actor.UserID, "shared plugin key owner must not become the actor")
 	require.Empty(t, actor.Email)
@@ -446,6 +446,13 @@ func TestResolveCanonicalActor_SharedPluginKeyDoesNotUseOwnerIdentity(t *testing
 	payload.Source.UserEmail = &selfEmail
 	actor = ti.service.resolveCanonicalActor(ctx, payload, &pluginKeyCtx)
 	require.Equal(t, selfEmail, actor.Email, "self-reported email attributes shared-key events")
+
+	legacyPersonalKeyCtx := *authCtx
+	legacyPersonalKeyCtx.APIKeyName = "plugins-hooks"
+	payload.Source.UserEmail = nil
+	actor = ti.service.resolveCanonicalActor(ctx, payload, &legacyPersonalKeyCtx)
+	require.Equal(t, authCtx.UserID, actor.UserID,
+		"a legacy personal key with a formerly-unrestricted plugins-* name keeps owner attribution")
 }
 
 func TestIngest_CachesSelfReportedActorForLaterSharedKeyEvents(t *testing.T) {
@@ -455,7 +462,7 @@ func TestIngest_CachesSelfReportedActorForLaterSharedKeyEvents(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
-	authCtx.APIKeyName = "plugins-hooks-20260713-codex"
+	authCtx.APIKeyName = "plugins-hooks-20260713-104500-c0d3e1"
 	remaining := make(chan time.Duration, 1)
 	ti.service.cache = &sessionCacheDeadlineRecorder{Cache: ti.service.cache, remaining: remaining}
 

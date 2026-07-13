@@ -273,9 +273,9 @@ func TestKeysService_CreateKey(t *testing.T) {
 	})
 }
 
-// The plugins- prefix classifies publish-minted org-wide keys during hook
-// ingestion; a user-created key must not adopt it, or its events would skip
-// the owner-identity fallback that keys user-scoped policy checks.
+// Plugin distribution owns the plugins- namespace. Hook ingestion recognizes
+// the stricter generated shared-key shape, while reserving the namespace keeps
+// future user-created keys unambiguous.
 func TestKeysService_CreateKey_RejectsReservedPluginPrefix(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestKeysService(t)
