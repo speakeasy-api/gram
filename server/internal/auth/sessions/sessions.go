@@ -91,6 +91,8 @@ func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context
 		ProjectSlug:           nil,
 		APIKeyScopes:          nil,
 		APIKeyID:              "",
+		APIKeyName:            "",
+		OrgWidePluginHooksKey: false,
 		IsAdmin:               false,
 	}
 

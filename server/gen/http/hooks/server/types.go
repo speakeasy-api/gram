@@ -1334,6 +1334,10 @@ type HookIngestSourceRequestBody struct {
 	RawEventName *string `form:"raw_event_name,omitempty" json:"raw_event_name,omitempty" xml:"raw_event_name,omitempty"`
 	// Hostname of the machine that emitted the hook event.
 	Hostname *string `form:"hostname,omitempty" json:"hostname,omitempty" xml:"hostname,omitempty"`
+	// Self-reported email of the developer on the emitting machine (device agent
+	// or provider account), used for attribution when the API key is shared
+	// org-wide.
+	UserEmail *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
 }
 
 // HookIngestSessionRequestBody is used to define fields on request body types.

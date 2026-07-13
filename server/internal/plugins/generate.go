@@ -71,10 +71,11 @@ type GenerateConfig struct {
 	// marketplace name; non-default projects get a project-scoped one. Must be
 	// resolved identically to the device-agent endpoint (see naming.MarketplaceName).
 	IsDefaultProject bool
-	// Version is stamped into every plugin.json. Callers should bump this on
-	// every publish so platform marketplaces (Claude Code, Cursor, Codex) treat
-	// the manifest as new and refresh installed copies. Empty falls back to
-	// the static default, preserving test ergonomics.
+	// Version is the per-publish epoch (unix seconds) mixed into generated
+	// plugin.json versions (see pluginManifestVersion and hooksManifestVersion)
+	// so platform marketplaces (Claude Code, Cursor, Codex) treat regenerated
+	// manifests as new and refresh installed copies. Empty pins deterministic
+	// defaults for tests, fingerprints, and the CI render diff.
 	Version string
 	// MarketplaceName is the identifier users type into Claude Code or Codex
 	// (e.g. `<plugin>@<marketplace>`) and the `name` field in the generated
@@ -86,11 +87,19 @@ type GenerateConfig struct {
 	// path for POC rollouts in orgs that cannot tolerate hook errors or brief
 	// server unavailability disrupting the user.
 	ObservabilityMode bool
+	// BrowserLogin lets the generated plugin mint per-user hooks keys via the
+	// interactive dashboard browser flow (localhost callback token exchange).
+	// Off by default: senders then authenticate only through explicit
+	// GRAM_HOOKS_* env credentials, a previously cached key, or the baked
+	// org-wide key, and login.sh prints manual instructions instead of
+	// opening a browser.
+	BrowserLogin bool
 }
 
 // PublishedHooksFiles renders the complete hooks (observability) subtree the
 // publish path rolls out — the Claude, Cursor, and Codex plugins with their
-// manifests — under a pinned configuration, in both hook modes. CI compares
+// manifests — under a pinned configuration, across every hook-mode and
+// browser-login combination a publish can emit. CI compares
 // this output between a PR's merge base and head to decide whether a
 // hooksGeneratorVersion bump is required, so it must cover everything a
 // publish emits: a Codex-only or manifest-only generator change has to
@@ -109,13 +118,21 @@ func PublishedHooksFiles() (map[string][]byte, error) {
 		Version:           "",
 		MarketplaceName:   "",
 		ObservabilityMode: false,
+		BrowserLogin:      false,
 	}
 	out := make(map[string][]byte)
 	for _, mode := range []struct {
 		prefix        string
 		observability bool
-	}{{"default", false}, {"observability-mode", true}} {
+		browserLogin  bool
+	}{
+		{"default", false, false},
+		{"observability-mode", true, false},
+		{"browser-login", false, true},
+		{"observability-mode-browser-login", true, true},
+	} {
 		cfg.ObservabilityMode = mode.observability
+		cfg.BrowserLogin = mode.browserLogin
 		files, err := generateHooksFiles(cfg)
 		if err != nil {
 			return nil, fmt.Errorf("generate hooks files (%s): %w", mode.prefix, err)
@@ -151,6 +168,9 @@ func DogfoodPluginFiles() (map[string][]byte, error) {
 		Version:           "",
 		MarketplaceName:   "",
 		ObservabilityMode: false,
+		// The dogfood harness is how the browser flow itself gets exercised
+		// locally, so it stays on here regardless of the publish default.
+		BrowserLogin: true,
 	}
 	files := make(map[string][]byte)
 	if err := generateClaudeObservabilityPluginInDir(files, "plugin-claude", cfg); err != nil {
@@ -189,24 +209,32 @@ func resolveMarketplaceName(cfg GenerateConfig) string {
 	return conv.Default(cfg.MarketplaceName, DefaultMarketplaceName(cfg.OrgName, cfg.ProjectSlug, cfg.IsDefaultProject))
 }
 
-// pluginManifestVersion returns the version to stamp into generated
-// plugin.json files. Callers set cfg.Version to a per-publish value; the
-// "0.1.0" fallback exists so package tests don't need to construct a version
-// just to exercise unrelated assertions.
+// pluginManifestVersion returns the version to stamp into generated MCP
+// plugin.json files: 0.1.<publish epoch>, which stays strictly above the
+// historical 0.1.0 manifests already in users' caches so a re-publish is
+// always seen as newer and triggers a refresh. The "0.1.0" fallback exists so
+// package tests don't need to construct a version just to exercise unrelated
+// assertions.
 func pluginManifestVersion(cfg GenerateConfig) string {
-	return conv.Default(cfg.Version, "0.1.0")
+	if cfg.Version == "" {
+		return "0.1.0"
+	}
+	return "0.1." + cfg.Version
 }
 
-// hooksManifestVersion is the version stamped into the observability plugin.json
-// on all three platforms. Unlike the MCP manifest version (a per-publish epoch),
-// it is derived deterministically from hooksGeneratorVersion so it changes only
-// on a manual bump — the single signal that publishes a new hooks plugin.
-// Rendered as 0.<hooksGeneratorVersion>.0, which sorts strictly above the
-// historical epoch-based 0.1.<epoch> hooks manifests already in users' caches
-// (minor component 9+ beats 1), so a bump is always seen as newer and triggers a
-// refresh.
-func hooksManifestVersion() string {
-	return "0." + hooksGeneratorVersion + ".0"
+// hooksManifestVersion is the version stamped into the observability
+// plugin.json on all three platforms: 0.<hooksGeneratorVersion>.<publish
+// epoch>. The hooks subtree is only regenerated when its content changes — a
+// hooksGeneratorVersion bump or an org-level hooks settings flip — and carried
+// byte-identical otherwise, so the epoch patch component moves exactly when
+// new hooks content publishes and installed copies refresh on settings-only
+// republishes too. The minor component (9+) sorts strictly above the
+// historical epoch-based 0.1.<epoch> hooks manifests already in users'
+// caches, so any regenerated manifest is always seen as newer. Empty
+// cfg.Version pins the deterministic 0.<hooksGeneratorVersion>.0 for tests
+// and the CI render diff.
+func hooksManifestVersion(cfg GenerateConfig) string {
+	return "0." + hooksGeneratorVersion + "." + conv.Default(cfg.Version, "0")
 }
 
 // mcpGeneratorVersion is mixed into the MCP fingerprint (see MCPFingerprint).
@@ -226,7 +254,7 @@ const mcpGeneratorVersion = "9"
 //
 // The Plugin Generate Check CI workflow requires the relevant one of these two
 // constants to change whenever generate.go does.
-const hooksGeneratorVersion = "10"
+const hooksGeneratorVersion = "12"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -878,7 +906,7 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 		Name:        name,
 		DisplayName: cfg.OrgName + " Observability",
 		Description: "Speakeasy observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Speakeasy dashboard.",
-		Version:     hooksManifestVersion(),
+		Version:     hooksManifestVersion(cfg),
 		Author:      pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
 		Homepage:    "https://getgram.ai",
 		UserConfig:  nil,
@@ -948,7 +976,7 @@ func generateCursorObservabilityPluginInDir(files map[string][]byte, subdir, nam
 		Name:        name,
 		DisplayName: "Observability (Cursor)",
 		Description: "Speakeasy observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Speakeasy dashboard.",
-		Version:     hooksManifestVersion(),
+		Version:     hooksManifestVersion(cfg),
 		Author:      cursorAuthor{Name: cfg.OrgName, Email: cfg.OrgEmail},
 		Homepage:    "https://getgram.ai",
 	})
@@ -1077,7 +1105,7 @@ func generateCodexObservabilityPluginInDir(files map[string][]byte, subdir strin
 	}
 	pluginJSON, err := marshalJSON(codexPluginMeta{
 		Name:        name,
-		Version:     hooksManifestVersion(),
+		Version:     hooksManifestVersion(cfg),
 		Description: "Speakeasy observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Speakeasy dashboard.",
 		MCPServers:  "",
 		Hooks:       "./hooks/hooks.json",
@@ -1110,7 +1138,7 @@ func generateCodexObservabilityPluginInDir(files map[string][]byte, subdir strin
 	}
 	files[path.Join(subdir, "hooks/hooks.json")] = hooksJSON
 
-	files[path.Join(subdir, "hooks/identity.sh")] = renderDeviceAgentIdentityScript()
+	files[path.Join(subdir, "hooks/identity.sh")] = renderCodexIdentityScript()
 	files[path.Join(subdir, "hooks/http.sh")] = renderSharedHTTPScript()
 	files[path.Join(subdir, "hooks/auth.sh")] = renderSharedAuthScript()
 	files[path.Join(subdir, "hooks/login.sh")] = renderLoginScript(cfg)
@@ -1218,33 +1246,257 @@ gram_enrich_identity_payload() {
   done
   IFS="$old_ifs"
 
+  # Providers can supply a platform-native fallback. The device agent remains
+  # authoritative when present because it represents the managed machine
+  # identity rather than an account self-report from the coding client.
+  if [ -z "$email" ] && type gram_hooks_provider_identity_email >/dev/null 2>&1; then
+    email="$(gram_hooks_provider_identity_email "$payload")"
+    if [[ "$email" =~ ^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$ ]]; then
+      gram_hooks_identity_debug "resolved user_email via provider account"
+    else
+      [ -n "$email" ] && gram_hooks_identity_debug "provider account returned an invalid email; ignoring it"
+      email=""
+    fi
+  fi
+
   if [ -z "$email" ]; then
-    gram_hooks_identity_debug "no user_email resolved from device agent(s) [$commands]; sending payload without attribution (server may fall back to OTEL session metadata)"
+    gram_hooks_identity_debug "no user_email resolved from device agent(s) [$commands] or provider account; sending payload without attribution (server may fall back to OTEL session metadata)"
     printf '%s' "$payload"
     return
   fi
 
   trimmed=$(printf '%s' "$payload" | sed 's/[[:space:]]*$//')
   case "$trimmed" in
-    \{*\})
-      if [[ "$trimmed" =~ \"user_email\"[[:space:]]*: ]]; then
-        printf '%s' "$trimmed" | sed -E 's|"user_email"[[:space:]]*:[[:space:]]*"[^"]*"|"user_email":"'"$email"'"|g'
-        return
-      fi
-      prefix="${trimmed%\}}"
-      if [[ "$prefix" =~ ^\{[[:space:]]*$ ]]; then
-        printf '{"user_email":"%s"}' "$email"
-      else
-        printf '%s,"user_email":"%s"}' "$prefix" "$email"
-      fi
-      ;;
+    \{*\}) ;;
     *)
       gram_hooks_identity_debug "payload is not a JSON object; cannot stamp user_email, sending unchanged"
       printf '%s' "$payload"
+      return
       ;;
   esac
+  # Only the TOP-LEVEL user_email feeds source.user_email downstream; a
+  # nested one (a tool argument, say) must be left untouched. jq sets the
+  # top-level key without disturbing nested fields. Without jq the field is
+  # appended only when absent: an existing top-level value is kept as-is
+  # rather than risk rewriting a nested tool argument with text surgery.
+  if command -v jq >/dev/null 2>&1; then
+    local stamped
+    stamped="$(printf '%s' "$trimmed" | jq -c --arg email "$email" '.user_email = $email' 2>/dev/null)" || stamped=""
+    if [ -n "$stamped" ]; then
+      printf '%s' "$stamped"
+      return
+    fi
+  fi
+  # The top-level extractor lives in hook.sh's normalization helpers; when
+  # this file is sourced standalone without them (and without jq), presence
+  # cannot be checked, so the payload is passed through untouched rather
+  # than risk appending a duplicate key.
+  if ! type gram_hooks_json_top_level_value >/dev/null 2>&1; then
+    gram_hooks_identity_debug "no jq and no JSON helpers in scope; cannot stamp user_email safely, sending unchanged"
+    printf '%s' "$trimmed"
+    return
+  fi
+  local existing_token
+  existing_token="$(gram_hooks_json_top_level_value "$trimmed" "user_email")"
+  if [ -n "$existing_token" ]; then
+    # The device identity outranks the provider's self-report (the jq path
+    # overwrites it). The normalization helper's depth-aware parser rewrites
+    # exactly one top-level key while preserving whitespace and nested tool
+    # arguments; duplicate top-level keys produce no rewrite.
+    local rewritten
+    rewritten="$(gram_hooks_json_top_level_value "$trimmed" "user_email" "$email")"
+    if [ -n "$rewritten" ] && [ "$(gram_hooks_json_top_level_value "$rewritten" "user_email")" = '"'"$email"'"' ]; then
+      printf '%s' "$rewritten"
+      return
+    fi
+    gram_hooks_identity_debug "existing top-level user_email is ambiguous; keeping it (no jq to rewrite safely)"
+    printf '%s' "$trimmed"
+    return
+  fi
+  prefix="${trimmed%\}}"
+  if [[ "$prefix" =~ ^\{[[:space:]]*$ ]]; then
+    printf '{"user_email":"%s"}' "$email"
+  else
+    printf '%s,"user_email":"%s"}' "$prefix" "$email"
+  fi
 }
 `)
+}
+
+// renderCodexIdentityScript adds a Codex-native fallback to the managed device
+// identity lookup. account/read is preferred because Codex owns its credential
+// storage abstraction (file, keychain, PAT, or agent identity). Older Codex
+// builds and incomplete account responses fall back to locally decoding both
+// JWTs in auth.json; the access token's profile claim often fills the gap left
+// by an ID token without an email claim.
+func renderCodexIdentityScript() []byte {
+	script := renderDeviceAgentIdentityScript()
+	return append(script, []byte(`
+
+gram_hooks_codex_find_binary() {
+  local candidate
+  if command -v codex >/dev/null 2>&1; then
+    command -v codex
+    return 0
+  fi
+  for candidate in \
+    "${CODEX_HOME:-${HOME:-}/.codex}/packages/standalone/current/bin/codex" \
+    "${HOME:-}/.local/bin/codex" \
+    "/usr/local/bin/codex" \
+    "/Applications/Codex.app/Contents/Resources/codex"; do
+    if [ -x "$candidate" ]; then
+      printf '%s' "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+gram_hooks_codex_json_email() {
+  local input="$1"
+  local email profile
+  email="$(gram_hooks_json_string_value "$input" "email")"
+  if [ -z "$email" ]; then
+    profile="$(gram_hooks_json_top_level_value "$input" "https://api.openai.com/profile")"
+    [ -n "$profile" ] && email="$(gram_hooks_json_string_value "$profile" "email")"
+  fi
+  printf '%s' "$email"
+}
+
+gram_hooks_codex_base64url_decode() {
+  local encoded="$1"
+  encoded="${encoded//-/+}"
+  encoded="${encoded//_//}"
+  case $((${#encoded} % 4)) in
+    2) encoded="${encoded}==" ;;
+    3) encoded="${encoded}=" ;;
+    1) return 1 ;;
+  esac
+  if printf 'dGVzdA==' | base64 --decode >/dev/null 2>&1; then
+    printf '%s' "$encoded" | base64 --decode
+  elif printf 'dGVzdA==' | base64 -D >/dev/null 2>&1; then
+    printf '%s' "$encoded" | base64 -D
+  elif command -v openssl >/dev/null 2>&1; then
+    printf '%s' "$encoded" | openssl base64 -d -A
+  else
+    return 1
+  fi
+}
+
+gram_hooks_codex_jwt_email() {
+  local jwt="$1"
+  local rest encoded claims
+  rest="${jwt#*.}"
+  [ "$rest" != "$jwt" ] || return 1
+  encoded="${rest%%.*}"
+  [ "$encoded" != "$rest" ] || return 1
+  claims="$(gram_hooks_codex_base64url_decode "$encoded" 2>/dev/null)" || return 1
+  gram_hooks_codex_json_email "$claims"
+}
+
+gram_hooks_codex_auth_file_email() {
+  local auth_file="${CODEX_HOME:-${HOME:-}/.codex}/auth.json"
+  local auth tokens token token_name email
+  [ -r "$auth_file" ] || return 1
+  auth="$(cat "$auth_file" 2>/dev/null)" || return 1
+  tokens="$(gram_hooks_json_top_level_value "$auth" "tokens")"
+  [ -n "$tokens" ] || return 1
+  # Prefer the access token because Codex puts the account profile there even
+  # when its ID token omits email. The ID token remains a compatibility fallback.
+  for token_name in access_token id_token; do
+    token="$(gram_hooks_json_string_value "$tokens" "$token_name")"
+    [ -n "$token" ] || continue
+    email="$(gram_hooks_codex_jwt_email "$token")"
+    [ -n "$email" ] && printf '%s' "$email" && return 0
+  done
+  return 1
+}
+
+gram_hooks_codex_stop_process() {
+  local pid="$1"
+  local watchdog
+  kill "$pid" >/dev/null 2>&1 || true
+  # A TERM-ignoring app-server must not turn best-effort attribution into an
+  # unbounded hook stall. The watchdog bounds wait, then is canceled when the
+  # child exits normally during the grace period.
+  (sleep 0.5; kill -9 "$pid" >/dev/null 2>&1 || true) &
+  watchdog=$!
+  wait "$pid" >/dev/null 2>&1 || true
+  kill "$watchdog" >/dev/null 2>&1 || true
+  wait "$watchdog" >/dev/null 2>&1 || true
+}
+
+gram_hooks_codex_app_server_email() {
+  local codex_bin work_dir input_fifo output_file pid elapsed timeout_tenths
+  local response result account email
+  codex_bin="$(gram_hooks_codex_find_binary)" || return 1
+  work_dir="$(mktemp -d "${TMPDIR:-/tmp}/gram-codex-identity.XXXXXX")" || return 1
+  input_fifo="$work_dir/input"
+  output_file="$work_dir/output"
+  mkfifo "$input_fifo" 2>/dev/null || { rm -rf "$work_dir"; return 1; }
+
+  "$codex_bin" app-server --stdio <"$input_fifo" >"$output_file" 2>/dev/null &
+  pid=$!
+  exec 9>"$input_fifo"
+  printf '%s\n' '{"id":71001,"method":"initialize","params":{"clientInfo":{"name":"gram_hooks","title":"Gram Hooks","version":"1.0.0"},"capabilities":{"optOutNotificationMethods":["remoteControl/status/changed"]}}}' >&9
+
+  timeout_tenths="${GRAM_CODEX_IDENTITY_TIMEOUT_TENTHS:-10}"
+  elapsed=0
+  while ! grep -q '"id"[[:space:]]*:[[:space:]]*71001' "$output_file" 2>/dev/null &&
+    kill -0 "$pid" >/dev/null 2>&1 && [ "$elapsed" -lt "$timeout_tenths" ]; do
+    sleep 0.1
+    elapsed=$((elapsed + 1))
+  done
+  if ! grep -q '"id"[[:space:]]*:[[:space:]]*71001' "$output_file" 2>/dev/null; then
+    exec 9>&-
+    gram_hooks_codex_stop_process "$pid"
+    rm -rf "$work_dir"
+    return 1
+  fi
+
+  printf '%s\n' '{"method":"initialized"}' >&9
+  printf '%s\n' '{"id":71002,"method":"account/read","params":{"refreshToken":false}}' >&9
+  elapsed=0
+  while ! grep -q '"id"[[:space:]]*:[[:space:]]*71002' "$output_file" 2>/dev/null &&
+    kill -0 "$pid" >/dev/null 2>&1 && [ "$elapsed" -lt "$timeout_tenths" ]; do
+    sleep 0.1
+    elapsed=$((elapsed + 1))
+  done
+  exec 9>&-
+  gram_hooks_codex_stop_process "$pid"
+
+  response="$(grep '"id"[[:space:]]*:[[:space:]]*71002' "$output_file" 2>/dev/null | tail -n 1)"
+  rm -rf "$work_dir"
+  [ -n "$response" ] || return 1
+  result="$(gram_hooks_json_top_level_value "$response" "result")"
+  account="$(gram_hooks_json_top_level_value "$result" "account")"
+  email="$(gram_hooks_json_string_value "$account" "email")"
+  [ -n "$email" ] || return 1
+  printf '%s' "$email"
+}
+
+gram_hooks_provider_identity_email() {
+  local payload="$1"
+  local event email
+  event="$(gram_hooks_json_string_value "$payload" "hook_event_name")"
+  [ "$event" = "SessionStart" ] || return 1
+
+  email="$(gram_hooks_codex_app_server_email)"
+  if [ -n "$email" ]; then
+    gram_hooks_identity_debug "Codex account/read returned an email"
+    printf '%s' "$email"
+    return 0
+  fi
+  email="$(gram_hooks_codex_auth_file_email)"
+  if [ -n "$email" ]; then
+    gram_hooks_identity_debug "Codex auth.json JWT fallback returned an email"
+    printf '%s' "$email"
+    return 0
+  fi
+  gram_hooks_identity_debug "Codex account/read and local JWT fallbacks returned no email"
+  return 1
+}
+`)...)
 }
 
 func renderHookRuntimeSourceSnippet() string {
@@ -1253,6 +1505,10 @@ func renderHookRuntimeSourceSnippet() string {
 . "$script_dir/http.sh"
 # shellcheck source=/dev/null
 . "$script_dir/auth.sh"
+if [ -f "$script_dir/identity.sh" ]; then
+  # shellcheck source=/dev/null
+  . "$script_dir/identity.sh"
+fi
 `
 }
 
@@ -1275,12 +1531,16 @@ func renderAuthPreflightScript(cfg GenerateConfig) []byte {
 	// In observability mode nothing may block or stall session start: auth
 	// failures exit 0, and the interactive browser login (which can wait
 	// minutes for the redirect) never runs — the in-session nudge and
-	// hooks/login.sh remain the interactive paths.
+	// hooks/login.sh remain the interactive paths. With browser login
+	// disabled the preflight is likewise never interactive: credentials come
+	// only from env, cache, or the baked org key.
 	failureExit := "2"
-	interactive := "1"
 	if cfg.ObservabilityMode {
 		failureExit = "0"
-		interactive = "0"
+	}
+	interactive := "0"
+	if cfg.BrowserLogin && !cfg.ObservabilityMode {
+		interactive = "1"
 	}
 	return fmt.Appendf(nil, `#!/usr/bin/env bash
 # Generated by Speakeasy. Do not edit — overwritten on every publish.
@@ -1293,6 +1553,7 @@ set -u
 server_url="${GRAM_HOOKS_SERVER_URL:-%s}"
 project_slug="${GRAM_HOOKS_PROJECT_SLUG:-%s}"
 %s
+gram_hooks_org_key="${GRAM_HOOKS_ORG_KEY:-%s}"
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
@@ -1307,9 +1568,11 @@ export GRAM_HOOKS_INTERACTIVE=%s
 # warning); once credentials have been established, a broken auth state
 # exits with the configured failure code from inside prepare_auth (2 blocks
 # the session start; observability mode passes 0 so nothing ever blocks).
+# With the baked org-wide key present, auth resolves without a browser and
+# session start never stalls on login.
 gram_hooks_prepare_auth "$server_url" "$project_slug" %s || true
 exit 0
-`, cfg.ServerURL, cfg.ProjectSlug, orgHintAssignment(cfg), failureExit, interactive, failureExit)
+`, cfg.ServerURL, cfg.ProjectSlug, orgHintAssignment(cfg), cfg.HooksAPIKey, failureExit, interactive, failureExit)
 }
 
 // renderLoginScript emits hooks/login.sh: the standalone interactive login
@@ -1317,6 +1580,13 @@ exit 0
 // nudge) run it directly to open the dashboard browser flow and cache a
 // hooks-scoped API key for this machine.
 func renderLoginScript(cfg GenerateConfig) []byte {
+	// With browser login disabled, login.sh stays non-interactive:
+	// gram_hooks_login then skips the browser token exchange and prints the
+	// manual GRAM_HOOKS_API_KEY instructions instead.
+	interactive := "0"
+	if cfg.BrowserLogin {
+		interactive = "1"
+	}
 	return fmt.Appendf(nil, `#!/usr/bin/env bash
 # Generated by Speakeasy. Do not edit — overwritten on every publish.
 #
@@ -1338,7 +1608,7 @@ if ! . "$script_dir/auth.sh"; then
   exit 1
 fi
 
-export GRAM_HOOKS_INTERACTIVE=1
+export GRAM_HOOKS_INTERACTIVE=%s
 export GRAM_HOOKS_LOGIN_FORCE=1
 
 if [ "${1:-}" = "--force" ]; then
@@ -1360,7 +1630,7 @@ fi
 
 echo "Speakeasy hooks authenticated (project ${GRAM_HOOKS_CACHED_PROJECT:-unset})."
 exit 0
-`, cfg.ServerURL, cfg.ProjectSlug, orgHintAssignment(cfg))
+`, cfg.ServerURL, cfg.ProjectSlug, orgHintAssignment(cfg), interactive)
 }
 
 // renderSharedAuthScript emits hooks/auth.sh: local device authentication for
@@ -1986,9 +2256,13 @@ gram_hooks_prepare_auth() {
   api_key=""
   project=""
   email=""
+  GRAM_HOOKS_AUTH_SOURCE=""
   if [ "$force" != "force" ]; then
     api_key="${GRAM_HOOKS_API_KEY:-}"
     project="${GRAM_HOOKS_PROJECT_SLUG:-}"
+    if [ -n "$api_key" ]; then
+      GRAM_HOOKS_AUTH_SOURCE="env"
+    fi
   fi
 
   if [ -z "$api_key" ]; then
@@ -2003,7 +2277,33 @@ gram_hooks_prepare_auth() {
       GRAM_HOOKS_CACHED_PROJECT=""
       GRAM_HOOKS_CACHED_EMAIL=""
     fi
-    if [ -z "${GRAM_HOOKS_CACHED_API_KEY:-}" ]; then
+    if [ -n "${GRAM_HOOKS_CACHED_API_KEY:-}" ]; then
+      GRAM_HOOKS_AUTH_SOURCE="cache"
+    elif [ -n "${gram_hooks_org_key:-}" ]; then
+      # No per-user credentials on this machine: fall back to the org-wide
+      # hooks key baked into the published plugin so events keep flowing,
+      # attributed via the payload's self-reported user_email, instead of
+      # degrading to the unauthenticated pass-through. Never cached: a later
+      # browser login upgrades this machine to per-user attribution, and a
+      # republished plugin swaps the key without stale local state.
+      #
+      # Interactive entry points (auth_preflight.sh/login.sh of a
+      # browser-sign-in-enabled render) offer the browser login FIRST, or
+      # fresh installs would silently stay on shared-key attribution
+      # forever. The org key doubles as the safety net: a declined,
+      # cooled-down, or failed login falls through to it instead of nudging
+      # or blocking, and gram_hooks_login's attempt marker keeps session
+      # starts from re-opening browser tabs.
+      if [ "${GRAM_HOOKS_INTERACTIVE:-}" = "1" ] &&
+        gram_hooks_login "$server_url" "$project_hint" &&
+        gram_hooks_read_auth "$server_url" 2>/dev/null; then
+        GRAM_HOOKS_AUTH_SOURCE="login"
+      else
+        GRAM_HOOKS_AUTH_SOURCE="org"
+        api_key="$gram_hooks_org_key"
+        project="$project_hint"
+      fi
+    else
       if ! gram_hooks_login "$server_url" "$project_hint"; then
         if [ "${GRAM_HOOKS_INTERACTIVE:-}" != "1" ] && gram_hooks_reauth_needed; then
           GRAM_HTTP_CODE=""
@@ -2021,14 +2321,17 @@ gram_hooks_prepare_auth() {
         echo "Speakeasy hooks could not read Gram authentication after login." >&2
         exit "$failure_exit"
       fi
+      GRAM_HOOKS_AUTH_SOURCE="login"
     fi
-    api_key="${GRAM_HOOKS_CACHED_API_KEY:-}"
-    # An explicit env project selection outranks the project the key was
-    # cached with; the cached project only outranks the baked default, so a
-    # login-time project choice survives sends but GRAM_HOOKS_PROJECT_SLUG
-    # still switches projects without forcing a re-login.
-    project="${GRAM_HOOKS_PROJECT_SLUG:-${GRAM_HOOKS_CACHED_PROJECT:-}}"
-    email="${GRAM_HOOKS_CACHED_EMAIL:-}"
+    if [ "$GRAM_HOOKS_AUTH_SOURCE" != "org" ]; then
+      api_key="${GRAM_HOOKS_CACHED_API_KEY:-}"
+      # An explicit env project selection outranks the project the key was
+      # cached with; the cached project only outranks the baked default, so a
+      # login-time project choice survives sends but GRAM_HOOKS_PROJECT_SLUG
+      # still switches projects without forcing a re-login.
+      project="${GRAM_HOOKS_PROJECT_SLUG:-${GRAM_HOOKS_CACHED_PROJECT:-}}"
+      email="${GRAM_HOOKS_CACHED_EMAIL:-}"
+    fi
   fi
 
   if [ -z "$project" ]; then
@@ -2082,19 +2385,64 @@ gram_hooks_post_authenticated() {
   # precedence over the cache on every send, so a re-login can never replace
   # them: a rejected configured key must fall through to the caller's non-2xx
   # handling (fail closed) rather than wipe the cache and downgrade to the
-  # never-authenticated pass-through.
+  # never-authenticated pass-through. The baked org-wide key is the same
+  # class: there is no cache to wipe and re-preparing would retry the very
+  # key that was just rejected. When the rejected key DID come from the
+  # cache, the force retry below resolves through the org-wide fallback, so
+  # one broken personal key does not stop events flowing.
   if { [ "$first_status" = "401" ] || [ "$first_status" = "403" ]; } \
     && [ -z "${GRAM_HOOKS_API_KEY:-}" ] \
+    && [ "${GRAM_HOOKS_AUTH_SOURCE:-}" != "org" ] \
     && [ "${GRAM_HOOKS_DISABLE_LOCAL_AUTH:-}" != "1" ]; then
     gram_hooks_forget_auth
     gram_hooks_mark_reauth_needed
-    if [ "${GRAM_HOOKS_INTERACTIVE:-}" != "1" ]; then
+    # Noninteractive senders surface the reconnect nudge only when there is
+    # no org-wide key to retry through; with one baked in, the forced
+    # re-prepare below resolves to it and the event still goes out.
+    if [ "${GRAM_HOOKS_INTERACTIVE:-}" != "1" ] && [ -z "${gram_hooks_org_key:-}" ]; then
       GRAM_HTTP_CODE="$first_status"
       return 79
     fi
     if ! gram_hooks_prepare_auth "$server_url" "$project_hint" "$failure_exit" force; then
       GRAM_HTTP_CODE="$first_status"
       return 78
+    fi
+    # The wiped cache held this machine's authenticated identity: the org
+    # key never attributes to its owner, and the canonical payload was built
+    # before the cache was cleared. The first prepare_auth exported the
+    # cached login email, so stamp it into source.user_email — replacing a
+    # self-reported provider email, not just filling an absent one. Under
+    # the personal key an unresolvable self-reported email fell back to the
+    # key owner (this same login identity); the shared org key has no owner
+    # fallback, so deferring to a provider email that resolves to no Gram
+    # user would run user-scoped policies with an empty user exactly on
+    # stale-cache recovery. The source object is machine-built by
+    # gram_hooks_build_canonical_payload with user_email as its final
+    # member, so the rewrite is positional, not a payload-wide search: the
+    # raw section keeps the provider's own user_email untouched.
+    if [ -n "${GRAM_HOOKS_AUTH_EMAIL:-}" ]; then
+      local stamped_email stamped_rest stamped_source stamped_head
+      stamped_email="$(printf '%s' "$GRAM_HOOKS_AUTH_EMAIL" | gram_hooks_json_escape_string)"
+      stamped_source="${payload%%'},"event":{'*}"
+      case "$stamped_source" in
+        *'"user_email":"'*)
+          stamped_head="${stamped_source%',"user_email":"'*}"
+          if [ "$stamped_head" != "$stamped_source" ]; then
+            stamped_rest="${payload#"$stamped_source"}"
+            payload="${stamped_head}"',"user_email":"'"$stamped_email"'"'"$stamped_rest"
+          else
+            echo "Speakeasy hooks: unexpected canonical source; org-key retry keeps the self-reported user_email." >&2
+          fi
+          ;;
+        *)
+          stamped_rest="${payload#'{"schema_version":"hook.ingest.v1","source":{'}"
+          if [ "$stamped_rest" != "$payload" ]; then
+            payload='{"schema_version":"hook.ingest.v1","source":{"user_email":"'"$stamped_email"'",'"$stamped_rest"
+          else
+            echo "Speakeasy hooks: unexpected canonical envelope; org-key retry sent without stamped user_email." >&2
+          fi
+          ;;
+      esac
     fi
     gram_http_post "${server_url}/rpc/hooks.ingest" "$payload" "$max_time" \
       "$@" \
@@ -2271,6 +2619,7 @@ set -u
 server_url="${GRAM_HOOKS_SERVER_URL:-%s}"
 project_slug="${GRAM_HOOKS_PROJECT_SLUG:-%s}"
 %s
+gram_hooks_org_key="${GRAM_HOOKS_ORG_KEY:-%s}"
 gram_hooks_nonblocking="%s"
 # In observability mode auth-state failures must not block either: prepare_auth
 # exits with this value on an established machine whose credentials broke.
@@ -2283,6 +2632,10 @@ provider_payload=$(cat)
 %s
 
 %s
+
+if type gram_enrich_identity_payload >/dev/null 2>&1; then
+  provider_payload="$(gram_enrich_identity_payload "$provider_payload")"
+fi
 
 hook_hostname=$(hostname 2>/dev/null || true)
 native_event="$(gram_hooks_native_event_name "$provider_payload")"
@@ -2319,7 +2672,7 @@ if [ -n "$gram_hooks_nonblocking" ]; then
   exit 0
 fi
 exit 2
-`, cfg.ServerURL, projectSlug, orgHintAssignment(cfg), nonblocking, renderHookRuntimeSourceSnippet(), renderHookPayloadNormalizationSnippet("codex"))
+`, cfg.ServerURL, projectSlug, orgHintAssignment(cfg), cfg.HooksAPIKey, nonblocking, renderHookRuntimeSourceSnippet(), renderHookPayloadNormalizationSnippet("codex"))
 	}
 
 	return fmt.Appendf(nil, `#!/usr/bin/env bash
@@ -2337,6 +2690,7 @@ set -u
 server_url="${GRAM_HOOKS_SERVER_URL:-%s}"
 project_slug="${GRAM_HOOKS_PROJECT_SLUG:-%s}"
 %s
+gram_hooks_org_key="${GRAM_HOOKS_ORG_KEY:-%s}"
 gram_hooks_nonblocking="%s"
 # In observability mode auth-state failures must not block either: prepare_auth
 # exits with this value on an established machine whose credentials broke.
@@ -2346,15 +2700,19 @@ if [ -n "$gram_hooks_nonblocking" ]; then
 fi
 
 %s
+
+%s
+
 provider_payload=$(cat)
+if type gram_enrich_identity_payload >/dev/null 2>&1; then
+  provider_payload="$(gram_enrich_identity_payload "$provider_payload")"
+fi
 if type gram_hooks_enrich_cursor_mcp_payload >/dev/null 2>&1; then
   provider_payload="$(gram_hooks_enrich_cursor_mcp_payload "$provider_payload")"
 fi
 if type gram_hooks_enrich_claude_mcp_payload >/dev/null 2>&1; then
   provider_payload="$(gram_hooks_enrich_claude_mcp_payload "$provider_payload")"
 fi
-
-%s
 
 # gram_hooks_emit_login_nudge injects a once-per-session UserPromptSubmit
 # additionalContext telling Claude the hooks are unauthenticated and where the
@@ -2481,7 +2839,7 @@ if [ -n "$gram_hooks_nonblocking" ]; then
   exit 0
 fi
 exit 2
-`, cfg.ServerURL, projectSlug, orgHintAssignment(cfg), nonblocking, renderHookRuntimeSourceSnippet()+cursorMCPEnrichment+claudeMCPEnrichment, renderHookPayloadNormalizationSnippet(platform), platform, platform, platform, platform, platform, platform, platform, platform, platform)
+`, cfg.ServerURL, projectSlug, orgHintAssignment(cfg), cfg.HooksAPIKey, nonblocking, renderHookRuntimeSourceSnippet()+cursorMCPEnrichment+claudeMCPEnrichment, renderHookPayloadNormalizationSnippet(platform), platform, platform, platform, platform, platform, platform, platform, platform, platform)
 }
 
 func renderClaudeMCPEnrichmentSnippet() string {

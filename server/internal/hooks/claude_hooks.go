@@ -627,9 +627,10 @@ func hasOptionalPluginAuth(payload *gen.ClaudePayload) bool {
 }
 
 // authorizePluginRequest validates the API key and project slug supplied
-// by a plugin-driven Claude request. Returns the auth-populated context
-// on success, or a 401 on either failure (the request explicitly tried
-// to authenticate, so we don't silently fall back to OTEL on bad creds).
+// by a plugin-driven request on the optional-auth hook endpoints (claude,
+// ingest). Returns the auth-populated context on success, or an error on
+// either failure (the request explicitly tried to authenticate, so callers
+// don't silently treat it as an unauthenticated request).
 func (s *Service) authorizePluginRequest(ctx context.Context, key, projectSlug string) (context.Context, error) {
 	keyScheme := &security.APIKeyScheme{
 		Name:           constants.KeySecurityScheme,
@@ -638,7 +639,7 @@ func (s *Service) authorizePluginRequest(ctx context.Context, key, projectSlug s
 	}
 	ctx, err := s.auth.Authorize(ctx, key, keyScheme)
 	if err != nil {
-		return ctx, fmt.Errorf("authorize claude hook api key: %w", err)
+		return ctx, fmt.Errorf("authorize hook api key: %w", err)
 	}
 	projectScheme := &security.APIKeyScheme{
 		Name:           constants.ProjectSlugSecuritySchema,
@@ -647,7 +648,7 @@ func (s *Service) authorizePluginRequest(ctx context.Context, key, projectSlug s
 	}
 	ctx, err = s.auth.Authorize(ctx, projectSlug, projectScheme)
 	if err != nil {
-		return ctx, fmt.Errorf("authorize claude hook project slug: %w", err)
+		return ctx, fmt.Errorf("authorize hook project slug: %w", err)
 	}
 	return ctx, nil
 }

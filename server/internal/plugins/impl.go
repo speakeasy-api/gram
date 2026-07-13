@@ -1329,6 +1329,7 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 				Version:           "",
 				MarketplaceName:   "",
 				ObservabilityMode: false,
+				BrowserLogin:      false,
 			}
 			result.ClaudeObservabilityPlugin = conv.PtrEmpty(ClaudeObservabilitySlug(slugCfg))
 			result.CodexObservabilityPlugin = conv.PtrEmpty(CodexObservabilitySlug(slugCfg))
@@ -1447,10 +1448,45 @@ func (s *Service) publishUpToDate(ctx context.Context, ac *contextvalues.AuthCon
 	}
 
 	// Up to date only when both components match what was last published: the MCP
-	// per-plugin fingerprints and the hooks generator version.
+	// per-plugin fingerprints, the hooks generator version, and the org-level
+	// hooks settings baked into the rendered subtree.
+	publishedCfg := decodeHooksConfig(conn.PublishedHooksConfig)
 	upToDate := maps.Equal(mcpFingerprints, decodeMCPFingerprints(conn.PublishedMcpFingerprints)) &&
-		conv.FromPGTextOrEmpty[string](conn.PublishedHooksVersion) == hooksGeneratorVersion
+		conv.FromPGTextOrEmpty[string](conn.PublishedHooksVersion) == hooksGeneratorVersion &&
+		publishedCfg != nil && *publishedCfg == hooksConfigOf(cfg)
 	return &upToDate
+}
+
+// publishedHooksConfig captures the org-level settings that shape the rendered
+// hooks subtree. It is persisted (as published_hooks_config) alongside the
+// hooks generator version so a settings flip regenerates hooks on the next
+// publish — the version alone only tracks generator code changes and would
+// otherwise carry the old rendering verbatim until an unrelated bump.
+type publishedHooksConfig struct {
+	ObservabilityMode bool `json:"observability_mode"`
+	BrowserLogin      bool `json:"browser_login"`
+}
+
+func hooksConfigOf(cfg GenerateConfig) publishedHooksConfig {
+	return publishedHooksConfig{
+		ObservabilityMode: cfg.ObservabilityMode,
+		BrowserLogin:      cfg.BrowserLogin,
+	}
+}
+
+// decodeHooksConfig parses the persisted hooks settings from a connection. It
+// returns nil on empty or malformed input, so connections that predate the
+// column (or a decode failure) are treated as "nothing matches" — the safe
+// direction, forcing a hooks regeneration that backfills a valid value.
+func decodeHooksConfig(raw []byte) *publishedHooksConfig {
+	if len(raw) == 0 {
+		return nil
+	}
+	var c publishedHooksConfig
+	if err := json.Unmarshal(raw, &c); err != nil {
+		return nil
+	}
+	return &c
 }
 
 // decodeMCPFingerprints parses the JSON per-plugin fingerprint map stored on a
@@ -1652,8 +1688,10 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	// version bumped.
 	mcpChanged := firstPublish || !input.SkipIfUnchanged ||
 		!maps.Equal(mcpFingerprints, decodeMCPFingerprints(existing.PublishedMcpFingerprints))
+	publishedCfg := decodeHooksConfig(existing.PublishedHooksConfig)
 	hooksChanged := firstPublish ||
-		conv.FromPGTextOrEmpty[string](existing.PublishedHooksVersion) != hooksGeneratorVersion
+		conv.FromPGTextOrEmpty[string](existing.PublishedHooksVersion) != hooksGeneratorVersion ||
+		publishedCfg == nil || *publishedCfg != hooksConfigOf(cfg)
 
 	if input.SkipIfUnchanged && !mcpChanged && !hooksChanged {
 		return &publishOutcome{RepoURL: repoURL, Skipped: true}, nil
@@ -1806,7 +1844,11 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	// credentials when GitHub fails. If this transaction itself fails, the
 	// published repo contains key strings with no DB records — re-publish
 	// overwrites them with fresh valid keys.
-	if err := s.persistPluginAPIKeys(ctx, input, candidates, projectName, repoOwner, repoName, pluginSlugs, mcpFingerprintsJSON, hooksGeneratorVersion); err != nil {
+	hooksConfigJSON, err := json.Marshal(hooksConfigOf(cfg))
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "marshal hooks config").LogError(ctx, s.logger)
+	}
+	if err := s.persistPluginAPIKeys(ctx, input, candidates, projectName, repoOwner, repoName, pluginSlugs, mcpFingerprintsJSON, hooksGeneratorVersion, hooksConfigJSON); err != nil {
 		if errors.Is(err, ErrGitHubRepoConflict) {
 			return nil, oops.E(oops.CodeConflict, err, "persist plugin api keys").LogWarn(ctx, s.logger)
 		}
@@ -2008,7 +2050,7 @@ func (s *Service) buildPluginAPIKeyCandidate(scope auth.APIKeyScope, purpose str
 		fullKey:   fullKey,
 		keyHash:   keyHash,
 		keyPrefix: s.keyPrefix + token[:5],
-		keyName:   fmt.Sprintf("plugins-%s-%s-%s", purpose, time.Now().UTC().Format("20060102-150405"), token[:6]),
+		keyName:   fmt.Sprintf("%s%s-%s-%s", auth.PluginAPIKeyNamePrefix, purpose, time.Now().UTC().Format("20060102-150405"), token[:6]),
 		scope:     scope,
 	}, nil
 }
@@ -2101,6 +2143,7 @@ func (s *Service) persistPluginAPIKeys(
 	pluginSlugs []string,
 	mcpFingerprintsJSON []byte,
 	hooksVersion string,
+	hooksConfigJSON []byte,
 ) error {
 	projectID := uuid.NullUUID{UUID: input.ProjectID, Valid: true}
 
@@ -2156,6 +2199,7 @@ func (s *Service) persistPluginAPIKeys(
 		MarketplaceToken:         pgtype.Text{String: candidateToken, Valid: true},
 		PublishedMcpFingerprints: mcpFingerprintsJSON,
 		PublishedHooksVersion:    conv.ToPGText(hooksVersion),
+		PublishedHooksConfig:     hooksConfigJSON,
 	}); err != nil {
 		return err
 	}
@@ -2350,13 +2394,15 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlu
 		APIKey:      "",
 		HooksAPIKey: "",
 		ProjectSlug: projectSlug,
-		// 0.1.{epoch} stays strictly above the historical 0.1.0 manifests
-		// already in users' Claude/Cursor/Codex caches, so a re-publish is
-		// always seen as a newer version and triggers a refresh.
-		Version:           fmt.Sprintf("0.1.%d", time.Now().Unix()),
+		// Milliseconds rather than seconds so publishes close together (e.g. a
+		// settings flip right after a publish) still mint distinct manifest
+		// versions; the 13-digit patch also sorts numerically above the
+		// 10-digit second epochs already in installed caches.
+		Version:           fmt.Sprintf("%d", time.Now().UnixMilli()),
 		MarketplaceName:   "",
 		IsDefaultProject:  s.isDefaultProject(ctx, projectID),
 		ObservabilityMode: false,
+		BrowserLogin:      false,
 	}
 	orgName, err := s.repo.GetOrganizationName(ctx, orgID)
 	switch {
@@ -2394,6 +2440,21 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlu
 		)
 	}
 	cfg.ObservabilityMode = observabilityMode
+	// hooks_browser_login is the org-level opt-in for the interactive browser
+	// token exchange. Off (or unreadable), the generated plugin never opens a
+	// browser: senders authenticate through env credentials, a previously
+	// cached key, or the baked org-wide key.
+	browserLogin, err := s.repo.IsOrganizationFeatureEnabled(ctx, repo.IsOrganizationFeatureEnabledParams{
+		OrganizationID: orgID,
+		FeatureName:    string(productfeatures.FeatureHooksBrowserLogin),
+	})
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to read hooks browser login flag, defaulting to no browser login",
+			attr.SlogOrganizationID(orgID),
+			attr.SlogError(err),
+		)
+	}
+	cfg.BrowserLogin = browserLogin
 	return cfg
 }
 

@@ -10,7 +10,6 @@ import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import {
   IngestHookResult,
@@ -33,7 +32,6 @@ import {
 import {
   IngestHookEventRequest,
   IngestHookEventRequest$outboundSchema,
-  IngestHookEventSecurity,
 } from "../models/operations/ingesthookevent.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
@@ -47,7 +45,6 @@ import { Result } from "../types/fp.js";
 export function hooksIngest(
   client: GramCore,
   request: IngestHookEventRequest,
-  security?: IngestHookEventSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -66,7 +63,6 @@ export function hooksIngest(
   return new APIPromise($do(
     client,
     request,
-    security,
     options,
   ));
 }
@@ -74,7 +70,6 @@ export function hooksIngest(
 async function $do(
   client: GramCore,
   request: IngestHookEventRequest,
-  security?: IngestHookEventSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
@@ -124,30 +119,15 @@ async function $do(
     ),
   }));
 
-  const requestSecurity = resolveSecurity(
-    [
-      {
-        fieldName: "Gram-Key",
-        type: "apiKey:header",
-        value: security?.apikeyHeaderGramKey,
-      },
-      {
-        fieldName: "Gram-Project",
-        type: "apiKey:header",
-        value: security?.projectSlugHeaderGramProject,
-      },
-    ],
-  );
-
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
     operationID: "ingestHookEvent",
     oAuth2Scopes: null,
 
-    resolvedSecurity: requestSecurity,
+    resolvedSecurity: null,
 
-    securitySource: security,
+    securitySource: null,
     retryConfig: options?.retries
       || client._options.retryConfig
       || { strategy: "none" },
@@ -155,7 +135,6 @@ async function $do(
   };
 
   const requestRes = client._createRequest(context, {
-    security: requestSecurity,
     method: "POST",
     baseURL: options?.serverURL,
     path: path,
