@@ -13,10 +13,10 @@ import { unwrapAsync } from "../types/fp.js";
 
 export class Tools extends ClientSDK {
   /**
-   * listResources resources
+   * listTools tools
    *
    * @remarks
-   * List all resources for a project
+   * List all tools for a project
    */
   async list(
     request?: ListToolsRequest | undefined,
