@@ -9,23 +9,28 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Type } from "@/components/ui/type";
+import { mcpServerRouteParam } from "@/lib/sources";
+import { useRoutes } from "@/routes";
+import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { RemoteMcpServerHeader } from "@gram/client/models/components/remotemcpserverheader.js";
 import { useCreateRemoteMcpServerHeaderMutation } from "@gram/client/react-query/createRemoteMcpServerHeader.js";
 import { useDeleteRemoteMcpServerHeaderMutation } from "@gram/client/react-query/deleteRemoteMcpServerHeader.js";
+import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import {
   invalidateAllRemoteMcpServerHeaders,
   useRemoteMcpServerHeaders,
 } from "@gram/client/react-query/remoteMcpServerHeaders.js";
 import { useUpdateRemoteMcpServerHeaderMutation } from "@gram/client/react-query/updateRemoteMcpServerHeader.js";
-import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
+import { Alert, Badge, Button, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { ArrowRight, Eye, EyeOff, Loader2, Plus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router";
 import { toast } from "sonner";
 
 const REDACTED_SECRET = "***";
 
-type HeaderSource = "static" | "environment" | "request";
+type HeaderSource = "static" | "request";
 
 type HeaderDraft = {
   key: string;
@@ -44,9 +49,6 @@ function headerSourceFromServer(header: RemoteMcpServerHeader): HeaderSource {
   if (header.valueFromRequestHeader) {
     return "request";
   }
-  if (header.value === "") {
-    return "environment";
-  }
   return "static";
 }
 
@@ -60,12 +62,25 @@ function headerDraftFromServer(header: RemoteMcpServerHeader): HeaderDraft {
     name: header.name,
     source,
     staticValue:
-      source === "static" && !isRedactedSecret ? (header.value ?? "") : "",
+      source === "static"
+        ? isRedactedSecret
+          ? REDACTED_SECRET
+          : (header.value ?? "")
+        : "",
     valueFromRequestHeader: header.valueFromRequestHeader ?? "",
     isRequired: header.isRequired,
     isSecret: header.isSecret,
     hadSecret: header.isSecret,
   };
+}
+
+// A saved secret shows its redacted placeholder (`***`) in the value field. As
+// long as the user leaves that placeholder untouched, we keep the existing
+// secret rather than overwriting it with the literal redaction string.
+function isUnchangedSecret(draft: HeaderDraft): boolean {
+  return (
+    draft.isSecret && draft.hadSecret && draft.staticValue === REDACTED_SECRET
+  );
 }
 
 function draftsEqual(a: HeaderDraft[], b: HeaderDraft[]): boolean {
@@ -106,12 +121,12 @@ function validateDrafts(drafts: HeaderDraft[]): string | null {
       return `Header "${name}" needs an inbound request header name.`;
     }
 
-    if (draft.source === "static") {
-      const needsValue =
-        !draft.isSecret || !draft.hadSecret || draft.staticValue.trim() !== "";
-      if (needsValue && draft.staticValue.trim() === "") {
-        return `Header "${name}" needs a static value.`;
-      }
+    if (
+      draft.source === "static" &&
+      !isUnchangedSecret(draft) &&
+      draft.staticValue.trim() === ""
+    ) {
+      return `Header "${name}" needs a static value.`;
     }
   }
 
@@ -122,11 +137,11 @@ function newHeaderDraft(): HeaderDraft {
   return {
     key: crypto.randomUUID(),
     name: "",
-    source: "environment",
+    source: "static",
     staticValue: "",
     valueFromRequestHeader: "",
     isRequired: false,
-    isSecret: false,
+    isSecret: true,
     hadSecret: false,
   };
 }
@@ -153,17 +168,7 @@ function headerDraftToWriteFields(draft: HeaderDraft): HeaderWriteFields {
     };
   }
 
-  if (draft.source === "environment") {
-    // Empty non-null value is the env-source sentinel (ADR-0002).
-    return {
-      ...base,
-      isSecret: false,
-      value: "",
-    };
-  }
-
-  const trimmedValue = draft.staticValue.trim();
-  if (draft.isSecret && trimmedValue === "" && draft.hadSecret) {
+  if (isUnchangedSecret(draft)) {
     return {
       ...base,
       isSecret: true,
@@ -177,11 +182,46 @@ function headerDraftToWriteFields(draft: HeaderDraft): HeaderWriteFields {
   };
 }
 
+// A single remote_mcps row can back several mcp_servers rows. Its headers are
+// stored on the remote, so editing them from any one MCP server silently
+// rewrites the values every sibling server sends. HeadersSectionContext tells
+// the component which surface it's rendered from so it can guard against that:
+//  - "mcp-server": rendered on an MCP server's Settings tab. When the backing
+//    remote is shared by more than one server, editing is locked and the user
+//    is pointed at the Remote MCP source, the single canonical edit surface.
+//  - "remote-mcp": rendered on the Remote MCP source page. Always editable,
+//    with an indicator listing every MCP server the change will affect.
+export type HeadersSectionContext =
+  | { kind: "mcp-server" }
+  | { kind: "remote-mcp"; linkedMcpServers: McpServer[] };
+
 export function HeadersSection({
   remoteMcpServerId,
+  context,
 }: {
   remoteMcpServerId: string;
+  context: HeadersSectionContext;
 }): JSX.Element {
+  const routes = useRoutes();
+
+  // On an MCP server's Settings tab we need to know whether the backing remote
+  // is shared before deciding to lock editing. On the Remote MCP page the
+  // caller already knows the linked servers, so skip the extra fetch there.
+  const isMcpServerContext = context.kind === "mcp-server";
+  const siblingsQuery = useMcpServers({ remoteMcpServerId }, undefined, {
+    enabled: isMcpServerContext && remoteMcpServerId !== "",
+  });
+  const linkedMcpServers = useMemo(() => {
+    if (context.kind === "remote-mcp") return context.linkedMcpServers;
+    return (siblingsQuery.data?.mcpServers ?? []).filter(
+      (server) => server.remoteMcpServerId === remoteMcpServerId,
+    );
+  }, [context, siblingsQuery.data, remoteMcpServerId]);
+
+  const sharedByOthers = linkedMcpServers.length > 1;
+  const readOnly = isMcpServerContext && sharedByOthers;
+  const siblingsLoading = isMcpServerContext && siblingsQuery.isLoading;
+
   const headersQuery = useRemoteMcpServerHeaders(
     { remoteMcpServerId },
     undefined,
@@ -218,10 +258,16 @@ export function HeadersSection({
   const saving =
     createHeader.isPending || updateHeader.isPending || deleteHeader.isPending;
   const saveDisabled =
-    !dirty || saving || validationError !== null || headersQuery.isLoading;
+    readOnly ||
+    !dirty ||
+    saving ||
+    validationError !== null ||
+    headersQuery.isLoading;
 
   const handleSave = async () => {
-    if (validationError) return;
+    // Defensive: the save/add controls are hidden in read-only mode, but a
+    // shared remote must never be mutated from an MCP server's Settings tab.
+    if (readOnly || validationError) return;
 
     const initialById = new Map(
       initialDrafts
@@ -302,19 +348,66 @@ export function HeadersSection({
   const mutationError =
     createHeader.error ?? updateHeader.error ?? deleteHeader.error;
 
+  const remoteSettingsHref = `${routes.sources.source.href(
+    "remotemcp",
+    remoteMcpServerId,
+  )}#settings`;
+
   return (
     <div className="rounded-lg border p-6">
       <Type variant="subheading" className="mb-1">
         Upstream Headers
       </Type>
       <Type muted small className="mb-4">
-        Headers sent to the remote MCP URL. Choose &ldquo;From
-        environment&rdquo; to fill the value from the environment attached to an
-        MCP server that fronts this source (header name must match the
-        environment variable).
+        Headers sent to the remote MCP URL.
       </Type>
       <Stack gap={4}>
-        {headersQuery.isLoading ? (
+        {readOnly ? (
+          <Alert variant="warning" dismissible={false}>
+            <Stack gap={2}>
+              <Type small>
+                These headers are shared by {linkedMcpServers.length} MCP
+                servers backed by this remote source. Editing them here would
+                change the values every one of those servers sends, so editing
+                is disabled on this page.
+              </Type>
+              <Link
+                to={remoteSettingsHref}
+                className="text-primary inline-flex items-center gap-1 text-sm hover:underline"
+              >
+                Edit on the Remote MCP source
+                <ArrowRight className="size-3.5" />
+              </Link>
+            </Stack>
+          </Alert>
+        ) : null}
+
+        {context.kind === "remote-mcp" && linkedMcpServers.length > 0 ? (
+          <Alert variant="warning" dismissible={false}>
+            <Stack gap={1}>
+              <Type small>
+                Changes here affect {linkedMcpServers.length}{" "}
+                {linkedMcpServers.length === 1 ? "MCP server" : "MCP servers"}{" "}
+                backed by this source:
+              </Type>
+              <div className="flex flex-wrap gap-2">
+                {linkedMcpServers.map((server) => (
+                  <Link
+                    key={server.id}
+                    to={routes.mcp.x.overview.href(mcpServerRouteParam(server))}
+                    className="no-underline"
+                  >
+                    <Badge variant="neutral" className="hover:bg-muted">
+                      <Badge.Text>{server.name || "MCP Server"}</Badge.Text>
+                    </Badge>
+                  </Link>
+                ))}
+              </div>
+            </Stack>
+          </Alert>
+        ) : null}
+
+        {headersQuery.isLoading || siblingsLoading ? (
           <Type muted small>
             Loading headers…
           </Type>
@@ -328,6 +421,7 @@ export function HeadersSection({
               <HeaderDraftRow
                 key={draft.key}
                 draft={draft}
+                readOnly={readOnly}
                 onChange={(next) =>
                   setDrafts((current) =>
                     current.map((row, rowIndex) =>
@@ -345,60 +439,65 @@ export function HeadersSection({
           </Stack>
         )}
 
-        {validationError && dirty ? (
-          <Type small className="text-destructive">
-            {validationError}
-          </Type>
-        ) : null}
+        {readOnly || siblingsLoading ? null : (
+          <>
+            {validationError && dirty ? (
+              <Type small className="text-destructive">
+                {validationError}
+              </Type>
+            ) : null}
 
-        {mutationError ? (
-          <Alert variant="error" dismissible={false}>
-            {mutationError.message}
-          </Alert>
-        ) : null}
+            {mutationError ? (
+              <Alert variant="error" dismissible={false}>
+                {mutationError.message}
+              </Alert>
+            ) : null}
 
-        <RequireScope scope="mcp:write" level="component">
-          <Button
-            variant="secondary"
-            size="md"
-            disabled={headersQuery.isLoading}
-            onClick={() =>
-              setDrafts((current) => [...current, newHeaderDraft()])
-            }
-          >
-            <Button.LeftIcon>
-              <Plus className="size-4" />
-            </Button.LeftIcon>
-            <Button.Text>Add header</Button.Text>
-          </Button>
-        </RequireScope>
+            <RequireScope scope="mcp:write" level="component">
+              <Button
+                variant="secondary"
+                size="md"
+                disabled={headersQuery.isLoading}
+                onClick={() =>
+                  setDrafts((current) => [...current, newHeaderDraft()])
+                }
+              >
+                <Button.LeftIcon>
+                  <Plus className="size-4" />
+                </Button.LeftIcon>
+                <Button.Text>Add header</Button.Text>
+              </Button>
+            </RequireScope>
 
-        <Type muted small>
-          Static secrets are redacted after save. Leave the value blank to keep
-          the current secret.
-        </Type>
+            <Type muted small>
+              Static secrets are redacted after save. Leave the redacted value
+              unchanged to keep the current secret, or replace it to set a new
+              one.
+            </Type>
 
-        <Stack direction="horizontal" gap={2}>
-          <RequireScope scope="mcp:write" level="component">
-            <Button
-              variant="primary"
-              size="md"
-              disabled={saveDisabled}
-              onClick={() => void handleSave()}
-            >
-              {saving ? (
-                <>
-                  <Button.LeftIcon>
-                    <Loader2 className="size-4 animate-spin" />
-                  </Button.LeftIcon>
-                  <Button.Text>Saving</Button.Text>
-                </>
-              ) : (
-                <Button.Text>Save</Button.Text>
-              )}
-            </Button>
-          </RequireScope>
-        </Stack>
+            <Stack direction="horizontal" gap={2}>
+              <RequireScope scope="mcp:write" level="component">
+                <Button
+                  variant="primary"
+                  size="md"
+                  disabled={saveDisabled}
+                  onClick={() => void handleSave()}
+                >
+                  {saving ? (
+                    <>
+                      <Button.LeftIcon>
+                        <Loader2 className="size-4 animate-spin" />
+                      </Button.LeftIcon>
+                      <Button.Text>Saving</Button.Text>
+                    </>
+                  ) : (
+                    <Button.Text>Save</Button.Text>
+                  )}
+                </Button>
+              </RequireScope>
+            </Stack>
+          </>
+        )}
       </Stack>
     </div>
   );
@@ -406,18 +505,20 @@ export function HeadersSection({
 
 function HeaderDraftRow({
   draft,
+  readOnly,
   onChange,
   onRemove,
 }: {
   draft: HeaderDraft;
+  readOnly: boolean;
   onChange: (draft: HeaderDraft) => void;
   onRemove: () => void;
 }): JSX.Element {
-  const showSecretPlaceholder =
-    draft.source === "static" &&
-    draft.isSecret &&
-    draft.hadSecret &&
-    draft.staticValue === "";
+  const [revealed, setRevealed] = useState(false);
+  // A saved secret is shown as its redacted placeholder — there's nothing to
+  // reveal, so hide the toggle until the user replaces it with a new value.
+  const isSavedSecret = draft.staticValue === REDACTED_SECRET;
+  const showRevealToggle = draft.isSecret && !isSavedSecret;
 
   return (
     <div className="rounded-md border p-4">
@@ -429,6 +530,7 @@ function HeaderDraftRow({
             </Type>
             <Input
               value={draft.name}
+              disabled={readOnly}
               onChange={(value) => onChange({ ...draft, name: value })}
               placeholder="Authorization"
             />
@@ -439,6 +541,7 @@ function HeaderDraftRow({
             </Type>
             <Select
               value={draft.source}
+              disabled={readOnly}
               onValueChange={(value) => {
                 const source = value as HeaderSource;
                 onChange({
@@ -452,25 +555,26 @@ function HeaderDraftRow({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="environment">From environment</SelectItem>
                 <SelectItem value="static">Static value</SelectItem>
                 <SelectItem value="request">From request header</SelectItem>
               </SelectContent>
             </Select>
           </div>
-          <RequireScope scope="mcp:write" level="component">
-            <Button
-              variant="tertiary"
-              size="md"
-              className="mt-6 shrink-0"
-              onClick={onRemove}
-              aria-label={`Remove header ${draft.name || "row"}`}
-            >
-              <Button.LeftIcon>
-                <Trash2 className="size-4" />
-              </Button.LeftIcon>
-            </Button>
-          </RequireScope>
+          {readOnly ? null : (
+            <RequireScope scope="mcp:write" level="component">
+              <Button
+                variant="tertiary"
+                size="md"
+                className="mt-6 shrink-0"
+                onClick={onRemove}
+                aria-label={`Remove header ${draft.name || "row"}`}
+              >
+                <Button.LeftIcon>
+                  <Trash2 className="size-4" />
+                </Button.LeftIcon>
+              </Button>
+            </RequireScope>
+          )}
         </Stack>
 
         {draft.source === "static" ? (
@@ -480,14 +584,34 @@ function HeaderDraftRow({
             </Type>
             <Input
               value={draft.staticValue}
+              disabled={readOnly}
               onChange={(value) => onChange({ ...draft, staticValue: value })}
-              placeholder={
-                showSecretPlaceholder
-                  ? "Leave blank to keep current secret"
-                  : "Bearer …"
-              }
-              type={draft.isSecret ? "password" : "text"}
-            />
+              onFocus={(event) => {
+                // Editing a redacted secret should replace it, not append to
+                // the `***` placeholder. Select it so the first keystroke wins.
+                if (draft.staticValue === REDACTED_SECRET) {
+                  event.currentTarget.select();
+                }
+              }}
+              placeholder="Bearer …"
+              type={showRevealToggle && !revealed ? "password" : "text"}
+              className={showRevealToggle ? "pr-10" : undefined}
+            >
+              {showRevealToggle ? (
+                <button
+                  type="button"
+                  onClick={() => setRevealed((current) => !current)}
+                  className="text-muted-foreground hover:text-foreground absolute top-2.5 right-3"
+                  aria-label={revealed ? "Hide value" : "Show value"}
+                >
+                  {revealed ? (
+                    <EyeOff className="size-4" />
+                  ) : (
+                    <Eye className="size-4" />
+                  )}
+                </button>
+              ) : null}
+            </Input>
           </div>
         ) : null}
 
@@ -498,6 +622,7 @@ function HeaderDraftRow({
             </Type>
             <Input
               value={draft.valueFromRequestHeader}
+              disabled={readOnly}
               onChange={(value) =>
                 onChange({ ...draft, valueFromRequestHeader: value })
               }
@@ -510,6 +635,7 @@ function HeaderDraftRow({
           <label className="flex items-center gap-2">
             <Checkbox
               checked={draft.isRequired}
+              disabled={readOnly}
               onCheckedChange={(checked) =>
                 onChange({ ...draft, isRequired: checked === true })
               }
@@ -520,6 +646,7 @@ function HeaderDraftRow({
             <label className="flex items-center gap-2">
               <Checkbox
                 checked={draft.isSecret}
+                disabled={readOnly}
                 onCheckedChange={(checked) =>
                   onChange({ ...draft, isSecret: checked === true })
                 }

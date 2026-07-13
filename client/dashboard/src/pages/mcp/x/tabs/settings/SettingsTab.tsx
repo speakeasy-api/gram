@@ -8,7 +8,7 @@ import {
 } from "./sections/authentication/AuthenticationSection";
 import { BrandingSection } from "./sections/BrandingSection";
 import { DangerZoneSection } from "./sections/DangerZoneSection";
-import { EnvironmentSection } from "./sections/EnvironmentSection";
+import { HeadersSection } from "./sections/HeadersSection";
 import { PublishingSection } from "./sections/PublishingSection";
 import {
   MCP_SERVER_URL_SECTION_ID,
@@ -58,7 +58,12 @@ export function SettingsTab({
         isLoadingEndpoints={isLoadingEndpoints}
       />
       <AuthenticationSection mcpServer={mcpServer} />
-      <EnvironmentSection mcpServer={mcpServer} />
+      {mcpServer.remoteMcpServerId ? (
+        <HeadersSection
+          remoteMcpServerId={mcpServer.remoteMcpServerId}
+          context={{ kind: "mcp-server" }}
+        />
+      ) : null}
       <ToolFilteringSection mcpServer={mcpServer} />
       <PublishingSection mcpServer={mcpServer} endpoints={endpoints} />
       <DangerZoneSection mcpServer={mcpServer} endpoints={endpoints} />
