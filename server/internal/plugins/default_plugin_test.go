@@ -30,6 +30,13 @@ func TestEnsureDefaultPlugin_CreatesWhenMissing(t *testing.T) {
 	require.Equal(t, "Default", result.Plugin.Name)
 	require.Equal(t, "default", result.Plugin.Slug)
 	require.Equal(t, pgtype.Bool{Bool: true, Valid: true}, result.Plugin.IsDefault)
+
+	// A freshly-created Default plugin is assigned to the org wildcard so it
+	// delivers to everyone under agent.getPlugins' per-principal scoping.
+	assignments, err := pluginsrepo.New(tx).ListPluginAssignments(ctx, result.Plugin.ID)
+	require.NoError(t, err)
+	require.Len(t, assignments, 1)
+	require.Equal(t, "*", assignments[0].PrincipalUrn)
 }
 
 func TestEnsureDefaultPlugin_ReturnsExistingWhenPresent(t *testing.T) {

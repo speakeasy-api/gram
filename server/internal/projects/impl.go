@@ -207,6 +207,18 @@ func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectP
 		return nil, oops.E(oops.CodeUnexpected, err, "error creating default plugin").LogError(ctx, s.logger)
 	}
 
+	// Default the Default plugin to the org wildcard so it delivers to every
+	// member: agent.getPlugins scopes delivery by assignment, so without this the
+	// auto-provisioned plugin (where enabled servers auto-attach) would reach no
+	// one. Admins can narrow the audience later from the plugin's assignment UI.
+	if _, err := plr.AddPluginAssignment(ctx, pluginsrepo.AddPluginAssignmentParams{
+		PluginID:       defaultPlugin.ID,
+		OrganizationID: payload.OrganizationID,
+		PrincipalUrn:   urn.PrincipalWildcard,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error assigning default plugin").LogError(ctx, s.logger)
+	}
+
 	if err := s.audit.LogPluginCreate(ctx, dbtx, audit.LogPluginCreateEvent{
 		OrganizationID:   payload.OrganizationID,
 		ProjectID:        prj.ID,
