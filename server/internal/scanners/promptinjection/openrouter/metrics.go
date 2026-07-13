@@ -43,7 +43,12 @@ func newMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *metric
 		meterJudgeDuration,
 		metric.WithDescription("Duration of a prompt-injection judge completion call in seconds"),
 		metric.WithUnit("s"),
-		metric.WithExplicitBucketBoundaries(0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60),
+		// Buckets skew toward the 10s call timeout (judgeTimeout): sub-0.5s
+		// resolution is useless when a stuck call is capped at 10s, so those
+		// boundaries are traded for finer resolution as latency approaches the
+		// timeout. The explicit 10s boundary means timed-out calls pile into the
+		// (9, 10] bucket with outcome=timeout.
+		metric.WithExplicitBucketBoundaries(0.5, 1, 2, 3, 5, 7.5, 9, 10, 15, 30, 60),
 	)
 	if err != nil {
 		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterJudgeDuration), attr.SlogError(err))
