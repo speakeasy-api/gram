@@ -245,7 +245,9 @@ func (p *PromoteStagedTelemetry) Do(ctx context.Context, args PromoteStagedTelem
 			// immediately instead of waiting out the TTL. Rows that did commit
 			// before the error are caught by the existence guard on the retry,
 			// so releasing cannot cause a double insert.
-			p.releaseClaims(ctx, args.ProjectID.String(), claimedIDs)
+			releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+			p.releaseClaims(releaseCtx, args.ProjectID.String(), claimedIDs)
+			cancel()
 			return nil, fmt.Errorf("insert promoted telemetry logs: %w", err)
 		}
 		deleteIDs = append(deleteIDs, claimedIDs...)
