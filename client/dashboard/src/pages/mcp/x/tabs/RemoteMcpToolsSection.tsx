@@ -33,10 +33,8 @@ type RemoteMcpToolsSectionProps = {
   isResolvingUrl: boolean;
   /** The mcp_server id, used to mint the user-session JWT. */
   mcpServerId: string | undefined;
-  /** Whether the server is issuer-gated (explicitly or implicitly). */
+  /** Whether the server is issuer-gated (has a user_session_issuer). */
   isIssuerGated: boolean;
-  /** Explicit issuer id (undefined when implicit); keys the token cache. */
-  userSessionIssuerId: string | undefined;
 };
 
 /**
@@ -107,14 +105,9 @@ function RemoteMcpToolsSectionInner({
   isResolvingUrl,
   mcpServerId,
   isIssuerGated,
-  userSessionIssuerId,
 }: RemoteMcpToolsSectionProps): JSX.Element {
   const { accessToken, isLoading: isTokenLoading } =
-    useRemoteMcpUserSessionToken({
-      mcpServerId,
-      isIssuerGated,
-      userSessionIssuerId,
-    });
+    useRemoteMcpUserSessionToken({ mcpServerId, isIssuerGated });
 
   // Issuer-gated servers must wait for the JWT before connecting, otherwise the
   // unauthenticated request 401s and caches a spurious `needsAuth`.

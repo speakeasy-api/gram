@@ -24,15 +24,9 @@ export interface UseRemoteMcpUserSessionTokenResult {
 export function useRemoteMcpUserSessionToken({
   mcpServerId,
   isIssuerGated,
-  userSessionIssuerId,
 }: {
   mcpServerId: string | undefined;
   isIssuerGated: boolean;
-  /**
-   * Explicit issuer id, or undefined when implicitly gated. Part of the
-   * query key so issuer changes drop cached JWTs with a stale audience.
-   */
-  userSessionIssuerId: string | undefined;
 }): UseRemoteMcpUserSessionTokenResult {
   const session = useSession();
   const project = useProject();
@@ -46,7 +40,6 @@ export function useRemoteMcpUserSessionToken({
       project.id,
       mcpServerId,
       session.user.id,
-      userSessionIssuerId ?? "implicit",
     ],
     queryFn: async () => {
       if (!mcpServerId) return null;

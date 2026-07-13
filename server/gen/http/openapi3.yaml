@@ -56448,9 +56448,6 @@ components:
                 authn_challenge_mode:
                     type: string
                     description: chain | interactive.
-                classification:
-                    type: string
-                    description: custom | project_default_idp. project_default_idp is the auto-provisioned built-in Gram issuer and cannot be edited or deleted.
                 created_at:
                     type: string
                     format: date-time
@@ -56479,7 +56476,6 @@ components:
                 - slug
                 - authn_challenge_mode
                 - session_duration_hours
-                - classification
                 - created_at
                 - updated_at
         UserSummary:

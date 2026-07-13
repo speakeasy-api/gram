@@ -15,7 +15,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
-	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -138,27 +137,6 @@ func TestDeleteUserSessionIssuer_ConflictWithActiveToolset(t *testing.T) {
 		ProjectID: *authCtx.ProjectID,
 	})
 	require.NoError(t, err, "issuer must remain active when deletion is rejected")
-}
-
-func TestDeleteUserSessionIssuer_ProjectDefaultRejected(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-
-	issuer, err := usersessions.GetOrCreateDefaultIssuer(ctx, ti.conn, *authCtx.ProjectID)
-	require.NoError(t, err)
-	require.Equal(t, usersessions.ClassificationProjectDefaultIDP, issuer.Classification)
-
-	err = ti.service.DeleteUserSessionIssuer(ctx, &gen.DeleteUserSessionIssuerPayload{
-		ID:               issuer.ID.String(),
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
-	})
-	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
 func TestDeleteUserSessionIssuer_BadID(t *testing.T) {

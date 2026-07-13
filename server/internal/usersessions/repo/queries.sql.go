@@ -1361,62 +1361,6 @@ func (q *Queries) UpdateUserSessionIssuer(ctx context.Context, arg UpdateUserSes
 	return i, err
 }
 
-const upsertDefaultUserSessionIssuer = `-- name: UpsertDefaultUserSessionIssuer :one
-INSERT INTO user_session_issuers (
-    id,
-    project_id,
-    slug,
-    authn_challenge_mode,
-    session_duration,
-    classification
-)
-VALUES (
-    $1,
-    $2,
-    $3,
-    $4,
-    $5,
-    'project_default_idp'
-)
-ON CONFLICT (id) DO UPDATE SET deleted_at = NULL, updated_at = clock_timestamp()
-RETURNING id, project_id, slug, authn_challenge_mode, session_duration, classification, created_at, updated_at, deleted_at, deleted
-`
-
-type UpsertDefaultUserSessionIssuerParams struct {
-	ID                 uuid.UUID
-	ProjectID          uuid.UUID
-	Slug               string
-	AuthnChallengeMode string
-	SessionDuration    pgtype.Interval
-}
-
-// Keyed on the caller-supplied deterministic id (usersessions.DefaultIssuerID)
-// so it is idempotent and resurrects a soft-deleted row. Race-safe: concurrent
-// first touches both land on the same id. Always classified project_default_idp.
-func (q *Queries) UpsertDefaultUserSessionIssuer(ctx context.Context, arg UpsertDefaultUserSessionIssuerParams) (UserSessionIssuer, error) {
-	row := q.db.QueryRow(ctx, upsertDefaultUserSessionIssuer,
-		arg.ID,
-		arg.ProjectID,
-		arg.Slug,
-		arg.AuthnChallengeMode,
-		arg.SessionDuration,
-	)
-	var i UserSessionIssuer
-	err := row.Scan(
-		&i.ID,
-		&i.ProjectID,
-		&i.Slug,
-		&i.AuthnChallengeMode,
-		&i.SessionDuration,
-		&i.Classification,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
-	)
-	return i, err
-}
-
 const userSessionIssuerHasActiveOwner = `-- name: UserSessionIssuerHasActiveOwner :one
 SELECT EXISTS (
     SELECT 1

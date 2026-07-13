@@ -12,7 +12,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/usersessions"
 )
 
 func TestUpdateUserSessionIssuer(t *testing.T) {
@@ -52,31 +51,6 @@ func TestUpdateUserSessionIssuer(t *testing.T) {
 	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionUserSessionIssuerUpdate)
 	require.NoError(t, err)
 	require.Equal(t, before+1, after)
-}
-
-func TestUpdateUserSessionIssuer_ProjectDefaultRejected(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-
-	issuer, err := usersessions.GetOrCreateDefaultIssuer(ctx, ti.conn, *authCtx.ProjectID)
-	require.NoError(t, err)
-
-	newSlug := "renamed-default"
-	_, err = ti.service.UpdateUserSessionIssuer(ctx, &gen.UpdateUserSessionIssuerPayload{
-		SessionToken:         nil,
-		ApikeyToken:          nil,
-		ProjectSlugInput:     nil,
-		ID:                   issuer.ID.String(),
-		Slug:                 &newSlug,
-		AuthnChallengeMode:   nil,
-		SessionDurationHours: nil,
-	})
-	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
 func TestUpdateUserSessionIssuer_NotFound(t *testing.T) {

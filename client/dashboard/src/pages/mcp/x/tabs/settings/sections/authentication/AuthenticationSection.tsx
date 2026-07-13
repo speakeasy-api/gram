@@ -7,7 +7,6 @@ import {
 } from "@/components/ui/field";
 import { Type } from "@/components/ui/type";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
-import { CheckCircle } from "lucide-react";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { useRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { useUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
@@ -157,22 +156,8 @@ export function AuthenticationSectionBody({
     setDeleteOpen(true);
   };
 
-  const implicitlyGated = target.implicitlyGated;
-
   let authenticationFields: ReactNode;
-  if (!issuerConfigured && implicitlyGated) {
-    // Private remote/tunneled servers with no explicit issuer are already
-    // secured by the built-in Gram issuer. Surface that as the default, and
-    // still let operators layer an upstream identity provider on top.
-    authenticationFields = (
-      <BuiltInAuthenticationField
-        probeStatus={probeStatus}
-        hasDiscoveredAuthorizationServer={!!authorizationServer}
-        onUseDiscovered={() => openSheet(authorizationServer)}
-        onStartManual={() => openSheet(undefined)}
-      />
-    );
-  } else if (!issuerConfigured) {
+  if (!issuerConfigured) {
     authenticationFields = (
       <IdentityProviderSetupField
         probeStatus={probeStatus}
@@ -264,47 +249,6 @@ function IdentityProviderSetupField({
         Clients authenticate through this provider before they can use server
         functionality.
       </FieldDescription>
-    </Field>
-  );
-}
-
-// BuiltInAuthenticationField is shown for implicitly-gated servers: Gram's
-// project-default issuer already secures the endpoint, so it presents that as
-// a secured state (mirroring the /mcp "Login Secured" card) while still
-// offering to attach an upstream identity provider on top.
-function BuiltInAuthenticationField({
-  probeStatus,
-  hasDiscoveredAuthorizationServer,
-  onUseDiscovered,
-  onStartManual,
-}: {
-  probeStatus: ProtectedResourceProbeStatus;
-  hasDiscoveredAuthorizationServer: boolean;
-  onUseDiscovered: () => void;
-  onStartManual: () => void;
-}) {
-  return (
-    <Field>
-      <FieldLabel>Authentication</FieldLabel>
-      <div className="border-success-softest bg-success-softest rounded-lg border border-dashed p-8 text-center">
-        <p className="text-success-foreground mb-1">
-          <CheckCircle className="text-success-foreground mx-auto mb-1 h-5 w-5" />
-          Login Secured
-        </p>
-        <p className="text-success-foreground text-sm">
-          Users authenticate with Gram before accessing this MCP server.
-        </p>
-      </div>
-      <FieldDescription>
-        Gram secures this server by default. Optionally attach an upstream
-        identity provider so users also sign in to that provider.
-      </FieldDescription>
-      <AuthenticationSetupActions
-        probeStatus={probeStatus}
-        hasDiscoveredAuthorizationServer={hasDiscoveredAuthorizationServer}
-        onUseDiscovered={onUseDiscovered}
-        onStartManual={onStartManual}
-      />
     </Field>
   );
 }

@@ -1,5 +1,4 @@
 import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
-import { isImplicitlyGated } from "@/lib/mcpOAuth";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { RemoteMcpToolsSection } from "./RemoteMcpToolsSection";
@@ -26,10 +25,7 @@ export function ToolsTab({
         mcpUrl={mcpUrl}
         isResolvingUrl={loading}
         mcpServerId={mcpServer.id}
-        isIssuerGated={
-          !!mcpServer.userSessionIssuerId || isImplicitlyGated(mcpServer)
-        }
-        userSessionIssuerId={mcpServer.userSessionIssuerId}
+        isIssuerGated={!!mcpServer.userSessionIssuerId}
       />
     </div>
   );

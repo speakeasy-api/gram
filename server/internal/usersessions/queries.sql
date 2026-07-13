@@ -13,29 +13,6 @@ VALUES (
 )
 RETURNING *;
 
--- name: UpsertDefaultUserSessionIssuer :one
--- Keyed on the caller-supplied deterministic id (usersessions.DefaultIssuerID)
--- so it is idempotent and resurrects a soft-deleted row. Race-safe: concurrent
--- first touches both land on the same id. Always classified project_default_idp.
-INSERT INTO user_session_issuers (
-    id,
-    project_id,
-    slug,
-    authn_challenge_mode,
-    session_duration,
-    classification
-)
-VALUES (
-    @id,
-    @project_id,
-    @slug,
-    @authn_challenge_mode,
-    @session_duration,
-    'project_default_idp'
-)
-ON CONFLICT (id) DO UPDATE SET deleted_at = NULL, updated_at = clock_timestamp()
-RETURNING *;
-
 -- name: GetUserSessionIssuerByID :one
 SELECT *
 FROM user_session_issuers

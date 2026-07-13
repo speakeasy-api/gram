@@ -16,7 +16,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -223,18 +222,8 @@ func (s *Service) resolveServerMintTarget(ctx context.Context, serverIDStr strin
 		return nil, oops.E(oops.CodeUnexpected, err, "load mcp server").LogError(ctx, s.logger)
 	}
 
-	issuerID := server.UserSessionIssuerID.UUID
 	if !server.UserSessionIssuerID.Valid {
-		// Implicitly gated servers mint against the project-default
-		// issuer, materialised on first touch.
-		if !mcpservers.EligibleForImplicitIssuer(&server) {
-			return nil, oops.E(oops.CodeBadRequest, nil, "mcp server is not issuer-gated; minting a user-session JWT is only meaningful for issuer-gated servers").LogError(ctx, s.logger)
-		}
-		issuer, ierr := GetOrCreateDefaultIssuer(ctx, s.db, projectID)
-		if ierr != nil {
-			return nil, oops.E(oops.CodeUnexpected, ierr, "resolve implicit user session issuer").LogError(ctx, s.logger)
-		}
-		issuerID = issuer.ID
+		return nil, oops.E(oops.CodeBadRequest, nil, "mcp server is not issuer-gated; minting a user-session JWT is only meaningful for issuer-gated servers").LogError(ctx, s.logger)
 	}
 	if server.Slug.String == "" {
 		return nil, oops.E(oops.CodeInvariantViolation, nil, "issuer-gated mcp server has no slug").LogError(ctx, s.logger)
@@ -246,8 +235,8 @@ func (s *Service) resolveServerMintTarget(ctx context.Context, serverIDStr strin
 	}
 
 	return &mintTarget{
-		issuerID:   issuerID,
-		audience:   urn.NewUserSessionIssuer(issuerID).String(),
+		issuerID:   server.UserSessionIssuerID.UUID,
+		audience:   urn.NewUserSessionIssuer(server.UserSessionIssuerID.UUID).String(),
 		issuerURL:  issuerURL,
 		resourceID: server.ID.String(),
 		logAttr:    attr.SlogMcpServerID(server.ID.String()),

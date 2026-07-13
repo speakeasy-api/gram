@@ -241,7 +241,6 @@ var UserSessionIssuer = Type("UserSessionIssuer", func() {
 	Attribute("slug", String, "Project-unique slug.")
 	Attribute("authn_challenge_mode", String, "chain | interactive.")
 	Attribute("session_duration_hours", Int, "Issued user session lifetime, in hours.")
-	Attribute("classification", String, "custom | project_default_idp. project_default_idp is the auto-provisioned built-in Gram issuer and cannot be edited or deleted.")
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
 	})
@@ -249,7 +248,7 @@ var UserSessionIssuer = Type("UserSessionIssuer", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "project_id", "slug", "authn_challenge_mode", "session_duration_hours", "classification", "created_at", "updated_at")
+	Required("id", "project_id", "slug", "authn_challenge_mode", "session_duration_hours", "created_at", "updated_at")
 })
 
 var ListUserSessionIssuersResult = Type("ListUserSessionIssuersResult", func() {

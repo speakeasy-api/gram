@@ -59,12 +59,9 @@ type CreateUserSessionIssuerResponseBody struct {
 	// chain | interactive.
 	AuthnChallengeMode *string `form:"authn_challenge_mode,omitempty" json:"authn_challenge_mode,omitempty" xml:"authn_challenge_mode,omitempty"`
 	// Issued user session lifetime, in hours.
-	SessionDurationHours *int `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
-	// custom | project_default_idp. project_default_idp is the auto-provisioned
-	// built-in Gram issuer and cannot be edited or deleted.
-	Classification *string `form:"classification,omitempty" json:"classification,omitempty" xml:"classification,omitempty"`
-	CreatedAt      *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt      *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	SessionDurationHours *int    `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
+	CreatedAt            *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt            *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // UpdateUserSessionIssuerResponseBody is the type of the "userSessionIssuers"
@@ -79,12 +76,9 @@ type UpdateUserSessionIssuerResponseBody struct {
 	// chain | interactive.
 	AuthnChallengeMode *string `form:"authn_challenge_mode,omitempty" json:"authn_challenge_mode,omitempty" xml:"authn_challenge_mode,omitempty"`
 	// Issued user session lifetime, in hours.
-	SessionDurationHours *int `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
-	// custom | project_default_idp. project_default_idp is the auto-provisioned
-	// built-in Gram issuer and cannot be edited or deleted.
-	Classification *string `form:"classification,omitempty" json:"classification,omitempty" xml:"classification,omitempty"`
-	CreatedAt      *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt      *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	SessionDurationHours *int    `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
+	CreatedAt            *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt            *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // ListUserSessionIssuersResponseBody is the type of the "userSessionIssuers"
@@ -107,12 +101,9 @@ type GetUserSessionIssuerResponseBody struct {
 	// chain | interactive.
 	AuthnChallengeMode *string `form:"authn_challenge_mode,omitempty" json:"authn_challenge_mode,omitempty" xml:"authn_challenge_mode,omitempty"`
 	// Issued user session lifetime, in hours.
-	SessionDurationHours *int `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
-	// custom | project_default_idp. project_default_idp is the auto-provisioned
-	// built-in Gram issuer and cannot be edited or deleted.
-	Classification *string `form:"classification,omitempty" json:"classification,omitempty" xml:"classification,omitempty"`
-	CreatedAt      *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt      *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	SessionDurationHours *int    `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
+	CreatedAt            *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt            *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // MigrateLegacyGramRegistrationsResponseBody is the type of the
@@ -1276,12 +1267,9 @@ type UserSessionIssuerResponseBody struct {
 	// chain | interactive.
 	AuthnChallengeMode *string `form:"authn_challenge_mode,omitempty" json:"authn_challenge_mode,omitempty" xml:"authn_challenge_mode,omitempty"`
 	// Issued user session lifetime, in hours.
-	SessionDurationHours *int `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
-	// custom | project_default_idp. project_default_idp is the auto-provisioned
-	// built-in Gram issuer and cannot be edited or deleted.
-	Classification *string `form:"classification,omitempty" json:"classification,omitempty" xml:"classification,omitempty"`
-	CreatedAt      *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt      *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	SessionDurationHours *int    `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
+	CreatedAt            *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt            *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // NewCreateUserSessionIssuerRequestBody builds the HTTP request body from the
@@ -1329,7 +1317,6 @@ func NewCreateUserSessionIssuerUserSessionIssuerOK(body *CreateUserSessionIssuer
 		Slug:                 *body.Slug,
 		AuthnChallengeMode:   *body.AuthnChallengeMode,
 		SessionDurationHours: *body.SessionDurationHours,
-		Classification:       *body.Classification,
 		CreatedAt:            *body.CreatedAt,
 		UpdatedAt:            *body.UpdatedAt,
 	}
@@ -1496,7 +1483,6 @@ func NewUpdateUserSessionIssuerUserSessionIssuerOK(body *UpdateUserSessionIssuer
 		Slug:                 *body.Slug,
 		AuthnChallengeMode:   *body.AuthnChallengeMode,
 		SessionDurationHours: *body.SessionDurationHours,
-		Classification:       *body.Classification,
 		CreatedAt:            *body.CreatedAt,
 		UpdatedAt:            *body.UpdatedAt,
 	}
@@ -1831,7 +1817,6 @@ func NewGetUserSessionIssuerUserSessionIssuerOK(body *GetUserSessionIssuerRespon
 		Slug:                 *body.Slug,
 		AuthnChallengeMode:   *body.AuthnChallengeMode,
 		SessionDurationHours: *body.SessionDurationHours,
-		Classification:       *body.Classification,
 		CreatedAt:            *body.CreatedAt,
 		UpdatedAt:            *body.UpdatedAt,
 	}
@@ -2320,9 +2305,6 @@ func ValidateCreateUserSessionIssuerResponseBody(body *CreateUserSessionIssuerRe
 	if body.SessionDurationHours == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("session_duration_hours", "body"))
 	}
-	if body.Classification == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("classification", "body"))
-	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -2361,9 +2343,6 @@ func ValidateUpdateUserSessionIssuerResponseBody(body *UpdateUserSessionIssuerRe
 	}
 	if body.SessionDurationHours == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("session_duration_hours", "body"))
-	}
-	if body.Classification == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("classification", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
@@ -2419,9 +2398,6 @@ func ValidateGetUserSessionIssuerResponseBody(body *GetUserSessionIssuerResponse
 	}
 	if body.SessionDurationHours == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("session_duration_hours", "body"))
-	}
-	if body.Classification == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("classification", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
@@ -3923,9 +3899,6 @@ func ValidateUserSessionIssuerResponseBody(body *UserSessionIssuerResponseBody) 
 	}
 	if body.SessionDurationHours == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("session_duration_hours", "body"))
-	}
-	if body.Classification == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("classification", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
