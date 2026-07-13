@@ -883,7 +883,8 @@ func TestServePublic_McpEndpoint_RemoteBacked_EnvSourcedHeader_FillsFromAttached
 	t.Cleanup(upstream.Close)
 
 	endpointSlug := "endpoint-" + uuid.NewString()
-	mcpServer, remoteServer := createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, upstream.URL, endpointSlug, "public", uuid.Nil)
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
+	mcpServer, remoteServer := createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, upstream.URL, endpointSlug, "public", issuerID)
 	createEnvSourcedRemoteHeader(t, ctx, ti.conn, *authCtx.ProjectID, remoteServer.ID, true)
 
 	envID := seedEnvironmentWithEntries(t, ctx, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, map[string]string{
@@ -892,7 +893,8 @@ func TestServePublic_McpEndpoint_RemoteBacked_EnvSourcedHeader_FillsFromAttached
 	})
 	attachEnvironmentToMcpServer(t, ctx, ti.conn, *authCtx.ProjectID, mcpServer, envID)
 
-	w, err := servePublicHTTP(t, ctx, ti, endpointSlug, makeInitializeBody(), "", nil)
+	token := mintIssuerBearerForEndpoint(t, ctx, ti, endpointSlug, mcpServer, authCtx.ActiveOrganizationID)
+	w, err := servePublicHTTP(t, ctx, ti, endpointSlug, makeInitializeBody(), token, nil)
 	<-done
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
@@ -920,7 +922,8 @@ func TestServePublic_McpEndpoint_RemoteBacked_RequiredEnvHeaderMissing_FailsClos
 	t.Cleanup(upstream.Close)
 
 	endpointSlug := "endpoint-" + uuid.NewString()
-	mcpServer, remoteServer := createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, upstream.URL, endpointSlug, "public", uuid.Nil)
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
+	mcpServer, remoteServer := createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, upstream.URL, endpointSlug, "public", issuerID)
 	createEnvSourcedRemoteHeader(t, ctx, ti.conn, *authCtx.ProjectID, remoteServer.ID, true)
 
 	envID := seedEnvironmentWithEntries(t, ctx, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, map[string]string{
@@ -928,7 +931,8 @@ func TestServePublic_McpEndpoint_RemoteBacked_RequiredEnvHeaderMissing_FailsClos
 	})
 	attachEnvironmentToMcpServer(t, ctx, ti.conn, *authCtx.ProjectID, mcpServer, envID)
 
-	_, err := servePublicHTTP(t, ctx, ti, endpointSlug, makeInitializeBody(), "", nil)
+	token := mintIssuerBearerForEndpoint(t, ctx, ti, endpointSlug, mcpServer, authCtx.ActiveOrganizationID)
+	_, err := servePublicHTTP(t, ctx, ti, endpointSlug, makeInitializeBody(), token, nil)
 	require.Error(t, err)
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
@@ -964,7 +968,8 @@ func TestServePublic_McpEndpoint_RemoteBacked_OptionalEnvHeaderMissing_Proceeds(
 	t.Cleanup(upstream.Close)
 
 	endpointSlug := "endpoint-" + uuid.NewString()
-	mcpServer, remoteServer := createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, upstream.URL, endpointSlug, "public", uuid.Nil)
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
+	mcpServer, remoteServer := createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, upstream.URL, endpointSlug, "public", issuerID)
 	createEnvSourcedRemoteHeader(t, ctx, ti.conn, *authCtx.ProjectID, remoteServer.ID, false)
 
 	envID := seedEnvironmentWithEntries(t, ctx, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, map[string]string{
@@ -972,7 +977,8 @@ func TestServePublic_McpEndpoint_RemoteBacked_OptionalEnvHeaderMissing_Proceeds(
 	})
 	attachEnvironmentToMcpServer(t, ctx, ti.conn, *authCtx.ProjectID, mcpServer, envID)
 
-	w, err := servePublicHTTP(t, ctx, ti, endpointSlug, makeInitializeBody(), "", nil)
+	token := mintIssuerBearerForEndpoint(t, ctx, ti, endpointSlug, mcpServer, authCtx.ActiveOrganizationID)
+	w, err := servePublicHTTP(t, ctx, ti, endpointSlug, makeInitializeBody(), token, nil)
 	<-done
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
@@ -998,10 +1004,12 @@ func TestServePublic_McpEndpoint_RemoteBacked_RequiredEnvHeaderNoEnvironment_Fai
 	t.Cleanup(upstream.Close)
 
 	endpointSlug := "endpoint-" + uuid.NewString()
-	_, remoteServer := createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, upstream.URL, endpointSlug, "public", uuid.Nil)
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
+	mcpServer, remoteServer := createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, upstream.URL, endpointSlug, "public", issuerID)
 	createEnvSourcedRemoteHeader(t, ctx, ti.conn, *authCtx.ProjectID, remoteServer.ID, true)
 
-	_, err := servePublicHTTP(t, ctx, ti, endpointSlug, makeInitializeBody(), "", nil)
+	token := mintIssuerBearerForEndpoint(t, ctx, ti, endpointSlug, mcpServer, authCtx.ActiveOrganizationID)
+	_, err := servePublicHTTP(t, ctx, ti, endpointSlug, makeInitializeBody(), token, nil)
 	require.Error(t, err)
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
@@ -1057,7 +1065,8 @@ func TestServePublic_McpEndpoint_RemoteBacked_EnvSourcedHeaderViaManagementAPI_F
 	t.Cleanup(upstream.Close)
 
 	endpointSlug := "endpoint-" + uuid.NewString()
-	mcpServer, remoteServer := createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, upstream.URL, endpointSlug, "public", uuid.Nil)
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
+	mcpServer, remoteServer := createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, upstream.URL, endpointSlug, "public", issuerID)
 
 	// Create the env-sourced header through the management API. Neither Value
 	// nor ValueFromRequestHeader is set and IsSecret is false, so the impl
@@ -1090,7 +1099,8 @@ func TestServePublic_McpEndpoint_RemoteBacked_EnvSourcedHeaderViaManagementAPI_F
 	})
 	attachEnvironmentToMcpServer(t, ctx, ti.conn, *authCtx.ProjectID, mcpServer, envID)
 
-	w, err := servePublicHTTP(t, ctx, ti, endpointSlug, makeInitializeBody(), "", nil)
+	token := mintIssuerBearerForEndpoint(t, ctx, ti, endpointSlug, mcpServer, authCtx.ActiveOrganizationID)
+	w, err := servePublicHTTP(t, ctx, ti, endpointSlug, makeInitializeBody(), token, nil)
 	<-done
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
