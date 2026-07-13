@@ -2066,50 +2066,6 @@ func (q *Queries) ListRiskWindowedMessages(ctx context.Context, arg ListRiskWind
 	return items, nil
 }
 
-const listRiskyChatIDs = `-- name: ListRiskyChatIDs :many
-SELECT DISTINCT cm.chat_id
-FROM risk_results rr
-JOIN chat_messages cm ON cm.id = rr.chat_message_id
-JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
-WHERE rr.project_id = ANY($1::uuid[])
-  AND rr.found IS TRUE
-  AND rr.excluded_at IS NULL
-  AND rr.false_positive_at IS NULL
-  AND rr.created_at >= $2
-  AND rr.created_at < $3
-`
-
-type ListRiskyChatIDsParams struct {
-	ProjectIds []uuid.UUID
-	FromTime   pgtype.Timestamptz
-	ToTime     pgtype.Timestamptz
-}
-
-// Distinct chats with at least one active risk finding created in the window,
-// for the token-by-risk breakdown (telemetry.queryRiskTokens). Mirrors the
-// risk_counts semantics used by ListChats: a finding counts only while found,
-// not excluded, not marked false-positive, and its policy is enabled and not
-// deleted.
-func (q *Queries) ListRiskyChatIDs(ctx context.Context, arg ListRiskyChatIDsParams) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, listRiskyChatIDs, arg.ProjectIds, arg.FromTime, arg.ToTime)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []uuid.UUID
-	for rows.Next() {
-		var chat_id uuid.UUID
-		if err := rows.Scan(&chat_id); err != nil {
-			return nil, err
-		}
-		items = append(items, chat_id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listSearchWindowedMessages = `-- name: ListSearchWindowedMessages :many
 WITH ordered AS (
   SELECT

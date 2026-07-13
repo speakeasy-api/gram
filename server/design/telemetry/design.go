@@ -332,31 +332,6 @@ var _ = Service("telemetry", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "TelemetryQuery", "type": "query"}`)
 	})
 
-	Method("queryRiskTokens", func() {
-		Description("Org-scoped daily token usage split by risk involvement: tokens from sessions with at least one active risk finding in the window versus all session tokens. Powers the token-usage panel's risk breakdown on the costs page.")
-
-		// Org-scoped like telemetry.query; project_id optionally narrows the
-		// slice to one of the caller's projects.
-		Security(security.Session)
-
-		Payload(func() {
-			Extend(TelemetryWindowPayload)
-			security.SessionPayload()
-		})
-
-		Result(QueryRiskTokensResult)
-
-		HTTP(func() {
-			POST("/rpc/telemetry.queryRiskTokens")
-			security.SessionHeader()
-			Response(StatusOK)
-		})
-
-		Meta("openapi:operationId", "queryRiskTokens")
-		Meta("openapi:extension:x-speakeasy-name-override", "queryRiskTokens")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "TelemetryQueryRiskTokens", "type": "query"}`)
-	})
-
 	Method("queryTumDetails", func() {
 		Description("Org-scoped daily usage details for the billing page, computed in one pass: the tokens-under-management daily token-type split (observed agent traffic; cache reads excluded) and per-dimension breakdowns over the same population.")
 
@@ -1450,10 +1425,10 @@ var QueryFilter = Type("QueryFilter", func() {
 	Required("dimension", "values")
 })
 
-// TelemetryWindowPayload is deliberately shared by queryRiskTokens and
-// queryTumDetails: both take exactly an org-scoped time window with an
-// optional project filter, and a single neutrally-named type keeps the
-// generated SDK from surfacing one endpoint's payload under the other's name.
+// TelemetryWindowPayload is an org-scoped time window with an optional
+// project filter, named neutrally so future window-shaped endpoints can
+// share it without the generated SDK surfacing one endpoint's payload under
+// another's name (queryTumDetails is the current consumer).
 var TelemetryWindowPayload = Type("TelemetryWindowPayload", func() {
 	Description("An org-scoped time window, optionally narrowed to one project")
 
@@ -1470,25 +1445,6 @@ var TelemetryWindowPayload = Type("TelemetryWindowPayload", func() {
 	})
 
 	Required("from", "to")
-})
-
-var RiskTokensPoint = Type("RiskTokensPoint", func() {
-	Description("One UTC day of token usage split by risk involvement")
-
-	Attribute("bucket_time_unix_nano", String, "Bucket start time in Unix nanoseconds (string for JS precision)")
-	Attribute("risky_tokens", Int64, "Tokens from sessions with at least one active risk finding created in the query window")
-	Attribute("total_tokens", Int64, "All session tokens in the bucket")
-
-	Required("bucket_time_unix_nano", "risky_tokens", "total_tokens")
-})
-
-var QueryRiskTokensResult = Type("QueryRiskTokensResult", func() {
-	Description("Result of the token-by-risk breakdown query")
-
-	Attribute("interval_seconds", Int64, "Timeseries bucket width in seconds. Always 86400 — the source aggregate is bucketed daily.")
-	Attribute("points", ArrayOf(RiskTokensPoint), "Gap-filled daily buckets in ascending time order")
-
-	Required("interval_seconds", "points")
 })
 
 // The per-metric fields shared by the daily points and the range totals.

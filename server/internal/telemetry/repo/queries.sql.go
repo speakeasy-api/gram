@@ -5873,18 +5873,6 @@ func tumObservedBase(sb squirrel.SelectBuilder, arg GetTokensUnderManagementPara
 	return sb
 }
 
-// billedHookSourceFilter scopes a chat_token_summaries read to the billed
-// completion surfaces, grandfathering pre-dimension rows (”).
-func billedHookSourceFilter(sb squirrel.SelectBuilder, sources []string) squirrel.SelectBuilder {
-	if len(sources) == 0 {
-		return sb
-	}
-	return sb.Where(squirrel.Or{
-		squirrel.Eq{"hook_source": sources},
-		squirrel.Eq{"hook_source": ""},
-	})
-}
-
 // TumDayBucket is one UTC day's worth of tokens under management.
 type TumDayBucket struct {
 	Day    time.Time `ch:"day_bucket"`
@@ -6075,93 +6063,6 @@ func (q *Queries) GetTumBreakdownDimByDay(ctx context.Context, arg GetTokensUnde
 		var bucket TumBreakdownDimDayBucket
 		if err := rows.ScanStruct(&bucket); err != nil {
 			return nil, fmt.Errorf("scanning tum breakdown dimension row: %w", err)
-		}
-		buckets = append(buckets, bucket)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	return buckets, nil
-}
-
-// GetRiskTokensParams contains the parameters for the per-day token split by
-// risk involvement. RiskyChatIDs is the set of chats (resolved from Postgres
-// risk findings) whose tokens count as risky.
-type GetRiskTokensParams struct {
-	ProjectIDs    []string
-	RiskyChatIDs  []string
-	StartUnixNano int64
-	EndUnixNano   int64
-	// HookSources restricts the risk-token reads to chats from these sources
-	// (billing.ModelUsageSources), grandfathering '' rows aggregated before
-	// chat_token_summaries had a hook_source dimension — matching
-	// GetTokensUnderManagementByDay so the risk split and the billed totals
-	// describe the same population. Empty means no source scoping.
-	HookSources []string
-}
-
-// RiskTokensDayBucket is one UTC day of token usage split into risky vs total.
-type RiskTokensDayBucket struct {
-	Day         time.Time `ch:"time_bucket"`
-	TotalTokens int64     `ch:"tokens"`
-	RiskyTokens int64     `ch:"risky_tokens"`
-}
-
-// GetRiskTokensByDay sums token usage per UTC day, alongside the subset from
-// chats in RiskyChatIDs. Reads the chat_token_summaries daily aggregate — the
-// same source as tokens under management — but without the stored-session
-// qualification, so the totals line up with the costs page's token charts.
-// Days without usage are omitted (callers gap-fill).
-//
-//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
-func (q *Queries) GetRiskTokensByDay(ctx context.Context, arg GetRiskTokensParams) ([]RiskTokensDayBucket, error) {
-	if len(arg.ProjectIDs) == 0 {
-		return nil, nil
-	}
-
-	// The total alias must NOT be "total_tokens": ClickHouse lets a SELECT
-	// alias shadow the source column, which would turn the sumIf's column
-	// reference into a nested aggregate (ILLEGAL_AGGREGATION).
-	sb := sq.Select(
-		"time_bucket",
-		"sum(total_tokens) AS tokens",
-	).
-		From("chat_token_summaries").
-		Where(squirrel.Eq{"gram_project_id": arg.ProjectIDs}).
-		Where("time_bucket >= toStartOfDay(fromUnixTimestamp64Nano(?))", arg.StartUnixNano).
-		Where("time_bucket < fromUnixTimestamp64Nano(?)", arg.EndUnixNano).
-		Where("chat_id != ''").
-		GroupBy("time_bucket").
-		OrderBy("time_bucket")
-	sb = billedHookSourceFilter(sb, arg.HookSources)
-
-	// clickhouse-go expands a Go slice bound to a single placeholder into a
-	// comma-joined value list, which only parses inside IN (...) — so the risky
-	// set rides in one parameter there. An empty set short-circuits to a
-	// constant zero instead of binding an empty list (invalid SQL).
-	if len(arg.RiskyChatIDs) > 0 {
-		sb = sb.Column(squirrel.Expr("sumIf(total_tokens, chat_id IN (?)) AS risky_tokens", arg.RiskyChatIDs))
-	} else {
-		sb = sb.Column("toInt64(0) AS risky_tokens")
-	}
-
-	query, args, err := sb.ToSql()
-	if err != nil {
-		return nil, fmt.Errorf("building risk tokens by day query: %w", err)
-	}
-
-	rows, err := q.conn.Query(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var buckets []RiskTokensDayBucket
-	for rows.Next() {
-		var bucket RiskTokensDayBucket
-		if err := rows.ScanStruct(&bucket); err != nil {
-			return nil, fmt.Errorf("scanning risk tokens day row: %w", err)
 		}
 		buckets = append(buckets, bucket)
 	}
