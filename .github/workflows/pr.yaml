@@ -746,8 +746,8 @@ jobs:
   golang-migrate-clickhouse:
     name: Test ClickHouse golang-migrate migrations
     runs-on: blacksmith-2vcpu-ubuntu-2404
-    needs: changes
-    if: needs.changes.outputs.migrations == 'true' && github.event_name == 'pull_request'
+    # needs: changes
+    # if: needs.changes.outputs.migrations == 'true' && github.event_name == 'pull_request'
     services:
       clickhouse:
         image: clickhouse/clickhouse-server:25.8.3
