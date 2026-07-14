@@ -26,10 +26,13 @@ const mocks = vi.hoisted(() => ({
   useRoles: vi.fn(),
   useShadowMCPInventoryServer: vi.fn(),
   useShadowMCPInventoryUsers: vi.fn(),
+  useUpdateShadowMCPInventoryServerNameMutation: vi.fn(),
   useUpsertShadowMCPInventoryPolicyBypassMutation: vi.fn(),
   invalidateShadowMCPInventory: vi.fn(),
   invalidateShadowMCPInventoryServer: vi.fn(),
   invalidateShadowMCPInventoryUsers: vi.fn(),
+  toastError: vi.fn(),
+  toastSuccess: vi.fn(),
 }));
 
 vi.mock("react-router", () => ({
@@ -107,6 +110,14 @@ vi.mock("@gram/client/react-query/shadowMCPInventoryUsers.js", () => ({
 vi.mock("@gram/client/react-query/shadowMCPInventory.js", () => ({
   invalidateAllShadowMCPInventory: mocks.invalidateShadowMCPInventory,
 }));
+
+vi.mock(
+  "@gram/client/react-query/updateShadowMCPInventoryServerName.js",
+  () => ({
+    useUpdateShadowMCPInventoryServerNameMutation:
+      mocks.useUpdateShadowMCPInventoryServerNameMutation,
+  }),
+);
 
 vi.mock(
   "@gram/client/react-query/upsertShadowMCPInventoryPolicyBypass.js",
@@ -326,6 +337,13 @@ vi.mock("@/components/ui/skeleton", () => ({
   SkeletonTable: () => <div>Loading table</div>,
 }));
 
+vi.mock("sonner", () => ({
+  toast: {
+    error: mocks.toastError,
+    success: mocks.toastSuccess,
+  },
+}));
+
 function inventoryServer(
   overrides: Partial<ShadowMCPInventoryServer> = {},
 ): ShadowMCPInventoryServer {
@@ -432,6 +450,10 @@ describe("ShadowMCPServerDetail", () => {
       isPending: false,
       mutateAsync: vi.fn().mockResolvedValue({}),
     });
+    mocks.useUpdateShadowMCPInventoryServerNameMutation.mockReturnValue({
+      isPending: false,
+      mutateAsync: vi.fn().mockResolvedValue({}),
+    });
   });
 
   afterEach(() => {
@@ -469,6 +491,241 @@ describe("ShadowMCPServerDetail", () => {
       undefined,
       expect.objectContaining({ enabled: true }),
     );
+  });
+
+  it("exposes the current server name and Policy-style editor attributes", () => {
+    renderDetailPage();
+
+    const renameButton = screen.getByRole("button", { name: "GitHub MCP" });
+    expect(renameButton.getAttribute("title")).toBe("Rename Shadow MCP server");
+
+    fireEvent.click(renameButton);
+
+    const input = screen.getByRole("textbox", {
+      name: "Shadow MCP server name",
+    });
+    expect(input).toBe(document.activeElement);
+    expect(input.getAttribute("maxlength")).toBe("255");
+  });
+
+  it("edits the server name inline and saves once on Enter after both invalidations", async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({});
+    let resolveServerInvalidation!: () => void;
+    let resolveInventoryInvalidation!: () => void;
+    mocks.invalidateShadowMCPInventoryServer.mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveServerInvalidation = resolve;
+      }),
+    );
+    mocks.invalidateShadowMCPInventory.mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveInventoryInvalidation = resolve;
+      }),
+    );
+    mocks.useUpdateShadowMCPInventoryServerNameMutation.mockReturnValue({
+      isPending: false,
+      mutateAsync,
+    });
+
+    renderDetailPage();
+    fireEvent.click(screen.getByRole("button", { name: "GitHub MCP" }));
+    const input = screen.getByRole("textbox", {
+      name: "Shadow MCP server name",
+    });
+    fireEvent.change(input, { target: { value: "  Engineering GitHub  " } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    await waitFor(() => {
+      expect(mutateAsync).toHaveBeenCalledWith({
+        request: {
+          updateShadowMCPInventoryServerNameForm: {
+            projectId: "project-id-1",
+            serverUrl: "https://github.example.com/mcp",
+            name: "Engineering GitHub",
+          },
+        },
+      });
+    });
+    expect(mutateAsync).toHaveBeenCalledTimes(1);
+    expect(mocks.invalidateShadowMCPInventoryServer).toHaveBeenCalledTimes(1);
+    expect(mocks.invalidateShadowMCPInventory).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByRole("textbox", { name: "Shadow MCP server name" }),
+    ).toBeTruthy();
+
+    resolveServerInvalidation();
+    await Promise.resolve();
+    expect(
+      screen.getByRole("textbox", { name: "Shadow MCP server name" }),
+    ).toBeTruthy();
+
+    resolveInventoryInvalidation();
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("textbox", { name: "Shadow MCP server name" }),
+      ).toBeNull();
+    });
+  });
+
+  it("saves a trimmed server name on blur", async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({});
+    mocks.useUpdateShadowMCPInventoryServerNameMutation.mockReturnValue({
+      isPending: false,
+      mutateAsync,
+    });
+
+    renderDetailPage();
+    fireEvent.click(screen.getByRole("button", { name: "GitHub MCP" }));
+    const input = screen.getByRole("textbox", {
+      name: "Shadow MCP server name",
+    });
+    fireEvent.change(input, { target: { value: "  Developer GitHub  " } });
+    fireEvent.blur(input);
+
+    await waitFor(() => {
+      expect(mutateAsync).toHaveBeenCalledWith({
+        request: {
+          updateShadowMCPInventoryServerNameForm: {
+            projectId: "project-id-1",
+            serverUrl: "https://github.example.com/mcp",
+            name: "Developer GitHub",
+          },
+        },
+      });
+    });
+  });
+
+  it("cancels an edit on Escape without saving", async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({});
+    mocks.useUpdateShadowMCPInventoryServerNameMutation.mockReturnValue({
+      isPending: false,
+      mutateAsync,
+    });
+
+    renderDetailPage();
+    fireEvent.click(screen.getByRole("button", { name: "GitHub MCP" }));
+    const input = screen.getByRole("textbox", {
+      name: "Shadow MCP server name",
+    });
+    fireEvent.change(input, { target: { value: "Canceled name" } });
+    fireEvent.keyDown(input, { key: "Escape" });
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("textbox", { name: "Shadow MCP server name" }),
+      ).toBeNull();
+    });
+    expect(mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("clears the custom server name with an empty string", async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({});
+    mocks.useUpdateShadowMCPInventoryServerNameMutation.mockReturnValue({
+      isPending: false,
+      mutateAsync,
+    });
+
+    renderDetailPage();
+    fireEvent.click(screen.getByRole("button", { name: "GitHub MCP" }));
+    const input = screen.getByRole("textbox", {
+      name: "Shadow MCP server name",
+    });
+    fireEvent.change(input, { target: { value: "   " } });
+    fireEvent.blur(input);
+
+    await waitFor(() => {
+      expect(mutateAsync).toHaveBeenCalledWith({
+        request: {
+          updateShadowMCPInventoryServerNameForm: {
+            projectId: "project-id-1",
+            serverUrl: "https://github.example.com/mcp",
+            name: "",
+          },
+        },
+      });
+    });
+  });
+
+  it("exits an unchanged edit without saving", async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({});
+    mocks.useUpdateShadowMCPInventoryServerNameMutation.mockReturnValue({
+      isPending: false,
+      mutateAsync,
+    });
+
+    renderDetailPage();
+    fireEvent.click(screen.getByRole("button", { name: "GitHub MCP" }));
+    const input = screen.getByRole("textbox", {
+      name: "Shadow MCP server name",
+    });
+    fireEvent.change(input, { target: { value: "  GitHub MCP  " } });
+    fireEvent.blur(input);
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("textbox", { name: "Shadow MCP server name" }),
+      ).toBeNull();
+    });
+    expect(mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("keeps the editor open and reports an error when saving fails", async () => {
+    const mutateAsync = vi.fn().mockRejectedValue(new Error("save failed"));
+    mocks.useUpdateShadowMCPInventoryServerNameMutation.mockReturnValue({
+      isPending: false,
+      mutateAsync,
+    });
+
+    renderDetailPage();
+    fireEvent.click(screen.getByRole("button", { name: "GitHub MCP" }));
+    const input = screen.getByRole("textbox", {
+      name: "Shadow MCP server name",
+    });
+    fireEvent.change(input, { target: { value: "Engineering GitHub" } });
+    fireEvent.blur(input);
+
+    await waitFor(() => {
+      expect(mocks.toastError).toHaveBeenCalledWith(
+        "Unable to update Shadow MCP server name",
+      );
+    });
+    expect(
+      screen.getByRole("textbox", { name: "Shadow MCP server name" }),
+    ).toBeTruthy();
+  });
+
+  it("uses the URL host when no custom server name exists", () => {
+    mocks.useShadowMCPInventoryServer.mockReturnValue({
+      data: inventoryServer({ serverName: undefined }),
+      error: null,
+      isLoading: false,
+    });
+
+    renderDetailPage();
+
+    expect(
+      screen.getByRole("button", { name: "github.example.com" }),
+    ).toBeTruthy();
+  });
+
+  it("does not disable allow-rule actions while a rename is pending", () => {
+    mocks.useUpdateShadowMCPInventoryServerNameMutation.mockReturnValue({
+      isPending: true,
+      mutateAsync: vi.fn().mockResolvedValue({}),
+    });
+
+    renderDetailPage();
+
+    expect(
+      screen
+        .getByRole("button", { name: "Edit Rule" })
+        .hasAttribute("disabled"),
+    ).toBe(false);
+    expect(
+      screen
+        .getByRole("button", { name: "Delete Rule" })
+        .hasAttribute("disabled"),
+    ).toBe(false);
   });
 
   it("shows an empty state when the server has no user activity", () => {

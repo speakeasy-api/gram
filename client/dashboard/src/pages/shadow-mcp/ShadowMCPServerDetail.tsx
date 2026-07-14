@@ -17,6 +17,7 @@ import {
   type ShadowMCPPolicyState,
 } from "@/components/shadow-mcp/shadowMCPInventoryStatus";
 import { SkeletonTable } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
 import { Type } from "@/components/ui/type";
 import { useProject } from "@/contexts/Auth";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
@@ -31,6 +32,7 @@ import {
   invalidateAllShadowMCPInventoryServer,
   useShadowMCPInventoryServer,
 } from "@gram/client/react-query/shadowMCPInventoryServer.js";
+import { useUpdateShadowMCPInventoryServerNameMutation } from "@gram/client/react-query/updateShadowMCPInventoryServerName.js";
 import {
   invalidateAllShadowMCPInventoryUsers,
   useShadowMCPInventoryUsers,
@@ -44,7 +46,8 @@ import {
   Table,
 } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { Pencil } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router";
 import { toast } from "sonner";
 
@@ -291,6 +294,81 @@ function DetailActionButtons({
   );
 }
 
+function EditableServerName({
+  name,
+  onSave,
+  saving,
+}: {
+  name: string;
+  onSave: (name: string) => Promise<boolean>;
+  saving: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(name);
+  const cancelNextBlur = useRef(false);
+
+  useEffect(() => {
+    if (!editing) setDraft(name);
+  }, [editing, name]);
+
+  const save = async () => {
+    if (saving) return;
+
+    const nextName = draft.trim();
+    if (nextName === name) {
+      setEditing(false);
+      return;
+    }
+
+    const saved = await onSave(nextName);
+    if (saved) setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <Input
+        aria-label="Shadow MCP server name"
+        autoFocus
+        className="h-9 w-[24rem] max-w-full text-lg font-semibold"
+        disabled={saving}
+        maxLength={255}
+        onBlur={() => {
+          if (cancelNextBlur.current) {
+            cancelNextBlur.current = false;
+            return;
+          }
+          void save();
+        }}
+        onChange={setDraft}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") event.currentTarget.blur();
+          if (event.key === "Escape") {
+            cancelNextBlur.current = true;
+            setDraft(name);
+            setEditing(false);
+          }
+        }}
+        value={draft}
+      />
+    );
+  }
+
+  return (
+    <button
+      className="group flex min-w-0 items-center gap-2"
+      onClick={() => {
+        cancelNextBlur.current = false;
+        setEditing(true);
+      }}
+      title="Rename Shadow MCP server"
+      type="button"
+    >
+      <span className="truncate">{name}</span>
+      <Pencil className="text-muted-foreground h-4 w-4 shrink-0 opacity-0 transition-opacity group-hover:opacity-100" />
+    </button>
+  );
+}
+
 export default function ShadowMCPServerDetail(): JSX.Element {
   const { serverSlug = "" } = useParams<{ serverSlug: string }>();
   const project = useProject();
@@ -340,6 +418,7 @@ export default function ShadowMCPServerDetail(): JSX.Element {
   const upsertPolicyBypass = useUpsertShadowMCPInventoryPolicyBypassMutation();
   const deletePolicyBypass = useDeleteShadowMCPInventoryPolicyBypassMutation();
   const resolveInventoryRequest = useResolveShadowMCPInventoryRequestMutation();
+  const updateServerName = useUpdateShadowMCPInventoryServerNameMutation();
   const [activeAction, setActiveAction] =
     useState<ActiveInventoryAction | null>(null);
   const [isSubmittingAction, setIsSubmittingAction] = useState(false);
@@ -485,6 +564,30 @@ export default function ShadowMCPServerDetail(): JSX.Element {
     }
   };
 
+  const saveServerName = async (name: string) => {
+    if (!server) return false;
+
+    try {
+      await updateServerName.mutateAsync({
+        request: {
+          updateShadowMCPInventoryServerNameForm: {
+            projectId: project.id,
+            serverUrl: server.canonicalServerUrl,
+            name,
+          },
+        },
+      });
+      await Promise.all([
+        invalidateAllShadowMCPInventoryServer(queryClient),
+        invalidateAllShadowMCPInventory(queryClient),
+      ]);
+      return true;
+    } catch {
+      toast.error("Unable to update Shadow MCP server name");
+      return false;
+    }
+  };
+
   const openAction = (mode: InventoryActionMode) => {
     if (!server) return;
     setActiveAction({ mode, server });
@@ -504,7 +607,13 @@ export default function ShadowMCPServerDetail(): JSX.Element {
         <RequireScope scope="org:admin" level="page">
           <Page.Section>
             <Page.Section.Title stage="beta">
-              {server?.serverName || server?.urlHost || "Shadow MCP Server"}
+              <EditableServerName
+                name={
+                  server?.serverName || server?.urlHost || "Shadow MCP Server"
+                }
+                onSave={saveServerName}
+                saving={updateServerName.isPending}
+              />
             </Page.Section.Title>
             <Page.Section.Description>
               {server?.canonicalServerUrl || serverSlug}
