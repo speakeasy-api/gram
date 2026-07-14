@@ -41,10 +41,16 @@ vi.mock("@/contexts/Fetcher", () => ({
   useFetcher: () => ({ fetch: mockAuthedFetch }),
 }));
 
-vi.mock("@gram/client/react-query", () => ({
+vi.mock("@gram/client/react-query/deployment.js", () => ({
   useDeployment: vi.fn(() => ({ data: undefined })),
+}));
+vi.mock("@gram/client/react-query/deploymentLogs.js", () => ({
   useDeploymentLogs: vi.fn(() => ({ data: undefined })),
+}));
+vi.mock("@gram/client/react-query/latestDeployment.js", () => ({
   useLatestDeployment: vi.fn(() => ({ data: undefined })),
+}));
+vi.mock("@gram/client/react-query/listToolsets.js", () => ({
   useListToolsets: vi.fn(() => ({ data: undefined })),
 }));
 
@@ -1122,7 +1128,7 @@ describe("useExternalMcpReleaseWorkflow", () => {
         {
           createRemoteSessionClientForm: expect.objectContaining({
             remoteSessionIssuerId: "rsi-1",
-            userSessionIssuerId: "usi-1",
+            userSessionIssuerIds: ["usi-1"],
             clientId: "dcr-client-id",
             clientSecret: "dcr-client-secret",
             tokenEndpointAuthMethod: "client_secret_basic",

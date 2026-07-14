@@ -106,6 +106,32 @@ var _ = Service("mcpServers", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "McpServers"}`)
 	})
 
+	Method("listMcpServersForOrg", func() {
+		Description("List all MCP servers across the organization")
+
+		// Session-only, unlike the rest of the service: this dashboard flow has
+		// no project selector, and API-key auth is not RBAC-enforced, so a
+		// project-scoped producer key could otherwise enumerate MCP servers
+		// across every project in the organization.
+		Security(security.Session)
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(ListMcpServersResult)
+
+		HTTP(func() {
+			GET("/rpc/mcpServers.listForOrg")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listMcpServersForOrg")
+		Meta("openapi:extension:x-speakeasy-name-override", "listForOrg")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListMcpServersForOrg"}`)
+	})
+
 	Method("updateMcpServer", func() {
 		Description("Update an MCP server. This is a full-record replace for the optional UUID references: fields omitted from the request become null on the stored record. name is an exception — omitting it leaves the existing display name unchanged, while providing it requires a non-empty value and recomputes the server-side slug. The id and visibility fields are required; exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be provided.")
 

@@ -1081,7 +1081,17 @@ function buildAssistantTools(deps: ToolDeps) {
       execute: async (args) => {
         const { urn_prefix, limit } = args as ListAvailableToolsArgs;
         try {
-          const res = await sdk.tools.list({ urnPrefix: urn_prefix, limit });
+          const res = await sdk.tools.list({
+            urnPrefix: urn_prefix,
+            limit,
+            toolTypes: [
+              "http",
+              "function",
+              "prompt",
+              "platform",
+              "externalmcp",
+            ],
+          });
           return okResult({
             tools: res.tools.map((t) => {
               const def =

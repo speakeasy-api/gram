@@ -1,7 +1,29 @@
 ---
 name: clickhouse
-description: Rules when working with ClickHouse database in Gram for analytics and telemetry features
+description: Rules when working with ClickHouse database in Gram for analytics and telemetry features, including editing the ClickHouse schema (server/clickhouse/schema.sql) and creating or fixing ClickHouse migrations
 ---
+
+## Schema design and evolution
+
+The ClickHouse schema is defined in `server/clickhouse/schema.sql`. To change it, edit that file and generate a migration:
+
+```
+mise clickhouse:diff <migration-name>
+```
+
+This produces migrations in **two flavors** that must always stay in sync:
+
+- `server/clickhouse/migrations/` — **Atlas** format. This is the source of truth: only these migrations are carried forward and applied in production.
+- `server/clickhouse/local/golang_migrate/` — **golang-migrate** format (`.up.sql`/`.down.sql` pairs). Used only for local development, so contributors without an Atlas Pro login can still run migrations.
+
+`mise clickhouse:diff` generates both flavors together. If you ever hand-edit a migration (or the diff output), make the equivalent change in **both** directories, then run `mise clickhouse:hash` to regenerate `atlas.sum`. Apply pending migrations locally with `mise clickhouse:migrate`.
+
+**No semicolons in `COMMENT '...'` strings.** golang-migrate splits statements naively, so a semicolon inside a column/table comment breaks its parser and the local migrations fail to replay. Rephrase the comment instead.
+
+Two CI checks guard this on every PR:
+
+- **atlas-lint** — runs the Atlas migration linter, plus a porcelain check that migrations were generated and are up to date with both the Postgres and ClickHouse schemas. If you edited `schema.sql` without running `mise clickhouse:diff`, this fails.
+- **golang-migrate-clickhouse** — replays all golang-migrate migrations against a real ClickHouse instance to prove they're valid. If the two flavors drifted, this is where it shows up.
 
 ## ClickHouse Queries (Telemetry Package)
 

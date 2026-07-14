@@ -193,6 +193,21 @@ func BuildListMcpServersPayload(mcpServersListMcpServersRemoteMcpServerID string
 	return v, nil
 }
 
+// BuildListMcpServersForOrgPayload builds the payload for the mcpServers
+// listMcpServersForOrg endpoint from CLI flags.
+func BuildListMcpServersForOrgPayload(mcpServersListMcpServersForOrgSessionToken string) (*mcpservers.ListMcpServersForOrgPayload, error) {
+	var sessionToken *string
+	{
+		if mcpServersListMcpServersForOrgSessionToken != "" {
+			sessionToken = &mcpServersListMcpServersForOrgSessionToken
+		}
+	}
+	v := &mcpservers.ListMcpServersForOrgPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildUpdateMcpServerPayload builds the payload for the mcpServers
 // updateMcpServer endpoint from CLI flags.
 func BuildUpdateMcpServerPayload(mcpServersUpdateMcpServerBody string, mcpServersUpdateMcpServerSessionToken string, mcpServersUpdateMcpServerApikeyToken string, mcpServersUpdateMcpServerProjectSlugInput string) (*mcpservers.UpdateMcpServerPayload, error) {

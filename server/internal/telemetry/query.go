@@ -9,10 +9,8 @@ import (
 	"slices"
 	"sort"
 	"strconv"
-	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"golang.org/x/sync/errgroup"
 
 	telem_gen "github.com/speakeasy-api/gram/server/gen/telemetry"
@@ -182,73 +180,9 @@ func (s *Service) Query(ctx context.Context, payload *telem_gen.QueryPayload) (*
 	return buildQueryResult(groupBy, interval, timeStart, timeEnd, topN, tableRows, tsRows), nil
 }
 
-// riskTokensIntervalSeconds is the fixed bucket width of queryRiskTokens — the
-// source aggregate (chat_token_summaries) is bucketed daily.
-const riskTokensIntervalSeconds int64 = 86400
-
-// QueryRiskTokens returns daily token usage split into tokens from sessions
-// with at least one active risk finding created in the window versus all
-// session tokens. Risk findings live in Postgres while per-chat token usage
-// lives in ClickHouse, so the risky chat set is resolved first and pushed into
-// the ClickHouse aggregation.
-func (s *Service) QueryRiskTokens(ctx context.Context, payload *telem_gen.QueryRiskTokensPayload) (*telem_gen.QueryRiskTokensResult, error) {
-	scope, err := s.resolveOrgQueryScope(ctx, payload.From, payload.To, payload.ProjectID)
-	if err != nil {
-		return nil, err
-	}
-	timeStart, timeEnd := scope.timeStart, scope.timeEnd
-
-	riskyIDs, err := s.chatRepo.ListRiskyChatIDs(ctx, chatRepo.ListRiskyChatIDsParams{
-		ProjectIds: scope.projectUUIDs,
-		FromTime:   pgtype.Timestamptz{Time: time.Unix(0, timeStart).UTC(), InfinityModifier: pgtype.Finite, Valid: true},
-		ToTime:     pgtype.Timestamptz{Time: time.Unix(0, timeEnd).UTC(), InfinityModifier: pgtype.Finite, Valid: true},
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to list chats with risk findings").LogError(ctx, s.logger)
-	}
-	riskyChatIDs := make([]string, 0, len(riskyIDs))
-	for _, id := range riskyIDs {
-		riskyChatIDs = append(riskyChatIDs, id.String())
-	}
-
-	// Scoped to the billed completion surfaces so the risk split describes
-	// the same population as the billed totals it renders against.
-	buckets, err := s.chRepo.GetRiskTokensByDay(ctx, repo.GetRiskTokensParams{
-		ProjectIDs:    scope.projectIDs,
-		RiskyChatIDs:  riskyChatIDs,
-		StartUnixNano: timeStart,
-		EndUnixNano:   timeEnd,
-		HookSources:   billing.ModelUsageSourceStrings(),
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error running risk tokens query").LogError(ctx, s.logger)
-	}
-
-	byBucket := make(map[int64]repo.RiskTokensDayBucket, len(buckets))
-	for _, b := range buckets {
-		byBucket[b.Day.UTC().UnixNano()] = b
-	}
-
-	// Zero-fill so consumers get one point per day across the whole range,
-	// matching telemetry.query's gap-filled timeseries contract. timeEnd is an
-	// exclusive boundary (the ClickHouse read uses <), so step just inside it —
-	// otherwise a day-aligned `to` would add one empty bucket past the range.
-	starts := bucketStarts(timeStart, timeEnd-1, riskTokensIntervalSeconds)
-	points := make([]*telem_gen.RiskTokensPoint, 0, len(starts))
-	for _, start := range starts {
-		b := byBucket[start]
-		points = append(points, &telem_gen.RiskTokensPoint{
-			BucketTimeUnixNano: strconv.FormatInt(start, 10),
-			RiskyTokens:        b.RiskyTokens,
-			TotalTokens:        b.TotalTokens,
-		})
-	}
-
-	return &telem_gen.QueryRiskTokensResult{
-		IntervalSeconds: riskTokensIntervalSeconds,
-		Points:          points,
-	}, nil
-}
+// tumDetailsIntervalSeconds is the fixed bucket width of queryTumDetails —
+// the billing page's details are bucketed daily.
+const tumDetailsIntervalSeconds int64 = 86400
 
 // tumBreakdownDims are the billing page's breakdown dimensions, in display
 // order. Each maps to an attribute_metrics_summaries expression (see
@@ -332,9 +266,11 @@ func (s *Service) QueryTumDetails(ctx context.Context, payload *telem_gen.QueryT
 	}
 
 	// Zero-fill so consumers get one point per day across the whole range,
-	// matching the other telemetry timeseries contracts. timeEnd is exclusive
-	// (see the same adjustment in QueryRiskTokens).
-	starts := bucketStarts(timeStart, timeEnd-1, riskTokensIntervalSeconds)
+	// matching the other telemetry timeseries contracts. timeEnd is an
+	// exclusive boundary (the ClickHouse read uses <), so step just inside it
+	// — otherwise a day-aligned `to` would add one empty bucket past the
+	// range.
+	starts := bucketStarts(timeStart, timeEnd-1, tumDetailsIntervalSeconds)
 	bucketIndex := make(map[int64]int, len(starts))
 	for i, start := range starts {
 		bucketIndex[start] = i
@@ -429,7 +365,7 @@ func (s *Service) QueryTumDetails(ctx context.Context, payload *telem_gen.QueryT
 	}
 
 	return &telem_gen.TumDetailsResult{
-		IntervalSeconds: riskTokensIntervalSeconds,
+		IntervalSeconds: tumDetailsIntervalSeconds,
 		Points:          points,
 		Breakdowns:      breakdowns,
 		Totals: &telem_gen.TumDetailsTotals{

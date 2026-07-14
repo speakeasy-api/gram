@@ -79,10 +79,16 @@ const (
 	sessionOutputTokensExpr = "sumIf(if(" + sessionClaudeAPIRequestPredicate + ", " +
 		"toInt64OrZero(toString(attributes.output_tokens)), " +
 		"toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens))), " + sessionUsageMeasureFilter + ")"
+	// total_tokens is input + output + cache WRITES — cache reads are excluded,
+	// matching the aggregate MV and the tokens-under-management measure. Both
+	// branches sum the disjoint components rather than trusting a reported
+	// total (Codex's gen_ai.usage.total_tokens includes cache reads; Cursor
+	// usage rows report no total at all).
 	sessionTotalTokensExpr = "sumIf(if(" + sessionClaudeAPIRequestPredicate + ", " +
 		"toInt64OrZero(toString(attributes.input_tokens)) + toInt64OrZero(toString(attributes.output_tokens)) + " +
-		"toInt64OrZero(toString(attributes.cache_read_tokens)) + toInt64OrZero(toString(attributes.cache_creation_tokens)), " +
-		"toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens))), " + sessionUsageMeasureFilter + ")"
+		"toInt64OrZero(toString(attributes.cache_creation_tokens)), " +
+		"toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)) + " +
+		"toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), " + sessionUsageMeasureFilter + ")"
 	sessionCacheReadTokensExpr = "sumIf(if(" + sessionClaudeAPIRequestPredicate + ", " +
 		"toInt64OrZero(toString(attributes.cache_read_tokens)), " +
 		"toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens))), " + sessionUsageMeasureFilter + ")"

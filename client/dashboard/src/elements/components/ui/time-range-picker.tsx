@@ -171,6 +171,26 @@ type ParseResult =
   | { type: "custom"; range: TimeRange; label?: string }
   | null;
 
+// Exported for unit testing. Decides how a successful parse is applied given
+// the picker's available presets: `availablePresets` only limits the
+// quick-pick options, so typed input that the AI normalizes to a preset
+// (e.g. "last week" -> 7d) must still apply when that preset isn't offered —
+// as the preset's concrete date range. Otherwise Enter silently no-ops
+// (the billing page passes availablePresets={[]}).
+export function resolveParsedRange(
+  parsed: NonNullable<ParseResult>,
+  isPresetAvailable: (preset: DateRangePreset) => boolean,
+): NonNullable<ParseResult> {
+  if (parsed.type === "preset" && !isPresetAvailable(parsed.preset)) {
+    return {
+      type: "custom",
+      range: getPresetRange(parsed.preset),
+      label: getPresetByValue(parsed.preset)?.shortLabel,
+    };
+  }
+  return parsed;
+}
+
 const timeRangeSchema = z.object({
   from: z.string().describe("ISO8601 start date/time"),
   to: z.string().describe("ISO8601 end date/time"),
@@ -442,13 +462,13 @@ function TimeRangePicker({
 
   const applyParseResult = (parsed: ParseResult) => {
     if (parsed) {
-      if (parsed.type === "preset") {
-        if (!isPresetAvailable(parsed.preset)) return false;
-        onPresetChange?.(parsed.preset);
+      const resolved = resolveParsedRange(parsed, isPresetAvailable);
+      if (resolved.type === "preset") {
+        onPresetChange?.(resolved.preset);
         setCustomLabel(null);
       } else {
-        const label = parsed.label || undefined;
-        onCustomRangeChange?.(parsed.range.from, parsed.range.to, label);
+        const label = resolved.label || undefined;
+        onCustomRangeChange?.(resolved.range.from, resolved.range.to, label);
         setCustomLabel(label || null);
       }
       setInputValue("");

@@ -31,6 +31,7 @@ export type ShadowMCPInventoryServer = {
   observedUseCount: number;
   requestCount: number;
   serverName?: string | undefined;
+  serverSlug: string;
   topUsers: Array<string>;
   urlHost: string;
   userCount: number;
@@ -65,6 +66,7 @@ export const ShadowMCPInventoryServer$inboundSchema: z.ZodMiniType<
     observed_use_count: z.int(),
     request_count: z.int(),
     server_name: z.optional(z.string()),
+    server_slug: z.string(),
     top_users: z.array(z.string()),
     url_host: z.string(),
     user_count: z.int(),
@@ -80,6 +82,7 @@ export const ShadowMCPInventoryServer$inboundSchema: z.ZodMiniType<
       "observed_use_count": "observedUseCount",
       "request_count": "requestCount",
       "server_name": "serverName",
+      "server_slug": "serverSlug",
       "top_users": "topUsers",
       "url_host": "urlHost",
       "user_count": "userCount",

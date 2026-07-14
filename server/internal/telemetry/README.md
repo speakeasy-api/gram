@@ -370,7 +370,8 @@ Key testing patterns:
 - Use `testenv.Launch()` in `TestMain` to set up infrastructure
 - Create helper functions for inserting test data
 - Use table-driven tests with descriptive names
-- After inserts, wait for ClickHouse eventual consistency by polling with `require.EventuallyWithT`, never `time.Sleep` (see the `golang` skill for the repo-wide convention and its `forbidigo` enforcement).
+- After inserts, call `testenv.FlushClickHouseAsyncInserts(t, conn)` (`server/internal/testenv/clickhouse.go`) before querying. Telemetry writes use ClickHouse [async inserts](https://clickhouse.com/docs/optimize/asynchronous-inserts), so rows only become visible after the async insert queue flushes — this helper drains it synchronously (`SYSTEM FLUSH ASYNC INSERT QUEUE`), making the data deterministically visible.
+- **Never wait for visibility non-deterministically** — no `time.Sleep` (enforced repo-wide via `forbidigo`; see the `golang` skill) and no `require.EventuallyWithT` polling for async-insert visibility. Polling masks the real synchronization point, slows tests, and still flakes under load. Reserve `require.EventuallyWithT` for conditions that are genuinely eventually consistent with no explicit flush mechanism.
 
 ## Data Models
 

@@ -3162,6 +3162,39 @@ CREATE TABLE IF NOT EXISTS assistant_mcp_servers (
 CREATE INDEX IF NOT EXISTS assistant_mcp_servers_mcp_server_id_idx ON assistant_mcp_servers (mcp_server_id);
 CREATE INDEX IF NOT EXISTS assistant_mcp_servers_project_id_idx ON assistant_mcp_servers (project_id);
 
+-- Admin-authoritative per-tool annotation metadata for an MCP server, read by
+-- the runtime proxy to fill the disposition dimension of RBAC checks.
+CREATE TABLE IF NOT EXISTS mcp_server_tool_metadata (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  mcp_server_id uuid NOT NULL,
+  tool_name TEXT NOT NULL,
+
+  -- MCP tool annotations (admin-set behavioral hints)
+  title TEXT,
+  read_only_hint boolean,
+  destructive_hint boolean,
+  idempotent_hint boolean,
+  open_world_hint boolean,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT mcp_server_tool_metadata_pkey PRIMARY KEY (id),
+  CONSTRAINT mcp_server_tool_metadata_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT mcp_server_tool_metadata_mcp_server_id_fkey FOREIGN KEY (mcp_server_id) REFERENCES mcp_servers (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS mcp_server_tool_metadata_project_id_idx
+ON mcp_server_tool_metadata (project_id)
+WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_server_tool_metadata_mcp_server_id_tool_name_key
+ON mcp_server_tool_metadata (mcp_server_id, tool_name)
+WHERE deleted IS FALSE;
+
 -- Plugin definitions: project-scoped distributable bundles of MCP servers.
 -- Admins create plugins and assign them to roles for distribution.
 CREATE TABLE IF NOT EXISTS plugins (

@@ -27,6 +27,7 @@ Two scanners are provided:
 
 from __future__ import annotations
 
+import gc
 import multiprocessing
 import os
 import signal
@@ -38,12 +39,13 @@ from functools import partial
 from typing import Protocol, Self, TypeVar
 
 import anyio
+import spacy
 from anyio import to_thread
 from asyncer import asyncify
 from presidio_analyzer import AnalyzerEngine
-from presidio_analyzer.nlp_engine import NlpEngineProvider
+from presidio_analyzer.nlp_engine import SpacyNlpEngine
 
-from pystreams.risk import presidiofp
+from pystreams.risk import metrics, presidiofp
 
 # The spaCy model bundled into the image (pinned in pystreams/pyproject.toml).
 # Presidio's default AnalyzerEngine() would also load this model, but selecting
@@ -62,7 +64,9 @@ DEFAULT_SCORE_THRESHOLD = 0.5
 # A policy that pins no entities makes Presidio scan its full default set, so
 # scan-scoping alone cannot keep US_DRIVER_LICENSE out — its recognizer is pure
 # noise (microsoft/presidio#1063), so it is dropped here (see
-# _scan_to_detections). PERSON is deliberately not included: person-name
+# _scan_to_detections). The recognizer is also removed from the registry in
+# _build_analyzer so its regex pass isn't paid per scan; this filter remains
+# the behavioural guarantee. PERSON is deliberately not included: person-name
 # detection on unpinned scans is intended behaviour, matching the Go path.
 _FINDING_LEVEL_DROP = frozenset({"US_DRIVER_LICENSE"})
 
@@ -158,9 +162,13 @@ class ThreadScanner(_AsyncCloseable):
     async def scan(
         self, content: str, entities: list[str] | None, score_threshold: float
     ) -> list[Detection]:
-        return await asyncify(_scan_to_detections, limiter=self._get_limiter())(
-            self._analyzer, content, entities, score_threshold
+        detections, scan_seconds = await asyncify(
+            _timed_scan, limiter=self._get_limiter()
+        )(self._analyzer, content, entities, score_threshold)
+        metrics.record_scan_duration(
+            scan_seconds, metrics.size_bucket_for(len(content))
         )
+        return detections
 
     async def aclose(self) -> None:
         return None
@@ -282,16 +290,23 @@ class ProcessPoolScanner(_AsyncCloseable):
     ) -> list[Detection]:
         future = await self._submit(_worker_scan, content, entities, score_threshold)
         if self._scan_timeout is None:
-            return await self._await_result(future)
-        try:
-            with anyio.fail_after(self._scan_timeout):
-                return await self._await_result(future)
-        except TimeoutError:
-            # Pull it from the executor queue if it hasn't started; a no-op once a
-            # worker has picked it up (the scan can't be interrupted, but the wait
-            # is over and the worker will be recycled per max_tasks_per_child).
-            future.cancel()
-            raise
+            detections, scan_seconds = await self._await_result(future)
+        else:
+            try:
+                with anyio.fail_after(self._scan_timeout):
+                    detections, scan_seconds = await self._await_result(future)
+            except TimeoutError:
+                # Pull it from the executor queue if it hasn't started; a no-op
+                # once a worker has picked it up (the scan can't be interrupted,
+                # but the wait is over and the worker will be recycled per
+                # max_tasks_per_child). A timed-out scan records no scan_duration
+                # — see record_scan_duration.
+                future.cancel()
+                raise
+        metrics.record_scan_duration(
+            scan_seconds, metrics.size_bucket_for(len(content))
+        )
+        return detections
 
     async def _warm_one(self) -> None:
         await self._await_result(await self._submit(_worker_warm))
@@ -363,19 +378,30 @@ def _worker_init() -> None:
     # pool, so the workers exit cleanly via the executor rather than the signal.
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     _WORKER_ANALYZER = _build_analyzer()
+    # The analyzer just built (spaCy model, vectors, recognizers) is a large,
+    # effectively immutable object graph that generational GC would otherwise
+    # re-traverse for the life of the worker. Freeze it into the permanent
+    # generation so per-scan collections skip it.
+    gc.freeze()
 
 
 def _worker_scan(
     content: str, entities: list[str] | None, score_threshold: float
-) -> list[Detection]:
-    """Scan in a worker process using its cached analyzer."""
+) -> tuple[list[Detection], float]:
+    """Scan in a worker process using its cached analyzer.
+
+    Returns the detections together with the scan's execution seconds: the
+    worker process has no ``MeterProvider`` (the OTel SDK is installed only in
+    the main process), so recording a metric here would silently no-op — the
+    timing travels back with the result and the parent records it.
+    """
     global _WORKER_ANALYZER
     analyzer = _WORKER_ANALYZER
     if analyzer is None:
         # Defensive: the initializer always runs first, but rebuild rather than
         # crash the worker if somehow it didn't.
         analyzer = _WORKER_ANALYZER = _build_analyzer()
-    return _scan_to_detections(analyzer, content, entities, score_threshold)
+    return _timed_scan(analyzer, content, entities, score_threshold)
 
 
 def _worker_warm() -> int:
@@ -387,6 +413,26 @@ def _worker_warm() -> int:
     _worker_scan("warm up: a@b.com", None, DEFAULT_SCORE_THRESHOLD)
     time.sleep(0.25)
     return os.getpid()
+
+
+def _timed_scan(
+    analyzer: Analyzer,
+    content: str,
+    entities: list[str] | None,
+    score_threshold: float,
+) -> tuple[list[Detection], float]:
+    """Run the scan and measure its execution time where it runs.
+
+    Both scan strategies call this on their worker (thread or process), so the
+    measured seconds cover only the scan work itself — the analyzer pass, the
+    false-positive filter, and the byte-offset conversion — never the wait for a
+    scan slot or pool worker that the caller's wall clock includes. That makes
+    the resulting ``scan_duration`` distribution a clean cost-vs-input-size
+    signal, unpolluted by saturation.
+    """
+    started = time.perf_counter()
+    detections = _scan_to_detections(analyzer, content, entities, score_threshold)
+    return detections, time.perf_counter() - started
 
 
 def _scan_to_detections(
@@ -480,14 +526,29 @@ def _build_analyzer() -> AnalyzerEngine:
 
     Synchronous: callable directly inside a pool worker's initializer and wrapped
     in ``asyncify`` by :func:`build_default_analyzer` for the async caller.
+
+    The model is loaded here rather than by the engine's own ``load()`` so the
+    dependency parser can be excluded. Presidio consumes the NER entities, the
+    tokens, and their lemmas (``LemmaContextAwareEnhancer`` scores matches by
+    surrounding lemmas) but never reads the dependency parse, and the parser is
+    one of the most expensive components in the pipeline. The
+    tagger/attribute_ruler/lemmatizer stay: English lemmatization needs POS
+    tags, and dropping lemmas would silently weaken context-based confidence
+    scores.
     """
-    provider = NlpEngineProvider(
-        nlp_configuration={
-            "nlp_engine_name": "spacy",
-            "models": [{"lang_code": "en", "model_name": SPACY_MODEL}],
-        }
-    )
-    return AnalyzerEngine(nlp_engine=provider.create_engine())
+    nlp = spacy.load(SPACY_MODEL, exclude=["parser"])
+    engine = SpacyNlpEngine(models=[{"lang_code": "en", "model_name": SPACY_MODEL}])
+    # Hand the engine its pre-loaded model: with ``nlp`` set, ``is_loaded()``
+    # reports True and ``AnalyzerEngine`` skips ``load()`` (which would reload
+    # the model from disk without the exclusion).
+    engine.nlp = {"en": nlp}
+    analyzer = AnalyzerEngine(nlp_engine=engine)
+    # US_DRIVER_LICENSE matches are dropped unconditionally after every scan
+    # (_FINDING_LEVEL_DROP), so running its recognizer's regex pass per scan is
+    # pure waste — remove it from the registry at the source. The post-scan drop
+    # stays as the behavioural guarantee, mirroring the Go path.
+    analyzer.registry.remove_recognizer("UsLicenseRecognizer")
+    return analyzer
 
 
 async def build_default_analyzer() -> AnalyzerEngine:

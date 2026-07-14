@@ -99,8 +99,6 @@ services:
       CLICKHOUSE_USER: gram
       CLICKHOUSE_PASSWORD: gram
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
-    mem_limit: 2g
-    memswap_limit: 2g
     volumes:
       - clickhouse_data:/var/lib/clickhouse
     ulimits:

@@ -134,14 +134,16 @@ func main() {
 	// Build the real production client with stubbed org-scoped concerns.
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	policy := guardian.NewDefaultPolicy(tracenoop.NewTracerProvider())
+	prov := &devProvisioner{apiKey: apiKey} // returns the dev key for any org
 	client := openrouter.NewUnifiedClient(
 		logger,
 		policy,
-		&devProvisioner{apiKey: apiKey}, // returns the dev key for any org
-		nil,                             // message capture  (nil-guarded)
-		nil,                             // usage tracking   (nil-guarded)
-		nil,                             // chat title gen   (nil-guarded)
-		nil,                             // telemetry logger (nil-guarded)
+		prov,
+		&openrouter.PlatformKeyResolver{Provisioner: prov},
+		nil, // message capture  (nil-guarded)
+		nil, // usage tracking   (nil-guarded)
+		nil, // chat title gen   (nil-guarded)
+		nil, // telemetry logger (nil-guarded)
 	)
 	_ = metricnoop.NewMeterProvider() // (ppopenrouter.New would need this; we call the client directly)
 
