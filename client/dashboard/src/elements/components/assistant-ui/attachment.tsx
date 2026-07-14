@@ -28,6 +28,7 @@ import {
 } from "@/elements/components/ui/avatar";
 import { TooltipIconButton } from "@/elements/components/assistant-ui/tooltip-icon-button";
 import { cn } from "@/lib/utils";
+import { attachmentTypeLabel } from "./attachment.helpers";
 
 const useFileSrc = (file: File | undefined) => {
   const [src, setSrc] = useState<string | undefined>(undefined);
@@ -139,7 +140,7 @@ const AttachmentUI: FC = () => {
       case "file":
         return "File";
       default:
-        throw new Error(`Unknown attachment type: ${String(type)}`);
+        return attachmentTypeLabel(type);
     }
   });
 
