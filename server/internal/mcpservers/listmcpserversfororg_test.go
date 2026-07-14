@@ -372,3 +372,57 @@ func TestListMcpServersForOrg_RBACFiltersToGrantedServers(t *testing.T) {
 	require.Len(t, result.McpServers, 1)
 	require.Equal(t, created[0], result.McpServers[0].ID)
 }
+
+// Grants for toolset-backed servers name the backing toolset id (the RBAC
+// picker's Server.id invariant), so a per-toolset grant must reveal the
+// toolset-backed row while leaving other servers filtered out.
+func TestListMcpServersForOrg_RBACToolsetGrantRevealsToolsetBackedServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	toolsetID := seedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID).ID.String()
+	toolsetBacked, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+		Name:                  "toolset backed server",
+		EnvironmentID:         nil,
+		RemoteMcpServerID:     nil,
+		TunneledMcpServerID:   nil,
+		ToolsetID:             &toolsetID,
+		ToolVariationsGroupID: nil,
+		Visibility:            types.McpServerVisibility("disabled"),
+	})
+	require.NoError(t, err)
+
+	remoteID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+	_, err = ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+		Name:                  "remote backed server",
+		EnvironmentID:         nil,
+		RemoteMcpServerID:     &remoteID,
+		TunneledMcpServerID:   nil,
+		ToolsetID:             nil,
+		ToolVariationsGroupID: nil,
+		Visibility:            types.McpServerVisibility("disabled"),
+	})
+	require.NoError(t, err)
+
+	ctx = withExactAuthzGrants(t, ctx, ti.conn,
+		authz.NewGrant(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+		authz.NewGrant(authz.ScopeMCPRead, toolsetID),
+	)
+
+	result, err := ti.service.ListMcpServersForOrg(ctx, &gen.ListMcpServersForOrgPayload{
+		SessionToken: nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.McpServers, 1)
+	require.Equal(t, toolsetBacked.ID, result.McpServers[0].ID)
+}
