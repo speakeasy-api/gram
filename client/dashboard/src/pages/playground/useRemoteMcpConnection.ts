@@ -59,10 +59,13 @@ export function useRemoteMcpConnection(
   // custom-domain URL would be a cross-origin mismatch (mirrors useInternalMcpUrl).
   const mcpUrl = useMemo(() => {
     const endpoints = endpointsData?.mcpEndpoints ?? [];
-    const endpoint = endpoints.find((e) => !e.customDomainId) ?? endpoints[0];
-    return endpoint?.slug
-      ? `${getServerURL()}/mcp/${endpoint.slug}`
-      : undefined;
+    // Only a platform-domain endpoint (no customDomainId) has a slug registered
+    // on the Gram origin. A custom-domain endpoint's slug lives under that
+    // domain, so `${getServerURL()}/mcp/<slug>` would 404 — never fall back to
+    // one here. A server with only custom-domain endpoints has no Gram-origin
+    // URL, so we return undefined (the chat surfaces the not-connected state).
+    const endpoint = endpoints.find((e) => !e.customDomainId);
+    return endpoint ? `${getServerURL()}/mcp/${endpoint.slug}` : undefined;
   }, [endpointsData]);
 
   const { accessToken, isLoading: isTokenLoading } =
