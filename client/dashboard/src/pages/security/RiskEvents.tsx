@@ -313,7 +313,7 @@ export default function RiskEvents(): JSX.Element {
           />
         </ListLayout.Toolbar>
         <ListLayout.List className="min-h-0 flex-1 overflow-hidden">
-          <div className="bg-background flex h-full min-h-0 flex-1 flex-col overflow-hidden border">
+          <div className="bg-card flex h-full min-h-0 flex-1 flex-col overflow-hidden border">
             {viewingInactivePolicy ? (
               <InactivePolicyNotice policyName={selectedPolicy?.name} />
             ) : null}

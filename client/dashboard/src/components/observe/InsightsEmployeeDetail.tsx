@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Alert } from "@/components/ui/alert";
 import { DynamicIcon, type IconName } from "@/components/ui/dynamic-icon";
 import { Card } from "@/components/ui/card";
-import { Heading } from "@/components/ui/heading";
+import { ObservabilityLayout } from "@/components/layouts/observability-layout";
 import { Progress } from "@/components/ui/progress";
 import { Type } from "@/components/ui/type";
 import {
@@ -442,40 +442,25 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
           rangeLabel,
         )}
       />
-      <div className="min-h-0 w-full flex-1 overflow-y-auto p-8 pb-24">
-        <div className="mx-auto flex max-w-7xl flex-col gap-6">
-          <div
-            className={cn(
-              "flex gap-4 transition-all duration-300",
-              isInsightsOpen
-                ? "flex-col items-stretch"
-                : "flex-row items-center justify-between",
-            )}
-          >
-            <div className="flex min-w-0 items-center gap-3">
-              <Avatar className="size-12">
+      <ObservabilityLayout fullHeight>
+        <ObservabilityLayout.Header
+          className="px-8 pt-8"
+          title={
+            <span className="flex min-w-0 items-center gap-3">
+              <Avatar className="size-10 shrink-0">
                 {member?.photoUrl && (
                   <AvatarImage src={member.photoUrl} alt={displayName} />
                 )}
-                <AvatarFallback className="text-base font-semibold">
+                <AvatarFallback className="text-sm font-semibold">
                   {getInitials(displayName)}
                 </AvatarFallback>
               </Avatar>
-              <div className="min-w-0">
-                <Heading variant="h1" className="truncate normal-case">
-                  {displayName}
-                </Heading>
-                <Type muted small className="truncate">
-                  {displayEmail}
-                </Type>
-              </div>
-            </div>
-            <div
-              className={cn(
-                "flex items-center gap-2",
-                isInsightsOpen ? "flex-wrap justify-start" : "shrink-0",
-              )}
-            >
+              <span className="truncate">{displayName}</span>
+            </span>
+          }
+          subtitle={displayEmail}
+          actions={
+            <>
               <AccountScopeSelector
                 accounts={accounts}
                 value={selectedOrgId}
@@ -492,173 +477,176 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
                 disabled={isLoading}
                 projectSlug={projectSlug}
               />
-            </div>
-          </div>
-
-          {error ? (
-            <Alert variant="error" dismissible={false}>
-              <span className="font-medium">
-                Unable to load employee usage data
-              </span>
-              <div>{error.message}</div>
-            </Alert>
-          ) : isLoading ? (
-            <DetailLoadingState isInsightsOpen={isInsightsOpen} />
-          ) : (
-            <>
-              <section
-                className={cn(
-                  "grid gap-4 transition-all duration-300",
-                  isInsightsOpen
-                    ? "grid-cols-1 md:grid-cols-2"
-                    : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5",
-                )}
-              >
-                <MetricCard title="Total Tokens" value={totalTokens} />
-                <MetricCard
-                  title="Total Cost"
-                  value={totalCost}
-                  format="currency"
-                  subtext={
-                    totalCost > 0
-                      ? `Over ${rangeLabel}`
-                      : "No cost data reported"
-                  }
-                />
-                <MetricCard
-                  title="Tool Calls"
-                  value={summary?.totalToolCalls ?? 0}
-                  subtext={`${(summary?.toolCallSuccess ?? 0).toLocaleString()} succeeded / ${(summary?.toolCallFailure ?? 0).toLocaleString()} failed`}
-                  link={toolLogsHref}
-                />
-                <MetricCard
-                  title="Agent Sessions"
-                  value={summary?.totalChats ?? 0}
-                  subtext={`Over ${rangeLabel}`}
-                  link={agentSessionsHref}
-                />
-                <MetricCard
-                  title="Risk Events"
-                  value={riskEventsCount}
-                  displayValue={
-                    riskOverviewQuery.isLoading || riskOverviewQuery.isError
-                      ? "-"
-                      : undefined
-                  }
-                  subtext={`Over ${rangeLabel}`}
-                  link={riskEventsHref}
-                />
-              </section>
-
-              <section
-                className={cn(
-                  "grid gap-4 transition-all duration-300",
-                  isInsightsOpen
-                    ? "grid-cols-1"
-                    : // Drop the accounts card (and its column) once a single
-                      // account is selected — the breakdown is already scoped to
-                      // it, so the full account list is redundant.
-                      selectedOrgId === ""
-                      ? "grid-cols-1 lg:grid-cols-3"
-                      : "grid-cols-1 lg:grid-cols-2",
-                )}
-              >
-                {selectedOrgId === "" && <AccountsCard accounts={accounts} />}
-                <BreakdownCard
-                  title="Platform Breakdown"
-                  rows={(summary?.hookSources ?? []).map((source) => ({
-                    label: formatPlatform(source.source),
-                    value: source.eventCount,
-                    valueLabel: `${source.eventCount.toLocaleString()} events`,
-                  }))}
-                  emptyLabel="No platform data"
-                />
-                <BreakdownCard
-                  title="Top Used Tools"
-                  rows={(summary?.tools ?? [])
-                    .slice()
-                    .sort((a, b) => b.count - a.count)
-                    .slice(0, 8)
-                    .map((tool) => ({
-                      label: formatToolUrn(tool.urn),
-                      value: tool.count,
-                      valueLabel: `${tool.count.toLocaleString()} calls (${tool.successCount.toLocaleString()} ok / ${tool.failureCount.toLocaleString()} blocked)`,
-                    }))}
-                  emptyLabel="No tool calls"
-                />
-              </section>
-
-              {member?.id && <EmployeeSessions userId={member.id} />}
-
-              {dataFlowQuery.error ? (
-                <Alert variant="error" dismissible={false}>
-                  <span className="font-medium">
-                    Unable to load employee data flow
-                  </span>
-                  <div>{dataFlowQuery.error.message}</div>
-                </Alert>
-              ) : dataFlowQuery.isLoading ? (
-                <Skeleton className="h-[360px]" />
-              ) : (
-                <EmployeeDataFlowGraphCard
-                  graph={dataFlow ?? { nodes: [], edges: [] }}
-                  userName={displayName}
-                  userPhotoUrl={member?.photoUrl ?? undefined}
-                />
-              )}
-
-              {metricsQuery.error ? (
-                <Alert variant="error" dismissible={false}>
-                  <span className="font-medium">
-                    Unable to load model metrics
-                  </span>
-                  <div>{metricsQuery.error.message}</div>
-                </Alert>
-              ) : metricsQuery.isLoading ? (
-                <Skeleton className="h-40" />
-              ) : (
-                <BreakdownCard
-                  title="Model Usage"
-                  rows={(metrics?.models ?? [])
-                    .slice()
-                    .sort((a, b) => b.count - a.count)
-                    .map((model) => ({
-                      label: model.name,
-                      value: model.count,
-                      valueLabel: `${model.count.toLocaleString()} requests`,
-                    }))}
-                  emptyLabel="No model usage"
-                />
-              )}
-
-              {overviewQuery.error ? (
-                <Alert variant="error" dismissible={false}>
-                  <span className="font-medium">
-                    Unable to load time series
-                  </span>
-                  <div>{overviewQuery.error.message}</div>
-                </Alert>
-              ) : overviewQuery.isLoading ? (
-                <Skeleton className="h-72" />
-              ) : (
-                <TokenTimeSeriesChart
-                  title="Token Use Over Time"
-                  chartId="user-tokens-over-time"
-                  timeSeries={timeSeries}
-                  hasData={timeSeries.some(
-                    (point) => getTotalTokens(point) > 0,
-                  )}
-                  expandedChart={expandedChart}
-                  onExpand={setExpandedChart}
-                  onRangeSelect={handleChartRangeSelect}
-                  isZoomed={customRange !== null}
-                  onResetZoom={handleClearCustomRange}
-                />
-              )}
             </>
-          )}
-        </div>
-      </div>
+          }
+        />
+        <ObservabilityLayout.Scroll className="px-8 pb-24">
+          <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 pt-6">
+            {error ? (
+              <Alert variant="error" dismissible={false}>
+                <span className="font-medium">
+                  Unable to load employee usage data
+                </span>
+                <div>{error.message}</div>
+              </Alert>
+            ) : isLoading ? (
+              <DetailLoadingState isInsightsOpen={isInsightsOpen} />
+            ) : (
+              <>
+                <section
+                  className={cn(
+                    "grid gap-4 transition-all duration-300",
+                    isInsightsOpen
+                      ? "grid-cols-1 md:grid-cols-2"
+                      : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5",
+                  )}
+                >
+                  <MetricCard title="Total Tokens" value={totalTokens} />
+                  <MetricCard
+                    title="Total Cost"
+                    value={totalCost}
+                    format="currency"
+                    subtext={
+                      totalCost > 0
+                        ? `Over ${rangeLabel}`
+                        : "No cost data reported"
+                    }
+                  />
+                  <MetricCard
+                    title="Tool Calls"
+                    value={summary?.totalToolCalls ?? 0}
+                    subtext={`${(summary?.toolCallSuccess ?? 0).toLocaleString()} succeeded / ${(summary?.toolCallFailure ?? 0).toLocaleString()} failed`}
+                    link={toolLogsHref}
+                  />
+                  <MetricCard
+                    title="Agent Sessions"
+                    value={summary?.totalChats ?? 0}
+                    subtext={`Over ${rangeLabel}`}
+                    link={agentSessionsHref}
+                  />
+                  <MetricCard
+                    title="Risk Events"
+                    value={riskEventsCount}
+                    displayValue={
+                      riskOverviewQuery.isLoading || riskOverviewQuery.isError
+                        ? "-"
+                        : undefined
+                    }
+                    subtext={`Over ${rangeLabel}`}
+                    link={riskEventsHref}
+                  />
+                </section>
+
+                <section
+                  className={cn(
+                    "grid gap-4 transition-all duration-300",
+                    isInsightsOpen
+                      ? "grid-cols-1"
+                      : // Drop the accounts card (and its column) once a single
+                        // account is selected — the breakdown is already scoped to
+                        // it, so the full account list is redundant.
+                        selectedOrgId === ""
+                        ? "grid-cols-1 lg:grid-cols-3"
+                        : "grid-cols-1 lg:grid-cols-2",
+                  )}
+                >
+                  {selectedOrgId === "" && <AccountsCard accounts={accounts} />}
+                  <BreakdownCard
+                    title="Platform Breakdown"
+                    rows={(summary?.hookSources ?? []).map((source) => ({
+                      label: formatPlatform(source.source),
+                      value: source.eventCount,
+                      valueLabel: `${source.eventCount.toLocaleString()} events`,
+                    }))}
+                    emptyLabel="No platform data"
+                  />
+                  <BreakdownCard
+                    title="Top Used Tools"
+                    rows={(summary?.tools ?? [])
+                      .slice()
+                      .sort((a, b) => b.count - a.count)
+                      .slice(0, 8)
+                      .map((tool) => ({
+                        label: formatToolUrn(tool.urn),
+                        value: tool.count,
+                        valueLabel: `${tool.count.toLocaleString()} calls (${tool.successCount.toLocaleString()} ok / ${tool.failureCount.toLocaleString()} blocked)`,
+                      }))}
+                    emptyLabel="No tool calls"
+                  />
+                </section>
+
+                {member?.id && <EmployeeSessions userId={member.id} />}
+
+                {dataFlowQuery.error ? (
+                  <Alert variant="error" dismissible={false}>
+                    <span className="font-medium">
+                      Unable to load employee data flow
+                    </span>
+                    <div>{dataFlowQuery.error.message}</div>
+                  </Alert>
+                ) : dataFlowQuery.isLoading ? (
+                  <Skeleton className="h-[360px]" />
+                ) : (
+                  <EmployeeDataFlowGraphCard
+                    graph={dataFlow ?? { nodes: [], edges: [] }}
+                    userName={displayName}
+                    userPhotoUrl={member?.photoUrl ?? undefined}
+                  />
+                )}
+
+                {metricsQuery.error ? (
+                  <Alert variant="error" dismissible={false}>
+                    <span className="font-medium">
+                      Unable to load model metrics
+                    </span>
+                    <div>{metricsQuery.error.message}</div>
+                  </Alert>
+                ) : metricsQuery.isLoading ? (
+                  <Skeleton className="h-40" />
+                ) : (
+                  <BreakdownCard
+                    title="Model Usage"
+                    rows={(metrics?.models ?? [])
+                      .slice()
+                      .sort((a, b) => b.count - a.count)
+                      .map((model) => ({
+                        label: model.name,
+                        value: model.count,
+                        valueLabel: `${model.count.toLocaleString()} requests`,
+                      }))}
+                    emptyLabel="No model usage"
+                  />
+                )}
+
+                {overviewQuery.error ? (
+                  <Alert variant="error" dismissible={false}>
+                    <span className="font-medium">
+                      Unable to load time series
+                    </span>
+                    <div>{overviewQuery.error.message}</div>
+                  </Alert>
+                ) : overviewQuery.isLoading ? (
+                  <Skeleton className="h-72" />
+                ) : (
+                  <TokenTimeSeriesChart
+                    title="Token Use Over Time"
+                    chartId="user-tokens-over-time"
+                    timeSeries={timeSeries}
+                    hasData={timeSeries.some(
+                      (point) => getTotalTokens(point) > 0,
+                    )}
+                    expandedChart={expandedChart}
+                    onExpand={setExpandedChart}
+                    onRangeSelect={handleChartRangeSelect}
+                    isZoomed={customRange !== null}
+                    onResetZoom={handleClearCustomRange}
+                  />
+                )}
+              </>
+            )}
+          </div>
+        </ObservabilityLayout.Scroll>
+      </ObservabilityLayout>
     </>
   );
 }

@@ -184,6 +184,7 @@ function TableRoot<T extends object>(
     noResultsMessage,
     renderGroupHeader,
     renderExpandedContent,
+    lazyExpandedContent,
     className,
     hideHeader,
     cellPadding,
@@ -212,6 +213,7 @@ function TableRoot<T extends object>(
         noResultsMessage={noResultsMessage}
         renderGroupHeader={renderGroupHeader}
         renderExpandedContent={renderExpandedContent}
+        lazyExpandedContent={lazyExpandedContent}
         handleLoadMore={handleLoadMore}
         isLoading={isLoading}
         onRowClick={onRowClick}
@@ -381,6 +383,7 @@ type BodyProps<T extends object> = {
   noResultsMessage?: ReactNode;
   renderGroupHeader?: (group: Group<T>) => ReactNode;
   renderExpandedContent?: (row: T) => ReactNode;
+  lazyExpandedContent?: boolean;
   hasMore?: boolean;
   handleLoadMore?: () => void;
   isLoading?: boolean;
@@ -428,6 +431,7 @@ const Body = React.forwardRef(function Body<T extends object>(
     isLoading,
     className,
     renderExpandedContent,
+    lazyExpandedContent,
   } = props;
 
   const renderRow = (row: T | Group<T>) => {
@@ -449,6 +453,7 @@ const Body = React.forwardRef(function Body<T extends object>(
           columns={columns}
           rowKey={rowKey}
           renderExpandedContent={renderExpandedContent}
+          lazy={lazyExpandedContent}
           key={rowKey(row)}
           onClick={onRowClick}
         />
@@ -541,12 +546,14 @@ function RowExpandable<T extends object>({
   columns,
   rowKey,
   renderExpandedContent,
+  lazy,
   className,
 }: {
   row: T;
   columns: Column<T>[];
   rowKey: (row: T) => string | number;
   renderExpandedContent: (row: T) => ReactNode;
+  lazy?: boolean;
   onClick?: (row: T) => void;
   className?: string;
 }) {
@@ -562,13 +569,21 @@ function RowExpandable<T extends object>({
     [rowKey, row, toggleExpanded],
   );
 
+  // In lazy mode every row is assumed expandable, so the content is only
+  // computed (and mounted) while the row is open — this keeps a fetch-on-expand
+  // panel from mounting for every row. In eager mode the content is computed up
+  // front so a row with no content can hide its chevron.
   const content = useMemo(
-    () => renderExpandedContent(row),
-    [renderExpandedContent, row],
+    () => (lazy && !isExpanded ? null : renderExpandedContent(row)),
+    [lazy, isExpanded, renderExpandedContent, row],
   );
 
+  // The chevron shows whenever the row can expand: always in lazy mode, or when
+  // there is eagerly-computed content otherwise.
+  const showChevron = lazy || content != null;
+
   const renderExpandCol = useCallback(() => {
-    return content ? (
+    return showChevron ? (
       <TooltipProvider>
         <Tooltip delayDuration={0}>
           <TooltipTrigger asChild>
@@ -586,7 +601,7 @@ function RowExpandable<T extends object>({
         </Tooltip>
       </TooltipProvider>
     ) : null;
-  }, [expand, isExpanded, content]);
+  }, [expand, isExpanded, showChevron]);
 
   const expandCol = columns.find((column) => column.key === expandColumn().key);
 
@@ -596,8 +611,10 @@ function RowExpandable<T extends object>({
 
   let onClickFn = onClick;
 
-  // If there's some expanded content to show and onClick is not provided, let the row expand when clicked
-  if (!onClick && content) {
+  // If the row can expand and onClick is not provided, let the row expand when
+  // clicked. In lazy mode `content` is null while collapsed, so fall back to the
+  // chevron's own visibility to decide.
+  if (!onClick && showChevron) {
     onClickFn = () => toggleExpanded(rowKey(row));
   }
 

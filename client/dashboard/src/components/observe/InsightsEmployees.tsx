@@ -10,12 +10,12 @@ import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { useInsightsState } from "@/components/insights-context";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { Card } from "@/components/ui/card";
-import { Heading } from "@/components/ui/heading";
 import { IdentityCell } from "@/components/ui/identity-cell";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { Page } from "@/components/page-layout";
+import { ObservabilityLayout } from "@/components/layouts/observability-layout";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { cn } from "@/lib/utils";
@@ -362,21 +362,19 @@ export function InsightsEmployeesContent(): JSX.Element {
         contextInfo={`Project-scoped Employees tab: ${enrolledEmployees} of ${totalEmployees} employees have hooks activity in ${rangeLabel} and are enrolled; ${notEnrolledEmployees} employees have no hooks activity and are not enrolled.`}
         suggestions={INSIGHTS_SUGGESTIONS["insights/employees"]}
       />
-      <div className="min-h-0 w-full flex-1 overflow-y-auto p-8 pb-24">
-        <div className="mx-auto flex max-w-7xl flex-col gap-6">
-          <div className="flex flex-col gap-4">
-            <div className="flex min-w-0 flex-col gap-1">
-              <div className="flex items-center gap-2">
-                <Heading variant="h1">Employee Enrollment</Heading>
-                <ReleaseStageBadge stage="preview" />
-              </div>
-              <Type muted small>
-                Track platform adoption for organization members in this project
-                over {rangeLabel}. Employees with tool or agent session activity
-                are marked enrolled; employees without any activity are marked
-                not enrolled.
-              </Type>
-            </div>
+      <ObservabilityLayout fullHeight>
+        <ObservabilityLayout.Header
+          className="px-8 pt-8"
+          title={
+            <span className="inline-flex items-center gap-2">
+              Employee Enrollment
+              <ReleaseStageBadge stage="preview" />
+            </span>
+          }
+          subtitle={`Track platform adoption for organization members in this project over ${rangeLabel}. Employees with tool or agent session activity are marked enrolled; employees without any activity are marked not enrolled.`}
+        />
+        <ObservabilityLayout.Scroll className="px-8 pb-24">
+          <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 pt-6">
             <Page.Toolbar>
               <Page.Toolbar.Search
                 value={search}
@@ -410,78 +408,78 @@ export function InsightsEmployeesContent(): JSX.Element {
                 }
               />
             </Page.Toolbar>
+
+            {error ? (
+              <Alert variant="error" dismissible={false}>
+                <span className="font-medium">
+                  Unable to load employee enrollment data
+                </span>
+                <div>{error.message}</div>
+              </Alert>
+            ) : isLoading ? (
+              <EmployeesLoadingState isInsightsOpen={isInsightsOpen} />
+            ) : (
+              <>
+                <section
+                  className={cn(
+                    "grid gap-4 transition-all duration-300",
+                    isInsightsOpen
+                      ? "grid-cols-1 md:grid-cols-2"
+                      : "grid-cols-1 md:grid-cols-2 lg:grid-cols-4",
+                  )}
+                >
+                  <MetricCard
+                    title={isUnattributedView ? "Unknown users" : "Employees"}
+                    value={totalEmployees}
+                    subtext={
+                      isUnattributedView
+                        ? "Usage not matched to a member"
+                        : "Organization members"
+                    }
+                  />
+                  <MetricCard
+                    title="Enrolled"
+                    value={enrolledEmployees}
+                    displayValue={isUnattributedView ? "-" : undefined}
+                    subtext={
+                      isUnattributedView
+                        ? "Not applicable to unknown users"
+                        : "Platform activity present"
+                    }
+                  />
+                  <MetricCard
+                    title="Not Enrolled"
+                    value={notEnrolledEmployees}
+                    displayValue={isUnattributedView ? "-" : undefined}
+                    subtext={
+                      isUnattributedView
+                        ? "Not applicable to unknown users"
+                        : "No platform activity found"
+                    }
+                  />
+                  <MetricCard
+                    title="Token Count"
+                    value={totalTokenCount}
+                    subtext={
+                      isUnattributedView
+                        ? undefined
+                        : `${enrollmentRate.toFixed(0)}% enrolled`
+                    }
+                  />
+                </section>
+
+                <EmployeeTable
+                  key={view}
+                  employees={employees}
+                  search={search}
+                  onSelectUser={openUser}
+                />
+                <EnrollmentLegend />
+              </>
+            )}
           </div>
-
-          {error ? (
-            <Alert variant="error" dismissible={false}>
-              <span className="font-medium">
-                Unable to load employee enrollment data
-              </span>
-              <div>{error.message}</div>
-            </Alert>
-          ) : isLoading ? (
-            <EmployeesLoadingState isInsightsOpen={isInsightsOpen} />
-          ) : (
-            <>
-              <section
-                className={cn(
-                  "grid gap-4 transition-all duration-300",
-                  isInsightsOpen
-                    ? "grid-cols-1 md:grid-cols-2"
-                    : "grid-cols-1 md:grid-cols-2 lg:grid-cols-4",
-                )}
-              >
-                <MetricCard
-                  title={isUnattributedView ? "Unknown users" : "Employees"}
-                  value={totalEmployees}
-                  subtext={
-                    isUnattributedView
-                      ? "Usage not matched to a member"
-                      : "Organization members"
-                  }
-                />
-                <MetricCard
-                  title="Enrolled"
-                  value={enrolledEmployees}
-                  displayValue={isUnattributedView ? "-" : undefined}
-                  subtext={
-                    isUnattributedView
-                      ? "Not applicable to unknown users"
-                      : "Platform activity present"
-                  }
-                />
-                <MetricCard
-                  title="Not Enrolled"
-                  value={notEnrolledEmployees}
-                  displayValue={isUnattributedView ? "-" : undefined}
-                  subtext={
-                    isUnattributedView
-                      ? "Not applicable to unknown users"
-                      : "No platform activity found"
-                  }
-                />
-                <MetricCard
-                  title="Token Count"
-                  value={totalTokenCount}
-                  subtext={
-                    isUnattributedView
-                      ? undefined
-                      : `${enrollmentRate.toFixed(0)}% enrolled`
-                  }
-                />
-              </section>
-
-              <EmployeeTable
-                key={view}
-                employees={employees}
-                search={search}
-                onSelectUser={openUser}
-              />
-              <EnrollmentLegend />
-            </>
-          )}
-        </div>
-      </div>
+        </ObservabilityLayout.Scroll>
+      </ObservabilityLayout>
     </>
   );
 }

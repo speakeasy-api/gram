@@ -8,7 +8,7 @@ import { Timeseries } from "@/components/chart/Timeseries";
 import { RankedBar, type RankedBarItem } from "@/components/chart/RankedBar";
 import { buildAgentTokenTimeSeries } from "@/components/observe/agentTokenTimeSeriesChartData";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
-import { Heading } from "@/components/ui/heading";
+import { ObservabilityLayout } from "@/components/layouts/observability-layout";
 import { Progress } from "@/components/ui/progress";
 import { Type } from "@/components/ui/type";
 import { formatCompact } from "@/lib/format";
@@ -445,58 +445,52 @@ export function InsightsAgentsContent(): JSX.Element {
         contextInfo={`Agents tab: ${activeUsers} active users, ${formatCompact(totalTokens)} tokens, ${formatCost(totalCost)} total cost in ${rangeLabel}. ${clientBreakdown.length} client types, ${modelBreakdown.length} models.`}
         suggestions={INSIGHTS_SUGGESTIONS["insights/costs"]}
       />
-      <div className="min-h-0 w-full flex-1 overflow-y-auto p-8 pb-24">
-        <div className="mx-auto flex max-w-7xl flex-col gap-6">
-          {/* Page title, then the filter bar on its own row below it. */}
-          <div className="flex flex-col gap-4">
-            <div className="flex min-w-0 flex-col gap-1">
-              <div className="flex items-center gap-2">
-                <Heading variant="h1">AI Agent Costs</Heading>
-                <ReleaseStageBadge stage="preview" />
-              </div>
-              <Type muted small>
-                Track token consumption and costs across users, clients, and
-                models over {rangeLabel}.
-              </Type>
-            </div>
-            <Page.Toolbar>
-              <Page.Toolbar.Filters
-                schema={COST_FILTERS}
-                values={costFilters.values}
-                optionsById={
-                  {
-                    client: availableClients,
-                    account_type: ACCOUNT_TYPE_OPTIONS,
-                  } satisfies OptionsById
-                }
-                onChange={
-                  costFilters.setValue as (
-                    id: string,
-                    value: FilterValue,
-                  ) => void
-                }
-                onClear={costFilters.clearValue as (id: string) => void}
-                onClearAll={costFilters.clearAll}
-              />
-              <Page.Toolbar.Actions>
-                <ValueModeToggle mode={valueMode} onChange={setValueMode} />
-              </Page.Toolbar.Actions>
-              <Page.Toolbar.Refresh
-                onRefresh={() => {
-                  void usersQuery.refetch();
-                  void projectQuery.refetch();
-                  void overviewQuery.refetch();
-                  void roleUsageQuery.refetch();
-                }}
-                isRefreshing={
-                  usersQuery.isFetching ||
-                  projectQuery.isFetching ||
-                  overviewQuery.isFetching ||
-                  roleUsageQuery.isFetching
-                }
-              />
-            </Page.Toolbar>
-          </div>
+      <ObservabilityLayout fullHeight>
+        <ObservabilityLayout.Header
+          title={
+            <span className="inline-flex items-center gap-2">
+              AI Agent Costs
+              <ReleaseStageBadge stage="preview" />
+            </span>
+          }
+          subtitle={`Track token consumption and costs across users, clients, and models over ${rangeLabel}.`}
+          className="px-8 pt-8"
+        />
+        <ObservabilityLayout.Scroll className="gap-6 px-8 pt-6 pb-8">
+          <Page.Toolbar>
+            <Page.Toolbar.Filters
+              schema={COST_FILTERS}
+              values={costFilters.values}
+              optionsById={
+                {
+                  client: availableClients,
+                  account_type: ACCOUNT_TYPE_OPTIONS,
+                } satisfies OptionsById
+              }
+              onChange={
+                costFilters.setValue as (id: string, value: FilterValue) => void
+              }
+              onClear={costFilters.clearValue as (id: string) => void}
+              onClearAll={costFilters.clearAll}
+            />
+            <Page.Toolbar.Actions>
+              <ValueModeToggle mode={valueMode} onChange={setValueMode} />
+            </Page.Toolbar.Actions>
+            <Page.Toolbar.Refresh
+              onRefresh={() => {
+                void usersQuery.refetch();
+                void projectQuery.refetch();
+                void overviewQuery.refetch();
+                void roleUsageQuery.refetch();
+              }}
+              isRefreshing={
+                usersQuery.isFetching ||
+                projectQuery.isFetching ||
+                overviewQuery.isFetching ||
+                roleUsageQuery.isFetching
+              }
+            />
+          </Page.Toolbar>
 
           {error ? (
             <Alert variant="error" dismissible={false}>
@@ -509,20 +503,15 @@ export function InsightsAgentsContent(): JSX.Element {
             <AgentsLoadingState isInsightsOpen={isInsightsOpen} />
           ) : (
             <>
-              <section
-                className={cn(
-                  "grid gap-4 transition-all duration-300",
-                  isInsightsOpen
-                    ? "grid-cols-1 md:grid-cols-2"
-                    : "grid-cols-1 md:grid-cols-2 lg:grid-cols-4",
-                )}
-              >
+              <ObservabilityLayout.Stats>
                 <MetricCard
+                  bordered={false}
                   title="Total Tokens"
                   value={filteredTotalTokens}
                   subtext={`${formatCompact(filteredTotalTokens)} across ${formatCompact(filteredTotalSessions)} sessions`}
                 />
                 <MetricCard
+                  bordered={false}
                   title="Total Cost"
                   value={filteredTotalCost}
                   format="currency"
@@ -533,11 +522,13 @@ export function InsightsAgentsContent(): JSX.Element {
                   }
                 />
                 <MetricCard
+                  bordered={false}
                   title="Active Users"
                   value={filteredActiveUsers}
                   subtext={`of ${(membersData?.members ?? []).length} org members`}
                 />
                 <MetricCard
+                  bordered={false}
                   title="AI Clients"
                   value={clientBreakdown.length}
                   subtext={
@@ -546,14 +537,13 @@ export function InsightsAgentsContent(): JSX.Element {
                       : "No client data"
                   }
                 />
-              </section>
+              </ObservabilityLayout.Stats>
 
-              <section
+              <ObservabilityLayout.Grid
+                columns={2}
                 className={cn(
-                  "grid gap-4 transition-all duration-300",
-                  isInsightsOpen || expandedChart
-                    ? "grid-cols-1"
-                    : "grid-cols-1 lg:grid-cols-2",
+                  "transition-all duration-300",
+                  (isInsightsOpen || expandedChart) && "lg:grid-cols-1",
                 )}
               >
                 <TokenTimeSeriesChart
@@ -581,7 +571,7 @@ export function InsightsAgentsContent(): JSX.Element {
                   expandedChart={expandedChart}
                   onExpand={setExpandedChart}
                 />
-              </section>
+              </ObservabilityLayout.Grid>
 
               <ModelBreakdownCard models={modelBreakdown} />
 
@@ -598,8 +588,8 @@ export function InsightsAgentsContent(): JSX.Element {
               <CostDisclaimer providers={clientBreakdown.map((c) => c.label)} />
             </>
           )}
-        </div>
-      </div>
+        </ObservabilityLayout.Scroll>
+      </ObservabilityLayout>
     </>
   );
 }

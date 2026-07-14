@@ -297,6 +297,25 @@ export const Expandable: StoryObj<ListTableProps> = {
   render: (args) => <TableWithState {...args} />,
 };
 
+// `lazyExpandedContent` mounts the expanded panel only while a row is open and
+// always shows a chevron (every row is assumed expandable). Use it when the
+// expanded content is expensive — e.g. it fires a network request on expand —
+// so it doesn't mount for every row up front. Log viewers use this.
+export const ExpandableLazy: StoryObj<ListTableProps> = {
+  args: {
+    ...defaultArgs,
+    onRowClick: undefined,
+    lazyExpandedContent: true,
+    renderExpandedContent: (row) => (
+      <div className="bg-muted p-4">
+        Lazily-mounted content for <strong>{row.name}</strong> — only rendered
+        while this row is open.
+      </div>
+    ),
+  },
+  render: (args) => <TableWithState {...args} />,
+};
+
 export const ExpandableWithDefaultExpanded: StoryObj<ListTableProps> = {
   args: {
     ...Expandable.args,

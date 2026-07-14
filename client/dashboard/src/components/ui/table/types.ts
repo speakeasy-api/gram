@@ -54,6 +54,14 @@ export type TableProps<T extends object> = {
   onRowClick?: (row: T) => void;
   renderGroupHeader?: (group: Group<T>) => ReactNode;
   renderExpandedContent?: (row: T) => ReactNode;
+  /**
+   * Only mount the expanded content while a row is actually open, and always
+   * show the expand chevron (rather than probing `renderExpandedContent` for
+   * every row up front to decide whether a chevron is warranted). Use this when
+   * the expanded content is expensive to mount — e.g. it fires a network
+   * request that should run only on expand. Every row is assumed expandable.
+   */
+  lazyExpandedContent?: boolean;
   onLoadMore?: () => Promise<void> | (() => void);
   hasMore?: boolean;
   noResultsMessage?: ReactNode;

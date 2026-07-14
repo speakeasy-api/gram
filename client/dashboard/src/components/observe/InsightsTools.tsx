@@ -42,9 +42,8 @@ import { useGramContext } from "@gram/client/react-query/_context.js";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
-import { Heading } from "@/components/ui/heading";
 import { InlineEmptyState } from "@/components/ui/inline-empty-state";
-import { Type } from "@/components/ui/type";
+import { ObservabilityLayout } from "@/components/layouts/observability-layout";
 import { ChartCard } from "@/components/chart/ChartCard";
 import { MetricCard } from "@/components/chart/MetricCard";
 import { formatChartZoomRangeLabel } from "@/components/chart/chartUtils";
@@ -78,17 +77,9 @@ function displayTargetLabel(
 
 // Shared with both the logging-disabled empty state and the populated view
 // below so the page title only has one copy to update.
-function ToolInsightsHeading() {
-  return (
-    <div className="flex min-w-0 flex-col gap-1">
-      <Heading variant="h1">MCP Servers & Tool Insights</Heading>
-      <Type muted small>
-        Monitor MCP servers and tool events across all users and agents in your
-        project
-      </Type>
-    </div>
-  );
-}
+const TOOL_INSIGHTS_TITLE = "MCP Servers & Tool Insights";
+const TOOL_INSIGHTS_SUBTITLE =
+  "Monitor MCP servers and tool events across all users and agents in your project";
 
 export function InsightsToolsContent(): JSX.Element {
   const { projectSlug } = useSlugs();
@@ -268,18 +259,24 @@ export function InsightsToolsContent(): JSX.Element {
         hideTrigger={isLogsDisabled}
       />
       {isLogsDisabled ? (
-        <div className="min-h-0 w-full flex-1 space-y-6 overflow-y-auto p-8 pb-24">
-          <ToolInsightsHeading />
-          <div className="relative flex-1">
-            <div
-              className="pointer-events-none h-full select-none"
-              aria-hidden="true"
-            >
-              <ObservabilitySkeleton />
+        <ObservabilityLayout fullHeight>
+          <ObservabilityLayout.Header
+            title={TOOL_INSIGHTS_TITLE}
+            subtitle={TOOL_INSIGHTS_SUBTITLE}
+            className="px-8 pt-8"
+          />
+          <ObservabilityLayout.Scroll className="gap-6 px-8 pt-6 pb-8">
+            <div className="relative flex-1">
+              <div
+                className="pointer-events-none h-full select-none"
+                aria-hidden="true"
+              >
+                <ObservabilitySkeleton />
+              </div>
+              <EnableLoggingOverlay onEnabled={refetch} />
             </div>
-            <EnableLoggingOverlay onEnabled={refetch} />
-          </div>
-        </div>
+          </ObservabilityLayout.Scroll>
+        </ObservabilityLayout>
       ) : (
         <HooksInnerContent
           isLogsDisabled={isLogsDisabled}
@@ -403,11 +400,12 @@ function HooksInnerContent({
   const hasSummaryData = (summaryData?.totals.eventCount ?? 0) > 0;
 
   return (
-    <div className="flex min-h-0 w-full flex-1 flex-col">
-      <div className="flex min-h-0 flex-1 flex-col gap-6 px-8 pt-8">
-        <div className="flex shrink-0 items-start justify-between gap-4">
-          <ToolInsightsHeading />
-          <div className="flex items-center gap-2">
+    <ObservabilityLayout fullHeight>
+      <ObservabilityLayout.Header
+        title={TOOL_INSIGHTS_TITLE}
+        subtitle={TOOL_INSIGHTS_SUBTITLE}
+        actions={
+          <>
             <HooksSetupButton />
             <Button variant="secondary" size="sm" asChild>
               <Link to={orgRoutes.logs.href()}>
@@ -415,9 +413,11 @@ function HooksInnerContent({
                 Configure settings
               </Link>
             </Button>
-          </div>
-        </div>
-
+          </>
+        }
+        className="px-8 pt-8"
+      />
+      <ObservabilityLayout.Scroll className="gap-6 px-8 pt-6 pb-8">
         <ObserveFilterBar
           serverOptions={serverOptions}
           serverOptionGroups={serverOptionGroups}
@@ -447,55 +447,47 @@ function HooksInnerContent({
           isRefreshing={isRefreshing}
         />
 
-        <div className="flex min-h-0 flex-1 overflow-hidden">
-          <div className="min-h-0 flex-1 overflow-y-auto pb-4">
-            {error ? (
-              <Alert
-                variant="error"
-                dismissible={false}
-                className="mx-auto w-full"
-              >
-                <span className="font-medium">Error loading tool usage</span>
-                <div>{error.message}</div>
-              </Alert>
-            ) : isLoading ? (
-              <div className="text-muted-foreground flex items-center justify-center gap-2 py-12">
-                <Spinner className="mr-0 size-5" />
-                <span>Loading tool usage...</span>
-              </div>
-            ) : !hasSummaryData &&
-              activeFilters.length === 0 &&
-              selectedRoleIds.length === 0 ? (
-              <HooksEmptyState
-                title="No Insights Generated"
-                subtitle="Install Observability plugin in your AI agent to start generating tool insights"
-              />
-            ) : !hasSummaryData ? (
-              <InlineEmptyState
-                icon={<Inbox />}
-                title="No matching tool usage"
-                description="Try adjusting your search query or time range"
-              />
-            ) : (
-              <HooksAnalytics
-                serverNameMappings={serverNameMappings}
-                compact={false}
-                addFilter={addFilter}
-                onHookTypesChange={onHookTypesChange}
-                summaryData={summaryData}
-                summaryPending={summaryPending}
-                summaryIsError={summaryIsError}
-                expandedChart={expandedChart}
-                onExpandedChartChange={setExpandedChart}
-                onRangeSelect={handleChartRangeSelect}
-                isZoomed={customRange !== null}
-                onResetZoom={onClearCustomRange}
-              />
-            )}
+        {error ? (
+          <Alert variant="error" dismissible={false} className="mx-auto w-full">
+            <span className="font-medium">Error loading tool usage</span>
+            <div>{error.message}</div>
+          </Alert>
+        ) : isLoading ? (
+          <div className="text-muted-foreground flex items-center justify-center gap-2 py-12">
+            <Spinner className="mr-0 size-5" />
+            <span>Loading tool usage...</span>
           </div>
-        </div>
-      </div>
-    </div>
+        ) : !hasSummaryData &&
+          activeFilters.length === 0 &&
+          selectedRoleIds.length === 0 ? (
+          <HooksEmptyState
+            title="No Insights Generated"
+            subtitle="Install Observability plugin in your AI agent to start generating tool insights"
+          />
+        ) : !hasSummaryData ? (
+          <InlineEmptyState
+            icon={<Inbox />}
+            title="No matching tool usage"
+            description="Try adjusting your search query or time range"
+          />
+        ) : (
+          <HooksAnalytics
+            serverNameMappings={serverNameMappings}
+            compact={false}
+            addFilter={addFilter}
+            onHookTypesChange={onHookTypesChange}
+            summaryData={summaryData}
+            summaryPending={summaryPending}
+            summaryIsError={summaryIsError}
+            expandedChart={expandedChart}
+            onExpandedChartChange={setExpandedChart}
+            onRangeSelect={handleChartRangeSelect}
+            isZoomed={customRange !== null}
+            onResetZoom={onClearCustomRange}
+          />
+        )}
+      </ObservabilityLayout.Scroll>
+    </ObservabilityLayout>
   );
 }
 
