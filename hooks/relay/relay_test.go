@@ -34,11 +34,14 @@ type fakeServer struct {
 	requests []components.IngestRequestBody
 	headers  []http.Header
 	respond  func(components.IngestRequestBody) (int, decision)
+	// effects, when set, is merged into the response body alongside the
+	// decision, mirroring the server's org_settings side channel.
+	effects func(components.IngestRequestBody) map[string]any
 }
 
 func newFakeServer(t *testing.T, respond func(components.IngestRequestBody) (int, decision)) *fakeServer {
 	t.Helper()
-	fs := &fakeServer{Server: nil, mu: sync.Mutex{}, requests: nil, headers: nil, respond: respond}
+	fs := &fakeServer{Server: nil, mu: sync.Mutex{}, requests: nil, headers: nil, respond: respond, effects: nil}
 	fs.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		var p components.IngestRequestBody
@@ -52,9 +55,16 @@ func newFakeServer(t *testing.T, respond func(components.IngestRequestBody) (int
 		if fs.respond != nil {
 			status, dec = fs.respond(p)
 		}
+		out := struct {
+			decision
+			Effects map[string]any `json:"effects,omitempty"`
+		}{decision: dec, Effects: nil}
+		if fs.effects != nil {
+			out.Effects = fs.effects(p)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
-		_ = json.NewEncoder(w).Encode(dec)
+		_ = json.NewEncoder(w).Encode(out)
 	}))
 	t.Cleanup(fs.Close)
 	return fs

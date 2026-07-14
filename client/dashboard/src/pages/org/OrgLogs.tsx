@@ -6,7 +6,14 @@ import { Type } from "@/components/ui/type";
 import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
 import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet";
 import { Stack } from "@speakeasy-api/moonshine";
-import { Eye, FileText, LogIn, Monitor, ShieldCheck } from "lucide-react";
+import {
+  Eye,
+  FileText,
+  LogIn,
+  Monitor,
+  ShieldCheck,
+  Unplug,
+} from "lucide-react";
 import { useState } from "react";
 import { AIIntegrationsSection } from "./AIIntegrationsSection";
 import { OtelForwardingSection } from "./OtelForwardingSection";
@@ -44,6 +51,9 @@ function OrgLogsInner() {
   const [hooksBrowserLoginEnabled, setHooksBrowserLoginEnabled] = useState<
     boolean | null
   >(null);
+  const [hooksFailOpenEnabled, setHooksFailOpenEnabled] = useState<
+    boolean | null
+  >(null);
 
   const effectiveLogsEnabled =
     logsEnabled ?? featuresData?.logsEnabled ?? false;
@@ -55,6 +65,8 @@ function OrgLogsInner() {
     observabilityModeEnabled ?? featuresData?.observabilityModeEnabled ?? false;
   const effectiveHooksBrowserLoginEnabled =
     hooksBrowserLoginEnabled ?? featuresData?.hooksBrowserLoginEnabled ?? false;
+  const effectiveHooksFailOpenEnabled =
+    hooksFailOpenEnabled ?? featuresData?.hooksFailOpenEnabled ?? false;
 
   const { mutate: setLogsFeature, status: logsMutationStatus } =
     useFeaturesSetMutation({
@@ -71,6 +83,8 @@ function OrgLogsInner() {
           setObservabilityModeEnabled(enabled);
         } else if (featureName === FeatureName.HooksBrowserLogin) {
           setHooksBrowserLoginEnabled(enabled);
+        } else if (featureName === FeatureName.HooksFailOpen) {
+          setHooksFailOpenEnabled(enabled);
         }
       },
       onError: (error) => {
@@ -144,6 +158,17 @@ function OrgLogsInner() {
       request: {
         setProductFeatureRequestBody: {
           featureName: FeatureName.HooksBrowserLogin,
+          enabled,
+        },
+      },
+    });
+  };
+
+  const handleSetHooksFailOpen = (enabled: boolean) => {
+    setLogsFeature({
+      request: {
+        setProductFeatureRequestBody: {
+          featureName: FeatureName.HooksFailOpen,
           enabled,
         },
       },
@@ -275,6 +300,41 @@ function OrgLogsInner() {
                   onCheckedChange={handleSetObservabilityMode}
                   disabled={isMutatingLogs}
                   aria-label="Enable observability mode"
+                />
+              </RequireScope>
+            )}
+          </Stack>
+
+          <div className="border-border border-t" />
+
+          <Stack direction="horizontal" justify="space-between" align="center">
+            <Stack gap={1}>
+              <Stack direction="horizontal" align="center" gap={2}>
+                <Unplug className="text-muted-foreground h-4 w-4" />
+                <Type variant="body" className="font-medium">
+                  Fail Open During Outages
+                </Type>
+              </Stack>
+              <Type
+                variant="body"
+                className="text-muted-foreground ml-6 text-sm"
+              >
+                When Speakeasy is unreachable or erroring, let agent tool calls
+                proceed instead of blocking them. Trade-off: blocking policies
+                are not enforced for the duration of the outage; events are
+                still recorded and scanned once Speakeasy recovers. When off
+                (the default), tool calls are blocked until a policy verdict can
+                be obtained. Invalid or revoked credentials always block
+                regardless of this setting.
+              </Type>
+            </Stack>
+            {!featuresLoading && (
+              <RequireScope scope="org:admin" level="component">
+                <Switch
+                  checked={effectiveHooksFailOpenEnabled}
+                  onCheckedChange={handleSetHooksFailOpen}
+                  disabled={isMutatingLogs}
+                  aria-label="Fail open during outages"
                 />
               </RequireScope>
             )}

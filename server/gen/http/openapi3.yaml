@@ -46155,6 +46155,9 @@ components:
                 hooks_browser_login_enabled:
                     type: boolean
                     description: Whether generated hook plugins may mint per-user keys via the interactive browser login
+                hooks_fail_open_enabled:
+                    type: boolean
+                    description: Whether hooks fail open when the Speakeasy control plane is unreachable or erroring — blocking policies are not enforced for the duration of the outage
                 logs_enabled:
                     type: boolean
                     description: Whether logging is enabled
@@ -46186,6 +46189,7 @@ components:
                 - scim_enabled
                 - observability_mode_enabled
                 - hooks_browser_login_enabled
+                - hooks_fail_open_enabled
                 - custom_model_keys_enabled
         GetProjectForm:
             type: object
@@ -53777,6 +53781,7 @@ components:
                         - scim
                         - observability_mode
                         - hooks_browser_login
+                        - hooks_fail_open
                         - custom_model_keys
                     maxLength: 60
             required:

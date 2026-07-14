@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/toolref"
@@ -110,9 +111,35 @@ func (s *Service) Ingest(ctx context.Context, payload *gen.IngestPayload) (*gen.
 	// duplicate).
 	s.captureMCPAttribution(context.WithoutCancel(ctx), payload, authCtx)
 	if blockReason != "" {
-		return canonicalDenyResult(userReason), nil
+		return s.withOrgSettings(ctx, authCtx.ActiveOrganizationID, canonicalDenyResult(userReason)), nil
 	}
-	return canonicalAllowResult(), nil
+	return s.withOrgSettings(ctx, authCtx.ActiveOrganizationID, canonicalAllowResult()), nil
+}
+
+// withOrgSettings attaches the org-level settings hook senders mirror locally
+// so they remain available when the control plane is unreachable. The value is
+// carried on every authenticated response — including denies and a `false`
+// setting — so a sender's cached copy converges on any successful exchange.
+// Best-effort: on lookup failure the effects are omitted and senders keep
+// their last-seen value.
+func (s *Service) withOrgSettings(ctx context.Context, orgID string, res *gen.IngestHookResult) *gen.IngestHookResult {
+	if s.productFeatures == nil {
+		return res
+	}
+	failOpen, err := s.productFeatures.IsFeatureEnabled(ctx, orgID, productfeatures.FeatureHooksFailOpen)
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to resolve hooks fail-open setting for ingest effects",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(orgID),
+		)
+		return res
+	}
+	res.Effects = map[string]any{
+		"org_settings": map[string]any{
+			"fail_open": failOpen,
+		},
+	}
+	return res
 }
 
 // canonicalActor is the human the event is attributed to. Distinct from the

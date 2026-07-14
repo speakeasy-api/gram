@@ -44,6 +44,9 @@ type GetProductFeaturesResponseBody struct {
 	// Whether generated hook plugins may mint per-user keys via the interactive
 	// browser login
 	HooksBrowserLoginEnabled *bool `form:"hooks_browser_login_enabled,omitempty" json:"hooks_browser_login_enabled,omitempty" xml:"hooks_browser_login_enabled,omitempty"`
+	// Whether hooks fail open when the Speakeasy control plane is unreachable or
+	// erroring — blocking policies are not enforced for the duration of the outage
+	HooksFailOpenEnabled *bool `form:"hooks_fail_open_enabled,omitempty" json:"hooks_fail_open_enabled,omitempty" xml:"hooks_fail_open_enabled,omitempty"`
 	// Whether the organization can supply its own model provider API keys (BYOK)
 	CustomModelKeysEnabled *bool `form:"custom_model_keys_enabled,omitempty" json:"custom_model_keys_enabled,omitempty" xml:"custom_model_keys_enabled,omitempty"`
 }
@@ -444,6 +447,7 @@ func NewGetProductFeaturesResultOK(body *GetProductFeaturesResponseBody) *featur
 		ScimEnabled:                  *body.ScimEnabled,
 		ObservabilityModeEnabled:     *body.ObservabilityModeEnabled,
 		HooksBrowserLoginEnabled:     *body.HooksBrowserLoginEnabled,
+		HooksFailOpenEnabled:         *body.HooksFailOpenEnabled,
 		CustomModelKeysEnabled:       *body.CustomModelKeysEnabled,
 	}
 
@@ -779,6 +783,9 @@ func ValidateGetProductFeaturesResponseBody(body *GetProductFeaturesResponseBody
 	}
 	if body.HooksBrowserLoginEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("hooks_browser_login_enabled", "body"))
+	}
+	if body.HooksFailOpenEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("hooks_fail_open_enabled", "body"))
 	}
 	if body.CustomModelKeysEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("custom_model_keys_enabled", "body"))

@@ -14,14 +14,17 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/features"
 	srv "github.com/speakeasy-api/gram/server/gen/http/features/server"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // PluginPublisher lets this service propagate org-level settings that change
@@ -52,6 +55,7 @@ type Service struct {
 	authz        *authz.Engine
 	featureCache cache.TypedCacheObject[FeatureCache]
 	plugins      PluginPublisher
+	audit        *audit.Logger
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -64,6 +68,7 @@ func NewService(
 	redisClient *redis.Client,
 	authzEngine *authz.Engine,
 	pluginPublisher PluginPublisher,
+	auditLogger *audit.Logger,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("product_features"))
 
@@ -76,6 +81,7 @@ func NewService(
 		authz:        authzEngine,
 		featureCache: cache.NewTypedObjectCache[FeatureCache](logger.With(attr.SlogCacheNamespace("productfeature")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
 		plugins:      pluginPublisher,
+		audit:        auditLogger,
 	}
 }
 
@@ -100,6 +106,15 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 
 	orgID := authCtx.ActiveOrganizationID
 
+	current, err := s.repo.IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{
+		OrganizationID: orgID,
+		FeatureName:    payload.FeatureName,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "check feature flag state").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
+	}
+	changed := current != payload.Enabled
+
 	// Observability mode changes the generated observability (hooks) plugin output
 	// (every event becomes non-blocking). That output can only be regenerated at
 	// the current hooks generator version, so a toggle can't take effect for an org
@@ -108,30 +123,24 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 	// isn't actually published. Only gate a real change, and only when plugin
 	// publishing is wired.
 	observabilityToggle := payload.FeatureName == string(FeatureObservabilityMode)
-	observabilityChanged := false
-	if observabilityToggle && s.plugins != nil {
-		current, ferr := s.repo.IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{
-			OrganizationID: orgID,
-			FeatureName:    payload.FeatureName,
-		})
-		if ferr != nil {
-			return oops.E(oops.CodeUnexpected, ferr, "check observability mode state").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
-		}
-		observabilityChanged = current != payload.Enabled
-		if observabilityChanged && !s.plugins.HooksRolloutEligible(ctx, orgID, authCtx.OrganizationSlug) {
-			return oops.E(oops.CodeConflict, nil, "can't change observability mode yet: your organization isn't approved for the latest observability hooks version. It will become available soon.")
-		}
+	if observabilityToggle && s.plugins != nil && changed && !s.plugins.HooksRolloutEligible(ctx, orgID, authCtx.OrganizationSlug) {
+		return oops.E(oops.CodeConflict, nil, "can't change observability mode yet: your organization isn't approved for the latest observability hooks version. It will become available soon.")
 	}
 
-	var err error
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "begin feature flag transaction").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	q := repo.New(dbtx)
 	if payload.Enabled {
-		err = s.repo.EnableFeature(ctx, repo.EnableFeatureParams{
+		err = q.EnableFeature(ctx, repo.EnableFeatureParams{
 			OrganizationID: orgID,
 			FeatureName:    payload.FeatureName,
 		})
 	} else {
-		_, err = s.repo.DeleteFeature(ctx, repo.DeleteFeatureParams{
+		_, err = q.DeleteFeature(ctx, repo.DeleteFeatureParams{
 			OrganizationID: orgID,
 			FeatureName:    payload.FeatureName,
 		})
@@ -143,6 +152,27 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 			"failed to set organization feature flag %q",
 			payload.FeatureName,
 		).LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
+	}
+
+	// Fail-open governs whether blocking policies are enforced during a
+	// control-plane outage, so flipping it is a security-posture change that
+	// must leave an audit trail.
+	if payload.FeatureName == string(FeatureHooksFailOpen) && changed {
+		if err := s.audit.LogOrganizationHooksFailOpenToggled(ctx, dbtx, audit.LogOrganizationHooksFailOpenToggledEvent{
+			OrganizationID:   orgID,
+			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName: authCtx.Email,
+			ActorSlug:        nil,
+			OrganizationName: authCtx.OrganizationSlug,
+			OrganizationSlug: authCtx.OrganizationSlug,
+			FailOpenEnabled:  payload.Enabled,
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "record hooks fail-open audit event").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
+		}
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "commit feature flag change").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
 	}
 
 	cacheEntry := FeatureCache{
@@ -165,7 +195,7 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 	// already written and the automated generator rollout republishes the org on
 	// its next tick (the config-hash signal detects the drift), so we log rather
 	// than fail the toggle.
-	if observabilityToggle && observabilityChanged && s.plugins != nil {
+	if observabilityToggle && changed && s.plugins != nil {
 		if repErr := s.plugins.RepublishOrganizationProjects(ctx, orgID); repErr != nil {
 			s.logger.WarnContext(ctx, "failed to republish org plugins after observability mode change; automated rollout will retry",
 				attr.SlogError(repErr),
@@ -239,6 +269,7 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 		ScimEnabled:                  isEnabled(FeatureSCIM),
 		ObservabilityModeEnabled:     isEnabled(FeatureObservabilityMode),
 		HooksBrowserLoginEnabled:     isEnabled(FeatureHooksBrowserLogin),
+		HooksFailOpenEnabled:         isEnabled(FeatureHooksFailOpen),
 		CustomModelKeysEnabled:       isEnabled(FeatureCustomModelKeys),
 	}, nil
 }

@@ -73,6 +73,9 @@ type GetProductFeaturesResult struct {
 	// Whether generated hook plugins may mint per-user keys via the interactive
 	// browser login
 	HooksBrowserLoginEnabled bool
+	// Whether hooks fail open when the Speakeasy control plane is unreachable or
+	// erroring — blocking policies are not enforced for the duration of the outage
+	HooksFailOpenEnabled bool
 	// Whether the organization can supply its own model provider API keys (BYOK)
 	CustomModelKeysEnabled bool
 }
