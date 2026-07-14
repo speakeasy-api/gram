@@ -20,7 +20,7 @@ catalog:
   "@tanstack/react-query": 5.101.1
   "@types/react": ^19.2.17
   "@types/react-dom": ^19.2.3
-  "@assistant-ui/react": ^0.11.0
+  "@assistant-ui/react": ^0.14.26
   "@vitejs/plugin-react": ^6.0.3
   ai: ^6.0.209
   "lucide-react": ^1.23.0
@@ -39,6 +39,7 @@ minimumReleaseAgeExclude:
   - "@chromatic-com/storybook"
 
 overrides:
+  assistant-cloud: 0.1.34
   glob@>=10.0 <10.5.0: 10.5.0
   # Without this, @polar-sh/ui resolves Recharts v3 while Elements/Tremor stay on v2.
   recharts: 2.15.4

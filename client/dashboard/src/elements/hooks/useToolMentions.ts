@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from "react";
-import { useAssistantApi, useAssistantState } from "@assistant-ui/react";
+import { useAui, useAuiState } from "@assistant-ui/react";
 import {
   MentionableTool,
   parseMentionedTools,
@@ -30,8 +30,8 @@ export function useToolMentions({
 }: UseToolMentionsOptions): UseToolMentionsReturn {
   const [cursorPosition, setCursorPosition] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const api = useAssistantApi();
-  const composerText = useAssistantState(({ composer }) => composer.text);
+  const aui = useAui();
+  const composerText = useAuiState(({ composer }) => composer.text);
 
   const mentionableTools = useMemo(
     () => toolSetToMentionableTools(tools),
@@ -52,7 +52,7 @@ export function useToolMentions({
 
   const handleAutocompleteChange = useCallback(
     (newValue: string, newCursorPosition: number) => {
-      api.composer().setText(newValue);
+      aui.composer().setText(newValue);
       setCursorPosition(newCursorPosition);
 
       setTimeout(() => {
@@ -63,7 +63,7 @@ export function useToolMentions({
         }
       }, 0);
     },
-    [api],
+    [aui],
   );
 
   const removeMention = useCallback(
@@ -71,10 +71,10 @@ export function useToolMentions({
       const tool = mentionableTools.find((t) => t.id === toolId);
       if (tool) {
         const newValue = removeToolMention(composerText, tool.name);
-        api.composer().setText(newValue);
+        aui.composer().setText(newValue);
       }
     },
-    [composerText, mentionableTools, api],
+    [composerText, mentionableTools, aui],
   );
 
   const isActive = enabled && mentionableTools.length > 0;

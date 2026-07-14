@@ -26,7 +26,7 @@ import { assertNever, cn } from "@/lib/utils";
 import { useElements } from "@/elements/hooks/useElements";
 import { useExpanded } from "@/elements/hooks/useExpanded";
 import { EASE_OUT_QUINT } from "@/elements/lib/easing";
-import { useAssistantState } from "@assistant-ui/react";
+import { useAuiState } from "@assistant-ui/react";
 
 const LAYOUT_TRANSITION = {
   layout: {
@@ -80,7 +80,7 @@ export const AssistantModal: FC<AssistantModalProps> = ({ className }) => {
       },
     [config.modal?.dimensions?.expanded],
   );
-  const thread = useAssistantState(({ thread }) => thread);
+  const thread = useAuiState(({ thread }) => thread);
   const isGenerating =
     thread?.messages?.some((message) => message.status?.type === "running") ??
     false;

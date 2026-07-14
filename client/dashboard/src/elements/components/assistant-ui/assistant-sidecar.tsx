@@ -13,7 +13,7 @@ import { useExpanded } from "@/elements/hooks/useExpanded";
 import { LazyMotion, domMax } from "motion/react";
 import * as m from "motion/react-m";
 import { EASE_OUT_QUINT } from "@/elements/lib/easing";
-import { useAssistantState } from "@assistant-ui/react";
+import { useAuiState } from "@assistant-ui/react";
 
 interface AssistantSidecarProps {
   className?: string;
@@ -25,7 +25,7 @@ export const AssistantSidecar: FC<AssistantSidecarProps> = ({ className }) => {
   const sidecarConfig = config.sidecar ?? {};
   const { title, dimensions } = sidecarConfig;
   const { expandable, isExpanded, setIsExpanded } = useExpanded();
-  const thread = useAssistantState(({ thread }) => thread);
+  const thread = useAuiState(({ thread }) => thread);
   const isGenerating = thread.messages.some(
     (message) => message.status?.type === "running",
   );
