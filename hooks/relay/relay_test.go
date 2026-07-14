@@ -1146,6 +1146,19 @@ func TestRedactCommandMasksURLQuerySecrets(t *testing.T) {
 	require.Contains(t, got, "mcp.example.com/mcp", "userinfo URLs keep host and path, matching the structured MCP URL")
 }
 
+func TestMCPInventoryRedactionMasksSignedURLCredentials(t *testing.T) {
+	got, ok := redactMCPInventoryURL("https://mcp.example.com/sse?sig=short&X-Amz-Signature=aws-secret&X-Amz-Credential=aws-credential&channel=eng")
+	require.True(t, ok)
+	require.NotContains(t, got, "short")
+	require.NotContains(t, got, "aws-secret")
+	require.NotContains(t, got, "aws-credential")
+	require.Contains(t, got, "channel=eng", "non-secret query parameters must survive")
+
+	command := redactCommand("npx -y mcp-remote https://mcp.example.com/sse?X-Goog-Signature=goog-secret&channel=eng")
+	require.NotContains(t, command, "goog-secret")
+	require.Contains(t, command, "channel=eng", "command URL redaction must preserve benign parameters")
+}
+
 // TestBackfilledPromptDenyGatesTriggeringToolEvent pins the Cursor recovery
 // path: when beforeSubmitPrompt was missed, the backfilled prompt's decision
 // is reporting-only and discarded by agenthooks, so a server deny must gate
