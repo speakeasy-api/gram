@@ -124,8 +124,10 @@ type CursorUsageSyncProgress struct {
 }
 
 func (p CursorUsageSyncProgress) String() string {
+	// RFC3339Nano keeps the millisecond watermark advance on the window
+	// start visible instead of truncating it to whole seconds.
 	return fmt.Sprintf(
 		"window=%s..%s usage_pages=%d usage_events=%d",
-		p.WindowStart.Format(time.RFC3339), p.WindowEnd.Format(time.RFC3339), p.UsagePages, p.UsageEvents,
+		p.WindowStart.Format(time.RFC3339Nano), p.WindowEnd.Format(time.RFC3339Nano), p.UsagePages, p.UsageEvents,
 	)
 }
