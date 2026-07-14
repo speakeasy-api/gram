@@ -130,11 +130,21 @@ export function PlaygroundChat({
     return {
       "Gram-Chat-Session": mcpAppSessionQuery.data,
       "Gram-Project": project.slug,
+      // Match the chat's MCP requests: the source tag and (for issuer-gated
+      // servers) the gateway JWT must ride the MCP-App resources/read calls too,
+      // or the tool call renders but its MCP-App UI fails to load.
+      "X-Gram-Source": "playground",
+      ...(gatewayToken ? { Authorization: `Bearer ${gatewayToken}` } : {}),
       ...(effectiveEnvironmentSlug
         ? { "Gram-Environment": effectiveEnvironmentSlug }
         : {}),
     };
-  }, [effectiveEnvironmentSlug, mcpAppSessionQuery.data, project.slug]);
+  }, [
+    effectiveEnvironmentSlug,
+    gatewayToken,
+    mcpAppSessionQuery.data,
+    project.slug,
+  ]);
 
   return (
     <GramElementsProvider

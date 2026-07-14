@@ -26,8 +26,16 @@ export function PlaygroundRemoteChat({
   model,
   additionalActions,
 }: PlaygroundRemoteChatProps): JSX.Element {
-  const { mcpUrl, gatewayToken, needsAuth, connectUrl, refetch, isLoading } =
-    useRemoteMcpConnection(mcpServerId, isIssuerGated);
+  const {
+    mcpUrl,
+    gatewayToken,
+    needsAuth,
+    isError,
+    connectUrl,
+    refetch,
+    isLoading,
+    connectionReady,
+  } = useRemoteMcpConnection(mcpServerId, isIssuerGated);
 
   // When the user comes back from the connect tab, re-attempt the connection so
   // a freshly linked session surfaces without a manual refresh.
@@ -42,11 +50,29 @@ export function PlaygroundRemoteChat({
     return <RemoteConnectPrompt connectUrl={connectUrl} />;
   }
 
+  if (isError) {
+    return (
+      <RemoteStatusNotice message="Couldn't connect to this MCP server to list its tools.">
+        <Button variant="secondary" onClick={refetch}>
+          Try again
+        </Button>
+      </RemoteStatusNotice>
+    );
+  }
+
   if (!mcpUrl || isLoading) {
     return (
       <div className="flex h-full items-center justify-center">
         <Type muted>Connecting to MCP server…</Type>
       </div>
+    );
+  }
+
+  // Issuer-gated server whose JWT never arrived (mint failed): block rather than
+  // open an unauthenticated chat that would 401 on every request.
+  if (!connectionReady) {
+    return (
+      <RemoteStatusNotice message="Couldn't authenticate with this MCP server. Check the server's identity provider configuration." />
     );
   }
 
@@ -58,6 +84,26 @@ export function PlaygroundRemoteChat({
       environmentSlug={environmentSlug}
       additionalActions={additionalActions}
     />
+  );
+}
+
+function RemoteStatusNotice({
+  message,
+  children,
+}: {
+  message: string;
+  children?: React.ReactNode;
+}): JSX.Element {
+  return (
+    <div className="flex h-full items-center justify-center">
+      <div className="border-neutral-softest flex max-w-md flex-col items-center gap-3 rounded-lg border px-6 py-12 text-center">
+        <PlugZap className="text-muted-foreground/70 size-8" />
+        <Type muted className="text-sm">
+          {message}
+        </Type>
+        {children}
+      </div>
+    </div>
   );
 }
 
