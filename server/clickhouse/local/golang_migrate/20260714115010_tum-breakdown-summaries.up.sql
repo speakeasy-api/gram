@@ -18,10 +18,14 @@
 -- stale split would make the final MV-off pass scan everything since July,
 -- widening the window in which live local ingestion silently vanishes from
 -- the summary. The day-aligned dynamic split caps the final pass at one day
--- of data however late the migration is applied. If UTC midnight passes
--- between the two INSERTs the day between their split evaluations is
--- skipped -- a bounded undercount, which the Atlas rationale calls out as
--- the safe failure direction for a billing record.
+-- of data however late the migration is applied. The split is computed ONCE
+-- into a scratch table and referenced by both INSERTs as a scalar subquery.
+-- golang-migrate executes statements independently, so a bare now() would
+-- be re-evaluated per statement and a UTC midnight straddle would open a
+-- one-day gap between the passes. The pinned split keeps the two windows
+-- exactly contiguous. The scratch table is dropped in the final statement.
+CREATE OR REPLACE TABLE `tmp_migration_bounds_20260714115010` ENGINE = Memory AS
+SELECT toStartOfDay(now('UTC')) AS pass_split;
 CREATE TABLE `tum_breakdown_summaries` (
     `gram_project_id` UUID,
     `chat_id` String,
@@ -56,7 +60,7 @@ FROM telemetry_logs
 WHERE chat_id != ''
   AND toString(attributes.gen_ai.usage.total_tokens) != ''
   AND fromUnixTimestamp64Nano(time_unix_nano, 'UTC') >= toDateTime('2026-05-25 00:00:00', 'UTC')
-  AND fromUnixTimestamp64Nano(time_unix_nano, 'UTC') < toStartOfDay(now('UTC'))
+  AND fromUnixTimestamp64Nano(time_unix_nano, 'UTC') < (SELECT pass_split FROM `tmp_migration_bounds_20260714115010`)
 GROUP BY gram_project_id, chat_id, time_bucket, hook_source, model, user_email, division_name, roles;
 INSERT INTO `tum_breakdown_summaries` (gram_project_id, chat_id, time_bucket, hook_source, model, user_email, division_name, roles, input_tokens, output_tokens, total_tokens)
 SELECT
@@ -74,7 +78,7 @@ SELECT
 FROM telemetry_logs
 WHERE chat_id != ''
   AND toString(attributes.gen_ai.usage.total_tokens) != ''
-  AND fromUnixTimestamp64Nano(time_unix_nano, 'UTC') >= toStartOfDay(now('UTC'))
+  AND fromUnixTimestamp64Nano(time_unix_nano, 'UTC') >= (SELECT pass_split FROM `tmp_migration_bounds_20260714115010`)
 GROUP BY gram_project_id, chat_id, time_bucket, hook_source, model, user_email, division_name, roles;
 CREATE MATERIALIZED VIEW `tum_breakdown_summaries_mv` TO `tum_breakdown_summaries` AS
 SELECT
@@ -93,3 +97,4 @@ FROM telemetry_logs
 WHERE chat_id != ''
   AND toString(attributes.gen_ai.usage.total_tokens) != ''
 GROUP BY gram_project_id, chat_id, time_bucket, hook_source, model, user_email, division_name, roles;
+DROP TABLE IF EXISTS `tmp_migration_bounds_20260714115010`;

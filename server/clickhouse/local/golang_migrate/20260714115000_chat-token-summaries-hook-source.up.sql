@@ -25,16 +25,23 @@
 -- and before the MV recreation are never materialized, so a stale split
 -- would let that MV-off loss window grow with every month of lateness,
 -- while the dynamic split caps the final pass at one day of raw rows.
--- (If UTC midnight passes between statements a single day-bucket is lost --
--- bounded, undercounting, local-only -- the price of not being able to pin
--- now() across golang-migrate's separately-executed statements. Undercount
--- is the safe failure direction for a billing record, per the Atlas
--- rationale.)
+--
+-- Both bounds are computed ONCE into a scratch table and referenced by the
+-- other statements as scalar subqueries. golang-migrate executes statements
+-- independently, so a bare now() would be re-evaluated per statement and a
+-- UTC midnight straddle would desynchronize the windows (deleting a bucket
+-- the re-derives never rebuild, or opening a gap between the two passes).
+-- Pinned bounds keep the deleted and reinserted windows identical by
+-- construction. The scratch table is dropped in the final statement.
+CREATE OR REPLACE TABLE `tmp_migration_bounds_20260714115000` ENGINE = Memory AS
+SELECT
+  greatest(toDateTime('2026-05-25 00:00:00', 'UTC'), toStartOfDay(now('UTC')) - INTERVAL 89 DAY) AS lower_bound,
+  toStartOfDay(now('UTC')) AS pass_split;
 ALTER TABLE `chat_token_summaries`
   ADD COLUMN `hook_source` String,
   MODIFY ORDER BY (`gram_project_id`, `chat_id`, `time_bucket`, `hook_source`);
 DROP VIEW `chat_token_summaries_mv`;
-ALTER TABLE `chat_token_summaries` DELETE WHERE time_bucket >= greatest(toDateTime('2026-05-25 00:00:00', 'UTC'), toStartOfDay(now('UTC')) - INTERVAL 89 DAY) SETTINGS mutations_sync = 2;
+ALTER TABLE `chat_token_summaries` DELETE WHERE time_bucket >= (SELECT lower_bound FROM `tmp_migration_bounds_20260714115000`) SETTINGS mutations_sync = 2;
 INSERT INTO `chat_token_summaries` (gram_project_id, chat_id, time_bucket, hook_source, total_tokens, stored_event_count)
 SELECT
     gram_project_id,
@@ -50,8 +57,8 @@ SELECT
     )) AS stored_event_count
 FROM telemetry_logs
 WHERE chat_id != ''
-  AND fromUnixTimestamp64Nano(time_unix_nano, 'UTC') >= greatest(toDateTime('2026-05-25 00:00:00', 'UTC'), toStartOfDay(now('UTC')) - INTERVAL 89 DAY)
-  AND fromUnixTimestamp64Nano(time_unix_nano, 'UTC') < toStartOfDay(now('UTC'))
+  AND fromUnixTimestamp64Nano(time_unix_nano, 'UTC') >= (SELECT lower_bound FROM `tmp_migration_bounds_20260714115000`)
+  AND fromUnixTimestamp64Nano(time_unix_nano, 'UTC') < (SELECT pass_split FROM `tmp_migration_bounds_20260714115000`)
 GROUP BY gram_project_id, chat_id, time_bucket, hook_source;
 INSERT INTO `chat_token_summaries` (gram_project_id, chat_id, time_bucket, hook_source, total_tokens, stored_event_count)
 SELECT
@@ -68,7 +75,7 @@ SELECT
     )) AS stored_event_count
 FROM telemetry_logs
 WHERE chat_id != ''
-  AND fromUnixTimestamp64Nano(time_unix_nano, 'UTC') >= toStartOfDay(now('UTC'))
+  AND fromUnixTimestamp64Nano(time_unix_nano, 'UTC') >= (SELECT pass_split FROM `tmp_migration_bounds_20260714115000`)
 GROUP BY gram_project_id, chat_id, time_bucket, hook_source;
 CREATE MATERIALIZED VIEW `chat_token_summaries_mv` TO `chat_token_summaries` AS
 SELECT
@@ -86,3 +93,4 @@ SELECT
 FROM telemetry_logs
 WHERE chat_id != ''
 GROUP BY gram_project_id, chat_id, time_bucket, hook_source;
+DROP TABLE IF EXISTS `tmp_migration_bounds_20260714115000`;

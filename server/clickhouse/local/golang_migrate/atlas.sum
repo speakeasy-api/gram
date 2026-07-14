@@ -1,4 +1,4 @@
-h1:XywNuTmbUakqRX6KQ5UMcL8GIVpkUSkD4BCBiNBG7qM=
+h1:KdzLKgkbCTnPkKzzCjQ5BB6By/UCkBcvxIAb5OxQhBs=
 20251127155815_initial_golang_migrate.up.sql h1:fkATa14aucJEoldFi1VgW7TRT8gyC6NGe1Hq/OzXVuI=
 20251208142630_add-tool-logs-table.up.sql h1:cGJCiWBvLPFwOlpx0jYYLgdPZD21+gKSF/x4mVksBcI=
 20251209104438_add-id-col-to-tool-logs-table.up.sql h1:+Ubsl1ZKfeCZL9dBhohUnkBksKZj6nwdZSXm7WwowaE=
@@ -58,5 +58,5 @@ h1:XywNuTmbUakqRX6KQ5UMcL8GIVpkUSkD4BCBiNBG7qM=
 20260713204907_staging-attribution-org-id.up.sql h1:bCex0E9KihBjcNCBRUzictkZoMjWJCTg6pdV/6vmlGA=
 20260714002937_shadow-mcp-inventory-slug-hash-index.up.sql h1:AsWsoZ2FqjG8OHHFlXtH6fjn6YxgTUf9/Vpqy6DzQWI=
 20260714104107_remove-semicolons-from-comments.up.sql h1:CQMvFncxlzgu0sdoeGZwZ2myd7qathbX0VgfMxopi9U=
-20260714115000_chat-token-summaries-hook-source.up.sql h1:clv3sxNtL4yBbTY45jMnIvNC8sSvvDGirIzCSpz5jnw=
-20260714115010_tum-breakdown-summaries.up.sql h1:WSTaVhi4H9a+xUYqGHKdRy/o2JOybG4Sn76MKysfHfA=
+20260714115000_chat-token-summaries-hook-source.up.sql h1:imvQVMa/2Ceuy6tnFmkld537Wr2CwzNsi3qs9DysDA4=
+20260714115010_tum-breakdown-summaries.up.sql h1:TcimH9EEZmoeVZixI3x6kGInFlHcGY4Vl00cgZDKWYM=
