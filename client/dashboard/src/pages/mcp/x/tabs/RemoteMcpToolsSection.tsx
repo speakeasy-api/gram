@@ -17,6 +17,7 @@ import {
   type RemoteMcpTool,
   type RemoteMcpToolAnnotations,
 } from "@/hooks/useRemoteMcpTools";
+import { useMcpConnectConsent } from "@/hooks/useMcpConnectConsent";
 import { useRemoteMcpUserSessionToken } from "@/hooks/useRemoteMcpUserSessionToken";
 import { handleError, toError } from "@/lib/errors";
 import { cn, firstPartyConnectUrl, mcpConnectionUrl } from "@/lib/utils";
@@ -51,7 +52,9 @@ type RemoteMcpToolsSectionProps = {
  *
  * For issuer-gated servers we require an explicit Connect click before doing
  * anything: minting the user-session JWT persists a session row server-side,
- * so merely viewing the page must not establish one. After the click we mint
+ * so merely viewing the page must not establish one. The consent is persisted
+ * per server (localStorage), so a server the user already connected reconnects
+ * automatically on return visits. After the click we mint
  * the JWT scoped to the mcp_server and connect with it. When no upstream
  * remote_session exists yet the gateway 401s into `needsAuth`, and we surface
  * an Authenticate button that opens the first-party connect page in a new tab;
@@ -162,9 +165,11 @@ function RemoteMcpToolsSectionInner({
 }: RemoteMcpToolsSectionProps): JSX.Element {
   // Issuer-gated servers only mint a user-session token after an explicit
   // Connect click — minting persists a session row, so viewing the page alone
-  // must not establish one. Per page visit on purpose: navigating away and
-  // back requires connecting again.
-  const [connectRequested, setConnectRequested] = useState(false);
+  // must not establish one. The consent is persisted (keyed by mcp_server id)
+  // so return visits reconnect without another click.
+  const { connectRequested, requestConnect } = useMcpConnectConsent(
+    isIssuerGated ? mcpServerId : undefined,
+  );
   const needsExplicitConnect = isIssuerGated && !connectRequested;
 
   const { accessToken, isLoading: isTokenLoading } =
@@ -222,7 +227,7 @@ function RemoteMcpToolsSectionInner({
       <RemoteMcpToolsBody
         loading={loading}
         needsExplicitConnect={needsExplicitConnect}
-        onExplicitConnect={() => setConnectRequested(true)}
+        onExplicitConnect={requestConnect}
         needsAuth={needsAuth}
         isError={isError}
         toolEntries={toolEntries}

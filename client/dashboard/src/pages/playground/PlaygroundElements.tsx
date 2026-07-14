@@ -7,6 +7,7 @@ import {
 import { Type } from "@/components/ui/type";
 import { useProject, useSession } from "@/contexts/Auth";
 import { useToolset } from "@/hooks/toolTypes";
+import { useMcpConnectConsent } from "@/hooks/useMcpConnectConsent";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
 import { useInternalMcpUrl } from "@/hooks/useToolsetUrl";
 import { useMcpOAuthRequired } from "@/lib/mcpOAuth";
@@ -160,13 +161,12 @@ export function PlaygroundElements({
   // Minting persists a user_sessions row server-side, so it only runs after
   // the user explicitly clicks Connect (see ConnectRequiredNotice below) —
   // opening the playground alone must not establish a session. The consent is
-  // keyed to the toolset id and held in component state only, so switching
-  // toolsets or revisiting the page requires connecting again.
+  // keyed by toolset id and persisted, so a toolset the user already connected
+  // reconnects on return visits without another click.
   const isIssuerGated = !!toolset?.id && !!toolset?.userSessionIssuerSlug;
-  const [connectedToolsetId, setConnectedToolsetId] = useState<string | null>(
-    null,
+  const { connectRequested, requestConnect } = useMcpConnectConsent(
+    isIssuerGated ? toolset?.id : undefined,
   );
-  const connectRequested = !!toolset?.id && connectedToolsetId === toolset.id;
   const mintUserSessionMutation = useMintUserSessionMutation();
   const gatewayTokenQuery = useQuery({
     queryKey: [
@@ -241,7 +241,7 @@ export function PlaygroundElements({
     return (
       <ConnectRequiredNotice
         serverName={toolset?.name ?? "this MCP server"}
-        onConnect={() => setConnectedToolsetId(toolset?.id ?? null)}
+        onConnect={requestConnect}
       />
     );
   }
