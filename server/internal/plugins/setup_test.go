@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -22,10 +23,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
+	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -95,7 +100,7 @@ func newTestPluginsService(t *testing.T) (context.Context, *testInstance) {
 
 	auditLogger := audit.NewLogger()
 
-	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, "local", "https://app.getgram.ai")
+	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, cache.NewRedisCacheAdapter(redisClient), authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, "local", "https://app.getgram.ai", nil)
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -105,6 +110,15 @@ func newTestPluginsService(t *testing.T) (context.Context, *testInstance) {
 }
 
 func newTestPluginsServiceWithGitHub(t *testing.T, ghClient plugins.GitHubPublisher) (context.Context, *testInstance) {
+	t.Helper()
+	return newTestPluginsServiceWithGitHubAndFeatures(t, ghClient, nil)
+}
+
+// newTestPluginsServiceWithGitHubAndFeatures builds a dashboard-style Service
+// (with auth) that also carries a feature provider, so the phased-rollout gating
+// on human-initiated hook-output changes (marketplace rename, observability-mode
+// toggle) can be exercised end to end.
+func newTestPluginsServiceWithGitHubAndFeatures(t *testing.T, ghClient plugins.GitHubPublisher, features feature.Provider) (context.Context, *testInstance) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -149,11 +163,13 @@ func newTestPluginsServiceWithGitHub(t *testing.T, ghClient plugins.GitHubPublis
 		tracerProvider,
 		conn,
 		sessionManager,
+		cache.NewRedisCacheAdapter(redisClient),
 		authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
 		auditLogger,
 		ghConfig,
 		"local",
 		"https://app.getgram.ai",
+		features,
 	)
 
 	return ctx, &testInstance{
@@ -161,6 +177,92 @@ func newTestPluginsServiceWithGitHub(t *testing.T, ghClient plugins.GitHubPublis
 		conn:           conn,
 		sessionManager: sessionManager,
 	}
+}
+
+// newTestPluginPublisher builds an automated-publisher Service (as the Temporal
+// worker does) that shares ti's database and GitHub mock but carries a feature
+// provider, so phased-rollout gating can be exercised end to end. Build fixtures
+// via ti.service (which has auth); publish via the returned publisher.
+func newTestPluginPublisher(t *testing.T, ti *testInstance, ghClient plugins.GitHubPublisher, features feature.Provider) *plugins.Service {
+	t.Helper()
+
+	ghConfig := &plugins.GitHubConfig{
+		Client:         ghClient,
+		Org:            "test-org",
+		InstallationID: 12345,
+	}
+
+	return plugins.NewPublisher(
+		testenv.NewLogger(t),
+		ti.conn,
+		audit.NewLogger(),
+		ghConfig,
+		"local",
+		"https://app.getgram.ai",
+		features,
+	)
+}
+
+// rewindPublishedHooksVersion overwrites the stored hooks generator version for
+// a project's GitHub connection, simulating an org that last received an older
+// hooks version than the current generator. It preserves every other connection
+// field so the MCP fingerprints still match (an MCP publish stays unchanged).
+func rewindPublishedHooksVersion(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, version string) {
+	t.Helper()
+
+	q := pluginsrepo.New(conn)
+	current, err := q.GetGitHubConnection(ctx, projectID)
+	require.NoError(t, err)
+
+	_, err = q.UpsertGitHubConnection(ctx, pluginsrepo.UpsertGitHubConnectionParams{
+		ProjectID:                projectID,
+		InstallationID:           current.InstallationID,
+		RepoOwner:                current.RepoOwner,
+		RepoName:                 current.RepoName,
+		MarketplaceToken:         current.MarketplaceToken,
+		PublishedMcpFingerprints: current.PublishedMcpFingerprints,
+		PublishedHooksVersion:    conv.ToPGText(version),
+		PublishedHooksConfig:     current.PublishedHooksConfig,
+	})
+	require.NoError(t, err)
+}
+
+// publishOrgID returns the organization id the publisher resolves for a project
+// — the org-metadata id used as the FlagHooksRollout distinct id, which is not
+// necessarily the same string as authCtx.ActiveOrganizationID.
+func publishOrgID(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID) string {
+	t.Helper()
+
+	project, err := projectsrepo.New(conn).GetProjectWithOrganizationMetadata(ctx, projectID)
+	require.NoError(t, err)
+	return project.ID
+}
+
+// countPluginHooksKeys returns how many hooks-scoped plugin API keys the org
+// has. Regenerating the hooks component mints a fresh one, so a change in this
+// count distinguishes a hooks regeneration from a carry.
+func countPluginHooksKeys(t *testing.T, ctx context.Context, conn *pgxpool.Pool, orgID string) int {
+	t.Helper()
+
+	keys, err := keysrepo.New(conn).ListAPIKeysByOrganization(ctx, orgID)
+	require.NoError(t, err)
+
+	count := 0
+	for _, k := range keys {
+		if strings.HasPrefix(k.Name, "plugins-hooks-") {
+			count++
+		}
+	}
+	return count
+}
+
+// publishedHooksVersion reads back the stored hooks generator version.
+func publishedHooksVersion(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID) string {
+	t.Helper()
+
+	current, err := pluginsrepo.New(conn).GetGitHubConnection(ctx, projectID)
+	require.NoError(t, err)
+	return current.PublishedHooksVersion.String
 }
 
 // orgObservabilitySlugs returns the per-org observability plugin directory

@@ -35,3 +35,22 @@ func SeedServer(
 	require.NoError(t, err)
 	return server
 }
+
+// SeedHeader inserts a remote_mcp_server_headers row directly, bypassing the
+// encryption wrapper. The value is stored verbatim, so callers must not seed a
+// secret header — reading one back would try to decrypt plaintext. Use the
+// createServerHeader endpoint when a test needs a real secret.
+func SeedHeader(
+	t *testing.T,
+	ctx context.Context,
+	conn *pgxpool.Pool,
+	params repo.CreateServerHeaderParams,
+) repo.RemoteMcpServerHeader {
+	t.Helper()
+
+	require.False(t, params.IsSecret, "SeedHeader cannot seed secret headers: the value would not be encrypted")
+
+	header, err := repo.New(conn).CreateServerHeader(ctx, params)
+	require.NoError(t, err)
+	return header
+}

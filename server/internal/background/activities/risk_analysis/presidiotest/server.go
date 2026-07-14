@@ -53,9 +53,7 @@ type MockServer struct {
 // the server is no longer needed.
 func NewMockServer(logger *slog.Logger) *MockServer {
 	if logger == nil {
-		// Import cycle (testenv → presidiotest → testenv) prevents calling
-		// testenv.NewLogger here, so we use slog.DiscardHandler directly.
-		logger = slog.New(slog.DiscardHandler) //nolint:forbidigo // import cycle prevents testenv.NewLogger
+		logger = slog.New(slog.DiscardHandler)
 	}
 
 	m := &MockServer{

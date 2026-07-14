@@ -12,25 +12,40 @@ import { gfm } from "turndown-plugin-gfm";
 
 const CDP_ENDPOINT = "http://127.0.0.1:9222";
 
-let cached: Browser | null = null;
-
+// Lightpanda reuses frame IDs across contexts, so a single CDP connection can
+// only ever host one BrowserContext — a second newContext() on the same
+// connection corrupts Playwright's target registry in a way that poisons the
+// whole handle. Every Browser handle is therefore a dedicated connection that
+// refuses a second context up front, and callers must close it when done.
 export async function getBrowser(): Promise<Browser> {
-  if (cached?.isConnected()) {
-    return cached;
-  }
-  cached = await chromium.connectOverCDP(CDP_ENDPOINT);
-  return cached;
+  const browser = await chromium.connectOverCDP(CDP_ENDPOINT);
+  const newContext = browser.newContext.bind(browser);
+  let hasContext = false;
+  browser.newContext = async (options) => {
+    if (hasContext) {
+      throw new Error(
+        "this browser handle already hosts a BrowserContext and the sandbox browser supports exactly one per handle; call getBrowser() again (or use withContext) for the next context",
+      );
+    }
+    hasContext = true;
+    return await newContext(options);
+  };
+  return browser;
 }
 
 export async function withContext<T>(
   fn: (ctx: BrowserContext) => Promise<T>,
 ): Promise<T> {
   const browser = await getBrowser();
-  const ctx = await browser.newContext();
   try {
-    return await fn(ctx);
+    const ctx = await browser.newContext();
+    try {
+      return await fn(ctx);
+    } finally {
+      await ctx.close();
+    }
   } finally {
-    await ctx.close();
+    await browser.close();
   }
 }
 

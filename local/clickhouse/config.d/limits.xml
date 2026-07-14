@@ -1,8 +1,10 @@
 <?xml version="1.0"?>
 <!-- Server-level limits for low-memory development -->
 <clickhouse>
-    <!-- Hard total server memory cap (bytes) -->
-    <max_server_memory_usage>0</max_server_memory_usage> <!-- 0 = auto (90% of container RAM) -->
+    <!-- Hard total server memory cap (bytes). Set explicitly rather than relying on the
+         auto ratio (90% of visible RAM) or a compose cgroup limit: cgroup limits are not
+         enforced in every environment, in which case ClickHouse sees the whole host's RAM. -->
+    <max_server_memory_usage>2147483648</max_server_memory_usage> <!-- 2 GiB -->
 
     <!-- Reduce cache sizes relative to available RAM -->
     <cache_size_to_ram_max_ratio>0.20</cache_size_to_ram_max_ratio>

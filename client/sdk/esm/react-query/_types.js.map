@@ -1,0 +1,1 @@
+{"version":3,"file":"_types.js","sourceRoot":"","sources":["../../src/react-query/_types.ts"],"names":[],"mappings":"AAAA;;GAEG;AAmKH;;;GAGG;AACH,MAAM,UAAU,kBAAkB,CAChC,IAAO;IAEP,MAAM,EAAE,IAAI,EAAE,CAAC,EAAE,GAAG,IAAI,EAAE,GAAG,IAA8B,CAAC;IAC5D,yEAAyE;IACzE,OAAQ,IAAgC,CAAC,MAAM,CAAC,aAAa,CAAC,CAAC;IAC/D,OAAO,IAAS,CAAC;AACnB,CAAC"}

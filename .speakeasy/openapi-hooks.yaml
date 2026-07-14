@@ -1,0 +1,564 @@
+openapi: 3.0.3
+info:
+  title: Gram API Description
+  description: Gram is the tools platform for AI agents
+  version: 0.0.1
+servers:
+  - url: https://app.getgram.ai
+paths:
+  /rpc/hooks.ingest:
+    post:
+      description: Feature-first unified endpoint for hook events from supported coding assistants.
+      operationId: ingestHookEvent
+      parameters:
+        - allowEmptyValue: true
+          description: Optional API key for plugin-driven attribution.
+          in: header
+          name: Gram-Key
+          schema:
+            description: Optional API key for plugin-driven attribution.
+            type: string
+        - allowEmptyValue: true
+          description: Optional project slug for plugin-driven attribution.
+          in: header
+          name: Gram-Project
+          schema:
+            description: Optional project slug for plugin-driven attribution.
+            type: string
+        - allowEmptyValue: true
+          description: Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.
+          in: header
+          name: Idempotency-Key
+          schema:
+            description: Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IngestRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IngestHookResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: ingest hooks
+      tags:
+        - hooks
+      x-speakeasy-name-override: ingest
+      x-speakeasy-react-hook:
+        name: IngestHookEvent
+components:
+  schemas:
+    Error:
+      type: object
+      properties:
+        fault:
+          type: boolean
+          description: Is the error a server-side fault?
+        id:
+          type: string
+          description: ID is a unique identifier for this particular occurrence of the problem.
+          example: 123abc
+        message:
+          type: string
+          description: Message is a human-readable explanation specific to this occurrence of the problem.
+          example: parameter 'p' must be an integer
+        name:
+          type: string
+          description: Name is the name of this class of errors.
+          example: bad_request
+        temporary:
+          type: boolean
+          description: Is the error temporary?
+        timeout:
+          type: boolean
+          description: Is the error a timeout?
+      description: unauthorized access
+      required:
+        - name
+        - id
+        - message
+        - temporary
+        - timeout
+        - fault
+      x-speakeasy-name-override: ServiceError
+    HookIngestData:
+      type: object
+      properties:
+        mcp:
+          $ref: '#/components/schemas/HookMCPData'
+        mcp_attribution:
+          type: array
+          items:
+            $ref: '#/components/schemas/HookMCPAttributionEntry'
+          description: Transcript-derived per-request MCP attribution (Claude Stop/SubagentStop).
+        mcp_inventory:
+          type: array
+          items:
+            $ref: '#/components/schemas/HookMCPData'
+          description: Configured MCP server snapshot captured at session start or configuration change. Transport credentials must be redacted by the sender.
+        message:
+          $ref: '#/components/schemas/HookMessageData'
+        notification:
+          $ref: '#/components/schemas/HookNotificationData'
+        prompt:
+          $ref: '#/components/schemas/HookPromptData'
+        skill:
+          $ref: '#/components/schemas/HookSkillData'
+        tool_call:
+          $ref: '#/components/schemas/HookToolCallData'
+        usage:
+          $ref: '#/components/schemas/HookUsageData'
+      description: Feature-specific payloads. Hooks populate only the blocks needed for the event.
+    HookIngestEvent:
+      type: object
+      properties:
+        occurred_at:
+          type: string
+          description: RFC3339 timestamp from the local agent. Defaults to receive time when absent.
+          format: date-time
+        type:
+          type: string
+          description: Canonical Gram hook event type.
+          enum:
+            - session.started
+            - session.updated
+            - session.ended
+            - prompt.submitted
+            - tool.requested
+            - tool.completed
+            - tool.failed
+            - assistant.responded
+            - assistant.thought
+            - usage.reported
+            - skill.activated
+            - notification.reported
+      description: Canonical Gram feature event.
+      required:
+        - type
+    HookIngestSession:
+      type: object
+      properties:
+        cwd:
+          type: string
+          description: Current working directory when the event fired.
+        id:
+          type: string
+          description: Stable conversation or session identifier.
+        model:
+          type: string
+          description: Model identifier reported by the local agent.
+        turn_id:
+          type: string
+          description: Generation, request, or turn identifier.
+      description: Agent session and turn identity, independent of provider naming.
+    HookIngestSource:
+      type: object
+      properties:
+        adapter:
+          type: string
+          description: Stable adapter slug, e.g. claude, cursor, codex, or a customer hook name.
+        adapter_version:
+          type: string
+          description: Adapter implementation version.
+        hostname:
+          type: string
+          description: Hostname of the machine that emitted the hook event.
+        raw_event_name:
+          type: string
+          description: Provider-native event name, if one exists.
+        user_email:
+          type: string
+          description: Self-reported email of the developer on the emitting machine (device agent or provider account), used for attribution when the API key is shared org-wide.
+      description: Metadata about the local hook adapter that translated a provider event into the Gram hook contract.
+      required:
+        - adapter
+    HookMCPAttributionEntry:
+      type: object
+      properties:
+        mcp_server:
+          type: string
+          description: Unredacted MCP server name from the transcript.
+        mcp_tool:
+          type: string
+          description: Unredacted MCP tool name from the transcript.
+        request_id:
+          type: string
+          description: Provider API request identifier (e.g. Claude's req_*) the attribution applies to.
+      description: Transcript-derived MCP attribution for one model API request. Claude redacts user-configured MCP server names to 'custom' on its OTEL telemetry, but records the real names in the local session transcript; hooks ship them here so ingest can restore the redacted names.
+      required:
+        - request_id
+    HookMCPData:
+      type: object
+      properties:
+        command:
+          type: string
+          description: MCP server command, when available.
+        result_json:
+          type: string
+          description: JSON-encoded MCP tool result, when reported as a string.
+        server_identity:
+          type: string
+          description: Stable server identity inferred by the hook adapter.
+        server_name:
+          type: string
+          description: Provider-reported MCP server name.
+        url:
+          type: string
+          description: MCP server URL, when available.
+      description: MCP feature payload.
+    HookMessageData:
+      type: object
+      properties:
+        duration_ms:
+          type: number
+          description: Message or thinking-block duration in milliseconds, when reported.
+          format: double
+        role:
+          type: string
+          description: Message role, e.g. assistant or user.
+        text:
+          type: string
+          description: Message text.
+      description: Assistant/user message payload.
+    HookNotificationData:
+      type: object
+      properties:
+        message:
+          type: string
+          description: Notification message.
+        title:
+          type: string
+          description: Notification title.
+        type:
+          type: string
+          description: Notification type.
+      description: Local agent notification payload.
+    HookPromptData:
+      type: object
+      properties:
+        text:
+          type: string
+          description: User prompt text.
+      description: Prompt feature payload.
+    HookSkillData:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Activated skill name.
+        source:
+          type: string
+          description: Skill source or namespace, if available.
+      description: Skill activation payload.
+      required:
+        - name
+    HookToolCallData:
+      type: object
+      properties:
+        duration_ms:
+          type: number
+          description: Tool execution duration in milliseconds, when reported.
+          format: double
+        error:
+          description: Tool error payload.
+        id:
+          type: string
+          description: Provider tool call identifier.
+        input:
+          description: Tool input payload.
+        is_interrupt:
+          type: boolean
+          description: Whether the failure was caused by user interruption.
+        name:
+          type: string
+          description: Tool name.
+        output:
+          description: Tool output payload.
+        permission_type:
+          type: string
+          description: Permission type requested by the agent, when applicable.
+        status:
+          type: string
+          description: Provider-reported tool call status, when available.
+      description: Tool call feature payload.
+    HookUsageData:
+      type: object
+      properties:
+        cache_read_tokens:
+          type: integer
+          description: Cache read token count.
+          format: int64
+        cache_write_tokens:
+          type: integer
+          description: Cache write token count.
+          format: int64
+        cost:
+          type: number
+          description: Reported cost.
+          format: double
+        input_tokens:
+          type: integer
+          description: Input token count.
+          format: int64
+        loop_count:
+          type: integer
+          description: Agent loop count, when reported.
+          format: int64
+        output_tokens:
+          type: integer
+          description: Output token count.
+          format: int64
+        status:
+          type: string
+          description: Provider-reported usage or session status, when available.
+      description: Token and cost usage payload.
+    IngestHookResult:
+      type: object
+      properties:
+        decision:
+          type: string
+          description: Whether the local hook should allow or deny the action.
+          enum:
+            - allow
+            - deny
+        effects:
+          type: object
+          description: Optional side-effect hints for hook SDKs.
+          additionalProperties: true
+        message:
+          type: string
+          description: User-facing decision message.
+        reason:
+          type: string
+          description: Machine-readable decision reason.
+      description: Provider-neutral decision returned by the unified hook endpoint.
+      required:
+        - decision
+    IngestRequestBody:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/HookIngestData'
+        event:
+          $ref: '#/components/schemas/HookIngestEvent'
+        raw:
+          description: Original provider payload for debugging. The backend does not use this for feature behavior.
+        schema_version:
+          type: string
+          description: Contract version. The current version is hook.ingest.v1.
+        session:
+          $ref: '#/components/schemas/HookIngestSession'
+        source:
+          $ref: '#/components/schemas/HookIngestSource'
+      required:
+        - schema_version
+        - source
+        - event
+  securitySchemes:
+    admin_auth_header_Authorization:
+      type: apiKey
+      description: Admin session auth for admin endpoints. Cookie-only credential; session is validated against Google on every request.
+      name: Authorization
+      in: header
+    apikey_header_Authorization:
+      type: apiKey
+      description: key based auth.
+      name: Authorization
+      in: header
+    apikey_header_Gram-Key:
+      type: apiKey
+      description: key based auth.
+      name: Gram-Key
+      in: header
+    chat_sessions_token_header_Gram-Chat-Session:
+      type: http
+      description: Gram Chat Sessions token based auth.
+      scheme: bearer
+    function_token_header_Authorization:
+      type: http
+      description: Gram Functions token based auth.
+      scheme: bearer
+    project_slug_header_Gram-Project:
+      type: apiKey
+      description: project slug header auth.
+      name: Gram-Project
+      in: header
+    session_header_Gram-Session:
+      type: apiKey
+      description: Session based auth. By cookie or header.
+      name: Gram-Session
+      in: header
+tags:
+  - name: access
+    description: Manage roles, team member access control, and authorization challenge events.
+  - name: admin
+    description: Operations supporting admin tasks, protected by Google workspace auth.
+  - name: agent
+    description: Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an org-scoped API key carrying the 'agent' scope.
+  - name: aiIntegrations
+    description: Manage organization-level AI provider integrations.
+  - name: assets
+    description: Manages assets used by Gram projects.
+  - name: assistantMemories
+    description: Manage assistant memory records.
+  - name: assistants
+    description: Manage assistants and their runtime configuration.
+  - name: auditlogs
+    description: Manages audit logs in Gram.
+  - name: auth
+    description: Managed auth for gram producers and dashboard.
+  - name: chat
+    description: Managed chats for gram AI consumers.
+  - name: chatSessions
+    description: Manages chat session tokens for client-side authentication
+  - name: cliAuth
+    description: Interactive device-agent enrollment via a PKCE one-time-code exchange. authorize (dashboard session) mints a short-lived code bound to a PKCE challenge; redeem (no auth — the code+verifier pair is the credential) exchanges it once for a per-user [agent,hooks] API key.
+  - name: deployments
+    description: Manages deployments of tools from upstream sources.
+  - name: domains
+    description: Manage custom domains for gram.
+  - name: environments
+    description: Managing toolset environments.
+  - name: externalCredentials
+    description: Manage organization-level external credentials — how Gram authenticates into a customer's AWS or GCP account.
+  - name: mcpRegistries
+    description: External MCP registry operations
+  - name: collections
+    description: MCP collection operations
+  - name: functions
+    description: Endpoints for working with functions.
+  - name: hooksServerNames
+    description: Manages display name overrides for hooks servers.
+  - name: hooks
+    description: Receives hook events from coding assistants for tool usage observability.
+  - name: instances
+    description: Consumer APIs for interacting with all relevant data for an instance of a toolset and environment.
+  - name: integrations
+    description: Explore third-party tools in Gram.
+  - name: keys
+    description: Managing system api keys.
+  - name: mcpEndpoints
+    description: Managing MCP endpoints, the url-friendly slug identifiers that address MCP servers.
+  - name: mcpMetadata
+    description: Manages metadata for the MCP install page shown to users.
+  - name: mcpServers
+    description: Managing MCP servers, which configure authentication, environment, and backend selection for an MCP server.
+  - name: modelKeys
+    description: Manage customer-supplied model provider API keys, scoped per project and responsibility slot.
+  - name: organizations
+    description: Organization membership, invitations, and directory.
+  - name: otelForwarding
+    description: Manage per-organization forwarding of inbound OTEL hook payloads to a customer-owned endpoint.
+  - name: packages
+    description: Manages packages in Gram.
+  - name: plugins
+    description: Manage distributable plugin bundles of MCP servers and hooks.
+  - name: features
+    description: Manage product level feature controls.
+  - name: projects
+    description: Manages projects in Gram.
+  - name: remoteMcp
+    description: Managing remote MCP servers.
+  - name: organizationRemoteSessionClients
+    description: Manage remote_session_client records from the organization-administrator surface — clients across every project in the caller's organization. client_secret_encrypted is never returned.
+  - name: remoteSessionClients
+    description: Manage remote_session_client records — credentials Gram uses when acting as an OAuth client of a remote_session_issuer. client_secret_encrypted is never returned.
+  - name: organizationRemoteSessionIssuers
+    description: Manage organization-level remote_session_issuer records — cross-project upstream Authorization Server identity records inherited by every project in the organization.
+  - name: remoteSessionIssuers
+    description: Manage remote_session_issuer records — upstream Authorization Server identity records that Gram talks to as an OAuth client.
+  - name: adminRemoteSessions
+    description: Platform-admin management of global remote_session_issuer / remote_session_client records — shared across every organization (project_id NULL, organization_id NULL). Speakeasy-staff only; every method requires the platform-admin flag.
+  - name: organizationRemoteSessions
+    description: Organization-administrator visibility into remote_sessions Gram is holding on a principal's behalf, across every project in the caller's organization. access_token_encrypted and refresh_token_encrypted are never returned.
+  - name: remoteSessions
+    description: Operator visibility into remote_sessions Gram is holding on a principal's behalf. Read + revoke; sessions are written by /mcp/{slug}/remote_login_callback and the silent-refresh path. access_token_encrypted and refresh_token_encrypted are never returned.
+  - name: resources
+    description: Dashboard API for interacting with resources.
+  - name: risk
+    description: Manage risk analysis policies and view scan results.
+  - name: telemetry
+    description: Fetch telemetry data for tools in Gram.
+  - name: templates
+    description: Manages re-usable prompt templates and higher-order tools for a project.
+  - name: tools
+    description: Dashboard API for interacting with tools.
+  - name: toolsets
+    description: Managed toolsets for gram AI consumers.
+  - name: triggers
+    description: Manage project trigger instances and static trigger definitions.
+  - name: tunneledMcp
+    description: Managing customer-hosted tunneled MCP servers.
+  - name: usage
+    description: Read usage for gram.
+  - name: userSessionClients
+    description: Operator visibility into DCR'd MCP clients (user_session_clients). Read + revoke; registrations are written by /mcp/{slug}/register.
+  - name: userSessionConsents
+    description: Operator visibility into user_session_consents — persistent consent records per (subject, user_session_client). List + revoke.
+  - name: userSessionIssuers
+    description: Manage user_session_issuer records — Gram-side authorization-server configuration that issues user sessions for an MCP server.
+  - name: userSessions
+    description: Operator visibility into issued user_sessions. List + revoke; sessions are written by /mcp/{slug}/token.
+  - name: variations
+    description: Manage variations of tools.
+  - name: external
+    description: Endpoints for external services to interact with gram.

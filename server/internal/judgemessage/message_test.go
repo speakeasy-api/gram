@@ -1,6 +1,7 @@
 package judgemessage_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -73,4 +74,23 @@ func TestNewJudgeMessageForToolCalls(t *testing.T) {
 	require.Equal(t, "Bash", msg.ToolCalls[1].ToolName)
 	require.Empty(t, msg.ToolCalls[1].MCPServer)
 	require.Empty(t, msg.ToolCalls[1].MCPFunction)
+}
+
+func TestRenderPayloadTruncatedToolCallsPreservesTail(t *testing.T) {
+	t.Parallel()
+
+	calls := make([]judgemessage.ToolCall, 0, 60)
+	for i := range 60 {
+		calls = append(calls, judgemessage.NewToolCall("Bash", fmt.Sprintf(`{"index":%d}`, i)))
+	}
+	calls[59] = judgemessage.NewToolCall("Bash", `{"command":"rm -rf /tail"}`)
+
+	payload := judgemessage.RenderPayload(judgemessage.NewForToolCalls(calls))
+
+	require.True(t, payload.ToolCallsTruncated)
+	require.Len(t, payload.ToolCalls, 50)
+	require.JSONEq(t, `{"index":0}`, payload.ToolCalls[0].Arguments)
+	require.JSONEq(t, `{"index":24}`, payload.ToolCalls[24].Arguments)
+	require.JSONEq(t, `{"index":35}`, payload.ToolCalls[25].Arguments)
+	require.JSONEq(t, `{"command":"rm -rf /tail"}`, payload.ToolCalls[49].Arguments)
 }

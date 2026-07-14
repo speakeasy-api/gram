@@ -1148,7 +1148,7 @@ func (q *Queries) InsertAssistantThreadEvent(ctx context.Context, arg InsertAssi
 	return id, err
 }
 
-const listActiveAssistantRuntimesForImageRecycle = `-- name: ListActiveAssistantRuntimesForImageRecycle :many
+const listActiveAssistantRuntimes = `-- name: ListActiveAssistantRuntimes :many
 SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.backend, r.backend_metadata_json, r.state, r.warm_until
 FROM assistant_runtimes r
 WHERE r.state = $1
@@ -1166,7 +1166,7 @@ WHERE r.state = $1
 ORDER BY r.updated_at ASC
 `
 
-type ListActiveAssistantRuntimesForImageRecycleRow struct {
+type ListActiveAssistantRuntimesRow struct {
 	ID                  uuid.UUID
 	AssistantThreadID   uuid.UUID
 	AssistantID         uuid.UUID
@@ -1177,22 +1177,20 @@ type ListActiveAssistantRuntimesForImageRecycleRow struct {
 	WarmUntil           pgtype.Timestamptz
 }
 
-// Returns live v2 runtime rows that carry backend metadata so a deploy-time
-// sweep can roll their machines onto the current runtime image. Only `active`
-// rows qualify: `starting` rows are mid-boot and already pull the current
-// image, while expiring/stopped rows are torn down or recycled lazily on the
-// next admission. Rows orphaned by a deleted assistant are excluded: they
-// belong to the deleted-assistant janitor, and recycling them would bump
-// updated_at and postpone the inactivity-based reap.
-func (q *Queries) ListActiveAssistantRuntimesForImageRecycle(ctx context.Context, activeState string) ([]ListActiveAssistantRuntimesForImageRecycleRow, error) {
-	rows, err := q.db.Query(ctx, listActiveAssistantRuntimesForImageRecycle, activeState)
+// Returns live v2 runtime rows that carry backend metadata for runtime
+// reconciliation sweeps. Only `active` rows qualify: `starting` rows are
+// mid-boot, while expiring/stopped rows are already being torn down or await
+// re-admission. Rows orphaned by a deleted assistant belong to the
+// deleted-assistant janitor and are excluded here.
+func (q *Queries) ListActiveAssistantRuntimes(ctx context.Context, activeState string) ([]ListActiveAssistantRuntimesRow, error) {
+	rows, err := q.db.Query(ctx, listActiveAssistantRuntimes, activeState)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListActiveAssistantRuntimesForImageRecycleRow
+	var items []ListActiveAssistantRuntimesRow
 	for rows.Next() {
-		var i ListActiveAssistantRuntimesForImageRecycleRow
+		var i ListActiveAssistantRuntimesRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.AssistantThreadID,

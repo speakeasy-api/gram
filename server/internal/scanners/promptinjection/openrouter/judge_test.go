@@ -36,7 +36,35 @@ func req(texts ...string) promptinjection.Request {
 			ToolCalls:   nil,
 		}
 	}
-	return promptinjection.Request{Messages: msgs, OrgID: "org-a", ProjectID: "proj"}
+	return promptinjection.Request{Messages: msgs, OrgID: "org-a", ProjectID: "proj", UserIDs: nil}
+}
+
+// TestClassifyBillsInternalKeyAndAttributesScannedUser pins the PI judge's
+// billing identity: internal OpenRouter key, per-message scanned-user
+// attribution.
+func TestClassifyBillsInternalKeyAndAttributesScannedUser(t *testing.T) {
+	t.Parallel()
+	client := &fakeCompletionClient{responder: func(string) string {
+		return `{"is_attack":false,"confidence":0.5,"rationale":"benign"}`
+	}}
+	c := newEngine(t, client)
+
+	in := req("first payload", "second payload")
+	in.UserIDs = []string{"user-1", "user-2"}
+	out, err := c.Classify(t.Context(), in)
+	require.NoError(t, err)
+	require.Len(t, out, 2)
+
+	client.mu.Lock()
+	keyTypes := append([]openrouter.KeyType(nil), client.keyTypes...)
+	userIDs := append([]string(nil), client.userIDs...)
+	client.mu.Unlock()
+	require.Len(t, keyTypes, 2)
+	for _, kt := range keyTypes {
+		require.Equal(t, openrouter.KeyTypeInternal, kt)
+	}
+	require.ElementsMatch(t, []string{"user-1", "user-2"}, userIDs,
+		"each judge call carries the scanned message's owner")
 }
 
 func TestClassifyFlagsInjectionVerdict(t *testing.T) {
@@ -182,8 +210,10 @@ type fakeCompletionClient struct {
 	err       error
 	responder func(text string) string
 
-	mu      sync.Mutex
-	prompts []string
+	mu       sync.Mutex
+	prompts  []string
+	keyTypes []openrouter.KeyType
+	userIDs  []string
 }
 
 func (c *fakeCompletionClient) lastPrompt() string {
@@ -204,6 +234,8 @@ func (c *fakeCompletionClient) GetCompletion(_ context.Context, request openrout
 	}
 	c.mu.Lock()
 	c.prompts = append(c.prompts, prompt)
+	c.keyTypes = append(c.keyTypes, request.KeyType)
+	c.userIDs = append(c.userIDs, request.UserID)
 	c.mu.Unlock()
 	if c.err != nil {
 		return nil, c.err

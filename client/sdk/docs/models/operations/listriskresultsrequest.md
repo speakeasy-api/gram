@@ -1,0 +1,27 @@
+# ListRiskResultsRequest
+
+## Example Usage
+
+```typescript
+import { ListRiskResultsRequest } from "@gram/client/models/operations/listriskresults.js";
+
+let value: ListRiskResultsRequest = {};
+```
+
+## Fields
+
+| Field         | Type                                                                                          | Required           | Description                                                                                                                                                                                |
+| ------------- | --------------------------------------------------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `policyId`    | _string_                                                                                      | :heavy_minus_sign: | Optional policy ID to filter by.                                                                                                                                                           |
+| `chatId`      | _string_                                                                                      | :heavy_minus_sign: | Optional chat ID to filter by.                                                                                                                                                             |
+| `category`    | _string_                                                                                      | :heavy_minus_sign: | Optional rule category key to filter by (e.g. secrets, pii, financial).                                                                                                                    |
+| `ruleId`      | _string_                                                                                      | :heavy_minus_sign: | Optional rule identifier substring to filter by (case-insensitive, e.g. 'secret' matches all 'secret.\*' rules).                                                                           |
+| `userId`      | _string_                                                                                      | :heavy_minus_sign: | Optional user identifier substring to filter by (case-insensitive, matched against the chat's external user id).                                                                           |
+| `uniqueMatch` | _boolean_                                                                                     | :heavy_minus_sign: | If true, collapse results to one row per (policy_id, rule_id, match), keeping the most recent occurrence. Useful when the same secret is detected many times within a single message body. |
+| `from`        | [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date) | :heavy_minus_sign: | Filter results to messages created at or after this timestamp (ISO 8601).                                                                                                                  |
+| `to`          | [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date) | :heavy_minus_sign: | Filter results to messages created strictly before this timestamp (ISO 8601).                                                                                                              |
+| `cursor`      | _string_                                                                                      | :heavy_minus_sign: | Cursor to fetch the next page of results.                                                                                                                                                  |
+| `limit`       | _number_                                                                                      | :heavy_minus_sign: | Maximum number of results to return per page.                                                                                                                                              |
+| `gramKey`     | _string_                                                                                      | :heavy_minus_sign: | API Key header                                                                                                                                                                             |
+| `gramSession` | _string_                                                                                      | :heavy_minus_sign: | Session header                                                                                                                                                                             |
+| `gramProject` | _string_                                                                                      | :heavy_minus_sign: | project header                                                                                                                                                                             |

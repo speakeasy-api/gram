@@ -1,0 +1,22 @@
+import * as z from "zod/v4-mini";
+import { Result as SafeParseResult } from "../../types/fp.js";
+import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+export type AgentMarketplace = {
+  /**
+   * Stable identifier for the marketplace, used as its key when the agent registers it with a managed tool. Matches the name written into the published marketplace.json, derived from the organization name (for example, `<org-slug>-gram`), so plugin references resolve deterministically across polls.
+   */
+  name: string;
+  /**
+   * Git URL for the marketplace, served by the marketplace proxy.
+   */
+  url: string;
+};
+/** @internal */
+export declare const AgentMarketplace$inboundSchema: z.ZodMiniType<
+  AgentMarketplace,
+  unknown
+>;
+export declare function agentMarketplaceFromJSON(
+  jsonString: string,
+): SafeParseResult<AgentMarketplace, SDKValidationError>;
+//# sourceMappingURL=agentmarketplace.d.ts.map

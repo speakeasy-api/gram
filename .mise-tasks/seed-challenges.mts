@@ -1,12 +1,12 @@
-#!/usr/bin/env -S node
+#!/usr/bin/env -S node --import tsx
 
 //MISE description="Seed the local ClickHouse with synthetic authz deny challenges so the org home page has data to render"
 
 import crypto from "node:crypto";
 
 import { intro, log, outro } from "@clack/prompts";
-import { GramCore } from "@gram/client/core.js";
-import { authInfo } from "@gram/client/funcs/authInfo.js";
+import { GramCore } from "#gram/client/core.js";
+import { authInfo } from "#gram/client/funcs/authInfo.js";
 
 const CLICKHOUSE_URL = `http://${process.env.CLICKHOUSE_HOST ?? "127.0.0.1"}:${
   process.env.CLICKHOUSE_HTTP_PORT ?? "8123"

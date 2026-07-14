@@ -52,6 +52,11 @@ type testInstance struct {
 
 func newTestProductFeaturesService(t *testing.T) (context.Context, *testInstance) {
 	t.Helper()
+	return newTestProductFeaturesServiceWithPublisher(t, nil)
+}
+
+func newTestProductFeaturesServiceWithPublisher(t *testing.T, pub productfeatures.PluginPublisher) (context.Context, *testInstance) {
+	t.Helper()
 
 	ctx := t.Context()
 
@@ -87,7 +92,7 @@ func newTestProductFeaturesService(t *testing.T) (context.Context, *testInstance
 	require.NoError(t, err)
 
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	svc := productfeatures.NewService(logger, tracerProvider, conn, sessionManager, redisClient, authzEngine)
+	svc := productfeatures.NewService(logger, tracerProvider, conn, sessionManager, redisClient, authzEngine, pub)
 
 	return ctx, &testInstance{
 		service:        svc,

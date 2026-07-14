@@ -1,5 +1,112 @@
 # server
 
+## 0.87.0
+
+### Minor Changes
+
+- 4da1ceb: Assistant completions now route through a project's own model provider key when one covers the assistants slot. Projects without a key keep the current platform-covered behavior. The key slot a completion uses is derived from the authenticated caller rather than request headers.
+- 0d36d3c: Projects can now bring their own model provider key for the risk-policy judge and the prompt-injection classifier, each as an independent key slot. Unset slots fall back to the project default key, then the platform key.
+- 15b6f77: Projects can now store their own model provider API keys (BYOK), scoped per responsibility slot with a fallback chain: a slot-specific key wins over the project default key, which wins over the platform key. Keys are validated with the provider on save, stored encrypted, and never returned by the API. Configuration is gated behind the custom model keys product feature; with no keys configured, behavior is unchanged.
+- 50097b0: Implement remote MCP server header management API
+- 15618be: Add the project-scoped API for listing users and usage for a Shadow MCP server, with generated dashboard SDK support.
+- 7cef3fe: Redefine tokens under management as observed agent traffic: the billing page now counts the tokens the platform observes coming from users' agent sessions (input, output, and cache writes — cache reads excluded), never inference the platform spends itself (risk-policy analysis, hosted chat). Breakdowns now offer model, agent, provider, account type, project, user, division, department, and role; the project filter dropdown is replaced by the Project breakdown section.
+
+### Patch Changes
+
+- db26157: Label cowork tool calls as `cowork` in tool logs so filtering by Cowork source works
+- b8a6e78: Fix MCP attribution never promoting when the Claude plugin authenticates with an org-wide hooks key. The transcript-attribution tuple was keyed in Redis by the project resolved from the plugin's `GRAM_HOOKS_PROJECT_SLUG` (default `"default"`), while the promotion worker looked it up by the staged OTEL row's project — set by the OTEL exporter's own credential. With an org-wide key the two disagree, so the join always missed and staged rows promoted verbatim as `custom` after the timeout. The tuple is now keyed by org id — both ingest paths always agree on the org, and cross-org isolation is preserved — with the row's org materialized onto `telemetry_logs_staging` as the lookup scope.
+- b270dc9: Remove the dormant telemetry.queryRiskTokens endpoint (no consumers; it computed the pre-DNO-491 billed population and no longer matched any billing surface)
+
+## 0.86.0
+
+### Minor Changes
+
+- 4d22067: Add "Suggest with AI" to the exclusion create/edit form, backed by a new dedicated `risk.suggestExclusion` endpoint (separate from `risk.suggestCustomRules`). It returns structured match fields (match type, match value, rule id/source filters) that the dashboard serializes into the exclusion criteria expression — regex suggestions are validated (RE2 compile, length cap) server-side before they reach the form.
+- f3ea11b: Add the project-scoped Shadow MCP inventory listing API and generated client SDK support.
+- b10e52d: Restore Claude's redacted MCP attribution on cost telemetry via session transcripts. Claude stamps `mcp_server.name='custom'` on api_request OTEL rows for user-configured MCP servers; those rows now park in a `telemetry_logs_staging` ClickHouse table while the Claude hook plugin's Stop/SubagentStop hooks ship the unredacted `(request_id → server/tool)` attribution extracted from the local session transcript. A per-session Temporal workflow joins the two, rewrites the attribution inside the row's attributes JSON, and promotes the row into `telemetry_logs` — so `attribute_metrics_summaries` aggregates true server/tool names. Rows whose attribution never arrives promote verbatim after 30 minutes via a scheduled sweep.
+
+### Patch Changes
+
+- 00ac3b8: Fix deletion of organization-level remote session clients, derive tunnel gateway URLs from the active environment, and detach remote identity providers without deleting shared clients.
+
+## 0.85.0
+
+### Minor Changes
+
+- ceb150d: Forward each organization's tokens-under-management usage to PostHog (AGE-2289): hourly group properties on the organization group (current/previous cycle tokens, contracted allowance, utilization) plus a once-per-day organization_token_usage event, emitted from the billing usage refresh workflow.
+- b8e7fe0: Hook plugin browser sign-in is now opt-in per organization. By default, published plugins never open a browser: they authenticate with explicitly configured credentials, a previously cached key, or the organization-wide key, and the login helper prints manual setup instructions instead. Organization admins can re-enable the interactive browser sign-in from the org settings page.
+- 83f97ec: Judge timeouts now surface as a dedicated `outcome:timeout` metric tag, with retuned duration histogram buckets near the 10s call timeout.
+- fff8efc: Assistant runtimes can now run locally: the new `local` runtime provider (the
+  local-development default) starts one Docker container per assistant on demand,
+  reuses it across turns, and automatically replaces idle containers when the
+  runtime image is rebuilt — no Fly.io credentials or registry pushes needed for
+  local image development.
+- dfe9fd9: feat: require a user_session_issuer for every remote and tunneled MCP server. The server mints the issuer in the same transaction as the mcp_servers row and it lasts for the server's lifetime: `user_session_issuer_id` is removed from both the create and update APIs, and the update query COALESCEs to the stored value, so no code path can supply, strip, or swap it. Enforced at the schema level by a `mcp_servers` CHECK constraint (added NOT VALID, then validated). Toolset-backed servers are exempt (their issuer lives on the toolset).
+
+### Patch Changes
+
+- 4c57fa5: Stop the chat session list visibility check from recording an authz challenge. Listing sessions probes `chat:read` only to decide whether the caller sees all sessions or just their own; a member without the grant is the normal case, not a denial. Logging it as one polluted the access diagnostics with spurious `chat:read` denials (the insights dock lists chats on every page load), making it look like `chat:read` was required to view unrelated pages such as the Cost dashboard.
+- a29bea1: feat: expose `is_default` on the plugin API and use it in the dashboard instead of matching on the "Default" name/slug. The onboarding distribute-servers step and plugin card/detail pages previously identified the org's fallback plugin by string comparison (`name === "Default"` / `slug === "default"`), a proxy that predates the server's `is_default` column and unique-per-project index. Both now read the real `is_default` flag returned by `listPlugins`/`getPlugin`.
+- fe3ddb2: fix: batch toolsets.list queries to eliminate N+1. `toolsets.list` used to loop over every toolset in a project issuing 11+ DB round trips each (plus one more per external-MCP tool), making the endpoint take seconds for projects with many toolsets and slowing the dashboard home page, which prefetches it on every project route. Replaced with a single batched fetch across all toolsets, cutting round trips from `O(toolset_count)` to a fixed ~10 regardless of how many toolsets a project has.
+- 7c637c7: Refresh the OpenRouter model list: add Claude Fable 5 (marked Expensive) and the GPT-5.6 series (Sol/Terra/Luna), replace the playground picker's "(Expensive)" label suffixes with a badge, and remove deprecated models (Claude Sonnet 4, GPT-4.1, o3, o4-mini, Gemini 2.5 Pro/Flash, DeepSeek R1).
+- 4a98092: Address review feedback from the OpenRouter model refresh: pin explicit per-provider fallback models in ResolveModel so de-listed or unknown models never silently resolve to a premium model (previously anthropic/\* fell back alphabetically to Claude Fable 5), give elements an explicit DEFAULT_MODEL (Claude Sonnet 5) instead of MODELS[0], and remove Gemini 3.5 Flash from the prompt-policy judge picker (the judge disables reasoning, which that model rejects).
+- 125059e: Reduce project overview latency by running independent ClickHouse aggregations concurrently, tracing each query, and computing chat resolutions in a single PostgreSQL pass.
+
+## 0.84.0
+
+### Minor Changes
+
+- da79525: Redesign the Plugins pages and add MCP server readiness surfacing:
+
+  - Marketplace card now reflects real setup state: an uninitialized/warning
+    variant (skeleton repo link, "Not published" badge, "Publish now"/"Add
+    collaborators" CTA) shown until the marketplace repo exists **and** has at
+    least one collaborator who has accepted their GitHub invite, distinct from
+    the connected/published state.
+  - Install flow reworked: a single "Install" dropdown (GitHub installation via
+    marketplace, preferred, or direct zip download) replaces the old split
+    button, on both the Plugins index and detail pages, and no longer disables
+    zip download just because the marketplace isn't set up yet.
+  - Default plugin gets special treatment (badge, description, auto-heal on
+    read for projects that predate the feature) and plugin membership no
+    longer N+1-queries its servers.
+  - New collapsible readiness bar on the MCP server ("x" route) sidebar,
+    summarizing Server URL / Authentication / Source / Included in Plugin
+    status with links to fix each.
+  - Server: `GetPublishStatus` now reports whether the marketplace repo has a
+    real (accepted, not just invited) collaborator, cached briefly to avoid
+    hitting GitHub's API on every dashboard poll, and invalidated immediately
+    after publishing adds one.
+
+- 48a97e2: Implement remote MCP server header management API
+
+### Patch Changes
+
+- da79525: Attach MCP servers to the Default plugin when they're enabled, not just when their first endpoint is created — remote MCP servers are created disabled with a pre-staged endpoint, so they previously never auto-attached and manually adding them failed with "mcp server is disabled or has no published endpoint". Also fixes creating a second endpoint for an already-attached server (previously failed on a duplicate-attach conflict), hides endpointless servers from the plugin's add-server picker, and asks for confirmation before removing a server's last address.
+- ae3fc4b: The billing page's Model breakdown now splits into "Risk Policy Analysis Model" — the platform's own risk-policy scanning inference, the metered unit of the TUM contracts — and "Completion Model" for user-facing completion surfaces (playground, elements, MCP chat, Slack). The "Sessions & messages" section and the risk-findings chart stacking are removed: billing meters the act of scanning observed traffic, not the customer's message population. Risk-analysis inference is attributed to the scanned user, so the User, Role, and Division breakdowns now report whose traffic was analyzed.
+- b06aa04: The enrollment page no longer shows 0 tokens and a stale last activity for employees whose telemetry rows split across identity keys: usage rows carrying a user id but no email now merge into the employee's email-keyed summary, linked AI accounts attach to that merged summary, and role breakdowns resolve those users instead of bucketing them as Unassigned. The employees and agents tables also render their pagination footer flush against the table instead of floating below a gap.
+- e3cf1d1: The hooks setup dialog's Claude Code instructions now install from your org's published plugin marketplace (with copyable commands and managed-settings snippets), instead of a public repository marketplace that carried no credentials. Publish status now reports the observability plugin slugs so install instructions always show the exact plugin name.
+- 020dfdf: Avoid rebuilding every platform tool descriptor for each tool returned by `toolsets.list`, significantly reducing latency for projects with large toolsets.
+
+## 0.83.0
+
+### Minor Changes
+
+- 5a0f98a: Add organization-scoped `externalCredentials` management API for CRUD of external credentials (AWS/GCP IAM) used to authenticate Gram into a customer cloud account. Per-provider create/update/get/delete plus a generic supertype-only list with an optional provider filter. Gated on `org:read`/`org:admin` and audited under per-provider subjects (`aws_iam_credential`, `gcp_iam_credential`).
+- 317d86e: Hook browser login now delivers the minted API key to the local listener as a form POST instead of appending it to the callback URL, keeping the key out of browser history and request logs, and the sign-in tab closes itself once authentication completes. Older dashboards that still redirect with query parameters keep working.
+- 02ac329: Issuer discovery now parses RFC 8414 `service_documentation`, `op_policy_uri`, and `op_tos_uri` and persists them on `remote_session_issuers` across the project, organization, and global admin surfaces.
+- 4fa3e51: Split the org-admin `organizationRemoteSessionIssuers` service into three per-resource services mirroring the project-scoped layer: `organizationRemoteSessionIssuers`, `organizationRemoteSessionClients`, and `organizationRemoteSessions`. Pure refactor with no behavior or RBAC change, but breaking for the management API and SDK: every method drops its redundant resource suffix, so the RPC paths and SDK method names change (e.g. `organizationRemoteSessionIssuers.createClient` becomes `organizationRemoteSessionClients.create`).
+
+### Patch Changes
+
+- e223d08: fix(telemetry): keep deleted MCP servers' tool-usage classification. Tool-usage `target_type` now resolves against live + soft-deleted MCP servers, so a managed remote/tunneled server's history no longer flips to `shadow_mcp_server` once the server is deleted or recreated.
+- dfee73b: fix: make Claude session user attribution deterministic. The hook-supplied device-enrolled employee email now always wins over the OTEL-cached account email (the AI account's own report, e.g. a personal gmail) when both are present — previously whichever ingest stream created the chat row first determined the session's `external_user_id`. The account's own email is unaffected and remains surfaced via `user_accounts` / `account_email`.
+- 11da690: feat: show which users are running the device agent. The org Device Agent page gains an admin-only "Active Users" tab listing who has synced, attributed by the email each agent reports on its ~60s `agent.getPlugins` poll, with `Page.Toolbar` search (name/email) and an Active/Stale status filter. A best-effort per-`(org, email)` last-seen record (throttled to ≤1 write/min) backs a session-secured, org-admin-gated `agent.listSyncedUsers` endpoint.
+- 74dbfed: feat: add a token usage breakdown to the billing page's Tokens Under Management section (DNO-404). A billing-cycle picker scopes the TUM usage card and a new "Token usage" panel to any contracted cycle; the panel renders a stacked bar chart of org-wide tokens for that cycle, sliced via a grouped, searchable breakdown picker — total, by token type (input / output / cache read / cache write), by risk involvement (tokens from sessions with at least one active risk finding, via the new org-scoped `telemetry.queryRiskTokens` endpoint), or by analytics dimensions — with daily/weekly/monthly granularity and a cumulative view. Beneath the chart, a usage details table lists per-metric cycle totals with sparklines: token types, agent sessions, tool calls, and message-level stats (tokens in messages with risk findings and tokens from tool-call messages, read from Postgres per-message token counts). The table's measures arrive in a single `telemetry.queryTumDetails` request, and its totals and time-based overage attribution are normalized to match the billed tokens-under-management numbers exactly, with finalized cycles served from the durable billing snapshots. The section also supports drill-down: clicking a chart bar (or dragging across bars) narrows the whole view to that range (re-bucketing daily), and a time-range picker beside the cycle selector accepts any custom period — typed in natural language or picked from a calendar — with billed normalization and overage reserved for full organization cycles; the usage card is labeled with the billing cycle its totals describe. Cycles are named by month ("June Billing Cycle"), table sections collapse individually or all at once, and a Reset button restores the initial view.
+- 0517e60: Restrict the Observe dashboard section (Costs, MCP & Tools Insights, Employee Enrollment, Agent Sessions, Tool Logs) to org admins. The Observe nav stays visible (like the Secure section), but each Observe page is gated on `org:admin`, so basic members see an "Access restricted" notice. Basic members also no longer receive `environment:read` by default.
+- dfee73b: feat: surface the AI account email on agent sessions. `chat.listChats` and `chat.load` now return `account_email` from the linked AI account, and the dashboard shows the personal account's email (e.g. a gmail on Claude Max) on session list rows, the transcript's user messages, and the session details popover — instead of only the attributed employee's work email.
+- 3f15c7c: fix: apply the Tool Logs `http.response.status_code` filter at the trace level so status-less rows no longer leak 200/success traces into "Non-2xx responses", and add a first-class Error/Success/Blocked/Pending Status filter to the Tool Logs page.
+
 ## 0.82.0
 
 ### Minor Changes

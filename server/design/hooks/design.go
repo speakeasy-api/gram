@@ -145,6 +145,7 @@ var HookIngestSource = Type("HookIngestSource", func() {
 	Attribute("adapter_version", String, "Adapter implementation version.")
 	Attribute("raw_event_name", String, "Provider-native event name, if one exists.")
 	Attribute("hostname", String, "Hostname of the machine that emitted the hook event.")
+	Attribute("user_email", String, "Self-reported email of the developer on the emitting machine (device agent or provider account), used for attribution when the API key is shared org-wide.")
 })
 
 var HookIngestSession = Type("HookIngestSession", func() {
@@ -227,15 +228,25 @@ var HookNotificationData = Type("HookNotificationData", func() {
 	Attribute("message", String, "Notification message.")
 })
 
+var HookMCPAttributionEntry = Type("HookMCPAttributionEntry", func() {
+	Description("Transcript-derived MCP attribution for one model API request. Claude redacts user-configured MCP server names to 'custom' on its OTEL telemetry, but records the real names in the local session transcript; hooks ship them here so ingest can restore the redacted names.")
+	Required("request_id")
+	Attribute("request_id", String, "Provider API request identifier (e.g. Claude's req_*) the attribution applies to.")
+	Attribute("mcp_server", String, "Unredacted MCP server name from the transcript.")
+	Attribute("mcp_tool", String, "Unredacted MCP tool name from the transcript.")
+})
+
 var HookIngestData = Type("HookIngestData", func() {
 	Description("Feature-specific payloads. Hooks populate only the blocks needed for the event.")
 	Attribute("prompt", HookPromptData)
 	Attribute("tool_call", HookToolCallData)
 	Attribute("mcp", HookMCPData)
+	Attribute("mcp_inventory", ArrayOf(HookMCPData), "Configured MCP server snapshot captured at session start or configuration change. Transport credentials must be redacted by the sender.")
 	Attribute("usage", HookUsageData)
 	Attribute("message", HookMessageData)
 	Attribute("skill", HookSkillData)
 	Attribute("notification", HookNotificationData)
+	Attribute("mcp_attribution", ArrayOf(HookMCPAttributionEntry), "Transcript-derived per-request MCP attribution (Claude Stop/SubagentStop).")
 })
 
 var IngestHookPayload = Type("IngestHookPayload", func() {
@@ -358,22 +369,23 @@ var _ = Service("hooks", func() {
 	Method("ingest", func() {
 		Description("Feature-first unified endpoint for hook events from supported coding assistants.")
 
-		Security(security.ByKey, security.ProjectSlug, func() {
-			Scope("hooks")
-		})
-
+		// Gram-Key + Gram-Project are OPTIONAL: hook senders must stay
+		// non-blocking for machines that never signed in. A request with no
+		// key is acknowledged without processing (fail open); a request that
+		// presents a key gets it validated and receives a 401 on rejection so
+		// the sender's credential-recovery path can react.
 		Payload(func() {
 			Extend(IngestHookPayload)
-			security.ByKeyPayload()
-			security.ProjectPayload()
+			Attribute("apikey_token", String, "Optional API key for plugin-driven attribution.")
+			Attribute("project_slug_input", String, "Optional project slug for plugin-driven attribution.")
 		})
 
 		Result(IngestHookResult)
 
 		HTTP(func() {
 			POST("/rpc/hooks.ingest")
-			security.ByKeyHeader()
-			security.ProjectHeader()
+			Header("apikey_token:Gram-Key")
+			Header("project_slug_input:Gram-Project")
 			Header("idempotency_key:Idempotency-Key")
 		})
 

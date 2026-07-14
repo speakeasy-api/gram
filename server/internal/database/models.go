@@ -568,6 +568,7 @@ type Environment struct {
 type EnvironmentEntry struct {
 	Name          string
 	Value         string
+	IsSecret      bool
 	EnvironmentID uuid.UUID
 	CreatedAt     pgtype.Timestamptz
 	UpdatedAt     pgtype.Timestamptz
@@ -951,6 +952,36 @@ type McpServer struct {
 	Deleted               bool
 }
 
+type McpServerToolMetadatum struct {
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	McpServerID     uuid.UUID
+	ToolName        string
+	Title           pgtype.Text
+	ReadOnlyHint    pgtype.Bool
+	DestructiveHint pgtype.Bool
+	IdempotentHint  pgtype.Bool
+	OpenWorldHint   pgtype.Bool
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
+}
+
+type ModelProviderKey struct {
+	ID              uuid.UUID
+	OrganizationID  string
+	ProjectID       uuid.UUID
+	Slot            string
+	Provider        string
+	ApiKeyEncrypted string
+	Enabled         bool
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
+}
+
 type OauthProxyClientInfo struct {
 	McpSlug                 string
 	ClientID                string
@@ -1002,6 +1033,7 @@ type OauthProxyServer struct {
 
 type OpenrouterApiKey struct {
 	OrganizationID string
+	KeyType        string
 	Key            string
 	KeyHash        string
 	MonthlyCredits int64
@@ -1233,15 +1265,18 @@ type PluginAssignment struct {
 }
 
 type PluginGithubConnection struct {
-	ID                   uuid.UUID
-	ProjectID            uuid.UUID
-	InstallationID       int64
-	RepoOwner            string
-	RepoName             string
-	MarketplaceToken     pgtype.Text
-	PublishedFingerprint pgtype.Text
-	CreatedAt            pgtype.Timestamptz
-	UpdatedAt            pgtype.Timestamptz
+	ID                       uuid.UUID
+	ProjectID                uuid.UUID
+	InstallationID           int64
+	RepoOwner                string
+	RepoName                 string
+	MarketplaceToken         pgtype.Text
+	PublishedFingerprint     pgtype.Text
+	PublishedMcpFingerprints []byte
+	PublishedHooksVersion    pgtype.Text
+	PublishedHooksConfig     []byte
+	CreatedAt                pgtype.Timestamptz
+	UpdatedAt                pgtype.Timestamptz
 }
 
 type PluginServer struct {
@@ -1497,6 +1532,7 @@ type RiskPolicy struct {
 	UserMessage          pgtype.Text
 	Prompt               pgtype.Text
 	ModelConfig          []byte
+	Score                float64
 	Version              int64
 	CreatedAt            pgtype.Timestamptz
 	UpdatedAt            pgtype.Timestamptz

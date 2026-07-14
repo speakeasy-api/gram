@@ -17,7 +17,7 @@ import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { Badge, Button, Icon } from "@speakeasy-api/moonshine";
 import { Plus } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Outlet, useNavigate } from "react-router";
+import { Outlet } from "react-router";
 import { toast } from "sonner";
 import { useToolsets } from "../toolsets/useToolsets";
 import { MCPEmptyState } from "./MCPEmptyState";
@@ -31,8 +31,11 @@ import {
   mcpServerFacets,
   MCP_FILTERS,
   MCP_FILTER_OPTIONS,
+  pluginFilterOptions,
+  pluginMembership,
   toolsetFacets,
 } from "./mcp-filter-schema";
+import { usePlugins } from "@gram/client/react-query/plugins.js";
 
 const BUILT_IN_SERVERS = [
   {
@@ -65,7 +68,6 @@ export const MCPPage = (): JSX.Element => {
 function MCPOverview() {
   const toolsets = useToolsets();
   const routes = useRoutes();
-  const navigate = useNavigate();
   const client = useSdkClient();
 
   // TODO(AGE-1902): collapse this fetch with useToolsets() once Hosted
@@ -95,10 +97,18 @@ function MCPOverview() {
   } = useMcpEndpoints({ gramProject }, undefined, {
     throwOnError: false,
   });
+  // Plugin membership only drives the "Included in plugins" filter, so a failed
+  // fetch degrades to an empty option list rather than breaking the listing.
+  const { data: pluginsResult, refetch: refetchPlugins } = usePlugins(
+    undefined,
+    undefined,
+    { throwOnError: false },
+  );
   const handleRefresh = () => {
     void toolsets.refetch();
     void refetchMcpServers();
     void refetchEndpoints();
+    void refetchPlugins();
   };
   const isRefreshing =
     isFetchingMcpServers || isFetchingEndpoints || toolsets.isFetching;
@@ -133,11 +143,23 @@ function MCPOverview() {
   const [search, setSearch] = useState("");
   const mcpFilters = useMcpDimensionFilters(MCP_FILTERS);
 
+  const plugins = useMemo(() => pluginsResult?.plugins ?? [], [pluginsResult]);
+  const membership = useMemo(() => pluginMembership(plugins), [plugins]);
+  const filterOptions = useMemo(
+    () => ({ ...MCP_FILTER_OPTIONS, plugins: pluginFilterOptions(plugins) }),
+    [plugins],
+  );
+
   const filteredToolsets = useMemo(() => {
     const query = search.toLowerCase();
     return [...toolsets]
       .filter((toolset) => {
-        if (!matchesMcpFilters(toolsetFacets(toolset), mcpFilters.values))
+        if (
+          !matchesMcpFilters(
+            toolsetFacets(toolset, membership),
+            mcpFilters.values,
+          )
+        )
           return false;
         if (!query) return true;
         return (
@@ -146,13 +168,18 @@ function MCPOverview() {
         );
       })
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [toolsets, search, mcpFilters.values]);
+  }, [toolsets, search, mcpFilters.values, membership]);
 
   const filteredMcpServers = useMemo(() => {
     const query = search.toLowerCase();
     return [...mcpServers]
       .filter((server) => {
-        if (!matchesMcpFilters(mcpServerFacets(server), mcpFilters.values))
+        if (
+          !matchesMcpFilters(
+            mcpServerFacets(server, membership),
+            mcpFilters.values,
+          )
+        )
           return false;
         if (!query) return true;
         return (
@@ -161,7 +188,7 @@ function MCPOverview() {
         );
       })
       .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
-  }, [mcpServers, search, mcpFilters.values]);
+  }, [mcpServers, search, mcpFilters.values, membership]);
 
   // Show the filter bar once there's anything to filter. Filters can drive the
   // result set to empty on their own, so the no-matches state must consider an
@@ -183,7 +210,7 @@ function MCPOverview() {
 
     toast.success(`MCP server "${result.name}" created`);
 
-    void navigate(routes.mcp.details.href(result.slug) + "#tools");
+    routes.mcp.details.tools.goTo(result.slug);
   };
 
   const newMcpServerButton = (
@@ -290,7 +317,7 @@ function MCPOverview() {
               <Page.Toolbar.Filters
                 schema={MCP_FILTERS}
                 values={mcpFilters.values}
-                optionsById={MCP_FILTER_OPTIONS}
+                optionsById={filterOptions}
                 onChange={
                   mcpFilters.setValue as (
                     id: string,

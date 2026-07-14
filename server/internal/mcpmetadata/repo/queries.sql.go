@@ -64,6 +64,43 @@ func (q *Queries) GetHeaderDisplayNamesByMcpServerID(ctx context.Context, mcpSer
 	return header_display_names, err
 }
 
+const getHeaderDisplayNamesByToolsetIDs = `-- name: GetHeaderDisplayNamesByToolsetIDs :many
+SELECT toolset_id, header_display_names
+FROM mcp_metadata
+WHERE project_id = $1
+  AND toolset_id = ANY($2::uuid[])
+`
+
+type GetHeaderDisplayNamesByToolsetIDsParams struct {
+	ProjectID  uuid.UUID
+	ToolsetIds []uuid.UUID
+}
+
+type GetHeaderDisplayNamesByToolsetIDsRow struct {
+	ToolsetID          uuid.NullUUID
+	HeaderDisplayNames []byte
+}
+
+func (q *Queries) GetHeaderDisplayNamesByToolsetIDs(ctx context.Context, arg GetHeaderDisplayNamesByToolsetIDsParams) ([]GetHeaderDisplayNamesByToolsetIDsRow, error) {
+	rows, err := q.db.Query(ctx, getHeaderDisplayNamesByToolsetIDs, arg.ProjectID, arg.ToolsetIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetHeaderDisplayNamesByToolsetIDsRow
+	for rows.Next() {
+		var i GetHeaderDisplayNamesByToolsetIDsRow
+		if err := rows.Scan(&i.ToolsetID, &i.HeaderDisplayNames); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getMetadataByMcpServerID = `-- name: GetMetadataByMcpServerID :one
 SELECT id,
        toolset_id,

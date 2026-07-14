@@ -91,7 +91,7 @@ export const RULE_CATEGORY_META: Record<
   shadow_mcp: {
     label: "Shadow MCP",
     description:
-      "Tool calls in Cursor and Claude Code that don't come from a Speakeasy-issued MCP server. Requires Speakeasy hooks to be installed on the agent.",
+      "Tool calls in Cursor, Claude Code, and Codex that don't come from a Speakeasy-issued MCP server. Requires Speakeasy hooks to be installed on the agent.",
     icon: "shield-off",
   },
   destructive_tool: {
@@ -1574,10 +1574,8 @@ export const DETECTION_RULES: Record<RuleCategory, DetectionRule[]> = {
       hidden: true,
     },
   ],
-  // prompt_injection is enabled at the category level; whether the L1 LLM
-  // judge runs on top of the L0 regex/keyword heuristics is selected per-org
-  // via the prompt-injection-use-classifier feature flag, not by the policy
-  // author.
+  // prompt_injection is enabled at the category level; the judge is selected
+  // by category, not by individual rule.
   prompt_injection: [],
   off_policy: [
     {

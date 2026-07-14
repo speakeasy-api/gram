@@ -1078,7 +1078,7 @@ const SERVER_CLASS_BADGE_META: Record<
   gram: {
     variant: "information",
     icon: Boxes,
-    tooltip: "Gram-hosted MCP server",
+    tooltip: "Speakeasy-hosted MCP server",
   },
   external: {
     variant: "warning",
@@ -1624,7 +1624,11 @@ function AccountsCard({ accounts }: { accounts: UserAccount[] }) {
             />
           ))
         ) : (
-          <p className="text-muted-foreground text-sm">No linked accounts</p>
+          <p className="text-muted-foreground text-sm">
+            No AI accounts detected yet. As this employee is seen using AI tools
+            (Claude, Codex, Cursor), the team and personal accounts they sign in
+            with are linked automatically and appear here.
+          </p>
         )}
       </div>
     </section>
@@ -1973,7 +1977,7 @@ function formatServerLabel(node: DataFlowSourceNode) {
     const shortId = node.label.slice(0, 8);
     const prefix =
       serverClass === "gram"
-        ? "Gram server"
+        ? "Speakeasy server"
         : serverClass === "local"
           ? "Local server"
           : "MCP server";

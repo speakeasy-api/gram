@@ -58,6 +58,18 @@ WHERE project_id = @project_id
   AND (sqlc.narg('toolset_id')::uuid IS NULL OR toolset_id = sqlc.narg('toolset_id')::uuid)
 ORDER BY created_at DESC;
 
+-- name: ListMCPServersByOrganizationID :many
+-- List every MCP server in an organization via each project's organization_id.
+-- For organization-administrator flows that span projects (e.g. the RBAC
+-- connection-policy picker), which carry no project scope.
+SELECT m.*
+FROM mcp_servers AS m
+JOIN projects AS p ON p.id = m.project_id
+WHERE p.organization_id = @organization_id
+  AND m.deleted IS FALSE
+  AND p.deleted IS FALSE
+ORDER BY m.created_at DESC;
+
 -- name: ListMCPServersForTelemetryByProjectID :many
 -- Includes soft-deleted servers so tool-usage telemetry can classify historical
 -- rows whose backing MCP server has since been deleted (or recreated). The
@@ -77,7 +89,7 @@ SET
     name = @name,
     slug = @slug,
     environment_id = @environment_id,
-    user_session_issuer_id = @user_session_issuer_id,
+    user_session_issuer_id = COALESCE(sqlc.narg('user_session_issuer_id'), user_session_issuer_id),
     remote_mcp_server_id = @remote_mcp_server_id,
     tunneled_mcp_server_id = @tunneled_mcp_server_id,
     toolset_id = @toolset_id,

@@ -23,7 +23,7 @@ report.md
 /posting
 /gram.posting.yaml
 /posting.env
-/client/sdk/docs
+/client/dashboard/src/sdk/docs
 /server/goa*
 /dev-idp/goa*
 /server/gram

@@ -9,10 +9,8 @@ import (
 	"slices"
 	"sort"
 	"strconv"
-	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"golang.org/x/sync/errgroup"
 
 	telem_gen "github.com/speakeasy-api/gram/server/gen/telemetry"
@@ -182,90 +180,30 @@ func (s *Service) Query(ctx context.Context, payload *telem_gen.QueryPayload) (*
 	return buildQueryResult(groupBy, interval, timeStart, timeEnd, topN, tableRows, tsRows), nil
 }
 
-// riskTokensIntervalSeconds is the fixed bucket width of queryRiskTokens — the
-// source aggregate (chat_token_summaries) is bucketed daily.
-const riskTokensIntervalSeconds int64 = 86400
-
-// QueryRiskTokens returns daily token usage split into tokens from sessions
-// with at least one active risk finding created in the window versus all
-// session tokens. Risk findings live in Postgres while per-chat token usage
-// lives in ClickHouse, so the risky chat set is resolved first and pushed into
-// the ClickHouse aggregation.
-func (s *Service) QueryRiskTokens(ctx context.Context, payload *telem_gen.QueryRiskTokensPayload) (*telem_gen.QueryRiskTokensResult, error) {
-	scope, err := s.resolveOrgQueryScope(ctx, payload.From, payload.To, payload.ProjectID)
-	if err != nil {
-		return nil, err
-	}
-	timeStart, timeEnd := scope.timeStart, scope.timeEnd
-
-	riskyIDs, err := s.chatRepo.ListRiskyChatIDs(ctx, chatRepo.ListRiskyChatIDsParams{
-		ProjectIds: scope.projectUUIDs,
-		FromTime:   pgtype.Timestamptz{Time: time.Unix(0, timeStart).UTC(), InfinityModifier: pgtype.Finite, Valid: true},
-		ToTime:     pgtype.Timestamptz{Time: time.Unix(0, timeEnd).UTC(), InfinityModifier: pgtype.Finite, Valid: true},
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to list chats with risk findings").LogError(ctx, s.logger)
-	}
-	riskyChatIDs := make([]string, 0, len(riskyIDs))
-	for _, id := range riskyIDs {
-		riskyChatIDs = append(riskyChatIDs, id.String())
-	}
-
-	// Scoped to the billed completion surfaces so the risk split describes
-	// the same population as the billed totals it renders against.
-	buckets, err := s.chRepo.GetRiskTokensByDay(ctx, repo.GetRiskTokensParams{
-		ProjectIDs:    scope.projectIDs,
-		RiskyChatIDs:  riskyChatIDs,
-		StartUnixNano: timeStart,
-		EndUnixNano:   timeEnd,
-		HookSources:   billing.ModelUsageSourceStrings(),
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error running risk tokens query").LogError(ctx, s.logger)
-	}
-
-	byBucket := make(map[int64]repo.RiskTokensDayBucket, len(buckets))
-	for _, b := range buckets {
-		byBucket[b.Day.UTC().UnixNano()] = b
-	}
-
-	// Zero-fill so consumers get one point per day across the whole range,
-	// matching telemetry.query's gap-filled timeseries contract. timeEnd is an
-	// exclusive boundary (the ClickHouse read uses <), so step just inside it —
-	// otherwise a day-aligned `to` would add one empty bucket past the range.
-	starts := bucketStarts(timeStart, timeEnd-1, riskTokensIntervalSeconds)
-	points := make([]*telem_gen.RiskTokensPoint, 0, len(starts))
-	for _, start := range starts {
-		b := byBucket[start]
-		points = append(points, &telem_gen.RiskTokensPoint{
-			BucketTimeUnixNano: strconv.FormatInt(start, 10),
-			RiskyTokens:        b.RiskyTokens,
-			TotalTokens:        b.TotalTokens,
-		})
-	}
-
-	return &telem_gen.QueryRiskTokensResult{
-		IntervalSeconds: riskTokensIntervalSeconds,
-		Points:          points,
-	}, nil
-}
+// tumDetailsIntervalSeconds is the fixed bucket width of queryTumDetails —
+// the billing page's details are bucketed daily.
+const tumDetailsIntervalSeconds int64 = 86400
 
 // tumBreakdownDims are the billing page's breakdown dimensions, in display
-// order. Each maps to a tum_breakdown_summaries expression (see
-// tumBreakdownDimExprs in the repo); the values match the telemetry
-// dimension identifiers the frontend picker uses.
-var tumBreakdownDims = []string{"hook_source", "model", "email", "division_name", "role"}
+// order. Each maps to an attribute_metrics_summaries expression (see
+// tumBreakdownDimExprs in the repo); the values are the public telemetry
+// dimension identifiers the frontend picker uses. All the dimensions the
+// observed agent traffic genuinely carries are offered: the model and agent
+// surface of each session, the account's provider and team/personal
+// classification, the emit-time user-identity snapshot, and the project the
+// traffic was recorded under.
+var tumBreakdownDims = []string{"model", "hook_source", "provider", "account_type", "email", "division_name", "department_name", "role", "project_id"}
 
 // QueryTumDetails computes the billing page's usage details for a time range
-// in one request: the billed per-day token split, per-dimension breakdowns,
-// and message-level stats (risk findings, tool-call messages) from Postgres
-// per-message token counts. The backing queries run concurrently.
+// in one request: the tokens-under-management per-day token split and
+// per-dimension breakdowns. The backing queries run concurrently.
 //
-// Everything derives from billing-native sources — the dimensioned billing
-// aggregate (tum_breakdown_summaries) qualified and scoped exactly like
-// the billed totals (billing.ModelUsageSources), and chat message stats —
-// never the analytics aggregates, so the page reports the billed population
-// exactly.
+// Tokens under management are the agent traffic the platform OBSERVES from
+// the customer's users (Claude Code, Cursor, Codex sessions), excluding
+// cache reads — never the inference Gram itself spends (risk-policy judges,
+// hosted chat surfaces). Reads attribute_metrics_summaries scoped exactly
+// like the billed totals (same source exclusions and measure), so the page
+// reports the billed population exactly.
 func (s *Service) QueryTumDetails(ctx context.Context, payload *telem_gen.QueryTumDetailsPayload) (*telem_gen.TumDetailsResult, error) {
 	scope, err := s.resolveOrgQueryScope(ctx, payload.From, payload.To, payload.ProjectID)
 	if err != nil {
@@ -279,7 +217,6 @@ func (s *Service) QueryTumDetails(ctx context.Context, payload *telem_gen.QueryT
 	// active projects only. Org-wide reads swap in the billing-aware list so
 	// a deleted project's usage cannot show on the card yet vanish from the
 	// breakdowns; an explicit project filter keeps the caller's choice.
-	billedProjectUUIDs := scope.projectUUIDs
 	billedProjectIDs := scope.projectIDs
 	if payload.ProjectID == nil || *payload.ProjectID == "" {
 		authCtx, _ := contextvalues.GetAuthContext(ctx)
@@ -287,7 +224,6 @@ func (s *Service) QueryTumDetails(ctx context.Context, payload *telem_gen.QueryT
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to list billing projects").LogError(ctx, s.logger)
 		}
-		billedProjectUUIDs = billingIDs
 		billedProjectIDs = make([]string, 0, len(billingIDs))
 		for _, id := range billingIDs {
 			billedProjectIDs = append(billedProjectIDs, id.String())
@@ -295,16 +231,15 @@ func (s *Service) QueryTumDetails(ctx context.Context, payload *telem_gen.QueryT
 	}
 
 	billedParams := repo.GetTokensUnderManagementParams{
-		ProjectIDs:        billedProjectIDs,
-		StartUnixNano:     timeStart,
-		EndUnixNano:       timeEnd,
-		BilledHookSources: billing.ModelUsageSourceStrings(),
+		ProjectIDs:          billedProjectIDs,
+		StartUnixNano:       timeStart,
+		EndUnixNano:         timeEnd,
+		ExcludedHookSources: billing.GramHostedHookSourceStrings(),
 	}
 
 	var (
 		dayRows []repo.TumBreakdownDayBucket
 		dimRows = make([][]repo.TumBreakdownDimDayBucket, len(tumBreakdownDims))
-		msgRows []chatRepo.SumMessageTokenStatsByDayRow
 	)
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.SetLimit(4)
@@ -313,18 +248,6 @@ func (s *Service) QueryTumDetails(ctx context.Context, payload *telem_gen.QueryT
 		dayRows, egErr = s.chRepo.GetTumBreakdownTotalsByDay(egCtx, billedParams)
 		if egErr != nil {
 			return fmt.Errorf("tum breakdown totals: %w", egErr)
-		}
-		return nil
-	})
-	eg.Go(func() error {
-		var egErr error
-		msgRows, egErr = s.chatRepo.SumMessageTokenStatsByDay(egCtx, chatRepo.SumMessageTokenStatsByDayParams{
-			ProjectIds: billedProjectUUIDs,
-			FromTime:   pgtype.Timestamptz{Time: time.Unix(0, timeStart).UTC(), InfinityModifier: pgtype.Finite, Valid: true},
-			ToTime:     pgtype.Timestamptz{Time: time.Unix(0, timeEnd).UTC(), InfinityModifier: pgtype.Finite, Valid: true},
-		})
-		if egErr != nil {
-			return fmt.Errorf("message token stats: %w", egErr)
 		}
 		return nil
 	})
@@ -342,31 +265,24 @@ func (s *Service) QueryTumDetails(ctx context.Context, payload *telem_gen.QueryT
 		return nil, oops.E(oops.CodeUnexpected, err, "error running usage details queries").LogError(ctx, s.logger)
 	}
 
-	msgByBucket := make(map[int64]chatRepo.SumMessageTokenStatsByDayRow, len(msgRows))
-	var riskyMessageTotal, toolMessageTotal int64
-	for _, row := range msgRows {
-		// The day column is a UTC-truncated timestamp without a zone; pgx
-		// decodes it as UTC, so UnixNano lines up with the bucket grid.
-		msgByBucket[row.Day.Time.UnixNano()] = row
-		riskyMessageTotal += row.RiskyMessageTokens
-		toolMessageTotal += row.ToolMessageTokens
-	}
-
 	// Zero-fill so consumers get one point per day across the whole range,
-	// matching the other telemetry timeseries contracts. timeEnd is exclusive
-	// (see the same adjustment in QueryRiskTokens).
-	starts := bucketStarts(timeStart, timeEnd-1, riskTokensIntervalSeconds)
+	// matching the other telemetry timeseries contracts. timeEnd is an
+	// exclusive boundary (the ClickHouse read uses <), so step just inside it
+	// — otherwise a day-aligned `to` would add one empty bucket past the
+	// range.
+	starts := bucketStarts(timeStart, timeEnd-1, tumDetailsIntervalSeconds)
 	bucketIndex := make(map[int64]int, len(starts))
 	for i, start := range starts {
 		bucketIndex[start] = i
 	}
 
 	dayByBucket := make(map[int64]repo.TumBreakdownDayBucket, len(dayRows))
-	var totalInput, totalOutput, totalTokens int64
+	var totalInput, totalOutput, totalCacheCreation, totalTokens int64
 	for _, row := range dayRows {
 		dayByBucket[row.Day.UTC().UnixNano()] = row
 		totalInput += row.InputTokens
 		totalOutput += row.OutputTokens
+		totalCacheCreation += row.CacheCreationTokens
 		totalTokens += row.TotalTokens
 	}
 
@@ -439,27 +355,24 @@ func (s *Service) QueryTumDetails(ctx context.Context, payload *telem_gen.QueryT
 	points := make([]*telem_gen.TumDetailsPoint, 0, len(starts))
 	for _, start := range starts {
 		day := dayByBucket[start]
-		msg := msgByBucket[start]
 		points = append(points, &telem_gen.TumDetailsPoint{
-			BucketTimeUnixNano: strconv.FormatInt(start, 10),
-			InputTokens:        day.InputTokens,
-			OutputTokens:       day.OutputTokens,
-			TotalTokens:        day.TotalTokens,
-			RiskyMessageTokens: msg.RiskyMessageTokens,
-			ToolMessageTokens:  msg.ToolMessageTokens,
+			BucketTimeUnixNano:  strconv.FormatInt(start, 10),
+			InputTokens:         day.InputTokens,
+			OutputTokens:        day.OutputTokens,
+			CacheCreationTokens: day.CacheCreationTokens,
+			TotalTokens:         day.TotalTokens,
 		})
 	}
 
 	return &telem_gen.TumDetailsResult{
-		IntervalSeconds: riskTokensIntervalSeconds,
+		IntervalSeconds: tumDetailsIntervalSeconds,
 		Points:          points,
 		Breakdowns:      breakdowns,
 		Totals: &telem_gen.TumDetailsTotals{
-			InputTokens:        totalInput,
-			OutputTokens:       totalOutput,
-			TotalTokens:        totalTokens,
-			RiskyMessageTokens: riskyMessageTotal,
-			ToolMessageTokens:  toolMessageTotal,
+			InputTokens:         totalInput,
+			OutputTokens:        totalOutput,
+			CacheCreationTokens: totalCacheCreation,
+			TotalTokens:         totalTokens,
 		},
 	}, nil
 }

@@ -27,8 +27,8 @@ For small edits, run the narrowest package script that proves the change. For sh
 ### General Guidelines
 
 - Use the `pnpm` package manager
-- When interacting with the server, prefer the `@gram/sdk` package (sourced from workspace at `./client/sdk`)
-- The document `client/sdk/REACT_QUERY.md` is very helpful for understanding how to use React Query hooks that come with the SDK.
+- When interacting with the server, use the `@gram/client` package (this is an alias to `client/dashboard/src/sdk/src/...`)
+- The document `client/dashboard/src/sdk/REACT_QUERY.md` is very helpful for understanding how to use React Query hooks that come with the SDK.
 - For data fetching and server state, use `@tanstack/react-query` instead of manual `useEffect`/`useState` patterns
 - When invalidating React Query caches after mutations, invalidate ALL relevant query keys — not just the most specific one. Different hooks may use different query key prefixes for the same data (e.g., `queryKeyInstance` vs `toolsets.getBySlug`). Use broad invalidation helpers like `invalidateAllToolset(queryClient)` to ensure all consumers refresh.
 

@@ -85,6 +85,7 @@ import {
   ALL_POLICY_MESSAGE_TYPES,
   CATEGORY_LEVEL_DETECTORS,
   FLAG_ONLY_CATEGORIES,
+  PRESIDIO_CATEGORIES,
   SCOPE_EXEMPT_CEL_EXAMPLES,
   SCOPE_INCLUDE_CEL_EXAMPLES,
   categoriesToPayload,
@@ -94,6 +95,7 @@ import {
   policyMessageTypesForPayload,
   policyToCategories,
 } from "./policy-form";
+import { SeverityBadge } from "./risk-ui";
 import { CelExpressionField } from "./cel-field";
 import { useCelStatus } from "./use-cel-status";
 import { useDetectionRulesStore } from "./detection-rules-data";
@@ -130,9 +132,11 @@ import { formatUsageCost } from "@/pages/chatLogs/claudeUsage";
 // empty-string item value, so "" is mapped through this and back on change.
 const DEFAULT_MODEL_VALUE = "__default__";
 
+// Gemini 3.5 Flash is deliberately absent: the judge disables reasoning
+// (`reasoning.effort: "none"`), which the Gemini 3.5 generation rejects with a
+// 400 — every evaluation on it would fail into the policy's error mode.
 const JUDGE_MODELS: { value: string; label: string }[] = [
   { value: "", label: "Default (Gemini 3.1 Flash Lite)" },
-  { value: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash" },
   { value: "anthropic/claude-sonnet-4.6", label: "Claude Sonnet 4.6" },
   { value: "anthropic/claude-haiku-4.5", label: "Claude Haiku 4.5" },
 ];
@@ -170,6 +174,11 @@ const STANDARD_STEPS: Step[] = [
     id: "detect",
     title: "Detect",
     description: "Turn on detector categories and custom rules.",
+  },
+  {
+    id: "sensitivity",
+    title: "Sensitivity",
+    description: "Tune detection confidence.",
   },
   {
     id: "scope",
@@ -663,6 +672,7 @@ function PromptPolicyEditor({
       : new Set<string>(),
   );
   const [userMessage, setUserMessage] = useState(policy?.userMessage ?? "");
+  const [score, setScore] = useState(policy?.score ?? 5);
   const [reviewVerdictFilter, setReviewVerdictFilter] =
     useState<EvalVerdict | null>(null);
 
@@ -677,6 +687,7 @@ function PromptPolicyEditor({
       scopeExempt !== (policy.scopeExempt ?? "") ||
       action !== (policy.action ?? "flag") ||
       userMessage !== (policy.userMessage ?? "") ||
+      score !== (policy.score ?? 5) ||
       audienceType !==
         (policy.audienceType === "targeted" ? "targeted" : "everyone") ||
       !sameSet(
@@ -760,6 +771,7 @@ function PromptPolicyEditor({
           ...scopePayload(),
           ...actionPayload(),
           userMessage,
+          score,
           autoName,
         },
       },
@@ -778,6 +790,7 @@ function PromptPolicyEditor({
           ...scopePayload(),
           ...actionPayload(),
           ...(userMessage.trim() ? { userMessage } : {}),
+          score,
           autoName,
         },
       },
@@ -880,6 +893,8 @@ function PromptPolicyEditor({
           setAudiencePrincipalUrns={setAudiencePrincipalUrns}
           userMessage={userMessage}
           setUserMessage={setUserMessage}
+          score={score}
+          setScore={setScore}
         />
       )}
 
@@ -894,6 +909,7 @@ function PromptPolicyEditor({
           scopeInclude={scopeInclude}
           scopeExempt={scopeExempt}
           action={action}
+          score={score}
           audienceType={audienceType}
           audiencePrincipalCount={audiencePrincipalUrns.size}
           verdicts={evalReview.verdicts}
@@ -1169,6 +1185,118 @@ function ScopeStep({
 
 // Shared Action step — identical for prompt and standard: flag/block picker,
 // audience, and the block-time custom message.
+// Severity assigns a CVSS-style score (0.1–10, default 5) to the policy.
+// Findings inherit it at read time to render a severity badge. Pure metadata —
+// changing it never re-scans or regenerates findings.
+const SEVERITY_MIN = 0.1;
+const SEVERITY_MAX = 10;
+
+function SeveritySection({
+  score,
+  setScore,
+}: {
+  score: number;
+  setScore: React.Dispatch<React.SetStateAction<number>>;
+}): JSX.Element {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <Label className="text-sm font-medium">Severity</Label>
+        <Stack direction="horizontal" gap={2} align="center">
+          <Type small mono>
+            {score.toFixed(1)}
+          </Type>
+          <SeverityBadge score={score} />
+        </Stack>
+      </div>
+      <Type small muted>
+        Rate how severe this policy's findings are, from {SEVERITY_MIN} to{" "}
+        {SEVERITY_MAX}. Findings surface this as a severity badge; it does not
+        change what the policy detects.
+      </Type>
+      <div className="pt-3">
+        <Slider
+          value={score}
+          onChange={(v) =>
+            setScore(Math.max(SEVERITY_MIN, Math.min(SEVERITY_MAX, v)))
+          }
+          min={SEVERITY_MIN}
+          max={SEVERITY_MAX}
+          step={0.1}
+          ticks={[SEVERITY_MIN, 4, 7, 9, SEVERITY_MAX]}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ── Sensitivity step (Presidio match-confidence threshold) ───────────────────
+// The minimum confidence a Presidio PII match must clear to be flagged. Applies
+// to every Presidio-backed detector in a standard policy and is only persisted
+// while at least one such category is active (see `presidioActive` in the
+// editor). Non-Presidio policies don't carry a stray threshold.
+const PRESIDIO_THRESHOLD_MIN = 0;
+const PRESIDIO_THRESHOLD_MAX = 1;
+const PRESIDIO_THRESHOLD_STEP = 0.05;
+const PRESIDIO_THRESHOLD_TICKS = [0, 0.25, 0.5, 0.75, 1];
+const DEFAULT_PRESIDIO_THRESHOLD = 0.5;
+
+function SensitivityStep({
+  active,
+  threshold,
+  setThreshold,
+}: {
+  active: boolean;
+  threshold: number;
+  setThreshold: React.Dispatch<React.SetStateAction<number>>;
+}): JSX.Element {
+  return (
+    <Card>
+      <SectionHeader description="Tune the confidence a match must clear before it's flagged." />
+      {active ? (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label className="text-sm font-medium">Detection sensitivity</Label>
+            <Type small mono>
+              {threshold.toFixed(2)}
+              {threshold === DEFAULT_PRESIDIO_THRESHOLD ? " · default" : ""}
+            </Type>
+          </div>
+          <Type small muted>
+            Minimum confidence a match must clear to be flagged, from{" "}
+            {PRESIDIO_THRESHOLD_MIN} to {PRESIDIO_THRESHOLD_MAX}. Higher means
+            fewer false positives but may miss borderline matches. Applies to
+            all Presidio-backed detectors in this policy.
+          </Type>
+          <div className="pt-3">
+            <Slider
+              value={threshold}
+              onChange={(v) =>
+                setThreshold(
+                  Math.max(
+                    PRESIDIO_THRESHOLD_MIN,
+                    Math.min(PRESIDIO_THRESHOLD_MAX, Math.round(v * 20) / 20),
+                  ),
+                )
+              }
+              min={PRESIDIO_THRESHOLD_MIN}
+              max={PRESIDIO_THRESHOLD_MAX}
+              step={PRESIDIO_THRESHOLD_STEP}
+              ticks={PRESIDIO_THRESHOLD_TICKS}
+            />
+          </div>
+        </div>
+      ) : (
+        <Type small muted>
+          Sensitivity applies to confidence-scored detectors. Turn on a
+          PII-style category (Financial, PII, Government IDs, Healthcare, or
+          Off-Policy) in the Detect step to adjust it.
+        </Type>
+      )}
+    </Card>
+  );
+}
+
 function ActionStep({
   action,
   setAction,
@@ -1178,6 +1306,8 @@ function ActionStep({
   setAudiencePrincipalUrns,
   userMessage,
   setUserMessage,
+  score,
+  setScore,
   flagOnlySelected = false,
 }: {
   action: PolicyAction;
@@ -1190,47 +1320,54 @@ function ActionStep({
   setAudiencePrincipalUrns: React.Dispatch<React.SetStateAction<Set<string>>>;
   userMessage: string;
   setUserMessage: React.Dispatch<React.SetStateAction<string>>;
+  score: number;
+  setScore: React.Dispatch<React.SetStateAction<number>>;
   flagOnlySelected?: boolean;
 }): JSX.Element {
   return (
-    <Card>
-      <SectionHeader description="Choose how the policy responds when it fires, and who it applies to." />
-      <Stack gap={5}>
-        <ActionPicker
-          formAction={action}
-          setFormAction={setAction}
-          flagOnlySelected={flagOnlySelected}
-        />
-        <PolicyAudiencePicker
-          formAudienceType={audienceType}
-          setFormAudienceType={setAudienceType}
-          selectedAudiencePrincipalUrns={audiencePrincipalUrns}
-          setSelectedAudiencePrincipalUrns={setAudiencePrincipalUrns}
-        />
-        {action !== "flag" && (
-          <div className="space-y-2">
-            <Label className="text-sm font-medium">
-              {action === "warn" ? "Warning message" : "Custom Message"}
-            </Label>
-            <p className="text-muted-foreground text-xs">
-              {action === "warn"
-                ? "Shown to the user when this policy warns on a tool call or prompt. Supports %{match}, %{entity}, %{policy}, and %{rule} placeholders, substituted at warn time. Leave blank to use the default message."
-                : "Shown to the user when this policy blocks a tool call or prompt. Leave blank to use the default message."}
-            </p>
-            <TextArea
-              value={userMessage}
-              onChange={setUserMessage}
-              placeholder={
-                action === "warn"
-                  ? "e.g. %{match} looks sensitive. Acknowledge to proceed."
-                  : "e.g. This action was blocked by your organization's security policy. Contact your admin for help."
-              }
-              rows={3}
-            />
-          </div>
-        )}
-      </Stack>
-    </Card>
+    <div className="space-y-4">
+      <Card>
+        <SeveritySection score={score} setScore={setScore} />
+      </Card>
+      <Card>
+        <SectionHeader description="Choose how the policy responds when it fires, and who it applies to." />
+        <Stack gap={5}>
+          <ActionPicker
+            formAction={action}
+            setFormAction={setAction}
+            flagOnlySelected={flagOnlySelected}
+          />
+          <PolicyAudiencePicker
+            formAudienceType={audienceType}
+            setFormAudienceType={setAudienceType}
+            selectedAudiencePrincipalUrns={audiencePrincipalUrns}
+            setSelectedAudiencePrincipalUrns={setAudiencePrincipalUrns}
+          />
+          {action !== "flag" && (
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">
+                {action === "warn" ? "Warning message" : "Custom Message"}
+              </Label>
+              <p className="text-muted-foreground text-xs">
+                {action === "warn"
+                  ? "Shown to the user when this policy warns on a tool call or prompt. Supports %{match}, %{entity}, %{policy}, and %{rule} placeholders, substituted at warn time. Leave blank to use the default message."
+                  : "Shown to the user when this policy blocks a tool call or prompt. Leave blank to use the default message."}
+              </p>
+              <TextArea
+                value={userMessage}
+                onChange={setUserMessage}
+                placeholder={
+                  action === "warn"
+                    ? "e.g. %{match} looks sensitive. Acknowledge to proceed."
+                    : "e.g. This action was blocked by your organization's security policy. Contact your admin for help."
+                }
+                rows={3}
+              />
+            </div>
+          )}
+        </Stack>
+      </Card>
+    </div>
   );
 }
 
@@ -1577,6 +1714,7 @@ function PromptReview({
   scopeInclude,
   scopeExempt,
   action,
+  score,
   audienceType,
   audiencePrincipalCount,
   verdicts,
@@ -1592,6 +1730,7 @@ function PromptReview({
   scopeInclude: string;
   scopeExempt: string;
   action: PolicyAction;
+  score: number;
   audienceType: "everyone" | "targeted";
   audiencePrincipalCount: number;
   verdicts: Map<string, EvalVerdict>;
@@ -1643,6 +1782,9 @@ function PromptReview({
                   ? "Warn"
                   : "Flag"}
             </Badge>
+          </SummaryRow>
+          <SummaryRow label="Severity">
+            <SeverityBadge score={score} />
           </SummaryRow>
           <SummaryRow label="Audience">
             <Type small>
@@ -2750,6 +2892,9 @@ function StandardPolicyEditor({
         policy.audienceType === "targeted"
           ? new Set(policy.audiencePrincipalUrns ?? [])
           : new Set<string>(),
+      score: policy.score ?? 5,
+      presidioThreshold:
+        policy.presidioScoreThreshold ?? DEFAULT_PRESIDIO_THRESHOLD,
     };
   }, [policy]);
 
@@ -2794,6 +2939,10 @@ function StandardPolicyEditor({
   const [customizeCategory, setCustomizeCategory] =
     useState<RuleCategory | null>(null);
   const [detectionExpanded, setDetectionExpanded] = useState(true);
+  const [score, setScore] = useState(policy?.score ?? 5);
+  const [presidioThreshold, setPresidioThreshold] = useState<number>(
+    policy?.presidioScoreThreshold ?? DEFAULT_PRESIDIO_THRESHOLD,
+  );
 
   // ── Derived state ──
   const includeCelStatus = useCelStatus(
@@ -2801,6 +2950,9 @@ function StandardPolicyEditor({
   );
   const exemptCelStatus = useCelStatus(scopeExempt);
   const flagOnlySelected = [...FLAG_ONLY_CATEGORIES].some((c) =>
+    selectedCategories.has(c),
+  );
+  const presidioActive = PRESIDIO_CATEGORIES.some((c) =>
     selectedCategories.has(c),
   );
   const hasEnabledDetector =
@@ -2840,6 +2992,8 @@ function StandardPolicyEditor({
       !sameSet(selectedCustomRuleIds, orig.customRuleIds) ||
       !sameSet(selectedCategories, orig.categories) ||
       approvedDomains !== orig.approvedDomains ||
+      score !== orig.score ||
+      (presidioActive && presidioThreshold !== orig.presidioThreshold) ||
       !sameSet(audiencePrincipalUrns, orig.audiencePrincipalUrns));
 
   const updateMutation = useRiskPoliciesUpdateMutation({
@@ -2933,6 +3087,14 @@ function StandardPolicyEditor({
             audiencePrincipalUrns: principals,
             autoName,
             userMessage,
+            score,
+            // Always send: default when no Presidio category is active, so
+            // disabling them resets the stored threshold instead of leaving a
+            // stale value that would resurface if Presidio is re-enabled later
+            // (update omits preserve prior values server-side).
+            presidioScoreThreshold: presidioActive
+              ? presidioThreshold
+              : DEFAULT_PRESIDIO_THRESHOLD,
             ...(identityActive ? { approvedEmailDomains } : {}),
           },
         },
@@ -2956,6 +3118,10 @@ function StandardPolicyEditor({
             audiencePrincipalUrns: principals,
             autoName,
             ...(userMessage.trim() ? { userMessage } : {}),
+            score,
+            ...(presidioActive
+              ? { presidioScoreThreshold: presidioThreshold }
+              : {}),
             ...(identityActive ? { approvedEmailDomains } : {}),
           },
         },
@@ -3043,6 +3209,14 @@ function StandardPolicyEditor({
         )}
 
         {step === 1 && (
+          <SensitivityStep
+            active={presidioActive}
+            threshold={presidioThreshold}
+            setThreshold={setPresidioThreshold}
+          />
+        )}
+
+        {step === 2 && (
           <ScopeStep
             description="Apply everywhere, or narrow the scope to reduce noise and cost."
             messageTypes={selectedMessageTypes}
@@ -3056,7 +3230,7 @@ function StandardPolicyEditor({
           />
         )}
 
-        {step === 2 && (
+        {step === 3 && (
           <ActionStep
             action={action}
             setAction={setAction}
@@ -3066,11 +3240,13 @@ function StandardPolicyEditor({
             setAudiencePrincipalUrns={setAudiencePrincipalUrns}
             userMessage={userMessage}
             setUserMessage={setUserMessage}
+            score={score}
+            setScore={setScore}
             flagOnlySelected={flagOnlySelected}
           />
         )}
 
-        {step === 3 && (
+        {step === 4 && (
           <StandardReview
             name={name}
             categories={selectedCategories}
@@ -3080,6 +3256,9 @@ function StandardPolicyEditor({
             scopeInclude={scopeInclude}
             scopeExempt={scopeExempt}
             action={action}
+            score={score}
+            presidioActive={presidioActive}
+            presidioThreshold={presidioThreshold}
             audienceType={audienceType}
             audiencePrincipalCount={audiencePrincipalUrns.size}
           />
@@ -3114,6 +3293,9 @@ function StandardReview({
   scopeInclude,
   scopeExempt,
   action,
+  score,
+  presidioActive,
+  presidioThreshold,
   audienceType,
   audiencePrincipalCount,
 }: {
@@ -3125,6 +3307,9 @@ function StandardReview({
   scopeInclude: string;
   scopeExempt: string;
   action: PolicyAction;
+  score: number;
+  presidioActive: boolean;
+  presidioThreshold: number;
   audienceType: "everyone" | "targeted";
   audiencePrincipalCount: number;
 }): JSX.Element {
@@ -3166,6 +3351,16 @@ function StandardReview({
             </Type>
           )}
         </SummaryRow>
+        {presidioActive ? (
+          <SummaryRow label="Sensitivity">
+            <Type small mono>
+              {presidioThreshold.toFixed(2)}
+              {presidioThreshold === DEFAULT_PRESIDIO_THRESHOLD
+                ? " · default"
+                : ""}
+            </Type>
+          </SummaryRow>
+        ) : null}
         <SummaryRow label="Scope">
           <Type small className="text-right">
             {scopeText}
@@ -3182,6 +3377,9 @@ function StandardReview({
           <Badge variant={action === "flag" ? "neutral" : "warning"}>
             {action === "block" ? "Block" : action === "warn" ? "Warn" : "Flag"}
           </Badge>
+        </SummaryRow>
+        <SummaryRow label="Severity">
+          <SeverityBadge score={score} />
         </SummaryRow>
         <SummaryRow label="Audience">
           <Type small>

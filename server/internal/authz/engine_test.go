@@ -907,6 +907,96 @@ func TestEngineFindMatched_logsSingleAggregateChallenge(t *testing.T) {
 	}, 5*time.Second, 100*time.Millisecond)
 }
 
+// --- Engine.Evaluate tests ---
+
+func TestEngineEvaluate_trueWhenGranted(t *testing.T) {
+	t.Parallel()
+
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeChatRead, WildcardResource)})
+
+	allowed, err := engine.Evaluate(ctx, ChatReadCheck("proj_123"))
+	require.NoError(t, err)
+	require.True(t, allowed)
+}
+
+func TestEngineEvaluate_falseWhenUnsatisfied(t *testing.T) {
+	t.Parallel()
+
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeProjectRead, WildcardResource)})
+
+	allowed, err := engine.Evaluate(ctx, ChatReadCheck("proj_123"))
+	require.NoError(t, err)
+	require.False(t, allowed)
+}
+
+func TestEngineEvaluate_trueWhenRBACDisabled(t *testing.T) {
+	t.Parallel()
+
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(false), staticChallengeLogging(true), workos.NewStubClient())
+
+	allowed, err := engine.Evaluate(enterpriseSessionCtx(t), ChatReadCheck("proj_123"))
+	require.NoError(t, err)
+	require.True(t, allowed)
+}
+
+func TestEngineEvaluate_errorsWhenGrantsMissing(t *testing.T) {
+	t.Parallel()
+
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
+
+	allowed, err := engine.Evaluate(enterpriseSessionCtx(t), ChatReadCheck("proj_123"))
+	require.False(t, allowed)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeUnexpected, oopsErr.Code)
+	require.ErrorIs(t, err, ErrMissingGrants)
+}
+
+// An unsatisfied Evaluate check is a routine visibility branch, not a denial —
+// it must never emit an authz challenge, otherwise it would pollute the
+// diagnostics UI with false "denied" scopes (the coupling AIS-305 removes).
+func TestEngineEvaluate_neverLogsChallenge(t *testing.T) {
+	t.Parallel()
+
+	orgID := "org_" + uuid.NewString()
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
+	ctx := GrantsToContext(enterpriseSessionCtxWithOrg(t, orgID), []Grant{NewGrant(ScopeProjectRead, WildcardResource)})
+
+	allowed, err := engine.Evaluate(ctx, ChatReadCheck("proj_123"))
+	require.NoError(t, err)
+	require.False(t, allowed)
+
+	require.Never(t, func() bool {
+		rows, err := chConn.Query(t.Context(), `
+			SELECT count() FROM authz_challenges WHERE organization_id = ?
+		`, orgID)
+		if err != nil {
+			return false
+		}
+		defer func() { _ = rows.Close() }()
+		if !rows.Next() {
+			return false
+		}
+		var count uint64
+		if err := rows.Scan(&count); err != nil {
+			return false
+		}
+		return count > 0
+	}, 500*time.Millisecond, 50*time.Millisecond, "Evaluate must not emit any challenge log entry")
+}
+
 func enterpriseSessionCtx(t *testing.T) context.Context {
 	t.Helper()
 	return enterpriseSessionCtxWithOrg(t, "org_123")

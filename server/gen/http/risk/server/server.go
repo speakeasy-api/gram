@@ -56,6 +56,7 @@ type Server struct {
 	UpdateRiskExclusion            http.Handler
 	DeleteRiskExclusion            http.Handler
 	SuggestCustomDetectionRule     http.Handler
+	SuggestExclusion               http.Handler
 	TestDetectionRule              http.Handler
 	EvaluatePromptGuardrail        http.Handler
 	SaveRiskEvalReview             http.Handler
@@ -127,6 +128,7 @@ func New(
 			{"UpdateRiskExclusion", "PUT", "/rpc/risk.updateExclusions"},
 			{"DeleteRiskExclusion", "DELETE", "/rpc/risk.deleteExclusions"},
 			{"SuggestCustomDetectionRule", "POST", "/rpc/risk.suggestCustomRules"},
+			{"SuggestExclusion", "POST", "/rpc/risk.suggestExclusion"},
 			{"TestDetectionRule", "POST", "/rpc/risk.testRule"},
 			{"EvaluatePromptGuardrail", "POST", "/rpc/riskEvals.evaluate"},
 			{"SaveRiskEvalReview", "POST", "/rpc/riskEvals.saveReview"},
@@ -170,6 +172,7 @@ func New(
 		UpdateRiskExclusion:            NewUpdateRiskExclusionHandler(e.UpdateRiskExclusion, mux, decoder, encoder, errhandler, formatter),
 		DeleteRiskExclusion:            NewDeleteRiskExclusionHandler(e.DeleteRiskExclusion, mux, decoder, encoder, errhandler, formatter),
 		SuggestCustomDetectionRule:     NewSuggestCustomDetectionRuleHandler(e.SuggestCustomDetectionRule, mux, decoder, encoder, errhandler, formatter),
+		SuggestExclusion:               NewSuggestExclusionHandler(e.SuggestExclusion, mux, decoder, encoder, errhandler, formatter),
 		TestDetectionRule:              NewTestDetectionRuleHandler(e.TestDetectionRule, mux, decoder, encoder, errhandler, formatter),
 		EvaluatePromptGuardrail:        NewEvaluatePromptGuardrailHandler(e.EvaluatePromptGuardrail, mux, decoder, encoder, errhandler, formatter),
 		SaveRiskEvalReview:             NewSaveRiskEvalReviewHandler(e.SaveRiskEvalReview, mux, decoder, encoder, errhandler, formatter),
@@ -220,6 +223,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.UpdateRiskExclusion = m(s.UpdateRiskExclusion)
 	s.DeleteRiskExclusion = m(s.DeleteRiskExclusion)
 	s.SuggestCustomDetectionRule = m(s.SuggestCustomDetectionRule)
+	s.SuggestExclusion = m(s.SuggestExclusion)
 	s.TestDetectionRule = m(s.TestDetectionRule)
 	s.EvaluatePromptGuardrail = m(s.EvaluatePromptGuardrail)
 	s.SaveRiskEvalReview = m(s.SaveRiskEvalReview)
@@ -269,6 +273,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountUpdateRiskExclusionHandler(mux, h.UpdateRiskExclusion)
 	MountDeleteRiskExclusionHandler(mux, h.DeleteRiskExclusion)
 	MountSuggestCustomDetectionRuleHandler(mux, h.SuggestCustomDetectionRule)
+	MountSuggestExclusionHandler(mux, h.SuggestExclusion)
 	MountTestDetectionRuleHandler(mux, h.TestDetectionRule)
 	MountEvaluatePromptGuardrailHandler(mux, h.EvaluatePromptGuardrail)
 	MountSaveRiskEvalReviewHandler(mux, h.SaveRiskEvalReview)
@@ -2231,6 +2236,59 @@ func NewSuggestCustomDetectionRuleHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "suggestCustomDetectionRule")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSuggestExclusionHandler configures the mux to serve the "risk" service
+// "suggestExclusion" endpoint.
+func MountSuggestExclusionHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/risk.suggestExclusion", f)
+}
+
+// NewSuggestExclusionHandler creates a HTTP handler which loads the HTTP
+// request and calls the "risk" service "suggestExclusion" endpoint.
+func NewSuggestExclusionHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSuggestExclusionRequest(mux, decoder)
+		encodeResponse = EncodeSuggestExclusionResponse(encoder)
+		encodeError    = EncodeSuggestExclusionError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "suggestExclusion")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
 		payload, err := decodeRequest(r)
 		if err != nil {

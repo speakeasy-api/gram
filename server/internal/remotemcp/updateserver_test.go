@@ -22,7 +22,6 @@ func TestUpdateServer_ServerFields(t *testing.T) {
 		ProjectSlugInput: nil,
 		URL:              "https://mcp.example.com",
 		TransportType:    "streamable-http",
-		Headers:          []*gen.HeaderInput{},
 	})
 	require.NoError(t, err)
 
@@ -36,7 +35,6 @@ func TestUpdateServer_ServerFields(t *testing.T) {
 		ID:               created.ID,
 		URL:              new("https://mcp-v2.example.com"),
 		TransportType:    new("sse"),
-		Headers:          nil,
 	})
 	require.NoError(t, err)
 	require.Equal(t, "https://mcp-v2.example.com", updated.URL)
@@ -45,230 +43,6 @@ func TestUpdateServer_ServerFields(t *testing.T) {
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteMcpServerUpdate)
 	require.NoError(t, err)
 	require.Equal(t, beforeCount+1, afterCount)
-}
-
-func TestUpdateServer_DesiredStateHeaders(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-
-	created, err := ti.service.CreateServer(ctx, &gen.CreateServerPayload{
-		SessionToken:     nil,
-		ProjectSlugInput: nil,
-		URL:              "https://mcp.example.com",
-		TransportType:    "streamable-http",
-		Headers: []*gen.HeaderInput{
-			{
-				Name:     "X-API-Key",
-				IsSecret: new(true),
-				Value:    new("original-secret"),
-			},
-		},
-	})
-	require.NoError(t, err)
-	require.Len(t, created.Headers, 1)
-
-	// Send desired state: update existing header + add a new one
-	updated, err := ti.service.UpdateServer(ctx, &gen.UpdateServerPayload{
-		SessionToken:     nil,
-		ProjectSlugInput: nil,
-		ID:               created.ID,
-		Headers: []*gen.HeaderInput{
-			{
-				Name:     "X-API-Key",
-				IsSecret: new(true),
-				Value:    new("updated-secret"),
-			},
-			{
-				Name:                   "X-Trace-ID",
-				IsSecret:               new(false),
-				ValueFromRequestHeader: new("X-Trace-ID"),
-			},
-		},
-	})
-	require.NoError(t, err)
-	require.Len(t, updated.Headers, 2)
-}
-
-func TestUpdateServer_RemoveHeadersByOmission(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-
-	created, err := ti.service.CreateServer(ctx, &gen.CreateServerPayload{
-		SessionToken:     nil,
-		ProjectSlugInput: nil,
-		URL:              "https://mcp.example.com",
-		TransportType:    "streamable-http",
-		Headers: []*gen.HeaderInput{
-			{
-				Name:     "X-API-Key",
-				IsSecret: new(true),
-				Value:    new("some-secret"),
-			},
-			{
-				Name:                   "X-Request-ID",
-				ValueFromRequestHeader: new("X-Request-ID"),
-			},
-		},
-	})
-	require.NoError(t, err)
-	require.Len(t, created.Headers, 2)
-
-	// Send desired state with only one header — the other is removed
-	updated, err := ti.service.UpdateServer(ctx, &gen.UpdateServerPayload{
-		SessionToken:     nil,
-		ProjectSlugInput: nil,
-		ID:               created.ID,
-		Headers: []*gen.HeaderInput{
-			{
-				Name:     "X-API-Key",
-				IsSecret: new(true),
-				Value:    new("some-secret"),
-			},
-		},
-	})
-	require.NoError(t, err)
-	require.Len(t, updated.Headers, 1)
-	require.Equal(t, "X-API-Key", updated.Headers[0].Name)
-}
-
-func TestUpdateServer_RemoveAllHeaders(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-
-	created, err := ti.service.CreateServer(ctx, &gen.CreateServerPayload{
-		SessionToken:     nil,
-		ProjectSlugInput: nil,
-		URL:              "https://mcp.example.com",
-		TransportType:    "streamable-http",
-		Headers: []*gen.HeaderInput{
-			{
-				Name:     "X-API-Key",
-				IsSecret: new(true),
-				Value:    new("secret"),
-			},
-		},
-	})
-	require.NoError(t, err)
-	require.Len(t, created.Headers, 1)
-
-	// Empty array means remove all headers
-	updated, err := ti.service.UpdateServer(ctx, &gen.UpdateServerPayload{
-		SessionToken:     nil,
-		ProjectSlugInput: nil,
-		ID:               created.ID,
-		Headers:          []*gen.HeaderInput{},
-	})
-	require.NoError(t, err)
-	require.Empty(t, updated.Headers)
-}
-
-func TestUpdateServer_NilHeadersLeavesUnchanged(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-
-	created, err := ti.service.CreateServer(ctx, &gen.CreateServerPayload{
-		SessionToken:     nil,
-		ProjectSlugInput: nil,
-		URL:              "https://mcp.example.com",
-		TransportType:    "streamable-http",
-		Headers: []*gen.HeaderInput{
-			{
-				Name:                   "X-Request-ID",
-				ValueFromRequestHeader: new("X-Request-ID"),
-			},
-		},
-	})
-	require.NoError(t, err)
-	require.Len(t, created.Headers, 1)
-
-	// nil headers = don't touch headers, only update URL
-	updated, err := ti.service.UpdateServer(ctx, &gen.UpdateServerPayload{
-		SessionToken:     nil,
-		ProjectSlugInput: nil,
-		ID:               created.ID,
-		URL:              new("https://mcp-new.example.com"),
-		Headers:          nil,
-	})
-	require.NoError(t, err)
-	require.Equal(t, "https://mcp-new.example.com", updated.URL)
-	require.Len(t, updated.Headers, 1)
-	require.Equal(t, "X-Request-ID", updated.Headers[0].Name)
-}
-
-func TestUpdateServer_PreserveExistingSecretValue(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-
-	created, err := ti.service.CreateServer(ctx, &gen.CreateServerPayload{
-		SessionToken:     nil,
-		ProjectSlugInput: nil,
-		URL:              "https://mcp.example.com",
-		TransportType:    "streamable-http",
-		Headers: []*gen.HeaderInput{
-			{
-				Name:     "X-API-Key",
-				IsSecret: new(true),
-				Value:    new("my-secret-value"),
-			},
-		},
-	})
-	require.NoError(t, err)
-	require.Len(t, created.Headers, 1)
-	require.Equal(t, "***", *created.Headers[0].Value)
-
-	// Omit value for existing secret header to preserve the stored value
-	updated, err := ti.service.UpdateServer(ctx, &gen.UpdateServerPayload{
-		SessionToken:     nil,
-		ProjectSlugInput: nil,
-		ID:               created.ID,
-		Headers: []*gen.HeaderInput{
-			{
-				Name:     "X-API-Key",
-				IsSecret: new(true),
-			},
-		},
-	})
-	require.NoError(t, err)
-	require.Len(t, updated.Headers, 1)
-	require.Equal(t, "X-API-Key", updated.Headers[0].Name)
-	require.True(t, updated.Headers[0].IsSecret)
-	require.NotNil(t, updated.Headers[0].Value)
-	require.Equal(t, "***", *updated.Headers[0].Value)
-}
-
-func TestUpdateServer_NewSecretHeaderWithoutValueReturnsError(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-
-	created, err := ti.service.CreateServer(ctx, &gen.CreateServerPayload{
-		SessionToken:     nil,
-		ProjectSlugInput: nil,
-		URL:              "https://mcp.example.com",
-		TransportType:    "streamable-http",
-		Headers:          []*gen.HeaderInput{},
-	})
-	require.NoError(t, err)
-
-	// Adding a new secret header without a value should return a 400, not a 500
-	_, err = ti.service.UpdateServer(ctx, &gen.UpdateServerPayload{
-		SessionToken:     nil,
-		ProjectSlugInput: nil,
-		ID:               created.ID,
-		Headers: []*gen.HeaderInput{
-			{
-				Name:     "X-New-Secret",
-				IsSecret: new(true),
-			},
-		},
-	})
-	require.Error(t, err)
-	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
 func TestUpdateServer_PartialServerFields(t *testing.T) {
@@ -281,7 +55,6 @@ func TestUpdateServer_PartialServerFields(t *testing.T) {
 		ProjectSlugInput: nil,
 		URL:              "https://mcp.example.com",
 		TransportType:    "streamable-http",
-		Headers:          []*gen.HeaderInput{},
 	})
 	require.NoError(t, err)
 
@@ -291,7 +64,6 @@ func TestUpdateServer_PartialServerFields(t *testing.T) {
 		ProjectSlugInput: nil,
 		ID:               created.ID,
 		URL:              new("https://mcp-new.example.com"),
-		Headers:          nil,
 	})
 	require.NoError(t, err)
 	require.Equal(t, "https://mcp-new.example.com", updated.URL)
@@ -312,7 +84,6 @@ func requireUpdateServerInvalidURL(t *testing.T, url string) error {
 		ProjectSlugInput: nil,
 		URL:              "https://mcp.example.com",
 		TransportType:    "streamable-http",
-		Headers:          []*gen.HeaderInput{},
 	})
 	require.NoError(t, err)
 
@@ -321,7 +92,6 @@ func requireUpdateServerInvalidURL(t *testing.T, url string) error {
 		ProjectSlugInput: nil,
 		ID:               created.ID,
 		URL:              &url,
-		Headers:          nil,
 	})
 	require.Error(t, err)
 	requireOopsCode(t, err, oops.CodeBadRequest)
@@ -378,7 +148,6 @@ func TestUpdateServer_AllowsPublicIPLiteral(t *testing.T) {
 		ProjectSlugInput: nil,
 		URL:              "https://mcp.example.com",
 		TransportType:    "streamable-http",
-		Headers:          []*gen.HeaderInput{},
 	})
 	require.NoError(t, err)
 
@@ -387,7 +156,6 @@ func TestUpdateServer_AllowsPublicIPLiteral(t *testing.T) {
 		ProjectSlugInput: nil,
 		ID:               created.ID,
 		URL:              new("http://8.8.8.8"),
-		Headers:          nil,
 	})
 	require.NoError(t, err)
 	require.Equal(t, "http://8.8.8.8", updated.URL)
@@ -403,7 +171,6 @@ func TestUpdateServer_NameSet(t *testing.T) {
 		ProjectSlugInput: nil,
 		URL:              "https://mcp.example.com",
 		TransportType:    "streamable-http",
-		Headers:          []*gen.HeaderInput{},
 	})
 	require.NoError(t, err)
 
@@ -412,7 +179,6 @@ func TestUpdateServer_NameSet(t *testing.T) {
 		ProjectSlugInput: nil,
 		ID:               created.ID,
 		Name:             new("New Name"),
-		Headers:          nil,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, updated.Name)
@@ -430,7 +196,6 @@ func TestUpdateServer_NameClearedWithEmptyString(t *testing.T) {
 		Name:             new("Initial"),
 		URL:              "https://mcp.example.com",
 		TransportType:    "streamable-http",
-		Headers:          []*gen.HeaderInput{},
 	})
 	require.NoError(t, err)
 	require.NotNil(t, created.Name)
@@ -440,7 +205,6 @@ func TestUpdateServer_NameClearedWithEmptyString(t *testing.T) {
 		ProjectSlugInput: nil,
 		ID:               created.ID,
 		Name:             new(""),
-		Headers:          nil,
 	})
 	require.NoError(t, err)
 	require.Nil(t, updated.Name)
@@ -457,7 +221,6 @@ func TestUpdateServer_NameNilLeavesUnchanged(t *testing.T) {
 		Name:             new("Keep Me"),
 		URL:              "https://mcp.example.com",
 		TransportType:    "streamable-http",
-		Headers:          []*gen.HeaderInput{},
 	})
 	require.NoError(t, err)
 
@@ -466,7 +229,6 @@ func TestUpdateServer_NameNilLeavesUnchanged(t *testing.T) {
 		ProjectSlugInput: nil,
 		ID:               created.ID,
 		URL:              new("https://other.example.com"),
-		Headers:          nil,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, updated.Name)
@@ -483,7 +245,6 @@ func TestUpdateServer_SlugRecomputedOnURLChange(t *testing.T) {
 		ProjectSlugInput: nil,
 		URL:              "https://api.example.com/mcp",
 		TransportType:    "streamable-http",
-		Headers:          []*gen.HeaderInput{},
 	})
 	require.NoError(t, err)
 	require.NotNil(t, created.Slug)
@@ -494,7 +255,6 @@ func TestUpdateServer_SlugRecomputedOnURLChange(t *testing.T) {
 		ProjectSlugInput: nil,
 		ID:               created.ID,
 		URL:              new("https://other.test.com/v2"),
-		Headers:          nil,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, updated.Slug)
@@ -513,7 +273,6 @@ func TestUpdateServer_SlugStableOnUnchangedURL(t *testing.T) {
 		ProjectSlugInput: nil,
 		URL:              "https://mcp.example.com",
 		TransportType:    "streamable-http",
-		Headers:          []*gen.HeaderInput{},
 	})
 	require.NoError(t, err)
 	require.NotNil(t, created.Slug)
@@ -523,7 +282,6 @@ func TestUpdateServer_SlugStableOnUnchangedURL(t *testing.T) {
 		ProjectSlugInput: nil,
 		ID:               created.ID,
 		Name:             new("Renamed"),
-		Headers:          nil,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, updated.Slug)

@@ -25,6 +25,7 @@ import { QueryErrorResetBoundary } from "@tanstack/react-query";
 import { PlugZap } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
+import { Link } from "react-router";
 
 type RemoteMcpToolsSectionProps = {
   /** The Gram-proxied MCP URL to connect to; undefined while endpoints load. */
@@ -35,6 +36,13 @@ type RemoteMcpToolsSectionProps = {
   mcpServerId: string | undefined;
   /** Whether the server is issuer-gated (has a user_session_issuer). */
   isIssuerGated: boolean;
+  /** Disabled servers cannot serve MCP requests. */
+  isDisabled: boolean;
+  /**
+   * Deep link to the server's Authentication settings section. Surfaced when a
+   * server with no authentication configured fails to list its tools.
+   */
+  authSettingsHref?: string;
 };
 
 /**
@@ -54,12 +62,26 @@ type RemoteMcpToolsSectionProps = {
 export function RemoteMcpToolsSection(
   props: RemoteMcpToolsSectionProps,
 ): JSX.Element {
+  if (props.isDisabled) {
+    return (
+      <ToolsSectionShell>
+        <EmptyState message="Enable this server to load its tools." />
+      </ToolsSectionShell>
+    );
+  }
+
   return (
     <QueryErrorResetBoundary>
       {({ reset }) => (
         <ErrorBoundary
           onReset={reset}
-          FallbackComponent={RemoteMcpToolsErrorFallback}
+          fallbackRender={(fallbackProps) => (
+            <RemoteMcpToolsErrorFallback
+              {...fallbackProps}
+              isIssuerGated={props.isIssuerGated}
+              authSettingsHref={props.authSettingsHref}
+            />
+          )}
         >
           <RemoteMcpToolsSectionInner {...props} />
         </ErrorBoundary>
@@ -76,7 +98,7 @@ function ToolsSectionShell({ children }: { children: ReactNode }): JSX.Element {
         Tools
       </Heading>
       <Type muted small className="mb-5">
-        Tools exposed by this remote MCP server.
+        Tools exposed by this MCP server.
       </Type>
       {children}
     </section>
@@ -86,9 +108,38 @@ function ToolsSectionShell({ children }: { children: ReactNode }): JSX.Element {
 function RemoteMcpToolsErrorFallback({
   error: rawError,
   resetErrorBoundary,
-}: FallbackProps): JSX.Element {
+  isIssuerGated,
+  authSettingsHref,
+}: FallbackProps & {
+  isIssuerGated: boolean;
+  authSettingsHref?: string;
+}): JSX.Element {
   const error = toError(rawError);
   handleError(error, { silent: true });
+
+  // A server with no authentication configured usually can't list its tools —
+  // the connection is rejected upstream before any tools come back. Rather
+  // than a generic failure, guide the user to set up authentication first.
+  // Retry stays available since a non-issuer-gated server with a public
+  // upstream can also land here on a transient failure.
+  if (!isIssuerGated) {
+    return (
+      <ToolsSectionShell>
+        <EmptyState
+          message="This server has no authentication configured yet. Set up an identity provider so its tools can be listed."
+          onRetry={resetErrorBoundary}
+        >
+          {authSettingsHref ? (
+            <Button variant="secondary" asChild>
+              <Link to={authSettingsHref}>
+                <Button.Text>Configure authentication</Button.Text>
+              </Link>
+            </Button>
+          ) : null}
+        </EmptyState>
+      </ToolsSectionShell>
+    );
+  }
 
   return (
     <ToolsSectionShell>

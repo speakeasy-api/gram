@@ -672,6 +672,7 @@ WHERE definition_slug = 'dashboard' AND status = 'active' AND deleted IS FALSE;
 CREATE TABLE IF NOT EXISTS environment_entries (
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 60),
   value TEXT NOT NULL CHECK (value <> '' AND CHAR_LENGTH(value) <= 4000),
+  is_secret BOOLEAN NOT NULL DEFAULT TRUE,
   environment_id uuid NOT NULL,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1254,6 +1255,14 @@ ON http_security (type, scheme);
 CREATE TABLE IF NOT EXISTS openrouter_api_keys (
   organization_id TEXT NOT NULL,
 
+  -- Which upstream OpenRouter key this row provisions: 'chat' pays for
+  -- customer-facing completion surfaces (playground, elements, assistants,
+  -- /chat/completions proxy); 'internal' pays for platform-initiated LLM
+  -- usage (risk judges, title generation, chat resolutions, memory), so a
+  -- burst of scanning inference can never exhaust the chat key's monthly cap
+  -- and 402 the customer's chat surface.
+  key_type TEXT NOT NULL DEFAULT 'chat',
+
   key TEXT NOT NULL,
   key_hash TEXT NOT NULL,
   monthly_credits BIGINT NOT NULL DEFAULT 0,
@@ -1264,7 +1273,7 @@ CREATE TABLE IF NOT EXISTS openrouter_api_keys (
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
-  CONSTRAINT openrouter_api_keys_pkey PRIMARY KEY (organization_id)
+  CONSTRAINT openrouter_api_keys_pkey PRIMARY KEY (organization_id, key_type)
 );
 
 
@@ -1581,6 +1590,18 @@ CREATE TABLE IF NOT EXISTS chat_messages (
 
 CREATE INDEX IF NOT EXISTS chat_messages_chat_id_idx ON chat_messages (chat_id);
 CREATE INDEX IF NOT EXISTS chat_messages_chat_id_generation_seq_idx ON chat_messages (chat_id, generation, seq);
+
+-- Chat listings derive each chat's message count and last-message time per
+-- request; this lets those be per-chat index-only probes instead of an
+-- aggregate over the chat's full message history.
+CREATE INDEX IF NOT EXISTS chat_messages_chat_id_created_at_idx
+ON chat_messages (chat_id, created_at);
+
+-- Latest non-empty source per chat as a single index-only probe (agent-type
+-- filter options via chats.listSources and the source filter on chats.list).
+CREATE INDEX IF NOT EXISTS chat_messages_chat_id_created_at_source_idx
+ON chat_messages (chat_id, created_at) INCLUDE (source)
+WHERE source IS NOT NULL AND source <> '';
 CREATE INDEX IF NOT EXISTS chat_messages_project_id_id_idx
 ON chat_messages (project_id, id)
 WHERE project_id IS NOT NULL;
@@ -2972,7 +2993,11 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
   CONSTRAINT mcp_servers_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE RESTRICT,
   CONSTRAINT mcp_servers_tool_variations_group_id_fkey FOREIGN KEY (tool_variations_group_id) REFERENCES tool_variations_groups (id) ON DELETE SET NULL,
   -- Exactly one backend must be set.
-  CONSTRAINT mcp_servers_backend_exclusivity_check CHECK (num_nonnulls(remote_mcp_server_id, tunneled_mcp_server_id, toolset_id) = 1)
+  CONSTRAINT mcp_servers_backend_exclusivity_check CHECK (num_nonnulls(remote_mcp_server_id, tunneled_mcp_server_id, toolset_id) = 1),
+  -- Remote and tunneled servers carry a Gram-as-AS issuer attached at create
+  -- time for the server's lifetime, regardless of visibility. Toolset-backed
+  -- servers are exempt (their auth lives on toolsets.user_session_issuer_id).
+  CONSTRAINT mcp_servers_issuer_required_check CHECK (deleted OR (remote_mcp_server_id IS NULL AND tunneled_mcp_server_id IS NULL) OR user_session_issuer_id IS NOT NULL)
 );
 
 CREATE INDEX IF NOT EXISTS mcp_servers_project_id_idx
@@ -3149,6 +3174,39 @@ CREATE TABLE IF NOT EXISTS assistant_mcp_servers (
 CREATE INDEX IF NOT EXISTS assistant_mcp_servers_mcp_server_id_idx ON assistant_mcp_servers (mcp_server_id);
 CREATE INDEX IF NOT EXISTS assistant_mcp_servers_project_id_idx ON assistant_mcp_servers (project_id);
 
+-- Admin-authoritative per-tool annotation metadata for an MCP server, read by
+-- the runtime proxy to fill the disposition dimension of RBAC checks.
+CREATE TABLE IF NOT EXISTS mcp_server_tool_metadata (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  mcp_server_id uuid NOT NULL,
+  tool_name TEXT NOT NULL,
+
+  -- MCP tool annotations (admin-set behavioral hints)
+  title TEXT,
+  read_only_hint boolean,
+  destructive_hint boolean,
+  idempotent_hint boolean,
+  open_world_hint boolean,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT mcp_server_tool_metadata_pkey PRIMARY KEY (id),
+  CONSTRAINT mcp_server_tool_metadata_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT mcp_server_tool_metadata_mcp_server_id_fkey FOREIGN KEY (mcp_server_id) REFERENCES mcp_servers (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS mcp_server_tool_metadata_project_id_idx
+ON mcp_server_tool_metadata (project_id)
+WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_server_tool_metadata_mcp_server_id_tool_name_key
+ON mcp_server_tool_metadata (mcp_server_id, tool_name)
+WHERE deleted IS FALSE;
+
 -- Plugin definitions: project-scoped distributable bundles of MCP servers.
 -- Admins create plugins and assign them to roles for distribution.
 CREATE TABLE IF NOT EXISTS plugins (
@@ -3266,13 +3324,37 @@ CREATE TABLE IF NOT EXISTS plugin_github_connections (
   -- existing connections (and any future connection without the marketplace
   -- surface enabled) are unconstrained.
   marketplace_token TEXT,
-  -- Stable content hash of the plugin packages last published to this repo,
-  -- independent of per-publish values (manifest version, injected API keys).
-  -- The automated generator rollout compares the current fingerprint against
-  -- this value and skips republishing when nothing has changed. Nullable so
-  -- connections published before fingerprinting existed re-publish once to
-  -- backfill it.
+  -- DEPRECATED: superseded by published_mcp_fingerprint + published_hooks_version
+  -- when hooks and MCP plugin generation were decoupled. No longer written or
+  -- read; retained per expand-contract and dropped in a later contract migration.
   published_fingerprint TEXT,
+  -- Per-plugin content fingerprints of the MCP (feature) plugins last published
+  -- to this repo: a JSON object mapping plugin slug -> stable hash (plus a
+  -- reserved "__shared__" key for the marketplace/README files), independent of
+  -- per-publish values (manifest version, injected API key). The automated
+  -- rollout compares the current fingerprints against this value to skip no-op
+  -- MCP republishes. JSON (rather than a single hash) so a future per-plugin
+  -- publish flow can decide independently which plugins have unpublished changes
+  -- without another migration. Excludes the hooks subtree, which rolls out on
+  -- published_hooks_version instead. Nullable so connections predating the split
+  -- republish once to backfill it.
+  published_mcp_fingerprints JSONB,
+  -- The hooksGeneratorVersion stamped into the observability (hooks) plugin last
+  -- published to this repo. The rollout regenerates the hooks subtree only when
+  -- the current hooksGeneratorVersion differs from this value, so an MCP-only
+  -- publish leaves the hooks plugin untouched. Nullable so connections predating
+  -- the split republish the hooks plugin once to backfill it.
+  published_hooks_version TEXT,
+  -- Snapshot of the hook-output-affecting config the observability (hooks) plugin
+  -- was last generated from: a JSON object with the resolved marketplace name,
+  -- observability mode, server URL, org id, and project slug. Stored verbatim (not
+  -- just a hash) so it stays human-readable; the publish path compares a hash of
+  -- it to decide whether the hooks subtree must be regenerated. The
+  -- hooksGeneratorVersion alone can't catch these config changes (a rename or an
+  -- observability-mode toggle leaves the version untouched), so without this the
+  -- carried hooks subtree would keep stale commands. Nullable so connections
+  -- predating this column republish the hooks plugin once to backfill it.
+  published_hooks_config JSONB,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -3363,6 +3445,10 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   -- (model id, temperature, fail-mode, etc.) as a JSON object. NULL for
   -- standard policies.
   model_config JSONB,
+  -- CVSS-style severity (0.1-10) the policy author assigns to findings this
+  -- policy produces. Purely descriptive; changing it does NOT bump `version`
+  -- or re-scan messages. Bounds are validated in the application layer.
+  score DOUBLE PRECISION NOT NULL DEFAULT 5.0,
   version BIGINT NOT NULL,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -4031,3 +4117,37 @@ WHERE deleted IS FALSE;
 -- rows that the partial unique indexes above exclude.
 CREATE INDEX IF NOT EXISTS json_web_keys_set_tenant_idx
 ON json_web_keys (organization_id, json_web_key_set_id);
+
+-- Customer-supplied model provider API keys (BYOK), scoped per project and
+-- responsibility slot (completion surface). The 'default' slot applies to
+-- every surface that has no dedicated override row. Key material is
+-- AES-256-GCM encrypted at rest and never returned by the API.
+CREATE TABLE IF NOT EXISTS model_provider_keys (
+  id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  slot TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  api_key_encrypted TEXT NOT NULL,
+  enabled boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT model_provider_keys_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT model_provider_keys_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS model_provider_keys_project_id_slot_key
+  ON model_provider_keys (project_id, slot)
+  WHERE deleted IS FALSE;
+
+-- Non-partial indexes backing the cascade FKs: keep org/project cascade
+-- deletes off a seq scan, including soft-deleted rows that the partial
+-- unique index above excludes.
+CREATE INDEX IF NOT EXISTS model_provider_keys_project_id_idx
+  ON model_provider_keys (project_id);
+
+CREATE INDEX IF NOT EXISTS model_provider_keys_organization_id_idx
+  ON model_provider_keys (organization_id);

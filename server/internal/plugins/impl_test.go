@@ -15,11 +15,17 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	mcpmetarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -29,10 +35,15 @@ type mockGitHubPublisher struct {
 	createRepoCalled      bool
 	pushFilesCalled       bool
 	addCollaboratorCalled bool
+	getRepoFilesCalled    bool
 	collaborators         []string
 	lastPushedFiles       map[string][]byte
-	createRepoErr         error
-	pushFilesErr          error
+	// repoFiles, when set, is returned by GetRepoFiles; otherwise it falls back
+	// to lastPushedFiles so a second publish carries the first publish's files.
+	repoFiles       map[string][]byte
+	createRepoErr   error
+	pushFilesErr    error
+	getRepoFilesErr error
 }
 
 func (m *mockGitHubPublisher) CreateRepo(_ context.Context, _ int64, _, _ string, _ bool) error {
@@ -53,6 +64,24 @@ func (m *mockGitHubPublisher) AddCollaborator(_ context.Context, _ int64, _, _, 
 	m.addCollaboratorCalled = true
 	m.collaborators = append(m.collaborators, username)
 	return nil
+}
+
+func (m *mockGitHubPublisher) HasDirectCollaborator(_ context.Context, _ int64, _, _ string) (bool, error) {
+	return len(m.collaborators) > 0, nil
+}
+
+func (m *mockGitHubPublisher) GetRepoFiles(_ context.Context, _ int64, _, _, _ string) (map[string][]byte, error) {
+	m.getRepoFilesCalled = true
+	if m.getRepoFilesErr != nil {
+		return nil, m.getRepoFilesErr
+	}
+	if m.repoFiles != nil {
+		return m.repoFiles, nil
+	}
+	if m.lastPushedFiles != nil {
+		return m.lastPushedFiles, nil
+	}
+	return nil, ghclient.ErrRepoNotFound
 }
 
 func TestPluginsService_CreatePlugin(t *testing.T) {
@@ -757,6 +786,92 @@ func TestPluginsService_PublishPlugins_HappyPath(t *testing.T) {
 	require.NotNil(t, status.UpToDate)
 	require.True(t, *status.UpToDate)
 	require.NotNil(t, status.LastPublishedAt)
+
+	// The observability plugin slugs must name plugins that actually exist in
+	// the published marketplace — install UIs build `<plugin>@<marketplace>`
+	// strings from them.
+	require.NotNil(t, status.ClaudeObservabilityPlugin)
+	require.NotNil(t, status.CodexObservabilityPlugin)
+	claudePublished := false
+	codexPublished := false
+	for path := range mock.lastPushedFiles {
+		claudePublished = claudePublished || strings.HasPrefix(path, *status.ClaudeObservabilityPlugin+"/")
+		codexPublished = codexPublished || strings.HasPrefix(path, *status.CodexObservabilityPlugin+"/")
+	}
+	require.True(t, claudePublished,
+		"claude observability plugin slug %q not found among published files", *status.ClaudeObservabilityPlugin)
+	require.True(t, codexPublished,
+		"codex observability plugin slug %q not found among published files", *status.CodexObservabilityPlugin)
+}
+
+// Reproduces the plugin_github_connections_installation_repo_key conflict:
+// project A publishes, gets soft-deleted (freeing its slug under the
+// partial projects_organization_id_slug_key index), and project B reuses
+// that slug — so both compute the identical repo_owner/repo_name. Since
+// soft-deletes never clean up plugin_github_connections, A's row is still
+// there when B tries to upsert its own. Publishing as B must succeed by
+// reclaiming A's stale row in band, not surface ErrGitHubRepoConflict.
+func TestPluginsService_PublishPlugins_ReclaimsStaleConnectionFromDeletedProject(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectAID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	projectA, err := projectsrepo.New(ti.conn).GetProjectByID(ctx, projectAID)
+	require.NoError(t, err)
+	sharedSlug := projectA.Slug
+
+	pluginA, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Project A Plugin"})
+	require.NoError(t, err)
+	toolsetA := createTestToolset(t, ctx, ti.conn, "reclaim-toolset-a")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    pluginA.ID,
+		ToolsetID:   conv.PtrEmpty(toolsetA.ID.String()),
+		DisplayName: conv.PtrEmpty("Server A"),
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+
+	_, err = projectsrepo.New(ti.conn).DeleteProject(ctx, projectAID)
+	require.NoError(t, err)
+
+	projectB, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           sharedSlug,
+		Slug:           sharedSlug,
+		OrganizationID: orgID,
+	})
+	require.NoError(t, err)
+
+	authCtx.ProjectID = &projectB.ID
+	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+
+	pluginB, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Project B Plugin"})
+	require.NoError(t, err)
+	toolsetB := createTestToolset(t, ctx, ti.conn, "reclaim-toolset-b")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    pluginB.ID,
+		ToolsetID:   conv.PtrEmpty(toolsetB.ID.String()),
+		DisplayName: conv.PtrEmpty("Server B"),
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	result, err := ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+	require.Contains(t, result.RepoURL, sharedSlug)
+
+	conn, err := pluginsrepo.New(ti.conn).GetGitHubConnection(ctx, projectB.ID)
+	require.NoError(t, err)
+	require.Equal(t, projectB.ID, conn.ProjectID)
 }
 
 // After a publish, mutating the plugin set (here: adding another server) must
@@ -976,10 +1091,13 @@ func TestPluginsService_PublishPlugins_RePublishCreatesAdditionalKey(t *testing.
 			hooksCount++
 		}
 	}
-	// Documents the current behavior: each publish mints fresh keys without
-	// revoking prior ones. A future improvement should revoke first.
+	// A human re-publish always refreshes the MCP component, minting a fresh MCP
+	// key each time (prior ones are not revoked — a future improvement should
+	// revoke first). The hooks component is decoupled: it is carried verbatim from
+	// the existing repo unless hooksGeneratorVersion bumps, so re-publishing does
+	// NOT mint a second hooks key.
 	require.Equal(t, 2, mcpCount, "expected 2 mcp keys after 2 publishes")
-	require.Equal(t, 2, hooksCount, "expected 2 hooks keys after 2 publishes")
+	require.Equal(t, 1, hooksCount, "expected hooks key to be reused (carried) across republishes")
 }
 
 // PublishPlugins must not persist the API key (or audit log entry, or
@@ -1384,14 +1502,15 @@ func TestPluginsService_PublishPlugins_ObservabilityHookScriptContainsAPIKey(t *
 	require.NotEmpty(t, hooksKeyPrefix, "expected a plugins-hooks-* API key")
 
 	claudeObservability, cursorObservability := orgObservabilitySlugs(t, ctx, ti)
-	// Hook senders must not embed the publish-time hooks key anymore. Each
-	// developer authenticates locally; auth.sh writes the resulting key to a
-	// protected curl config when the hook fires.
+	// Hook senders embed the publish-time hooks key as the org-wide fallback:
+	// per-user browser login still takes precedence when cached, but a machine
+	// with no personal credentials sends through the baked key instead of
+	// degrading to the unauthenticated pass-through.
 	for _, path := range []string{claudeObservability + "/hooks/hook.sh", "cursor-plugins/" + cursorObservability + "/hooks/hook.sh"} {
 		script := string(mock.lastPushedFiles[path])
 		require.NotEmpty(t, script, path+" missing")
 		require.Contains(t, script, "gram_hooks_post_authenticated", "%s does not use local hook auth", path)
-		require.NotContains(t, script, hooksKeyPrefix, "%s embeds the publish-time hooks key", path)
+		require.Contains(t, script, hooksKeyPrefix, "%s must embed the org-wide hooks key fallback", path)
 		// Must NOT contain the MCP key — separate scope, separate concerns.
 		require.NotContains(t, script, "plugins-mcp-", "%s leaked the MCP key", path)
 	}
@@ -1721,6 +1840,320 @@ func TestPluginsService_PublishProject_SkipsWhenUnchanged(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, third.Skipped, "changed plugin set must re-publish")
 	require.True(t, mock.pushFilesCalled)
+}
+
+// hooksFilesOf returns the observability (hooks) plugin files from a pushed file
+// map, identified by the hooks/ subdirectory that only the observability plugins
+// use. These files embed the hooks API key, so comparing them across publishes
+// detects whether the hooks component was regenerated (fresh key) or carried.
+func hooksFilesOf(files map[string][]byte) map[string]string {
+	out := make(map[string]string)
+	for p, c := range files {
+		if strings.Contains(p, "/hooks/") {
+			out[p] = string(c)
+		}
+	}
+	return out
+}
+
+// observabilityManifestVersion extracts the version stamped into the pushed
+// Claude observability plugin.json — the value platform marketplaces compare
+// to decide whether installed copies refresh.
+func observabilityManifestVersion(t *testing.T, files map[string][]byte) string {
+	t.Helper()
+	for p, c := range files {
+		if strings.Contains(p, "observability") && strings.HasSuffix(p, ".claude-plugin/plugin.json") {
+			var meta struct {
+				Version string `json:"version"`
+			}
+			require.NoError(t, json.Unmarshal(c, &meta), "parse %s", p)
+			require.NotEmpty(t, meta.Version)
+			return meta.Version
+		}
+	}
+	t.Fatal("no claude observability plugin.json among pushed files")
+	return ""
+}
+
+// An MCP-only republish must carry the observability (hooks) plugin verbatim —
+// the whole point of decoupling the two components. The hooks files (including
+// their embedded hooks API key) must be byte-identical across a publish driven
+// solely by an MCP content change.
+func TestPluginsService_PublishProject_MCPChangeCarriesHooksVerbatim(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Carry Hooks"})
+	require.NoError(t, err)
+
+	toolset := createTestToolset(t, ctx, ti.conn, "carry-toolset")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   conv.PtrEmpty(toolset.ID.String()),
+		DisplayName: conv.PtrEmpty("Carry Server"),
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	input := plugins.PublishProjectInput{
+		ProjectID:       *authCtx.ProjectID,
+		CreatedByUserID: authCtx.UserID,
+		CommitMessage:   "Update plugin packages",
+		SkipIfUnchanged: true,
+	}
+
+	first, err := ti.service.PublishProject(ctx, input)
+	require.NoError(t, err)
+	require.False(t, first.Skipped)
+
+	hooksBefore := hooksFilesOf(mock.lastPushedFiles)
+	require.NotEmpty(t, hooksBefore, "first publish must emit hooks files")
+
+	// Change the plugin set — an MCP-only change; hooksGeneratorVersion is untouched.
+	toolset2 := createTestToolset(t, ctx, ti.conn, "carry-toolset-2")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   conv.PtrEmpty(toolset2.ID.String()),
+		DisplayName: conv.PtrEmpty("Carry Server 2"),
+		Policy:      "optional",
+		SortOrder:   1,
+	})
+	require.NoError(t, err)
+
+	second, err := ti.service.PublishProject(ctx, input)
+	require.NoError(t, err)
+	require.False(t, second.Skipped, "MCP change must republish")
+	require.True(t, mock.getRepoFilesCalled, "carrying hooks requires fetching the existing repo")
+
+	hooksAfter := hooksFilesOf(mock.lastPushedFiles)
+	require.Equal(t, hooksBefore, hooksAfter, "hooks subtree must be carried verbatim across an MCP-only publish")
+}
+
+// phasedRolloutFixture creates a published project and rewinds its stored hooks
+// version to "0", leaving a pending hooks bump for the phased rollout to gate.
+// It returns the baseline hooks files so callers can assert carry-vs-regenerate.
+func phasedRolloutFixture(t *testing.T, ctx context.Context, ti *testInstance, mock *mockGitHubPublisher, name string) (pluginID string, hooksBaseline map[string]string) {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: name})
+	require.NoError(t, err)
+
+	toolset := createTestToolset(t, ctx, ti.conn, name+"-toolset")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   conv.PtrEmpty(toolset.ID.String()),
+		DisplayName: conv.PtrEmpty(name + " Server"),
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	// Baseline publish (non-phased) records the current hooks version + MCP
+	// fingerprints, then we rewind the stored hooks version so a bump is pending.
+	_, err = ti.service.PublishProject(ctx, plugins.PublishProjectInput{
+		ProjectID:       *authCtx.ProjectID,
+		CreatedByUserID: authCtx.UserID,
+		CommitMessage:   "baseline",
+		SkipIfUnchanged: true,
+	})
+	require.NoError(t, err)
+
+	hooksBaseline = hooksFilesOf(mock.lastPushedFiles)
+	require.NotEmpty(t, hooksBaseline, "baseline publish must emit hooks files")
+
+	rewindPublishedHooksVersion(t, ctx, ti.conn, *authCtx.ProjectID, "0")
+
+	return plugin.ID, hooksBaseline
+}
+
+// A phase-gated org that is NOT in the rollout must not receive a pending hooks
+// bump: with no MCP change, the publish skips entirely and the stored hooks
+// version is left untouched (the org stays on what it already has).
+func TestPluginsService_PublishProject_PhasedRollout_NonEligibleBlocksHooksBump(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	phasedRolloutFixture(t, ctx, ti, mock, "Phased NonEligible")
+
+	// Empty provider → no clearance payload → org is not in the rollout phase.
+	pub := newTestPluginPublisher(t, ti, mock, &feature.InMemory{})
+
+	mock.pushFilesCalled = false
+	mock.getRepoFilesCalled = false
+	res, err := pub.PublishProject(ctx, plugins.PublishProjectInput{
+		ProjectID:       *authCtx.ProjectID,
+		CreatedByUserID: authCtx.UserID,
+		CommitMessage:   "phased",
+		SkipIfUnchanged: true,
+	})
+	require.NoError(t, err)
+	require.True(t, res.Skipped, "non-eligible org with a pending hooks bump and no content change must skip")
+	require.False(t, mock.pushFilesCalled, "a gated hooks bump must not push to GitHub")
+	require.Equal(t, "0", publishedHooksVersion(t, ctx, ti.conn, *authCtx.ProjectID), "gated org keeps its old hooks version")
+}
+
+// An org cleared by the FlagHooksRollout payload rolls the pending hooks bump
+// forward: hooks are regenerated (fresh key, so the subtree differs) and the
+// stored version advances off the rewound value.
+func TestPluginsService_PublishProject_PhasedRollout_EligibleGetsHooksBump(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	phasedRolloutFixture(t, ctx, ti, mock, "Phased Eligible")
+
+	orgID := publishOrgID(t, ctx, ti.conn, *authCtx.ProjectID)
+	hooksKeysBefore := countPluginHooksKeys(t, ctx, ti.conn, orgID)
+
+	// A pin above any plausible generator version clears this org for the bump.
+	features := &feature.InMemory{}
+	features.SetFlagPayload(feature.FlagHooksRollout, orgID, []byte(`{"version": 9999}`))
+	pub := newTestPluginPublisher(t, ti, mock, features)
+
+	mock.pushFilesCalled = false
+	res, err := pub.PublishProject(ctx, plugins.PublishProjectInput{
+		ProjectID:       *authCtx.ProjectID,
+		CreatedByUserID: authCtx.UserID,
+		CommitMessage:   "phased",
+		SkipIfUnchanged: true,
+	})
+	require.NoError(t, err)
+	require.False(t, res.Skipped, "eligible org must roll the pending hooks bump forward")
+	require.True(t, mock.pushFilesCalled)
+
+	// A regenerated hooks component mints a fresh hooks-scoped key (the hook
+	// scripts themselves no longer embed the key, so their bytes are stable).
+	require.Equal(t, hooksKeysBefore+1, countPluginHooksKeys(t, ctx, ti.conn, orgID), "eligible org regenerates the hooks subtree with a fresh key")
+	require.NotEqual(t, "0", publishedHooksVersion(t, ctx, ti.conn, *authCtx.ProjectID), "eligible org advances its stored hooks version")
+}
+
+// MCP content changes must publish regardless of the hooks rollout phase: a
+// gated org still gets its MCP update, and its hooks are carried verbatim rather
+// than rolled forward.
+func TestPluginsService_PublishProject_PhasedRollout_MCPPublishesRegardlessOfPhase(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	pluginID, hooksBefore := phasedRolloutFixture(t, ctx, ti, mock, "Phased MCP")
+	orgID := publishOrgID(t, ctx, ti.conn, *authCtx.ProjectID)
+	hooksKeysBefore := countPluginHooksKeys(t, ctx, ti.conn, orgID)
+
+	// An MCP content change (new server) while the org remains phase-gated.
+	toolset2 := createTestToolset(t, ctx, ti.conn, "phased-mcp-2")
+	_, err := ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    pluginID,
+		ToolsetID:   conv.PtrEmpty(toolset2.ID.String()),
+		DisplayName: conv.PtrEmpty("Phased MCP Server 2"),
+		Policy:      "optional",
+		SortOrder:   1,
+	})
+	require.NoError(t, err)
+
+	pub := newTestPluginPublisher(t, ti, mock, &feature.InMemory{})
+
+	mock.pushFilesCalled = false
+	mock.getRepoFilesCalled = false
+	res, err := pub.PublishProject(ctx, plugins.PublishProjectInput{
+		ProjectID:       *authCtx.ProjectID,
+		CreatedByUserID: authCtx.UserID,
+		CommitMessage:   "phased",
+		SkipIfUnchanged: true,
+	})
+	require.NoError(t, err)
+	require.False(t, res.Skipped, "MCP content change must publish even for a phase-gated org")
+	require.True(t, mock.pushFilesCalled)
+	require.True(t, mock.getRepoFilesCalled, "carrying hooks requires fetching the existing repo")
+
+	hooksAfter := hooksFilesOf(mock.lastPushedFiles)
+	require.Equal(t, hooksBefore, hooksAfter, "phase-gated org carries hooks verbatim while MCP publishes")
+	require.Equal(t, hooksKeysBefore, countPluginHooksKeys(t, ctx, ti.conn, orgID), "carrying hooks must not mint a new hooks key")
+	require.Equal(t, "0", publishedHooksVersion(t, ctx, ti.conn, *authCtx.ProjectID), "an MCP publish must not advance a gated org's hooks version")
+}
+
+// Flipping an org-level hooks setting must regenerate the hooks subtree on the
+// next publish even though hooksGeneratorVersion is unchanged: the rendered
+// scripts bake the setting in, so carrying them verbatim would leave the old
+// behavior live until an unrelated generator bump. The persisted
+// published_hooks_config is what detects the flip. The org is cleared for the
+// current hooks version up front — a non-eligible org would defer the flip
+// instead (see hooks_config_test.go for the deferral path).
+func TestPluginsService_PublishProject_RegeneratesHooksOnBrowserLoginFlip(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	features := &feature.InMemory{}
+	ctx, ti := newTestPluginsServiceWithGitHubAndFeatures(t, mock, features)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	// Pin above any real generator version so the flip regenerates rather than
+	// defers under the rollout gate.
+	features.SetFlagPayload(feature.FlagHooksRollout, authCtx.ActiveOrganizationID, []byte(`{"version": 9999}`))
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Flip Hooks"})
+	require.NoError(t, err)
+
+	toolset := createTestToolset(t, ctx, ti.conn, "flip-toolset")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   conv.PtrEmpty(toolset.ID.String()),
+		DisplayName: conv.PtrEmpty("Flip Server"),
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	input := plugins.PublishProjectInput{
+		ProjectID:       *authCtx.ProjectID,
+		CreatedByUserID: authCtx.UserID,
+		CommitMessage:   "Update plugin packages",
+		SkipIfUnchanged: true,
+	}
+
+	first, err := ti.service.PublishProject(ctx, input)
+	require.NoError(t, err)
+	require.False(t, first.Skipped)
+	hooksBefore := hooksFilesOf(mock.lastPushedFiles)
+	require.NotEmpty(t, hooksBefore)
+	versionBefore := observabilityManifestVersion(t, mock.lastPushedFiles)
+
+	require.NoError(t, productfeaturesrepo.New(ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		FeatureName:    string(productfeatures.FeatureHooksBrowserLogin),
+	}))
+
+	second, err := ti.service.PublishProject(ctx, input)
+	require.NoError(t, err)
+	require.False(t, second.Skipped, "a hooks settings flip must republish")
+	hooksAfter := hooksFilesOf(mock.lastPushedFiles)
+	require.NotEqual(t, hooksBefore, hooksAfter,
+		"hooks subtree must be regenerated, not carried, after a settings flip")
+	require.NotEqual(t, versionBefore, observabilityManifestVersion(t, mock.lastPushedFiles),
+		"the observability plugin.json version must move on a settings flip, or installed copies never refresh")
+
+	// The regenerated config is persisted, so the next unchanged rollout skips.
+	third, err := ti.service.PublishProject(ctx, input)
+	require.NoError(t, err)
+	require.True(t, third.Skipped, "republishing with the same settings must skip again")
 }
 
 // A dashboard publish (PublishPlugins, which never skips) must still record the

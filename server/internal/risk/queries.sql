@@ -21,6 +21,7 @@ INSERT INTO risk_policies (
   , user_message
   , prompt
   , model_config
+  , score
   , version
 )
 VALUES (
@@ -45,6 +46,7 @@ VALUES (
   , @user_message
   , sqlc.narg(prompt)::text
   , sqlc.narg(model_config)::jsonb
+  , COALESCE(sqlc.narg(score)::double precision, 5.0)
   , 1
 )
 RETURNING *;
@@ -103,6 +105,8 @@ SET name = @name
   , user_message = @user_message
   , prompt = sqlc.narg(prompt)::text
   , model_config = sqlc.narg(model_config)::jsonb
+  -- Descriptive severity: preserve on omit, never contributes to the version bump.
+  , score = COALESCE(sqlc.narg(score)::double precision, score)
   , version = CASE
       WHEN sources IS DISTINCT FROM @sources
         OR presidio_entities IS DISTINCT FROM @presidio_entities
@@ -824,10 +828,17 @@ WHERE id = ANY(@message_ids::uuid[])
   AND project_id = @project_id;
 
 -- name: GetMessageContentBatch :many
-SELECT id, role, content, tool_calls
-FROM chat_messages
-WHERE id = ANY(@ids::uuid[])
-  AND project_id = @project_id;
+-- The scanned user's id rides along so the LLM judge's completion telemetry
+-- can attribute scanning volume to whose traffic was analyzed. Same
+-- attribution rule as ListRiskOverviewTopUsers: the message's own user_id
+-- wins, the chat owner's is the fallback — and a soft-deleted chat's owner
+-- never is (LEFT JOIN so the message still gets scanned, just unattributed).
+SELECT cm.id, cm.role, cm.content, cm.tool_calls,
+  COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::TEXT AS chat_user_id
+FROM chat_messages cm
+LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
+WHERE cm.id = ANY(@ids::uuid[])
+  AND cm.project_id = @project_id;
 
 -- name: GetBatchChatIdentities :many
 -- One row per chat represented in a batch of messages, for the session-scoped
@@ -978,6 +989,10 @@ WHERE rr.id = @id
 -- default project-wide view). When set the results are scoped to that policy
 -- AND disabled-but-not-deleted policies are included, so explicitly filtering
 -- to a policy still surfaces its historical findings after it was turned off.
+--
+-- @assistant_id scopes results to chats linked to that assistant (live
+-- assistant_threads row); @non_assistant instead restricts to chats with no
+-- assistant link at all.
 SELECT
     sub.id, sub.project_id, sub.organization_id, sub.risk_policy_id,
     sub.risk_policy_version, sub.chat_message_id, sub.source, sub.found,
@@ -1020,6 +1035,15 @@ FROM (
     AND (sqlc.narg(to_time)::timestamptz IS NULL OR cm.created_at < sqlc.narg(to_time)::timestamptz)
     AND (@rule_id::text = '' OR rr.rule_id ILIKE '%' || @rule_id::text || '%')
     AND (@user_id::text = '' OR c.external_user_id ILIKE '%' || @user_id::text || '%')
+    AND (NOT @non_assistant::boolean OR NOT EXISTS (
+      SELECT 1 FROM assistant_threads at
+      WHERE at.chat_id = cm.chat_id AND at.deleted IS FALSE
+    ))
+    AND (sqlc.narg(assistant_id)::uuid IS NULL OR EXISTS (
+      SELECT 1 FROM assistant_threads at
+      WHERE at.chat_id = cm.chat_id AND at.deleted IS FALSE
+        AND at.assistant_id = sqlc.narg(assistant_id)::uuid
+    ))
     AND (@category::text = '' OR (
     CASE
       WHEN rr.source = 'llm_judge' THEN 'prompt_policy'

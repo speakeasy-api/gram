@@ -1344,12 +1344,14 @@ func TestServeInstallPage_McpServer_RemoteBacked_PublicRenders(t *testing.T) {
 		Url:           "https://upstream.example.com/mcp",
 	})
 
+	issuer := createUserSessionIssuer(t, ctx, ti, *authCtx.ProjectID)
 	endpointSlug := "remote-mcp-public-" + uuid.NewString()[:8]
 	server, _ := createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
-		name:              "Remote MCP Public",
-		visibility:        mcpservers.VisibilityPublic,
-		endpointSlug:      endpointSlug,
-		remoteMcpServerID: uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
+		name:                "Remote MCP Public",
+		visibility:          mcpservers.VisibilityPublic,
+		endpointSlug:        endpointSlug,
+		remoteMcpServerID:   uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
+		userSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
 	})
 
 	docURL := "https://docs.example.com/remote-mcp"
@@ -1395,12 +1397,14 @@ func TestServeInstallPage_McpServer_RemoteBacked_PrivateRedirectsToLogin(t *test
 		Url:           "https://upstream.example.com/mcp",
 	})
 
+	issuer := createUserSessionIssuer(t, ctx, ti, *authCtx.ProjectID)
 	endpointSlug := "remote-mcp-private-" + uuid.NewString()[:8]
 	createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
-		name:              "Remote MCP Private",
-		visibility:        mcpservers.VisibilityPrivate,
-		endpointSlug:      endpointSlug,
-		remoteMcpServerID: uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
+		name:                "Remote MCP Private",
+		visibility:          mcpservers.VisibilityPrivate,
+		endpointSlug:        endpointSlug,
+		remoteMcpServerID:   uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
+		userSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
 	})
 
 	req := httptest.NewRequest("GET", "/mcp/"+endpointSlug+"/install", nil)
@@ -1612,11 +1616,13 @@ func TestServeInstallPage_McpServer_InstallationOverrideURL(t *testing.T) {
 		Url:           "https://upstream.example.com/mcp",
 	})
 
+	issuer := createUserSessionIssuer(t, ctx, ti, *authCtx.ProjectID)
 	endpointSlug := "override-" + uuid.NewString()[:8]
 	server, _ := createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
-		visibility:        mcpservers.VisibilityPublic,
-		endpointSlug:      endpointSlug,
-		remoteMcpServerID: uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
+		visibility:          mcpservers.VisibilityPublic,
+		endpointSlug:        endpointSlug,
+		remoteMcpServerID:   uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
+		userSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
 	})
 
 	override := "https://custom-install-page.example.com/install"

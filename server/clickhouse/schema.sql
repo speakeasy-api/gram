@@ -57,10 +57,10 @@ CREATE TABLE IF NOT EXISTS telemetry_logs (
     remote_mcp_server_id String MATERIALIZED toString(attributes.gram.remote_mcp_server.id) COMMENT 'Remote MCP server ID (materialized from attributes.gram.remote_mcp_server.id).',
     mcp_server_id String MATERIALIZED toString(attributes.gram.mcp_server.id) COMMENT 'MCP server ID (materialized from attributes.gram.mcp_server.id).',
     skill_name String MATERIALIZED if(toString(attributes.gram.tool.name) = 'Skill', JSONExtractString(toString(attributes.gen_ai.tool.call.arguments), 'skill'), '') COMMENT 'Skill name extracted from tool arguments when tool_name is Skill (materialized).',
-    provider String MATERIALIZED toString(attributes.gram.provider) COMMENT 'AI provider for the session account (e.g. anthropic, openai); set by ingest (materialized from attributes.gram.provider).',
-    external_org_id String MATERIALIZED toString(attributes.gram.external_org_id) COMMENT 'Provider organization id for the account the user was logged into on-device (e.g. Claude organization.id). Distinct from the Gram org. Personal-account tracking discriminator; normalized by ingest (materialized from attributes.gram.external_org_id).',
-    account_type String MATERIALIZED toString(attributes.gram.account_type) COMMENT 'team (company/enterprise account) or personal (individual account); set by ingest. Empty until classified (materialized from attributes.gram.account_type).',
-    billing_mode String MATERIALIZED toString(attributes.gram.billing_mode) COMMENT 'How the account is billed: metered (pay-per-token; cost is real spend) | flat_rate (subscription seat; cost is an estimate) | unknown | empty. Resolved by ingest from admin-declared config (materialized from attributes.gram.billing_mode).'
+    provider String MATERIALIZED toString(attributes.gram.provider) COMMENT 'AI provider for the session account (e.g. anthropic, openai). Set by ingest (materialized from attributes.gram.provider).',
+    external_org_id String MATERIALIZED toString(attributes.gram.external_org_id) COMMENT 'Provider organization id for the account the user was logged into on-device (e.g. Claude organization.id). Distinct from the Gram org. Personal-account tracking discriminator. Normalized by ingest (materialized from attributes.gram.external_org_id).',
+    account_type String MATERIALIZED toString(attributes.gram.account_type) COMMENT 'team (company/enterprise account) or personal (individual account). Set by ingest. Empty until classified (materialized from attributes.gram.account_type).',
+    billing_mode String MATERIALIZED toString(attributes.gram.billing_mode) COMMENT 'How the account is billed: metered (pay-per-token, cost is real spend) | flat_rate (subscription seat, cost is an estimate) | unknown | empty. Resolved by ingest from admin-declared config (materialized from attributes.gram.billing_mode).'
 ) ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(fromUnixTimestamp64Nano(time_unix_nano))
 ORDER BY (gram_project_id, time_unix_nano, id)
@@ -100,6 +100,56 @@ CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_external_org_id ON telemetry_l
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_account_type ON telemetry_logs (account_type) TYPE set(0) GRANULARITY 4;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_provider ON telemetry_logs (provider) TYPE set(0) GRANULARITY 4;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_billing_mode ON telemetry_logs (billing_mode) TYPE set(0) GRANULARITY 4;
+
+-- telemetry_logs_staging parks Claude OTEL api_request rows whose inline MCP
+-- attribution was redacted (mcp_server.name = 'custom') until the
+-- transcript-derived attribution for the request arrives via hooks (or a
+-- timeout passes). Its physical columns match telemetry_logs so rows can be
+-- re-inserted verbatim, but it deliberately carries only three materialized
+-- columns (request_id, the attribution join key; org_id, the tuple's Redis
+-- key scope; and chat_id for manual inspection) — telemetry_logs' other
+-- materialized columns are recomputed at insert time when the row is
+-- promoted. A scheduled sweep scans staging per
+-- project every two minutes, rewrites attributes.mcp_server.name /
+-- attributes.mcp_tool.name for rows whose tuple arrived, and inserts them
+-- into telemetry_logs — the moment attribute_metrics_summaries_mv fires —
+-- then deletes them here. Rows keep their id across promotion, so
+-- telemetry_logs itself is the exactly-once ledger. The short TTL is a
+-- cleanup backstop only (measured from observation time, since the promotion
+-- timeout is too): the 30-minute timeout promotes stragglers verbatim long
+-- before it.
+CREATE TABLE IF NOT EXISTS telemetry_logs_staging (
+    id UUID DEFAULT generateUUIDv7() COMMENT 'Unique identifier for the log entry, preserved when the row is promoted to telemetry_logs.',
+    time_unix_nano Int64 COMMENT 'Unix time (ns) when the event occurred measured by the origin clock.' CODEC(Delta, ZSTD),
+    observed_time_unix_nano Int64 COMMENT 'Unix time (ns) when the event was observed by the collection system.' CODEC(Delta, ZSTD),
+    observed_timestamp DateTime64(9) DEFAULT fromUnixTimestamp64Nano(observed_time_unix_nano) COMMENT 'Human-readable timestamp derived from observed_time_unix_nano.',
+    severity_text LowCardinality(Nullable(String)) COMMENT 'Text representation of severity (DEBUG, INFO, WARN, ERROR, FATAL).',
+    body String COMMENT 'The primary log message extracted from the log record.' CODEC(ZSTD),
+    trace_id Nullable(FixedString(32)) COMMENT 'W3C trace ID linking related logs across services.',
+    span_id Nullable(FixedString(16)) COMMENT 'W3C span ID for specific operation within a trace.',
+    attributes JSON COMMENT 'Additional attributes about the specific event occurrence.' CODEC(ZSTD),
+    resource_attributes JSON COMMENT 'Attributes describing the resource that generated this log.' CODEC(ZSTD),
+    gram_project_id UUID COMMENT 'Project ID (denormalized from resource_attributes).',
+    gram_deployment_id Nullable(UUID) COMMENT 'Deployment ID (denormalized from resource_attributes).',
+    gram_function_id Nullable(UUID) COMMENT 'Function ID that generated the log (null for HTTP logs).',
+    gram_urn String COMMENT 'The Gram URN (e.g. claude-code:otel:logs).',
+    service_name LowCardinality(String) COMMENT 'Logical service name.',
+    service_version Nullable(String) COMMENT 'Service version.',
+    gram_chat_id Nullable(String) COMMENT 'The Chat ID (Claude session id) associated with the log.',
+    chat_id String MATERIALIZED toString(attributes.gen_ai.conversation.id) COMMENT 'Chat ID (materialized from attributes.gen_ai.conversation.id) — the promotion worker scopes by this.',
+    request_id String MATERIALIZED toString(attributes.request_id) COMMENT 'Claude API request id (materialized from attributes.request_id) — the attribution join key.',
+    org_id String MATERIALIZED toString(attributes.gram.org.id) COMMENT 'Gram org id (materialized from attributes.gram.org.id) — the attribution tuple join scope. The tuple is keyed by org, not project, because the hooks key and the OTEL exporter key can resolve different projects.'
+) ENGINE = MergeTree
+PARTITION BY toYYYYMMDD(fromUnixTimestamp64Nano(time_unix_nano))
+ORDER BY (gram_project_id, time_unix_nano, id)
+TTL fromUnixTimestamp64Nano(observed_time_unix_nano) + INTERVAL 2 DAY
+SETTINGS index_granularity = 8192
+COMMENT 'Holding pen for Claude OTEL api_request rows with redacted (custom) MCP attribution, awaiting transcript-derived attribution before promotion into telemetry_logs.';
+
+-- Promotion scans by project (the sorting key prefix); this index only
+-- serves ad-hoc per-session inspection of staged rows, mirroring the
+-- bloom-filter treatment chat_id gets on telemetry_logs.
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_staging_chat_id ON telemetry_logs_staging (chat_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 
 CREATE TABLE IF NOT EXISTS trace_summaries (
     -- Key cols
@@ -212,6 +262,23 @@ SELECT
 FROM telemetry_logs
 WHERE trace_id IS NOT NULL AND trace_id != '' AND NOT startsWith(telemetry_logs.gram_urn, 'urn:uuid:')
 GROUP BY trace_id, gram_project_id;
+
+CREATE TABLE IF NOT EXISTS shadow_mcp_inventory_urls (
+    gram_project_id UUID,
+    canonical_server_url String,
+    url_host String,
+    server_name String,
+    first_seen DateTime64(9, 'UTC'),
+    last_seen DateTime64(9, 'UTC'),
+    updated_at DateTime64(9, 'UTC')
+) ENGINE = ReplacingMergeTree(updated_at)
+ORDER BY (gram_project_id, canonical_server_url)
+SETTINGS index_granularity = 8192
+COMMENT 'Project-scoped Shadow MCP inventory URLs and display metadata';
+
+CREATE INDEX IF NOT EXISTS idx_shadow_mcp_inventory_urls_slug_hash
+ON shadow_mcp_inventory_urls (substring(lower(hex(SHA256(canonical_server_url))), 1, 8))
+TYPE bloom_filter(0.01) GRANULARITY 1;
 
 CREATE TABLE IF NOT EXISTS metrics_summaries (
     -- Key columns
@@ -423,17 +490,43 @@ CREATE TABLE IF NOT EXISTS attribute_metrics_summaries (
     skill_name String,
     agent_name String,
     mcp_server_name String,
-    mcp_tool_name String
+    mcp_tool_name String,
+
+    -- Backfill rollback machinery (a keyed variant of the Altinity "delete
+    -- via tombstone column" pattern,
+    -- https://kb.altinity.com/altinity-kb-queries-and-syntax/delete-via-tombstone-column/):
+    --
+    -- generation is an IMMUTABLE sort-key discriminator separating coexisting
+    -- data generations: 0 = original/MV-ingested rows, 1 = the 2026-07 full
+    -- re-derive backfill (future backfills increment). Because it is part of
+    -- the sorting key, a backfill row never merges with the original row for
+    -- the same logical key — the two generations coexist untouched, which is
+    -- what makes rollback lossless. Sort-key columns cannot be ALTER UPDATEd,
+    -- which is why the mutable visibility switch is the separate non-key
+    -- column below.
+    --
+    -- is_active is the mutable tombstone switch: 1 = visible, 0 = hidden;
+    -- readers filter is_active = 1. Cutover/rollback flip it via ALTER UPDATE.
+    -- Mutation predicates must only reference sort-key columns (generation,
+    -- time_bucket) so rows with identical keys always carry the same flag and
+    -- merges can never combine a hidden row with a visible one.
+    --
+    -- The MV emits both columns explicitly as constants (generation 0, active) —
+    -- a TO-table MV inserts positionally, so the SELECT must produce every
+    -- target column; column defaults are not applied. Production runbook:
+    -- clickhouse/local/backfill/20260713000000_backfill-attribute-metrics-summaries.sql
+    generation UInt8,
+    is_active UInt8 DEFAULT 1
 ) ENGINE = AggregatingMergeTree
 -- Primary key stays the original 12 dimensions; account_type, provider,
--- billing_mode, and attribution dimensions are appended to ORDER BY only (the
--- sorting key). ALTER MODIFY ORDER BY extends the sorting key but leaves the
--- primary key as a prefix, so this must be declared explicitly here to match the
--- migrated table (otherwise a bare ORDER BY would imply the primary key includes
--- the appended dims, and atlas would see drift it can't reconcile — "modifying
--- primary key is not supported").
+-- billing_mode, attribution dimensions, and generation are appended to ORDER BY
+-- only (the sorting key). ALTER MODIFY ORDER BY extends the sorting key but
+-- leaves the primary key as a prefix, so this must be declared explicitly here
+-- to match the migrated table (otherwise a bare ORDER BY would imply the
+-- primary key includes the appended dims, and atlas would see drift it can't
+-- reconcile — "modifying primary key is not supported").
 PRIMARY KEY (gram_project_id, time_bucket, department_name, job_title, employee_type, division_name, cost_center_name, user_email, model, hook_source, roles, groups)
-ORDER BY (gram_project_id, time_bucket, department_name, job_title, employee_type, division_name, cost_center_name, user_email, model, hook_source, roles, groups, account_type, provider, billing_mode, query_source, skill_name, agent_name, mcp_server_name, mcp_tool_name)
+ORDER BY (gram_project_id, time_bucket, department_name, job_title, employee_type, division_name, cost_center_name, user_email, model, hook_source, roles, groups, account_type, provider, billing_mode, query_source, skill_name, agent_name, mcp_server_name, mcp_tool_name, generation)
 -- Retained beyond the standard 90-day telemetry window (matching
 -- chat_token_summaries) so the costs page can break down token usage across
 -- the same lookback that TUM billing reports cover.
@@ -454,7 +547,13 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS attribute_metrics_summaries_mv TO attribu
 -- classification to raw telemetry_logs.
 WITH
     -- Cutoff separates live MV ingestion from one-time historical backfill.
-    toUnixTimestamp64Nano(toDateTime64('2026-06-20 00:00:00', 9, 'UTC')) AS attribute_metrics_cutoff_unix_nano,
+    -- Rows with event time >= cutoff are the MV's; everything before it is
+    -- owned by the manual backfill (see
+    -- clickhouse/local/backfill/20260713000000_backfill-attribute-metrics-summaries.sql).
+    -- Must be a whole-hour boundary so time_bucket partitions cleanly between
+    -- the two writers, and should sit shortly (~1h) after the deploy that
+    -- ships it.
+    toUnixTimestamp64Nano(toDateTime64('2026-07-14 00:00:00', 9, 'UTC')) AS attribute_metrics_cutoff_unix_nano,
     -- Every persisted Claude OTEL log row carries this URN (stamped at ingest).
     (gram_urn = 'claude-code:otel:logs') AS is_claude_otel_row,
     -- Claude emits one api_request row per turn with model, token, cost, and
@@ -522,10 +621,16 @@ SELECT
     -- Cardinality
     uniqExactIfState(toString(attributes.gen_ai.conversation.id), toString(attributes.gen_ai.conversation.id) != '' AND (is_claude_api_request OR is_agent_usage_row)) AS total_chats,
 
-    -- Token sums
+    -- Token sums. total_tokens is input + output + cache WRITES — cache reads
+    -- are excluded, matching the tokens-under-management measure (a cache
+    -- read re-observes prompt content already counted when it entered the
+    -- cache; see tumMeasureExpr in server/internal/telemetry/repo). Both
+    -- branches sum the disjoint components rather than trusting a reported
+    -- total: Codex's gen_ai.usage.total_tokens includes cache reads and
+    -- Cursor usage rows report no total at all.
     sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens))), is_claude_api_request OR is_agent_usage_row) AS total_input_tokens,
     sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.output_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens))), is_claude_api_request OR is_agent_usage_row) AS total_output_tokens,
-    sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)) + toInt64OrZero(toString(attributes.output_tokens)) + toInt64OrZero(toString(attributes.cache_read_tokens)) + toInt64OrZero(toString(attributes.cache_creation_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens))), is_claude_api_request OR is_agent_usage_row) AS total_tokens,
+    sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)) + toInt64OrZero(toString(attributes.output_tokens)) + toInt64OrZero(toString(attributes.cache_creation_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), is_claude_api_request OR is_agent_usage_row) AS total_tokens,
     sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.cache_read_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens))), is_claude_api_request OR is_agent_usage_row) AS cache_read_input_tokens,
     sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.cache_creation_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), is_claude_api_request OR is_agent_usage_row) AS cache_creation_input_tokens,
 
@@ -549,7 +654,15 @@ SELECT
     if(is_claude_api_request, toString(attributes.skill.name), '') AS skill_name,
     if(is_claude_api_request, toString(attributes.agent.name), '') AS agent_name,
     if(is_claude_api_request, toString(attributes.mcp_server.name), '') AS mcp_server_name,
-    if(is_claude_api_request, toString(attributes.mcp_tool.name), '') AS mcp_tool_name
+    if(is_claude_api_request, toString(attributes.mcp_tool.name), '') AS mcp_tool_name,
+
+    -- Rollback machinery: MV rows are always generation 0 and active. These are
+    -- emitted explicitly (as constants) rather than relying on column defaults —
+    -- a TO-table MV inserts positionally with no column list, so the SELECT must
+    -- produce every target column or ingestion fails with a column-count
+    -- mismatch. Constants need no GROUP BY entry.
+    toUInt8(0) AS generation,
+    toUInt8(1) AS is_active
 FROM telemetry_logs
 -- Admit only the three agent surfaces: Claude OTEL api_request/tool_result
 -- rows, Codex/Cursor usage rows, and Codex/Cursor completed tool-call hook
@@ -628,57 +741,6 @@ SELECT
 FROM telemetry_logs
 WHERE chat_id != ''
 GROUP BY gram_project_id, chat_id, time_bucket, hook_source;
-
--- tum_breakdown_summaries is the DIMENSIONED billing aggregate: the same
--- gen_ai completion rows chat_token_summaries (the billing record) sums,
--- broken down by consuming surface and user identity so the billing page's
--- breakdowns can report the billed population exactly. Reads apply the same
--- read-time stored-session qualification (via chat_token_summaries) and
--- registry-driven source scoping (billing.ModelUsageSources). Identity
--- dimensions are stamped on completion rows at emit time by the telemetry
--- logger's directory snapshot. attribute_metrics_summaries is provenance-
--- first (agent-fleet surfaces only) and no longer carries these rows.
-CREATE TABLE IF NOT EXISTS tum_breakdown_summaries (
-    -- Key columns
-    gram_project_id UUID,
-    chat_id String,
-    time_bucket DateTime('UTC'),
-    hook_source String,
-    model String,
-    user_email String,
-    division_name String,
-    roles Array(String),
-
-    -- Billed token split for the slice (input + output = total for
-    -- completion rows; they carry no cache attributes).
-    input_tokens SimpleAggregateFunction(sum, Int64),
-    output_tokens SimpleAggregateFunction(sum, Int64),
-    total_tokens SimpleAggregateFunction(sum, Int64)
-) ENGINE = AggregatingMergeTree
-ORDER BY (gram_project_id, time_bucket, chat_id, hook_source, model, user_email, division_name, roles)
-TTL time_bucket + INTERVAL 730 DAY
-SETTINGS index_granularity = 8192
-COMMENT 'Per-chat daily billed token usage broken down by consuming surface and user identity, retained beyond the raw telemetry TTL to power the billing page breakdowns across historical billing cycles';
-
-CREATE MATERIALIZED VIEW IF NOT EXISTS tum_breakdown_summaries_mv TO tum_breakdown_summaries AS
-SELECT
-    gram_project_id,
-    chat_id,
-    -- Force UTC so the daily billing bucket boundary never shifts with the
-    -- server timezone (fromUnixTimestamp64Nano defaults to the server tz).
-    toStartOfDay(fromUnixTimestamp64Nano(time_unix_nano, 'UTC')) AS time_bucket,
-    hook_source,
-    toString(attributes.gen_ai.response.model) AS model,
-    user_email,
-    toString(attributes.user.attributes.division_name) AS division_name,
-    arraySort(JSONExtract(ifNull(toJSONString(attributes.user.roles), '[]'), 'Array(String)')) AS roles,
-    sum(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens))) AS input_tokens,
-    sum(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens))) AS output_tokens,
-    sum(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens))) AS total_tokens
-FROM telemetry_logs
-WHERE chat_id != ''
-  AND toString(attributes.gen_ai.usage.total_tokens) != ''
-GROUP BY gram_project_id, chat_id, time_bucket, hook_source, model, user_email, division_name, roles;
 
 CREATE TABLE IF NOT EXISTS attribute_keys (
     gram_project_id UUID,

@@ -41,6 +41,11 @@ type GetProductFeaturesResponseBody struct {
 	// Whether observability mode is enabled, making generated hook plugins fully
 	// non-blocking
 	ObservabilityModeEnabled *bool `form:"observability_mode_enabled,omitempty" json:"observability_mode_enabled,omitempty" xml:"observability_mode_enabled,omitempty"`
+	// Whether generated hook plugins may mint per-user keys via the interactive
+	// browser login
+	HooksBrowserLoginEnabled *bool `form:"hooks_browser_login_enabled,omitempty" json:"hooks_browser_login_enabled,omitempty" xml:"hooks_browser_login_enabled,omitempty"`
+	// Whether the organization can supply its own model provider API keys (BYOK)
+	CustomModelKeysEnabled *bool `form:"custom_model_keys_enabled,omitempty" json:"custom_model_keys_enabled,omitempty" xml:"custom_model_keys_enabled,omitempty"`
 }
 
 // GetProductFeaturesUnauthorizedResponseBody is the type of the "features"
@@ -438,6 +443,8 @@ func NewGetProductFeaturesResultOK(body *GetProductFeaturesResponseBody) *featur
 		SsoEnabled:                   *body.SsoEnabled,
 		ScimEnabled:                  *body.ScimEnabled,
 		ObservabilityModeEnabled:     *body.ObservabilityModeEnabled,
+		HooksBrowserLoginEnabled:     *body.HooksBrowserLoginEnabled,
+		CustomModelKeysEnabled:       *body.CustomModelKeysEnabled,
 	}
 
 	return v
@@ -769,6 +776,12 @@ func ValidateGetProductFeaturesResponseBody(body *GetProductFeaturesResponseBody
 	}
 	if body.ObservabilityModeEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("observability_mode_enabled", "body"))
+	}
+	if body.HooksBrowserLoginEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("hooks_browser_login_enabled", "body"))
+	}
+	if body.CustomModelKeysEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("custom_model_keys_enabled", "body"))
 	}
 	return
 }

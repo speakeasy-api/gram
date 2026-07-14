@@ -99,12 +99,14 @@ EOF
 fi
 echo ""
 
-if [ "${usage_local:-}" = "true" ] || ! git diff --quiet main -- hooks/; then
-  echo "Using local plugin directory: ./hooks/plugin-claude-test"
+if [ "${usage_local:-}" = "true" ] || ! git diff --quiet main -- server/internal/plugins/ server/cmd/export-hook-plugin/; then
+  plugin_out="$(mktemp -d)"
+  echo "Rendering local plugin into: ${plugin_out}"
+  (cd server && go run ./cmd/export-hook-plugin -out "$plugin_out" >/dev/null)
   echo ""
-  exec claude --setting-sources project,local --plugin-dir ./hooks/plugin-claude-test --debug
+  exec claude --setting-sources project,local --plugin-dir "${plugin_out}/plugin-claude" --debug
 else
-  echo "No branch changes in hooks/ vs main — using published plugin"
+  echo "No branch changes to the plugin generators vs main — using published plugin"
   echo ""
   exec claude --setting-sources project,local --debug
 fi

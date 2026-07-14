@@ -188,10 +188,13 @@ cert_names() {
   site_host="$(extract_hostname "$GRAM_SITE_URL")"
   server_host="$(extract_hostname "$GRAM_SERVER_URL")"
 
+  # host.docker.internal lets local assistant runtime containers dial the
+  # server over TLS through Docker's host gateway alias.
   printf "%s\n" \
     "$site_host" \
     "$server_host" \
     "localhost" \
+    "host.docker.internal" \
     "127.0.0.1" \
     "::1" \
     | awk 'NF && !seen[$0]++'
@@ -215,6 +218,9 @@ gen_keypair() {
     echo "WARN: root CA not found at $root_ca" >&2
   else
     mise set --file mise.local.toml NODE_EXTRA_CA_CERTS="$root_ca"
+    # Mounted into local assistant runtime containers so runners trust the
+    # local server certificate.
+    mise set --file mise.local.toml GRAM_ASSISTANT_RUNTIME_LOCAL_CA_FILE="$root_ca"
   fi
 
   echo "  cert => $CERT_PATH"

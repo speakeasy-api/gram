@@ -74,6 +74,19 @@ type CompletionRequest struct {
 	HTTPMetadata   *HTTPMetadata
 	APIKeyID       string
 
+	// KeyType selects which of the org's OpenRouter keys pays for the call;
+	// the zero value resolves to the chat key. An explicit request field —
+	// never derived from UsageSource, which the completions proxy accepts
+	// from clients.
+	KeyType KeyType
+
+	// KeySlot selects the customer key slot the call resolves against; the
+	// zero value falls back to UsageSource. Callers whose UsageSource is
+	// client-claimed (the completions proxy) must set it from the
+	// authenticated surface instead, so a claimed source cannot bill another
+	// slot's customer key.
+	KeySlot billing.ModelUsageSource
+
 	JSONSchema *or.ChatJSONSchemaConfig // For structured output mode
 
 	// Reasoning, when set, is forwarded verbatim to OpenRouter on the
@@ -100,8 +113,15 @@ type ObjectCompletionRequest struct {
 	UsageSource    billing.ModelUsageSource
 	UserID         string
 	ExternalUserID string
+	UserEmail      string
 	HTTPMetadata   *HTTPMetadata
 	JSONSchema     *or.ChatJSONSchemaConfig // For structured output mode
+	// KeyType selects which of the org's OpenRouter keys pays for the call;
+	// the zero value resolves to the chat key.
+	KeyType KeyType
+	// KeySlot selects the customer key slot the call resolves against; the
+	// zero value falls back to UsageSource.
+	KeySlot billing.ModelUsageSource
 }
 
 // CompletionResponse encapsulates the result of a completion call.

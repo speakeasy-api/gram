@@ -1,7 +1,7 @@
 import "@speakeasy-api/moonshine/moonshine.css";
 import "./App.css"; // Import this second to override certain values in moonshine.css
 
-import { NuqsAdapter } from "nuqs/adapters/react-router/v7";
+import { NuqsAdapter } from "nuqs/adapters/react-router/v8";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider as LocalTooltipProvider } from "@/components/ui/tooltip";
 import { FontTexture, WebGLCanvas } from "@/components/webgl";
@@ -46,7 +46,7 @@ import { AppRoute, useRoutes, useOrgRoutes } from "./routes";
 
 export default function App(): JSX.Element {
   // Initialize from storage so React/Moonshine match the theme the pre-paint
-  // inline script (in index.html) already applied to <html> — avoids a flash.
+  // script (loaded from index.html) already applied to <html> — avoids a flash.
   const [theme, setTheme] = useState<"light" | "dark">(() => {
     try {
       return localStorage.getItem(PREFERRED_THEME_STORAGE_KEY) === "dark"

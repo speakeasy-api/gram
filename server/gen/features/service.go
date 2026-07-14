@@ -70,6 +70,11 @@ type GetProductFeaturesResult struct {
 	// Whether observability mode is enabled, making generated hook plugins fully
 	// non-blocking
 	ObservabilityModeEnabled bool
+	// Whether generated hook plugins may mint per-user keys via the interactive
+	// browser login
+	HooksBrowserLoginEnabled bool
+	// Whether the organization can supply its own model provider API keys (BYOK)
+	CustomModelKeysEnabled bool
 }
 
 // SetProductFeaturePayload is the payload type of the features service
