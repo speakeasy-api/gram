@@ -110,7 +110,7 @@ Activate a skill when your task falls within its scope.
 | --------------------------------- | ------------------------------------------------------------------------------- |
 | `golang`                          | Writing or editing Go code                                                      |
 | `postgresql`                      | Creating migrations, writing SQLc queries, or changing the database schema      |
-| `clickhouse`                      | Working with ClickHouse queries in the `server/` package                        |
+| `clickhouse`                      | Working with ClickHouse queries, schema, or migrations in the `server/` package |
 | `frontend`                        | Working on the React frontends in `client/` or `elements/`                      |
 | `vercel-react-best-practices`     | Optimizing React performance, reviewing components for best practices           |
 | `gram-functions`                  | Understanding or modifying the Gram Functions serverless execution feature      |
