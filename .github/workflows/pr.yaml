@@ -743,6 +743,42 @@ jobs:
             --config otel-collector/fly.toml \
             --yes
 
+  golang-migrate-clickhouse:
+    name: Test ClickHouse golang-migrate migrations
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    needs: changes
+    if: needs.changes.outputs.migrations == 'true' && github.event_name == 'pull_request'
+    services:
+      clickhouse:
+        image: clickhouse/clickhouse-server:25.8.3
+        env:
+          CLICKHOUSE_USER: gram
+          CLICKHOUSE_PASSWORD: gram
+          CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+        ports:
+          - 9000:9000
+        options: >-
+          --health-cmd "clickhouse-client --user gram --password gram --query 'SELECT 1'"
+          --health-interval 10s
+          --health-start-period 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
+
+      - name: Setup Mise
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        with:
+          install: true
+          cache: true
+          env: false
+
+      - name: Run ClickHouse migrations with golang-migrate
+        env:
+          CH_URL: clickhouse://127.0.0.1:9000/default?username=gram&password=gram&secure=false&x-multi-statement=true
+        run: mise run clickhouse:migrate --engine golang-migrate --url ${CH_URL}
+
   atlas-lint:
     name: Lint migrations with Atlas
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -1979,6 +2015,7 @@ jobs:
       - ts-framework-test
       - elements-build-lint
       - elements-test
+      - golang-migrate-clickhouse
       - atlas-lint
       - atlas-push
       - webhooks-catalog-breaking-changes
