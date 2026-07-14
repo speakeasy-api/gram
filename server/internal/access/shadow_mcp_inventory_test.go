@@ -460,6 +460,35 @@ func TestService_UpdateShadowMCPInventoryServerName_ReturnsNotFoundForUnknownURL
 	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 }
 
+func TestService_UpdateShadowMCPInventoryServerName_RejectsProjectFromAnotherOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	otherOrganizationID := uuid.NewString()
+	otherProject := createShadowMCPProject(t, ctx, ti, otherOrganizationID)
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+	seedShadowMCPInventoryServer(t, ctx, ti, otherProject.ID.String(), "Other Organization MCP")
+
+	err := ti.service.UpdateShadowMCPInventoryServerName(ctx, &gen.UpdateShadowMCPInventoryServerNamePayload{
+		ProjectID: otherProject.ID.String(),
+		ServerURL: "https://github.example.com/mcp",
+		Name:      "Renamed Across Organizations",
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
+
+	row, err := telemetryRepo.New(ti.chConn).GetShadowMCPInventoryURL(ctx, telemetryRepo.GetShadowMCPInventoryURLParams{
+		GramProjectID:      otherProject.ID.String(),
+		CanonicalServerURL: "https://github.example.com/mcp",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, row)
+	require.Equal(t, "Other Organization MCP", row.ServerName)
+	require.Empty(t, row.ServerNameOverride)
+}
+
 func TestShadowMCPInventorySlugHash_ReturnsHashSuffix(t *testing.T) {
 	t.Parallel()
 
