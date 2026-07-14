@@ -21,7 +21,11 @@ import { useRoutes } from "@/routes";
 import { useHideInsightsDock } from "@/components/insights-context";
 import { Confirm } from "@gram/client/models/components/upsertglobaltoolvariationform.js";
 import { queryKeyInstance } from "@gram/client/react-query/instance.js";
-import { queryKeyListToolsets } from "@gram/client/react-query/listToolsets.js";
+import {
+  queryKeyListToolsets,
+  useListToolsets,
+} from "@gram/client/react-query/listToolsets.js";
+import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { invalidateTemplate } from "@gram/client/react-query/template.js";
 import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
 import { useUpdateToolsetMutation } from "@gram/client/react-query/updateToolset.js";
@@ -42,11 +46,64 @@ import { PlaygroundLogsPanel } from "./PlaygroundLogsPanel";
 import { PlaygroundRemoteChat } from "./PlaygroundRemoteChat";
 import { ShareChatButton } from "./ShareChatButton";
 import { useRemoteMcpConnection } from "./useRemoteMcpConnection";
-import {
-  remoteServerKey,
-  toolsetServerKey,
-  usePlaygroundServers,
-} from "./usePlaygroundServers";
+
+// A single selectable server in the playground. Toolset-backed and
+// remote-MCP-backed servers share one flat picker; the `kind` discriminant only
+// drives how we connect (and which controls appear), never how it's labeled.
+type PlaygroundServerRef =
+  | { kind: "toolset"; key: string; name: string; toolsetSlug: string }
+  | {
+      kind: "remote";
+      key: string;
+      name: string;
+      mcpServerId: string;
+      isIssuerGated: boolean;
+    };
+
+const toolsetServerKey = (slug: string) => `toolset:${slug}`;
+const remoteServerKey = (mcpServerId: string) => `remote:${mcpServerId}`;
+
+// Merges toolset-backed servers (from listToolsets) with remote-MCP-backed
+// servers (the remoteMcpServerId subset of mcpServers) into one sorted list.
+// Neither source overlaps the other, so nothing is double-counted.
+function usePlaygroundServers(): {
+  servers: PlaygroundServerRef[];
+  isLoading: boolean;
+} {
+  const { data: toolsetsData, isLoading: isLoadingToolsets } =
+    useListToolsets();
+  const { data: mcpServersData, isLoading: isLoadingMcpServers } =
+    useMcpServers();
+
+  const servers = useMemo<PlaygroundServerRef[]>(() => {
+    const toolsetServers: PlaygroundServerRef[] = (
+      toolsetsData?.toolsets ?? []
+    ).map((toolset) => ({
+      kind: "toolset",
+      key: toolsetServerKey(toolset.slug),
+      name: toolset.name,
+      toolsetSlug: toolset.slug,
+    }));
+
+    const remoteServers: PlaygroundServerRef[] = (
+      mcpServersData?.mcpServers ?? []
+    )
+      .filter((server) => !!server.remoteMcpServerId)
+      .map((server) => ({
+        kind: "remote",
+        key: remoteServerKey(server.id),
+        name: server.name ?? server.slug ?? "Remote MCP server",
+        mcpServerId: server.id,
+        isIssuerGated: !!server.userSessionIssuerId,
+      }));
+
+    return [...toolsetServers, ...remoteServers].sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
+  }, [toolsetsData, mcpServersData]);
+
+  return { servers, isLoading: isLoadingToolsets || isLoadingMcpServers };
+}
 
 function PlaygroundEmptyState({ onCreate }: { onCreate: () => void }) {
   return (
