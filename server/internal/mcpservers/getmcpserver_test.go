@@ -213,3 +213,40 @@ func TestGetMcpServer_RBACAllowedWithServerGrant(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, created.ID, fetched.ID)
 }
+
+// Grants for toolset-backed servers name the backing toolset id (the RBAC
+// picker's Server.id invariant), not the mcp_servers row id.
+func TestGetMcpServer_RBACAllowedWithBackingToolsetGrant(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	toolsetID := seedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID).ID.String()
+
+	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		Name:              "rbac toolset-backed server",
+		EnvironmentID:     nil,
+		RemoteMcpServerID: nil,
+		ToolsetID:         &toolsetID,
+		Visibility:        types.McpServerVisibility("private"),
+	})
+	require.NoError(t, err)
+
+	ctx = withExactAuthzGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPRead, toolsetID))
+
+	fetched, err := ti.service.GetMcpServer(ctx, &gen.GetMcpServerPayload{
+		ID:               &created.ID,
+		Slug:             nil,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, created.ID, fetched.ID)
+}
