@@ -1,5 +1,5 @@
 import { FullPageError } from "@/components/full-page-error";
-import { GramLogo } from "@/components/gram-logo";
+import { SpeakeasyLogo } from "@/components/speakeasy-logo";
 import { PageHeader } from "@/components/page-header";
 import {
   Sidebar,
@@ -312,7 +312,7 @@ const AppLoadingShell = () => (
       {/* Header */}
       <header className="dark:bg-background flex h-14 shrink-0 items-center border-b bg-white pr-4 pl-5">
         <div className="flex items-center gap-3">
-          <GramLogo className="w-28" />
+          <SpeakeasyLogo className="w-28" />
           <span className="text-muted-foreground/50 text-xl select-none">
             /
           </span>

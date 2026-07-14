@@ -35,7 +35,7 @@ vi.mock("@/contexts/Auth", () => ({
 
 vi.mock("@/lib/utils", () => ({ buildLoginRedirectURL: () => "/login" }));
 
-vi.mock("@/components/gram-logo", () => ({ GramLogo: () => null }));
+vi.mock("@/components/speakeasy-logo", () => ({ SpeakeasyLogo: () => null }));
 
 vi.mock("@/components/ui/type", () => ({
   Type: ({ children }: { children: ReactNode }) => <span>{children}</span>,

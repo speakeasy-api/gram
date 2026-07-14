@@ -1,6 +1,6 @@
 import { CodeBlock } from "@/components/code";
 import { Expandable } from "@/components/expandable";
-import { GramLogo } from "@/components/gram-logo";
+import { SpeakeasyLogo } from "@/components/speakeasy-logo";
 import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
 import { OpenApiSourceInput } from "@/components/OpenApiSourceInput";
@@ -261,7 +261,7 @@ const LHS = ({
           className="mb-8 h-16 w-full border-b px-6"
         >
           <Link className="hover:bg-accent rounded-md p-2" to="/">
-            <GramLogo className="w-25" />
+            <SpeakeasyLogo className="w-25" />
           </Link>
           <a href="https://docs.getgram.ai/" target="_blank">
             <Type mono className="text-[15px] font-normal">
@@ -1138,7 +1138,7 @@ const DefaultLogo = () => (
     }}
   >
     <motion.span className="text-foreground text-6xl font-thin select-none">
-      <GramLogo className="w-18" variant="icon" />
+      <SpeakeasyLogo className="w-18" variant="icon" />
     </motion.span>
   </motion.div>
 );

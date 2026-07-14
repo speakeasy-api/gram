@@ -1,6 +1,6 @@
 import { ArrowRight, ExternalLink, LifeBuoy } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { GramLogo } from "@/components/gram-logo";
+import { SpeakeasyLogo } from "@/components/speakeasy-logo";
 
 interface OnboardingHeaderProps {
   onLeave?: () => void;
@@ -17,7 +17,7 @@ export function OnboardingHeader({
     <header className="border-border bg-background w-full border-b">
       <div className="mx-auto flex w-full max-w-5xl items-center justify-between py-4">
         <div className="flex items-center gap-3">
-          <GramLogo variant="horizontal" className="w-32" />
+          <SpeakeasyLogo variant="horizontal" className="w-32" />
           <div className="bg-border h-5 w-px" />
           <span className="text-foreground text-sm font-medium">
             Setup organization

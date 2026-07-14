@@ -1,4 +1,4 @@
-import { GramLogo } from "@/components/gram-logo/index";
+import { SpeakeasyLogo } from "@/components/speakeasy-logo/index";
 import { toError } from "@/lib/errors";
 import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
 
@@ -13,7 +13,7 @@ export function FullPageError({
   return (
     <main className="bg-background flex min-h-screen items-center justify-center p-8">
       <Stack gap={6} align="center" className="max-w-md text-center">
-        <GramLogo variant="vertical" />
+        <SpeakeasyLogo variant="vertical" />
 
         <Stack gap={3} align="center">
           <Stack direction="horizontal" gap={2} align="center">

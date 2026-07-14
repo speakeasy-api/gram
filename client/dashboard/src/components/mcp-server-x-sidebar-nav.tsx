@@ -101,7 +101,7 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
       "A remote identity provider is attached to this server.";
   } else if (isTunneledBacked) {
     authenticationDescription =
-      "Gram authentication is configured; upstream identity providers are optional.";
+      "Speakeasy authentication is configured; upstream identity providers are optional.";
   }
 
   let sourceDescription = "Connect an MCP server as this server's source.";

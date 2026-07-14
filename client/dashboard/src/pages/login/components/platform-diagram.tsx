@@ -1,4 +1,4 @@
-import { GramLogo } from "@/components/gram-logo";
+import { SpeakeasyLogo } from "@/components/speakeasy-logo";
 import { cn } from "@/lib/utils";
 import { motion, useReducedMotion } from "motion/react";
 
@@ -361,7 +361,7 @@ export function PlatformDiagram({
           className="w-full rounded-lg border border-slate-200 bg-white p-3"
         >
           <div className="mb-3 flex items-center">
-            <GramLogo variant="horizontal" className="w-20" />
+            <SpeakeasyLogo variant="horizontal" className="w-20" />
             <span className="ml-1 text-[10px] font-medium tracking-wider text-slate-400 uppercase">
               Control Plane
             </span>
@@ -444,7 +444,7 @@ export function PlatformDiagram({
           />
           <div className="relative rounded-lg bg-white p-3">
             <div className="mb-3 flex items-center">
-              <GramLogo variant="horizontal" className="w-20" />
+              <SpeakeasyLogo variant="horizontal" className="w-20" />
               <span className="ml-1 text-[10px] font-medium tracking-wider text-slate-400 uppercase">
                 Tools Platform
               </span>

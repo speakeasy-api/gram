@@ -120,7 +120,7 @@ export function DistributeServersStep({
     () => (data?.servers as PulseMCPServer[]) ?? [],
     [data],
   );
-  // Onboarding only surfaces servers Gram can fully auto-configure: those whose
+  // Onboarding only surfaces servers Speakeasy can fully auto-configure: those whose
   // OAuth authorization server advertises a dynamic client registration
   // endpoint (DCR), reported live by the catalog's `supports_dcr` flag.
   // Everything else would dead-end on "OAuth setup required" or a missing API
@@ -484,7 +484,7 @@ export function DistributeServersStep({
           {!isLoading && (
             <p className="text-muted-foreground mt-4 text-xs leading-relaxed">
               Only servers that support OAuth dynamic client registration (DCR)
-              are shown here — Gram can configure these automatically. More
+              are shown here — Speakeasy can configure these automatically. More
               servers, including those that need manual OAuth or API key setup,
               are available in the{" "}
               <routes.catalog.Link className="underline underline-offset-2 hover:text-foreground">
