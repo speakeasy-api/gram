@@ -31,12 +31,14 @@ def presidio_options() -> Sequence[click.Option]:
         click.Option(
             ["--scan-max-tasks-per-child"],
             type=int,
-            default=1000,
+            default=10_000,
             envvar="GRAM_PYSTREAMS_SCAN_MAX_TASKS_PER_CHILD",
             help=(
                 "Recycle a scan-pool worker after this many scans to bound memory "
-                "drift (like gunicorn --max-requests). <=0 disables recycling. "
-                "Only applies when --scan-workers > 0."
+                "drift (like gunicorn --max-requests). Each recycle costs a full "
+                "spaCy model reload on the replacement worker, so size it in "
+                "hours of traffic. <=0 disables recycling. Only applies when "
+                "--scan-workers > 0."
             ),
         ),
         click.Option(
@@ -45,9 +47,34 @@ def presidio_options() -> Sequence[click.Option]:
             default=300.0,
             envvar="GRAM_PYSTREAMS_SCAN_TIMEOUT",
             help=(
-                "Seconds a single scan may run before it is treated as a failure "
-                "(like gunicorn --timeout). <=0 disables the bound. Only applies "
-                "when --scan-workers > 0."
+                "Seconds a single scan may execute before it is treated as a "
+                "failure (like gunicorn --timeout). <=0 disables the bound. Only "
+                "applies when --scan-workers > 0."
+            ),
+        ),
+        click.Option(
+            ["--scan-slot-timeout"],
+            type=float,
+            default=60.0,
+            envvar="GRAM_PYSTREAMS_SCAN_SLOT_TIMEOUT",
+            help=(
+                "Seconds a scan may wait for a free pool worker before the "
+                "message is requeued (nacked for redelivery) instead of burning "
+                "the execution budget on queue wait. <=0 disables the bound. "
+                "Only applies when --scan-workers > 0."
+            ),
+        ),
+        click.Option(
+            ["--max-inflight"],
+            type=int,
+            default=None,
+            envvar="GRAM_PYSTREAMS_MAX_INFLIGHT",
+            help=(
+                "Cap on PresidioAnalysis messages processed concurrently by this "
+                "process. Excess backlog then waits at the broker (visible and "
+                "redeliverable) rather than in-process where it spends the scan "
+                "slot budget. Unset derives from scan capacity (2 handlers per "
+                "scan slot, minimum 4); <=0 disables the cap."
             ),
         ),
     ]

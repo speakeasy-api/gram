@@ -10,6 +10,7 @@ not repeated at the call site.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import partial
 from typing import TypeVar
 
 import anyio.abc
@@ -36,14 +37,20 @@ class ReceiverGroup:
         message_type: type[M],
         subscription_type: type[Message],
         handler: MessageCallback[M],
+        *,
+        max_concurrency: int | None = None,
     ) -> None:
         """Resolve a subscriber for ``message_type`` and start consuming it.
 
         The handler is wrapped so every delivered message runs inside a
         ``stream.handleMessage`` span tagged with the topic and subscription
-        proto names. Async because resolving the subscriber may reconcile the
-        topic/subscription against the local emulator, which is offloaded off the
-        event loop rather than blocking it.
+        proto names. ``max_concurrency`` caps how many handlers run at once for
+        this subscription (None keeps the subscriber's default; <=0 disables
+        the bound) — size it to the handler's real downstream capacity, since
+        undelivered messages wait at the broker but admitted ones wait
+        in-process. Async because resolving the subscriber may reconcile the
+        topic/subscription against the local emulator, which is offloaded off
+        the event loop rather than blocking it.
         """
         subscriber = await pubsub_subscriber_for_message_async(
             self.broker,
@@ -52,10 +59,13 @@ class ReceiverGroup:
             logger=self.logger,
         )
         self.task_group.start_soon(
-            subscriber.receive,
-            traced(
-                handler,
-                topic_proto_name=message_type.DESCRIPTOR.full_name,
-                subscription_proto_name=subscription_type.DESCRIPTOR.full_name,
-            ),
+            partial(
+                subscriber.receive,
+                traced(
+                    handler,
+                    topic_proto_name=message_type.DESCRIPTOR.full_name,
+                    subscription_proto_name=subscription_type.DESCRIPTOR.full_name,
+                ),
+                max_concurrency=max_concurrency,
+            )
         )

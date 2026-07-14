@@ -73,6 +73,18 @@ _FINDING_LEVEL_DROP = frozenset({"US_DRIVER_LICENSE"})
 _T = TypeVar("_T")
 
 
+class ScanSlotTimeout(Exception):
+    """A scan spent its whole slot budget queued, never reaching a pool worker.
+
+    Raised only when the pool future was still pending at the slot deadline and
+    could be cancelled: the content was never scanned, no work was duplicated,
+    so the caller can safely requeue the message (nack for redelivery) instead
+    of burning the much larger execution budget on pure queue wait. A scan that
+    times out *while executing* raises ``TimeoutError`` instead — that signals
+    a pathological input, where a retry would just tie up another worker.
+    """
+
+
 @dataclass(frozen=True)
 class Detection:
     """A real (non-false-positive) PII match found in scanned content.
@@ -195,20 +207,32 @@ class ProcessPoolScanner(_AsyncCloseable):
     false-positive-filtered, byte offsets resolved), which is small and picklable;
     the heavy text and the analyzer never cross the process boundary per message.
 
-    Two lifecycle knobs borrow from gunicorn's pre-fork model (the same shape the
-    official Presidio image uses to scale):
+    Three lifecycle knobs; the first two borrow from gunicorn's pre-fork model
+    (the same shape the official Presidio image uses to scale):
 
     - ``max_tasks_per_child`` recycles a worker after it has run that many scans
       (gunicorn's ``--max-requests``), bounding spaCy/numpy memory drift over a
-      long-lived worker. ``None``/<=0 disables recycling.
-    - ``scan_timeout`` bounds how long a single scan may take before it is treated
-      as a failure (gunicorn's ``--timeout``). The worker cannot be interrupted
-      mid-scan: the timed-out scan keeps running on its worker to completion, but
-      the caller stops waiting and that worker is simply unavailable (not serving
-      other scans) until it finishes, at which point ``max_tasks_per_child`` may
-      recycle it. Meanwhile the other workers keep serving — a single pathological
-      message ties up at most one worker rather than stalling the consumer.
-      ``None``/<=0 disables the bound.
+      long-lived worker. Each recycle costs a full spaCy model load on the
+      replacement worker, so size it in hours of traffic, not minutes.
+      ``None``/<=0 disables recycling.
+    - ``scan_timeout`` bounds how long a single scan may *execute* before it is
+      treated as a failure (gunicorn's ``--timeout``). The worker cannot be
+      interrupted mid-scan: the timed-out scan keeps running on its worker to
+      completion, but the caller stops waiting and that worker is simply
+      unavailable (not serving other scans) until it finishes, at which point
+      ``max_tasks_per_child`` may recycle it. Meanwhile the other workers keep
+      serving — a single pathological message ties up at most one worker rather
+      than stalling the consumer. ``None``/<=0 disables the bound.
+    - ``slot_timeout`` bounds how long a scan may sit *queued* before a worker
+      picks it up. Queue wait and execution are different failure modes: a scan
+      that never started is pure capacity backlog — its content was never
+      touched, so it is safe to hand back for redelivery once the backlog
+      clears — whereas an execution timeout signals a pathological input.
+      Without the split, a backlog deep enough to outlast ``scan_timeout`` made
+      millisecond scans of small payloads "fail" after the full execution
+      budget and get dropped. Past the deadline the still-pending future is
+      cancelled and :class:`ScanSlotTimeout` is raised; the caller decides the
+      requeue. ``None``/<=0 disables the bound.
 
     Everything that touches the executor is bridged through anyio's threading and
     cancellation primitives (``to_thread.run_sync`` + ``fail_after``) rather than
@@ -224,10 +248,12 @@ class ProcessPoolScanner(_AsyncCloseable):
         executor: ProcessPoolExecutor,
         *,
         scan_timeout: float | None = 300.0,
+        slot_timeout: float | None = 60.0,
         wait_limiter: anyio.CapacityLimiter | None = None,
     ):
         self._executor = executor
         self._scan_timeout = scan_timeout if scan_timeout and scan_timeout > 0 else None
+        self._slot_timeout = slot_timeout if slot_timeout and slot_timeout > 0 else None
         # Dedicated limiter for the result-wait threads (see class docstring). None
         # falls back to anyio's default limiter — fine for the single-scan tests,
         # but ``create`` always supplies one for the real, concurrent path.
@@ -238,8 +264,9 @@ class ProcessPoolScanner(_AsyncCloseable):
         cls,
         *,
         max_workers: int = 4,
-        max_tasks_per_child: int | None = 1000,
+        max_tasks_per_child: int | None = 10_000,
         scan_timeout: float | None = 300.0,
+        slot_timeout: float | None = 60.0,
     ) -> ProcessPoolScanner:
         """Build the pool and eagerly warm every worker's analyzer.
 
@@ -269,6 +296,7 @@ class ProcessPoolScanner(_AsyncCloseable):
         scanner = cls(
             executor,
             scan_timeout=scan_timeout,
+            slot_timeout=slot_timeout,
             wait_limiter=anyio.CapacityLimiter(max_workers),
         )
         # One warmup task per worker, run concurrently; each does a real scan and
@@ -289,6 +317,12 @@ class ProcessPoolScanner(_AsyncCloseable):
         self, content: str, entities: list[str] | None, score_threshold: float
     ) -> list[Detection]:
         future = await self._submit(_worker_scan, content, entities, score_threshold)
+        # Queue wait and execution are bounded separately: waiting for a worker
+        # is a capacity signal (raises ScanSlotTimeout, message safely
+        # requeueable), so the execution budget below is spent on execution and
+        # a backlog can't "fail" cheap scans that never ran. Neither timed-out
+        # path records a scan_duration — see record_scan_duration.
+        await self._wait_for_start(future)
         if self._scan_timeout is None:
             detections, scan_seconds = await self._await_result(future)
         else:
@@ -296,17 +330,44 @@ class ProcessPoolScanner(_AsyncCloseable):
                 with anyio.fail_after(self._scan_timeout):
                     detections, scan_seconds = await self._await_result(future)
             except TimeoutError:
-                # Pull it from the executor queue if it hasn't started; a no-op
-                # once a worker has picked it up (the scan can't be interrupted,
-                # but the wait is over and the worker will be recycled per
-                # max_tasks_per_child). A timed-out scan records no scan_duration
-                # — see record_scan_duration.
+                # The scan started (``_wait_for_start`` returned), so this
+                # cancel is a no-op — the scan can't be interrupted, but the
+                # wait is over and the worker will be recycled per
+                # max_tasks_per_child.
                 future.cancel()
                 raise
         metrics.record_scan_duration(
             scan_seconds, metrics.size_bucket_for(len(content))
         )
         return detections
+
+    async def _wait_for_start(self, future: Future[_T]) -> None:
+        """Wait (bounded by ``slot_timeout``) until a worker picks the scan up.
+
+        Polls the future's state instead of parking a worker thread: a queued
+        scan holds no thread and no ``wait_limiter`` slot while it waits, so a
+        deep backlog can't pin the limiter that running scans' result-waits
+        need. Past the deadline the still-pending future is cancelled and
+        :class:`ScanSlotTimeout` raised; if a worker won the race and picked it
+        up just as the deadline fired (``cancel`` fails), the scan proceeds and
+        is bounded by ``scan_timeout`` like any other.
+        """
+        deadline = (
+            None
+            if self._slot_timeout is None
+            else anyio.current_time() + self._slot_timeout
+        )
+        delay = 0.005
+        while not future.running() and not future.done():
+            if deadline is not None and anyio.current_time() >= deadline:
+                if future.cancel():
+                    raise ScanSlotTimeout(
+                        f"scan queued for {self._slot_timeout:g}s without being "
+                        "picked up by a pool worker"
+                    )
+                return
+            await anyio.sleep(delay)
+            delay = min(delay * 2, 0.1)
 
     async def _warm_one(self) -> None:
         await self._await_result(await self._submit(_worker_warm))
