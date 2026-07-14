@@ -127,16 +127,16 @@ function ModelProviderKeysTable({
     {
       key: "key",
       header: "Key",
-      width: "200px",
+      width: "260px",
       render: (slot) => {
         const key = keysBySlot.get(slot.slot);
         return (
           <Stack direction="horizontal" gap={2} align="center">
             <KeySourceBadge source={keySourceForSlot(slot.slot, keysBySlot)} />
             {key && !key.enabled ? (
-              <Type muted small>
-                Key disabled
-              </Type>
+              <Badge variant="warning" background className="shrink-0">
+                <Badge.Text>Disabled</Badge.Text>
+              </Badge>
             ) : null}
           </Stack>
         );
@@ -145,7 +145,7 @@ function ModelProviderKeysTable({
     {
       key: "updated",
       header: "Updated",
-      width: "140px",
+      width: "170px",
       render: (slot) => {
         const key = keysBySlot.get(slot.slot);
         if (!key) {
@@ -156,7 +156,7 @@ function ModelProviderKeysTable({
           );
         }
         return (
-          <Type muted small>
+          <Type muted small className="whitespace-nowrap">
             <HumanizeDateTime date={key.updatedAt} />
           </Type>
         );
@@ -165,40 +165,45 @@ function ModelProviderKeysTable({
     {
       key: "actions",
       header: "",
-      width: "300px",
+      width: "220px",
       render: (slot) => {
         const key = keysBySlot.get(slot.slot);
         return (
-          <Stack direction="horizontal" gap={2} justify="end">
+          <Stack direction="horizontal" gap={2} align="center" justify="end">
             <Button
               variant="secondary"
               size="sm"
+              className="w-28"
               onClick={() => setDialogSlot(slot)}
               disabled={isMutating || !customModelKeysEnabled}
             >
               {key ? "Replace key" : "Set key"}
             </Button>
-            {key ? (
-              <Switch
-                checked={key.enabled}
-                onCheckedChange={(enabled) => handleSetEnabled(key, enabled)}
-                disabled={
-                  isMutating || (!key.enabled && !customModelKeysEnabled)
-                }
-                aria-label={`${slot.name} key enabled`}
-              />
-            ) : null}
-            {key ? (
-              <Button
-                variant="destructiveGhost"
-                size="sm"
-                onClick={() => handleRemove(slot, key)}
-                disabled={isMutating}
-                aria-label={`Remove ${slot.name} key`}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
-            ) : null}
+            <div className="flex w-9 shrink-0 justify-center">
+              {key ? (
+                <Switch
+                  checked={key.enabled}
+                  onCheckedChange={(enabled) => handleSetEnabled(key, enabled)}
+                  disabled={
+                    isMutating || (!key.enabled && !customModelKeysEnabled)
+                  }
+                  aria-label={`${slot.name} key enabled`}
+                />
+              ) : null}
+            </div>
+            <div className="flex w-9 shrink-0 justify-center">
+              {key ? (
+                <Button
+                  variant="destructiveGhost"
+                  size="sm"
+                  onClick={() => handleRemove(slot, key)}
+                  disabled={isMutating}
+                  aria-label={`Remove ${slot.name} key`}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              ) : null}
+            </div>
           </Stack>
         );
       },
