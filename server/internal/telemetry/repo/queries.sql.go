@@ -5864,6 +5864,9 @@ const tumMeasureExpr = "toInt64(sumIfMerge(total_input_tokens) + sumIfMerge(tota
 func tumObservedBase(sb squirrel.SelectBuilder, arg GetTokensUnderManagementParams) squirrel.SelectBuilder {
 	sb = sb.
 		From("attribute_metrics_summaries").
+		// Exclude tombstoned rows (soft-deleted backfill data; see the
+		// is_active column comment in server/clickhouse/schema.sql).
+		Where("is_active = 1").
 		Where(squirrel.Eq{"gram_project_id": arg.ProjectIDs}).
 		Where("time_bucket >= toStartOfDay(fromUnixTimestamp64Nano(?))", arg.StartUnixNano).
 		Where("time_bucket < fromUnixTimestamp64Nano(?)", arg.EndUnixNano)
