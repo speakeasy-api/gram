@@ -9,6 +9,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { Heading } from "@/components/ui/heading";
 import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import { Label } from "@/components/ui/label";
+import { SearchBar } from "@/components/ui/search-bar";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Type } from "@/components/ui/type";
 import { useOrganization } from "@/contexts/Auth";
@@ -33,7 +34,6 @@ import { useMemo, useState } from "react";
 import { useParams } from "react-router";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useQueries } from "@tanstack/react-query";
-import { Search } from "lucide-react";
 import {
   useCollections,
   useCollectionServers,
@@ -340,7 +340,7 @@ function CollectionDetailInner() {
           {/* Main content */}
           <div className="min-w-0 flex-1">
             {/* Header */}
-            <div className="bg-card mb-6 border p-5">
+            <Card className="mb-6 p-5">
               <div className="flex flex-col gap-5 2xl:flex-row 2xl:items-start 2xl:justify-between">
                 <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start">
                   <div className="bg-muted/60 flex h-16 w-16 shrink-0 items-center justify-center border">
@@ -444,7 +444,7 @@ function CollectionDetailInner() {
                   </RequireScope>
                 </div>
               </div>
-            </div>
+            </Card>
 
             {!isLoading && collectionMcpJson.excludedCount > 0 && (
               <Alert variant="warning" dismissible={false} className="mb-4">
@@ -612,25 +612,22 @@ function CollectionDetailInner() {
               <Card.Content>
                 {editingServers && (
                   <RequireScope scope="org:admin" level="section">
-                    <div className="mb-4 border p-4">
+                    <Card className="mb-4 p-4">
                       <div className="mb-3">
-                        <Type className="text-sm font-medium">
+                        <Heading variant="h6" className="font-medium">
                           Edit servers
-                        </Type>
+                        </Heading>
                         <Type muted small className="mt-1">
                           Select the MCP-enabled servers that should be included
                           in this collection.
                         </Type>
                       </div>
                       <div className="border">
-                        <div className="relative border-b">
-                          <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-                          <input
-                            type="text"
-                            placeholder="Search servers..."
+                        <div className="border-b p-2">
+                          <SearchBar
                             value={serverSearch}
-                            onChange={(e) => setServerSearch(e.target.value)}
-                            className="placeholder:text-muted-foreground w-full bg-transparent py-2.5 pr-3 pl-9 text-sm outline-none"
+                            onChange={setServerSearch}
+                            placeholder="Search servers..."
                           />
                         </div>
                         <div className="max-h-64 overflow-y-auto">
@@ -639,14 +636,14 @@ function CollectionDetailInner() {
                               <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
                             </div>
                           ) : filteredServers.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center p-4 text-center">
-                              <ServerIcon className="text-muted-foreground mb-1 h-6 w-6" />
-                              <Type small muted>
-                                {serverSearch
+                            <InlineEmptyState
+                              icon={<ServerIcon />}
+                              title={
+                                serverSearch
                                   ? "No servers match your search."
-                                  : "No MCP servers available."}
-                              </Type>
-                            </div>
+                                  : "No MCP servers available."
+                              }
+                            />
                           ) : (
                             filteredServers.map((server) => {
                               const key = serverOptionKey(
@@ -761,7 +758,7 @@ function CollectionDetailInner() {
                           <Button.Text>Cancel</Button.Text>
                         </Button>
                       </div>
-                    </div>
+                    </Card>
                   </RequireScope>
                 )}
                 {editingServers ? null : isLoading ? (
@@ -769,12 +766,10 @@ function CollectionDetailInner() {
                     Loading servers...
                   </Type>
                 ) : servers.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-8 text-center">
-                    <Server className="text-muted-foreground mb-2 h-8 w-8" />
-                    <Type muted small>
-                      No servers in this collection yet.
-                    </Type>
-                  </div>
+                  <InlineEmptyState
+                    icon={<Server />}
+                    title="No servers in this collection yet."
+                  />
                 ) : (
                   <div className="space-y-3">
                     {rawServers.map((server, index) => {

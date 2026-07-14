@@ -42,7 +42,7 @@ export function ActionBadge({ action }: { action: string }): React.JSX.Element {
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded px-1.5 py-0.5 font-mono text-[11px] font-medium",
+        "inline-flex items-center px-1.5 py-0.5 font-mono text-[11px] font-medium",
         colors.bg,
         colors.text,
       )}
@@ -56,12 +56,7 @@ export function ActionDot({ action }: { action: string }): React.JSX.Element {
   const category = getActionCategory(action);
   const colors = getActionColorConfig(category);
   return (
-    <span
-      className={cn(
-        "mt-[3px] inline-block size-2 shrink-0 rounded-full",
-        colors.dot,
-      )}
-    />
+    <span className={cn("mt-[3px] inline-block size-2 shrink-0", colors.dot)} />
   );
 }
 

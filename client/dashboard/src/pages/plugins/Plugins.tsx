@@ -1,5 +1,6 @@
 import { CreateResourceCard } from "@/components/create-resource-card";
 import { Page } from "@/components/page-layout";
+import { Card } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { SearchBar } from "@/components/ui/search-bar";
@@ -306,7 +307,7 @@ export default function Plugins(): JSX.Element {
           <Page.Section.Body>
             <Stack direction="vertical" gap={4}>
               {publishStatus?.connected && publishStatus.repoUrl && (
-                <div className="bg-muted/30 border-border/60 flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3">
+                <Card className="flex-row flex-wrap items-center justify-between gap-3 px-4 py-3">
                   <div className="flex flex-col gap-0.5">
                     <span className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
                       Marketplace
@@ -329,7 +330,7 @@ export default function Plugins(): JSX.Element {
                       marketplaceUrl={publishStatus.marketplaceUrl}
                     />
                   )}
-                </div>
+                </Card>
               )}
               {hasPlugins && (
                 <SearchBar
@@ -361,7 +362,7 @@ export default function Plugins(): JSX.Element {
           </Page.Section.Description>
           <Page.Section.Body>
             <Stack direction="horizontal" gap={3} align="center">
-              <div className="bg-primary/10 flex h-10 w-10 items-center justify-center rounded-lg">
+              <div className="bg-primary/10 flex h-10 w-10 items-center justify-center">
                 <Activity className="text-primary h-5 w-5" />
               </div>
               <Stack direction="vertical" gap={1} className="flex-1">

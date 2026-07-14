@@ -44,13 +44,13 @@ describe("getActionCategory", () => {
 describe("getActionColorConfig", () => {
   it("returns correct colors for each category", () => {
     const create = getActionColorConfig("create");
-    expect(create.dot).toBe("bg-emerald-500");
-    expect(create.text).toBe("text-emerald-700");
-    expect(create.bg).toBe("bg-emerald-50");
+    expect(create.dot).toBe("bg-success-default");
+    expect(create.text).toBe("text-default-success");
+    expect(create.bg).toBe("bg-success-softest");
 
     const destructive = getActionColorConfig("destructive");
-    expect(destructive.dot).toBe("bg-red-500");
-    expect(destructive.text).toBe("text-red-700");
-    expect(destructive.bg).toBe("bg-red-50");
+    expect(destructive.dot).toBe("bg-destructive-default");
+    expect(destructive.text).toBe("text-default-destructive");
+    expect(destructive.bg).toBe("bg-destructive-softest");
   });
 });

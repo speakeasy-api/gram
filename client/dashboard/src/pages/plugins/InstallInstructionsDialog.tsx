@@ -1,5 +1,6 @@
 import { CopyButton } from "@/components/ui/copy-button";
 import { Dialog } from "@/components/ui/dialog";
+import { Heading } from "@/components/ui/heading";
 import {
   Tooltip,
   TooltipContent,
@@ -110,9 +111,9 @@ function ClaudeCodeInstallContent({
   return (
     <div className="min-w-0 space-y-6">
       <div>
-        <h3 className="mb-2 text-sm font-semibold">
+        <Heading variant="h6" className="mb-2 font-semibold">
           Install in your Claude Code instance
-        </h3>
+        </Heading>
         <p className="text-muted-foreground mb-4 text-sm">
           Run this command from inside Claude Code to register the marketplace
           for your user account:
@@ -143,9 +144,9 @@ function ClaudeCodeInstallContent({
       </div>
 
       <div>
-        <h3 className="mb-2 text-sm font-semibold">
+        <Heading variant="h6" className="mb-2 font-semibold">
           Roll out to your team via Managed Settings
-        </h3>
+        </Heading>
         <p className="text-muted-foreground mb-4 text-sm">
           Push the marketplace to every Claude Code install in your organization
           through Claude.ai's Managed Settings — no per-user install command
@@ -260,9 +261,9 @@ function ClaudeCoworkInstallContent({
   return (
     <div className="min-w-0 space-y-6">
       <div>
-        <h3 className="mb-2 text-sm font-semibold">
+        <Heading variant="h6" className="mb-2 font-semibold">
           Roll out to your organization
-        </h3>
+        </Heading>
         <p className="text-muted-foreground mb-4 text-sm">
           Cowork admins register the underlying GitHub repository as a plugin
           source on Claude.ai. Members get the marketplace automatically — no
@@ -364,9 +365,9 @@ function CursorInstallContent({
   return (
     <div className="min-w-0 space-y-6">
       <div>
-        <h3 className="mb-2 text-sm font-semibold">
+        <Heading variant="h6" className="mb-2 font-semibold">
           Roll out to your team in Cursor
-        </h3>
+        </Heading>
         <p className="text-muted-foreground mb-4 text-sm">
           Cursor team admins register the underlying GitHub repository as a
           plugin marketplace; once imported, plugins are available to every team
@@ -491,7 +492,9 @@ function CodexInstallContent({
     <div className="min-w-0 space-y-6">
       {/* ── Quick install ─────────────────────────────────────────────────── */}
       <div>
-        <h3 className="mb-2 text-sm font-semibold">Quick install</h3>
+        <Heading variant="h6" className="mb-2 font-semibold">
+          Quick install
+        </Heading>
         <p className="text-muted-foreground mb-3 text-sm">
           Download a one-command install script that registers the marketplace,
           enables hooks in{" "}

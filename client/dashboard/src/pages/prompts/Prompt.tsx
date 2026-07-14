@@ -1,4 +1,5 @@
 import { Page } from "@/components/page-layout";
+import { Alert } from "@/components/ui/alert";
 import {
   invalidateTemplate,
   useTemplate,
@@ -22,7 +23,11 @@ export default function PromptPage(): JSX.Element {
   if (status === "pending") {
     content = null;
   } else if (status === "error") {
-    content = <p className="text-red-500">{error.message}</p>;
+    content = (
+      <Alert variant="error" dismissible={false}>
+        {error.message}
+      </Alert>
+    );
   } else if (status === "success" && data) {
     content = (
       <PromptEditor
@@ -45,7 +50,9 @@ export default function PromptPage(): JSX.Element {
     );
   } else {
     content = (
-      <p className="text-red-500">No data returned for prompt template</p>
+      <Alert variant="error" dismissible={false}>
+        No data returned for prompt template
+      </Alert>
     );
   }
 

@@ -35,11 +35,11 @@ function ChangedFieldRow({
         {field}
       </span>
       <div className="flex min-w-0 flex-1 flex-wrap items-start gap-2">
-        <span className="max-w-full rounded bg-red-50 px-2 py-0.5 font-mono text-xs break-all text-red-700 line-through dark:bg-red-950 dark:text-red-400">
+        <span className="bg-destructive-softest text-destructive max-w-full px-2 py-0.5 font-mono text-xs break-all line-through">
           {formatValue(oldValue)}
         </span>
         <span className="text-muted-foreground pt-0.5 text-xs">→</span>
-        <span className="max-w-full rounded bg-emerald-50 px-2 py-0.5 font-mono text-xs break-all text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">
+        <span className="bg-success-softest text-success max-w-full px-2 py-0.5 font-mono text-xs break-all">
           {formatValue(newValue)}
         </span>
       </div>
@@ -61,7 +61,7 @@ export function StructuredDiff({ log }: { log: AuditLog }): React.JSX.Element {
         <button
           type="button"
           onClick={() => setShowRawDiff(false)}
-          className="mb-2 text-xs text-blue-500 hover:underline"
+          className="text-link-primary mb-2 text-xs hover:underline"
         >
           View structured diff
         </button>
@@ -92,7 +92,7 @@ export function StructuredDiff({ log }: { log: AuditLog }): React.JSX.Element {
           {changes.length} field{changes.length === 1 ? "" : "s"} changed
         </span>
       </div>
-      <div className="bg-background rounded-md border">
+      <div className="bg-background border">
         {changes.map((change) => (
           <ChangedFieldRow
             key={change.field}
@@ -105,7 +105,7 @@ export function StructuredDiff({ log }: { log: AuditLog }): React.JSX.Element {
       <button
         type="button"
         onClick={() => setShowRawDiff(true)}
-        className="mt-2 text-xs text-blue-500 hover:underline"
+        className="text-link-primary mt-2 text-xs hover:underline"
       >
         View raw diff
       </button>

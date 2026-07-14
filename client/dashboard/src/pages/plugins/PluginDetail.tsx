@@ -5,6 +5,14 @@ import { Card } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Heading } from "@/components/ui/heading";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
@@ -364,7 +372,7 @@ export default function PluginDetail(): JSX.Element | null {
             owner/name display and install button degrade independently so partial
             metadata never hides the whole entrypoint. */}
         {publishStatus?.connected && publishStatus.repoUrl && (
-          <div className="bg-muted/30 border-border/60 mb-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3">
+          <Card className="mb-6 flex-row flex-wrap items-center justify-between gap-3 px-4 py-3">
             <div className="flex flex-col gap-0.5">
               <span className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
                 Marketplace
@@ -387,7 +395,7 @@ export default function PluginDetail(): JSX.Element | null {
                 marketplaceUrl={publishStatus.marketplaceUrl}
               />
             )}
-          </div>
+          </Card>
         )}
 
         {/* Servers section */}
@@ -407,24 +415,22 @@ export default function PluginDetail(): JSX.Element | null {
           </Button>
         </Stack>
         {servers.length === 0 ? (
-          <Stack
-            gap={2}
-            className="bg-background mb-8 rounded-md border p-8"
-            align="center"
-            justify="center"
-          >
-            <Type variant="body">No servers added yet</Type>
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => setIsAddServerOpen(true)}
-            >
-              <Button.LeftIcon>
-                <Plus className="h-4 w-4" />
-              </Button.LeftIcon>
-              <Button.Text>Add Server</Button.Text>
-            </Button>
-          </Stack>
+          <InlineEmptyState
+            className="mb-8"
+            title="No servers added yet"
+            action={
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => setIsAddServerOpen(true)}
+              >
+                <Button.LeftIcon>
+                  <Plus className="h-4 w-4" />
+                </Button.LeftIcon>
+                <Button.Text>Add Server</Button.Text>
+              </Button>
+            }
+          />
         ) : (
           <div className="mb-8 grid grid-cols-1 gap-6 xl:grid-cols-2">
             {servers.map((server) => (
@@ -560,22 +566,22 @@ export default function PluginDetail(): JSX.Element | null {
                 {isLoadingServers ? (
                   <Skeleton className="h-9 w-full" />
                 ) : availableServerOptions.length > 0 ? (
-                  <select
-                    name="serverKey"
-                    className="bg-background rounded-md border px-3 py-2 text-sm"
-                    required
-                  >
-                    <option value="">Select an MCP server</option>
-                    {availableServerOptions.map((o) => (
-                      <option
-                        key={serverOptionKey(o.kind, o.id)}
-                        value={serverOptionKey(o.kind, o.id)}
-                      >
-                        {o.name}
-                        {o.kind === "mcpServer" ? " (Remote MCP)" : ""}
-                      </option>
-                    ))}
-                  </select>
+                  <Select name="serverKey" required>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select an MCP server" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableServerOptions.map((o) => (
+                        <SelectItem
+                          key={serverOptionKey(o.kind, o.id)}
+                          value={serverOptionKey(o.kind, o.id)}
+                        >
+                          {o.name}
+                          {o.kind === "mcpServer" ? " (Remote MCP)" : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 ) : serverOptions.length > 0 ? (
                   <Type muted small>
                     All available MCP servers have already been added to this

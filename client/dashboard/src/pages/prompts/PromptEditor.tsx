@@ -1,4 +1,7 @@
+import { Alert } from "@/components/ui/alert";
 import { Field, FieldLabel } from "@/components/ui/field";
+import { Heading } from "@/components/ui/heading";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -250,23 +253,27 @@ export function PromptEditor({
                   })}
                 </ul>
               ) : (
-                <p className="text-muted-foreground border-muted-foreground/20 rounded-md border border-dashed p-4 text-sm">
-                  No arguments found in prompt template. You can add these using
-                  the syntax{" "}
-                  <code className="rounded bg-red-50 px-1 py-0.5 text-xs text-red-600">
-                    {"{{argument_name}}"}
-                  </code>
-                  .
-                </p>
+                <InlineEmptyState
+                  title="No arguments found in prompt template"
+                  description={
+                    <>
+                      You can add these using the syntax{" "}
+                      <code className="bg-muted rounded px-1 py-0.5 text-xs">
+                        {"{{argument_name}}"}
+                      </code>
+                      .
+                    </>
+                  }
+                />
               )}
             </fieldset>
           </div>
         </div>
         <div className="pt-6">
           {error ? (
-            <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3">
-              <p className="text-sm text-red-700">{error.message}</p>
-            </div>
+            <Alert variant="error" dismissible={false} className="mb-4">
+              {error.message}
+            </Alert>
           ) : null}
           <Button type="submit" disabled={isPending} size="md">
             {isPending ? (
@@ -276,16 +283,20 @@ export function PromptEditor({
           </Button>
         </div>
       </form>
-      <aside className="bg-secondary sticky top-8 w-80 flex-shrink-0 space-y-6 rounded-lg p-6">
+      <aside className="bg-secondary sticky top-8 w-80 flex-shrink-0 space-y-6 p-6">
         <div>
-          <h3 className="mb-2 text-sm font-medium">Prompt Templates</h3>
+          <Heading variant="h6" className="mb-2 font-medium">
+            Prompt Templates
+          </Heading>
           <p className="text-muted-foreground text-sm">
             Create reusable prompts with dynamic variables using the Mustache
             syntax.
           </p>
         </div>
         <div>
-          <h3 className="mb-2 text-sm font-medium">Using Variables</h3>
+          <Heading variant="h6" className="mb-2 font-medium">
+            Using Variables
+          </Heading>
           <p className="text-muted-foreground mb-2 text-sm">
             Add variables to your prompt using double curly braces:
           </p>
@@ -294,7 +305,9 @@ export function PromptEditor({
           </code>
         </div>
         <div>
-          <h3 className="mb-2 text-sm font-medium">Arguments</h3>
+          <Heading variant="h6" className="mb-2 font-medium">
+            Arguments
+          </Heading>
           <p className="text-muted-foreground text-sm">
             Variables detected in your prompt will automatically appear in the
             Arguments section. Add descriptions to help users understand what
@@ -302,7 +315,9 @@ export function PromptEditor({
           </p>
         </div>
         <div>
-          <h3 className="mb-2 text-sm font-medium">Tips</h3>
+          <Heading variant="h6" className="mb-2 font-medium">
+            Tips
+          </Heading>
           <ul className="text-muted-foreground space-y-1 text-sm">
             <li>• Use descriptive variable names</li>
             <li>• Keep prompts clear and concise</li>

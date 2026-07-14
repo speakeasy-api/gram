@@ -318,7 +318,7 @@ export const PublishDialog = memo(function PublishDialog({
                 <div
                   id="github-user-results"
                   role="listbox"
-                  className="bg-popover text-popover-foreground absolute z-50 mt-1 max-h-56 w-full overflow-y-auto rounded-md border p-1 shadow-lg"
+                  className="bg-popover text-popover-foreground absolute z-50 mt-1 max-h-56 w-full overflow-y-auto border p-1"
                 >
                   {searchLoading && (
                     <div className="text-muted-foreground flex items-center gap-2 px-2 py-1.5 text-xs">

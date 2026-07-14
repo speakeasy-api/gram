@@ -1,24 +1,19 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Checkbox } from "@/components/ui/checkbox";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
+import { SearchBar } from "@/components/ui/search-bar";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { TextArea } from "@/components/ui/textarea";
-import { Type } from "@/components/ui/type";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
-import { cn } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
 import { Stack } from "@/components/ui/stack";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { useQueries } from "@tanstack/react-query";
-import {
-  Globe,
-  Lock,
-  Loader2,
-  Search,
-  Server as ServerIcon,
-} from "lucide-react";
+import { Globe, Lock, Loader2, Server as ServerIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useCreateCollection } from "./hooks";
 
@@ -296,34 +291,30 @@ function CreateCollectionForm() {
               <label className="mb-2 block text-sm font-medium">
                 Visibility
               </label>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  className={cn(
-                    "flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition-colors",
-                    visibility === "public"
-                      ? "border-foreground/30 bg-accent"
-                      : "border-border hover:bg-accent/50",
-                  )}
-                  onClick={() => setVisibility("public")}
-                >
-                  <Globe className="h-3.5 w-3.5" />
-                  Public
-                </button>
-                <button
-                  type="button"
-                  className={cn(
-                    "flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition-colors",
-                    visibility === "private"
-                      ? "border-foreground/30 bg-accent"
-                      : "border-border hover:bg-accent/50",
-                  )}
-                  onClick={() => setVisibility("private")}
-                >
-                  <Lock className="h-3.5 w-3.5" />
-                  Private
-                </button>
-              </div>
+              <SegmentedControl
+                value={visibility}
+                onChange={setVisibility}
+                options={[
+                  {
+                    value: "public",
+                    label: (
+                      <span className="flex items-center gap-1.5">
+                        <Globe className="h-3.5 w-3.5" />
+                        Public
+                      </span>
+                    ),
+                  },
+                  {
+                    value: "private",
+                    label: (
+                      <span className="flex items-center gap-1.5">
+                        <Lock className="h-3.5 w-3.5" />
+                        Private
+                      </span>
+                    ),
+                  },
+                ]}
+              />
               <p className="text-muted-foreground mt-1.5 text-xs">
                 {visibility === "private"
                   ? "Private collections are only visible to your organization."
@@ -335,15 +326,12 @@ function CreateCollectionForm() {
               <label className="mb-2 block text-sm font-medium">
                 MCP Servers ({selectedCount} selected)
               </label>
-              <div className="rounded-md border">
-                <div className="relative border-b">
-                  <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    placeholder="Search servers..."
+              <div className="border">
+                <div className="border-b p-2">
+                  <SearchBar
                     value={serverSearch}
-                    onChange={(e) => setServerSearch(e.target.value)}
-                    className="placeholder:text-muted-foreground w-full bg-transparent py-2.5 pr-3 pl-9 text-sm outline-none"
+                    onChange={setServerSearch}
+                    placeholder="Search servers..."
                   />
                 </div>
                 <div className="max-h-64 overflow-y-auto">
@@ -352,14 +340,14 @@ function CreateCollectionForm() {
                       <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
                     </div>
                   ) : filteredServers.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center p-4 text-center">
-                      <ServerIcon className="text-muted-foreground mb-1 h-6 w-6" />
-                      <Type small muted>
-                        {serverSearch
+                    <InlineEmptyState
+                      icon={<ServerIcon />}
+                      title={
+                        serverSearch
                           ? "No servers match your search."
-                          : "No MCP servers available."}
-                      </Type>
-                    </div>
+                          : "No MCP servers available."
+                      }
+                    />
                   ) : (
                     filteredServers.map((server) => (
                       <label
