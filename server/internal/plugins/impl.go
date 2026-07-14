@@ -69,7 +69,7 @@ type GitHubPublisher interface {
 	HasDirectCollaborator(ctx context.Context, installationID int64, owner, repo string) (bool, error)
 	// GetRepoFiles returns the current published files so a publish can carry an
 	// unchanged plugin component (hooks or MCP) verbatim into a fresh push,
-	// leaving the other component's files and embedded key untouched. Returns
+	// leaving the other component's files and configuration untouched. Returns
 	// ghclient.ErrRepoNotFound when nothing has been published yet.
 	GetRepoFiles(ctx context.Context, installationID int64, owner, repo, branch string) (map[string][]byte, error)
 }
@@ -1126,7 +1126,7 @@ func (s *Service) DownloadPluginPackage(ctx context.Context, payload *gen.Downlo
 
 // DownloadObservabilityPlugin returns a ZIP of the per-org observability
 // plugin for direct installation. Mints a fresh hooks-scoped API key per
-// download and embeds it in the script — the org's API Keys page will
+// download and embeds it in speakeasy.json — the org's API Keys page will
 // accumulate one row per download, which admins can audit and revoke
 // independently of the publish-bundled key. The plugin contents are
 // otherwise identical to what PublishPlugins ships in the GitHub marketplace.
@@ -1217,11 +1217,10 @@ func (s *Service) DownloadCodexInstallScript(ctx context.Context, payload *gen.D
 	}, io.NopCloser(bytes.NewReader(script)), nil
 }
 
-// writePluginZip serializes the file map as a deterministic ZIP, marking
-// shell scripts executable so hook.sh / hook_async.sh run after extraction. The GitHub
+// writePluginZip serializes the file map as a deterministic ZIP, marking shell
+// scripts executable so the bootstrapper runs after extraction. The GitHub
 // publish path applies the same rule via Tree mode 100755 in
-// thirdparty/github/repo.go; keep them in sync — without the execute bit,
-// Claude Code, Cursor, and Codex silently fail on `./hook.sh: permission denied`.
+// thirdparty/github/repo.go; keep them in sync.
 func writePluginZip(w io.Writer, files map[string][]byte) error {
 	zw := zip.NewWriter(w)
 	paths := make([]string, 0, len(files))

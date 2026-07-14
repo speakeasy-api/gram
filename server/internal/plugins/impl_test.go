@@ -1389,8 +1389,7 @@ func TestPluginsService_PublishPlugins_PublicToolsetWithoutMetadata(t *testing.T
 }
 
 // PublishPlugins always emits a per-org observability plugin containing
-// Gram hooks. The hook script bakes in the hooks-scoped API key so team
-// members don't need to configure credentials per-machine.
+// the bootstrapper, relay config, and provider hook manifest.
 func TestPluginsService_PublishPlugins_EmitsObservabilityPlugin(t *testing.T) {
 	t.Parallel()
 
@@ -1420,11 +1419,13 @@ func TestPluginsService_PublishPlugins_EmitsObservabilityPlugin(t *testing.T) {
 	// at the plugin root register the plugin but never wire the hooks up.
 	require.NotNil(t, mock.lastPushedFiles[claudeObservability+"/.claude-plugin/plugin.json"], "claude observability plugin.json missing")
 	require.NotNil(t, mock.lastPushedFiles[claudeObservability+"/hooks/hooks.json"], "claude observability hooks/hooks.json missing")
-	require.NotNil(t, mock.lastPushedFiles[claudeObservability+"/hooks/hook.sh"], "claude observability hooks/hook.sh missing")
+	require.NotNil(t, mock.lastPushedFiles[claudeObservability+"/hooks/bootstrap.sh"], "claude observability bootstrap.sh missing")
+	require.NotNil(t, mock.lastPushedFiles[claudeObservability+"/speakeasy.json"], "claude observability speakeasy.json missing")
 
 	require.NotNil(t, mock.lastPushedFiles["cursor-plugins/"+cursorObservability+"/.cursor-plugin/plugin.json"], "cursor observability plugin.json missing")
 	require.NotNil(t, mock.lastPushedFiles["cursor-plugins/"+cursorObservability+"/hooks/hooks.json"], "cursor observability hooks/hooks.json missing")
-	require.NotNil(t, mock.lastPushedFiles["cursor-plugins/"+cursorObservability+"/hooks/hook.sh"], "cursor observability hooks/hook.sh missing")
+	require.NotNil(t, mock.lastPushedFiles["cursor-plugins/"+cursorObservability+"/hooks/bootstrap.sh"], "cursor observability bootstrap.sh missing")
+	require.NotNil(t, mock.lastPushedFiles["cursor-plugins/"+cursorObservability+"/speakeasy.json"], "cursor observability speakeasy.json missing")
 }
 
 // PublishPlugins must succeed when the org has no custom plugins — the
@@ -1441,8 +1442,8 @@ func TestPluginsService_PublishPlugins_ObservabilityOnly(t *testing.T) {
 
 	claudeObservability, cursorObservability := orgObservabilitySlugs(t, ctx, ti)
 
-	require.NotNil(t, mock.lastPushedFiles[claudeObservability+"/hooks/hook.sh"], "claude observability hooks/hook.sh missing")
-	require.NotNil(t, mock.lastPushedFiles["cursor-plugins/"+cursorObservability+"/hooks/hook.sh"], "cursor observability hooks/hook.sh missing")
+	require.NotNil(t, mock.lastPushedFiles[claudeObservability+"/hooks/bootstrap.sh"], "claude observability bootstrap.sh missing")
+	require.NotNil(t, mock.lastPushedFiles["cursor-plugins/"+cursorObservability+"/hooks/bootstrap.sh"], "cursor observability bootstrap.sh missing")
 
 	for _, p := range []struct {
 		path     string
@@ -1464,10 +1465,9 @@ func TestPluginsService_PublishPlugins_ObservabilityOnly(t *testing.T) {
 	}
 }
 
-// The observability hook script must contain the freshly-minted hooks-scoped
-// API key (Bearer-token form) so team members can install the plugin without
-// any per-machine credential configuration.
-func TestPluginsService_PublishPlugins_ObservabilityHookScriptContainsAPIKey(t *testing.T) {
+// The observability config contains the freshly-minted hooks-scoped API key,
+// while provider commands and bootstrappers remain secret-free.
+func TestPluginsService_PublishPlugins_ObservabilityConfigContainsAPIKey(t *testing.T) {
 	t.Parallel()
 
 	mock := &mockGitHubPublisher{}
@@ -1502,20 +1502,18 @@ func TestPluginsService_PublishPlugins_ObservabilityHookScriptContainsAPIKey(t *
 	require.NotEmpty(t, hooksKeyPrefix, "expected a plugins-hooks-* API key")
 
 	claudeObservability, cursorObservability := orgObservabilitySlugs(t, ctx, ti)
-	// Hook senders embed the publish-time hooks key as the org-wide fallback:
+	// Relay configs embed the publish-time hooks key as the org-wide fallback:
 	// per-user browser login still takes precedence when cached, but a machine
 	// with no personal credentials sends through the baked key instead of
 	// degrading to the unauthenticated pass-through.
-	for _, path := range []string{claudeObservability + "/hooks/hook.sh", "cursor-plugins/" + cursorObservability + "/hooks/hook.sh"} {
-		script := string(mock.lastPushedFiles[path])
-		require.NotEmpty(t, script, path+" missing")
-		require.Contains(t, script, "gram_hooks_post_authenticated", "%s does not use local hook auth", path)
-		require.Contains(t, script, hooksKeyPrefix, "%s must embed the org-wide hooks key fallback", path)
-		// Must NOT contain the MCP key — separate scope, separate concerns.
-		require.NotContains(t, script, "plugins-mcp-", "%s leaked the MCP key", path)
+	for _, root := range []string{claudeObservability, "cursor-plugins/" + cursorObservability} {
+		config := string(mock.lastPushedFiles[root+"/speakeasy.json"])
+		require.NotEmpty(t, config, root+"/speakeasy.json missing")
+		require.Contains(t, config, hooksKeyPrefix)
+		require.NotContains(t, config, "plugins-mcp-", "%s leaked the MCP key", root)
+		require.NotContains(t, string(mock.lastPushedFiles[root+"/hooks/bootstrap.sh"]), hooksKeyPrefix)
+		require.NotContains(t, string(mock.lastPushedFiles[root+"/hooks/hooks.json"]), hooksKeyPrefix)
 	}
-	authScript := string(mock.lastPushedFiles[claudeObservability+"/hooks/auth.sh"])
-	require.Contains(t, authScript, `printf 'header = "Gram-Key: %s"\n'`, "auth.sh must write Gram-Key to curl config")
 }
 
 // The observability plugin must appear FIRST in each platform's marketplace
@@ -1843,13 +1841,12 @@ func TestPluginsService_PublishProject_SkipsWhenUnchanged(t *testing.T) {
 }
 
 // hooksFilesOf returns the observability (hooks) plugin files from a pushed file
-// map, identified by the hooks/ subdirectory that only the observability plugins
-// use. These files embed the hooks API key, so comparing them across publishes
-// detects whether the hooks component was regenerated (fresh key) or carried.
+// map. The root speakeasy.json carries settings and the hooks/ directory carries
+// provider commands and bootstrappers, so both are needed to detect regeneration.
 func hooksFilesOf(files map[string][]byte) map[string]string {
 	out := make(map[string]string)
 	for p, c := range files {
-		if strings.Contains(p, "/hooks/") {
+		if strings.Contains(p, "/hooks/") || (strings.Contains(p, "observability") && strings.HasSuffix(p, "/speakeasy.json")) {
 			out[p] = string(c)
 		}
 	}
