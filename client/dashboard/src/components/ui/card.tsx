@@ -52,13 +52,13 @@ function Card({
       {...props}
     >
       {icon && (
-        <div className="bg-muted/30 text-muted-foreground/20 relative w-40 shrink-0 overflow-hidden border-r">
+        <div className="bg-card text-muted-foreground/40 relative w-40 shrink-0 overflow-hidden border-r">
           <div
             className="scroll-dots-target absolute inset-0"
             style={{
               backgroundImage:
                 "radial-gradient(circle, currentColor 1px, transparent 1px)",
-              backgroundSize: "16px 16px",
+              backgroundSize: "15px 15px",
             }}
           />
           <div className="absolute inset-0 flex items-center justify-center">
