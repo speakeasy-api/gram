@@ -2,6 +2,14 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 
+// react-grab: dev-only overlay to copy any UI element's file/component/HTML
+// context to the clipboard for pasting into a coding agent (⌘C / Ctrl+C on
+// hover). `import.meta.env.DEV` is statically replaced with `false` in
+// production builds, so this dynamic import is tree-shaken out entirely.
+if (import.meta.env.DEV) {
+  import("react-grab");
+}
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <style>
