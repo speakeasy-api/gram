@@ -3557,6 +3557,7 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
   organization_id TEXT NOT NULL,
+  idempotency_key TEXT,
 
   enabled BOOLEAN NOT NULL DEFAULT TRUE,
   name TEXT NOT NULL,
@@ -3614,6 +3615,10 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   CONSTRAINT risk_policies_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
   CONSTRAINT risk_policies_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata(id) ON DELETE CASCADE
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS risk_policies_project_id_idempotency_key_idx
+ON risk_policies (project_id, idempotency_key)
+WHERE idempotency_key IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS risk_policies_project_id_idx
 ON risk_policies (project_id)
