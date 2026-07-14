@@ -22,9 +22,7 @@ CREATE TABLE `risk_findings` (
   `fingerprint_global_hs256` String DEFAULT '' COMMENT 'Global fingerprint: base64url HMAC-SHA256 of the match under the current pepper. Stable across tenants.' CODEC(ZSTD(1)),
   `fingerprint_tenant_hs256` String DEFAULT '' COMMENT 'Tenant-qualified fingerprint: base64url HMAC-SHA256 under a per-org HKDF key. Used to dedupe unique matches within an org.' CODEC(ZSTD(1)),
   INDEX `idx_risk_findings_chat_message_id` ((chat_message_id)) TYPE bloom_filter(0.01) GRANULARITY 1,
-  INDEX `idx_risk_findings_fingerprint_tenant_hs256` ((fingerprint_tenant_hs256)) TYPE bloom_filter(0.01) GRANULARITY 1,
   INDEX `idx_risk_findings_risk_policy_id` ((risk_policy_id)) TYPE bloom_filter(0.01) GRANULARITY 1,
-  INDEX `idx_risk_findings_rule_id` ((rule_id)) TYPE set(0) GRANULARITY 4,
-  INDEX `idx_risk_findings_source` ((source)) TYPE set(0) GRANULARITY 4
+  INDEX `idx_risk_findings_rule_id` ((rule_id)) TYPE set(0) GRANULARITY 4
 ) ENGINE = MergeTree
 PRIMARY KEY (`organization_id`, `project_id`, `created_at`, `id`) ORDER BY (`organization_id`, `project_id`, `created_at`, `id`) PARTITION BY (toYYYYMMDD(created_at)) TTL toDateTime(created_at) + toIntervalDay(90) SETTINGS index_granularity = 8192 COMMENT 'Risk findings event log: one row per detected secret or sensitive-data match, hashed not plaintext, powering the Risk Events page and analytics.';

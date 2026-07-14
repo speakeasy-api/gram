@@ -935,6 +935,4 @@ COMMENT 'Risk findings event log: one row per detected secret or sensitive-data 
 -- already in the ORDER BY so no bloom filters needed for them).
 CREATE INDEX IF NOT EXISTS idx_risk_findings_chat_message_id ON risk_findings (chat_message_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_risk_findings_risk_policy_id ON risk_findings (risk_policy_id) TYPE bloom_filter(0.01) GRANULARITY 1;
-CREATE INDEX IF NOT EXISTS idx_risk_findings_fingerprint_tenant_hs256 ON risk_findings (fingerprint_tenant_hs256) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_risk_findings_rule_id ON risk_findings (rule_id) TYPE set(0) GRANULARITY 4;
-CREATE INDEX IF NOT EXISTS idx_risk_findings_source ON risk_findings (source) TYPE set(0) GRANULARITY 4;
