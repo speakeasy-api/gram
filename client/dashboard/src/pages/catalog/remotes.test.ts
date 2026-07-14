@@ -132,38 +132,24 @@ describe("filterToHttpRemotes", () => {
 });
 
 describe("collectibleHeaders", () => {
-  it("returns all headers when the server does not support DCR", () => {
+  it("always drops the Authorization header", () => {
     const r = remote("https://x.example/mcp", "streamable-http", [
       "Authorization",
       "X-API-Key",
     ]);
-    const s = server([r]);
-    expect(collectibleHeaders(s, r).map((h) => h.name)).toEqual([
-      "Authorization",
-      "X-API-Key",
-    ]);
-  });
-
-  it("drops the OAuth bearer Authorization header when the server supports DCR", () => {
-    const r = remote("https://x.example/mcp", "streamable-http", [
-      "Authorization",
-      "X-API-Key",
-    ]);
-    const s = { ...server([r]), supportsDcr: true };
-    expect(collectibleHeaders(s, r).map((h) => h.name)).toEqual(["X-API-Key"]);
+    expect(collectibleHeaders(r).map((h) => h.name)).toEqual(["X-API-Key"]);
   });
 
   it("matches the Authorization header case-insensitively", () => {
     const r = remote("https://x.example/mcp", "streamable-http", [
       "authorization",
     ]);
-    const s = { ...server([r]), supportsDcr: true };
-    expect(collectibleHeaders(s, r)).toEqual([]);
+    expect(collectibleHeaders(r)).toEqual([]);
   });
 
   it("returns an empty list for a remote without headers", () => {
     const r = remote("https://x.example/mcp");
-    expect(collectibleHeaders(server([r]), r)).toEqual([]);
+    expect(collectibleHeaders(r)).toEqual([]);
   });
 });
 
@@ -219,11 +205,11 @@ describe("catalogHeadersForRemoteUrl", () => {
     ).toHaveLength(1);
   });
 
-  it("excludes the OAuth bearer Authorization header on DCR servers", () => {
+  it("excludes the Authorization header regardless of DCR support", () => {
     const r = remote("https://a.example/mcp", "streamable-http", [
       "Authorization",
     ]);
-    const servers = [{ ...server([r]), supportsDcr: true }];
+    const servers = [server([r]), { ...server([r]), supportsDcr: true }];
     expect(
       catalogHeadersForRemoteUrl(servers, "https://a.example/mcp"),
     ).toEqual([]);

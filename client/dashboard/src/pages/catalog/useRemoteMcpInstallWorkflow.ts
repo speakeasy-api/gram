@@ -172,7 +172,7 @@ function buildInstallTargets(config: ServerConfig): InstallTarget[] {
       config.remotes.length > 1
         ? `${config.name} ${getRemoteDisplayInfo(remote.url).name}`
         : config.name,
-    headers: collectibleHeaders(config.server, remote).flatMap((header) => {
+    headers: collectibleHeaders(remote).flatMap((header) => {
       const value =
         config.headerValues[headerValueKey(remote.url, header.name)]?.trim();
       return value ? [{ header, value }] : [];

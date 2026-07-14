@@ -684,9 +684,9 @@ function ConfigurePhaseContent({
   const hasHeaderInputs = releaseState.serverConfigs.some(
     (config) => configCollectibleHeaderCount(config) > 0,
   );
-  // Headers the upstream marks required must be filled before installing —
-  // omitting them would create a server that cannot authenticate. Bulk
-  // installs never collect header values, so they are exempt.
+  // Headers the upstream marks required gate the primary button, but a Skip
+  // action always lets the user install now and fill values in from the
+  // server's Settings tab later. Bulk installs never collect header values.
   const missingRequiredHeaders = bulk
     ? 0
     : releaseState.serverConfigs.reduce(
@@ -754,14 +754,27 @@ function ConfigurePhaseContent({
             Cancel
           </Button>
         </div>
-        <Button
-          disabled={!canSubmit}
-          onClick={() => {
-            void releaseState.startInstall();
-          }}
-        >
-          <Button.Text>Add to Project</Button.Text>
-        </Button>
+        <div className="flex gap-2">
+          {missingRequiredHeaders > 0 && (
+            <Button
+              variant="secondary"
+              disabled={!releaseState.canInstall}
+              onClick={() => {
+                void releaseState.startInstall();
+              }}
+            >
+              <Button.Text>Skip for now</Button.Text>
+            </Button>
+          )}
+          <Button
+            disabled={!canSubmit}
+            onClick={() => {
+              void releaseState.startInstall();
+            }}
+          >
+            <Button.Text>Add to Project</Button.Text>
+          </Button>
+        </div>
       </Dialog.Footer>
     </div>
   );
@@ -920,7 +933,7 @@ function BulkInstallSummary({
 
 function configCollectibleHeaderCount(config: ServerConfig): number {
   return config.remotes.reduce(
-    (count, remote) => count + collectibleHeaders(config.server, remote).length,
+    (count, remote) => count + collectibleHeaders(remote).length,
     0,
   );
 }
@@ -929,7 +942,7 @@ function missingRequiredHeaderCount(config: ServerConfig): number {
   return config.remotes.reduce(
     (count, remote) =>
       count +
-      collectibleHeaders(config.server, remote).filter(
+      collectibleHeaders(remote).filter(
         (header) =>
           (header.isRequired ?? false) &&
           !config.headerValues[headerValueKey(remote.url, header.name)]?.trim(),
@@ -961,8 +974,8 @@ function HeaderValueSections({
         <Label>Upstream headers</Label>
         <Type small muted className="block">
           Values are stored on the server and sent with every upstream request.
-          Required headers must be set now; optional ones can be left blank and
-          configured later in Settings.
+          You can skip this step — headers can always be configured later in the
+          server's Settings tab.
         </Type>
       </div>
       <div className="max-h-64 space-y-3 overflow-y-auto">
@@ -990,7 +1003,7 @@ function HeaderValueConfig({
 }) {
   const configIndex = configIndexOf(releaseState, config);
   const remotesWithHeaders = config.remotes.filter(
-    (remote) => collectibleHeaders(config.server, remote).length > 0,
+    (remote) => collectibleHeaders(remote).length > 0,
   );
   const showRemoteName = config.remotes.length > 1;
 
@@ -1008,7 +1021,7 @@ function HeaderValueConfig({
               {getRemoteDisplayInfo(remote.url).name}
             </Type>
           )}
-          {collectibleHeaders(config.server, remote).map((header) => (
+          {collectibleHeaders(remote).map((header) => (
             <HeaderValueField
               key={header.name}
               label={header.name}

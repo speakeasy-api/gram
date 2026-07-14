@@ -386,11 +386,11 @@ describe("useRemoteMcpInstallWorkflow", () => {
     );
   });
 
-  it("never creates the OAuth bearer Authorization header for DCR servers", async () => {
+  it("never creates an Authorization header record, even without DCR", async () => {
     const url = "https://mcp.example.com/mcp";
     const servers = [
       makeServer({
-        supportsDcr: true,
+        supportsDcr: false,
         remotes: [remote(url, ["Authorization"])],
       }),
     ];

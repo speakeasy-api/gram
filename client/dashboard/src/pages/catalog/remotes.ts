@@ -34,18 +34,14 @@ export function normalizeRemoteUrl(url: string): string {
 }
 
 // Headers worth collecting from the user when installing a catalog remote.
-// An Authorization header on a server whose OAuth authorization server
-// supports dynamic client registration is the OAuth bearer token — auth
-// auto-configuration handles that after install, so prompting the user for a
-// static value would only fight it. Servers without DCR keep their
-// Authorization header (e.g. static bearer/API tokens).
+// The Authorization header is never collected: on DCR-capable servers auth
+// auto-configuration owns it, and everywhere else auth is better set up from
+// the server's Settings tab than by pasting a static bearer value here.
 export function collectibleHeaders(
-  server: PulseMCPServer,
   remote: ExternalMCPRemote,
 ): ExternalMCPRemoteHeader[] {
   return (remote.headers ?? []).filter(
-    (header) =>
-      !(server.supportsDcr && header.name.toLowerCase() === "authorization"),
+    (header) => header.name.toLowerCase() !== "authorization",
   );
 }
 
@@ -62,7 +58,7 @@ export function catalogHeadersForRemoteUrl(
   for (const server of servers) {
     for (const remote of server.remotes ?? []) {
       if (normalizeRemoteUrl(remote.url) !== normalized) continue;
-      const headers = collectibleHeaders(server, remote);
+      const headers = collectibleHeaders(remote);
       if (headers.length > 0) return headers;
     }
   }
