@@ -261,7 +261,7 @@ func TestListRiskResults_ByUserID(t *testing.T) {
 
 // linkAssistantThread attaches a chat to a freshly created assistant so the
 // chat counts as "assistant-driven" for the non_assistant filter.
-func linkAssistantThread(t *testing.T, ti *testInstance, projectID uuid.UUID, orgID string, chatID uuid.UUID) {
+func linkAssistantThread(t *testing.T, ti *testInstance, projectID uuid.UUID, orgID string, chatID uuid.UUID) uuid.UUID {
 	t.Helper()
 	ctx := t.Context()
 
@@ -283,10 +283,12 @@ func linkAssistantThread(t *testing.T, ti *testInstance, projectID uuid.UUID, or
 		CorrelationID: "corr-" + uuid.NewString()[:8],
 		ChatID:        chatID,
 	}))
+	return assistant.ID
 }
 
-// The non_assistant filter surfaces only findings whose chat is not linked to
-// an assistant — the events most likely to be missing user attribution.
+// The assistant filter dimension: non_assistant surfaces only findings whose
+// chat is not linked to an assistant (the events most likely to be missing
+// user attribution), while assistant_id scopes to a single assistant's chats.
 func TestListRiskResults_NonAssistant(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
@@ -303,7 +305,7 @@ func TestListRiskResults_NonAssistant(t *testing.T) {
 	// One finding from an assistant-driven chat, one from a plain chat.
 	assistantChat, assistantMsg := seedChatMessageWithUser(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "assistant@example.com")
 	seedRiskResult(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, 1, assistantMsg, true)
-	linkAssistantThread(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, assistantChat)
+	assistantID := linkAssistantThread(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, assistantChat)
 
 	_, humanMsg := seedChatMessageWithUser(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "human@example.com")
 	seedRiskResult(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, 1, humanMsg, true)
@@ -321,6 +323,23 @@ func TestListRiskResults_NonAssistant(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, filtered.Results, 1)
 	require.Equal(t, "human@example.com", *filtered.Results[0].UserID)
+
+	// With assistant_id, only that assistant's finding remains.
+	assistantIDStr := assistantID.String()
+	scoped, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{
+		AssistantID: &assistantIDStr,
+	})
+	require.NoError(t, err)
+	require.Len(t, scoped.Results, 1)
+	require.Equal(t, "assistant@example.com", *scoped.Results[0].UserID)
+
+	// An assistant with no linked chats matches nothing.
+	otherAssistant := uuid.NewString()
+	empty, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{
+		AssistantID: &otherAssistant,
+	})
+	require.NoError(t, err)
+	require.Empty(t, empty.Results)
 }
 
 func TestGetRiskPolicyStatus_WithAnalyzedMessages(t *testing.T) {

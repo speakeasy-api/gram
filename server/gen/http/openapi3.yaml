@@ -28819,6 +28819,14 @@ paths:
                     description: If true, only return findings from chats that are not linked to an assistant. Useful for surfacing events that are missing user attribution.
                     type: boolean
                 - allowEmptyValue: true
+                  description: Optional assistant ID; only return findings from chats linked to this assistant.
+                  in: query
+                  name: assistant_id
+                  schema:
+                    description: Optional assistant ID; only return findings from chats linked to this assistant.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
                   description: Filter results to messages created at or after this timestamp (ISO 8601).
                   in: query
                   name: from
@@ -29117,6 +29125,14 @@ paths:
                   schema:
                     description: If true, only return findings from chats that are not linked to an assistant. Useful for surfacing events that are missing user attribution.
                     type: boolean
+                - allowEmptyValue: true
+                  description: Optional assistant ID; only return findings from chats linked to this assistant.
+                  in: query
+                  name: assistant_id
+                  schema:
+                    description: Optional assistant ID; only return findings from chats linked to this assistant.
+                    format: uuid
+                    type: string
                 - allowEmptyValue: true
                   description: Filter results to messages created at or after this timestamp (ISO 8601).
                   in: query

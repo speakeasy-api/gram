@@ -22,6 +22,7 @@ type listRiskResultsForAgentInput struct {
 	UserID       *string `json:"user_id,omitempty" jsonschema:"Case-insensitive substring matched against the chat's external user ID."`
 	UniqueMatch  *bool   `json:"unique_match,omitempty" jsonschema:"Collapse to one row per (policy_id, rule_id, match), keeping the most recent occurrence."`
 	NonAssistant *bool   `json:"non_assistant,omitempty" jsonschema:"Only return findings from chats that are not linked to an assistant. Useful for surfacing events missing user attribution."`
+	AssistantID  *string `json:"assistant_id,omitempty" jsonschema:"Only return findings from chats linked to this assistant ID."`
 	From         *string `json:"from,omitempty" jsonschema:"Filter to messages created at or after this ISO 8601 timestamp."`
 	To           *string `json:"to,omitempty" jsonschema:"Filter to messages created strictly before this ISO 8601 timestamp."`
 	Cursor       *string `json:"cursor,omitempty" jsonschema:"Cursor for pagination."`
@@ -41,6 +42,7 @@ func (s *ListRiskResultsForAgent) Descriptor() core.ToolDescriptor {
 		InputSchema: core.BuildInputSchema[listRiskResultsForAgentInput](
 			core.WithPropertyFormat("policy_id", "uuid"),
 			core.WithPropertyFormat("chat_id", "uuid"),
+			core.WithPropertyFormat("assistant_id", "uuid"),
 			core.WithPropertyFormat("from", "date-time"),
 			core.WithPropertyFormat("to", "date-time"),
 			core.WithPropertyNumberRange("limit", 1, 200),
@@ -66,6 +68,7 @@ func (s *ListRiskResultsForAgent) Call(ctx context.Context, _ toolconfig.ToolCal
 		UserID:       nil,
 		UniqueMatch:  nil,
 		NonAssistant: nil,
+		AssistantID:  nil,
 		From:         nil,
 		To:           nil,
 		Cursor:       nil,
@@ -86,6 +89,7 @@ func (s *ListRiskResultsForAgent) Call(ctx context.Context, _ toolconfig.ToolCal
 		UserID:           input.UserID,
 		UniqueMatch:      input.UniqueMatch,
 		NonAssistant:     input.NonAssistant,
+		AssistantID:      input.AssistantID,
 		From:             input.From,
 		To:               input.To,
 		Cursor:           input.Cursor,

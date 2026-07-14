@@ -989,6 +989,10 @@ WHERE rr.id = @id
 -- default project-wide view). When set the results are scoped to that policy
 -- AND disabled-but-not-deleted policies are included, so explicitly filtering
 -- to a policy still surfaces its historical findings after it was turned off.
+--
+-- @assistant_id scopes results to chats linked to that assistant (live
+-- assistant_threads row); @non_assistant instead restricts to chats with no
+-- assistant link at all.
 SELECT
     sub.id, sub.project_id, sub.organization_id, sub.risk_policy_id,
     sub.risk_policy_version, sub.chat_message_id, sub.source, sub.found,
@@ -1034,6 +1038,11 @@ FROM (
     AND (NOT @non_assistant::boolean OR NOT EXISTS (
       SELECT 1 FROM assistant_threads at
       WHERE at.chat_id = cm.chat_id AND at.deleted IS FALSE
+    ))
+    AND (sqlc.narg(assistant_id)::uuid IS NULL OR EXISTS (
+      SELECT 1 FROM assistant_threads at
+      WHERE at.chat_id = cm.chat_id AND at.deleted IS FALSE
+        AND at.assistant_id = sqlc.narg(assistant_id)::uuid
     ))
     AND (@category::text = '' OR (
     CASE

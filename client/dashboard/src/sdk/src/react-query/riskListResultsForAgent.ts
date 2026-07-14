@@ -124,6 +124,7 @@ export function setRiskListResultsForAgentData(
       userId?: string | undefined;
       uniqueMatch?: boolean | undefined;
       nonAssistant?: boolean | undefined;
+      assistantId?: string | undefined;
       from?: Date | undefined;
       to?: Date | undefined;
       cursor?: string | undefined;
@@ -151,6 +152,7 @@ export function invalidateRiskListResultsForAgent(
       userId?: string | undefined;
       uniqueMatch?: boolean | undefined;
       nonAssistant?: boolean | undefined;
+      assistantId?: string | undefined;
       from?: Date | undefined;
       to?: Date | undefined;
       cursor?: string | undefined;

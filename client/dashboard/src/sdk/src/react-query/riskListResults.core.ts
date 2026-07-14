@@ -54,6 +54,7 @@ export function buildRiskListResultsQuery(
       userId: request?.userId,
       uniqueMatch: request?.uniqueMatch,
       nonAssistant: request?.nonAssistant,
+      assistantId: request?.assistantId,
       from: request?.from,
       to: request?.to,
       cursor: request?.cursor,
@@ -95,6 +96,7 @@ export function queryKeyRiskListResults(
     userId?: string | undefined;
     uniqueMatch?: boolean | undefined;
     nonAssistant?: boolean | undefined;
+    assistantId?: string | undefined;
     from?: Date | undefined;
     to?: Date | undefined;
     cursor?: string | undefined;

@@ -1507,6 +1507,9 @@ func EncodeListRiskResultsRequest(encoder func(*http.Request) goahttp.Encoder) f
 		if p.NonAssistant != nil {
 			values.Add("non_assistant", fmt.Sprintf("%v", *p.NonAssistant))
 		}
+		if p.AssistantID != nil {
+			values.Add("assistant_id", *p.AssistantID)
+		}
 		if p.From != nil {
 			values.Add("from", *p.From)
 		}
@@ -1780,6 +1783,9 @@ func EncodeListRiskResultsForAgentRequest(encoder func(*http.Request) goahttp.En
 		}
 		if p.NonAssistant != nil {
 			values.Add("non_assistant", fmt.Sprintf("%v", *p.NonAssistant))
+		}
+		if p.AssistantID != nil {
+			values.Add("assistant_id", *p.AssistantID)
 		}
 		if p.From != nil {
 			values.Add("from", *p.From)
