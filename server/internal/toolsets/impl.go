@@ -360,7 +360,30 @@ func (s *Service) ListToolsetsForOrg(ctx context.Context, payload *gen.ListTools
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to list toolsets for organization").LogError(ctx, s.logger)
 	}
 
-	result, err := mv.GetToolsetsSummary(ctx, s.logger, s.db, toolsets)
+	// Rows span every project in the org, so each check carries its own row's
+	// project id rather than the (possibly absent) auth context project.
+	checks := make([]authz.Check, len(toolsets))
+	for i, toolset := range toolsets {
+		checks[i] = authz.MCPCheck(authz.ScopeMCPRead, toolset.ID.String(), toolset.ProjectID.String())
+	}
+	allowedIDs, err := s.authz.Filter(ctx, checks)
+	if err != nil {
+		return nil, err
+	}
+
+	allowedSet := make(map[string]struct{}, len(allowedIDs))
+	for _, id := range allowedIDs {
+		allowedSet[id] = struct{}{}
+	}
+
+	allowedToolsets := make([]repo.ListToolsetsWithVersionsByOrganizationRow, 0, len(allowedIDs))
+	for _, toolset := range toolsets {
+		if _, ok := allowedSet[toolset.ID.String()]; ok {
+			allowedToolsets = append(allowedToolsets, toolset)
+		}
+	}
+
+	result, err := mv.GetToolsetsSummary(ctx, s.logger, s.db, allowedToolsets)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get toolset summaries").LogError(ctx, s.logger)
 	}

@@ -10,6 +10,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_servers"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -297,4 +298,77 @@ func TestListMcpServersForOrg_RBACForbidden(t *testing.T) {
 		SessionToken: nil,
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestListMcpServersForOrg_RBACEmptyWithOrgReadOnly(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	remoteID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+	_, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+		Name:                  "org read only server",
+		EnvironmentID:         nil,
+		RemoteMcpServerID:     &remoteID,
+		TunneledMcpServerID:   nil,
+		ToolsetID:             nil,
+		ToolVariationsGroupID: nil,
+		Visibility:            types.McpServerVisibility("disabled"),
+	})
+	require.NoError(t, err)
+
+	// org:read alone passes the endpoint gate but grants mcp:read on nothing.
+	ctx = withExactAuthzGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeOrgRead, authCtx.ActiveOrganizationID))
+
+	result, err := ti.service.ListMcpServersForOrg(ctx, &gen.ListMcpServersForOrgPayload{
+		SessionToken: nil,
+	})
+	require.NoError(t, err)
+	require.Empty(t, result.McpServers)
+}
+
+func TestListMcpServersForOrg_RBACFiltersToGrantedServers(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	var created []string
+	for i := range 2 {
+		remoteID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+		server, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+			SessionToken:          nil,
+			ApikeyToken:           nil,
+			ProjectSlugInput:      nil,
+			Name:                  fmt.Sprintf("org filter server %d", i),
+			EnvironmentID:         nil,
+			RemoteMcpServerID:     &remoteID,
+			TunneledMcpServerID:   nil,
+			ToolsetID:             nil,
+			ToolVariationsGroupID: nil,
+			Visibility:            types.McpServerVisibility("disabled"),
+		})
+		require.NoError(t, err)
+		created = append(created, server.ID)
+	}
+
+	ctx = withExactAuthzGrants(t, ctx, ti.conn,
+		authz.NewGrant(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+		authz.NewGrant(authz.ScopeMCPRead, created[0]),
+	)
+
+	result, err := ti.service.ListMcpServersForOrg(ctx, &gen.ListMcpServersForOrgPayload{
+		SessionToken: nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.McpServers, 1)
+	require.Equal(t, created[0], result.McpServers[0].ID)
 }
