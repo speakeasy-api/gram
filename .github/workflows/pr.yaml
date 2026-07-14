@@ -782,8 +782,8 @@ jobs:
   atlas-lint:
     name: Lint migrations with Atlas
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    needs: changes
-    if: needs.changes.outputs.migrations == 'true' && github.event_name == 'pull_request'
+    # needs: changes
+    # if: needs.changes.outputs.migrations == 'true' && github.event_name == 'pull_request'
     permissions:
       contents: read
       pull-requests: write
@@ -847,10 +847,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
-      # Porcelain check: regenerate migrations from the schema files using the
-      # same tasks developers run locally. If anything appears in the working
-      # tree, a schema change was committed without its migration (or a
-      # generated file is stale) and the job fails.
       - name: Check migration state is clean
         shell: bash
         run: |
