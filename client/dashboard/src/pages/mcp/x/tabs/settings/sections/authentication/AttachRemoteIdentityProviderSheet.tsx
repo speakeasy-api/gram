@@ -589,7 +589,7 @@ export function AttachRemoteIdentityProviderSheet({
           <Stack gap={4}>
             <SectionHeading
               title="Identity Provider"
-              description="The upstream OAuth authorization server Gram delegates to."
+              description="The upstream OAuth authorization server Speakeasy delegates to."
             />
             {hasSelectable && <ModeSwitch mode={mode} onChange={setMode} />}
 
@@ -705,7 +705,7 @@ export function AttachRemoteIdentityProviderSheet({
             <Stack gap={4} className="border-t pt-6">
               <SectionHeading
                 title="Session Client"
-                description="The OAuth client Gram registers and uses with this provider."
+                description="The OAuth client Speakeasy registers and uses with this provider."
               />
               {clientSectionBody}
             </Stack>
