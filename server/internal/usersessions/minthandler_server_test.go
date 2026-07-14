@@ -2,10 +2,10 @@ package usersessions_test
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
@@ -77,13 +77,13 @@ func TestMintUserSessionForServerAllowsMCPConnect(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	row, err := repo.New(ti.conn).GetUserSessionByJTI(ctx, repo.GetUserSessionByJTIParams{
+	// Dashboard mints must not persist a user_sessions row — only real OAuth
+	// clients establish sessions that surface in the sessions list.
+	_, err = repo.New(ti.conn).GetUserSessionByJTI(ctx, repo.GetUserSessionByJTIParams{
 		UserSessionIssuerID: server.UserSessionIssuerID.UUID,
 		Jti:                 claims.ID,
 	})
-	require.NoError(t, err)
-	require.False(t, row.UserSessionClientID.Valid)
-	require.True(t, strings.HasPrefix(row.RefreshTokenHash, "dashboard-mint:"))
+	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
 func TestMintUserSessionForServerRejectsUngatedServer(t *testing.T) {
