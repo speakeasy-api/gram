@@ -257,7 +257,11 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		return nil, err
 	}
 
-	baseParams := repo.CountChatsParams{
+	pinned := conv.PtrValOr(payload.Pinned, "")
+	sources := parseSourceFilter(conv.PtrValOr(payload.Source, ""))
+	accountType := conv.PtrValOr(payload.AccountType, "")
+
+	rows, err := s.repo.ListChats(ctx, repo.ListChatsParams{
 		ProjectID:         *authCtx.ProjectID,
 		ExternalUserID:    externalUserID,
 		UserID:            userID,
@@ -269,31 +273,9 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		ExcludeSourceKind: excludeSourceKind,
 		HasRiskFilter:     hasRiskFilter,
 		MinRiskScore:      minRiskScore,
-		Pinned:            conv.PtrValOr(payload.Pinned, ""),
-		Sources:           parseSourceFilter(conv.PtrValOr(payload.Source, "")),
-		AccountType:       conv.PtrValOr(payload.AccountType, ""),
-	}
-
-	total, err := s.repo.CountChats(ctx, baseParams)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "count chats").LogError(ctx, s.logger)
-	}
-
-	rows, err := s.repo.ListChats(ctx, repo.ListChatsParams{
-		ProjectID:         baseParams.ProjectID,
-		ExternalUserID:    baseParams.ExternalUserID,
-		UserID:            baseParams.UserID,
-		FromTime:          baseParams.FromTime,
-		ToTime:            baseParams.ToTime,
-		Search:            baseParams.Search,
-		AssistantID:       baseParams.AssistantID,
-		SourceKind:        baseParams.SourceKind,
-		ExcludeSourceKind: baseParams.ExcludeSourceKind,
-		HasRiskFilter:     baseParams.HasRiskFilter,
-		MinRiskScore:      baseParams.MinRiskScore,
-		Pinned:            baseParams.Pinned,
-		Sources:           baseParams.Sources,
-		AccountType:       baseParams.AccountType,
+		Pinned:            pinned,
+		Sources:           sources,
+		AccountType:       accountType,
 		SortBy:            payload.SortBy,
 		SortOrder:         payload.SortOrder,
 		PageLimit:         conv.SafeInt32(payload.Limit),
@@ -301,6 +283,35 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list chats").LogError(ctx, s.logger)
+	}
+
+	// Every page row carries the pre-LIMIT total via a window count. A separate
+	// count query is only needed when the requested offset is past the end of
+	// the result set, so there are no rows to read it from.
+	var total int64
+	switch {
+	case len(rows) > 0:
+		total = rows[0].TotalCount
+	case payload.Offset > 0:
+		total, err = s.repo.CountChats(ctx, repo.CountChatsParams{
+			ProjectID:         *authCtx.ProjectID,
+			ExternalUserID:    externalUserID,
+			UserID:            userID,
+			FromTime:          fromTime,
+			ToTime:            toTime,
+			Search:            search,
+			AssistantID:       assistantID,
+			SourceKind:        sourceKind,
+			ExcludeSourceKind: excludeSourceKind,
+			HasRiskFilter:     hasRiskFilter,
+			MinRiskScore:      minRiskScore,
+			Pinned:            pinned,
+			Sources:           sources,
+			AccountType:       accountType,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "count chats").LogError(ctx, s.logger)
+		}
 	}
 
 	result := make([]*gen.ChatOverview, 0, len(rows))
