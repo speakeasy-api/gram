@@ -38,21 +38,36 @@ export function CardContextMenu({
       <ContextMenuTrigger asChild>
         <div className={cn("h-full", className)}>{children}</div>
       </ContextMenuTrigger>
-      <ContextMenuContent className="min-w-[10rem]">
-        {actions.map((action, index) => (
-          <ContextMenuItem
-            key={index}
-            disabled={action.disabled}
-            variant={action.destructive ? "destructive" : "default"}
-            onSelect={() => action.onClick()}
-          >
-            {action.label}
-            {action.icon && (
-              <Icon name={action.icon} className="size-3 shrink-0" />
-            )}
-          </ContextMenuItem>
-        ))}
-      </ContextMenuContent>
+      <ActionContextMenuContent actions={actions} />
     </ContextMenu>
+  );
+}
+
+/**
+ * The `ContextMenuContent` for a right-click menu built from an `Action[]`.
+ * Shared by CardContextMenu and TableRowContextMenu so every context menu in
+ * the app maps actions to items the same way.
+ */
+export function ActionContextMenuContent({
+  actions,
+}: {
+  actions: Action[];
+}): React.JSX.Element {
+  return (
+    <ContextMenuContent className="min-w-[10rem]">
+      {actions.map((action, index) => (
+        <ContextMenuItem
+          key={index}
+          disabled={action.disabled}
+          variant={action.destructive ? "destructive" : "default"}
+          onSelect={() => action.onClick()}
+        >
+          {action.label}
+          {action.icon && (
+            <Icon name={action.icon} className="size-3 shrink-0" />
+          )}
+        </ContextMenuItem>
+      ))}
+    </ContextMenuContent>
   );
 }
