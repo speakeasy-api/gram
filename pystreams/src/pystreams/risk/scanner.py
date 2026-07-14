@@ -237,10 +237,14 @@ class ProcessPoolScanner(_AsyncCloseable):
     Everything that touches the executor is bridged through anyio's threading and
     cancellation primitives (``to_thread.run_sync`` + ``fail_after``) rather than
     the asyncio loop directly, so the scanner runs unchanged on either anyio
-    backend (asyncio or trio). The bridge uses a dedicated thread limiter sized to
-    the worker count, so blocking on pool results never draws down anyio's shared
-    default thread pool (used by the publish hop and the in-process scanner) — only
-    ``max_workers`` scans run at once, so that many result-waits is the ceiling.
+    backend (asyncio or trio). The bridge uses two dedicated thread limiters,
+    each sized to the worker count, so blocking on the pool never draws down
+    anyio's shared default thread pool (used by the publish hop and the
+    in-process scanner). Result-waits get one (only ``max_workers`` scans run at
+    once, so that many is the ceiling) and submits get their own: result-wait
+    tokens are held for a whole scan, and a submit queued behind them would
+    stall un-metered — the slot clock only starts once the future exists — so
+    submits must never share their capacity.
     """
 
     def __init__(
@@ -250,14 +254,19 @@ class ProcessPoolScanner(_AsyncCloseable):
         scan_timeout: float | None = 300.0,
         slot_timeout: float | None = 60.0,
         wait_limiter: anyio.CapacityLimiter | None = None,
+        submit_limiter: anyio.CapacityLimiter | None = None,
     ):
         self._executor = executor
         self._scan_timeout = scan_timeout if scan_timeout and scan_timeout > 0 else None
         self._slot_timeout = slot_timeout if slot_timeout and slot_timeout > 0 else None
-        # Dedicated limiter for the result-wait threads (see class docstring). None
-        # falls back to anyio's default limiter — fine for the single-scan tests,
-        # but ``create`` always supplies one for the real, concurrent path.
+        # Dedicated limiters for the result-wait and submit threads (see class
+        # docstring); they must be distinct — sharing one lets result-waits,
+        # which hold a token per running scan, starve submissions and delay the
+        # slot clock. None falls back to anyio's default limiter — fine for the
+        # single-scan tests, but ``create`` always supplies both for the real,
+        # concurrent path.
         self._wait_limiter = wait_limiter
+        self._submit_limiter = submit_limiter
 
     @classmethod
     async def create(
@@ -298,6 +307,7 @@ class ProcessPoolScanner(_AsyncCloseable):
             scan_timeout=scan_timeout,
             slot_timeout=slot_timeout,
             wait_limiter=anyio.CapacityLimiter(max_workers),
+            submit_limiter=anyio.CapacityLimiter(max_workers),
         )
         # One warmup task per worker, run concurrently; each does a real scan and
         # then briefly sleeps so the tasks can't all be served by one worker —
@@ -378,11 +388,16 @@ class ProcessPoolScanner(_AsyncCloseable):
         # ``max_tasks_per_child`` recycles a worker. That spawn is real blocking
         # I/O (hundreds of ms at warmup), so bridge it through a worker thread like
         # the result wait below; the executor is never touched from the loop.
+        # Submits get their own limiter, never the result-waits': those tokens
+        # are held for a running scan's whole duration, and a submit queued
+        # behind them would wait un-metered — the slot deadline can't start
+        # until the future exists. Submit tokens are only ever held for the
+        # brief call itself, so this wait stays small and bounded.
         def submit() -> Future[_T]:
             return self._executor.submit(fn, *args)
 
         return await asyncify(
-            submit, abandon_on_cancel=True, limiter=self._wait_limiter
+            submit, abandon_on_cancel=True, limiter=self._submit_limiter
         )()
 
     async def _await_result(self, future: Future[_T]) -> _T:

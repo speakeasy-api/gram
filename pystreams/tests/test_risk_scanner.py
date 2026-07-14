@@ -312,6 +312,59 @@ async def test_pool_scan_execution_times_out_via_anyio_deadline():
     assert not future.cancelled()
 
 
+class _FirstRunningExecutor:
+    """Executor stand-in where only the first future starts; the rest queue.
+
+    Models a saturated pool: the first scan is picked up by "the worker" and
+    never completes, while every later submission stays pending forever.
+    """
+
+    def __init__(self):
+        self.submitted: list[Future] = []
+
+    def submit(self, fn, *args):
+        future: Future = Future()
+        if not self.submitted:
+            future.set_running_or_notify_cancel()
+        self.submitted.append(future)
+        return future
+
+
+async def test_submit_is_not_starved_by_result_waits():
+    # Regression: submits must not share the result-wait limiter. A result-wait
+    # holds its token for the whole running scan, so a shared limiter would
+    # block a new message inside _submit — before the slot deadline even starts
+    # — until an earlier scan finished, exactly the unbounded wait the slot
+    # timeout exists to prevent.
+    executor = _FirstRunningExecutor()
+    wait_limiter = anyio.CapacityLimiter(1)
+    scanner = ProcessPoolScanner(
+        cast(ProcessPoolExecutor, executor),
+        scan_timeout=None,
+        slot_timeout=0.1,
+        wait_limiter=wait_limiter,
+    )
+
+    async with anyio.create_task_group() as tg:
+        # The first scan runs forever, parking a result-wait thread that holds
+        # the only wait_limiter token.
+        tg.start_soon(scanner.scan, "first", None, 0.75)
+        # Poll, not an Event: the awaited condition is a worker *thread*
+        # borrowing the limiter token inside the scanner, which exposes no
+        # hook to signal from.
+        while wait_limiter.statistics().borrowed_tokens == 0:  # noqa: ASYNC110
+            await anyio.sleep(0.01)
+
+        # The second scan must still submit immediately and requeue at its slot
+        # deadline; under a shared limiter it would hang here past fail_after.
+        with anyio.fail_after(2):
+            with pytest.raises(ScanSlotTimeout):
+                await scanner.scan("second", None, 0.75)
+
+        assert len(executor.submitted) == 2
+        tg.cancel_scope.cancel()
+
+
 async def test_pool_scan_slot_deadline_defers_to_execution_bound_once_started():
     executor = _RunningStuckExecutor()
     scanner = ProcessPoolScanner(
