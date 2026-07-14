@@ -1182,7 +1182,7 @@ func TestHooksBootstrapColdAndWarmPathsPreserveInput(t *testing.T) {
 
 	script := renderHooksBootstrapForRelease("test-version", map[string]hooksBinaryTarget{
 		target: {URL: server.URL + "/hooks.zip", SHA256: fmt.Sprintf("%x", sum)},
-	}, false)
+	}, false, "releases.test")
 	cache := t.TempDir()
 	first, err := runHooksBootstrap(t, script, cache, "cold-input", "--first", "value")
 	require.NoError(t, err, string(first))
@@ -1221,7 +1221,7 @@ func TestHooksBootstrapChecksumMismatchNeverExecutes(t *testing.T) {
 
 	script := renderHooksBootstrapForRelease("bad-checksum", map[string]hooksBinaryTarget{
 		target: {URL: server.URL + "/hooks.zip", SHA256: strings.Repeat("0", 64)},
-	}, false)
+	}, false, "releases.test")
 	out, err := runHooksBootstrap(t, script, t.TempDir(), "payload")
 	require.Error(t, err)
 	require.Contains(t, string(out), "checksum mismatch")
@@ -1240,7 +1240,7 @@ func TestHooksBootstrapInstallFailOpenExitsZeroWithoutExecuting(t *testing.T) {
 
 	script := renderHooksBootstrapForRelease("fail-open", map[string]hooksBinaryTarget{
 		target: {URL: server.URL + "/hooks.zip", SHA256: strings.Repeat("0", 64)},
-	}, true)
+	}, true, "releases.test")
 	out, err := runHooksBootstrap(t, script, t.TempDir(), "payload")
 	require.NoError(t, err, string(out))
 	require.Contains(t, string(out), "checksum mismatch")
@@ -1311,7 +1311,7 @@ func TestHooksBootstrapConcurrentColdInvocationsDownloadOnce(t *testing.T) {
 
 	script := renderHooksBootstrapForRelease("concurrent", map[string]hooksBinaryTarget{
 		target: {URL: server.URL + "/hooks.zip", SHA256: fmt.Sprintf("%x", sum)},
-	}, false)
+	}, false, "releases.test")
 	cache := t.TempDir()
 	var wg sync.WaitGroup
 	errs := make(chan error, 2)
@@ -1348,7 +1348,7 @@ func TestHooksBootstrapRecoversStaleInstallLock(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(lock, "pid"), []byte("99999999\n"), 0o644))
 	script := renderHooksBootstrapForRelease("stale-lock", map[string]hooksBinaryTarget{
 		target: {URL: server.URL + "/hooks.zip", SHA256: fmt.Sprintf("%x", sum)},
-	}, false)
+	}, false, "releases.test")
 	out, err := runHooksBootstrap(t, script, cache, "event")
 	require.NoError(t, err, string(out))
 	require.Equal(t, "event", string(out))
@@ -1373,14 +1373,14 @@ func TestHooksBootstrapChecksumChangeInvalidatesWarmCache(t *testing.T) {
 	cache := t.TempDir()
 	firstScript := renderHooksBootstrapForRelease("same-version", map[string]hooksBinaryTarget{
 		target: {URL: firstServer.URL + "/hooks.zip", SHA256: fmt.Sprintf("%x", firstSum)},
-	}, false)
+	}, false, "releases.test")
 	out, err := runHooksBootstrap(t, firstScript, cache, "")
 	require.NoError(t, err, string(out))
 	require.Equal(t, "first", string(out))
 
 	secondScript := renderHooksBootstrapForRelease("same-version", map[string]hooksBinaryTarget{
 		target: {URL: secondServer.URL + "/hooks.zip", SHA256: fmt.Sprintf("%x", secondSum)},
-	}, false)
+	}, false, "releases.test")
 	out, err = runHooksBootstrap(t, secondScript, cache, "")
 	require.NoError(t, err, string(out))
 	require.Equal(t, "second", string(out))
@@ -1389,14 +1389,27 @@ func TestHooksBootstrapChecksumChangeInvalidatesWarmCache(t *testing.T) {
 func TestHooksBootstrapEmbedsPinnedReleaseMetadata(t *testing.T) {
 	t.Parallel()
 	require.Len(t, hooksBinaryTargets, 6)
-	script := string(renderHooksBootstrap(GenerateConfig{}))
-	for target, asset := range hooksBinaryTargets {
+	cfg := GenerateConfig{ServerURL: "https://app.getgram.ai"}
+	script := string(renderHooksBootstrap(cfg))
+	served := hooksServedTargets(cfg.ServerURL)
+	for target, asset := range served {
 		require.Contains(t, script, target)
-		require.Contains(t, asset.URL, "releases/download/hooks%40"+hooksBinaryVersion+"/")
+		require.Equal(t, "https://app.getgram.ai/hooks/releases/"+hooksBinaryVersion+"/speakeasy-hooks_"+strings.ReplaceAll(target, "-", "_")+".zip", asset.URL)
 		require.Len(t, asset.SHA256, 64)
 		require.Contains(t, script, asset.URL)
 		require.Contains(t, script, asset.SHA256)
+		// Upstream (server-side fetch) stays pinned to the immutable GitHub
+		// release; only the client-facing URLs point at the Gram domain.
+		require.Contains(t, hooksBinaryTargets[target].URL, "https://github.com/speakeasy-api/gram/releases/download/hooks%40"+hooksBinaryVersion+"/")
+		require.Equal(t, hooksBinaryTargets[target].SHA256, asset.SHA256)
 	}
+	// Cold-install failures must steer administrators toward the org's own
+	// server domain — the whole point of serving artifacts from it is that
+	// GitHub may be unreachable (sandboxed harnesses).
+	require.Contains(t, script, "allow downloads from app.getgram.ai")
+	require.NotContains(t, script, "github.com")
+	require.Contains(t, string(renderHooksPowerShellBootstrap(cfg)), "allow downloads from app.getgram.ai")
+	require.NotContains(t, string(renderHooksPowerShellBootstrap(cfg)), "github.com")
 }
 
 func TestHooksConfigHashTracksBinaryReleaseMetadata(t *testing.T) {

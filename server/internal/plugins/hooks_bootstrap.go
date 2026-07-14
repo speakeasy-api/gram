@@ -3,6 +3,7 @@ package plugins
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"sort"
 	"strings"
 
@@ -30,6 +31,12 @@ func hooksReleaseTargets(version string, sha256s map[string]string) map[string]h
 	return out
 }
 
+// hooksBinaryTargets is the UPSTREAM artifact set: the GitHub release URLs the
+// server itself fetches from (see HooksArtifactServer). Bootstrap scripts never
+// see these URLs — they download from the org's Gram server domain via
+// hooksServedTargets, because customer environments (notably Claude Cowork's
+// sandbox) often cannot reach GitHub while the Gram domain is already
+// allowlisted for ingest.
 var hooksBinaryTargets = hooksReleaseTargets(hooksBinaryVersion, map[string]string{
 	"darwin-amd64":  "db80bb7d5ccd42e44db76822765bf9838c1b6b9ea8e4a799f99d990a9e625775",
 	"darwin-arm64":  "1eeef8fc011e09ea2d7b14e332ffc809f64cac885ab4aa22b4199d3828d80fc9",
@@ -54,8 +61,33 @@ func renderHooksConfig(cfg GenerateConfig) ([]byte, error) {
 	return append(b, '\n'), nil
 }
 
+// hooksServedTargets derives the download URLs baked into bootstrap scripts:
+// the pinned artifacts as served by the org's own Gram server (see
+// HooksArtifactServer), keeping the checksums from the upstream pin.
+func hooksServedTargets(serverURL string) map[string]hooksBinaryTarget {
+	base := strings.TrimRight(serverURL, "/")
+	out := make(map[string]hooksBinaryTarget, len(hooksBinaryTargets))
+	for target, asset := range hooksBinaryTargets {
+		out[target] = hooksBinaryTarget{
+			URL:    fmt.Sprintf("%s%s%s/speakeasy-hooks_%s.zip", base, HooksReleaseRoutePrefix, hooksBinaryVersion, strings.ReplaceAll(target, "-", "_")),
+			SHA256: asset.SHA256,
+		}
+	}
+	return out
+}
+
+// hooksDownloadHost names the host administrators must allow for cold installs
+// in the install-failure hint. Falls back to the raw server URL when it does
+// not parse as an absolute URL.
+func hooksDownloadHost(serverURL string) string {
+	if u, err := url.Parse(serverURL); err == nil && u.Host != "" {
+		return u.Host
+	}
+	return serverURL
+}
+
 func renderHooksBootstrap(cfg GenerateConfig) []byte {
-	return renderHooksBootstrapForRelease(hooksBinaryVersion, hooksBinaryTargets, hooksInstallFailOpen(cfg))
+	return renderHooksBootstrapForRelease(hooksBinaryVersion, hooksServedTargets(cfg.ServerURL), hooksInstallFailOpen(cfg), hooksDownloadHost(cfg.ServerURL))
 }
 
 // hooksInstallFailOpen resolves the install-failure policy baked into the
@@ -72,8 +104,9 @@ func hooksInstallFailOpen(cfg GenerateConfig) bool {
 // failure (download, missing tooling, lock-wait timeout, checksum mismatch)
 // exits 0 so providers treat the hook as passed; when false it exits 1 and
 // decision-capable hooks fail per provider semantics. A checksum mismatch
-// never executes the artifact under either policy.
-func renderHooksBootstrapForRelease(version string, targets map[string]hooksBinaryTarget, failOpen bool) []byte {
+// never executes the artifact under either policy. downloadHost names the host
+// to allowlist in the install-failure hint.
+func renderHooksBootstrapForRelease(version string, targets map[string]hooksBinaryTarget, failOpen bool, downloadHost string) []byte {
 	var cases strings.Builder
 	keys := make([]string, 0, len(targets))
 	for target := range targets {
@@ -94,7 +127,7 @@ install_failure_exit=%d
 
 install_failure() {
   printf 'speakeasy-hooks: %%s\n' "$1" >&2
-  printf 'speakeasy-hooks: ask your administrator to allow downloads from github.com and release-assets.githubusercontent.com, or preinstall the hooks binary (GRAM_HOOKS_HOME overrides the cache location)\n' >&2
+  printf 'speakeasy-hooks: ask your administrator to allow downloads from %s, or preinstall the hooks binary (GRAM_HOOKS_HOME overrides the cache location)\n' >&2
   exit "$install_failure_exit"
 }
 
@@ -240,7 +273,7 @@ fi
 trap - EXIT HUP INT TERM
 cleanup
 exec "$binary" "$@"
-`, version, conv.Ternary(failOpen, 0, 1), cases.String())
+`, version, conv.Ternary(failOpen, 0, 1), downloadHost, cases.String())
 }
 
 // renderHooksPowerShellBootstrap renders the Windows bootstrap script. It
@@ -248,9 +281,10 @@ exec "$binary" "$@"
 // install-failure policy so both can share one cache on machines that also
 // run hooks under Git Bash.
 func renderHooksPowerShellBootstrap(cfg GenerateConfig) []byte {
+	served := hooksServedTargets(cfg.ServerURL)
 	var cases strings.Builder
 	for _, arch := range []string{"amd64", "arm64"} {
-		asset := hooksBinaryTargets["windows-"+arch]
+		asset := served["windows-"+arch]
 		fmt.Fprintf(&cases, "    %q { $Url = %q; $ExpectedSha = %q }\n", arch, asset.URL, asset.SHA256)
 	}
 
@@ -263,7 +297,7 @@ $InstallFailureExit = %d
 
 function Exit-InstallFailure([string]$Message) {
     [Console]::Error.WriteLine("speakeasy-hooks: $Message")
-    [Console]::Error.WriteLine("speakeasy-hooks: ask your administrator to allow downloads from github.com and release-assets.githubusercontent.com, or preinstall the hooks binary (GRAM_HOOKS_HOME overrides the cache location)")
+    [Console]::Error.WriteLine("speakeasy-hooks: ask your administrator to allow downloads from %s, or preinstall the hooks binary (GRAM_HOOKS_HOME overrides the cache location)")
     exit $InstallFailureExit
 }
 
@@ -370,7 +404,7 @@ try {
 
 & $Binary @ForwardArgs
 exit $LASTEXITCODE
-`, hooksBinaryVersion, conv.Ternary(hooksInstallFailOpen(cfg), 0, 1), cases.String())
+`, hooksBinaryVersion, conv.Ternary(hooksInstallFailOpen(cfg), 0, 1), hooksDownloadHost(cfg.ServerURL), cases.String())
 }
 
 func hooksBootstrapCommand(root, provider string, timeoutSeconds int, async bool) string {

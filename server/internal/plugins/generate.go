@@ -303,7 +303,7 @@ func hooksConfigSnapshot(cfg GenerateConfig) HooksConfig {
 		BrowserLogin:      cfg.BrowserLogin,
 		InstallFailOpen:   cfg.InstallFailOpen,
 		BinaryVersion:     hooksBinaryVersion,
-		BinaryTargets:     hooksBinaryTargets,
+		BinaryTargets:     hooksServedTargets(cfg.ServerURL),
 	}
 }
 
