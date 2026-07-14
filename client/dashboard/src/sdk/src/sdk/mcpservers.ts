@@ -6,6 +6,7 @@ import { mcpServersCreate } from "../funcs/mcpServersCreate.js";
 import { mcpServersDelete } from "../funcs/mcpServersDelete.js";
 import { mcpServersGet } from "../funcs/mcpServersGet.js";
 import { mcpServersList } from "../funcs/mcpServersList.js";
+import { mcpServersListForOrg } from "../funcs/mcpServersListForOrg.js";
 import { mcpServersListToolFilters } from "../funcs/mcpServersListToolFilters.js";
 import { mcpServersUpdate } from "../funcs/mcpServersUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
@@ -28,6 +29,10 @@ import {
   ListMcpServersRequest,
   ListMcpServersSecurity,
 } from "../models/operations/listmcpservers.js";
+import {
+  ListMcpServersForOrgRequest,
+  ListMcpServersForOrgSecurity,
+} from "../models/operations/listmcpserversfororg.js";
 import {
   ListMcpServerToolFiltersRequest,
   ListMcpServerToolFiltersSecurity,
@@ -108,6 +113,25 @@ export class McpServers extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListMcpServersResult> {
     return unwrapAsync(mcpServersList(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listMcpServersForOrg mcpServers
+   *
+   * @remarks
+   * List all MCP servers across the organization
+   */
+  async listForOrg(
+    request?: ListMcpServersForOrgRequest | undefined,
+    security?: ListMcpServersForOrgSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListMcpServersResult> {
+    return unwrapAsync(mcpServersListForOrg(
       this,
       request,
       security,

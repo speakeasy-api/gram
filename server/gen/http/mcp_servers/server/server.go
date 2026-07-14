@@ -18,13 +18,14 @@ import (
 
 // Server lists the mcpServers service endpoint HTTP handlers.
 type Server struct {
-	Mounts          []*MountPoint
-	CreateMcpServer http.Handler
-	GetMcpServer    http.Handler
-	ListMcpServers  http.Handler
-	UpdateMcpServer http.Handler
-	ListToolFilters http.Handler
-	DeleteMcpServer http.Handler
+	Mounts               []*MountPoint
+	CreateMcpServer      http.Handler
+	GetMcpServer         http.Handler
+	ListMcpServers       http.Handler
+	ListMcpServersForOrg http.Handler
+	UpdateMcpServer      http.Handler
+	ListToolFilters      http.Handler
+	DeleteMcpServer      http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -57,16 +58,18 @@ func New(
 			{"CreateMcpServer", "POST", "/rpc/mcpServers.create"},
 			{"GetMcpServer", "GET", "/rpc/mcpServers.get"},
 			{"ListMcpServers", "GET", "/rpc/mcpServers.list"},
+			{"ListMcpServersForOrg", "GET", "/rpc/mcpServers.listForOrg"},
 			{"UpdateMcpServer", "POST", "/rpc/mcpServers.update"},
 			{"ListToolFilters", "GET", "/rpc/mcpServers.listToolFilters"},
 			{"DeleteMcpServer", "DELETE", "/rpc/mcpServers.delete"},
 		},
-		CreateMcpServer: NewCreateMcpServerHandler(e.CreateMcpServer, mux, decoder, encoder, errhandler, formatter),
-		GetMcpServer:    NewGetMcpServerHandler(e.GetMcpServer, mux, decoder, encoder, errhandler, formatter),
-		ListMcpServers:  NewListMcpServersHandler(e.ListMcpServers, mux, decoder, encoder, errhandler, formatter),
-		UpdateMcpServer: NewUpdateMcpServerHandler(e.UpdateMcpServer, mux, decoder, encoder, errhandler, formatter),
-		ListToolFilters: NewListToolFiltersHandler(e.ListToolFilters, mux, decoder, encoder, errhandler, formatter),
-		DeleteMcpServer: NewDeleteMcpServerHandler(e.DeleteMcpServer, mux, decoder, encoder, errhandler, formatter),
+		CreateMcpServer:      NewCreateMcpServerHandler(e.CreateMcpServer, mux, decoder, encoder, errhandler, formatter),
+		GetMcpServer:         NewGetMcpServerHandler(e.GetMcpServer, mux, decoder, encoder, errhandler, formatter),
+		ListMcpServers:       NewListMcpServersHandler(e.ListMcpServers, mux, decoder, encoder, errhandler, formatter),
+		ListMcpServersForOrg: NewListMcpServersForOrgHandler(e.ListMcpServersForOrg, mux, decoder, encoder, errhandler, formatter),
+		UpdateMcpServer:      NewUpdateMcpServerHandler(e.UpdateMcpServer, mux, decoder, encoder, errhandler, formatter),
+		ListToolFilters:      NewListToolFiltersHandler(e.ListToolFilters, mux, decoder, encoder, errhandler, formatter),
+		DeleteMcpServer:      NewDeleteMcpServerHandler(e.DeleteMcpServer, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -78,6 +81,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.CreateMcpServer = m(s.CreateMcpServer)
 	s.GetMcpServer = m(s.GetMcpServer)
 	s.ListMcpServers = m(s.ListMcpServers)
+	s.ListMcpServersForOrg = m(s.ListMcpServersForOrg)
 	s.UpdateMcpServer = m(s.UpdateMcpServer)
 	s.ListToolFilters = m(s.ListToolFilters)
 	s.DeleteMcpServer = m(s.DeleteMcpServer)
@@ -91,6 +95,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountCreateMcpServerHandler(mux, h.CreateMcpServer)
 	MountGetMcpServerHandler(mux, h.GetMcpServer)
 	MountListMcpServersHandler(mux, h.ListMcpServers)
+	MountListMcpServersForOrgHandler(mux, h.ListMcpServersForOrg)
 	MountUpdateMcpServerHandler(mux, h.UpdateMcpServer)
 	MountListToolFiltersHandler(mux, h.ListToolFilters)
 	MountDeleteMcpServerHandler(mux, h.DeleteMcpServer)
@@ -237,6 +242,59 @@ func NewListMcpServersHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listMcpServers")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "mcpServers")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListMcpServersForOrgHandler configures the mux to serve the
+// "mcpServers" service "listMcpServersForOrg" endpoint.
+func MountListMcpServersForOrgHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/mcpServers.listForOrg", f)
+}
+
+// NewListMcpServersForOrgHandler creates a HTTP handler which loads the HTTP
+// request and calls the "mcpServers" service "listMcpServersForOrg" endpoint.
+func NewListMcpServersForOrgHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListMcpServersForOrgRequest(mux, decoder)
+		encodeResponse = EncodeListMcpServersForOrgResponse(encoder)
+		encodeError    = EncodeListMcpServersForOrgError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listMcpServersForOrg")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "mcpServers")
 		payload, err := decodeRequest(r)
 		if err != nil {

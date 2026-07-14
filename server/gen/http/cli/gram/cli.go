@@ -108,7 +108,7 @@ func UsageCommands() []string {
 		"keys (create-key|list-keys|revoke-key|verify-key)",
 		"mcp-endpoints (create-mcp-endpoint|get-mcp-endpoint|list-mcp-endpoints|update-mcp-endpoint|check-mcp-endpoint-slug-availability|delete-mcp-endpoint)",
 		"mcp-metadata (get-mcp-metadata|set-mcp-metadata|export-mcp-metadata)",
-		"mcp-servers (create-mcp-server|get-mcp-server|list-mcp-servers|update-mcp-server|list-tool-filters|delete-mcp-server)",
+		"mcp-servers (create-mcp-server|get-mcp-server|list-mcp-servers|list-mcp-servers-for-org|update-mcp-server|list-tool-filters|delete-mcp-server)",
 		"model-keys (list-keys|upsert-key|delete-key)",
 		"organizations (get|send-invite|revoke-invite|update-invite-role|list-invites|list-users|remove-user|enable-webhooks|disable-webhooks|create-portal-session|get-onboarding-status|verify-onboarding-hooks-setup|send-enterprise-admin-onboarding-email|generate-work-os-admin-portal-link)",
 		"otel-forwarding (get-config|upsert-config|delete-config)",
@@ -1077,6 +1077,9 @@ func ParseEndpoint(
 		mcpServersListMcpServersSessionTokenFlag        = mcpServersListMcpServersFlags.String("session-token", "", "")
 		mcpServersListMcpServersApikeyTokenFlag         = mcpServersListMcpServersFlags.String("apikey-token", "", "")
 		mcpServersListMcpServersProjectSlugInputFlag    = mcpServersListMcpServersFlags.String("project-slug-input", "", "")
+
+		mcpServersListMcpServersForOrgFlags            = flag.NewFlagSet("list-mcp-servers-for-org", flag.ExitOnError)
+		mcpServersListMcpServersForOrgSessionTokenFlag = mcpServersListMcpServersForOrgFlags.String("session-token", "", "")
 
 		mcpServersUpdateMcpServerFlags                = flag.NewFlagSet("update-mcp-server", flag.ExitOnError)
 		mcpServersUpdateMcpServerBodyFlag             = mcpServersUpdateMcpServerFlags.String("body", "REQUIRED", "")
@@ -2702,6 +2705,7 @@ func ParseEndpoint(
 	mcpServersCreateMcpServerFlags.Usage = mcpServersCreateMcpServerUsage
 	mcpServersGetMcpServerFlags.Usage = mcpServersGetMcpServerUsage
 	mcpServersListMcpServersFlags.Usage = mcpServersListMcpServersUsage
+	mcpServersListMcpServersForOrgFlags.Usage = mcpServersListMcpServersForOrgUsage
 	mcpServersUpdateMcpServerFlags.Usage = mcpServersUpdateMcpServerUsage
 	mcpServersListToolFiltersFlags.Usage = mcpServersListToolFiltersUsage
 	mcpServersDeleteMcpServerFlags.Usage = mcpServersDeleteMcpServerUsage
@@ -3748,6 +3752,9 @@ func ParseEndpoint(
 
 			case "list-mcp-servers":
 				epf = mcpServersListMcpServersFlags
+
+			case "list-mcp-servers-for-org":
+				epf = mcpServersListMcpServersForOrgFlags
 
 			case "update-mcp-server":
 				epf = mcpServersUpdateMcpServerFlags
@@ -5228,6 +5235,9 @@ func ParseEndpoint(
 			case "list-mcp-servers":
 				endpoint = c.ListMcpServers()
 				data, err = mcpserversc.BuildListMcpServersPayload(*mcpServersListMcpServersRemoteMcpServerIDFlag, *mcpServersListMcpServersTunneledMcpServerIDFlag, *mcpServersListMcpServersToolsetIDFlag, *mcpServersListMcpServersSessionTokenFlag, *mcpServersListMcpServersApikeyTokenFlag, *mcpServersListMcpServersProjectSlugInputFlag)
+			case "list-mcp-servers-for-org":
+				endpoint = c.ListMcpServersForOrg()
+				data, err = mcpserversc.BuildListMcpServersForOrgPayload(*mcpServersListMcpServersForOrgSessionTokenFlag)
 			case "update-mcp-server":
 				endpoint = c.UpdateMcpServer()
 				data, err = mcpserversc.BuildUpdateMcpServerPayload(*mcpServersUpdateMcpServerBodyFlag, *mcpServersUpdateMcpServerSessionTokenFlag, *mcpServersUpdateMcpServerApikeyTokenFlag, *mcpServersUpdateMcpServerProjectSlugInputFlag)
@@ -10099,6 +10109,7 @@ func mcpServersUsage() {
 	fmt.Fprintln(os.Stderr, `    create-mcp-server: Create a new MCP server`)
 	fmt.Fprintln(os.Stderr, `    get-mcp-server: Get an MCP server by ID or slug. Exactly one of id or slug must be provided.`)
 	fmt.Fprintln(os.Stderr, `    list-mcp-servers: List MCP servers for a project. Accepts optional remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id filters to scope the result to a single backend; at most one filter may be supplied since the backends are mutually exclusive.`)
+	fmt.Fprintln(os.Stderr, `    list-mcp-servers-for-org: List all MCP servers across the organization`)
 	fmt.Fprintln(os.Stderr, `    update-mcp-server: Update an MCP server. This is a full-record replace for the optional UUID references: fields omitted from the request become null on the stored record. name is an exception — omitting it leaves the existing display name unchanged, while providing it requires a non-empty value and recomputes the server-side slug. The id and visibility fields are required; exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be provided.`)
 	fmt.Fprintln(os.Stderr, `    list-tool-filters: List the tool filter scopes (tags) available on an MCP server and the tools under each, including tools excluded from all filters. Exactly one of id or slug must be provided. Read-only; reflects the explicit tool variations group resolved from the chain (mcp_servers then toolsets), deriving effective tags with the same logic as the runtime ?tags= filter. Returns filtering disabled when no explicit group is set.`)
 	fmt.Fprintln(os.Stderr, `    delete-mcp-server: Delete an MCP server`)
@@ -10182,6 +10193,24 @@ func mcpServersListMcpServersUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-servers list-mcp-servers --remote-mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --tunneled-mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --toolset-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func mcpServersListMcpServersForOrgUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-servers list-mcp-servers-for-org", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List all MCP servers across the organization`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-servers list-mcp-servers-for-org --session-token \"abc123\"")
 }
 
 func mcpServersUpdateMcpServerUsage() {

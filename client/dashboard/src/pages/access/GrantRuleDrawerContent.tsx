@@ -6,6 +6,7 @@ import { getServerURL } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
 import { useListCollections } from "@gram/client/react-query/listCollections.js";
+import { useListMcpServersForOrg } from "@gram/client/react-query/listMcpServersForOrg.js";
 import { useListToolsetsForOrg } from "@gram/client/react-query/listToolsetsForOrg.js";
 import {
   AlertTriangle,
@@ -25,6 +26,16 @@ import type { Selector } from "@gram/client/models/components/selector.js";
 import type { ActivePanel, AnnotationHint, ResourceType } from "./types";
 import { ANNOTATION_TO_DISPOSITION } from "./types";
 import { computePanelState, type CollectionGroup } from "./computePanelState";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  mergeMcpServersIntoGroups,
+  type Server,
+  type ServerGroup,
+} from "./serverMerge";
 
 interface GrantRuleDrawerContentProps {
   /** The resource type determines which resource list to show */
@@ -47,36 +58,14 @@ interface GrantRuleDrawerContentProps {
   allowSelectors?: Selector[] | null;
 }
 
-interface ServerTool {
-  id: string;
-  name: string;
-  type: string;
-  httpMethod?: string;
-  annotations?: {
-    readOnlyHint?: boolean;
-    destructiveHint?: boolean;
-    idempotentHint?: boolean;
-    openWorldHint?: boolean;
-  };
-}
-
-interface Server {
-  id: string;
-  name: string;
-  slug: string;
-  mcpSlug?: string;
-  tools: ServerTool[];
-}
-
-interface ServerGroup {
-  projectId: string;
-  projectName: string;
-  servers: Server[];
-}
-
 function useMCPServers(enabled: boolean) {
   const organization = useOrganization();
   const { data } = useListToolsetsForOrg(undefined, undefined, { enabled });
+  const { data: mcpServersData } = useListMcpServersForOrg(
+    undefined,
+    undefined,
+    { enabled },
+  );
 
   return useMemo((): ServerGroup[] => {
     const projectInfo = new Map(
@@ -126,10 +115,18 @@ function useMCPServers(enabled: boolean) {
         slug: mcpUrl,
         mcpSlug: t.mcpSlug ?? undefined,
         tools,
+        dynamicTools: false,
       });
     }
-    return [...groups.values()].filter((g) => g.servers.length > 0);
-  }, [data, organization.projects]);
+    // Fold in mcp_servers rows (remote/tunneled and toolset-backed servers
+    // the toolset list doesn't cover). See serverMerge.ts for the grant id
+    // invariant this maintains.
+    return mergeMcpServersIntoGroups(
+      [...groups.values()],
+      mcpServersData?.mcpServers ?? [],
+      new Map(organization.projects.map((p) => [p.id, p.name])),
+    );
+  }, [data, mcpServersData, organization.projects]);
 }
 
 export function GrantRuleDrawerContent({
@@ -291,13 +288,16 @@ export function GrantRuleDrawerContent({
   // The "Specific tools" picker only makes sense for servers with enumerable
   // tools. Proxy servers (no tools/list at deploy time) appear in the
   // "Specific servers" picker for server-level grants but must not render
-  // a zero-tools row here.
+  // a zero-tools row here. Dynamic-tools servers (remote/tunneled) are kept
+  // so the panel can explain why their tools can't be selected.
   const toolPanelMcpServers = useMemo(
     () =>
       scopedMcpServers
         .map((g) => ({
           ...g,
-          servers: g.servers.filter((s) => s.tools.length > 0),
+          servers: g.servers.filter(
+            (s) => s.tools.length > 0 || s.dynamicTools,
+          ),
         }))
         .filter((g) => g.servers.length > 0),
     [scopedMcpServers],
@@ -325,6 +325,9 @@ export function GrantRuleDrawerContent({
     );
   }
 
+  // For MCP scopes, `id` is `Server.id`, which serverMerge.ts guarantees is
+  // the id enforcement checks (toolset id for toolset-backed servers, the
+  // mcp_servers id for remote/tunneled) — see the GRANT ID INVARIANT there.
   const toggleResource = (id: string) => {
     if (selectors === null) return;
     const has = selectors.some(
@@ -883,6 +886,42 @@ function ToolSelectionPanel({
               </div>
             ) : (
               filteredServers.map((server) => {
+                if (server.dynamicTools) {
+                  return (
+                    <Tooltip key={server.id}>
+                      <TooltipTrigger asChild>
+                        {/* Focusable so keyboard users can surface the tooltip
+                            explaining why the row can't be selected. */}
+                        <div
+                          tabIndex={0}
+                          aria-disabled="true"
+                          className="border-border focus-visible:ring-ring flex cursor-not-allowed items-center border-b px-3 py-2.5 text-sm opacity-50 focus-visible:ring-1 focus-visible:outline-none last:border-b-0"
+                        >
+                          <span className="min-w-0 flex-1 truncate">
+                            <HighlightMatch
+                              text={`${server.projectName.toLowerCase()}/`}
+                              query={q}
+                              className="text-muted-foreground/60"
+                            />
+                            <HighlightMatch
+                              text={server.name}
+                              query={q}
+                              className="font-medium"
+                            />
+                          </span>
+                          <span className="text-muted-foreground shrink-0 text-xs">
+                            dynamic tools
+                          </span>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="max-w-xs">
+                        Tools are dynamically resolved for this server and
+                        cannot be individually permissioned.
+                      </TooltipContent>
+                    </Tooltip>
+                  );
+                }
+
                 const isExpanded = expandedServers.has(server.id);
                 const serverTools = server.tools
                   .slice()

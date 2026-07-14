@@ -195,6 +195,7 @@ trackedFiles:
   src/funcs/mcpServersDelete.ts: {}
   src/funcs/mcpServersGet.ts: {}
   src/funcs/mcpServersList.ts: {}
+  src/funcs/mcpServersListForOrg.ts: {}
   src/funcs/mcpServersListToolFilters.ts: {}
   src/funcs/mcpServersUpdate.ts: {}
   src/funcs/modelKeysDeleteKey.ts: {}
@@ -1268,6 +1269,7 @@ trackedFiles:
   src/models/operations/listmcpendpoints.ts: {}
   src/models/operations/listmcpregistries.ts: {}
   src/models/operations/listmcpservers.ts: {}
+  src/models/operations/listmcpserversfororg.ts: {}
   src/models/operations/listmcpservertoolfilters.ts: {}
   src/models/operations/listmembers.ts: {}
   src/models/operations/listmodelproviderkeys.ts: {}
@@ -1692,6 +1694,8 @@ trackedFiles:
   src/react-query/listMCPRegistries.ts: {}
   src/react-query/listMcpServerToolFilters.core.ts: {}
   src/react-query/listMcpServerToolFilters.ts: {}
+  src/react-query/listMcpServersForOrg.core.ts: {}
+  src/react-query/listMcpServersForOrg.ts: {}
   src/react-query/listOrganizationUsers.core.ts: {}
   src/react-query/listOrganizationUsers.ts: {}
   src/react-query/listPackages.core.ts: {}
@@ -4543,6 +4547,15 @@ examples:
       responses:
         "200":
           application/json: {"mcp_servers": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  listMcpServersForOrg:
+    speakeasy-default-list-mcp-servers-for-org:
+      responses:
+        "200":
+          application/json: {"mcp_servers": [{"created_at": "2026-03-28T06:21:12.394Z", "id": "86626e25-460f-4b56-9f71-328b09d4cc96", "project_id": "aab89a63-e373-49be-9b2a-af1aa87baa50", "updated_at": "2024-09-01T15:49:00.273Z", "visibility": "disabled"}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
