@@ -459,6 +459,26 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ShadowMCPInventoryServer"}`)
 	})
 
+	Method("updateShadowMCPInventoryServerName", func() {
+		Description("Update or clear the administrator-defined display name for one project-scoped Shadow MCP inventory server URL.")
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(UpdateShadowMCPInventoryServerNameForm)
+			security.SessionPayload()
+		})
+
+		HTTP(func() {
+			POST("/rpc/access.updateShadowMCPInventoryServerName")
+			security.SessionHeader()
+			Response(StatusNoContent)
+		})
+
+		Meta("openapi:operationId", "updateShadowMCPInventoryServerName")
+		Meta("openapi:extension:x-speakeasy-name-override", "updateShadowMCPInventoryServerName")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateShadowMCPInventoryServerName", "type": "mutation"}`)
+	})
+
 	Method("listShadowMCPInventoryUsers", func() {
 		Description("List users with observed telemetry usage for one project-scoped Shadow MCP server URL.")
 		Security(security.Session)
@@ -1115,6 +1135,14 @@ var ShadowMCPInventoryRequestSummaryModel = Type("ShadowMCPInventoryRequestSumma
 	Attribute("requested_at", String, func() {
 		Format(FormatDateTime)
 	})
+})
+
+var UpdateShadowMCPInventoryServerNameForm = Type("UpdateShadowMCPInventoryServerNameForm", func() {
+	Required("project_id", "server_url", "name")
+
+	Attribute("project_id", String, func() { Format(FormatUUID) })
+	Attribute("server_url", String, func() { Format(FormatURI) })
+	Attribute("name", String, func() { MaxLength(255) })
 })
 
 var ShadowMCPInventoryServerModel = Type("ShadowMCPInventoryServer", func() {
