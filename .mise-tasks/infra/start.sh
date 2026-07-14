@@ -17,24 +17,56 @@ else
     READINESS_TIMEOUT=30
 fi
 
+# Resolve a `timeout` binary if available (coreutils `timeout`, or `gtimeout`
+# from Homebrew coreutils on macOS). Used to bound each probe so a hung
+# `docker compose exec` or Docker Engine call cannot block past the deadline.
+TIMEOUT_BIN=""
+if command -v timeout > /dev/null 2>&1; then
+    TIMEOUT_BIN="timeout"
+elif command -v gtimeout > /dev/null 2>&1; then
+    TIMEOUT_BIN="gtimeout"
+fi
+
+# run_bounded <seconds> <command...>
+# Runs the command, killing it after <seconds> when a timeout binary is
+# available; otherwise runs it unbounded (best effort on systems without one).
+run_bounded() {
+    local secs="$1"
+    shift
+    if [[ -n "$TIMEOUT_BIN" ]]; then
+        "$TIMEOUT_BIN" "$secs" "$@"
+    else
+        "$@"
+    fi
+}
+
 # wait_for <display-name> <compose-service> <check command...>
-# Retries the check until it succeeds or the timeout elapses. On timeout it
-# prints the container status and recent logs, then exits nonzero so the caller
-# can detect the infrastructure failure.
+# Retries the check until it succeeds or the timeout elapses. Each probe is
+# bounded by the time left on the deadline so a hung probe cannot block past it.
+# On timeout it prints the container status and recent logs, then exits nonzero
+# so the caller can detect the infrastructure failure.
 wait_for() {
     local name="$1" service="$2"
     shift 2
 
     local deadline=$((SECONDS + READINESS_TIMEOUT))
-    until "$@" > /dev/null 2>&1; do
-        if ((SECONDS >= deadline)); then
+    while true; do
+        local remaining=$((deadline - SECONDS))
+        if ((remaining <= 0)); then
             echo "❌ Timed out after ${READINESS_TIMEOUT}s waiting for ${name} to be ready." >&2
             echo "Container status:" >&2
-            docker compose ps "$service" >&2 || true
+            run_bounded 10 docker compose ps "$service" >&2 || true
             echo "Recent ${service} logs:" >&2
-            docker compose logs --tail=50 "$service" >&2 || true
+            run_bounded 10 docker compose logs --tail=50 "$service" >&2 || true
             exit 1
         fi
+
+        # Cap each probe at the remaining time (and 5s for periodic feedback).
+        local probe=$((remaining < 5 ? remaining : 5))
+        if run_bounded "$probe" "$@" > /dev/null 2>&1; then
+            return 0
+        fi
+
         echo "Waiting for ${name} to be ready..."
         sleep 1
     done
