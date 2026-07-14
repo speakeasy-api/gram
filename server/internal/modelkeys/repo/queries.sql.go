@@ -11,6 +11,39 @@ import (
 	"github.com/google/uuid"
 )
 
+const getKeyByIDForUpdate = `-- name: GetKeyByIDForUpdate :one
+SELECT id, organization_id, project_id, slot, provider, api_key_encrypted, enabled, created_at, updated_at, deleted_at, deleted
+FROM model_provider_keys
+WHERE id = $1
+  AND project_id = $2
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+type GetKeyByIDForUpdateParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) GetKeyByIDForUpdate(ctx context.Context, arg GetKeyByIDForUpdateParams) (ModelProviderKey, error) {
+	row := q.db.QueryRow(ctx, getKeyByIDForUpdate, arg.ID, arg.ProjectID)
+	var i ModelProviderKey
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Slot,
+		&i.Provider,
+		&i.ApiKeyEncrypted,
+		&i.Enabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getKeyForResolution = `-- name: GetKeyForResolution :one
 SELECT api_key_encrypted
 FROM model_provider_keys
@@ -134,6 +167,41 @@ func (q *Queries) ListKeysByProject(ctx context.Context, projectID uuid.UUID) ([
 		return nil, err
 	}
 	return items, nil
+}
+
+const setKeyEnabled = `-- name: SetKeyEnabled :one
+UPDATE model_provider_keys
+SET enabled = $1
+  , updated_at = clock_timestamp()
+WHERE id = $2
+  AND project_id = $3
+  AND deleted IS FALSE
+RETURNING id, organization_id, project_id, slot, provider, api_key_encrypted, enabled, created_at, updated_at, deleted_at, deleted
+`
+
+type SetKeyEnabledParams struct {
+	Enabled   bool
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) SetKeyEnabled(ctx context.Context, arg SetKeyEnabledParams) (ModelProviderKey, error) {
+	row := q.db.QueryRow(ctx, setKeyEnabled, arg.Enabled, arg.ID, arg.ProjectID)
+	var i ModelProviderKey
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Slot,
+		&i.Provider,
+		&i.ApiKeyEncrypted,
+		&i.Enabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const softDeleteKeyByID = `-- name: SoftDeleteKeyByID :one

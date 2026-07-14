@@ -2,6 +2,7 @@ import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { Button } from "@/components/ui/button";
 import { Heading } from "@/components/ui/heading";
 import { SkeletonTable } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { Type } from "@/components/ui/type";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { HumanizeDateTime } from "@/lib/dates";
@@ -11,6 +12,7 @@ import {
   invalidateAllModelProviderKeys,
   useModelProviderKeys,
 } from "@gram/client/react-query/modelProviderKeys.js";
+import { useSetModelProviderKeyEnabledMutation } from "@gram/client/react-query/setModelProviderKeyEnabled.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { Badge, Column, Stack, Table } from "@speakeasy-api/moonshine";
@@ -28,14 +30,22 @@ import { ModelProviderKeyDialog } from "./ModelProviderKeyDialog";
 export function ModelProviderKeysSection(): JSX.Element | null {
   const { data: features } = useProductFeatures();
 
-  if (!features?.customModelKeysEnabled) {
+  if (!features) {
     return null;
   }
 
-  return <EnabledModelProviderKeysSection />;
+  return (
+    <ModelProviderKeysTable
+      customModelKeysEnabled={features.customModelKeysEnabled}
+    />
+  );
 }
 
-function EnabledModelProviderKeysSection(): JSX.Element {
+function ModelProviderKeysTable({
+  customModelKeysEnabled,
+}: {
+  customModelKeysEnabled: boolean;
+}): JSX.Element | null {
   const queryClient = useQueryClient();
   const gramProject = useProjectSlugForRequests();
   const { data, isLoading, isError, refetch } = useModelProviderKeys(
@@ -61,10 +71,43 @@ function EnabledModelProviderKeysSection(): JSX.Element {
       },
     });
 
+  const { mutate: setKeyEnabled, isPending: isSettingEnabled } =
+    useSetModelProviderKeyEnabledMutation({
+      onSuccess: (key) => {
+        toast.success(`Provider key ${key.enabled ? "enabled" : "disabled"}`);
+        return invalidateAllModelProviderKeys(queryClient);
+      },
+      onError: (err) => {
+        toast.error(`Failed to update key: ${err.message}`);
+      },
+    });
+
   const handleRemove = (slot: ModelKeySlot, key: ModelProviderKey) => {
     if (!window.confirm(`Remove the ${slot.name} provider key?`)) return;
     deleteKey({ request: { id: key.id } });
   };
+
+  const handleSetEnabled = (key: ModelProviderKey, enabled: boolean) => {
+    setKeyEnabled({
+      request: {
+        setKeyEnabledRequestBody: {
+          id: key.id,
+          enabled,
+        },
+      },
+    });
+  };
+
+  const isMutating = isDeleting || isSettingEnabled;
+
+  if (
+    !customModelKeysEnabled &&
+    !isLoading &&
+    !isError &&
+    (data?.keys.length ?? 0) === 0
+  ) {
+    return null;
+  }
 
   const columns: Column<ModelKeySlot>[] = [
     {
@@ -122,7 +165,7 @@ function EnabledModelProviderKeysSection(): JSX.Element {
     {
       key: "actions",
       header: "",
-      width: "220px",
+      width: "300px",
       render: (slot) => {
         const key = keysBySlot.get(slot.slot);
         return (
@@ -131,16 +174,26 @@ function EnabledModelProviderKeysSection(): JSX.Element {
               variant="secondary"
               size="sm"
               onClick={() => setDialogSlot(slot)}
-              disabled={isDeleting}
+              disabled={isMutating || !customModelKeysEnabled}
             >
               {key ? "Replace key" : "Set key"}
             </Button>
+            {key ? (
+              <Switch
+                checked={key.enabled}
+                onCheckedChange={(enabled) => handleSetEnabled(key, enabled)}
+                disabled={
+                  isMutating || (!key.enabled && !customModelKeysEnabled)
+                }
+                aria-label={`${slot.name} key enabled`}
+              />
+            ) : null}
             {key ? (
               <Button
                 variant="destructiveGhost"
                 size="sm"
                 onClick={() => handleRemove(slot, key)}
-                disabled={isDeleting}
+                disabled={isMutating}
                 aria-label={`Remove ${slot.name} key`}
               >
                 <Trash2 className="h-3.5 w-3.5" />
@@ -176,6 +229,8 @@ function EnabledModelProviderKeysSection(): JSX.Element {
     );
   }
 
+  const dialogKey = dialogSlot ? keysBySlot.get(dialogSlot.slot) : undefined;
+
   return (
     <Stack gap={4}>
       <div>
@@ -195,7 +250,7 @@ function EnabledModelProviderKeysSection(): JSX.Element {
       {dialogSlot ? (
         <ModelProviderKeyDialog
           slot={dialogSlot}
-          hasExistingKey={keysBySlot.has(dialogSlot.slot)}
+          existingEnabled={dialogKey?.enabled}
           onClose={() => setDialogSlot(null)}
         />
       ) : null}

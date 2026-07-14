@@ -16,6 +16,14 @@ WHERE project_id = @project_id
   AND deleted IS FALSE
 ORDER BY slot;
 
+-- name: GetKeyByIDForUpdate :one
+SELECT *
+FROM model_provider_keys
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+FOR UPDATE;
+
 -- name: InsertKey :one
 INSERT INTO model_provider_keys (
     organization_id
@@ -45,6 +53,15 @@ RETURNING *;
 -- name: SoftDeleteKeyByID :one
 UPDATE model_provider_keys
 SET deleted_at = clock_timestamp()
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: SetKeyEnabled :one
+UPDATE model_provider_keys
+SET enabled = @enabled
+  , updated_at = clock_timestamp()
 WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE

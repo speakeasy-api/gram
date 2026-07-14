@@ -156,6 +156,33 @@ func TestResolveKey_DisabledKeyIsIgnored(t *testing.T) {
 	require.Equal(t, "platform-key", resolved.Key)
 }
 
+func TestResolveKey_DisabledSlotOverrideFallsBackToProjectDefault(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	enableCustomModelKeys(t, ctx, ti.conn)
+	resolver, orgID, projectID := newResolverUnderTest(t, ctx, ti)
+
+	upsertTestKey(t, ctx, ti, modelkeys.SlotDefault, "sk-or-project-default")
+	override, err := ti.service.UpsertKey(ctx, newUpsertPayload(string(billing.ModelUsageSourceAssistants), func(payload *gen.UpsertKeyPayload) {
+		payload.APIKey = "sk-or-assistants-override"
+		payload.Enabled = false
+	}))
+	require.NoError(t, err)
+
+	resolved, err := resolver.ResolveKey(ctx, orgID, projectID, billing.ModelUsageSourceAssistants, openrouter.KeyTypeChat)
+	require.NoError(t, err)
+	require.Equal(t, "sk-or-project-default", resolved.Key)
+	require.True(t, resolved.Customer)
+
+	_, err = ti.service.SetKeyEnabled(ctx, newSetKeyEnabledPayload(override.ID, true))
+	require.NoError(t, err)
+
+	resolved, err = resolver.ResolveKey(ctx, orgID, projectID, billing.ModelUsageSourceAssistants, openrouter.KeyTypeChat)
+	require.NoError(t, err)
+	require.Equal(t, "sk-or-assistants-override", resolved.Key)
+}
+
 func TestResolveKey_DeletedKeyIsIgnored(t *testing.T) {
 	t.Parallel()
 

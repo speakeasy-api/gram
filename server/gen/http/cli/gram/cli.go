@@ -109,7 +109,7 @@ func UsageCommands() []string {
 		"mcp-endpoints (create-mcp-endpoint|get-mcp-endpoint|list-mcp-endpoints|update-mcp-endpoint|check-mcp-endpoint-slug-availability|delete-mcp-endpoint)",
 		"mcp-metadata (get-mcp-metadata|set-mcp-metadata|export-mcp-metadata)",
 		"mcp-servers (create-mcp-server|get-mcp-server|list-mcp-servers|list-mcp-servers-for-org|update-mcp-server|list-tool-filters|delete-mcp-server)",
-		"model-keys (list-keys|upsert-key|delete-key)",
+		"model-keys (list-keys|upsert-key|set-key-enabled|delete-key)",
 		"organizations (get|send-invite|revoke-invite|update-invite-role|list-invites|list-users|remove-user|enable-webhooks|disable-webhooks|create-portal-session|get-onboarding-status|verify-onboarding-hooks-setup|send-enterprise-admin-onboarding-email|generate-work-os-admin-portal-link)",
 		"otel-forwarding (get-config|upsert-config|delete-config)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
@@ -1117,6 +1117,12 @@ func ParseEndpoint(
 		modelKeysUpsertKeySessionTokenFlag     = modelKeysUpsertKeyFlags.String("session-token", "", "")
 		modelKeysUpsertKeyApikeyTokenFlag      = modelKeysUpsertKeyFlags.String("apikey-token", "", "")
 		modelKeysUpsertKeyProjectSlugInputFlag = modelKeysUpsertKeyFlags.String("project-slug-input", "", "")
+
+		modelKeysSetKeyEnabledFlags                = flag.NewFlagSet("set-key-enabled", flag.ExitOnError)
+		modelKeysSetKeyEnabledBodyFlag             = modelKeysSetKeyEnabledFlags.String("body", "REQUIRED", "")
+		modelKeysSetKeyEnabledSessionTokenFlag     = modelKeysSetKeyEnabledFlags.String("session-token", "", "")
+		modelKeysSetKeyEnabledApikeyTokenFlag      = modelKeysSetKeyEnabledFlags.String("apikey-token", "", "")
+		modelKeysSetKeyEnabledProjectSlugInputFlag = modelKeysSetKeyEnabledFlags.String("project-slug-input", "", "")
 
 		modelKeysDeleteKeyFlags                = flag.NewFlagSet("delete-key", flag.ExitOnError)
 		modelKeysDeleteKeyIDFlag               = modelKeysDeleteKeyFlags.String("id", "REQUIRED", "")
@@ -2719,6 +2725,7 @@ func ParseEndpoint(
 	modelKeysFlags.Usage = modelKeysUsage
 	modelKeysListKeysFlags.Usage = modelKeysListKeysUsage
 	modelKeysUpsertKeyFlags.Usage = modelKeysUpsertKeyUsage
+	modelKeysSetKeyEnabledFlags.Usage = modelKeysSetKeyEnabledUsage
 	modelKeysDeleteKeyFlags.Usage = modelKeysDeleteKeyUsage
 
 	organizationsFlags.Usage = organizationsUsage
@@ -3783,6 +3790,9 @@ func ParseEndpoint(
 
 			case "upsert-key":
 				epf = modelKeysUpsertKeyFlags
+
+			case "set-key-enabled":
+				epf = modelKeysSetKeyEnabledFlags
 
 			case "delete-key":
 				epf = modelKeysDeleteKeyFlags
@@ -5269,6 +5279,9 @@ func ParseEndpoint(
 			case "upsert-key":
 				endpoint = c.UpsertKey()
 				data, err = modelkeysc.BuildUpsertKeyPayload(*modelKeysUpsertKeyBodyFlag, *modelKeysUpsertKeySessionTokenFlag, *modelKeysUpsertKeyApikeyTokenFlag, *modelKeysUpsertKeyProjectSlugInputFlag)
+			case "set-key-enabled":
+				endpoint = c.SetKeyEnabled()
+				data, err = modelkeysc.BuildSetKeyEnabledPayload(*modelKeysSetKeyEnabledBodyFlag, *modelKeysSetKeyEnabledSessionTokenFlag, *modelKeysSetKeyEnabledApikeyTokenFlag, *modelKeysSetKeyEnabledProjectSlugInputFlag)
 			case "delete-key":
 				endpoint = c.DeleteKey()
 				data, err = modelkeysc.BuildDeleteKeyPayload(*modelKeysDeleteKeyIDFlag, *modelKeysDeleteKeySessionTokenFlag, *modelKeysDeleteKeyApikeyTokenFlag, *modelKeysDeleteKeyProjectSlugInputFlag)
@@ -10330,6 +10343,7 @@ func modelKeysUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    list-keys: List the model provider keys configured for a project. Key material is never returned.`)
 	fmt.Fprintln(os.Stderr, `    upsert-key: Create or replace the model provider key for a slot. The key is validated with the provider, then stored encrypted.`)
+	fmt.Fprintln(os.Stderr, `    set-key-enabled: Enable or disable a model provider key without replacing its key material.`)
 	fmt.Fprintln(os.Stderr, `    delete-key: Delete a model provider key. Completions on the affected slot fall back to the project default key or the platform key.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -10379,6 +10393,30 @@ func modelKeysUpsertKeyUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "model-keys upsert-key --body '{\n      \"api_key\": \"abc123\",\n      \"enabled\": false,\n      \"provider\": \"abc123\",\n      \"slot\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func modelKeysSetKeyEnabledUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] model-keys set-key-enabled", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Enable or disable a model provider key without replacing its key material.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "model-keys set-key-enabled --body '{\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func modelKeysDeleteKeyUsage() {
