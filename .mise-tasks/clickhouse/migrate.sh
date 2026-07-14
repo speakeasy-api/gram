@@ -7,6 +7,7 @@
 #USAGE flag "--engine <engine>" {
 #USAGE   env "CLICKHOUSE_MIGRATION_ENGINE"
 #USAGE   choices "atlas" "golang-migrate"
+#USAGE   default "atlas"
 #USAGE   help "Which engine to use to apply migrations against ClickHouse"
 #USAGE }
 
