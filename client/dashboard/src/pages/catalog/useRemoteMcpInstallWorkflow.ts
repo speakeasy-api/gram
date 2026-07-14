@@ -1,6 +1,9 @@
 import { useFetcher } from "@/contexts/Fetcher";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
-import { createDefaultMcpEndpoint } from "@/lib/mcpEndpoints";
+import {
+  createDefaultMcpEndpoint,
+  DEFAULT_ENDPOINT_FAILED_MESSAGE,
+} from "@/lib/mcpEndpoints";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { getServerURL } from "@/lib/utils";
 import type { PulseMCPServer } from "@/pages/catalog/hooks";
@@ -499,12 +502,17 @@ export function useRemoteMcpInstallWorkflow({
 
       // Pre-stage a default endpoint so the user doesn't have to create one
       // before the server can serve. Best-effort: never rolls back the source.
-      const endpoint = await createDefaultMcpEndpoint(
-        client,
-        configuredMcpServer,
-        orgSlug,
-        reqOpts,
-      );
+      if (!orgSlug) {
+        toast.warning(DEFAULT_ENDPOINT_FAILED_MESSAGE);
+      }
+      const endpoint = orgSlug
+        ? await createDefaultMcpEndpoint(
+            client,
+            configuredMcpServer,
+            orgSlug,
+            reqOpts,
+          )
+        : undefined;
 
       return {
         mcpServer: configuredMcpServer,

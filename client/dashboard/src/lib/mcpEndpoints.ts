@@ -7,7 +7,9 @@ import { toast } from "sonner";
 
 type SdkClient = ReturnType<typeof useSdkClient>;
 
-const DEFAULT_ENDPOINT_FAILED_MESSAGE =
+// Shown when the default endpoint can't be created (or attempted — callers
+// without an org slug warn with this too and skip the call).
+export const DEFAULT_ENDPOINT_FAILED_MESSAGE =
   "MCP server created, but the default endpoint failed. Add one from the server page.";
 
 // Create the default MCP endpoint for a freshly created server. Slugs are
@@ -21,14 +23,9 @@ const DEFAULT_ENDPOINT_FAILED_MESSAGE =
 export async function createDefaultMcpEndpoint(
   client: SdkClient,
   mcpServer: McpServer,
-  orgSlug: string | undefined,
+  orgSlug: string,
   options?: RequestOptions,
 ): Promise<McpEndpoint | undefined> {
-  if (!orgSlug) {
-    toast.warning(DEFAULT_ENDPOINT_FAILED_MESSAGE);
-    return undefined;
-  }
-
   try {
     return await client.mcpEndpoints.create(
       {
