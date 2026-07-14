@@ -82,10 +82,32 @@ if $agent_mode && ! command -v mise &> /dev/null; then
     curl -fsSL https://mise.run | sh
     export PATH="$HOME/.local/bin:$PATH"
     mise trust
+
+    mise_bin="$HOME/.local/bin/mise"
+
+    bashrc="$HOME/.bashrc"
+    if [ ! -f "$bashrc" ] || ! grep -qF "mise activate bash" "$bashrc"; then
+        echo "eval \"\$($mise_bin activate bash)\"" >> "$bashrc"
+        echo "✅ Added mise activation in $bashrc"
+    fi
+
+    zshrc="${ZDOTDIR-$HOME}/.zshrc"
+    if [ ! -f "$zshrc" ] || ! grep -qF "mise activate zsh" "$zshrc"; then
+        echo "eval \"\$($mise_bin activate zsh)\"" >> "$zshrc"
+        echo "✅ Added mise activation in $zshrc"
+    fi
+
+    # mise activate exports MISE_SHELL; if it's unset, the current shell
+    # hasn't been activated yet.
+    if [ -z "${MISE_SHELL:-}" ]; then
+        echo "ℹ️ To take effect in your current shell, run:"
+        echo "   eval \"\$($mise_bin activate bash)\"   # bash"
+        echo "   eval \"\$($mise_bin activate zsh)\"    # zsh"
+    fi
 else
     check_command "mise" "
     Install it from here: https://mise.jdx.dev/
-    - Make sure to update your .zprofile (zsh), .profile (bash), ...
+    - Make sure to update your .zshrc (zsh), .bashrc (bash), ...
     - Additionaly enable completions for better DX: https://mise.jdx.dev/installing-mise.html#autocompletion
     "
 fi
