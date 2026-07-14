@@ -17,7 +17,7 @@ CREATE TABLE `risk_findings` (
   `end_pos` Int32 DEFAULT '0' COMMENT 'Byte offset of the match end within the scanned field.',
   `dead_letter_reason` String DEFAULT '' COMMENT 'Non-empty marks a synthetic could-not-analyze sentinel rather than a real finding.' CODEC(ZSTD(1)),
   `match_len` UInt32 DEFAULT '0' COMMENT 'Byte length of the raw match, used to render the redacted display.',
-  `match_redacted` String DEFAULT '' COMMENT 'Precomputed display string in the form redacted len=N sha=XXXXXXXX. shadow_mcp and account_identity findings pass their match through verbatim here.' CODEC(ZSTD(1)),
+  `match_redacted` String DEFAULT '' COMMENT 'Precomputed display string in the form redacted len=N sha=XXXXXXXX. Every source is redacted here including shadow_mcp and account_identity so no plaintext or PII is ever stored in ClickHouse. The verbatim value stays in Postgres for the audited unmask path.' CODEC(ZSTD(1)),
   `fingerprint_pepper_version` String DEFAULT '' COMMENT 'Pepper keyring version used to compute the fingerprints.',
   `fingerprint_global_hs256` String DEFAULT '' COMMENT 'Global fingerprint: base64url HMAC-SHA256 of the match under the current pepper. Stable across tenants.' CODEC(ZSTD(1)),
   `fingerprint_tenant_hs256` String DEFAULT '' COMMENT 'Tenant-qualified fingerprint: base64url HMAC-SHA256 under a per-org HKDF key. Used to dedupe unique matches within an org.' CODEC(ZSTD(1)),

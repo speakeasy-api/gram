@@ -918,7 +918,7 @@ CREATE TABLE IF NOT EXISTS risk_findings (
     -- its length, a redacted display string, and one-way fingerprints. Plaintext
     -- stays in Postgres for the audited unmask path.
     match_len UInt32 DEFAULT 0 COMMENT 'Byte length of the raw match, used to render the redacted display.',
-    match_redacted String DEFAULT '' COMMENT 'Precomputed display string in the form redacted len=N sha=XXXXXXXX. shadow_mcp and account_identity findings pass their match through verbatim here.' CODEC(ZSTD),
+    match_redacted String DEFAULT '' COMMENT 'Precomputed display string in the form redacted len=N sha=XXXXXXXX. Every source is redacted here including shadow_mcp and account_identity so no plaintext or PII is ever stored in ClickHouse. The verbatim value stays in Postgres for the audited unmask path.' CODEC(ZSTD),
 
     -- One-way fingerprints (base64url of HMAC-SHA256). See internal/risk/fingerprint.go.
     fingerprint_pepper_version String DEFAULT '' COMMENT 'Pepper keyring version used to compute the fingerprints.',
