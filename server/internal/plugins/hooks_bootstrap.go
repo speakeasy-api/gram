@@ -55,7 +55,16 @@ func renderHooksConfig(cfg GenerateConfig) ([]byte, error) {
 }
 
 func renderHooksBootstrap(cfg GenerateConfig) []byte {
-	return renderHooksBootstrapForRelease(hooksBinaryVersion, hooksBinaryTargets, cfg.InstallFailOpen)
+	return renderHooksBootstrapForRelease(hooksBinaryVersion, hooksBinaryTargets, hooksInstallFailOpen(cfg))
+}
+
+// hooksInstallFailOpen resolves the install-failure policy baked into the
+// bootstrap scripts. Observability mode always fails open: its contract is
+// that no hook can delay or block the agent, and a cold-install failure
+// happens before the hooks binary exists to apply nonblocking behavior, so
+// only the bootstrap exit code can honor that guarantee.
+func hooksInstallFailOpen(cfg GenerateConfig) bool {
+	return cfg.InstallFailOpen || cfg.ObservabilityMode
 }
 
 // renderHooksBootstrapForRelease renders the Unix bootstrap script. failOpen
@@ -135,7 +144,7 @@ if cache_valid; then
   exec "$binary" "$@"
 fi
 
-mkdir -p "$(dirname "$install_dir")"
+mkdir -p "$(dirname "$install_dir")" || install_failure 'could not create the cache directory'
 lock="${install_dir}.lock"
 waited=0
 while ! mkdir "$lock" 2>/dev/null; do
@@ -182,10 +191,13 @@ trap cleanup EXIT HUP INT TERM
 if ! cache_valid; then
   work=$(mktemp -d "$(dirname "$install_dir")/.speakeasy-hooks.XXXXXX") || install_failure 'could not create a working directory'
   archive="${work}/hooks.zip"
+  # The download budget must stay under the ~60s provider hook kill (same
+  # reasoning as the lock wait) so a stalled network lands on the configured
+  # install-failure policy instead of an opaque provider timeout.
   if command -v curl >/dev/null 2>&1; then
-    curl --fail --silent --show-error --location --connect-timeout 10 --max-time 90 "$url" --output "$archive" || install_failure 'download failed'
+    curl --fail --silent --show-error --location --connect-timeout 10 --max-time 45 "$url" --output "$archive" || install_failure 'download failed'
   elif command -v wget >/dev/null 2>&1; then
-    wget -q --timeout=90 --tries=1 "$url" -O "$archive" || install_failure 'download failed'
+    wget -q --timeout=45 --tries=1 "$url" -O "$archive" || install_failure 'download failed'
   else
     install_failure 'curl or wget is required for first install'
   fi
@@ -274,7 +286,11 @@ if (Test-Cache) {
     exit $LASTEXITCODE
 }
 
-$null = New-Item -ItemType Directory -Force -Path (Split-Path $InstallDir -Parent)
+try {
+    $null = New-Item -ItemType Directory -Force -Path (Split-Path $InstallDir -Parent)
+} catch {
+    Exit-InstallFailure "could not create the cache directory"
+}
 $LockPath = "$InstallDir.lock"
 $Waited = 0
 while ($true) {
@@ -306,7 +322,7 @@ try {
         New-Item -ItemType Directory -Force -Path $Work | Out-Null
         $Archive = Join-Path $Work "hooks.zip"
         try {
-            Invoke-WebRequest -UseBasicParsing -TimeoutSec 90 -Uri $Url -OutFile $Archive
+            Invoke-WebRequest -UseBasicParsing -TimeoutSec 45 -Uri $Url -OutFile $Archive
         } catch {
             Exit-InstallFailure "download failed"
         }
@@ -332,7 +348,7 @@ try {
 
 & $Binary @ForwardArgs
 exit $LASTEXITCODE
-`, hooksBinaryVersion, conv.Ternary(cfg.InstallFailOpen, 0, 1), cases.String())
+`, hooksBinaryVersion, conv.Ternary(hooksInstallFailOpen(cfg), 0, 1), cases.String())
 }
 
 func hooksBootstrapCommand(root, provider string, timeoutSeconds int, async bool) string {

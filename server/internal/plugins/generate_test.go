@@ -1247,6 +1247,18 @@ func TestHooksBootstrapInstallFailOpenExitsZeroWithoutExecuting(t *testing.T) {
 	require.NoFileExists(t, marker)
 }
 
+func TestHooksBootstrapObservabilityModeAlwaysFailsOpen(t *testing.T) {
+	t.Parallel()
+	// Observability mode guarantees no hook can block the agent; a cold-install
+	// failure happens before the binary exists to enforce that, so the
+	// bootstrap exit policy must fail open regardless of the org's
+	// install-failure setting.
+	require.Contains(t, string(renderHooksBootstrap(GenerateConfig{ObservabilityMode: true})), "install_failure_exit=0")
+	require.Contains(t, string(renderHooksPowerShellBootstrap(GenerateConfig{ObservabilityMode: true})), "$InstallFailureExit = 0")
+	require.Contains(t, string(renderHooksBootstrap(GenerateConfig{})), "install_failure_exit=1")
+	require.Contains(t, string(renderHooksPowerShellBootstrap(GenerateConfig{})), "$InstallFailureExit = 1")
+}
+
 func TestCarryHooksSubtreeIsLayoutIndependent(t *testing.T) {
 	t.Parallel()
 	prefixes := hooksSubtreePrefixes("Acme")
@@ -1259,15 +1271,30 @@ func TestCarryHooksSubtreeIsLayoutIndependent(t *testing.T) {
 	}
 
 	dst := map[string][]byte{}
-	require.True(t, carryHooksSubtree(dst, published, []byte(`{"org_name":"Acme"}`), "Renamed Since Publish"))
+	carriedOrg, carried := carryHooksSubtree(dst, published, []byte(`{"org_name":"Acme"}`), "Renamed Since Publish")
+	require.True(t, carried)
+	require.Equal(t, "Acme", carriedOrg)
 	require.Len(t, dst, 4)
 	require.Equal(t, []byte("v14 claude"), dst[prefixes[0]+"hooks/hook.sh"])
 	require.NotContains(t, dst, "some-mcp-plugin/.claude-plugin/plugin.json")
 
+	// The regenerated shared manifests must reference the carried directories
+	// (published under the old org name), not the renamed org's paths.
+	sharedCfg := GenerateConfig{
+		OrgName:      "Renamed Since Publish",
+		HooksAPIKey:  "gram_hooks_test",
+		HooksOrgName: carriedOrg,
+	}
+	shared, err := generateSharedFiles(nil, sharedCfg)
+	require.NoError(t, err)
+	require.Contains(t, string(shared[".claude-plugin/marketplace.json"]), `"./`+ClaudeObservabilitySlug(sharedCfg)+`"`)
+	require.True(t, strings.HasPrefix(ClaudeObservabilitySlug(sharedCfg)+"/", prefixes[0]))
+
 	// A platform subtree missing from the published repo means the component
 	// is not recoverable and the caller must regenerate.
 	delete(published, prefixes[2]+"hooks/hook.sh")
-	require.False(t, carryHooksSubtree(map[string][]byte{}, published, []byte(`{"org_name":"Acme"}`), "Acme"))
+	_, carried = carryHooksSubtree(map[string][]byte{}, published, []byte(`{"org_name":"Acme"}`), "Acme")
+	require.False(t, carried)
 }
 
 func TestHooksBootstrapConcurrentColdInvocationsDownloadOnce(t *testing.T) {

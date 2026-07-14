@@ -1344,6 +1344,7 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 				IsDefaultProject:  false,
 				Version:           "",
 				MarketplaceName:   "",
+				HooksOrgName:      "",
 				ObservabilityMode: false,
 				BrowserLogin:      false,
 				InstallFailOpen:   false,
@@ -1912,8 +1913,9 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	// CURRENT generator's paths would fail against an older published layout
 	// and silently regenerate past the rollout gate.
 	carriedHooks := false
+	carriedHooksOrgName := ""
 	if !hooksChanged {
-		carriedHooks = carryHooksSubtree(files, existingFiles, targetHooksConfigJSON, cfg.OrgName)
+		carriedHooksOrgName, carriedHooks = carryHooksSubtree(files, existingFiles, targetHooksConfigJSON, cfg.OrgName)
 	}
 	if !carriedHooks {
 		hooksCandidate, err := s.buildPluginAPIKeyCandidate(auth.APIKeyScopeHooks, "hooks")
@@ -1952,6 +1954,11 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	sharedCfg := cfg
 	sharedCfg.APIKey = fingerprintAPIKeySentinel
 	sharedCfg.HooksAPIKey = fingerprintHooksKeySentinel
+	// A carried subtree keeps the directory names it was published under, which
+	// diverge from cfg.OrgName after an org rename; point the regenerated
+	// manifests' observability entries at the carried directories so they stay
+	// resolvable.
+	sharedCfg.HooksOrgName = carriedHooksOrgName
 	sharedFiles, err := generateSharedFiles(pluginInfos, sharedCfg)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "generate shared files").LogError(ctx, s.logger)
@@ -2018,11 +2025,13 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 // verbatim into dst by directory prefix (see hooksSubtreePrefixes). The
 // prefixes derive from the published hooks config's org name — the org may
 // have been renamed since publish — falling back to the current org name when
-// the stored config predates the snapshot. Reports false when any platform's
-// subtree is missing, in which case the caller must regenerate.
-func carryHooksSubtree(dst, existing map[string][]byte, publishedConfig []byte, currentOrgName string) bool {
+// the stored config predates the snapshot. Returns the org name the carried
+// directories derive from (for GenerateConfig.HooksOrgName) and whether the
+// carry succeeded; false means a platform's subtree is missing and the caller
+// must regenerate.
+func carryHooksSubtree(dst, existing map[string][]byte, publishedConfig []byte, currentOrgName string) (string, bool) {
 	if len(existing) == 0 {
-		return false
+		return "", false
 	}
 	orgName := currentOrgName
 	var hc HooksConfig
@@ -2039,11 +2048,11 @@ func carryHooksSubtree(dst, existing map[string][]byte, publishedConfig []byte, 
 			}
 		}
 		if !found {
-			return false
+			return "", false
 		}
 	}
 	maps.Copy(dst, staged)
-	return true
+	return orgName, true
 }
 
 // validMarketplaceName matches identifiers Claude Code, Cursor, and Codex
@@ -2596,6 +2605,7 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlu
 		// 10-digit second epochs already in installed caches.
 		Version:           fmt.Sprintf("%d", time.Now().UnixMilli()),
 		MarketplaceName:   "",
+		HooksOrgName:      "",
 		IsDefaultProject:  s.isDefaultProject(ctx, projectID),
 		ObservabilityMode: false,
 		BrowserLogin:      false,

@@ -93,6 +93,13 @@ type GenerateConfig struct {
 	// GRAM_HOOKS_* env credentials, a previously cached key, or the baked
 	// org-wide key instead of opening a browser.
 	BrowserLogin bool
+	// HooksOrgName overrides the org name used to derive the observability
+	// plugin directory slugs (Claude/Cursor/Codex). The publish path sets it to
+	// the published hooks config's org name when it carries the hooks subtree
+	// verbatim, so the always-regenerated shared marketplace manifests and
+	// README keep referencing the carried directories even after an org rename.
+	// Empty falls back to OrgName.
+	HooksOrgName string
 	// InstallFailOpen selects the org's binary install-failure policy. When
 	// set, a bootstrap distribution failure (unreachable download origin,
 	// missing tooling, lock-wait timeout, checksum mismatch) exits 0 so the
@@ -124,6 +131,7 @@ func PublishedHooksFiles() (map[string][]byte, error) {
 		IsDefaultProject:  true,
 		Version:           "",
 		MarketplaceName:   "",
+		HooksOrgName:      "",
 		ObservabilityMode: false,
 		BrowserLogin:      false,
 		InstallFailOpen:   false,
@@ -178,6 +186,7 @@ func DogfoodPluginFiles() (map[string][]byte, error) {
 		IsDefaultProject:  true,
 		Version:           "",
 		MarketplaceName:   "",
+		HooksOrgName:      "",
 		ObservabilityMode: false,
 		// The dogfood harness is how the browser flow itself gets exercised
 		// locally, so it stays on here regardless of the publish default.
@@ -971,18 +980,19 @@ func codexMCPServerName(displayName string) string {
 }
 
 // ClaudeObservabilitySlug / CursorObservabilitySlug derive the observability
-// plugin's directory name and marketplace identifier from the org slug.
-// Namespacing per-org avoids collisions with user plugins that legitimately
-// use slug "observability".
+// plugin's directory name and marketplace identifier from the org slug
+// (HooksOrgName when the publish path carried an older subtree, see
+// GenerateConfig). Namespacing per-org avoids collisions with user plugins
+// that legitimately use slug "observability".
 // Exported because tests need to predict the published path.
 func ClaudeObservabilitySlug(cfg GenerateConfig) string {
-	return naming.ObservabilitySlug(cfg.OrgName)
+	return naming.ObservabilitySlug(conv.Default(cfg.HooksOrgName, cfg.OrgName))
 }
 func CursorObservabilitySlug(cfg GenerateConfig) string {
-	return conv.ToSlug(cfg.OrgName) + "-observability-cursor"
+	return conv.ToSlug(conv.Default(cfg.HooksOrgName, cfg.OrgName)) + "-observability-cursor"
 }
 func CodexObservabilitySlug(cfg GenerateConfig) string {
-	return conv.ToSlug(cfg.OrgName) + "-observability-codex"
+	return conv.ToSlug(conv.Default(cfg.HooksOrgName, cfg.OrgName)) + "-observability-codex"
 }
 
 // hooksSubtreePrefixes returns the repo directory prefixes the hooks
@@ -1220,7 +1230,7 @@ func generateCodexObservabilityPluginInDir(files map[string][]byte, subdir strin
 		hooks := []codexHookCommand{{
 			Type:           "command",
 			Command:        codexHookCommandString(timeoutSeconds, async),
-			CommandWindows: hooksPowerShellCommand(`${PLUGIN_ROOT}`, "codex", timeoutSeconds, async),
+			CommandWindows: codexHookCommandStringWindows(timeoutSeconds, async),
 		}}
 		hookEvents[event] = []codexMatcherGroup{{
 			Matcher: "",
@@ -1268,9 +1278,13 @@ func GenerateObservabilityPluginPackage(cfg GenerateConfig, platform string) (ma
 
 // codexHookApproval is a single [hooks.state] entry that pre-approves a Codex
 // hook event without requiring the user to click through Settings → Hooks.
+// Codex hashes the platform-effective command — on Windows commandWindows
+// replaces command before hashing (discovery.rs at the pinned commit) — so an
+// approval carries one hash per platform and the install script picks by OS.
 type codexHookApproval struct {
-	StateKey    string
-	TrustedHash string
+	StateKey           string
+	TrustedHash        string
+	TrustedHashWindows string
 }
 
 // codexEventSnakeCase maps PascalCase Codex hook event names to the snake_case
@@ -1356,21 +1370,34 @@ func computeCodexHookApprovals(marketplace, plugin string, observabilityMode boo
 	for _, event := range CodexObservabilityHookEvents {
 		snake := codexEventSnakeCase(event)
 		timeoutSeconds, async := codexHookParams(event, observabilityMode)
-		command := codexHookCommandString(timeoutSeconds, async)
-		hash, err := computeCodexHookHash(event, command)
+		hash, err := computeCodexHookHash(event, codexHookCommandString(timeoutSeconds, async))
 		if err != nil {
 			return nil, fmt.Errorf("compute hash for %s hook: %w", event, err)
 		}
+		windowsHash, err := computeCodexHookHash(event, codexHookCommandStringWindows(timeoutSeconds, async))
+		if err != nil {
+			return nil, fmt.Errorf("compute windows hash for %s hook: %w", event, err)
+		}
 		approvals = append(approvals, codexHookApproval{
-			StateKey:    fmt.Sprintf(`%s@%s:hooks/hooks.json:%s:0:0`, plugin, marketplace, snake),
-			TrustedHash: hash,
+			StateKey:           fmt.Sprintf(`%s@%s:hooks/hooks.json:%s:0:0`, plugin, marketplace, snake),
+			TrustedHash:        hash,
+			TrustedHashWindows: windowsHash,
 		})
 	}
 	return approvals, nil
 }
 
+// codexHookCommandString / codexHookCommandStringWindows are the single source
+// for the command strings emitted into the Codex hooks.json (command /
+// commandWindows) AND hashed into the precomputed approvals — Codex hashes the
+// command string verbatim, so any drift between the two call sites silently
+// untrusts every hook.
 func codexHookCommandString(timeoutSeconds int, async bool) string {
 	return hooksBootstrapCommand(`${PLUGIN_ROOT}`, "codex", timeoutSeconds, async)
+}
+
+func codexHookCommandStringWindows(timeoutSeconds int, async bool) string {
+	return hooksPowerShellCommand(`${PLUGIN_ROOT}`, "codex", timeoutSeconds, async)
 }
 
 // GenerateCodexInstallScript produces a bash install script that:
@@ -1462,8 +1489,19 @@ fi
 	// does not expand $PLUGIN_KEY etc. inside the Python source.
 	b.WriteString(`# ── 2. Patch ~/.codex/config.toml ────────────────────────────────────────────
 echo "→ Configuring ~/.codex/config.toml..."
+# Codex hashes the platform-effective hook command (commandWindows replaces
+# command on Windows before hashing), so the trusted hash to install differs
+# per platform. The quoted heredoc hides bash variables from Python; pass the
+# platform through the environment.
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) SPEAKEASY_HOOKS_OS=windows ;;
+  *) SPEAKEASY_HOOKS_OS=unix ;;
+esac
+export SPEAKEASY_HOOKS_OS
 python3 - <<'PYTHON'
 import os, re
+
+WINDOWS = os.environ.get("SPEAKEASY_HOOKS_OS") == "windows"
 
 config_path = os.path.expanduser("~/.codex/config.toml")
 os.makedirs(os.path.dirname(config_path), exist_ok=True)
@@ -1516,14 +1554,16 @@ content = ensure_table_entry(content, "[features]", "plugin_hooks", "true")
 if not has_table_header(content, "[hooks.state]") and not re.search(r'(?m)^\[hooks\.state\.', content):
     content = content.rstrip('\n') + '\n\n[hooks.state]\n'
 
-for state_key, trusted_hash in [
+for state_key, trusted_hash, trusted_hash_windows in [
 `)
 
 	for _, a := range approvals {
-		fmt.Fprintf(&b, "    (%q, %q),\n", a.StateKey, a.TrustedHash)
+		fmt.Fprintf(&b, "    (%q, %q, %q),\n", a.StateKey, a.TrustedHash, a.TrustedHashWindows)
 	}
 
 	b.WriteString(`]:
+    if WINDOWS:
+        trusted_hash = trusted_hash_windows
     section = f'[hooks.state."{state_key}"]'
     if not has_table_header(content, section):
         entry = f'\n{section}\nenabled = true\ntrusted_hash = "{trusted_hash}"\n'
@@ -1814,9 +1854,11 @@ type codexMatcherGroup struct {
 // 5bed6447998c754d154dbd796517310b8f04d4ce. On Windows it replaces command
 // before execution. Codex substitutes plugin variables only in the ${KEY}
 // textual form (discovery.rs), so commandWindows must use ${PLUGIN_ROOT},
-// never PowerShell-only $env: expansion. Trust hashing normalizes
-// command_windows to None at that commit (see computeCodexHookHash), so the
-// field is deliberately absent from the precomputed approvals.
+// never PowerShell-only $env: expansion. Trust hashing happens after that
+// replacement (discovery.rs normalizes command_windows into command before
+// hashing), so Windows machines verify against a hash of the commandWindows
+// string — precomputed approvals carry both hashes and the install script
+// selects by platform.
 type codexHookCommand struct {
 	Type           string `json:"type"`
 	Command        string `json:"command"`

@@ -161,13 +161,17 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 		)
 	}
 
-	// Propagate a hook-output-affecting change to the org's published
+	// Propagate a hook-output-affecting write to the org's published
 	// marketplaces now. Eligibility was already verified above, so eligible
-	// orgs regenerate their hooks immediately. This is best-effort: on failure
-	// the feature is already written and the automated generator rollout
-	// republishes the org on its next tick (the config-hash signal detects the
-	// drift), so we log rather than fail the toggle.
-	if hookOutputToggle && hookOutputChanged && s.plugins != nil {
+	// orgs regenerate their hooks immediately. Republish even when this write
+	// looked like a no-op: two concurrent opposite toggles can each read the
+	// other's pre-write state, and skipping "unchanged" writes could leave the
+	// losing value published; the publish itself dedupes via SkipIfUnchanged.
+	// This is best-effort: on failure the feature is already written and the
+	// automated generator rollout republishes the org on its next tick (the
+	// config-hash signal detects the drift), so we log rather than fail the
+	// toggle.
+	if hookOutputToggle && s.plugins != nil {
 		if repErr := s.plugins.RepublishOrganizationProjects(ctx, orgID); repErr != nil {
 			s.logger.WarnContext(ctx, "failed to republish org plugins after hooks feature change; automated rollout will retry",
 				attr.SlogError(repErr),

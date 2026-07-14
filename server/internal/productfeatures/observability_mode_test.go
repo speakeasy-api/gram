@@ -91,7 +91,7 @@ func TestProductFeaturesService_SetObservabilityMode(t *testing.T) {
 		require.True(t, enabled)
 	})
 
-	t.Run("no-op toggle neither gates nor republishes", func(t *testing.T) {
+	t.Run("no-op toggle is not gated but still republishes", func(t *testing.T) {
 		t.Parallel()
 		pub := &stubPluginPublisher{eligible: true}
 		ctx, ti := newTestProductFeaturesServiceWithPublisher(t, pub)
@@ -104,14 +104,17 @@ func TestProductFeaturesService_SetObservabilityMode(t *testing.T) {
 		require.Equal(t, 1, pub.republishCalls)
 
 		// Setting the same value again is unchanged, so even after the org becomes
-		// ineligible it must NOT be gated (no error) and must NOT republish again.
+		// ineligible it must NOT be gated (no error). It still requests a
+		// republish: change detection is a read-then-write race under concurrent
+		// opposite toggles, so every write propagates and the publish path
+		// dedupes via SkipIfUnchanged.
 		pub.eligible = false
 		err := ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
 			FeatureName: string(productfeatures.FeatureObservabilityMode),
 			Enabled:     true,
 		})
 		require.NoError(t, err, "re-setting the current value is a no-op, not a gated change")
-		require.Equal(t, 1, pub.republishCalls, "an unchanged value must not republish again")
+		require.Equal(t, 2, pub.republishCalls, "every hook-output write requests a republish; SkipIfUnchanged dedupes downstream")
 	})
 
 	t.Run("republish failure does not fail the toggle", func(t *testing.T) {
