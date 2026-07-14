@@ -3088,9 +3088,13 @@ function StandardPolicyEditor({
             autoName,
             userMessage,
             score,
-            ...(presidioActive
-              ? { presidioScoreThreshold: presidioThreshold }
-              : {}),
+            // Always send: default when no Presidio category is active, so
+            // disabling them resets the stored threshold instead of leaving a
+            // stale value that would resurface if Presidio is re-enabled later
+            // (update omits preserve prior values server-side).
+            presidioScoreThreshold: presidioActive
+              ? presidioThreshold
+              : DEFAULT_PRESIDIO_THRESHOLD,
             ...(identityActive ? { approvedEmailDomains } : {}),
           },
         },
