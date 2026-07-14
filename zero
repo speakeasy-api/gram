@@ -162,7 +162,11 @@ interactive_only mise run zero:cleanup
 echo "✅ Cleaned up stale state"
 
 echo -e "\n⏳ Starting infra"
-interactive_only mise infra:start
+# The infra containers below (Postgres, ClickHouse, Temporal, ...) are required
+# by the migrations that run immediately after, so they must come up in agent
+# mode too (previously this was interactive-only, which left agent runs without
+# a database and broke the migration steps below).
+mise infra:start
 
 echo -e "\n⏳ Running migrations"
 mise run zero:migrations
