@@ -100,7 +100,9 @@ If a chart need doesn't fit these, check `ChartCard`, `MetricCard`, and `chartUt
 
 All six share the `Layout` scaffold's header contract: `eyebrow` (mono caption), `title` (display serif), `subtitle` (quiet sans), `actions` (right-aligned controls), closed by a hairline rule. See `Layouts/Page Layouts` in Storybook.
 
-**Exempt from the layout system** — full-screen surfaces that render _outside_ the main chrome (no sidebar/top-bar) and are intentionally bespoke: `login`/`register` (split-screen auth), the onboarding wizard and enterprise setup wizard (`outsideMainLayout`), and the immersive full-bleed `chat` surfaces. Do not force these into a layout. Everything else is one of the six.
+**Exempt from the layout system** — intentionally bespoke surfaces: `login`/`register` (split-screen auth), the onboarding wizard and enterprise setup wizard (`outsideMainLayout`), the immersive full-bleed `chat` surfaces, and the Costs explorer's `EntityProfile` drill-down hero (a deliberate mesh-gradient/animated-nav design). Do not force these into a layout. Everything else is one of the six.
+
+Telemetry viewers (insights/logs) use `ObservabilityLayout` in `fullHeight` mode: `<Page.Body fullHeight overflowHidden noPadding>` → `<ObservabilityLayout fullHeight>` with a fixed `.Header` above an `.Scroll` region (`.Scroll` forwards `ref`/`onScroll` for virtualized/infinite-scroll tables).
 
 ## Visual rules ("Claude Design")
 

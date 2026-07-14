@@ -25,12 +25,46 @@ import { Layout } from "./layout";
 function ObservabilityLayoutRoot({
   children,
   className,
+  fullHeight = false,
 }: {
   children: React.ReactNode;
   className?: string;
+  /**
+   * For telemetry viewers whose header stays put while a table scrolls
+   * beneath it. Makes the root fill its parent; pair with `.Scroll` for the
+   * scrolling region. Requires the page to render it in a full-height body
+   * (`<Page.Body fullHeight overflowHidden noPadding>`).
+   */
+  fullHeight?: boolean;
 }): JSX.Element {
-  return <Layout className={className}>{children}</Layout>;
+  return (
+    <Layout
+      className={cn(fullHeight && "h-full min-h-0 overflow-hidden", className)}
+    >
+      {children}
+    </Layout>
+  );
 }
+
+/**
+ * The scrolling body region for a `fullHeight` viewer: the header sits above
+ * it and stays put while this area scrolls. Holds the filters, stats, and the
+ * (virtualized) table.
+ */
+const ObservabilityLayoutScroll = React.forwardRef<
+  HTMLDivElement,
+  React.ComponentProps<"div">
+>(function ObservabilityLayoutScroll({ children, className, ...props }, ref) {
+  return (
+    <div
+      ref={ref}
+      className={cn("flex min-h-0 flex-1 flex-col overflow-y-auto", className)}
+      {...props}
+    >
+      {children}
+    </div>
+  );
+});
 
 /**
  * The KPI row. Tiles sit in a hairline-divided band — one border around
@@ -111,6 +145,7 @@ function ObservabilityLayoutSection({
 }
 
 ObservabilityLayoutRoot.Header = Layout.Header;
+ObservabilityLayoutRoot.Scroll = ObservabilityLayoutScroll;
 ObservabilityLayoutRoot.Stats = ObservabilityLayoutStats;
 ObservabilityLayoutRoot.Strip = ObservabilityLayoutStrip;
 ObservabilityLayoutRoot.Grid = ObservabilityLayoutGrid;
