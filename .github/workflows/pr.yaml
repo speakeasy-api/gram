@@ -812,6 +812,13 @@ jobs:
         with:
           cloud-token: ${{ secrets.ATLAS_TOKEN }}
 
+      - name: Setup Mise
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        with:
+          install: true
+          cache: true
+          env: false
+
       - name: Run gram migration static checks
         shell: bash
         env:
@@ -839,6 +846,45 @@ jobs:
           git-base: origin/main
         env:
           GITHUB_TOKEN: ${{ github.token }}
+
+      # Porcelain check: regenerate migrations from the schema files using the
+      # same tasks developers run locally. If anything appears in the working
+      # tree, a schema change was committed without its migration (or a
+      # generated file is stale) and the job fails.
+      - name: Check migration state is clean
+        shell: bash
+        run: |
+          failed=0
+
+          mise run db:diff ci-drift-check
+          pg_status="$(git status --porcelain -- server/migrations)"
+          if [ -n "$pg_status" ]; then
+            failed=1
+            echo "::error::PostgreSQL migrations are out of sync with server/database/schema.sql"
+            echo "Regenerating PostgreSQL migrations produced uncommitted changes:"
+            echo "$pg_status"
+            git add -N -- server/migrations
+            git diff -- server/migrations
+            echo ""
+            echo "Fix: run 'mise run db:diff <name>' locally and commit the generated migration and atlas.sum."
+          fi
+
+          mise run clickhouse:diff ci-drift-check
+          ch_status="$(git status --porcelain -- server/clickhouse server/internal/telemetry/repo)"
+          if [ -n "$ch_status" ]; then
+            failed=1
+            echo "::error::ClickHouse migrations are out of sync with server/clickhouse/schema.sql"
+            echo "Regenerating ClickHouse migrations produced uncommitted changes."
+            echo "This covers the Atlas dir (server/clickhouse/migrations), the golang-migrate dir"
+            echo "(server/clickhouse/local/golang_migrate), and the generated materialized columns Go file:"
+            echo "$ch_status"
+            git add -N -- server/clickhouse server/internal/telemetry/repo
+            git diff -- server/clickhouse server/internal/telemetry/repo
+            echo ""
+            echo "Fix: run 'mise run clickhouse:diff <name>' locally and commit the generated files in both migration dirs."
+          fi
+
+          exit "$failed"
 
   atlas-push:
     name: Push migrations to Atlas Registry
