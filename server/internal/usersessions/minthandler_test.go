@@ -2,10 +2,10 @@ package usersessions_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
@@ -74,13 +74,13 @@ func TestMintUserSessionAllowsMCPConnect(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	// Dashboard mints must not persist a user_sessions row — only real OAuth
-	// clients establish sessions that surface in the sessions list.
-	_, err = repo.New(ti.conn).GetUserSessionByJTI(ctx, repo.GetUserSessionByJTIParams{
+	row, err := repo.New(ti.conn).GetUserSessionByJTI(ctx, repo.GetUserSessionByJTIParams{
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
 		Jti:                 claims.ID,
 	})
-	require.ErrorIs(t, err, pgx.ErrNoRows)
+	require.NoError(t, err)
+	require.False(t, row.UserSessionClientID.Valid)
+	require.True(t, strings.HasPrefix(row.RefreshTokenHash, "dashboard-mint:"))
 }
 
 func TestMintUserSessionRequiresExactlyOneTarget(t *testing.T) {
