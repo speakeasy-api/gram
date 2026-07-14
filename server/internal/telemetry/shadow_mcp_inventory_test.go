@@ -68,6 +68,99 @@ func TestShadowMCPInventoryURLs_UpsertAndList(t *testing.T) {
 	require.Equal(t, lastSeen, rows[0].LastSeen)
 }
 
+func TestShadowMCPInventoryURLs_NameOverrideSurvivesLaterObservation(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	projectID := uuid.NewString()
+	serverURL := "https://github.example.com/mcp"
+	firstSeen := time.Date(2026, 7, 14, 12, 0, 0, 0, time.UTC)
+
+	require.NoError(t, ti.chClient.UpsertShadowMCPInventoryURLs(ctx, []telemetryRepo.UpsertShadowMCPInventoryURLParams{{
+		GramProjectID:      projectID,
+		CanonicalServerURL: serverURL,
+		URLHost:            "github.example.com",
+		ServerName:         "GitHub MCP",
+		SeenAt:             firstSeen,
+		UpdatedAt:          firstSeen,
+	}}))
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	updated, err := ti.chClient.UpdateShadowMCPInventoryURLNameOverride(ctx, telemetryRepo.UpdateShadowMCPInventoryURLNameOverrideParams{
+		GramProjectID:      projectID,
+		CanonicalServerURL: serverURL,
+		ServerNameOverride: "Engineering GitHub",
+		UpdatedAt:          firstSeen.Add(time.Minute),
+	})
+	require.NoError(t, err)
+	require.True(t, updated)
+
+	require.NoError(t, ti.chClient.UpsertShadowMCPInventoryURLs(ctx, []telemetryRepo.UpsertShadowMCPInventoryURLParams{{
+		GramProjectID:      projectID,
+		CanonicalServerURL: serverURL,
+		URLHost:            "github.example.com",
+		ServerName:         "GitHub Enterprise MCP",
+		SeenAt:             firstSeen.Add(2 * time.Minute),
+		UpdatedAt:          firstSeen.Add(2 * time.Minute),
+	}}))
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	rows, err := ti.chClient.ListShadowMCPInventoryURLs(ctx, telemetryRepo.ListShadowMCPInventoryURLsParams{
+		GramProjectID: projectID,
+		Limit:         10,
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, "GitHub Enterprise MCP", rows[0].ServerName)
+	require.Equal(t, "Engineering GitHub", rows[0].ServerNameOverride)
+}
+
+func TestShadowMCPInventoryURLs_NameOverrideCanBeCleared(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	projectID := uuid.NewString()
+	serverURL := "https://github.example.com/mcp"
+	seenAt := time.Date(2026, 7, 14, 12, 0, 0, 0, time.UTC)
+
+	require.NoError(t, ti.chClient.UpsertShadowMCPInventoryURLs(ctx, []telemetryRepo.UpsertShadowMCPInventoryURLParams{{
+		GramProjectID:      projectID,
+		CanonicalServerURL: serverURL,
+		URLHost:            "github.example.com",
+		ServerName:         "GitHub MCP",
+		SeenAt:             seenAt,
+		UpdatedAt:          seenAt,
+	}}))
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	updated, err := ti.chClient.UpdateShadowMCPInventoryURLNameOverride(ctx, telemetryRepo.UpdateShadowMCPInventoryURLNameOverrideParams{
+		GramProjectID:      projectID,
+		CanonicalServerURL: serverURL,
+		ServerNameOverride: "Engineering GitHub",
+		UpdatedAt:          seenAt.Add(time.Minute),
+	})
+	require.NoError(t, err)
+	require.True(t, updated)
+
+	updated, err = ti.chClient.UpdateShadowMCPInventoryURLNameOverride(ctx, telemetryRepo.UpdateShadowMCPInventoryURLNameOverrideParams{
+		GramProjectID:      projectID,
+		CanonicalServerURL: serverURL,
+		ServerNameOverride: "",
+		UpdatedAt:          seenAt.Add(2 * time.Minute),
+	})
+	require.NoError(t, err)
+	require.True(t, updated)
+
+	rows, err := ti.chClient.ListShadowMCPInventoryURLs(ctx, telemetryRepo.ListShadowMCPInventoryURLsParams{
+		GramProjectID: projectID,
+		Limit:         10,
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, "GitHub MCP", rows[0].ServerName)
+	require.Empty(t, rows[0].ServerNameOverride)
+}
+
 func TestShadowMCPInventoryURLs_ListBySlugHash(t *testing.T) {
 	t.Parallel()
 
