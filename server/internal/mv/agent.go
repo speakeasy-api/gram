@@ -3,7 +3,6 @@ package mv
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"io"
 
@@ -11,6 +10,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
 	"github.com/speakeasy-api/gram/server/internal/agent/repo"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
 )
 
@@ -88,13 +88,7 @@ func BuildAgentPluginsView(rows []repo.GetAgentPluginSetRow, marketplaceURL func
 			// exists in the published repo: the hooks rollout gate can pin the
 			// subtree under a pre-rename org name, recorded in the published
 			// hooks config snapshot.
-			hooksOrgName := row.OrganizationName
-			var publishedHooks struct {
-				OrgName string `json:"org_name"`
-			}
-			if json.Unmarshal(row.PublishedHooksConfig, &publishedHooks) == nil && publishedHooks.OrgName != "" {
-				hooksOrgName = publishedHooks.OrgName
-			}
+			hooksOrgName := conv.Default(naming.PublishedHooksOrgName(row.PublishedHooksConfig), row.OrganizationName)
 			observabilitySlug := naming.ObservabilitySlug(hooksOrgName)
 			plugins = append(plugins, &gen.AgentPlugin{
 				Slug:            observabilitySlug,

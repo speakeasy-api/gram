@@ -273,7 +273,9 @@ func hooksManifestVersion(cfg GenerateConfig) string {
 // directly in plugin metadata and runtime configuration. ServerURL/OrgID are
 // written to the generated runtime configuration.
 type HooksConfig struct {
-	MarketplaceName   string                       `json:"marketplace_name"`
+	MarketplaceName string `json:"marketplace_name"`
+	// OrgName's tag is also read by naming.PublishedHooksOrgName, which every
+	// surface uses to name the published observability plugin after a rename.
 	OrgName           string                       `json:"org_name"`
 	OrgEmail          string                       `json:"org_email"`
 	ProjectSlug       string                       `json:"project_slug"`

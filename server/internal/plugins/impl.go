@@ -49,6 +49,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -1208,7 +1209,7 @@ func (s *Service) DownloadCodexInstallScript(ctx context.Context, payload *gen.D
 	// The script's plugin key and hook approvals must name the codex plugin as
 	// it exists in the published repo, which a rollout-gated carry may have
 	// pinned under a pre-rename org name.
-	cfg.HooksOrgName = publishedHooksOrgName(conn.PublishedHooksConfig)
+	cfg.HooksOrgName = naming.PublishedHooksOrgName(conn.PublishedHooksConfig)
 
 	script, err := GenerateCodexInstallScript(marketplaceURL, cfg)
 	if err != nil {
@@ -1351,7 +1352,7 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 				IsDefaultProject:  false,
 				Version:           "",
 				MarketplaceName:   "",
-				HooksOrgName:      publishedHooksOrgName(conn.PublishedHooksConfig),
+				HooksOrgName:      naming.PublishedHooksOrgName(conn.PublishedHooksConfig),
 				ObservabilityMode: false,
 				BrowserLogin:      false,
 				InstallFailOpen:   false,
@@ -2040,7 +2041,7 @@ func carryHooksSubtree(dst, existing map[string][]byte, publishedConfig []byte, 
 	if len(existing) == 0 {
 		return "", false
 	}
-	orgName := conv.Default(publishedHooksOrgName(publishedConfig), currentOrgName)
+	orgName := conv.Default(naming.PublishedHooksOrgName(publishedConfig), currentOrgName)
 	staged := make(map[string][]byte)
 	for _, prefix := range hooksSubtreePrefixes(orgName) {
 		found := false
@@ -2056,22 +2057,6 @@ func carryHooksSubtree(dst, existing map[string][]byte, publishedConfig []byte, 
 	}
 	maps.Copy(dst, staged)
 	return orgName, true
-}
-
-// publishedHooksOrgName extracts the org name the published hooks subtree was
-// generated under from a stored hooks config snapshot. Empty when the snapshot
-// is missing, unreadable, or predates the org_name field; callers fall back to
-// the current org name. Every surface that points users at the published
-// observability plugin (marketplace entries, install status, install scripts,
-// the device agent) must derive its slugs from this name — the current org
-// name diverges from the published directories after a rename while the
-// rollout gate pins the hooks subtree.
-func publishedHooksOrgName(publishedConfig []byte) string {
-	var hc HooksConfig
-	if err := json.Unmarshal(publishedConfig, &hc); err != nil {
-		return ""
-	}
-	return hc.OrgName
 }
 
 // validMarketplaceName matches identifiers Claude Code, Cursor, and Codex
