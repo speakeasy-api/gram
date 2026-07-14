@@ -3,7 +3,12 @@ import type {
   TransportType,
 } from "@gram/client/models/components/externalmcpremote.js";
 import { describe, expect, it } from "vitest";
-import { dedupeRemotesByUrl, filterToHttpRemotes } from "./remotes";
+import {
+  collectibleHeaders,
+  dedupeRemotesByUrl,
+  filterToHttpRemotes,
+  normalizeRemoteUrl,
+} from "./remotes";
 import type { PulseMCPServer } from "./hooks";
 
 function remote(
@@ -122,5 +127,58 @@ describe("filterToHttpRemotes", () => {
   it("returns undefined remotes when server has no remotes", () => {
     const result = filterToHttpRemotes(server([]));
     expect(result.remotes).toEqual([]);
+  });
+});
+
+describe("collectibleHeaders", () => {
+  it("returns all headers when the server does not support DCR", () => {
+    const r = remote("https://x.example/mcp", "streamable-http", [
+      "Authorization",
+      "X-API-Key",
+    ]);
+    const s = server([r]);
+    expect(collectibleHeaders(s, r).map((h) => h.name)).toEqual([
+      "Authorization",
+      "X-API-Key",
+    ]);
+  });
+
+  it("drops the OAuth bearer Authorization header when the server supports DCR", () => {
+    const r = remote("https://x.example/mcp", "streamable-http", [
+      "Authorization",
+      "X-API-Key",
+    ]);
+    const s = { ...server([r]), supportsDcr: true };
+    expect(collectibleHeaders(s, r).map((h) => h.name)).toEqual(["X-API-Key"]);
+  });
+
+  it("matches the Authorization header case-insensitively", () => {
+    const r = remote("https://x.example/mcp", "streamable-http", [
+      "authorization",
+    ]);
+    const s = { ...server([r]), supportsDcr: true };
+    expect(collectibleHeaders(s, r)).toEqual([]);
+  });
+
+  it("returns an empty list for a remote without headers", () => {
+    const r = remote("https://x.example/mcp");
+    expect(collectibleHeaders(server([r]), r)).toEqual([]);
+  });
+});
+
+describe("normalizeRemoteUrl", () => {
+  it("strips trailing slashes", () => {
+    expect(normalizeRemoteUrl("https://x.example/mcp/")).toBe(
+      "https://x.example/mcp",
+    );
+    expect(normalizeRemoteUrl("https://x.example/mcp///")).toBe(
+      "https://x.example/mcp",
+    );
+  });
+
+  it("leaves canonical URLs unchanged", () => {
+    expect(normalizeRemoteUrl("https://x.example/mcp")).toBe(
+      "https://x.example/mcp",
+    );
   });
 });

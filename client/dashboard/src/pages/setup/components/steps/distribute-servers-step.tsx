@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   Boxes,
@@ -8,16 +8,17 @@ import {
   Server as ServerIcon,
 } from "lucide-react";
 import { useSdkClient } from "@/contexts/Sdk";
-import { useTelemetry } from "@/contexts/Telemetry";
 import { useRoutes } from "@/routes";
 import { StepContainer } from "../step-container";
 import { type PulseMCPServer, useListMCPCatalog } from "@/pages/catalog/hooks";
-import { useExternalMcpReleaseWorkflow } from "@/pages/catalog/useExternalMcpReleaseWorkflow";
-import { useQueryClient } from "@tanstack/react-query";
 import {
-  invalidateAllListToolsets,
-  useListToolsets,
-} from "@gram/client/react-query/listToolsets";
+  filterToHttpRemotes,
+  normalizeRemoteUrl,
+} from "@/pages/catalog/remotes";
+import { useRemoteMcpInstallWorkflow } from "@/pages/catalog/useRemoteMcpInstallWorkflow";
+import { useQueryClient } from "@tanstack/react-query";
+import { useMcpServers } from "@gram/client/react-query/mcpServers";
+import { useRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
 import {
   invalidateAllPlugins,
@@ -38,7 +39,6 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { InstallInstructionsButton } from "@/pages/plugins/InstallInstructionsDialog";
-import { ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG } from "@/lib/externalMcpUserSessions";
 import { cn } from "@/lib/utils";
 
 /** Display name of the shared plugin bundle catalog servers are added to. */
@@ -67,7 +67,6 @@ export function DistributeServersStep({
   onBack,
 }: DistributeServersStepProps): JSX.Element {
   const client = useSdkClient();
-  const telemetry = useTelemetry();
   const routes = useRoutes();
   const queryClient = useQueryClient();
   const [query, setQuery] = useState("");
@@ -90,11 +89,11 @@ export function DistributeServersStep({
   // The catalog is small and returned in a single response, so we fetch the
   // whole list once and search/filter it client-side (no cursor pagination).
   const { data, isLoading } = useListMCPCatalog();
-  const { data: toolsetsData, refetch: refetchToolsets } = useListToolsets();
   const { data: publishStatus } = usePublishStatus();
 
-  // Default-plugin membership: map its toolset-backed servers back to catalog
-  // registry specifiers so we can flag servers that are already distributed.
+  // Default-plugin membership: map its mcp_server-backed entries through their
+  // remote MCP server URLs back to catalog remotes so we can flag servers that
+  // are already distributed.
   const { data: pluginsData } = usePlugins();
   const defaultPlugin = pluginsData?.plugins.find((p) => p.isDefault);
   const { data: defaultPluginFull } = usePlugin(
@@ -102,19 +101,44 @@ export function DistributeServersStep({
     undefined,
     { enabled: !!defaultPlugin?.id },
   );
+  const { data: mcpServersData } = useMcpServers();
+  const { data: remoteServersData } = useRemoteMcpServers();
 
-  const distributedSpecifiers = useMemo(() => {
-    const toolsetById = new Map(
-      (toolsetsData?.toolsets ?? []).map((t) => [t.id, t]),
+  const distributedUrls = useMemo(() => {
+    const mcpServerById = new Map(
+      (mcpServersData?.mcpServers ?? []).map((s) => [s.id, s]),
     );
-    const specs = new Set<string>();
+    const remoteUrlById = new Map(
+      (remoteServersData?.remoteMcpServers ?? []).map((s) => [
+        s.id,
+        normalizeRemoteUrl(s.url),
+      ]),
+    );
+    const urls = new Set<string>();
     for (const server of defaultPluginFull?.servers ?? []) {
-      if (!server.toolsetId) continue;
-      const spec = toolsetById.get(server.toolsetId)?.origin?.registrySpecifier;
-      if (spec) specs.add(spec);
+      if (!server.mcpServerId) continue;
+      const remoteMcpServerId = mcpServerById.get(
+        server.mcpServerId,
+      )?.remoteMcpServerId;
+      const url = remoteMcpServerId
+        ? remoteUrlById.get(remoteMcpServerId)
+        : undefined;
+      if (url) urls.add(url);
     }
-    return specs;
-  }, [defaultPluginFull?.servers, toolsetsData?.toolsets]);
+    return urls;
+  }, [
+    defaultPluginFull?.servers,
+    mcpServersData?.mcpServers,
+    remoteServersData?.remoteMcpServers,
+  ]);
+
+  const isDistributed = useCallback(
+    (server: PulseMCPServer) =>
+      (server.remotes ?? []).some((remote) =>
+        distributedUrls.has(normalizeRemoteUrl(remote.url)),
+      ),
+    [distributedUrls],
+  );
 
   const servers = useMemo(
     () => (data?.servers as PulseMCPServer[]) ?? [],
@@ -164,52 +188,41 @@ export function DistributeServersStep({
   const selectedServerObjects = useMemo(
     () =>
       autoConfigurableServers.filter(
-        (s) =>
-          selected.has(serverKey(s)) &&
-          !distributedSpecifiers.has(s.registrySpecifier),
+        (s) => selected.has(serverKey(s)) && !isDistributed(s),
       ),
-    [autoConfigurableServers, selected, distributedSpecifiers],
+    [autoConfigurableServers, selected, isDistributed],
   );
 
-  // --- Deploy workflow (driven headlessly, no dialog) -----------------------
-  // Raw catalog servers are fed in un-enriched, so each partitions as a
-  // single-remote server and the backend resolves all remotes at deploy time.
-  // Mirror the catalog AddServerDialog: gate Speakeasy OAuth user-session
-  // onboarding behind the same flag so distributed servers that require OAuth
-  // are auto-configured instead of surfacing "OAuth setup required" later.
-  const workflow = useExternalMcpReleaseWorkflow({
+  // --- Install workflow (driven headlessly, no dialog) ----------------------
+  // Every selected server is installed as a Remote MCP server. There is no UI
+  // to answer the selectRemotes phase, so multi-remote servers install every
+  // endpoint.
+  const workflow = useRemoteMcpInstallWorkflow({
     servers: serversToDeploy,
-    onboardExternalMcpToUserSessions:
-      telemetry.isFeatureEnabled(ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG) ??
-      false,
+    autoSelectRemotes: true,
   });
   const startedRef = useRef(false);
   const finishedRef = useRef(false);
 
   /**
-   * Bundle the freshly deployed toolsets into the shared "Default" plugin and
-   * republish the marketplace so the org's users receive them.
+   * Bundle the freshly created MCP servers into the shared "Default" plugin
+   * and republish the marketplace so the org's users receive them.
    */
   const finishDistribution = async () => {
     try {
       // Only reachable in the complete phase (the driving effect guards this);
-      // the check also narrows the workflow union so toolsetStatuses is typed.
+      // the check also narrows the workflow union so statuses is typed.
       if (workflow.phase !== "complete") return;
-      // Match on the exact toolset slugs the workflow just created, not on
-      // registrySpecifier — the org may already hold older or forked toolsets
-      // for the same specifier, and those must not be swept into this run's
-      // bundle.
-      const deployedSlugs = new Set(
-        workflow.toolsetStatuses
-          .filter((s) => s.status === "completed" && s.toolsetSlug)
-          .map((s) => s.toolsetSlug as string),
-      );
-      const { data: fresh } = await refetchToolsets();
-      const toAdd = (fresh?.toolsets ?? []).filter((t) =>
-        deployedSlugs.has(t.slug),
+      const toAdd = workflow.statuses.flatMap((s) =>
+        s.status === "completed" && s.mcpServerId
+          ? [{ mcpServerId: s.mcpServerId, displayName: s.name }]
+          : [],
       );
       if (toAdd.length === 0) {
-        setDrawerError("No servers were deployed. Try again.");
+        setDrawerError(
+          workflow.statuses.find((s) => s.error)?.error ??
+            "No servers were installed. Try again.",
+        );
         return;
       }
 
@@ -225,17 +238,17 @@ export function DistributeServersStep({
       const full = await client.plugins.getPlugin({ id: plugin.id });
       const alreadyBundled = new Set(
         (full.servers ?? [])
-          .map((s) => s.toolsetId)
+          .map((s) => s.mcpServerId)
           .filter((id): id is string => !!id),
       );
 
-      for (const toolset of toAdd) {
-        if (alreadyBundled.has(toolset.id)) continue;
+      for (const server of toAdd) {
+        if (alreadyBundled.has(server.mcpServerId)) continue;
         await client.plugins.addPluginServer({
           addPluginServerForm: {
             pluginId: plugin.id,
-            toolsetId: toolset.id,
-            displayName: toolset.name,
+            mcpServerId: server.mcpServerId,
+            displayName: server.displayName,
             policy: "required",
           },
         });
@@ -247,12 +260,11 @@ export function DistributeServersStep({
         });
       }
 
-      // Refresh plugin + toolset state so the just-distributed servers flip to
-      // "Added" (disabled) in the grid, and drop them from the selection.
+      // Refresh plugin state so the just-distributed servers flip to "Added"
+      // (disabled) in the grid, and drop them from the selection.
       await Promise.all([
         invalidateAllPlugins(queryClient),
         invalidateAllPlugin(queryClient),
-        invalidateAllListToolsets(queryClient),
       ]);
       setSelected(new Set());
 
@@ -266,41 +278,24 @@ export function DistributeServersStep({
     }
   };
 
-  // Drive the workflow: auto-start the deploy, then bundle + publish once all
-  // toolsets are created. Guarded by refs so each fires exactly once per run.
+  // Drive the workflow: auto-start the install, then bundle + publish once all
+  // servers are created. Guarded by refs so each fires exactly once per run.
   useEffect(() => {
     if (!drawerOpen || drawerError) return;
 
     if (workflow.phase === "configure") {
-      if (
-        !startedRef.current &&
-        workflow.canDeploy &&
-        !workflow.isInstallStateLoading
-      ) {
+      if (!startedRef.current && workflow.canInstall) {
         startedRef.current = true;
-        void workflow.startDeployment();
+        void workflow.startInstall();
       }
       return;
     }
 
     if (workflow.phase === "complete" && !finishedRef.current) {
-      const done =
-        workflow.toolsetStatuses.length > 0 &&
-        workflow.toolsetStatuses.every(
-          (s) => s.status === "completed" || s.status === "failed",
-        );
-      if (done) {
-        finishedRef.current = true;
-        void finishDistribution();
-      }
-      return;
-    }
-
-    if (workflow.phase === "error" && !finishedRef.current) {
       finishedRef.current = true;
-      setDrawerError(workflow.error);
+      void finishDistribution();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- guarded by refs; re-run on workflow identity to observe phase + toolset-status changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- guarded by refs; re-run on workflow identity to observe phase + status changes
   }, [workflow, drawerOpen, drawerError]);
 
   const handleDistribute = () => {
@@ -309,7 +304,8 @@ export function DistributeServersStep({
     finishedRef.current = false;
     setDrawerError(null);
     setDrawerStep("adding");
-    setServersToDeploy(selectedServerObjects);
+    // Remote MCP servers are created from streamable-http endpoints only.
+    setServersToDeploy(selectedServerObjects.map(filterToHttpRemotes));
     setDrawerOpen(true);
   };
 
@@ -349,8 +345,7 @@ export function DistributeServersStep({
       : "Distribute servers";
   // Once at least one server has been distributed, the secondary action is no
   // longer a skip — the user has done the step, so let them move on.
-  const skipLabel =
-    distributedSpecifiers.size > 0 ? "Continue" : "Skip for now";
+  const skipLabel = distributedUrls.size > 0 ? "Continue" : "Skip for now";
 
   return (
     <StepContainer
@@ -412,16 +407,14 @@ export function DistributeServersStep({
             <div className="mt-3 grid grid-cols-2 gap-3">
               {visibleServers.map((server) => {
                 const key = serverKey(server);
-                const isDistributed = distributedSpecifiers.has(
-                  server.registrySpecifier,
-                );
+                const distributed = isDistributed(server);
                 const isSelected = selected.has(key);
                 return (
                   <button
                     key={key}
                     type="button"
                     onClick={() => {
-                      if (isDistributed) {
+                      if (distributed) {
                         showInstructions();
                       } else {
                         toggle(key);
@@ -429,7 +422,7 @@ export function DistributeServersStep({
                     }}
                     className={cn(
                       "flex min-h-[118px] items-start gap-3 rounded-lg border p-4 text-left transition-all",
-                      isSelected && !isDistributed
+                      isSelected && !distributed
                         ? "border-foreground bg-secondary"
                         : "border-border bg-card hover:border-foreground/30",
                     )}
@@ -453,7 +446,7 @@ export function DistributeServersStep({
                         {server.description ?? server.registrySpecifier}
                       </span>
                     </div>
-                    {isDistributed ? (
+                    {distributed ? (
                       <Badge variant="success" className="flex-shrink-0">
                         <Badge.LeftIcon>
                           <Check className="h-3 w-3" />
