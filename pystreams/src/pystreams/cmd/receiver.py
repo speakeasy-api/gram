@@ -46,9 +46,11 @@ class ReceiverGroup:
         ``stream.handleMessage`` span tagged with the topic and subscription
         proto names. ``max_concurrency`` caps how many handlers run at once for
         this subscription (None keeps the subscriber's default; <=0 disables
-        the bound) — size it to the handler's real downstream capacity, since
-        undelivered messages wait at the broker but admitted ones wait
-        in-process. Async because resolving the subscriber may reconcile the
+        the bound), and also sizes the pubsub client's flow-control window (2x
+        the bound), so backlog past it stays undelivered at the broker rather
+        than leased into this process — size it to the handler's real
+        downstream capacity. Async because resolving the subscriber may
+        reconcile the
         topic/subscription against the local emulator, which is offloaded off
         the event loop rather than blocking it.
         """
