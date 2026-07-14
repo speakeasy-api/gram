@@ -12,13 +12,13 @@ import {
   useOrganizationRemoteSessionClientMcpServers,
 } from "@gram/client/react-query/organizationRemoteSessionClientMcpServers.js";
 import { useRemoveOrganizationRemoteSessionClientFromMcpServerMutation } from "@gram/client/react-query/removeOrganizationRemoteSessionClientFromMcpServer.js";
+import { Button } from "@/components/ui/button";
 import {
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/moonshine";
+} from "@/components/ui/dropdown-menu";
 import { useQueryClient } from "@tanstack/react-query";
 import { MoreHorizontal, Network } from "lucide-react";
 import { toast } from "sonner";

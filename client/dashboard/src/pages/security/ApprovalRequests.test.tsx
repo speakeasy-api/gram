@@ -47,7 +47,7 @@ vi.mock("@/components/page-layout", () => {
   };
 });
 
-vi.mock("@/components/ui/moonshine", () => ({
+vi.mock("@/components/ui/icon", () => ({
   Icon: ({ name }: { name: string }) => <span>{name}</span>,
 }));
 

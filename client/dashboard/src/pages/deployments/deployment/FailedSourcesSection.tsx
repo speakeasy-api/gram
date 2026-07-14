@@ -8,7 +8,9 @@ import { cn } from "@/lib/utils";
 import { useSdkClient } from "@/contexts/Sdk";
 import type { Deployment } from "@gram/client/models/components/deployment.js";
 import type { DeploymentLogEvent } from "@gram/client/models/components/deploymentlogevent.js";
-import { Alert, Badge, Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Alert } from "@/components/ui/alert";
 import {
   ChevronDown,
   ChevronRight,

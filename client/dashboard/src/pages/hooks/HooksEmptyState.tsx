@@ -1,5 +1,5 @@
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
-import { Badge } from "@/components/ui/moonshine";
+import { Badge } from "@/components/ui/badge";
 import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";

@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
 import { LogOutIcon, AlertCircleIcon, BuildingIcon } from "lucide-react";
 import { useState } from "react";
 

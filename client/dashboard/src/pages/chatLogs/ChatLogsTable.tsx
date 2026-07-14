@@ -5,18 +5,16 @@ import { Heading } from "@/components/ui/heading";
 import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Spinner } from "@/components/ui/spinner";
-import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
+import { CopyButton } from "@/components/ui/copy-button";
 import { cn } from "@/lib/utils";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { useSession } from "@/contexts/Auth";
 import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
-import { Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import {
-  Check,
   ChevronRight,
-  Copy,
   DollarSign,
   Inbox,
   MessageSquare,

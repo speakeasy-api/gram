@@ -1,5 +1,5 @@
 import { Dialog } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
 import { ExternalLink, ShieldAlert } from "lucide-react";
 
 interface PublicMcpWarningDialogProps {

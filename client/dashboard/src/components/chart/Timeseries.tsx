@@ -7,7 +7,7 @@
 // ./chart-theme so every timeseries chart in the app looks the same by
 // construction instead of by convention.
 import { formatChartLabel, smoothData } from "@/components/chart/chartUtils";
-import { Badge } from "@/components/ui/moonshine";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatCompact } from "@/lib/format";
 import { ChartNoAxesColumn, RotateCcw } from "lucide-react";

@@ -1,6 +1,8 @@
 import { Dialog } from "@/components/ui/dialog";
 import { Type } from "@/components/ui/type";
-import { Button, Input, Stack } from "@/components/ui/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 import { WizardContext } from "./machine";
 

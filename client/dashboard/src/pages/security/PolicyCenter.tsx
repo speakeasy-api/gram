@@ -28,20 +28,19 @@ import {
   TabsList,
 } from "@/components/ui/tabs";
 import { ExclusionsTab, type ExclusionSheetState } from "./ExclusionsTab";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { type Column, Table } from "@/components/ui/table";
+import { Input } from "@/components/ui/input";
 import {
-  Badge,
-  Button,
-  type Column,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Input,
-  Stack,
-  Table,
-} from "@/components/ui/moonshine";
+} from "@/components/ui/dropdown-menu";
 import { DynamicIcon, type IconName } from "@/components/ui/dynamic-icon";
-import type { BadgeProps } from "@/components/ui/moonshine";
+import { type BadgeProps } from "@/components/ui/badge";
 import {
   Plus,
   Shield,

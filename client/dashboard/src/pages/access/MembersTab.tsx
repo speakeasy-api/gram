@@ -2,7 +2,7 @@ import { Heading } from "@/components/ui/heading";
 import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import { Type } from "@/components/ui/type";
 import { useMembers } from "@gram/client/react-query/members.js";
-import { Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
 import { useOrgRoutes } from "@/routes";
 import { ArrowRight, Users } from "lucide-react";
 

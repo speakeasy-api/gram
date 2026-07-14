@@ -1,7 +1,7 @@
 import { LoaderCircle } from "lucide-react";
 import * as React from "react";
 
-import { Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 function formatShownCount(

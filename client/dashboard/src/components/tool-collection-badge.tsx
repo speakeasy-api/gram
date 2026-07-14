@@ -1,6 +1,7 @@
 import { ReactElement } from "react";
 import { cn } from "@/lib/utils";
-import { Badge, Stack } from "@/components/ui/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
   TooltipContent,

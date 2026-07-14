@@ -21,7 +21,8 @@ import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useAuditLogFacets } from "@gram/client/react-query/auditLogFacets.js";
 import { useAuditLogsInfinite } from "@gram/client/react-query/auditLogs.js";
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
-import { Button, Input } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   ArrowRight,
   ChevronDown,

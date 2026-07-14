@@ -18,7 +18,9 @@ import { TextArea } from "@/components/ui/textarea";
 import { Type } from "@/components/ui/type";
 import { toastError } from "@/lib/toast-error";
 import { cn } from "@/lib/utils";
-import { Badge, Button, Input } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { DynamicIcon, type IconName } from "@/components/ui/dynamic-icon";
 import {
   ArrowLeft,

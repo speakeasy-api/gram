@@ -7,7 +7,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import { InputDialog } from "./input-dialog";
 import { ProjectAvatar } from "./project-menu";
-import { Button } from "./ui/moonshine";
+import { Button } from "./ui/button";
 import {
   Command,
   CommandEmpty,

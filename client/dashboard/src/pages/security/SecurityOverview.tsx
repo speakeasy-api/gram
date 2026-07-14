@@ -10,7 +10,7 @@ import { RequireScope } from "@/components/require-scope";
 import { DashboardCard } from "@/components/ui/dashboard-card";
 import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
 import { type DateRangePreset } from "@gram-ai/elements";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";

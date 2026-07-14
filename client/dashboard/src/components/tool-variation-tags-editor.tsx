@@ -1,4 +1,4 @@
-import { Badge } from "@/components/ui/moonshine";
+import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { useMemo } from "react";

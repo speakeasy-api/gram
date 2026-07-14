@@ -1,5 +1,5 @@
 import { toolSupportsAnnotations, type Tool } from "@/lib/toolTypes";
-import { Badge } from "@/components/ui/moonshine";
+import { Badge } from "@/components/ui/badge";
 
 export interface ResolvedToolAnnotations {
   readOnly: boolean;

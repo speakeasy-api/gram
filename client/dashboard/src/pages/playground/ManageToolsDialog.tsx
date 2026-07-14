@@ -10,7 +10,8 @@ import {
 import { Type } from "@/components/ui/type";
 import { useLatestDeployment, useListTools } from "@/hooks/toolTypes";
 import { Tool, Toolset, getToolSourceLabel } from "@/lib/toolTypes";
-import { Button, Input } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { EditToolDialog } from "./EditToolDialog";

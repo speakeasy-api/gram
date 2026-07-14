@@ -22,7 +22,7 @@ import {
 } from "@gram/client/react-query/toolVariationGroups.js";
 import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
 import { useUpdateMcpServerMutation } from "@gram/client/react-query/updateMcpServer.js";
-import { Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";

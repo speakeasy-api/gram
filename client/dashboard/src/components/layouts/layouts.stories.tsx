@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
-import { Badge, Button, Table, type Column } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Table, type Column } from "@/components/ui/table";
 import { Card } from "@/components/ui/card";
 import { DetailList } from "@/components/ui/detail-list";
 import { LoadMoreFooter } from "@/components/ui/load-more-footer";

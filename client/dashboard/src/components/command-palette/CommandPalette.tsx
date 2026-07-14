@@ -11,7 +11,7 @@ import { BrandGradientLine } from "@/components/brand-gradient-line";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { useCommandPalette } from "@/contexts/CommandPalette";
 import { useSlugs } from "@/contexts/Sdk";
-import { Badge } from "@/components/ui/moonshine";
+import { Badge } from "@/components/ui/badge";
 import { DynamicIcon, type IconName } from "@/components/ui/dynamic-icon";
 import { Sparkles } from "lucide-react";
 import { useState } from "react";

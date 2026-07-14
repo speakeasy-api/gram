@@ -6,7 +6,8 @@ import {
   usePublishing,
   type PublishingTarget,
 } from "@/pages/mcp/usePublishing";
-import { Button, Stack } from "@/components/ui/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
 import { PageSection } from "./MCPDetails";
 
 export function MCPPublishingSection({

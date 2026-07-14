@@ -1,5 +1,5 @@
 import { Type } from "@/components/ui/type";
-import { Stack } from "@/components/ui/moonshine";
+import { Stack } from "@/components/ui/stack";
 import { toast } from "sonner";
 
 interface ErrorHandlerOptions {

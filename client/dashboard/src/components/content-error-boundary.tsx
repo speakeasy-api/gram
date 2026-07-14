@@ -1,4 +1,5 @@
-import { Button, Stack } from "@/components/ui/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
 import { CircleAlert, RotateCcw } from "lucide-react";

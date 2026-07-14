@@ -21,7 +21,7 @@ import { useLatestDeployment, useListResources } from "@/hooks/toolTypes";
 import { Resource, Toolset } from "@/lib/toolTypes";
 import { useUpdateToolsetMutation } from "@gram/client/react-query/updateToolset.js";
 import { Dialog } from "@/components/ui/dialog";
-import { Stack } from "@/components/ui/moonshine";
+import { Stack } from "@/components/ui/stack";
 import { Newspaper } from "lucide-react";
 import { useMemo, useState } from "react";
 import { GettingStartedInstructions } from "@/components/functions/GettingStartedInstructions";

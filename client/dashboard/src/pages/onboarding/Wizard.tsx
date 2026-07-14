@@ -28,7 +28,11 @@ import { Toolset } from "@gram/client/models/components/toolset.js";
 import { invalidateAllLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import { invalidateAllListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
-import { Alert, Badge, Button, Input, Stack } from "@/components/ui/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Alert } from "@/components/ui/alert";
+import { Input } from "@/components/ui/input";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Check,

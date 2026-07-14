@@ -1,6 +1,6 @@
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
-import { Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
 import { Plus, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";

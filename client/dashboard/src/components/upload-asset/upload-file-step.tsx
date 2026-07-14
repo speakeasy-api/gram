@@ -1,6 +1,6 @@
 import { useProject, useSession } from "@/contexts/Auth";
 import { getServerURL } from "@/lib/utils";
-import { Stack } from "@/components/ui/moonshine";
+import { Stack } from "@/components/ui/stack";
 import { useState } from "react";
 import { toast } from "sonner";
 import { OpenApiSourceInput } from "../OpenApiSourceInput";

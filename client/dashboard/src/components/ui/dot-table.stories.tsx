@@ -3,7 +3,8 @@ import { faker } from "@faker-js/faker";
 import { Database, GitBranch, MessageSquare } from "lucide-react";
 import { DotTable } from "@/components/ui/dot-table";
 import { DotRow } from "@/components/ui/dot-row";
-import { Badge, Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Type } from "@/components/ui/type";
 
 faker.seed(23);

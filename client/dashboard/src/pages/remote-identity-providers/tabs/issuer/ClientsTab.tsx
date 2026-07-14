@@ -6,13 +6,13 @@ import { useOrgRoutes } from "@/routes";
 import type { OrganizationRemoteSessionClient } from "@gram/client/models/components/organizationremotesessionclient.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { useOrganizationRemoteSessionClients } from "@gram/client/react-query/organizationRemoteSessionClients.js";
+import { Button } from "@/components/ui/button";
 import {
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/moonshine";
+} from "@/components/ui/dropdown-menu";
 import { Key, MoreHorizontal, Plus } from "lucide-react";
 import { useState } from "react";
 import { remoteSessionClientDisplayName } from "../../clientDisplay";

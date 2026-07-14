@@ -21,7 +21,8 @@ import {
 import { useRemoteMcpUserSessionToken } from "@/hooks/useRemoteMcpUserSessionToken";
 import { handleError, toError } from "@/lib/errors";
 import { cn, firstPartyConnectUrl, mcpConnectionUrl } from "@/lib/utils";
-import { Badge, Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { QueryErrorResetBoundary } from "@tanstack/react-query";
 import { PlugZap } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";

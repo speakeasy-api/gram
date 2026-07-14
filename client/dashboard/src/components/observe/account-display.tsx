@@ -4,7 +4,7 @@ import {
   providerLabel,
 } from "@/components/observe/account-display-utils";
 import { cn } from "@/lib/utils";
-import { Badge } from "@/components/ui/moonshine";
+import { Badge } from "@/components/ui/badge";
 import { Type } from "@/components/ui/type";
 
 // The per-account type marker. Personal reuses the shared amber badge; team is

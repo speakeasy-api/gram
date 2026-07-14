@@ -7,7 +7,9 @@ import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
 import type { PulseMCPServer as CatalogServer } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
 import type { ProjectEntry } from "@gram/client/models/components/projectentry.js";
-import { Badge, Button, Input } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import {
   ArrowRight,
   Check,

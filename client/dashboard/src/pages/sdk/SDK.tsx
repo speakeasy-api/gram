@@ -1,12 +1,13 @@
 import { Page } from "@/components/page-layout";
-import { Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { SkeletonCode } from "@/components/ui/skeleton";
 import { TextArea } from "@/components/ui/textarea";
 import { Type } from "@/components/ui/type";
 import { useProject } from "@/contexts/Auth";
 import { capitalize } from "@/lib/utils";
-import { CodeSnippet, Stack } from "@/components/ui/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { CodeSnippet } from "@/components/ui/code-snippet";
 import { WandSparkles } from "lucide-react";
 import { AgentifyProvider } from "../playground/Agentify";
 import { useAgentify } from "../playground/useAgentify";

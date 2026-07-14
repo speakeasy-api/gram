@@ -10,7 +10,7 @@ import {
 import { useOrganization } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useOrgRoutes } from "@/routes";
-import { Alert } from "@/components/ui/moonshine";
+import { Alert } from "@/components/ui/alert";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import { Link, Navigate, useLocation, useNavigate } from "react-router";

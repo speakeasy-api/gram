@@ -3,7 +3,7 @@ import { StatusDot, type StatusDotTone } from "@/components/ui/status-dot";
 import { Type } from "@/components/ui/type";
 import { useRoutes } from "@/routes";
 import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
-import { Badge } from "@/components/ui/moonshine";
+import { Badge } from "@/components/ui/badge";
 import { ArrowRight, Network } from "lucide-react";
 
 type McpServerCardStatus = "public" | "private" | "disabled";

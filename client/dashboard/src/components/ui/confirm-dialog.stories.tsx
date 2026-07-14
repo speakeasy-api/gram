@@ -3,7 +3,7 @@ import { useState } from "react";
 
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useConfirm } from "@/components/ui/use-confirm";
-import { Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
 
 const meta: Meta<typeof ConfirmDialog> = {
   title: "UI/ConfirmDialog",

@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
 import { PlusIcon } from "lucide-react";
 
 export const AddButton = ({

@@ -16,11 +16,8 @@ import type { ChallengeBucket } from "@gram/client/models/components/challengebu
 import { Outcome } from "@gram/client/models/operations/listchallengebuckets.js";
 import { useChallengeBuckets } from "@gram/client/react-query/challengeBuckets.js";
 import { useChallenges } from "@gram/client/react-query/challenges.js";
-import {
-  Badge as MoonshineBadge,
-  type Column,
-  Table,
-} from "@/components/ui/moonshine";
+import { Badge as MoonshineBadge } from "@/components/ui/badge";
+import { type Column, Table } from "@/components/ui/table";
 import { Check } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";

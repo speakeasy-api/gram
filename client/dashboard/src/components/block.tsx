@@ -1,4 +1,5 @@
-import { cn, Stack } from "@/components/ui/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { cn } from "@/lib/utils";
 import { Type } from "./ui/type";
 
 /**

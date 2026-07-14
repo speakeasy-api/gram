@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 import { useAssetImageUploadHandler } from "@/components/useAssetImageUploadHandler";
 import { Asset } from "@gram/client/models/components/asset.js";
-import { Stack } from "@/components/ui/moonshine";
+import { Stack } from "@/components/ui/stack";
 import { Loader2, UploadIcon } from "lucide-react";
 import { useState } from "react";
 import { AssetImage } from "./asset-image";

@@ -42,7 +42,9 @@ import {
   Search,
   Server,
 } from "lucide-react";
-import { Badge, Button, Input, useTheme } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { useTheme } from "@/contexts/theme-context";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";

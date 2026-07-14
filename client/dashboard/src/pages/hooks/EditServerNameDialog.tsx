@@ -2,7 +2,8 @@ import { Dialog } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import type { ServerNameMappings } from "@/hooks/useServerNameMappings";
 import type { ServerNameOverride } from "@gram/client/models/components/servernameoverride.js";
-import { Button, Input } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { LoaderCircle, Trash } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 

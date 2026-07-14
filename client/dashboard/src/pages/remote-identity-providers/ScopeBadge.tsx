@@ -1,4 +1,4 @@
-import { Badge } from "@/components/ui/moonshine";
+import { Badge } from "@/components/ui/badge";
 
 // ScopeBadge labels a remote identity provider or session client as
 // organization-wide or scoped to a single project, based on whether it carries

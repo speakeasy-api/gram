@@ -1,7 +1,7 @@
 import { Dialog } from "@/components/ui/dialog";
 import { InputGroupInput } from "@/components/ui/input-group";
 import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
 import { Loader2, X } from "lucide-react";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 

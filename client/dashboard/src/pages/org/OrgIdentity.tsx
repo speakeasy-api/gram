@@ -9,7 +9,8 @@ import { toastError } from "@/lib/toast-error";
 import { useOrgRoutes } from "@/routes";
 import { useGenerateWorkOSAdminPortalLinkMutation } from "@gram/client/react-query/generateWorkOSAdminPortalLink.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
-import { Badge, Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { FolderSync, Loader2, Lock } from "lucide-react";
 import { toast } from "sonner";
 

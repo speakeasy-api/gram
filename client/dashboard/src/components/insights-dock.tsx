@@ -34,7 +34,7 @@ import {
   INSIGHTS_SUGGESTION_ICONS,
   type InsightsSuggestion,
 } from "@/lib/insights-suggestions";
-import { useTheme } from "@/components/ui/moonshine";
+import { useTheme } from "@/contexts/theme-context";
 import type { UIMessage } from "ai";
 import {
   ArrowLeft,

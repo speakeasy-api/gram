@@ -34,19 +34,18 @@ import { useRoles } from "@gram/client/react-query/roles.js";
 import { OrganizationInvitation } from "@gram/client/models/components/organizationinvitation.js";
 import { OrganizationUser } from "@gram/client/models/components/organizationuser.js";
 import { SimpleTooltip } from "@/components/ui/tooltip";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
+import { Alert } from "@/components/ui/alert";
+import { type Column, Table } from "@/components/ui/table";
+import { Input } from "@/components/ui/input";
 import {
-  Alert,
-  Button,
-  Column,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  Input,
-  Stack,
-  Table,
-} from "@/components/ui/moonshine";
+} from "@/components/ui/dropdown-menu";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ChevronLeft,

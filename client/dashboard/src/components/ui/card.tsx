@@ -1,7 +1,7 @@
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
-import { Grid } from "@/components/ui/moonshine";
+import { Grid } from "@/components/ui/grid";
 import { Heading } from "./heading";
 import { Skeleton, SkeletonParagraph } from "./skeleton";
 import { Type } from "./type";

@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
-import { Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 
 const meta: Meta<typeof Dialog> = {

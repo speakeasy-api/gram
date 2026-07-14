@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils";
-import { Column, Stack, Table } from "@/components/ui/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { type Column, Table } from "@/components/ui/table";
 
 function Skeleton({
   className,

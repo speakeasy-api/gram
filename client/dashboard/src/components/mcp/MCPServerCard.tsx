@@ -5,7 +5,7 @@ import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { ArrowRight, Network } from "lucide-react";
 import { Link } from "react-router";
-import { Badge } from "@/components/ui/moonshine";
+import { Badge } from "@/components/ui/badge";
 import { MCPStatusIndicator } from "./MCPStatusIndicator";
 
 // MCPServerCard renders an mcp_servers row inside the /mcp listing grid.

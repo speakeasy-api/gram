@@ -10,7 +10,8 @@ import { toolVariationsGroupDisplayName } from "@/lib/toolVariationGroups";
 import { cn } from "@/lib/utils";
 import { ListToolFiltersResult } from "@gram/client/models/components/listtoolfiltersresult.js";
 import { ToolFilterTool } from "@gram/client/models/components/toolfiltertool.js";
-import { Badge, Stack } from "@/components/ui/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Badge } from "@/components/ui/badge";
 
 // Sentinel value identifying the "available only without filtering" grouping in
 // the active-tag selection, distinct from any real tag.

@@ -22,15 +22,15 @@ import {
   useMemo,
   useState,
 } from "react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
-  Badge,
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/moonshine";
+} from "@/components/ui/dropdown-menu";
 import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { useSearchLogsMutation } from "@gram/client/react-query/searchLogs.js";

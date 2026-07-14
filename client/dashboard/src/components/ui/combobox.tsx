@@ -13,7 +13,8 @@ import {
 } from "@/components/ui/popover";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { Button, Stack } from "@/components/ui/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { ReactNode, useState } from "react";
 import { Type } from "./type";

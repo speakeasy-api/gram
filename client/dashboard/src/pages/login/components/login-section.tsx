@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
 import { buildLoginRedirectURL, cn } from "@/lib/utils";
 import { useSearchParams } from "react-router";
 import { useState } from "react";

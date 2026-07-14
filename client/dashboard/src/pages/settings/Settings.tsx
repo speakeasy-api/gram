@@ -8,7 +8,7 @@ import {
   useProject,
 } from "@/contexts/Auth";
 import { ShieldAlert } from "lucide-react";
-import { Stack } from "@/components/ui/moonshine";
+import { Stack } from "@/components/ui/stack";
 import { SettingsDangerZone } from "./SettingsDangerZone";
 import { RegistryCacheSection } from "./RegistryCacheSection";
 

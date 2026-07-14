@@ -12,7 +12,9 @@ import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { useDeploymentLogs } from "@gram/client/react-query/deploymentLogs.js";
 import { Heading } from "@/components/ui/heading";
-import { Button, CodeSnippet, Stack } from "@/components/ui/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
+import { CodeSnippet } from "@/components/ui/code-snippet";
 import { ArrowRightIcon, FileTextIcon, RefreshCcwIcon } from "lucide-react";
 
 export default function UploadOpenAPI(): JSX.Element {

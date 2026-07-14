@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { toastError } from "@/lib/toast-error";
-import { Button, Stack } from "@/components/ui/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
 import { LinkIcon, TerminalIcon, UploadIcon } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FullWidthUpload } from "@/components/upload";

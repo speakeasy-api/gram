@@ -11,7 +11,9 @@ import {
   getToolTypeLabel,
   toolSupportsAnnotations,
 } from "@/lib/toolTypes";
-import { Badge, Button, Input } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { FileCode, PencilRuler, SquareFunction } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { McpIcon } from "@/components/ui/mcp-icon";

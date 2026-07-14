@@ -5,7 +5,9 @@ import type { PulseMCPServer as CatalogServer } from "@/pages/catalog/hooks";
 import { toolStats } from "@/pages/catalog/hooks/serverMetadata";
 import { buildCollectionMcpJson } from "@/lib/mcp-json";
 import { useOrgRoutes } from "@/routes";
-import { Badge, Button, Stack } from "@/components/ui/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   ArrowRight,
   Download,

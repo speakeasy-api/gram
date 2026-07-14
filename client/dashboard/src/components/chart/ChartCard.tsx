@@ -1,4 +1,4 @@
-import { cn } from "@/components/ui/moonshine";
+import { cn } from "@/lib/utils";
 import { Heading } from "@/components/ui/heading";
 import { Maximize2, Minimize2, RotateCcw } from "lucide-react";
 import type { ReactNode } from "react";

@@ -6,7 +6,7 @@ import { Switch } from "@/components/ui/switch";
 import { Type } from "@/components/ui/type";
 import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
 import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet";
-import { Stack } from "@/components/ui/moonshine";
+import { Stack } from "@/components/ui/stack";
 import { Eye, FileText, Monitor, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { AIIntegrationsSection } from "./AIIntegrationsSection";

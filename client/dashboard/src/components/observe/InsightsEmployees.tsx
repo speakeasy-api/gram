@@ -53,15 +53,11 @@ import { Link, useNavigate, useSearchParams } from "react-router";
 import { useRoutes } from "@/routes";
 import { useSlugs } from "@/contexts/Sdk";
 import { slugify } from "@/lib/constants";
-import {
-  Alert,
-  Badge,
-  Button,
-  type Column,
-  type SortDescriptor,
-  Table,
-  sortTableData,
-} from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Alert } from "@/components/ui/alert";
+import { type Column, type SortDescriptor, Table } from "@/components/ui/table";
+import { sortTableData } from "@/components/ui/table/sorting";
 import { HooksSetupDialog } from "@/pages/hooks/HooksSetupDialog";
 
 type EmployeeView = "employees" | "unattributed";

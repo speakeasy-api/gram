@@ -105,9 +105,9 @@ vi.mock("@/components/FeatureRequestModal", () => ({
   FeatureRequestModal: () => null,
 }));
 
-// moonshine bundles dynamic icon imports that don't resolve in vitest. Stub
-// it down to plain HTML matching the existing test pattern.
-vi.mock("@/components/ui/moonshine", () => ({
+// Bundled icon imports don't resolve in vitest. Stub the design-system
+// primitives down to plain HTML matching the existing test pattern.
+vi.mock("@/components/ui/button", () => ({
   Button: ({
     children,
     onClick,
@@ -121,9 +121,17 @@ vi.mock("@/components/ui/moonshine", () => ({
       {children}
     </button>
   ),
+}));
+vi.mock("@/components/ui/stack", () => ({
   Stack: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+}));
+vi.mock("@/components/ui/badge", () => ({
   Badge: ({ children }: { children: ReactNode }) => <span>{children}</span>,
+}));
+vi.mock("@/components/ui/alert", () => ({
   Alert: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+}));
+vi.mock("@/components/ui/link", () => ({
   Link: ({ children, href }: { children: ReactNode; href?: string }) => (
     <a href={href}>{children}</a>
   ),

@@ -24,7 +24,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { LoadMoreButton } from "@/components/ui/load-more-footer";
 import { Type } from "@/components/ui/type";
-import { Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { sessionStatus, subjectLabel } from "@/lib/user-session-status";

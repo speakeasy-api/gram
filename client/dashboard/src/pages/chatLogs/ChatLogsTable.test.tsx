@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ChatLogsTable } from "./ChatLogsTable";
 
-vi.mock("@/components/ui/moonshine", () => ({
+vi.mock("@/components/ui/button", () => ({
   Button: ({
     children,
     onClick,

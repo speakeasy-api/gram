@@ -8,7 +8,7 @@
 /* Vendored moonshine design system: tokens, custom utilities, responsive
  * @source whitelist, and font @theme mapping. Replaces the former
  * node_modules @reference + precompiled moonshine.css import pair. */
-@import "./components/ui/moonshine/global.css";
+@import "./components/ui/styles/global.css";
 
 @custom-variant dark (&:where(.dark, .dark *));
 

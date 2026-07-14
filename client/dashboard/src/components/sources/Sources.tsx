@@ -14,12 +14,12 @@ import { useListAssets } from "@gram/client/react-query/listAssets.js";
 import { useListTools } from "@gram/client/react-query/listTools.js";
 import { useRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.js";
 import { useTunneledMcpServers } from "@gram/client/react-query/tunneledMcpServers.js";
+import { Button } from "@/components/ui/button";
 import {
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuTrigger,
-} from "@/components/ui/moonshine";
+} from "@/components/ui/dropdown-menu";
 import { Dialog } from "@/components/ui/dialog";
 import { ChevronDown, CircleAlert, History, Plus } from "lucide-react";
 import { useMemo } from "react";

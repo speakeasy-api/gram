@@ -1,4 +1,4 @@
-import { Link } from "@/components/ui/moonshine";
+import { Link } from "@/components/ui/link";
 import { type ComponentPropsWithoutRef, type ReactElement } from "react";
 
 /**

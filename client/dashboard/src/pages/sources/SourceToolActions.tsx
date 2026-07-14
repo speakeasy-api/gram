@@ -8,7 +8,9 @@ import { Type } from "@/components/ui/type";
 import { ToolUpdateFields } from "@/hooks/useToolUpdate";
 import { TOOL_NAME_REGEX } from "@/lib/constants";
 import { Tool } from "@/lib/toolTypes";
-import { Button, Input, Stack } from "@/components/ui/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Layers2 } from "lucide-react";
 import { useMemo, useState } from "react";
 

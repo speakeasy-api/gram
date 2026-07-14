@@ -3,7 +3,8 @@ import { Type } from "@/components/ui/type";
 import { useSession } from "@/contexts/Auth";
 import { buildLoginRedirectURL } from "@/lib/utils";
 import { useRiskCreatePolicyBypassRequestMutation } from "@gram/client/react-query/riskCreatePolicyBypassRequest.js";
-import { Button, Stack } from "@/components/ui/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
 import { Check, CircleX, LoaderCircle, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 

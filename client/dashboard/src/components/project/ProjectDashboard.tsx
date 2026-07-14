@@ -21,7 +21,7 @@ import { unwrapAsync } from "@gram/client/types/fp";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { useCallback, useEffect, useMemo, type ReactNode } from "react";
-import { Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { ArrowRight, Wand2 } from "lucide-react";

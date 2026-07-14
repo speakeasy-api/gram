@@ -1,5 +1,5 @@
 import { Type } from "@/components/ui/type";
-import { Stack } from "@/components/ui/moonshine";
+import { Stack } from "@/components/ui/stack";
 
 interface MessageHistoryIndicatorProps {
   isNavigating: boolean;

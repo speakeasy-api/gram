@@ -10,7 +10,7 @@ import { useRoutes } from "@/routes";
 import { PromptTemplate } from "@gram/client/models/components/prompttemplate.js";
 import { useDeleteTemplateMutation } from "@gram/client/react-query/deleteTemplate.js";
 import { invalidateAllTemplates } from "@gram/client/react-query/templates.js";
-import { Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { useState } from "react";

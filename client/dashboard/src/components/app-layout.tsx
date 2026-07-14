@@ -6,7 +6,7 @@ import {
 import { useSdkClient } from "@/contexts/Sdk.tsx";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
-import { Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
 import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
 import { RefreshCw, ShieldAlert } from "lucide-react";

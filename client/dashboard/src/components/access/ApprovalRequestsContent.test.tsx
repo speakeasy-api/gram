@@ -80,13 +80,15 @@ vi.mock("nuqs", () => ({
   useQueryState: mocks.useQueryState,
 }));
 
-vi.mock("@/components/ui/moonshine", () => ({
+vi.mock("@/components/ui/badge", () => ({
   Badge: Object.assign(
     ({ children }: { children: ReactNode }) => <span>{children}</span>,
     {
       Text: ({ children }: { children: ReactNode }) => <span>{children}</span>,
     },
   ),
+}));
+vi.mock("@/components/ui/button", () => ({
   Button: Object.assign(
     ({
       children,
@@ -108,6 +110,8 @@ vi.mock("@/components/ui/moonshine", () => ({
       Text: ({ children }: { children: ReactNode }) => <span>{children}</span>,
     },
   ),
+}));
+vi.mock("@/components/ui/table", () => ({
   Table: ({
     columns,
     data,

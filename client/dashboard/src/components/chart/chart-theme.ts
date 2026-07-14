@@ -8,7 +8,7 @@
 // src/pages/security/SecurityOverview.tsx.
 //
 // Design language: the language palette (the --color-lang-* tokens in
-// src/components/ui/moonshine/base.css) IS the series palette — colors
+// src/components/ui/styles/base.css) IS the series palette — colors
 // identify series, never surface fills. Tooltips render as a fixed dark
 // "ink" surface with "bone" text regardless of the app's light/dark theme,
 // matching the existing CHART_COLORS.tooltipBg/tooltipTitle/tooltipBody

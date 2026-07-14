@@ -3,7 +3,7 @@
 // optional row links, sublabels, an active/selected highlight, and a
 // rank-based color gradient. Bars are thin and squared, per the chart
 // system's design language (no rounded()).
-import { cn } from "@/components/ui/moonshine";
+import { cn } from "@/lib/utils";
 import type { CSSProperties } from "react";
 import { Link } from "react-router";
 import { withAlpha } from "./chart-theme";

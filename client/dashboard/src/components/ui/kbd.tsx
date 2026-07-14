@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
  * bg-muted, squared corners).
  *
  * Deliberately does not delegate rendering to the vendored `Key`
- * (`@/components/ui/moonshine`, read before writing this): that component
+ * (`@/components/ui/key-hint`, read before writing this): that component
  * renders a rounded-lg chip with a background *gradient* and drop shadow,
  * which conflicts with the flat hairline treatment here and can't be cleanly
  * overridden via `className` — the gradient is a `background-image` layered

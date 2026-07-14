@@ -20,7 +20,9 @@ import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.j
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { RequireScope } from "@/components/require-scope";
 import { Dialog } from "@/components/ui/dialog";
-import { Badge, Button, Stack } from "@/components/ui/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 import { Server, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";

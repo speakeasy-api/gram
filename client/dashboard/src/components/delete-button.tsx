@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 import { Trash2Icon } from "lucide-react";
-import { Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 
 export function DeleteButton({

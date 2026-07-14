@@ -1,5 +1,5 @@
 import { ArrowRight, ExternalLink, LifeBuoy } from "lucide-react";
-import { Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
 import { GramLogo } from "@/components/gram-logo";
 import { Type } from "@/components/ui/type";
 

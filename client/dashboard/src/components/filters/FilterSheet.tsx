@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
 import {
   Sheet,
   SheetContent,

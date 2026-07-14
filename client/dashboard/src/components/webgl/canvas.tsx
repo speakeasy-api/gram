@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 import { Canvas as R3FCanvas, useThree } from "@react-three/fiber";
 import { EffectComposer } from "@react-three/postprocessing";
 import * as THREE from "three";
-import { useTheme } from "@/components/ui/moonshine";
+import { useTheme } from "@/contexts/theme-context";
 import { PerspectiveCamera } from "@react-three/drei";
 
 const CanvasManager = ({

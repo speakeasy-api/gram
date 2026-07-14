@@ -14,7 +14,7 @@ import {
 import { StatusDot } from "@/components/ui/status-dot";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
 import { Check, ChevronsUpDown, Link, Plus, Unlink } from "lucide-react";
 import { useState } from "react";
 import {

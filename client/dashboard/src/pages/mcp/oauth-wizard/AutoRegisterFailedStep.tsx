@@ -1,7 +1,8 @@
 import { CodeBlock } from "@/components/code";
 import { Dialog } from "@/components/ui/dialog";
 import { Type } from "@/components/ui/type";
-import { Button, Link } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
+import { Link } from "@/components/ui/link";
 import { AlertTriangle } from "lucide-react";
 
 export function AutoRegisterFailedStep({

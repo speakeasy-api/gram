@@ -1,4 +1,6 @@
-import { Alert, Badge, Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Alert } from "@/components/ui/alert";
 import { DynamicIcon, type IconName } from "@/components/ui/dynamic-icon";
 import { Card } from "@/components/ui/card";
 import { Heading } from "@/components/ui/heading";

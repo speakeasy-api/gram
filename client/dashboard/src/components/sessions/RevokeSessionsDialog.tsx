@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useMutation } from "@tanstack/react-query";
 
-import { Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Type } from "@/components/ui/type";
 import { useRevokeUserSessionMutation } from "@gram/client/react-query/revokeUserSession.js";

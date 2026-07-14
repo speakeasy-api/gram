@@ -3,7 +3,7 @@ import { Type } from "@/components/ui/type";
 import { useProductTier } from "@/hooks/useProductTier";
 import { useOrgRoutes } from "@/routes";
 import { useGetPeriodUsage } from "@gram/client/react-query/getPeriodUsage.js";
-import { Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
 import { CreditCard, Server } from "lucide-react";
 
 interface ServerEnableDialogProps {

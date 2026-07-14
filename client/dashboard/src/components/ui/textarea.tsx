@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 
-// Mirrors the visual contract of `Input` (see components/ui/moonshine/components/Input):
+// Mirrors the visual contract of `Input` (see components/ui/input.tsx):
 // a 1px hairline on the inset surface, squared corners, no shadow.
 const textAreaClassNames = cn(
   "w-full resize-y border border-neutral-default bg-inset px-4 py-3",

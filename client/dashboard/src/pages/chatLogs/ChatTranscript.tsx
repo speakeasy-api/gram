@@ -26,13 +26,13 @@ import {
   ShieldOff,
   SlidersHorizontal,
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import {
-  Badge,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/moonshine";
+} from "@/components/ui/dropdown-menu";
 import { MessageContent, type SectionMatch, ToolUI } from "@gram-ai/elements";
 import type { ClaudeToolUsage } from "@gram/client/models/components/claudetoolusage.js";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";

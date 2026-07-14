@@ -9,7 +9,8 @@ import {
 import { usePublishPluginsMutation } from "@gram/client/react-query/publishPlugins";
 import { StepContainer } from "../step-container";
 import { PublishDialog } from "@/pages/plugins/PublishDialog";
-import { Badge, Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { StatusDot } from "@/components/ui/status-dot";
 

@@ -4,7 +4,7 @@ import { NuqsAdapter } from "nuqs/adapters/react-router/v7";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { FontTexture, WebGLCanvas } from "@/components/webgl";
-import { ThemeProvider } from "@/components/ui/moonshine";
+import { ThemeProvider } from "@/contexts/Theme";
 import { useEffect, useMemo, useState } from "react";
 import {
   BrowserRouter,

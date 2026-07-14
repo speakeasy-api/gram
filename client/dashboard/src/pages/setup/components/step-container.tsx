@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { ArrowRight, ArrowLeft } from "lucide-react";
-import { Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
 import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
 

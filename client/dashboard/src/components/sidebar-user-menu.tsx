@@ -10,8 +10,8 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  ThemeSwitcher,
-} from "@/components/ui/moonshine";
+} from "@/components/ui/dropdown-menu";
+import { ThemeSwitcher } from "@/components/ui/theme-switcher";
 import {
   ActivityIcon,
   BookOpenIcon,

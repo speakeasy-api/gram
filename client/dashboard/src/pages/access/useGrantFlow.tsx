@@ -3,7 +3,8 @@ import { ResolveChallengeFormResolutionType } from "@gram/client/models/componen
 import { invalidateAllChallenges } from "@gram/client/react-query/challenges.js";
 import { invalidateAllChallengeBuckets } from "@gram/client/react-query/challengeBuckets.js";
 import { useResolveChallengeMutation } from "@gram/client/react-query/resolveChallenge.js";
-import { Button, type Column } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
+import { type Column } from "@/components/ui/table";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CreateRoleDialog } from "./CreateRoleDialog";

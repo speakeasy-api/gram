@@ -3,7 +3,7 @@ import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
 import { AIIntegrationProviderCard } from "@/pages/org/ai-integration-provider-card";
 import { AI_INTEGRATION_PROVIDERS } from "@/pages/org/ai-integration-providers";
-import { Stack } from "@/components/ui/moonshine";
+import { Stack } from "@/components/ui/stack";
 
 export function AIIntegrationsSection(): JSX.Element {
   return (

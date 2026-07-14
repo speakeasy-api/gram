@@ -1,7 +1,7 @@
 import { Type } from "@/components/ui/type";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
-import { Badge } from "@/components/ui/moonshine";
+import { Badge } from "@/components/ui/badge";
 
 export function LinkedMcpServerRow({
   server,

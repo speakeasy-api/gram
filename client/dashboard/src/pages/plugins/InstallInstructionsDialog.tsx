@@ -7,7 +7,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useFetcher } from "@/contexts/Fetcher";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
 import { BookOpen, Download, ExternalLink } from "lucide-react";
 import { useState } from "react";
 import { HookSourceIcon } from "../hooks/HookSourceIcon";

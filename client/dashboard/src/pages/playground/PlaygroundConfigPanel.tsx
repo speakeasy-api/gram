@@ -29,7 +29,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { McpIcon } from "@/components/ui/mcp-icon";
-import { Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
 
 interface ToolsetInfo {
   name: string;

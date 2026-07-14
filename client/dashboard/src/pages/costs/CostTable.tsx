@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import {
   Tooltip,

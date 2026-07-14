@@ -30,7 +30,9 @@ import {
   useAssistantsList,
 } from "@gram/client/react-query/assistantsList.js";
 import { useGetPeriodUsage } from "@gram/client/react-query/getPeriodUsage.js";
-import { Badge, Button, Stack } from "@/components/ui/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useQueryClient } from "@tanstack/react-query";
 import { Bot, Boxes, Cpu, Info, LoaderCircle, Plus } from "lucide-react";
 import { parseAsStringLiteral, useQueryState } from "nuqs";

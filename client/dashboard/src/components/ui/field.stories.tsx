@@ -8,7 +8,7 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/moonshine";
+import { Input } from "@/components/ui/input";
 
 const meta: Meta<typeof Field> = {
   title: "UI/Field",

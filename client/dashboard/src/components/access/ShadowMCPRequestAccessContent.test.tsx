@@ -33,7 +33,7 @@ vi.mock("@gram/client/react-query/riskCreatePolicyBypassRequest.js", () => ({
   }),
 }));
 
-vi.mock("@/components/ui/moonshine", () => ({
+vi.mock("@/components/ui/button", () => ({
   Button: Object.assign(
     ({ children, onClick }: { children: ReactNode; onClick?: () => void }) => (
       <button onClick={onClick}>{children}</button>
@@ -45,7 +45,8 @@ vi.mock("@/components/ui/moonshine", () => ({
       Text: ({ children }: { children: ReactNode }) => <span>{children}</span>,
     },
   ),
-  Icon: ({ name }: { name: string }) => <span data-icon={name} />,
+}));
+vi.mock("@/components/ui/stack", () => ({
   Stack: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 

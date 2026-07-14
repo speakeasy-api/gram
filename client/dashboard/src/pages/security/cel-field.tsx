@@ -5,7 +5,7 @@ import {
 } from "@/components/ui/collapsible";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
 import { Check, ChevronRight, CircleAlert, Loader2 } from "lucide-react";
 import { Suspense, useState, type JSX } from "react";
 import { useCelStatus, type CelStatus } from "./use-cel-status";

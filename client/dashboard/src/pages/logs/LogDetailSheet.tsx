@@ -9,7 +9,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/moonshine";
+} from "@/components/ui/dropdown-menu";
 import { ChevronDown, CircleAlert, Copy, ShieldAlert } from "lucide-react";
 import { useState } from "react";
 import { formatNanoTimestamp, getSeverityColorClass } from "./utils";

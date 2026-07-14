@@ -1,4 +1,4 @@
-import { DropdownMenuItem } from "@/components/ui/moonshine";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { useRoutes } from "@/routes";
 import { Code, FileCode, Network, Server } from "lucide-react";
 import type { ReactNode } from "react";

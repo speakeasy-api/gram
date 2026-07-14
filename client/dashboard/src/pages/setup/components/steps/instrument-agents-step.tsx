@@ -15,13 +15,11 @@ import { StepContainer } from "../step-container";
 import { AGENT_PLATFORMS } from "../../setup-data";
 import type { AgentPlatform, PlatformSetupStatus } from "../../types";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
-import {
-  Alert,
-  Badge,
-  Button,
-  CodeSnippet,
-  Link,
-} from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { CodeSnippet } from "@/components/ui/code-snippet";
+import { Alert } from "@/components/ui/alert";
+import { Link } from "@/components/ui/link";
 import { cn } from "@/lib/utils";
 
 const API_KEY_PLACEHOLDER = "{{GRAM_API_KEY}}";

@@ -2,7 +2,7 @@ import { OpenApiSourceInput } from "@/components/OpenApiSourceInput";
 import { Spinner } from "@/components/ui/spinner";
 import { useUploadOpenAPISteps } from "@/pages/onboarding/upload-openapi-utils";
 import { UploadedDocument } from "@/pages/onboarding/Wizard";
-import { Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import React from "react";
 import { toast } from "sonner";

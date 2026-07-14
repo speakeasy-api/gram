@@ -18,7 +18,7 @@ import { useRoutes } from "@/routes";
 import { Asset } from "@gram/client/models/components/asset.js";
 import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import { HoverCardPortal } from "@radix-ui/react-hover-card";
-import { Badge } from "@/components/ui/moonshine";
+import { Badge } from "@/components/ui/badge";
 import { ArrowRight, CircleAlertIcon, FileCode, Network } from "lucide-react";
 
 export type NamedAsset =

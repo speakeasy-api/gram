@@ -22,7 +22,8 @@ import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSess
 import { useGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
 import { useListEnvironments } from "@gram/client/react-query/listEnvironments.js";
 import { useMintUserSessionMutation } from "@gram/client/react-query/mintUserSession.js";
-import { Button, useTheme } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
+import { useTheme } from "@/contexts/theme-context";
 import { useQuery } from "@tanstack/react-query";
 import { AlertCircle, HistoryIcon, ShieldAlert } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";

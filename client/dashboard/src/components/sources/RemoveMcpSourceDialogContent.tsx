@@ -1,7 +1,9 @@
 import { Type } from "@/components/ui/type";
 import { LinkedMcpServerRow } from "@/components/sources/LinkedMcpServerRow";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
-import { Alert, Button, Input } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
+import { Alert } from "@/components/ui/alert";
+import { Input } from "@/components/ui/input";
 import { Dialog } from "@/components/ui/dialog";
 import { toastError } from "@/lib/toast-error";
 import { Loader2 } from "lucide-react";

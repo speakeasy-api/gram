@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { faker } from "@faker-js/faker";
 import { Link } from "react-router";
 import { DashboardCard } from "@/components/ui/dashboard-card";
-import { Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
 
 faker.seed(17);
 

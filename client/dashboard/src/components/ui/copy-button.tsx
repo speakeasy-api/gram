@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { Check, Copy, type LucideIcon } from "lucide-react";

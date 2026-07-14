@@ -1,5 +1,6 @@
 import { Tool } from "@/lib/toolTypes";
-import { Badge, Stack } from "@/components/ui/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Badge } from "@/components/ui/badge";
 import { SquareFunction } from "lucide-react";
 import { HttpRoute } from "./http-route";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";

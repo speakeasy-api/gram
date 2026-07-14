@@ -13,7 +13,7 @@ import { dateTimeFormatters } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { useDeploymentSuspense } from "@gram/client/react-query/deployment.js";
 import { useDeploymentLogsSuspense } from "@gram/client/react-query/deploymentLogs.js";
-import { Input } from "@/components/ui/moonshine";
+import { Input } from "@/components/ui/input";
 import {
   ChevronDown,
   ChevronRight,

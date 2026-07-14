@@ -12,7 +12,8 @@ import {
 } from "@gram-ai/elements";
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate.js";
-import { ResizablePanel, useTheme } from "@/components/ui/moonshine";
+import { ResizablePanel } from "@/components/ui/resizable-panel";
+import { useTheme } from "@/contexts/theme-context";
 import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useParams, useSearchParams } from "react-router";

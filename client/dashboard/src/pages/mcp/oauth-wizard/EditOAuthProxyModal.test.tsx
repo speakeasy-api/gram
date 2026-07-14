@@ -36,7 +36,7 @@ vi.mock("@/contexts/Telemetry", () => ({
   useTelemetry: () => ({ capture: mocks.capture }),
 }));
 
-vi.mock("@/components/ui/moonshine", () => ({
+vi.mock("@/components/ui/button", () => ({
   Button: ({
     children,
     onClick,
@@ -50,6 +50,8 @@ vi.mock("@/components/ui/moonshine", () => ({
       {children}
     </button>
   ),
+}));
+vi.mock("@/components/ui/stack", () => ({
   Stack: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 

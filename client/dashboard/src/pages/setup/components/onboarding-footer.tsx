@@ -1,4 +1,4 @@
-import { ThemeSwitcher } from "@/components/ui/moonshine";
+import { ThemeSwitcher } from "@/components/ui/theme-switcher";
 import { Type } from "@/components/ui/type";
 
 export function OnboardingFooter(): JSX.Element {

@@ -3,7 +3,8 @@ import * as React from "react";
 
 import { Dialog } from "@/components/ui/dialog";
 import { Field, FieldLabel } from "@/components/ui/field";
-import { Button, Input } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 export interface ConfirmDialogProps {
   open: boolean;

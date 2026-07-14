@@ -12,5 +12,5 @@
 export {
   Icon as DynamicIcon,
   type IconProps as DynamicIconProps,
-} from "@/components/ui/moonshine/components/Icon";
-export { type IconName } from "@/components/ui/moonshine/components/Icon/names";
+} from "@/components/ui/icon";
+export { type IconName } from "@/components/ui/icon/names";

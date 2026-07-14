@@ -1,5 +1,6 @@
 import { InlineEmptyState } from "@/components/ui/inline-empty-state";
-import { Badge, Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Type } from "@/components/ui/type";
 import { telemetrySearchLogs } from "@gram/client/funcs/telemetrySearchLogs";
 import { TelemetryLogRecord } from "@gram/client/models/components/telemetrylogrecord.js";

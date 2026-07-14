@@ -1,4 +1,4 @@
-import { cn } from "@/components/ui/moonshine";
+import { cn } from "@/lib/utils";
 import { ReactNode } from "react";
 
 export type ChartButtonProps = {

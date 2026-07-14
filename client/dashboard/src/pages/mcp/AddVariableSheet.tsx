@@ -12,7 +12,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Type } from "@/components/ui/type";
-import { Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
 import { ChevronDown, Import, Plus, X } from "lucide-react";
 import { useCallback, useState } from "react";
 import { EnvVarState } from "./environmentVariableUtils";

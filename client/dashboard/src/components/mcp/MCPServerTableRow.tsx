@@ -4,7 +4,7 @@ import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { Network } from "lucide-react";
-import { Badge } from "@/components/ui/moonshine";
+import { Badge } from "@/components/ui/badge";
 import { MCPStatusIndicator } from "./MCPStatusIndicator";
 
 // MCPServerTableRow renders an mcp_servers row in the /mcp listing table

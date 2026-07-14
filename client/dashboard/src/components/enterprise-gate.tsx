@@ -1,6 +1,6 @@
 import { Type } from "@/components/ui/type";
 import { useProductTier } from "@/hooks/useProductTier";
-import { Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
 import { DynamicIcon, type IconName } from "@/components/ui/dynamic-icon";
 import React from "react";
 

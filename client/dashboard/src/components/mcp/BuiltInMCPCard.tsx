@@ -1,7 +1,7 @@
 import { Card } from "@/components/ui/card";
 import { Type } from "@/components/ui/type";
 import { useRoutes } from "@/routes";
-import { Badge } from "@/components/ui/moonshine";
+import { Badge } from "@/components/ui/badge";
 import { Network, ScrollText } from "lucide-react";
 
 const BUILT_IN_ICONS: Record<string, React.ReactNode> = {

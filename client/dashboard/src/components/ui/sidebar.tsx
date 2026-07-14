@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn, isMacPlatform } from "@/lib/utils";
-import { Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
 import * as React from "react";
 import {
   SidebarContext,

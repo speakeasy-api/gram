@@ -5,17 +5,16 @@ import { SkeletonTable } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { useRoutes } from "@/routes";
 import { useListDeploymentsSuspense } from "@gram/client/react-query/listDeployments.js";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Alert } from "@/components/ui/alert";
+import { Table, type TableProps } from "@/components/ui/table";
 import {
-  Alert,
-  Badge,
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Table,
-  TableProps,
-} from "@/components/ui/moonshine";
+} from "@/components/ui/dropdown-menu";
 import {
   Check,
   CircleDashed,

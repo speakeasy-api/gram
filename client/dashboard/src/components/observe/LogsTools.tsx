@@ -58,8 +58,10 @@ import type { ToolUsageUserFilter } from "@gram/client/models/components/toolusa
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useListAttributeKeys } from "@gram/client/react-query/listAttributeKeys.js";
 import { unwrapAsync } from "@gram/client/types/fp";
-import { Alert, Badge, Button } from "@/components/ui/moonshine";
-import type { BadgeProps } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Alert } from "@/components/ui/alert";
+import { type BadgeProps } from "@/components/ui/badge";
 import { Heading } from "@/components/ui/heading";
 import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import { Skeleton } from "@/components/ui/skeleton";

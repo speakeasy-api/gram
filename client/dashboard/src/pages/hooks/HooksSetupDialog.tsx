@@ -9,7 +9,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
 import { useRoutes } from "@/routes";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
 import { ExternalLink, Plus, Sparkles } from "lucide-react";

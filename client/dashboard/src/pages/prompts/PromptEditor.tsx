@@ -1,6 +1,7 @@
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Label } from "@/components/ui/label";
-import { Button, Input } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { MUSTACHE_VAR_REGEX, PROMPT_NAME_PATTERN } from "@/lib/constants";
 import { assert, cn } from "@/lib/utils";
 import { PromptTemplate } from "@gram/client/models/components/prompttemplate.js";

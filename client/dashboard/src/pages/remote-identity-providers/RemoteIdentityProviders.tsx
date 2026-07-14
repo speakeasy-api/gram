@@ -24,15 +24,15 @@ import {
   invalidateAllOrganizationRemoteSessionIssuers,
   useOrganizationRemoteSessionIssuers,
 } from "@gram/client/react-query/organizationRemoteSessionIssuers.js";
+import { Button } from "@/components/ui/button";
+import { Alert } from "@/components/ui/alert";
 import {
-  Alert,
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/moonshine";
+} from "@/components/ui/dropdown-menu";
 import { useQueryClient } from "@tanstack/react-query";
 import { Fingerprint, MoreHorizontal, Plus } from "lucide-react";
 import { useMemo, useState } from "react";

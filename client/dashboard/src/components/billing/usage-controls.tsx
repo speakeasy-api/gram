@@ -2,7 +2,7 @@ import { Page } from "@/components/page-layout";
 import { UsageMeter } from "@/components/ui/progress";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
 import { useCallback, useState } from "react";
 
 export const TopUpCTA = (): JSX.Element => {

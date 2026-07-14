@@ -2,12 +2,12 @@ import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { Button } from "@/components/ui/button";
 import {
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuTrigger,
-} from "@/components/ui/moonshine";
+} from "@/components/ui/dropdown-menu";
 import { ChevronDown, Database, Plus } from "lucide-react";
 import { AddSourceMenuItems } from "./AddSourceMenuItems";
 

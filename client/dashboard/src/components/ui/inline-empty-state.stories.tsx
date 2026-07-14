@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { InboxIcon, SearchXIcon } from "lucide-react";
 
-import { Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
 import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 
 const meta: Meta<typeof InlineEmptyState> = {

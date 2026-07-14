@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
 import { Type } from "@/components/ui/type";
 import {
   ONBOARDING_CTA_CONTENT_VT_CLASS,

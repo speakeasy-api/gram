@@ -39,12 +39,10 @@ import {
 } from "@gram/client/react-query/template.js";
 import { invalidateAllTemplates } from "@gram/client/react-query/templates.js";
 import { useUpdateTemplateMutation } from "@gram/client/react-query/updateTemplate.js";
-import {
-  Badge,
-  Button,
-  ResizablePanel,
-  Stack,
-} from "@/components/ui/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { ResizablePanel } from "@/components/ui/resizable-panel";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowDown, ArrowUp, FileText, Play, Plus, Save } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";

@@ -10,7 +10,7 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
 import { type DateRangePreset } from "@gram-ai/elements";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
-import { Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Heading } from "@/components/ui/heading";
 import { InlineEmptyState } from "@/components/ui/inline-empty-state";

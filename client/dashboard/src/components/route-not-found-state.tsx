@@ -1,5 +1,6 @@
 import { Type } from "@/components/ui/type";
-import { Button, Stack } from "@/components/ui/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
 import { CircleAlert } from "lucide-react";
 import type { ReactNode } from "react";
 

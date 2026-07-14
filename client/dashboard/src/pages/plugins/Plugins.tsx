@@ -24,15 +24,15 @@ import {
   useMarketplaceSettingsSuspense,
 } from "@gram/client/react-query/marketplaceSettings";
 import { useUpdateMarketplaceSettingsMutation } from "@gram/client/react-query/updateMarketplaceSettings";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Input,
-  Stack,
-} from "@/components/ui/moonshine";
+} from "@/components/ui/dropdown-menu";
 import {
   Activity,
   ChevronDown,

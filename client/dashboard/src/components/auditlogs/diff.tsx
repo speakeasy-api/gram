@@ -1,7 +1,7 @@
 import { AuditLog } from "@gram/client/models/components/auditlog.js";
 import { FileDiffOptions, ThemeTypes } from "@pierre/diffs";
 import { MultiFileDiff } from "@pierre/diffs/react";
-import { useTheme } from "@/components/ui/moonshine";
+import { useTheme } from "@/contexts/theme-context";
 import React from "react";
 
 const staticDiffOptions: FileDiffOptions<undefined> = {

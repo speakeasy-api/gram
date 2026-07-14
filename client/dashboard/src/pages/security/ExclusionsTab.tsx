@@ -1,16 +1,15 @@
 import { Type } from "@/components/ui/type";
 import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import { Switch } from "@/components/ui/switch";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { type Column, Table } from "@/components/ui/table";
 import {
-  Badge,
-  Button,
-  type Column,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Table,
-} from "@/components/ui/moonshine";
+} from "@/components/ui/dropdown-menu";
 import { useRiskDeleteExclusionMutation } from "@gram/client/react-query/riskDeleteExclusion.js";
 import {
   invalidateAllRiskListExclusions,

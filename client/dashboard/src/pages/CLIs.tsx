@@ -1,7 +1,7 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Type } from "@/components/ui/type";
-import { Badge } from "@/components/ui/moonshine";
+import { Badge } from "@/components/ui/badge";
 import { Terminal } from "lucide-react";
 
 export default function CLIs(): JSX.Element {

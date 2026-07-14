@@ -6,7 +6,7 @@ import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import { Type } from "@/components/ui/type";
 import { formatRemoteSessionIssuerDisplay } from "@/lib/sources";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
-import { Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
 import { Plus, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 

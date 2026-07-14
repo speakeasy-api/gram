@@ -9,7 +9,7 @@ import {
   invalidateAllListChats,
   useListChats,
 } from "@gram/client/react-query/listChats.js";
-import { Stack } from "@/components/ui/moonshine";
+import { Stack } from "@/components/ui/stack";
 import { ChevronRight } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";

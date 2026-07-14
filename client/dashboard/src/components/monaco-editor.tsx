@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 import Editor, { loader, OnMount } from "@monaco-editor/react";
-import { useTheme } from "@/components/ui/moonshine";
+import { useTheme } from "@/contexts/theme-context";
 import type * as Monaco from "monaco-editor";
 import * as monaco from "monaco-editor";
 import { useEffect, useRef } from "react";

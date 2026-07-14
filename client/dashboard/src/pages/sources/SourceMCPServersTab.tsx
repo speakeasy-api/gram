@@ -2,7 +2,7 @@ import { MCPServerPortalCard } from "@/components/sources/MCPServerPortalCard";
 import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import { useRoutes } from "@/routes";
 import { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
-import { Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
 import { Server } from "lucide-react";
 
 export function SourceMCPServersTab({

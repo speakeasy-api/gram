@@ -1,5 +1,5 @@
 import type { JSX } from "react";
-import { Badge } from "@/components/ui/moonshine";
+import { Badge } from "@/components/ui/badge";
 import { Zap } from "lucide-react";
 import type { TelemetryLogRecord } from "@gram/client/models/components/telemetrylogrecord.js";
 import { cn } from "@/lib/utils";

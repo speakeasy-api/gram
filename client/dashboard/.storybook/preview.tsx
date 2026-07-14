@@ -5,7 +5,7 @@ import { MemoryRouter } from "react-router";
 import { withThemeByClassName } from "@storybook/addon-themes";
 import { ThemedDocsContainer } from "./themedDocsContainer";
 
-import { ThemeProvider } from "../src/components/ui/moonshine";
+import { ThemeProvider } from "../src/contexts/Theme";
 import { TooltipProvider } from "../src/components/ui/tooltip";
 
 // Mirrors the provider stack in App.tsx so components render like they do in

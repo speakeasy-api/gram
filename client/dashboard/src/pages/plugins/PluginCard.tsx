@@ -5,7 +5,9 @@ import { Type } from "@/components/ui/type";
 import { HumanizeDateTime } from "@/lib/dates";
 import { useRoutes } from "@/routes";
 import { Plugin } from "@gram/client/models/components/plugin.js";
-import { Badge, Button, Stack } from "@/components/ui/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { ArrowRight, Puzzle, Server } from "lucide-react";
 import { Link, useNavigate } from "react-router";
 

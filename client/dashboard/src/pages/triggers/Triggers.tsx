@@ -29,14 +29,11 @@ import { TriggerInstance } from "@gram/client/models/components/triggerinstance.
 import { TriggerDefinition } from "@gram/client/models/components/triggerdefinition.js";
 import { CreateTriggerInstanceFormTargetKind as TargetKind } from "@gram/client/models/components/createtriggerinstanceform.js";
 import { useRoutes } from "@/routes";
-import {
-  Badge,
-  Button,
-  type Column,
-  Input,
-  Stack,
-  Table,
-} from "@/components/ui/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { type Column, Table } from "@/components/ui/table";
+import { Input } from "@/components/ui/input";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Check,

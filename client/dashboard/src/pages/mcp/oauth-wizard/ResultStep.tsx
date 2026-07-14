@@ -1,6 +1,6 @@
 import { Dialog } from "@/components/ui/dialog";
 import { Type } from "@/components/ui/type";
-import { Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
 import { CheckCircle2 } from "lucide-react";
 
 export function ResultStep({

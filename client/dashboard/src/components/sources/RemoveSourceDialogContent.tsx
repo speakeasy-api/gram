@@ -1,5 +1,7 @@
 import { slugify } from "@/lib/constants";
-import { Alert, Button, Input } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
+import { Alert } from "@/components/ui/alert";
+import { Input } from "@/components/ui/input";
 import { Dialog } from "@/components/ui/dialog";
 import { Type } from "@/components/ui/type";
 import { Loader2Icon } from "lucide-react";

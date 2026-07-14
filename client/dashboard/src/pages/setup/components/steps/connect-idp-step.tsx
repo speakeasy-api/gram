@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import { KeyRound, ExternalLink, Loader2, ChevronDown } from "lucide-react";
-import { Button, Input, useTheme } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { useTheme } from "@/contexts/theme-context";
 import { Card } from "@/components/ui/card";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { useGenerateWorkOSAdminPortalLinkMutation } from "@gram/client/react-query/generateWorkOSAdminPortalLink.js";

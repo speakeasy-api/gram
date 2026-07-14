@@ -1,11 +1,11 @@
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import {
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/moonshine";
+} from "@/components/ui/dropdown-menu";
 import { DynamicIcon, type IconName } from "@/components/ui/dynamic-icon";
 import { ChevronDown, EllipsisVertical } from "lucide-react";
 import { useState } from "react";

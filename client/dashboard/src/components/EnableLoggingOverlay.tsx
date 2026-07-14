@@ -1,6 +1,6 @@
 import { RequireScope } from "@/components/require-scope";
 import { useState } from "react";
-import { Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
 import { Heading } from "@/components/ui/heading";
 import { Activity, Info } from "lucide-react";
 import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";

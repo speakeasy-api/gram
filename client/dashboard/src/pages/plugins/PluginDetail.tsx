@@ -27,16 +27,16 @@ import { useRemovePluginServerMutation } from "@gram/client/react-query/removePl
 import { useListToolsets } from "@gram/client/react-query/listToolsets";
 import { useMcpServers } from "@gram/client/react-query/mcpServers";
 import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import {
-  Badge,
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Input,
-  Stack,
-} from "@/components/ui/moonshine";
+} from "@/components/ui/dropdown-menu";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import {

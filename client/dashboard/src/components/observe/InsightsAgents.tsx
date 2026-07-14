@@ -47,16 +47,12 @@ import {
 import { ACCOUNT_TYPE_OPTIONS } from "@/components/observe/observeFilterConstants";
 import { Page } from "@/components/page-layout";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import {
-  Alert,
-  Badge,
-  Button,
-  type Column,
-  Input,
-  type SortDescriptor,
-  Table,
-  sortTableData,
-} from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Alert } from "@/components/ui/alert";
+import { type Column, type SortDescriptor, Table } from "@/components/ui/table";
+import { sortTableData } from "@/components/ui/table/sorting";
+import { Input } from "@/components/ui/input";
 import { ArrowRight } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { Link } from "react-router";

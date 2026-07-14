@@ -1,4 +1,4 @@
-import { Input } from "@/components/ui/moonshine";
+import { Input } from "@/components/ui/input";
 import { Eye, EyeOff } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";

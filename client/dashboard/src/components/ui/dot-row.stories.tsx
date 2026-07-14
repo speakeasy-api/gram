@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { faker } from "@faker-js/faker";
 import { Database, GitBranch, MessageSquare } from "lucide-react";
 import { DotRow } from "@/components/ui/dot-row";
-import { Badge } from "@/components/ui/moonshine";
+import { Badge } from "@/components/ui/badge";
 import { Type } from "@/components/ui/type";
 
 faker.seed(11);

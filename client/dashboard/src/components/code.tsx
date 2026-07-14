@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/moonshine";
-import { getLanguageAccentColor } from "@/components/ui/moonshine/lib/codeUtils";
+import { Button } from "@/components/ui/button";
+import { getLanguageAccentColor } from "@/components/ui/lib/codeUtils";
 import { Check, Copy } from "lucide-react";
 import React, { useEffect } from "react";
 import {

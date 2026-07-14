@@ -9,11 +9,9 @@ import { useDisableWebhooksMutation } from "@gram/client/react-query/disableWebh
 import { useEnableWebhooksMutation } from "@gram/client/react-query/enableWebhooks.js";
 import { useOrganization } from "@gram/client/react-query/organization.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
-import {
-  Button as MoonshineButton,
-  Stack,
-  useTheme,
-} from "@/components/ui/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Button as MoonshineButton } from "@/components/ui/button";
+import { useTheme } from "@/contexts/theme-context";
 import { Webhook } from "lucide-react";
 import { AppPortal } from "svix-react";
 import React, { JSX } from "react";

@@ -1,6 +1,7 @@
 import { GramLogo } from "@/components/gram-logo/index";
 import { toError } from "@/lib/errors";
-import { Button, Stack } from "@/components/ui/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
 import { Heading } from "@/components/ui/heading";
 import { CircleAlert, RotateCcw } from "lucide-react";
 

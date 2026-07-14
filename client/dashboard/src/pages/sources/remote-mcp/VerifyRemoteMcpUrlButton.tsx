@@ -1,4 +1,5 @@
-import { Alert, Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
+import { Alert } from "@/components/ui/alert";
 import { Loader2, Plug } from "lucide-react";
 import type { VerifyRemoteMcpUrlState } from "./useVerifyRemoteMcpUrl";
 

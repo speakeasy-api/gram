@@ -1,6 +1,8 @@
 import { slugify } from "@/lib/constants";
 import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
-import { Button, Input, Stack } from "@/components/ui/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import React from "react";
 import { Type } from "../ui/type";
 import { useStep } from "./step/use-step";

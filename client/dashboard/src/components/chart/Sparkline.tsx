@@ -2,7 +2,7 @@
 // table cells where a full canvas chart would be overkill. Colored by trend
 // (red/green/neutral, first-vs-last) when `trendColor` is set; otherwise a
 // fixed `color` or `currentColor`. Series math lives in ./sparkline-math.
-import { cn } from "@/components/ui/moonshine";
+import { cn } from "@/lib/utils";
 import {
   DRAW_POINTS,
   movingAverage,

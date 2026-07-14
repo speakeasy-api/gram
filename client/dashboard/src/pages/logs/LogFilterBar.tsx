@@ -1,5 +1,5 @@
 import { QuerySamplesPopover } from "@/components/QuerySamplesPopover";
-import { Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
 import {
   CommandEmpty,
   CommandGroup,

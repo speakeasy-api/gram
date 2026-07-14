@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/select";
 import { TextArea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { Badge } from "@/components/ui/moonshine";
+import { Badge } from "@/components/ui/badge";
 import { ChevronRight } from "lucide-react";
 import { useEffect, useMemo, useState, type JSX, type ReactNode } from "react";
 import type { CelEngine, CelMessage, CelSpan } from "./cel-wasm";

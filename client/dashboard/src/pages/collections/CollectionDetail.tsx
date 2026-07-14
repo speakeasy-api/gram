@@ -24,7 +24,10 @@ import {
   Server,
   Server as ServerIcon,
 } from "lucide-react";
-import { Alert, Badge, Button, Input } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Alert } from "@/components/ui/alert";
+import { Input } from "@/components/ui/input";
 import { TextArea } from "@/components/ui/textarea";
 import { useMemo, useState } from "react";
 import { useParams } from "react-router";

@@ -8,7 +8,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Type } from "@/components/ui/type";
-import { Alert, Button, Input, Link, Stack } from "@/components/ui/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
+import { Alert } from "@/components/ui/alert";
+import { Input } from "@/components/ui/input";
+import { Link } from "@/components/ui/link";
 
 import { WizardContext } from "./machine";
 import type { ProxyFormKey } from "./machine-types";

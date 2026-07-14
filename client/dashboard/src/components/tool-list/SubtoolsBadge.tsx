@@ -1,5 +1,6 @@
 import { Tool } from "@/lib/toolTypes";
-import { Badge, Stack } from "@/components/ui/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
   TooltipContent,

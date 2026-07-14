@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { subjectLabel } from "@/lib/user-session-status";
 import { useRevokeUserSessionMutation } from "@gram/client/react-query/revokeUserSession.js";

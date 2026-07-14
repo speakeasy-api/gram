@@ -1,4 +1,4 @@
-import { Badge } from "@/components/ui/moonshine";
+import { Badge } from "@/components/ui/badge";
 import { SimpleTooltip } from "./ui/tooltip";
 
 // The backend `account_type` telemetry dimension resolves to team | personal.

@@ -50,7 +50,7 @@
         "paths": [
           {
             "name": "@speakeasy-api/moonshine",
-            "message": "@speakeasy-api/moonshine is vendored at @/components/ui/moonshine (compatibility barrel), not an npm dependency. Import from \"@/components/ui/moonshine\" instead."
+            "message": "@speakeasy-api/moonshine has been fully internalized into @/components/ui/<name> (flat, per-file), not an npm dependency. Import each component from its own file, e.g. \"@/components/ui/button\"."
           },
           {
             "name": "@gram/client/models/components",

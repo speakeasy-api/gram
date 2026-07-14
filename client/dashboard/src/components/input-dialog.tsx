@@ -1,4 +1,6 @@
-import { Button, Input, Stack } from "@/components/ui/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Type } from "@/components/ui/type";
 import { useState } from "react";
 import { toastError } from "@/lib/toast-error";

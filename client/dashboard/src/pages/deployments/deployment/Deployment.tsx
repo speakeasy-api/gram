@@ -16,7 +16,7 @@ import {
   useDeployment,
   useDeploymentSuspense,
 } from "@gram/client/react-query/deployment.js";
-import { Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
 import {
   CheckIcon,
   DotIcon,

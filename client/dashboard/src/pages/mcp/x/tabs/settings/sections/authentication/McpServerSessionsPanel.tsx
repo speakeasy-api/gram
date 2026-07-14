@@ -5,7 +5,7 @@ import { SessionRow } from "@/components/sessions/SessionRow";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { LoadMoreButton } from "@/components/ui/load-more-footer";
-import { Button } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/button";
 import { SettingsSection } from "../../SettingsSection";
 
 /**

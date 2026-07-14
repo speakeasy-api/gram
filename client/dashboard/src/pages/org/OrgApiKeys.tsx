@@ -15,14 +15,11 @@ import {
   useListAPIKeysSuspense,
 } from "@gram/client/react-query/listAPIKeys";
 import { useRevokeAPIKeyMutation } from "@gram/client/react-query/revokeAPIKey";
-import {
-  Alert,
-  Button,
-  Column,
-  Input,
-  Stack,
-  Table,
-} from "@/components/ui/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
+import { Alert } from "@/components/ui/alert";
+import { type Column, Table } from "@/components/ui/table";
+import { Input } from "@/components/ui/input";
 import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Copy, KeyRound, Trash2 } from "lucide-react";
 import { useId, useMemo, useState } from "react";
