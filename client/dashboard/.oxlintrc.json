@@ -47,6 +47,15 @@
     "no-restricted-imports": [
       "error",
       {
+        "patterns": [
+          {
+            "group": [
+              "@/components/ui/moonshine",
+              "@/components/ui/moonshine/*"
+            ],
+            "message": "The moonshine subtree was flattened into components/ui. Import each component from its own file, e.g. \"@/components/ui/button\", \"@/components/ui/table\"."
+          }
+        ],
         "paths": [
           {
             "name": "@speakeasy-api/moonshine",

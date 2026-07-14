@@ -131,10 +131,10 @@ Backwards-compatible callers stay `<HooksEmptyState />`; only the variant caller
 
 ### Tables
 
-Use Moonshine's `Table` from `@/components/ui/moonshine` for dashboard tables. The legacy `@/components/ui/table` wrapper has been removed; do **not** recreate it, add new shadcn table wrappers, or hand-roll table styling with raw `<table>` markup when Moonshine can express the UI. If you find a lingering legacy table pattern, migrate it to Moonshine when touched.
+Use the design system's `Table` from `@/components/ui/table` for dashboard tables. Do **not** add new shadcn table wrappers or hand-roll table styling with raw `<table>` markup when this `Table` can express the UI. If you find a lingering legacy table pattern, migrate it when touched.
 
 ```tsx
-import { Column, Table } from "@/components/ui/moonshine";
+import { Column, Table } from "@/components/ui/table";
 ```
 
 For normal data tables, prefer the declarative `columns` / `data` / `rowKey` API. Define `Column<T>[]` near the component so render functions stay typed, use `render` for rich cells, and use `width` for stable layouts instead of ad hoc cell class widths.
@@ -428,7 +428,7 @@ The `@/components/ui/link` wrapper sets `target="_blank"` when `external` is tru
 
 ### Styling and Design System
 
-The dashboard's design system is now internal (the "Claude Design" look: squared corners, warm ink/bone neutrals, mono uppercase captions, display-serif headings, hairline borders). `@speakeasy-api/moonshine` is vendored into `client/dashboard/src/components/ui/moonshine` — do not add it as an npm dependency or import from the package name. See the `gram-design-system` skill for the full component catalog and visual rules; the load-bearing points:
+The dashboard's design system is now internal (the "Claude Design" look: squared corners, warm ink/bone neutrals, mono uppercase captions, display-serif headings, hairline borders). The former `@speakeasy-api/moonshine` components live flat in `client/dashboard/src/components/ui` (no `moonshine` subtree, no barrel) — import each per file, e.g. `@/components/ui/button`. Do not add `@speakeasy-api/moonshine` as an npm dependency or import from the package name. See the `gram-design-system` skill for the full component catalog and visual rules; the load-bearing points:
 
 - **ALWAYS use design tokens and utility classes from the internal design system** instead of hardcoded Tailwind palette colors.
 - **NEVER use hardcoded Tailwind colors** like `bg-neutral-100`, `border-gray-200`, `text-gray-500`, etc. — use the design-token classes (`bg-background`, `text-muted-foreground`, `border-border`, `bg-lang-*`, etc.) instead.
@@ -445,7 +445,7 @@ Pre-GA features get a `Preview` or `Beta` badge wherever the user would otherwis
 
 **Source of truth:** `client/dashboard/src/components/release-stage-badge.tsx` — exports `ReleaseStageBadge` and the `ReleaseStage = "preview" | "beta"` type.
 
-**Underlying primitive:** Moonshine's `<Badge>` component (`@/components/ui/moonshine`). `ReleaseStageBadge` composes Moonshine's Badge with `background` enabled — this is the source of truth for shape (mono, uppercase, tracked, bordered, `rounded-xs`, `h-5`, `text-[12px]`). Do **not** override these classes; the design system owns them. The wrapper just picks a semantic variant and adds a tooltip.
+**Underlying primitive:** the `<Badge>` component (`@/components/ui/badge`). `ReleaseStageBadge` composes Moonshine's Badge with `background` enabled — this is the source of truth for shape (mono, uppercase, tracked, bordered, `rounded-xs`, `h-5`, `text-[12px]`). Do **not** override these classes; the design system owns them. The wrapper just picks a semantic variant and adds a tooltip.
 
 **Variant → stage mapping** (variant names are hooks, not literal semantics):
 
