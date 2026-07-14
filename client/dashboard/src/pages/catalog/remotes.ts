@@ -49,6 +49,26 @@ export function collectibleHeaders(
   );
 }
 
+// Header requirements the catalog publishes for a given remote endpoint URL.
+// Used to suggest header rows for remote MCP servers that were created from
+// (or happen to match) a catalog entry. Registries may list the same URL under
+// several servers or remote variants; the first variant that actually carries
+// collectible headers wins.
+export function catalogHeadersForRemoteUrl(
+  servers: PulseMCPServer[],
+  url: string,
+): ExternalMCPRemoteHeader[] {
+  const normalized = normalizeRemoteUrl(url);
+  for (const server of servers) {
+    for (const remote of server.remotes ?? []) {
+      if (normalizeRemoteUrl(remote.url) !== normalized) continue;
+      const headers = collectibleHeaders(server, remote);
+      if (headers.length > 0) return headers;
+    }
+  }
+  return [];
+}
+
 /** Friendly display names and descriptions for known remote endpoints */
 const REMOTE_DISPLAY_INFO: Record<
   string,
