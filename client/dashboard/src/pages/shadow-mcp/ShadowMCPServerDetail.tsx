@@ -539,7 +539,8 @@ export default function ShadowMCPServerDetail(): JSX.Element {
                 inputLabel="Shadow MCP server name"
                 editTitle="Rename Shadow MCP server"
                 maxLength={255}
-                inputClassName="h-9 w-[24rem] max-w-full text-lg font-semibold"
+                editorClassName="w-[24rem] max-w-full"
+                inputClassName="text-lg font-semibold"
               >
                 <span className="truncate">{serverDisplayName}</span>
               </InlineEditableText>

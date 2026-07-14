@@ -1,6 +1,11 @@
-import { Input } from "@/components/ui/input";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "@/components/ui/input-group";
 import { cn } from "@/lib/utils";
-import { Pencil } from "lucide-react";
+import { Check, Pencil } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
 type InlineEditableTextProps = {
@@ -10,6 +15,7 @@ type InlineEditableTextProps = {
   inputLabel: string;
   editTitle: string;
   maxLength?: number;
+  editorClassName?: string;
   inputClassName?: string;
   buttonClassName?: string;
   disabled?: boolean;
@@ -25,6 +31,7 @@ export function InlineEditableText({
   inputLabel,
   editTitle,
   maxLength,
+  editorClassName,
   inputClassName,
   buttonClassName,
   disabled = false,
@@ -35,6 +42,7 @@ export function InlineEditableText({
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
   const cancelNextBlur = useRef(false);
+  const dirty = normalizeValue(draft) !== value;
 
   useEffect(() => {
     if (!editing) setDraft(value);
@@ -64,30 +72,52 @@ export function InlineEditableText({
 
   if (editing) {
     return (
-      <Input
-        aria-label={inputLabel}
-        autoFocus
-        className={inputClassName}
-        disabled={disabled || submitting}
-        maxLength={maxLength}
-        onBlur={() => {
-          if (cancelNextBlur.current) {
-            cancelNextBlur.current = false;
-            return;
-          }
-          void submit();
-        }}
-        onChange={setDraft}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") event.currentTarget.blur();
-          if (event.key === "Escape") {
-            cancelNextBlur.current = true;
-            setDraft(value);
-            setEditing(false);
-          }
-        }}
-        value={draft}
-      />
+      <InputGroup
+        className={cn(
+          "border-border bg-card dark:bg-card h-10 rounded-md rounded-tl-md rounded-tr-md rounded-br-md rounded-bl-md shadow-none has-[[data-slot=input-group-control]:focus-visible]:ring-1 has-[[data-slot=input-group-control]:focus-visible]:ring-ring/30",
+          editorClassName,
+        )}
+      >
+        <InputGroupInput
+          aria-label={inputLabel}
+          autoFocus
+          className={inputClassName}
+          disabled={disabled || submitting}
+          maxLength={maxLength}
+          onBlur={() => {
+            if (cancelNextBlur.current) {
+              cancelNextBlur.current = false;
+              return;
+            }
+            void submit();
+          }}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") event.currentTarget.blur();
+            if (event.key === "Escape") {
+              cancelNextBlur.current = true;
+              setDraft(value);
+              setEditing(false);
+            }
+          }}
+          value={draft}
+        />
+        {dirty && (
+          <InputGroupAddon align="inline-end">
+            <InputGroupButton
+              aria-label="Save change"
+              disabled={disabled || submitting}
+              onClick={() => void submit()}
+              onMouseDown={(event) => event.preventDefault()}
+              size="icon-sm"
+              title="Save change"
+              variant="ghost"
+            >
+              <Check />
+            </InputGroupButton>
+          </InputGroupAddon>
+        )}
+      </InputGroup>
     );
   }
 
