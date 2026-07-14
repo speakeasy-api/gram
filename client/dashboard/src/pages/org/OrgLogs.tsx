@@ -317,15 +317,14 @@ function OrgLogsInner() {
               </Stack>
               <Type
                 variant="body"
-                className="text-muted-foreground ml-6 text-sm"
+                className="text-muted-foreground mr-8 ml-6 max-w-4xl text-sm"
               >
                 When Speakeasy is unreachable or erroring, let agent tool calls
-                proceed instead of blocking them. Trade-off: blocking policies
-                are not enforced for the duration of the outage; events are
-                still recorded and scanned once Speakeasy recovers. When off
-                (the default), tool calls are blocked until a policy verdict can
-                be obtained. Invalid or revoked credentials always block
-                regardless of this setting.
+                proceed instead of blocking them until a verdict can be obtained
+                (the default). Blocking policies are not enforced for the
+                duration of the outage — events are still recorded and scanned
+                once Speakeasy recovers. Invalid or revoked credentials always
+                block, regardless of this setting.
               </Type>
             </Stack>
             {!featuresLoading && (
