@@ -197,7 +197,14 @@ if ! cache_valid; then
   if command -v curl >/dev/null 2>&1; then
     curl --fail --silent --show-error --location --connect-timeout 10 --max-time 45 "$url" --output "$archive" || install_failure 'download failed'
   elif command -v wget >/dev/null 2>&1; then
-    wget -q --timeout=45 --tries=1 "$url" -O "$archive" || install_failure 'download failed'
+    # wget --timeout is a per-read timeout, not a wall-clock cap: a server that
+    # trickles bytes resets it indefinitely. timeout(1) enforces the real
+    # deadline wherever coreutils/busybox provide it.
+    wget_cmd="wget -q --timeout=45 --tries=1"
+    if command -v timeout >/dev/null 2>&1; then
+      wget_cmd="timeout 45 $wget_cmd"
+    fi
+    $wget_cmd "$url" -O "$archive" || install_failure 'download failed'
   else
     install_failure 'curl or wget is required for first install'
   fi
@@ -321,10 +328,25 @@ try {
     if (-not (Test-Cache)) {
         New-Item -ItemType Directory -Force -Path $Work | Out-Null
         $Archive = Join-Path $Work "hooks.zip"
+        # -TimeoutSec is not a wall-clock cap on Windows PowerShell 5.1 (it
+        # doesn't bound body streaming), so a trickling server could outlive the
+        # provider hook budget; run the download in a job and enforce the
+        # deadline with Wait-Job.
+        $Download = Start-Job -ScriptBlock {
+            param($Uri, $OutFile)
+            $ProgressPreference = "SilentlyContinue"
+            Invoke-WebRequest -UseBasicParsing -TimeoutSec 45 -Uri $Uri -OutFile $OutFile
+        } -ArgumentList $Url, $Archive
         try {
-            Invoke-WebRequest -UseBasicParsing -TimeoutSec 45 -Uri $Url -OutFile $Archive
+            if (-not (Wait-Job -Job $Download -Timeout 45)) {
+                Stop-Job -Job $Download
+                Exit-InstallFailure "download failed"
+            }
+            Receive-Job -Job $Download -ErrorAction Stop | Out-Null
         } catch {
             Exit-InstallFailure "download failed"
+        } finally {
+            Remove-Job -Job $Download -Force -ErrorAction SilentlyContinue
         }
         $ActualSha = (Get-FileHash -Algorithm SHA256 -LiteralPath $Archive).Hash.ToLowerInvariant()
         if ($ActualSha -ne $ExpectedSha) { Exit-InstallFailure "downloaded archive checksum mismatch" }
