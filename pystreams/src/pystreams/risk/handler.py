@@ -14,7 +14,12 @@ from opentelemetry import trace
 
 from pystreams import attr
 from pystreams.risk import metrics
-from pystreams.risk.scanner import DEFAULT_SCORE_THRESHOLD, Detection, Scanner
+from pystreams.risk.scanner import (
+    DEFAULT_SCORE_THRESHOLD,
+    Detection,
+    Scanner,
+    ScanSlotTimeout,
+)
 
 # Source label stamped on every finding this handler emits, so all findings
 # from the Presidio path are attributed identically downstream.
@@ -94,6 +99,19 @@ class PresidioHandler:
                     message.content, requested, score_threshold
                 )
                 scan_ms = (time.perf_counter() - scan_started) * 1000
+            except ScanSlotTimeout:
+                # The scan never started: the pool was backlogged for the whole
+                # slot budget and the content was never touched. Unlike the
+                # swallowed failures below this is not a property of the
+                # message, so re-raising to nack is safe (nothing scanned,
+                # nothing published — redelivery duplicates no work) and
+                # correct: the subscription's retry policy backs the message
+                # off (10s..600s) and it lands back here once capacity clears,
+                # instead of being silently dropped unscanned. No log line:
+                # backlog requeues fire in bursts, and the ``requeued`` outcome
+                # recorded in the ``finally`` already carries the signal.
+                outcome = metrics.OUTCOME_REQUEUED
+                raise
             except Exception as exc:
                 # This is best-effort shadow processing, and the PresidioAnalyzer
                 # subscription declares no dead-letter policy. Letting a scan
