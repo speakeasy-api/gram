@@ -77,7 +77,9 @@ type CreateMcpServerPayload struct {
 	ProjectSlugInput *string
 	// A human-readable display name for the server
 	Name string
-	// The ID of the environment to associate with the server
+	// The ID of the environment to associate with the server. Not supported for
+	// remote MCP servers: the request is rejected when this is set alongside
+	// remote_mcp_server_id.
 	EnvironmentID *string
 	// The ID of the remote MCP server to use as the backend
 	RemoteMcpServerID *string
@@ -163,7 +165,9 @@ type UpdateMcpServerPayload struct {
 	// A human-readable display name for the server. Omit to leave the existing
 	// name unchanged; if provided, must be non-empty.
 	Name *string
-	// The ID of the environment to associate with the server
+	// The ID of the environment to associate with the server. Not supported for
+	// remote MCP servers: the request is rejected when this is set alongside
+	// remote_mcp_server_id.
 	EnvironmentID *string
 	// The ID of the remote MCP server to use as the backend
 	RemoteMcpServerID *string

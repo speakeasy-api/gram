@@ -74,7 +74,11 @@ export function ToolFilteringSection({
           remoteMcpServerId: mcpServer.remoteMcpServerId ?? undefined,
           tunneledMcpServerId: mcpServer.tunneledMcpServerId ?? undefined,
           toolsetId: mcpServer.toolsetId ?? undefined,
-          environmentId: mcpServer.environmentId ?? undefined,
+          // Remote MCP servers cannot carry an environment (rejected by the
+          // API guard); only forward it for toolset/tunneled backends.
+          environmentId: mcpServer.remoteMcpServerId
+            ? undefined
+            : (mcpServer.environmentId ?? undefined),
           visibility: mcpServer.visibility,
           toolVariationsGroupId: groupId ?? undefined,
         },
