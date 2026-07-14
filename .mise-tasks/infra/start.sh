@@ -6,8 +6,16 @@ docker compose up -d || exit 1
 # Maximum time (seconds) to wait for a service to accept queries before giving
 # up. Bounded so headless callers (e.g. `./zero --agent`) fail fast instead of
 # hanging forever when infra never becomes healthy. Override with
-# INFRA_READINESS_TIMEOUT.
+# INFRA_READINESS_TIMEOUT. Validate as a plain decimal integer before using it
+# in arithmetic: unvalidated values would be evaluated by $((...)) (allowing
+# command substitution) and leading zeroes would be misread as octal.
 READINESS_TIMEOUT="${INFRA_READINESS_TIMEOUT:-30}"
+if [[ "$READINESS_TIMEOUT" =~ ^[0-9]+$ ]]; then
+    READINESS_TIMEOUT=$((10#$READINESS_TIMEOUT))
+else
+    echo "⚠️  Ignoring invalid INFRA_READINESS_TIMEOUT='$READINESS_TIMEOUT'; using 30." >&2
+    READINESS_TIMEOUT=30
+fi
 
 # wait_for <display-name> <compose-service> <check command...>
 # Retries the check until it succeeds or the timeout elapses. On timeout it
