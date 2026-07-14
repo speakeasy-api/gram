@@ -636,6 +636,20 @@
   }
 }
 
+/*
+ * The page canvas behind cards. Grey in light so white `bg-card` surfaces read
+ * as raised; unchanged (near-black) in dark, where cards (neutral-900) already
+ * lift off the ink canvas — making the canvas grey in dark would collide with
+ * the card color.
+ */
+@utility bg-canvas {
+  background-color: var(--color-neutral-100);
+
+  @variant dark {
+    background-color: var(--color-base-black);
+  }
+}
+
 @utility bg-surface-secondary {
   background-color: var(--color-neutral-100);
 

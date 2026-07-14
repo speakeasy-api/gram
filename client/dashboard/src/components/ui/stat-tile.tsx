@@ -143,7 +143,9 @@ export function StatCard({
   ...statTileProps
 }: StatCardProps): React.JSX.Element {
   return (
-    <div className={cn("border-neutral-softest border p-5", cardClassName)}>
+    <div
+      className={cn("bg-card border-neutral-softest border p-5", cardClassName)}
+    >
       <StatTile {...statTileProps} />
     </div>
   );

@@ -98,6 +98,10 @@ const TableContainer = forwardRef<HTMLTableElement, TableContainerProps>(
           className={cn(
             styles.table,
             "relative grid w-full caption-bottom [border-collapse:separate] [border-spacing:0] [grid-template-columns:var(--grid-template-columns)] overflow-x-auto overflow-y-hidden rounded-lg border text-sm",
+            // Top-level tables read as white cards on the grey app canvas
+            // (bg-canvas). Nested/subtables stay transparent so they blend into
+            // their host row.
+            tableDepth === 1 && "bg-card",
             tableDepth > 1 && "rounded-none border-none",
             className,
           )}

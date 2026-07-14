@@ -79,7 +79,7 @@ function ObservabilityLayoutStats({
 }) {
   return (
     <Layout.Body className={cn("pt-6", className)}>
-      <div className="border-neutral-softest grid grid-cols-1 border sm:grid-cols-2 lg:grid-cols-4 [&>*]:p-6 [&>*:not(:first-child)]:border-t [&>*:not(:first-child)]:border-neutral-softest sm:[&>*:nth-child(-n+2)]:border-t-0 sm:[&>*:nth-child(even)]:border-l sm:[&>*:nth-child(even)]:border-neutral-softest lg:[&>*]:border-t-0 lg:[&>*:not(:first-child)]:border-l lg:[&>*:not(:first-child)]:border-neutral-softest">
+      <div className="bg-card border-neutral-softest grid grid-cols-1 border sm:grid-cols-2 lg:grid-cols-4 [&>*]:p-6 [&>*:not(:first-child)]:border-t [&>*:not(:first-child)]:border-neutral-softest sm:[&>*:nth-child(-n+2)]:border-t-0 sm:[&>*:nth-child(even)]:border-l sm:[&>*:nth-child(even)]:border-neutral-softest lg:[&>*]:border-t-0 lg:[&>*:not(:first-child)]:border-l lg:[&>*:not(:first-child)]:border-neutral-softest">
         {children}
       </div>
     </Layout.Body>
