@@ -2994,6 +2994,9 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
   CONSTRAINT mcp_servers_tool_variations_group_id_fkey FOREIGN KEY (tool_variations_group_id) REFERENCES tool_variations_groups (id) ON DELETE SET NULL,
   -- Exactly one backend must be set.
   CONSTRAINT mcp_servers_backend_exclusivity_check CHECK (num_nonnulls(remote_mcp_server_id, tunneled_mcp_server_id, toolset_id) = 1),
+  -- environment_id is inert for remote-backed servers (the remote serve path
+  -- never reads it); remote-backed servers must not carry one.
+  CONSTRAINT mcp_servers_remote_no_environment_check CHECK (environment_id IS NULL OR remote_mcp_server_id IS NULL),
   -- Remote and tunneled servers carry a Gram-as-AS issuer attached at create
   -- time for the server's lifetime, regardless of visibility. Toolset-backed
   -- servers are exempt (their auth lives on toolsets.user_session_issuer_id).
