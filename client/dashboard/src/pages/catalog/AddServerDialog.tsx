@@ -269,6 +269,27 @@ export function AddServerDialog({
       return;
     }
 
+    // Dead-end guard: when no server has a compatible endpoint, canInstall
+    // never becomes true and the install never starts. Interactive users see
+    // the warning in the configure step, but headless/auto-start callers would
+    // wait forever — report the failure instead.
+    if (
+      releaseState.phase === "configure" &&
+      releaseState.serverConfigs.length > 0 &&
+      releaseState.serverConfigs.every((config) => config.remotes.length === 0)
+    ) {
+      finishedRef.current = true;
+      onInstallFinished({
+        projectSlug,
+        status: "failed",
+        succeededCount: 0,
+        failedCount: servers.length,
+        error:
+          "None of the selected servers expose a compatible remote endpoint.",
+      });
+      return;
+    }
+
     if (releaseState.phase !== "complete") return;
 
     const statuses = releaseState.statuses;
@@ -663,13 +684,24 @@ function ConfigurePhaseContent({
   const hasHeaderInputs = releaseState.serverConfigs.some(
     (config) => configCollectibleHeaderCount(config) > 0,
   );
+  // Headers the upstream marks required must be filled before installing —
+  // omitting them would create a server that cannot authenticate. Bulk
+  // installs never collect header values, so they are exempt.
+  const missingRequiredHeaders = bulk
+    ? 0
+    : releaseState.serverConfigs.reduce(
+        (count, config) => count + missingRequiredHeaderCount(config),
+        0,
+      );
   // When every server came through the selectRemotes phase and none needs
   // header values, there is nothing left to configure — install immediately.
   const nothingToConfigure =
     singleRemoteConfigs.length === 0 && !hasHeaderInputs;
 
+  const canSubmit = releaseState.canInstall && missingRequiredHeaders === 0;
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && releaseState.canInstall) {
+    if (e.key === "Enter" && canSubmit) {
       e.preventDefault();
       void releaseState.startInstall();
     }
@@ -718,14 +750,12 @@ function ConfigurePhaseContent({
               Back
             </Button>
           )}
-          {!releaseState.goBack && (
-            <Button variant="tertiary" onClick={onClose}>
-              Cancel
-            </Button>
-          )}
+          <Button variant="tertiary" onClick={onClose}>
+            Cancel
+          </Button>
         </div>
         <Button
-          disabled={!releaseState.canInstall}
+          disabled={!canSubmit}
           onClick={() => {
             void releaseState.startInstall();
           }}
@@ -895,6 +925,19 @@ function configCollectibleHeaderCount(config: ServerConfig): number {
   );
 }
 
+function missingRequiredHeaderCount(config: ServerConfig): number {
+  return config.remotes.reduce(
+    (count, remote) =>
+      count +
+      collectibleHeaders(config.server, remote).filter(
+        (header) =>
+          (header.isRequired ?? false) &&
+          !config.headerValues[headerValueKey(remote.url, header.name)]?.trim(),
+      ).length,
+    0,
+  );
+}
+
 /**
  * Optional upstream header values, collected per endpoint. Values left blank
  * are simply not saved — headers can always be configured later from the
@@ -918,7 +961,8 @@ function HeaderValueSections({
         <Label>Upstream headers</Label>
         <Type small muted className="block">
           Values are stored on the server and sent with every upstream request.
-          Leave blank to configure later in Settings.
+          Required headers must be set now; optional ones can be left blank and
+          configured later in Settings.
         </Type>
       </div>
       <div className="max-h-64 space-y-3 overflow-y-auto">

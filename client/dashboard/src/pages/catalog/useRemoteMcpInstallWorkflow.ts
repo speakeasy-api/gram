@@ -367,11 +367,14 @@ export function useRemoteMcpInstallWorkflow({
     }
   }, [canProceed, currentServerIndex, multiRemoteConfigs]);
 
-  // A config with no HTTP remote cannot be installed as a remote MCP server.
+  // A config with no HTTP remote cannot be installed as a remote MCP server —
+  // startInstall reports it as failed. At least one config must be
+  // installable for the install to be worth starting at all.
   const canInstall = useMemo(() => {
     return (
       serverConfigs.length > 0 &&
-      serverConfigs.every((c) => c.name.trim() !== "" && c.remotes.length > 0)
+      serverConfigs.every((c) => c.name.trim() !== "") &&
+      serverConfigs.some((c) => c.remotes.length > 0)
     );
   }, [serverConfigs]);
 
@@ -517,16 +520,31 @@ export function useRemoteMcpInstallWorkflow({
   const startInstall = useCallback(async () => {
     if (!canInstall || phaseRef.current !== "configure") return;
 
-    const targets = serverConfigs.flatMap(buildInstallTargets);
+    // Configs without a compatible endpoint can't be installed; report them as
+    // failed instead of blocking the rest of the batch (or, for headless
+    // callers, stalling forever with nothing to install).
+    const targets = serverConfigs
+      .filter((config) => config.remotes.length > 0)
+      .flatMap(buildInstallTargets);
+    const uninstallable = serverConfigs.filter(
+      (config) => config.remotes.length === 0,
+    );
 
     setPhase("installing");
-    setStatuses(
-      targets.map((target, index) => ({
+    setStatuses([
+      ...targets.map((target, index) => ({
         key: `${index}-${target.remote.url}`,
         name: target.name,
         status: "pending" as const,
       })),
-    );
+      ...uninstallable.map((config, index) => ({
+        key: `uninstallable-${index}`,
+        name: config.name,
+        status: "failed" as const,
+        error:
+          "This server does not expose a compatible remote endpoint and cannot be added.",
+      })),
+    ]);
 
     const reqOpts = projectSlug
       ? { headers: { "gram-project": projectSlug } }

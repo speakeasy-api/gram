@@ -167,7 +167,7 @@ describe("useRemoteMcpInstallWorkflow", () => {
     expect(state.canInstall).toBe(true);
   });
 
-  it("blocks install when a server has no compatible remote", () => {
+  it("blocks install when no server has a compatible remote", () => {
     const servers = [makeServer({ remotes: [] })];
     const { result } = renderHook(() =>
       useRemoteMcpInstallWorkflow({ servers }),
@@ -175,6 +175,35 @@ describe("useRemoteMcpInstallWorkflow", () => {
     const state = result.current;
     if (state.phase !== "configure") throw new Error("unexpected phase");
     expect(state.canInstall).toBe(false);
+  });
+
+  it("reports endpoint-less servers as failed and installs the rest", async () => {
+    const servers = [
+      makeServer({ title: "No Endpoint", remotes: [] }),
+      makeServer({
+        title: "Good",
+        remotes: [remote("https://good.example/mcp")],
+      }),
+    ];
+    const { result } = renderHook(() =>
+      useRemoteMcpInstallWorkflow({ servers }),
+    );
+    const state = result.current;
+    if (state.phase !== "configure") throw new Error("unexpected phase");
+    expect(state.canInstall).toBe(true);
+
+    await startInstall(result);
+
+    await waitFor(() => expect(result.current.phase).toBe("complete"));
+    expect(mockCreateServer).toHaveBeenCalledTimes(1);
+    const complete = result.current;
+    if (complete.phase !== "complete") throw new Error("unexpected phase");
+    const byName = new Map(complete.statuses.map((s) => [s.name, s]));
+    expect(byName.get("Good")).toMatchObject({ status: "completed" });
+    expect(byName.get("No Endpoint")).toMatchObject({ status: "failed" });
+    expect(byName.get("No Endpoint")!.error).toContain(
+      "compatible remote endpoint",
+    );
   });
 
   // -------------------------------------------------------------------------

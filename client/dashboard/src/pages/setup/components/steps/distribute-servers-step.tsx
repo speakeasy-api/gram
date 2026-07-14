@@ -304,8 +304,19 @@ export function DistributeServersStep({
     finishedRef.current = false;
     setDrawerError(null);
     setDrawerStep("adding");
-    // Remote MCP servers are created from streamable-http endpoints only.
-    setServersToDeploy(selectedServerObjects.map(filterToHttpRemotes));
+    // Remote MCP servers are created from streamable-http endpoints only. If
+    // nothing survives the filter the workflow would never start, so surface
+    // the dead end instead of an endless spinner.
+    const deployable = selectedServerObjects.map(filterToHttpRemotes);
+    if (!deployable.some((server) => (server.remotes ?? []).length > 0)) {
+      setServersToDeploy([]);
+      setDrawerError(
+        "None of the selected servers expose a compatible remote endpoint.",
+      );
+      setDrawerOpen(true);
+      return;
+    }
+    setServersToDeploy(deployable);
     setDrawerOpen(true);
   };
 
