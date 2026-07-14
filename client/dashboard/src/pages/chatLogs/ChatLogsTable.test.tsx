@@ -8,10 +8,16 @@ vi.mock("@/components/ui/button", () => ({
   Button: ({
     children,
     onClick,
+    "aria-label": ariaLabel,
   }: {
     children: ReactNode;
     onClick?: () => void;
-  }) => <button onClick={onClick}>{children}</button>,
+    "aria-label"?: string;
+  }) => (
+    <button onClick={onClick} aria-label={ariaLabel}>
+      {children}
+    </button>
+  ),
 }));
 
 vi.mock("@/components/ui/tooltip", () => ({
@@ -59,7 +65,7 @@ describe("ChatLogsTable", () => {
       />,
     );
 
-    fireEvent.click(screen.getByTitle("Copy Chat ID"));
+    fireEvent.click(screen.getByRole("button", { name: "Copy Chat ID" }));
 
     expect(writeText).toHaveBeenCalledWith(chatId);
   });

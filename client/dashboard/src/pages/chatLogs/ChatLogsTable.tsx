@@ -181,7 +181,7 @@ export function ChatLogsTable({
                     </span>
                     <CopyButton
                       text={chat.id}
-                      tooltip="Copy chat ID"
+                      tooltip="Copy Chat ID"
                       size="inline"
                       className="opacity-50 hover:opacity-100"
                     />
