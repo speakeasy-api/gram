@@ -93,7 +93,10 @@ export function InlineEditableText({
           }}
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key === "Enter") event.currentTarget.blur();
+            if (event.key === "Enter") {
+              event.preventDefault();
+              event.currentTarget.blur();
+            }
             if (event.key === "Escape") {
               cancelNextBlur.current = true;
               setDraft(value);

@@ -5,6 +5,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import type { FormEvent } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { InlineEditableText } from "./inline-editable-text";
 
@@ -111,6 +112,31 @@ describe("InlineEditableText", () => {
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledWith("Engineering"));
     expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
+  it("prevents Enter from submitting an enclosing form", async () => {
+    const onSubmit = vi.fn().mockResolvedValue(true);
+    const onFormSubmit = vi.fn((event: FormEvent) => event.preventDefault());
+    render(
+      <form onSubmit={onFormSubmit}>
+        <InlineEditableText
+          value="GitHub MCP"
+          onSubmit={onSubmit}
+          inputLabel="Server name"
+          editTitle="Rename server"
+        >
+          <span>GitHub MCP</span>
+        </InlineEditableText>
+      </form>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "GitHub MCP" }));
+    const input = screen.getByRole("textbox", { name: "Server name" });
+    fireEvent.change(input, { target: { value: "Engineering" } });
+
+    expect(fireEvent.keyDown(input, { key: "Enter" })).toBe(false);
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith("Engineering"));
+    expect(onFormSubmit).not.toHaveBeenCalled();
   });
 
   it("cancels with Escape without submitting", async () => {
