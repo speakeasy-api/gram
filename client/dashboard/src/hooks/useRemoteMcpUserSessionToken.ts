@@ -20,19 +20,30 @@ export interface UseRemoteMcpUserSessionTokenResult {
  *
  * Only issuer-gated servers get a token; the mint RPC 400s for the rest, so we
  * leave `accessToken` undefined and let the connection proceed unauthenticated.
+ *
+ * Minting persists a user_sessions row on the server (it shows up in the
+ * server's User sessions list), so callers must gate it behind an explicit
+ * user action via `enabled` — never mint just because a page rendered.
  */
 export function useRemoteMcpUserSessionToken({
   mcpServerId,
   isIssuerGated,
+  enabled: connectRequested,
 }: {
   mcpServerId: string | undefined;
   isIssuerGated: boolean;
+  /**
+   * Explicit-consent gate: keep false until the user asks to connect (e.g.
+   * clicks a Connect button). While false the query stays idle and nothing is
+   * minted.
+   */
+  enabled: boolean;
 }): UseRemoteMcpUserSessionTokenResult {
   const session = useSession();
   const project = useProject();
   const mintMutation = useMintUserSessionMutation();
 
-  const enabled = !!mcpServerId && isIssuerGated;
+  const enabled = !!mcpServerId && isIssuerGated && connectRequested;
 
   const query = useQuery({
     queryKey: [

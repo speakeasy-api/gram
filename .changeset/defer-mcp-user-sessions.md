@@ -1,5 +1,5 @@
 ---
-"server": patch
+"dashboard": patch
 ---
 
-Stop persisting a user_sessions row when the dashboard mints a user-session JWT. Viewing an MCP server or the playground no longer surfaces as an active user session; sessions now only appear when a client establishes one via the real OAuth flow.
+Require an explicit Connect before establishing a user session when viewing an MCP server. The server detail Tools tab and the playground no longer mint a user-session token on render for issuer-gated servers; a Connect button gates the mint, so merely viewing a page no longer creates an active user session.

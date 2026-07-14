@@ -25,7 +25,7 @@ import { useListEnvironments } from "@gram/client/react-query/listEnvironments.j
 import { useMintUserSessionMutation } from "@gram/client/react-query/mintUserSession.js";
 import { useMoonshineConfig } from "@speakeasy-api/moonshine";
 import { useQuery } from "@tanstack/react-query";
-import { AlertCircle, HistoryIcon, ShieldAlert } from "lucide-react";
+import { AlertCircle, HistoryIcon, PlugZap, ShieldAlert } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
@@ -156,6 +156,17 @@ export function PlaygroundElements({
   // on /mcp/{slug} requests, so the runtime gateway resolves the dashboard
   // user's stored upstream credentials via the same path a real MCP client
   // would after an OAuth dance — no special-casing in ApplyIssuerGate.
+  //
+  // Minting persists a user_sessions row server-side, so it only runs after
+  // the user explicitly clicks Connect (see ConnectRequiredNotice below) —
+  // opening the playground alone must not establish a session. The consent is
+  // keyed to the toolset id and held in component state only, so switching
+  // toolsets or revisiting the page requires connecting again.
+  const isIssuerGated = !!toolset?.id && !!toolset?.userSessionIssuerSlug;
+  const [connectedToolsetId, setConnectedToolsetId] = useState<string | null>(
+    null,
+  );
+  const connectRequested = !!toolset?.id && connectedToolsetId === toolset.id;
   const mintUserSessionMutation = useMintUserSessionMutation();
   const gatewayTokenQuery = useQuery({
     queryKey: [
@@ -178,8 +189,9 @@ export function PlaygroundElements({
       });
       return result;
     },
-    // Only mint for issuer-gated toolsets — the mint RPC 400s otherwise.
-    enabled: !!toolset?.id && !!toolset?.userSessionIssuerSlug,
+    // Only mint for issuer-gated toolsets — the mint RPC 400s otherwise — and
+    // only after the user explicitly connected.
+    enabled: isIssuerGated && connectRequested,
     // The minted JWT is good for ~1h; refetch every 45 minutes so we always
     // have headroom before expiry.
     staleTime: 1000 * 60 * 45,
@@ -221,6 +233,17 @@ export function PlaygroundElements({
     oauthStatus?.status !== "authenticated"
   ) {
     return <OAuthRequiredNotice providerName={toolset?.name ?? "provider"} />;
+  }
+
+  // Issuer-gated toolsets need an explicit Connect before the playground mints
+  // a user-session token (see the gatewayTokenQuery comment above).
+  if (isIssuerGated && !connectRequested) {
+    return (
+      <ConnectRequiredNotice
+        serverName={toolset?.name ?? "this MCP server"}
+        onConnect={() => setConnectedToolsetId(toolset?.id ?? null)}
+      />
+    );
   }
 
   return (
@@ -343,6 +366,37 @@ function AuthWarningBanner({
           Configure now
         </routes.mcp.details.Link>
       </span>
+    </div>
+  );
+}
+
+/**
+ * The explicit-consent gate for issuer-gated toolsets: connecting mints a
+ * user-session token, which establishes a session on the server, so we wait
+ * for a deliberate click instead of minting on page load.
+ */
+function ConnectRequiredNotice({
+  serverName,
+  onConnect,
+}: {
+  serverName: string;
+  onConnect: () => void;
+}) {
+  return (
+    <div className="flex h-full items-center justify-center">
+      <div className="flex max-w-md flex-col items-center gap-3 px-4 text-center">
+        <div className="bg-muted rounded-full p-3">
+          <PlugZap className="text-muted-foreground size-6" />
+        </div>
+        <Type className="font-medium">Connect to start chatting</Type>
+        <Type muted className="text-sm">
+          Connecting to{" "}
+          <span className="text-foreground font-medium">{serverName}</span>{" "}
+          establishes a user session for your account so the playground can call
+          its tools on your behalf.
+        </Type>
+        <Button onClick={onConnect}>Connect</Button>
+      </div>
     </div>
   );
 }
