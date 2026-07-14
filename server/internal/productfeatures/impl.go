@@ -2,9 +2,11 @@ package productfeatures
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel/trace"
@@ -23,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -106,25 +109,27 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 
 	orgID := authCtx.ActiveOrganizationID
 
-	current, err := s.repo.IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{
-		OrganizationID: orgID,
-		FeatureName:    payload.FeatureName,
-	})
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "check feature flag state").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
-	}
-	changed := current != payload.Enabled
-
 	// Observability mode changes the generated observability (hooks) plugin output
 	// (every event becomes non-blocking). That output can only be regenerated at
 	// the current hooks generator version, so a toggle can't take effect for an org
 	// that isn't cleared for it. Reject the change up front — before writing the
 	// feature — so the persisted feature state never claims a hook behavior that
 	// isn't actually published. Only gate a real change, and only when plugin
-	// publishing is wired.
+	// publishing is wired. This pre-write read is advisory (the write below is
+	// what authoritatively detects a change); a lost race here only means an
+	// unnecessary eligibility check.
 	observabilityToggle := payload.FeatureName == string(FeatureObservabilityMode)
-	if observabilityToggle && s.plugins != nil && changed && !s.plugins.HooksRolloutEligible(ctx, orgID, authCtx.OrganizationSlug) {
-		return oops.E(oops.CodeConflict, nil, "can't change observability mode yet: your organization isn't approved for the latest observability hooks version. It will become available soon.")
+	if observabilityToggle && s.plugins != nil {
+		current, err := s.repo.IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{
+			OrganizationID: orgID,
+			FeatureName:    payload.FeatureName,
+		})
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "check feature flag state").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
+		}
+		if current != payload.Enabled && !s.plugins.HooksRolloutEligible(ctx, orgID, authCtx.OrganizationSlug) {
+			return oops.E(oops.CodeConflict, nil, "can't change observability mode yet: your organization isn't approved for the latest observability hooks version. It will become available soon.")
+		}
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -133,38 +138,52 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	// changed is derived from the write itself — the insert either landed or
+	// hit the active-row conflict, the soft delete either matched a live row
+	// or found none — so the audit below records exactly the transitions that
+	// commit, immune to read-then-write races.
 	q := repo.New(dbtx)
+	changed := false
 	if payload.Enabled {
-		err = q.EnableFeature(ctx, repo.EnableFeatureParams{
+		inserted, err := q.EnableFeature(ctx, repo.EnableFeatureParams{
 			OrganizationID: orgID,
 			FeatureName:    payload.FeatureName,
 		})
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to enable organization feature flag %q", payload.FeatureName).LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
+		}
+		changed = inserted > 0
 	} else {
-		_, err = q.DeleteFeature(ctx, repo.DeleteFeatureParams{
+		_, err := q.DeleteFeature(ctx, repo.DeleteFeatureParams{
 			OrganizationID: orgID,
 			FeatureName:    payload.FeatureName,
 		})
-	}
-	if err != nil {
-		return oops.E(
-			oops.CodeUnexpected,
-			err,
-			"failed to set organization feature flag %q",
-			payload.FeatureName,
-		).LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			// Already disabled — a no-op, mirroring how enabling an enabled
+			// feature is a no-op.
+		case err != nil:
+			return oops.E(oops.CodeUnexpected, err, "failed to disable organization feature flag %q", payload.FeatureName).LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
+		default:
+			changed = true
+		}
 	}
 
 	// Fail-open governs whether blocking policies are enforced during a
 	// control-plane outage, so flipping it is a security-posture change that
 	// must leave an audit trail.
 	if payload.FeatureName == string(FeatureHooksFailOpen) && changed {
+		org, err := orgrepo.New(dbtx).GetOrganizationMetadata(ctx, orgID)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "read organization for hooks fail-open audit event").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
+		}
 		if err := s.audit.LogOrganizationHooksFailOpenToggled(ctx, dbtx, audit.LogOrganizationHooksFailOpenToggledEvent{
 			OrganizationID:   orgID,
 			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
 			ActorDisplayName: authCtx.Email,
 			ActorSlug:        nil,
-			OrganizationName: authCtx.OrganizationSlug,
-			OrganizationSlug: authCtx.OrganizationSlug,
+			OrganizationName: org.Name,
+			OrganizationSlug: org.Slug,
 			FailOpenEnabled:  payload.Enabled,
 		}); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "record hooks fail-open audit event").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))

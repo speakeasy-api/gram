@@ -18,8 +18,8 @@ type orgSettings struct {
 	// ServerURL scopes the cache to the deployment it was learned from — a
 	// value cached from a dev server must not govern production enforcement.
 	ServerURL string `json:"server_url"`
-	// Org scopes the cache within a server, mirroring readCachedAuth: another
-	// org's posture must not apply here.
+	// Org scopes the cache within a server: another org's posture must not
+	// apply here. It must match the config's org exactly on read.
 	Org string `json:"org,omitempty"`
 	// FailOpen is the org's downtime choice: allow gating events through when
 	// no verdict is obtainable instead of blocking until recovery.
@@ -47,10 +47,12 @@ func orgSettingsPath() string {
 	return authFilePath() + ".org-settings.json"
 }
 
-// readOrgSettings loads the cached settings, enforcing the same server/org
-// scoping rules as readCachedAuth plus the max-age cutoff. A missing,
-// malformed, mismatched, or stale cache reads as absent — the caller falls
-// back to the fail-closed default.
+// readOrgSettings loads the cached settings. A missing, malformed,
+// mismatched, or stale cache reads as absent — the caller falls back to the
+// fail-closed default. Unlike readCachedAuth, which tolerates a one-sided
+// unknown org, the org here must match the config exactly: this cache weakens
+// enforcement, so a posture recorded under one deployment identity must never
+// govern another (an org-less config must not inherit some org's fail-open).
 func readOrgSettings(cfg Config) (orgSettings, bool) {
 	b, err := os.ReadFile(orgSettingsPath())
 	if err != nil {
@@ -63,26 +65,28 @@ func readOrgSettings(cfg Config) (orgSettings, bool) {
 	if s.ServerURL != cfg.ServerURL {
 		return orgSettings{}, false
 	}
-	if cfg.OrgID != "" && s.Org != "" && s.Org != cfg.OrgID {
+	if s.Org != cfg.OrgID {
 		return orgSettings{}, false
 	}
-	if time.Since(s.UpdatedAt) > orgSettingsMaxAge {
+	// A future updated_at means the clock rolled back since the write; its
+	// real age is unknowable, so treat it as stale rather than letting it
+	// outlive the max-age cutoff.
+	if s.UpdatedAt.After(time.Now()) || time.Since(s.UpdatedAt) > orgSettingsMaxAge {
 		return orgSettings{}, false
 	}
 	return s, true
 }
 
-// writeOrgSettings persists a server-confirmed fail-open value. Recently
-// confirmed unchanged values are skipped so the common case does no I/O
-// beyond the read; an aged entry is rewritten even when unchanged so its
-// updated_at keeps clearing the max-age cutoff. Failures are swallowed: a
-// hook must never fail over its settings cache, and a stale or absent cache
-// only means the fail-closed default applies.
-func writeOrgSettings(cfg Config, org string, failOpen bool) {
-	if org == "" {
-		org = cfg.OrgID
-	}
-	if cur, ok := readOrgSettings(cfg); ok && cur.FailOpen == failOpen && cur.Org == org && time.Since(cur.UpdatedAt) < orgSettingsRefreshAge {
+// writeOrgSettings persists a server-confirmed fail-open value under the
+// config's own identity (server URL + org), so readback is scoped to exactly
+// the deployment the response was obtained for. Recently confirmed unchanged
+// values are skipped so the common case does no I/O beyond the read; an aged
+// entry is rewritten even when unchanged so its updated_at keeps clearing the
+// max-age cutoff. Failures are swallowed: a hook must never fail over its
+// settings cache, and a stale or absent cache only means the fail-closed
+// default applies.
+func writeOrgSettings(cfg Config, failOpen bool) {
+	if cur, ok := readOrgSettings(cfg); ok && cur.FailOpen == failOpen && time.Since(cur.UpdatedAt) < orgSettingsRefreshAge {
 		return
 	}
 
@@ -92,7 +96,7 @@ func writeOrgSettings(cfg Config, org string, failOpen bool) {
 	}
 	body, err := json.Marshal(orgSettings{
 		ServerURL: cfg.ServerURL,
-		Org:       org,
+		Org:       cfg.OrgID,
 		FailOpen:  failOpen,
 		UpdatedAt: time.Now().UTC(),
 	})

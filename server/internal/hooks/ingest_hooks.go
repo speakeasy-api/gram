@@ -126,7 +126,10 @@ func (s *Service) withOrgSettings(ctx context.Context, orgID string, res *gen.In
 	if s.productFeatures == nil {
 		return res
 	}
-	failOpen, err := s.productFeatures.IsFeatureEnabled(ctx, orgID, productfeatures.FeatureHooksFailOpen)
+	// Detach from request cancellation: the feature client answers a canceled
+	// lookup with (false, nil), which would read as a definitive fail-closed
+	// posture rather than an omitted one.
+	failOpen, err := s.productFeatures.IsFeatureEnabled(context.WithoutCancel(ctx), orgID, productfeatures.FeatureHooksFailOpen)
 	if err != nil {
 		s.logger.WarnContext(ctx, "failed to resolve hooks fail-open setting for ingest effects",
 			attr.SlogError(err),

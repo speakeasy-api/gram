@@ -136,7 +136,7 @@ func EnableRBACTx(ctx context.Context, dbtx repo.DBTX, organizationID string) er
 	// index (org, feature) WHERE deleted IS FALSE, so re-enabling an already-
 	// enabled org is a true no-op rather than a UniqueViolation that would
 	// poison the transaction.
-	if err := repo.New(dbtx).EnableFeature(ctx, repo.EnableFeatureParams{
+	if _, err := repo.New(dbtx).EnableFeature(ctx, repo.EnableFeatureParams{
 		OrganizationID: organizationID,
 		FeatureName:    string(FeatureRBAC),
 	}); err != nil {

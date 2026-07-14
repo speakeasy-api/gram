@@ -7,7 +7,7 @@ SELECT EXISTS (
             AND deleted IS FALSE
 ) AS enabled;
 
--- name: EnableFeature :exec
+-- name: EnableFeature :execrows
 INSERT INTO organization_features (
     organization_id,
     feature_name

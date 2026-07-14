@@ -217,7 +217,7 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 func (r *Relay) send(ctx context.Context, c creds, payload components.IngestRequestBody) ingestResult {
 	res := r.client.send(ctx, c, payload)
 	if res.statusCode >= 200 && res.statusCode < 300 && res.failOpen != nil {
-		writeOrgSettings(r.cfg, c.Org, *res.failOpen)
+		writeOrgSettings(r.cfg, *res.failOpen)
 	}
 	return res
 }

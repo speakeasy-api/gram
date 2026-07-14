@@ -92,7 +92,7 @@ func TestIngestDenyStillRefreshesOrgSettings(t *testing.T) {
 func TestIngestWithoutEffectsLeavesOrgSettings(t *testing.T) {
 	fs := newFakeServer(t, nil)
 	cfg := authedConfig(t, fs.URL)
-	writeOrgSettings(cfg, "", true)
+	writeOrgSettings(cfg, true)
 
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 	require.Equal(t, 0, res.ExitCode)
@@ -110,7 +110,7 @@ func TestServerErrorFailsOpenWithCachedSetting(t *testing.T) {
 		return http.StatusServiceUnavailable, decision{Decision: "", Reason: "", Message: ""}
 	})
 	cfg := authedConfig(t, fs.URL)
-	writeOrgSettings(cfg, "", true)
+	writeOrgSettings(cfg, true)
 
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 
@@ -140,7 +140,7 @@ func TestServerErrorBlocksWhenCachedFailClosed(t *testing.T) {
 		return http.StatusInternalServerError, decision{Decision: "", Reason: "", Message: ""}
 	})
 	cfg := authedConfig(t, fs.URL)
-	writeOrgSettings(cfg, "", false)
+	writeOrgSettings(cfg, false)
 
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 
@@ -152,7 +152,7 @@ func TestServerErrorBlocksWhenCachedFailClosed(t *testing.T) {
 func TestUnreachableFailsOpenWithCachedSetting(t *testing.T) {
 	fs := newFakeServer(t, nil)
 	cfg := authedConfig(t, fs.URL)
-	writeOrgSettings(cfg, "", true)
+	writeOrgSettings(cfg, true)
 	fs.Close()
 
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
@@ -180,7 +180,7 @@ func TestClientErrorStaysClosedDespiteFailOpen(t *testing.T) {
 		return http.StatusBadRequest, decision{Decision: "", Reason: "", Message: ""}
 	})
 	cfg := authedConfig(t, fs.URL)
-	writeOrgSettings(cfg, "", true)
+	writeOrgSettings(cfg, true)
 
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 
@@ -196,7 +196,7 @@ func TestEnvKeyRejectionStaysClosedDespiteFailOpen(t *testing.T) {
 		return http.StatusUnauthorized, decision{Decision: "", Reason: "", Message: ""}
 	})
 	cfg := authedConfig(t, fs.URL)
-	writeOrgSettings(cfg, "", true)
+	writeOrgSettings(cfg, true)
 
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 
@@ -217,7 +217,7 @@ func TestCachedKeyRejectionRatchetUnchangedByFailOpen(t *testing.T) {
 	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
-	writeOrgSettings(cfg, "", true)
+	writeOrgSettings(cfg, true)
 
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 
@@ -234,7 +234,7 @@ func TestOrgSettingsCacheScopedToServer(t *testing.T) {
 	cfg := authedConfig(t, fs.URL)
 	other := cfg
 	other.ServerURL = "https://other.gram.test"
-	writeOrgSettings(other, "", true)
+	writeOrgSettings(other, true)
 	fs.Close()
 
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
@@ -249,8 +249,8 @@ func TestOrgSettingsCacheScopedToOrg(t *testing.T) {
 	cfg := authedConfig(t, fs.URL)
 	cfg.OrgID = "org-1"
 	other := cfg
-	other.OrgID = ""
-	writeOrgSettings(other, "org-2", true)
+	other.OrgID = "org-2"
+	writeOrgSettings(other, true)
 	fs.Close()
 
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
@@ -258,12 +258,42 @@ func TestOrgSettingsCacheScopedToOrg(t *testing.T) {
 	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`, "another org's cached setting must be ignored")
 }
 
+// TestOrgSettingsCacheRequiresExactOrgMatch: a config that does not declare an
+// org must not inherit a posture recorded under some org's identity — the
+// match is exact, not one-sided like the credential cache.
+func TestOrgSettingsCacheRequiresExactOrgMatch(t *testing.T) {
+	fs := newFakeServer(t, nil)
+	cfg := authedConfig(t, fs.URL)
+	other := cfg
+	other.OrgID = "org-1"
+	writeOrgSettings(other, true)
+	fs.Close()
+
+	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+
+	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`, "an org-scoped cached setting must not apply to an org-less config")
+}
+
+// TestFutureTimestampedOrgSettingsIgnored: a future updated_at (clock rolled
+// back since the write) has an unknowable age, so it must read as stale
+// instead of surviving the max-age cutoff indefinitely.
+func TestFutureTimestampedOrgSettingsIgnored(t *testing.T) {
+	fs := newFakeServer(t, nil)
+	cfg := authedConfig(t, fs.URL)
+	seedOrgSettings(t, cfg, true, -48*time.Hour)
+	fs.Close()
+
+	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+
+	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`, "a future-stamped cached setting must be ignored")
+}
+
 // TestForgetAuthLeavesOrgSettings: losing a credential must not flip the org's
 // enforcement posture.
 func TestForgetAuthLeavesOrgSettings(t *testing.T) {
 	t.Setenv("GRAM_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
 	cfg := Config{ServerURL: "https://gram.test", ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
-	writeOrgSettings(cfg, "", true)
+	writeOrgSettings(cfg, true)
 
 	forgetAuth()
 
