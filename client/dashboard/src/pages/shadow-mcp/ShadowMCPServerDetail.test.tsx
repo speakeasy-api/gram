@@ -508,6 +508,26 @@ describe("ShadowMCPServerDetail", () => {
     expect(input.getAttribute("maxlength")).toBe("255");
   });
 
+  it.each([
+    ["loading", { data: undefined, error: null, isLoading: true }],
+    [
+      "unavailable",
+      { data: undefined, error: new Error("load failed"), isLoading: false },
+    ],
+  ])(
+    "does not expose the rename control while the server is %s",
+    (_, query) => {
+      mocks.useShadowMCPInventoryServer.mockReturnValue(query);
+
+      renderDetailPage();
+
+      expect(screen.queryByTitle("Rename Shadow MCP server")).toBeNull();
+      expect(
+        screen.queryByRole("textbox", { name: "Shadow MCP server name" }),
+      ).toBeNull();
+    },
+  );
+
   it("edits the server name inline and saves once on Enter after both invalidations", async () => {
     const mutateAsync = vi.fn().mockResolvedValue({});
     let resolveServerInvalidation!: () => void;

@@ -514,6 +514,23 @@ export default function ShadowMCPServerDetail(): JSX.Element {
     }
   };
 
+  let serverNameTitle = <span className="truncate">{serverDisplayName}</span>;
+  if (server) {
+    serverNameTitle = (
+      <InlineEditableText
+        value={serverDisplayName}
+        onSubmit={saveServerName}
+        inputLabel="Shadow MCP server name"
+        editTitle="Rename Shadow MCP server"
+        maxLength={255}
+        editorClassName="w-[24rem] max-w-full"
+        inputClassName="text-lg font-semibold"
+      >
+        {serverNameTitle}
+      </InlineEditableText>
+    );
+  }
+
   const openAction = (mode: InventoryActionMode) => {
     if (!server) return;
     setActiveAction({ mode, server });
@@ -532,19 +549,7 @@ export default function ShadowMCPServerDetail(): JSX.Element {
       <Page.Body fullHeight className="pb-8">
         <RequireScope scope="org:admin" level="page">
           <Page.Section>
-            <Page.Section.Title stage="beta">
-              <InlineEditableText
-                value={serverDisplayName}
-                onSubmit={saveServerName}
-                inputLabel="Shadow MCP server name"
-                editTitle="Rename Shadow MCP server"
-                maxLength={255}
-                editorClassName="w-[24rem] max-w-full"
-                inputClassName="text-lg font-semibold"
-              >
-                <span className="truncate">{serverDisplayName}</span>
-              </InlineEditableText>
-            </Page.Section.Title>
+            <Page.Section.Title>{serverNameTitle}</Page.Section.Title>
             <Page.Section.Description>
               {server?.canonicalServerUrl || serverSlug}
             </Page.Section.Description>
