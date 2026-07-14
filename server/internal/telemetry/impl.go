@@ -34,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/telemetryerrs"
 	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	usersRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -499,24 +500,103 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 	}, nil
 }
 
+// resolveSummaryOwnerIDs maps summary group keys to the Gram user id each key
+// authoritatively identifies. SearchUsers keys internal summaries email-first,
+// so an email-shaped key is resolved through the org's user directory; a
+// non-email key is already a raw gram user id and identifies itself. Keys that
+// resolve to no connected user are absent from the result. Best-effort: on a
+// directory lookup failure only the id-shaped keys are returned.
+func (s *Service) resolveSummaryOwnerIDs(ctx context.Context, orgID string, keys []string) map[string]string {
+	ownerByKey := make(map[string]string, len(keys))
+	emails := make([]string, 0, len(keys))
+	seen := make(map[string]struct{}, len(keys))
+	for _, key := range keys {
+		if !strings.Contains(key, "@") {
+			ownerByKey[key] = key
+			continue
+		}
+		email := conv.NormalizeEmail(key)
+		if _, ok := seen[email]; ok {
+			continue
+		}
+		seen[email] = struct{}{}
+		emails = append(emails, email)
+	}
+	if len(emails) == 0 {
+		return ownerByKey
+	}
+
+	rows, err := usersRepo.New(s.db).GetConnectedUsersByEmails(ctx, usersRepo.GetConnectedUsersByEmailsParams{
+		Emails:         emails,
+		OrganizationID: orgID,
+	})
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to resolve summary emails to org users", attr.SlogError(err))
+		return ownerByKey
+	}
+	idByEmail := make(map[string]string, len(rows))
+	for _, row := range rows {
+		idByEmail[conv.NormalizeEmail(row.Email)] = row.ID
+	}
+	for _, key := range keys {
+		if !strings.Contains(key, "@") {
+			continue
+		}
+		if id, ok := idByEmail[conv.NormalizeEmail(key)]; ok {
+			ownerByKey[key] = id
+		}
+	}
+	return ownerByKey
+}
+
 // attachUserAccounts populates UserSummary.Accounts from the user_accounts
-// directory. The directory is keyed by raw gram user id while summaries are
-// keyed email-first, so each summary is looked up under its group key plus every
-// raw user_id folded into it (rawUserIDsByKey, keyed by summary group key).
-// Best-effort: a lookup failure leaves accounts empty rather than failing the
-// listing.
+// directory. Ownership comes from the directory itself, never from telemetry
+// row identity: an account row attaches to the summary whose resolved owner
+// (email group key resolved through the user directory, or an id-shaped group
+// key) matches the row's user_id, else to the summary keyed by the account's
+// own email (its own usage rows, e.g. an unprovisioned member or a personal
+// identity). The raw telemetry user_ids folded into a summary (rawUserIDsByKey)
+// only widen the candidate fetch — attaching through them would let a stray row
+// pairing one person's email with another person's user id hand the second
+// person's accounts to the first summary (DNO-509). Best-effort: a lookup
+// failure leaves accounts empty rather than failing the listing.
 func (s *Service) attachUserAccounts(ctx context.Context, orgID string, users []*telem_gen.UserSummary, rawUserIDsByKey map[string][]string) {
-	summaryByID := make(map[string]*telem_gen.UserSummary, len(users))
-	userIDs := make([]string, 0, len(users))
+	if len(users) == 0 {
+		return
+	}
+
+	keys := make([]string, 0, len(users))
 	for _, u := range users {
-		for _, id := range append([]string{u.UserID}, rawUserIDsByKey[u.UserID]...) {
+		keys = append(keys, u.UserID)
+	}
+	ownerByKey := s.resolveSummaryOwnerIDs(ctx, orgID, keys)
+
+	summaryByOwner := make(map[string]*telem_gen.UserSummary, len(users))
+	summaryByEmailKey := make(map[string]*telem_gen.UserSummary, len(users))
+	userIDs := make([]string, 0, len(users))
+	seenIDs := make(map[string]struct{}, len(users))
+	for _, u := range users {
+		// Group keys are distinct, but two case-variant email keys can resolve to
+		// the same user; the earlier summary in list order keeps the claim.
+		if owner := ownerByKey[u.UserID]; owner != "" {
+			if _, claimed := summaryByOwner[owner]; !claimed {
+				summaryByOwner[owner] = u
+			}
+		}
+		if strings.Contains(u.UserID, "@") {
+			emailKey := conv.NormalizeEmail(u.UserID)
+			if _, claimed := summaryByEmailKey[emailKey]; !claimed {
+				summaryByEmailKey[emailKey] = u
+			}
+		}
+		for _, id := range append([]string{ownerByKey[u.UserID]}, rawUserIDsByKey[u.UserID]...) {
 			if id == "" {
 				continue
 			}
-			if _, ok := summaryByID[id]; ok {
+			if _, ok := seenIDs[id]; ok {
 				continue
 			}
-			summaryByID[id] = u
+			seenIDs[id] = struct{}{}
 			userIDs = append(userIDs, id)
 		}
 	}
@@ -537,8 +617,13 @@ func (s *Service) attachUserAccounts(ctx context.Context, orgID string, users []
 		if !row.UserID.Valid || row.UserID.String == "" {
 			continue
 		}
-		summary, ok := summaryByID[row.UserID.String]
-		if !ok {
+		summary := summaryByOwner[row.UserID.String]
+		if summary == nil {
+			if email := conv.NormalizeEmail(conv.FromPGTextOrEmpty[string](row.Email)); email != "" {
+				summary = summaryByEmailKey[email]
+			}
+		}
+		if summary == nil {
 			continue
 		}
 		var lastSeen *string
@@ -643,6 +728,17 @@ func (s *Service) searchUsersByRole(ctx context.Context, payload *telem_gen.Sear
 		}
 	}
 
+	// Role assignments are keyed by raw gram user id while summaries are keyed
+	// email-first, so resolve each summary's owner through the user directory.
+	// The raw ids folded into a summary are only a fallback for keys that do not
+	// resolve: a stray row pairing one person's email with another person's user
+	// id would otherwise bucket the summary under the wrong role (DNO-509).
+	keys := make([]string, 0, len(items))
+	for _, item := range items {
+		keys = append(keys, item.UserID)
+	}
+	ownerByKey := s.resolveSummaryOwnerIDs(ctx, params.organizationID, keys)
+
 	// Single pass: aggregate per-user costs by role and build the response.
 	type roleAgg struct {
 		summary *telem_gen.RoleSummary
@@ -651,11 +747,13 @@ func (s *Service) searchUsersByRole(ctx context.Context, payload *telem_gen.Sear
 
 	const unassignedRoleID = "unassigned"
 	for _, item := range items {
-		// Role assignments are keyed by raw gram user id while summaries are keyed
-		// email-first, so fall back to the raw ids folded into the summary.
 		ri := roleInfo{id: unassignedRoleID, name: "Unassigned"}
-		if r, ok := userToRole[item.UserID]; ok {
-			ri = r
+		if owner, ok := ownerByKey[item.UserID]; ok {
+			// A resolved member without an assignment stays Unassigned rather than
+			// borrowing a role through raw telemetry ids.
+			if r, ok := userToRole[owner]; ok {
+				ri = r
+			}
 		} else {
 			for _, rawID := range item.RawUserIDs {
 				if r, ok := userToRole[rawID]; ok {

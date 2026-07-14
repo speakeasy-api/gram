@@ -11,6 +11,7 @@ from pystreams.risk.scanner import (
     Detection,
     ProcessPoolScanner,
     Recognized,
+    ScanSlotTimeout,
     ThreadScanner,
     _AsyncCloseable,
 )
@@ -228,11 +229,11 @@ async def test_context_manager_exit_closes_scanner():
 
 
 class _StuckExecutor:
-    """Executor stand-in whose submitted futures never complete.
+    """Executor stand-in whose futures are never picked up by a worker.
 
-    Lets the ProcessPoolScanner timeout path be tested without spawning real
-    worker processes or loading the spaCy model: ``scan`` submits, then waits on a
-    future that is never resolved, so the anyio ``fail_after`` deadline must fire.
+    Lets the ProcessPoolScanner slot-timeout path be tested without spawning
+    real worker processes or loading the spaCy model: ``scan`` submits a future
+    that stays pending forever, so the slot deadline must fire.
     """
 
     def __init__(self):
@@ -240,6 +241,46 @@ class _StuckExecutor:
 
     def submit(self, fn, *args):
         future: Future = Future()
+        self.submitted.append(future)
+        return future
+
+
+class _StuckRunningBase:
+    """Base for executor fakes whose futures start running but never resolve.
+
+    A context manager by necessity, not convenience: a running future can't be
+    cancelled, so a timed-out scan's abandoned result-wait thread stays parked
+    in ``future.result()``. anyio worker threads are non-daemon, and one that
+    never finishes blocks interpreter shutdown — pytest prints its summary and
+    then hangs forever. Leaving the ``with`` block resolves every still-pending
+    future so those threads can exit. (The real executor resolves its futures
+    on shutdown/kill, so production teardown has no equivalent leak; it is
+    purely a property of these fakes.)
+    """
+
+    def __init__(self):
+        self.submitted: list[Future] = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        for future in self.submitted:
+            if not future.done():
+                future.set_result(([], 0.0))
+
+
+class _RunningStuckExecutor(_StuckRunningBase):
+    """Executor stand-in whose futures start executing but never complete.
+
+    The future is marked running at submit, standing in for a worker that
+    picked the scan up and wedged: the slot wait passes instantly and the
+    execution deadline (``scan_timeout``) must fire.
+    """
+
+    def submit(self, fn, *args):
+        future: Future = Future()
+        future.set_running_or_notify_cancel()
         self.submitted.append(future)
         return future
 
@@ -260,18 +301,101 @@ class _ImmediateExecutor:
         return future
 
 
-async def test_pool_scan_times_out_via_anyio_deadline():
+async def test_pool_scan_slot_timeout_raises_when_never_picked_up():
     executor = _StuckExecutor()
-    scanner = ProcessPoolScanner(cast(ProcessPoolExecutor, executor), scan_timeout=0.05)
+    scanner = ProcessPoolScanner(
+        cast(ProcessPoolExecutor, executor), scan_timeout=None, slot_timeout=0.05
+    )
 
-    # The scan never completes, so the anyio fail_after deadline must raise.
-    with pytest.raises(TimeoutError):
+    # No worker ever picks the scan up, so the slot deadline raises the
+    # requeueable ScanSlotTimeout — not the execution TimeoutError.
+    with pytest.raises(ScanSlotTimeout):
         await scanner.scan("anything", None, 0.75)
 
-    # On timeout the future is cancelled, so a still-queued scan is pulled rather
-    # than left to run with nobody awaiting it (and the abandoned wait unblocks).
+    # The still-queued scan is pulled from the executor queue rather than left
+    # to run with nobody awaiting it.
     (future,) = executor.submitted
     assert future.cancelled()
+
+
+async def test_pool_scan_execution_times_out_via_anyio_deadline():
+    with _RunningStuckExecutor() as executor:
+        scanner = ProcessPoolScanner(
+            cast(ProcessPoolExecutor, executor), scan_timeout=0.05, slot_timeout=None
+        )
+
+        # A worker picked the scan up (slot wait passes) but it never
+        # completes, so the execution deadline must raise plain TimeoutError.
+        with pytest.raises(TimeoutError):
+            await scanner.scan("anything", None, 0.75)
+
+        # A running scan cannot be interrupted; the cancel attempt is a no-op.
+        (future,) = executor.submitted
+        assert not future.cancelled()
+
+
+class _FirstRunningExecutor(_StuckRunningBase):
+    """Executor stand-in where only the first future starts; the rest queue.
+
+    Models a saturated pool: the first scan is picked up by "the worker" and
+    never completes, while every later submission stays pending forever.
+    """
+
+    def submit(self, fn, *args):
+        future: Future = Future()
+        if not self.submitted:
+            future.set_running_or_notify_cancel()
+        self.submitted.append(future)
+        return future
+
+
+async def test_submit_is_not_starved_by_result_waits():
+    # Regression: submits must not share the result-wait limiter. A result-wait
+    # holds its token for the whole running scan, so a shared limiter would
+    # block a new message inside _submit — before the slot deadline even starts
+    # — until an earlier scan finished, exactly the unbounded wait the slot
+    # timeout exists to prevent.
+    wait_limiter = anyio.CapacityLimiter(1)
+    with _FirstRunningExecutor() as executor:
+        scanner = ProcessPoolScanner(
+            cast(ProcessPoolExecutor, executor),
+            scan_timeout=None,
+            slot_timeout=0.1,
+            wait_limiter=wait_limiter,
+        )
+
+        async with anyio.create_task_group() as tg:
+            # The first scan runs forever, parking a result-wait thread that
+            # holds the only wait_limiter token.
+            tg.start_soon(scanner.scan, "first", None, 0.75)
+            # Poll, not an Event: the awaited condition is a worker *thread*
+            # borrowing the limiter token inside the scanner, which exposes no
+            # hook to signal from.
+            while wait_limiter.statistics().borrowed_tokens == 0:  # noqa: ASYNC110
+                await anyio.sleep(0.01)
+
+            # The second scan must still submit immediately and requeue at its
+            # slot deadline; under a shared limiter it would hang here past
+            # fail_after.
+            with anyio.fail_after(2):
+                with pytest.raises(ScanSlotTimeout):
+                    await scanner.scan("second", None, 0.75)
+
+            assert len(executor.submitted) == 2
+            tg.cancel_scope.cancel()
+
+
+async def test_pool_scan_slot_deadline_defers_to_execution_bound_once_started():
+    with _RunningStuckExecutor() as executor:
+        scanner = ProcessPoolScanner(
+            cast(ProcessPoolExecutor, executor), scan_timeout=0.05, slot_timeout=0.05
+        )
+
+        # The scan started, so even with a slot bound configured the failure is
+        # the execution timeout — slot expiry never misclassifies a running
+        # scan.
+        with pytest.raises(TimeoutError):
+            await scanner.scan("anything", None, 0.75)
 
 
 async def test_pool_scan_without_timeout_returns_result():
@@ -336,12 +460,28 @@ async def test_pool_scan_records_worker_reported_duration(recorded_scan_duration
 
 
 async def test_pool_scan_timeout_records_no_duration(recorded_scan_durations):
-    executor = _StuckExecutor()
-    scanner = ProcessPoolScanner(cast(ProcessPoolExecutor, executor), scan_timeout=0.05)
+    with _RunningStuckExecutor() as executor:
+        scanner = ProcessPoolScanner(
+            cast(ProcessPoolExecutor, executor), scan_timeout=0.05, slot_timeout=None
+        )
 
-    # A timed-out scan reports nothing: scan_duration stays a clean read of what
-    # completed scans cost.
-    with pytest.raises(TimeoutError):
+        # A timed-out scan reports nothing: scan_duration stays a clean read of
+        # what completed scans cost.
+        with pytest.raises(TimeoutError):
+            await scanner.scan("anything", None, 0.75)
+
+        assert recorded_scan_durations == []
+
+
+async def test_pool_scan_slot_timeout_records_no_duration(recorded_scan_durations):
+    scanner = ProcessPoolScanner(
+        cast(ProcessPoolExecutor, _StuckExecutor()),
+        scan_timeout=None,
+        slot_timeout=0.05,
+    )
+
+    # A scan that never ran has no execution cost to report either.
+    with pytest.raises(ScanSlotTimeout):
         await scanner.scan("anything", None, 0.75)
 
     assert recorded_scan_durations == []
