@@ -172,6 +172,12 @@ func (g UserSessionGrant) AdditionalCacheKeys() []string { return []string{} }
 // enough to limit blast radius if the code leaks.
 func (g UserSessionGrant) TTL() time.Duration { return 10 * time.Minute }
 
+// errIssuerGateOrgLookup marks the post-validation operational path in
+// validateUserSessionToken: the bearer token itself was accepted but the
+// endpoint's organization could not be described, so the resulting 401 is
+// not a credential rejection.
+var errIssuerGateOrgLookup = errors.New("describe organization for issuer-gated endpoint")
+
 // validateUserSessionToken delegates the JWT verify + revocation check to
 // usersessions.Signer.ValidateBearer, then — for user / API-key subjects —
 // stamps a contextvalues.AuthContext scoped to the endpoint's org/project.
@@ -197,12 +203,6 @@ func (g UserSessionGrant) TTL() time.Duration { return 10 * time.Minute }
 // silently bypasses on enterprise endpoints (ShouldEnforce returns false
 // when AccountType != "enterprise"; PrepareContext skips when SessionID
 // is nil).
-// errIssuerGateOrgLookup marks the post-validation operational path in
-// validateUserSessionToken: the bearer token itself was accepted but the
-// endpoint's organization could not be described, so the resulting 401 is
-// not a credential rejection.
-var errIssuerGateOrgLookup = errors.New("describe organization for issuer-gated endpoint")
-
 func (s *Service) validateUserSessionToken(ctx context.Context, token string, endpoint *ResolvedMcpEndpoint) (context.Context, *urn.SessionSubject, error) {
 	if token == "" {
 		return ctx, nil, nil
