@@ -54,6 +54,8 @@ export function InlineEditableText({
     try {
       const accepted = await onSubmit(nextValue);
       if (accepted) setEditing(false);
+    } catch {
+      // Submission feedback belongs to the caller; a failure keeps the draft open.
     } finally {
       submittingRef.current = false;
       setSubmitting(false);

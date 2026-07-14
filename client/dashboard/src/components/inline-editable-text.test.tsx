@@ -104,6 +104,20 @@ describe("InlineEditableText", () => {
     expect(screen.getByRole("textbox", { name: "Server name" })).toBeTruthy();
   });
 
+  it("retains the draft and recovers when submission rejects", async () => {
+    renderEditor({
+      onSubmit: vi.fn().mockRejectedValue(new Error("save failed")),
+    });
+    fireEvent.click(screen.getByRole("button", { name: "GitHub MCP" }));
+    const input = screen.getByRole("textbox", { name: "Server name" });
+    fireEvent.change(input, { target: { value: "Engineering" } });
+    fireEvent.blur(input);
+
+    await waitFor(() => expect(input.hasAttribute("disabled")).toBe(false));
+    expect(input.getAttribute("value")).toBe("Engineering");
+    expect(screen.getByRole("textbox", { name: "Server name" })).toBeTruthy();
+  });
+
   it("prevents duplicate submissions while pending", async () => {
     let resolve!: (accepted: boolean) => void;
     const onSubmit = vi.fn().mockReturnValue(
