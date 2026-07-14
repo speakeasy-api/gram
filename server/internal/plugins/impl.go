@@ -1205,6 +1205,10 @@ func (s *Service) DownloadCodexInstallScript(ctx context.Context, payload *gen.D
 	marketplaceURL := fmt.Sprintf("%s%s%s.git", s.serverURL, marketplace.RoutePrefix, conn.MarketplaceToken.String)
 
 	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, conv.PtrValOr(ac.ProjectSlug, ""), *ac.ProjectID)
+	// The script's plugin key and hook approvals must name the codex plugin as
+	// it exists in the published repo, which a rollout-gated carry may have
+	// pinned under a pre-rename org name.
+	cfg.HooksOrgName = publishedHooksOrgName(conn.PublishedHooksConfig)
 
 	script, err := GenerateCodexInstallScript(marketplaceURL, cfg)
 	if err != nil {
@@ -1333,6 +1337,9 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 			result.RepoURL = &repoURL
 			// The observability plugin slugs are org-name-derived (see naming
 			// package); surface them so install UIs never re-derive the formula.
+			// HooksOrgName keeps the reported slugs pointing at the published
+			// directories when a rename happened while the rollout gate carried
+			// the hooks subtree.
 			slugCfg := GenerateConfig{
 				OrgName:           s.resolveOrganizationName(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug),
 				OrgEmail:          "",
@@ -1344,7 +1351,7 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 				IsDefaultProject:  false,
 				Version:           "",
 				MarketplaceName:   "",
-				HooksOrgName:      "",
+				HooksOrgName:      publishedHooksOrgName(conn.PublishedHooksConfig),
 				ObservabilityMode: false,
 				BrowserLogin:      false,
 				InstallFailOpen:   false,
@@ -2033,11 +2040,7 @@ func carryHooksSubtree(dst, existing map[string][]byte, publishedConfig []byte, 
 	if len(existing) == 0 {
 		return "", false
 	}
-	orgName := currentOrgName
-	var hc HooksConfig
-	if err := json.Unmarshal(publishedConfig, &hc); err == nil && hc.OrgName != "" {
-		orgName = hc.OrgName
-	}
+	orgName := conv.Default(publishedHooksOrgName(publishedConfig), currentOrgName)
 	staged := make(map[string][]byte)
 	for _, prefix := range hooksSubtreePrefixes(orgName) {
 		found := false
@@ -2053,6 +2056,22 @@ func carryHooksSubtree(dst, existing map[string][]byte, publishedConfig []byte, 
 	}
 	maps.Copy(dst, staged)
 	return orgName, true
+}
+
+// publishedHooksOrgName extracts the org name the published hooks subtree was
+// generated under from a stored hooks config snapshot. Empty when the snapshot
+// is missing, unreadable, or predates the org_name field; callers fall back to
+// the current org name. Every surface that points users at the published
+// observability plugin (marketplace entries, install status, install scripts,
+// the device agent) must derive its slugs from this name — the current org
+// name diverges from the published directories after a rename while the
+// rollout gate pins the hooks subtree.
+func publishedHooksOrgName(publishedConfig []byte) string {
+	var hc HooksConfig
+	if err := json.Unmarshal(publishedConfig, &hc); err != nil {
+		return ""
+	}
+	return hc.OrgName
 }
 
 // validMarketplaceName matches identifiers Claude Code, Cursor, and Codex

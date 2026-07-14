@@ -3,6 +3,7 @@ package mv
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 
@@ -83,8 +84,18 @@ func BuildAgentPluginsView(rows []repo.GetAgentPluginSetRow, marketplaceURL func
 				row.MarketplaceUpdatedAt.Time.UnixNano(),
 			)
 			// Observability is required on every published marketplace,
-			// independent of assignments.
-			observabilitySlug := naming.ObservabilitySlug(row.OrganizationName)
+			// independent of assignments. The slug must name the plugin as it
+			// exists in the published repo: the hooks rollout gate can pin the
+			// subtree under a pre-rename org name, recorded in the published
+			// hooks config snapshot.
+			hooksOrgName := row.OrganizationName
+			var publishedHooks struct {
+				OrgName string `json:"org_name"`
+			}
+			if json.Unmarshal(row.PublishedHooksConfig, &publishedHooks) == nil && publishedHooks.OrgName != "" {
+				hooksOrgName = publishedHooks.OrgName
+			}
+			observabilitySlug := naming.ObservabilitySlug(hooksOrgName)
 			plugins = append(plugins, &gen.AgentPlugin{
 				Slug:            observabilitySlug,
 				MarketplaceName: name,
