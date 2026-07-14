@@ -1,8 +1,8 @@
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { Page } from "@/components/page-layout";
+import { SettingsLayout } from "@/components/layouts/settings-layout";
 import { Card } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
-import { Heading } from "@/components/ui/heading";
 import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import {
   Sheet,
@@ -336,129 +336,143 @@ function OrgDomainsInner() {
 
   return (
     <>
-      <Heading variant="h1" className="mb-2">
-        Custom Domain
-      </Heading>
-      <Type muted small className="mb-6">
-        Connect a custom domain to serve your MCP servers from your own branded
-        URL instead of the default platform domain.
-      </Type>
-      {domain?.domain ? (
-        <Card>
-          <Stack direction="horizontal" justify="space-between" align="start">
-            <Stack gap={1}>
-              <Stack direction="horizontal" align="center" gap={2}>
-                <Globe className="text-muted-foreground h-4 w-4" />
-                <Type variant="body" className="font-mono font-medium">
-                  {domain.domain}
-                </Type>
-                {domain.isUpdating ? (
-                  <SimpleTooltip tooltip="Your domain is being verified. This may take a few minutes.">
-                    <Loader2 className="text-primary h-4 w-4 animate-spin" />
-                  </SimpleTooltip>
-                ) : domain.verified ? (
-                  <SimpleTooltip tooltip="Domain verified and active">
-                    <Check className="text-default-success h-4 w-4 stroke-3" />
-                  </SimpleTooltip>
-                ) : (
-                  <SimpleTooltip tooltip="Domain verification failed. Ensure your DNS records are set up correctly.">
-                    <X className="text-destructive h-4 w-4 stroke-3" />
-                  </SimpleTooltip>
-                )}
-              </Stack>
-              <Type
-                variant="body"
-                className="text-muted-foreground ml-6 text-sm"
-              >
-                Linked <HumanizeDateTime date={domain.createdAt} />
-              </Type>
-              <div className="mt-1 ml-6 flex flex-wrap items-center gap-2">
-                <Type variant="body" className="text-muted-foreground text-sm">
-                  Allowed IPs:
-                </Type>
-                {domain.ipAllowlist.length === 0 ? (
-                  <Type
-                    variant="body"
-                    className="text-muted-foreground text-sm italic"
-                  >
-                    All (no restriction)
-                  </Type>
-                ) : (
-                  domain.ipAllowlist.map((ip) => (
-                    <Badge key={ip} background={false} className="font-mono">
-                      {ip}
-                    </Badge>
-                  ))
-                )}
-              </div>
-            </Stack>
-            <RequireScope scope="org:admin" level="section">
-              <Stack direction="horizontal" gap={2}>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => {
-                    setEditIPs(domain.ipAllowlist);
-                    setEditIPsValid(true);
-                    setUpdateAllowlistError("");
-                    setIsEditAllowlistOpen(true);
-                  }}
+      <SettingsLayout>
+        <SettingsLayout.Header
+          title="Custom Domain"
+          subtitle="Connect a custom domain to serve your MCP servers from your own branded URL instead of the default platform domain."
+        />
+        <SettingsLayout.Body>
+          <SettingsLayout.Group label="Domain">
+            {domain?.domain ? (
+              <Card>
+                <Stack
+                  direction="horizontal"
+                  justify="space-between"
+                  align="start"
                 >
-                  Edit allowlist
-                </Button>
-                {!domain.verified && (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => setIsAddDomainDialogOpen(true)}
-                    disabled={domain.isUpdating}
-                  >
-                    Reverify
-                  </Button>
-                )}
-                <Button
-                  variant="tertiary"
-                  size="sm"
-                  onClick={() => setIsDeleteDomainDialogOpen(true)}
-                  className="hover:text-destructive"
-                  disabled={deleteDomainMutation.isPending}
-                  aria-label="Remove domain"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </Stack>
-            </RequireScope>
-          </Stack>
-        </Card>
-      ) : (
-        !domainIsLoading && (
-          <InlineEmptyState
-            icon={<Globe />}
-            title="No custom domain configured"
-            description="You can connect one custom domain per organization for your MCP servers."
-            action={
-              <RequireScope scope="org:admin" level="component">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => {
-                    if (productTier.includes("base")) {
-                      setIsCustomDomainUpgradeModalOpen(true);
-                    } else {
-                      setIsAddDomainDialogOpen(true);
-                    }
-                  }}
-                >
-                  <Button.LeftIcon>
-                    <Globe className="h-4 w-4" />
-                  </Button.LeftIcon>
-                  <Button.Text>Add Domain</Button.Text>
-                </Button>
-              </RequireScope>
-            }
-          />
-        )
-      )}
+                  <Stack gap={1}>
+                    <Stack direction="horizontal" align="center" gap={2}>
+                      <Globe className="text-muted-foreground h-4 w-4" />
+                      <Type variant="body" className="font-mono font-medium">
+                        {domain.domain}
+                      </Type>
+                      {domain.isUpdating ? (
+                        <SimpleTooltip tooltip="Your domain is being verified. This may take a few minutes.">
+                          <Loader2 className="text-primary h-4 w-4 animate-spin" />
+                        </SimpleTooltip>
+                      ) : domain.verified ? (
+                        <SimpleTooltip tooltip="Domain verified and active">
+                          <Check className="text-default-success h-4 w-4 stroke-3" />
+                        </SimpleTooltip>
+                      ) : (
+                        <SimpleTooltip tooltip="Domain verification failed. Ensure your DNS records are set up correctly.">
+                          <X className="text-destructive h-4 w-4 stroke-3" />
+                        </SimpleTooltip>
+                      )}
+                    </Stack>
+                    <Type
+                      variant="body"
+                      className="text-muted-foreground ml-6 text-sm"
+                    >
+                      Linked <HumanizeDateTime date={domain.createdAt} />
+                    </Type>
+                    <div className="mt-1 ml-6 flex flex-wrap items-center gap-2">
+                      <Type
+                        variant="body"
+                        className="text-muted-foreground text-sm"
+                      >
+                        Allowed IPs:
+                      </Type>
+                      {domain.ipAllowlist.length === 0 ? (
+                        <Type
+                          variant="body"
+                          className="text-muted-foreground text-sm italic"
+                        >
+                          All (no restriction)
+                        </Type>
+                      ) : (
+                        domain.ipAllowlist.map((ip) => (
+                          <Badge
+                            key={ip}
+                            background={false}
+                            className="font-mono"
+                          >
+                            {ip}
+                          </Badge>
+                        ))
+                      )}
+                    </div>
+                  </Stack>
+                  <RequireScope scope="org:admin" level="section">
+                    <Stack direction="horizontal" gap={2}>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => {
+                          setEditIPs(domain.ipAllowlist);
+                          setEditIPsValid(true);
+                          setUpdateAllowlistError("");
+                          setIsEditAllowlistOpen(true);
+                        }}
+                      >
+                        Edit allowlist
+                      </Button>
+                      {!domain.verified && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => setIsAddDomainDialogOpen(true)}
+                          disabled={domain.isUpdating}
+                        >
+                          Reverify
+                        </Button>
+                      )}
+                      <Button
+                        variant="tertiary"
+                        size="sm"
+                        onClick={() => setIsDeleteDomainDialogOpen(true)}
+                        className="hover:text-destructive"
+                        disabled={deleteDomainMutation.isPending}
+                        aria-label="Remove domain"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </Stack>
+                  </RequireScope>
+                </Stack>
+              </Card>
+            ) : (
+              !domainIsLoading && (
+                <InlineEmptyState
+                  icon={<Globe />}
+                  title="No custom domain configured"
+                  description="You can connect one custom domain per organization for your MCP servers."
+                  action={
+                    <RequireScope scope="org:admin" level="component">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          if (productTier.includes("base")) {
+                            setIsCustomDomainUpgradeModalOpen(true);
+                          } else {
+                            setIsAddDomainDialogOpen(true);
+                          }
+                        }}
+                      >
+                        <Button.LeftIcon>
+                          <Globe className="h-4 w-4" />
+                        </Button.LeftIcon>
+                        <Button.Text>Add Domain</Button.Text>
+                      </Button>
+                    </RequireScope>
+                  }
+                />
+              )
+            )}
+          </SettingsLayout.Group>
+        </SettingsLayout.Body>
+      </SettingsLayout>
 
       <Dialog
         open={isDeleteDomainDialogOpen}

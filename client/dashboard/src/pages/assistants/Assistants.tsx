@@ -189,7 +189,7 @@ export default function AssistantsIndex(): JSX.Element {
             <UsageSection />
           </TabsContent>
           <TabsContent value="triggers" className="mt-6 w-full">
-            <TriggersPanel />
+            <TriggersPanel embedded />
           </TabsContent>
           <TabsContent value="audit" className="mt-6 w-full">
             <RequireScope scope="org:read" level="section">

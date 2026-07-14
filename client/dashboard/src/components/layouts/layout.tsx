@@ -167,6 +167,44 @@ function LayoutSection({
   );
 }
 
+/**
+ * A destructive-action block, closed off by a destructive hairline. Shared by
+ * the layouts that need one (settings, detail) so a "delete this" card is never
+ * hand-rolled.
+ */
+function LayoutDangerZone({
+  label = "Danger zone",
+  description,
+  children,
+  className,
+}: {
+  label?: React.ReactNode;
+  description?: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <section
+      className={cn(
+        "border-destructive-softest mt-8 flex flex-col gap-4 border-t py-8",
+        className,
+      )}
+    >
+      <div className="flex flex-col gap-1">
+        <span className="text-default-destructive font-mono text-xs font-light tracking-[0.08em] uppercase">
+          {label}
+        </span>
+        {description ? (
+          <Type muted small>
+            {description}
+          </Type>
+        ) : null}
+      </div>
+      {children}
+    </section>
+  );
+}
+
 // Compound members are attached by mutation rather than Object.assign: the
 // react/only-export-components rule recognizes the former as a component
 // export and flags the latter.
@@ -177,5 +215,6 @@ LayoutRoot.Subtitle = LayoutSubtitle;
 LayoutRoot.Actions = LayoutActions;
 LayoutRoot.Body = LayoutBody;
 LayoutRoot.Section = LayoutSection;
+LayoutRoot.DangerZone = LayoutDangerZone;
 
 export { LayoutRoot as Layout };

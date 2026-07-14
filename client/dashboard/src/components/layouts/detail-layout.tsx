@@ -97,6 +97,7 @@ DetailLayoutRoot.Content = DetailLayoutContent;
 DetailLayoutRoot.Main = DetailLayoutMain;
 DetailLayoutRoot.Aside = DetailLayoutAside;
 DetailLayoutRoot.Section = Layout.Section;
+DetailLayoutRoot.DangerZone = Layout.DangerZone;
 DetailLayoutRoot.Actions = Layout.Actions;
 
 export { DetailLayoutRoot as DetailLayout };

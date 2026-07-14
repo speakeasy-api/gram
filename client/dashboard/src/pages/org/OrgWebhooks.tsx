@@ -1,9 +1,9 @@
 import { Page } from "@/components/page-layout";
+import { SettingsLayout } from "@/components/layouts/settings-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Card } from "@/components/ui/card";
 import { Heading } from "@/components/ui/heading";
 import { Switch } from "@/components/ui/switch";
-import { Type } from "@/components/ui/type";
 import { useCreatePortalSessionMutation } from "@gram/client/react-query/createPortalSession.js";
 import { useDisableWebhooksMutation } from "@gram/client/react-query/disableWebhooks.js";
 import { useEnableWebhooksMutation } from "@gram/client/react-query/enableWebhooks.js";
@@ -61,32 +61,16 @@ function OrgWebhooksInner() {
     disableWebhooks.status !== "pending";
 
   return (
-    <>
-      <Heading variant="h3" className="mb-4">
-        Webhooks
-      </Heading>
-      <Type muted small className="mb-6">
-        Configure webhook delivery for various platform events.
-      </Type>
-      <Card>
-        <Stack gap={4}>
-          <Stack direction="horizontal" justify="space-between" align="center">
-            <Stack gap={1}>
-              <Stack direction="horizontal" align="center" gap={2}>
-                <Webhook className="text-muted-foreground h-4 w-4" />
-                <Type variant="body" className="font-medium">
-                  Enable Webhooks
-                </Type>
-              </Stack>
-              <Type
-                variant="body"
-                className="text-muted-foreground ml-6 text-sm"
-              >
-                Enable or disable webhook delivery of organization events.
-                Disabling this option does not destroy existing webhook
-                configuration below.
-              </Type>
-            </Stack>
+    <SettingsLayout>
+      <SettingsLayout.Header
+        title="Webhooks"
+        subtitle="Configure webhook delivery for various platform events."
+      />
+      <SettingsLayout.Body>
+        <SettingsLayout.Group
+          label="Enable Webhooks"
+          description="Enable or disable webhook delivery of organization events. Disabling this option does not destroy existing webhook configuration below."
+          actions={
             <RequireScope scope="org:admin" level="component">
               <Switch
                 checked={orgResult.data?.webhooksEnabled || false}
@@ -101,11 +85,12 @@ function OrgWebhooksInner() {
                 aria-label="Toggle webhooks"
               />
             </RequireScope>
-          </Stack>
-        </Stack>
-      </Card>
-      {orgResult.data?.webhooksOnboarded && <WebhookConfigPortal />}
-    </>
+          }
+        >
+          {orgResult.data?.webhooksOnboarded && <WebhookConfigPortal />}
+        </SettingsLayout.Group>
+      </SettingsLayout.Body>
+    </SettingsLayout>
   );
 }
 

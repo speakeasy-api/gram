@@ -1,7 +1,7 @@
 import { Page } from "@/components/page-layout";
+import { DetailLayout } from "@/components/layouts/detail-layout";
 import { Card } from "@/components/ui/card";
 import { DetailList } from "@/components/ui/detail-list";
-import { Heading } from "@/components/ui/heading";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { ManualSetupBadge } from "@/pages/catalog/ManualSetupBadge";
@@ -219,225 +219,223 @@ export default function CatalogDetail(): JSX.Element {
         />
       </Page.Header>
       <Page.Body>
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
-          {/* Left Column - Server Details */}
-          <div className="space-y-6 lg:col-span-2">
-            {/* Header */}
-            <div className="flex items-start gap-6">
-              <div className="bg-muted flex h-24 w-24 shrink-0 items-center justify-center">
-                {server.iconUrl ? (
-                  <img
-                    src={server.iconUrl}
-                    alt={displayName}
-                    className="h-16 w-16 object-contain"
-                  />
-                ) : (
-                  <ServerIcon className="text-muted-foreground h-12 w-12" />
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                <Stack
-                  direction="horizontal"
-                  gap={3}
-                  align="center"
-                  className="mb-2"
-                >
-                  <Heading variant="h1" className="normal-case">
-                    {displayName}
-                  </Heading>
-                  {isOfficial && <Badge>Official</Badge>}
-                  {versionMeta?.isLatest && (
-                    <Badge variant="neutral">Latest</Badge>
-                  )}
-                  <ManualSetupBadge server={server} />
-                </Stack>
-                {SERVER_WEBSITE_MAP[server.registrySpecifier] ? (
-                  <a
-                    href={`https://${SERVER_WEBSITE_MAP[server.registrySpecifier]}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary text-sm hover:underline"
-                  >
-                    {SERVER_WEBSITE_MAP[server.registrySpecifier]}
-                  </a>
-                ) : (
-                  <Type muted className="font-mono text-sm">
-                    {server.registrySpecifier}
-                  </Type>
-                )}
-                <div className="mt-4">
-                  {isInstalled ? (
-                    <Stack direction="horizontal" gap={2} align="center">
-                      {existingExternalMcp && (
-                        <Button
-                          variant="secondary"
-                          size="md"
-                          onClick={() =>
-                            removeServerMutation.mutate(
-                              existingExternalMcp.slug,
-                            )
-                          }
-                          disabled={removeServerMutation.isPending}
-                        >
-                          {removeServerMutation.isPending ? (
-                            <>
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                              <Button.Text>Removing...</Button.Text>
-                            </>
-                          ) : (
-                            <>
-                              <Minus className="h-4 w-4" />
-                              <Button.Text>Remove</Button.Text>
-                            </>
-                          )}
-                        </Button>
-                      )}
-                      <Button size="md" onClick={() => setShowAddDialog(true)}>
-                        <Plus className="h-4 w-4" />
-                        <Button.Text>Install as fork</Button.Text>
-                      </Button>
-                    </Stack>
+        <DetailLayout>
+          <DetailLayout.Header
+            eyebrow="MCP Catalog"
+            title={
+              <span className="inline-flex items-center gap-3 normal-case">
+                <span className="bg-muted flex h-10 w-10 shrink-0 items-center justify-center">
+                  {server.iconUrl ? (
+                    <img
+                      src={server.iconUrl}
+                      alt={displayName}
+                      className="h-7 w-7 object-contain"
+                    />
                   ) : (
-                    <Button size="md" onClick={() => setShowAddDialog(true)}>
-                      <Plus className="h-4 w-4" />
-                      <Button.Text>Add</Button.Text>
+                    <ServerIcon className="text-muted-foreground h-5 w-5" />
+                  )}
+                </span>
+                {displayName}
+                {isOfficial && <Badge>Official</Badge>}
+                {versionMeta?.isLatest && (
+                  <Badge variant="neutral">Latest</Badge>
+                )}
+                <ManualSetupBadge server={server} />
+              </span>
+            }
+            subtitle={
+              SERVER_WEBSITE_MAP[server.registrySpecifier] ? (
+                <a
+                  href={`https://${SERVER_WEBSITE_MAP[server.registrySpecifier]}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  {SERVER_WEBSITE_MAP[server.registrySpecifier]}
+                </a>
+              ) : (
+                <span className="font-mono">{server.registrySpecifier}</span>
+              )
+            }
+            actions={
+              isInstalled ? (
+                <Stack direction="horizontal" gap={2} align="center">
+                  {existingExternalMcp && (
+                    <Button
+                      variant="secondary"
+                      size="md"
+                      onClick={() =>
+                        removeServerMutation.mutate(existingExternalMcp.slug)
+                      }
+                      disabled={removeServerMutation.isPending}
+                    >
+                      {removeServerMutation.isPending ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <Button.Text>Removing...</Button.Text>
+                        </>
+                      ) : (
+                        <>
+                          <Minus className="h-4 w-4" />
+                          <Button.Text>Remove</Button.Text>
+                        </>
+                      )}
                     </Button>
                   )}
-                </div>
-              </div>
-            </div>
+                  <Button size="md" onClick={() => setShowAddDialog(true)}>
+                    <Plus className="h-4 w-4" />
+                    <Button.Text>Install as fork</Button.Text>
+                  </Button>
+                </Stack>
+              ) : (
+                <Button size="md" onClick={() => setShowAddDialog(true)}>
+                  <Plus className="h-4 w-4" />
+                  <Button.Text>Add</Button.Text>
+                </Button>
+              )
+            }
+          />
 
-            {/* About */}
-            <Card>
-              <Card.Header>
-                <Card.Title>About</Card.Title>
-              </Card.Header>
-              <Card.Content>
-                <Type className="leading-relaxed whitespace-pre-wrap">
-                  {server.description || "No description available."}
-                </Type>
-              </Card.Content>
-            </Card>
-
-            {/* Available Tools */}
-            {detailTools.length > 0 && <ToolsSection tools={detailTools} />}
-          </div>
-
-          {/* Right Column - Info */}
-          <div className="space-y-4">
-            {/* Usage Stats */}
-            {(weeklyUsage || visitorsTotal || totalUsage) && (
+          <DetailLayout.Content>
+            <DetailLayout.Main>
+              {/* About */}
               <Card>
                 <Card.Header>
-                  <Card.Title>Usage</Card.Title>
+                  <Card.Title>About</Card.Title>
+                </Card.Header>
+                <Card.Content>
+                  <Type className="leading-relaxed whitespace-pre-wrap">
+                    {server.description || "No description available."}
+                  </Type>
+                </Card.Content>
+              </Card>
+
+              {/* Available Tools */}
+              {detailTools.length > 0 && <ToolsSection tools={detailTools} />}
+            </DetailLayout.Main>
+
+            <DetailLayout.Aside>
+              {/* Usage Stats */}
+              {(weeklyUsage || visitorsTotal || totalUsage) && (
+                <Card>
+                  <Card.Header>
+                    <Card.Title>Usage</Card.Title>
+                  </Card.Header>
+                  <Card.Content>
+                    <DetailList orientation="inline">
+                      {weeklyUsage !== undefined && weeklyUsage > 0 && (
+                        <DetailList.Item
+                          label="This Week"
+                          value={weeklyUsage.toLocaleString()}
+                        />
+                      )}
+                      {visitorsTotal !== undefined && visitorsTotal > 0 && (
+                        <DetailList.Item
+                          label="Monthly"
+                          value={visitorsTotal.toLocaleString()}
+                        />
+                      )}
+                      {totalUsage !== undefined && totalUsage > 0 && (
+                        <DetailList.Item
+                          label="All Time"
+                          value={totalUsage.toLocaleString()}
+                        />
+                      )}
+                    </DetailList>
+                  </Card.Content>
+                </Card>
+              )}
+
+              {/* Version & Release Info */}
+              <Card>
+                <Card.Header>
+                  <Card.Title>Version & Release</Card.Title>
                 </Card.Header>
                 <Card.Content>
                   <DetailList orientation="inline">
-                    {weeklyUsage !== undefined && weeklyUsage > 0 && (
+                    <DetailList.Item
+                      label="Version"
+                      value={
+                        <span className="font-mono">{server.version}</span>
+                      }
+                    />
+                    {versionMeta?.status && (
                       <DetailList.Item
-                        label="This Week"
-                        value={weeklyUsage.toLocaleString()}
+                        label="Status"
+                        value={
+                          <span className="capitalize">
+                            {versionMeta.status}
+                          </span>
+                        }
                       />
                     )}
-                    {visitorsTotal !== undefined && visitorsTotal > 0 && (
+                    {versionMeta?.publishedAt && (
                       <DetailList.Item
-                        label="Monthly"
-                        value={visitorsTotal.toLocaleString()}
+                        label="Published"
+                        value={new Date(
+                          versionMeta.publishedAt,
+                        ).toLocaleDateString()}
                       />
                     )}
-                    {totalUsage !== undefined && totalUsage > 0 && (
+                    {versionMeta?.updatedAt && (
                       <DetailList.Item
-                        label="All Time"
-                        value={totalUsage.toLocaleString()}
+                        label="Last Updated"
+                        value={new Date(
+                          versionMeta.updatedAt,
+                        ).toLocaleDateString()}
+                      />
+                    )}
+                    {versionMeta?.source && (
+                      <DetailList.Item
+                        label="Source"
+                        value={
+                          <a
+                            href={
+                              versionMeta.source.startsWith("http")
+                                ? versionMeta.source
+                                : `https://${versionMeta.source}`
+                            }
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary inline-flex items-center gap-1 hover:underline"
+                          >
+                            <span className="max-w-[150px] truncate">
+                              {versionMeta.source}
+                            </span>
+                            <ExternalLink className="h-3 w-3 shrink-0" />
+                          </a>
+                        }
                       />
                     )}
                   </DetailList>
                 </Card.Content>
               </Card>
-            )}
 
-            {/* Version & Release Info */}
-            <Card>
-              <Card.Header>
-                <Card.Title>Version & Release</Card.Title>
-              </Card.Header>
-              <Card.Content>
-                <DetailList orientation="inline">
-                  <DetailList.Item
-                    label="Version"
-                    value={<span className="font-mono">{server.version}</span>}
-                  />
-                  {versionMeta?.status && (
+              {/* Registry Info */}
+              <Card>
+                <Card.Header>
+                  <Card.Title>Registry</Card.Title>
+                </Card.Header>
+                <Card.Content>
+                  <DetailList orientation="inline">
                     <DetailList.Item
-                      label="Status"
+                      label="Registry"
+                      value={server.registryId}
+                    />
+                    <DetailList.Item
+                      label="Specifier"
                       value={
-                        <span className="capitalize">{versionMeta.status}</span>
+                        <span className="font-mono text-xs break-all">
+                          {server.registrySpecifier}
+                        </span>
                       }
                     />
-                  )}
-                  {versionMeta?.publishedAt && (
-                    <DetailList.Item
-                      label="Published"
-                      value={new Date(
-                        versionMeta.publishedAt,
-                      ).toLocaleDateString()}
-                    />
-                  )}
-                  {versionMeta?.updatedAt && (
-                    <DetailList.Item
-                      label="Last Updated"
-                      value={new Date(
-                        versionMeta.updatedAt,
-                      ).toLocaleDateString()}
-                    />
-                  )}
-                  {versionMeta?.source && (
-                    <DetailList.Item
-                      label="Source"
-                      value={
-                        <a
-                          href={
-                            versionMeta.source.startsWith("http")
-                              ? versionMeta.source
-                              : `https://${versionMeta.source}`
-                          }
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-primary inline-flex items-center gap-1 hover:underline"
-                        >
-                          <span className="max-w-[150px] truncate">
-                            {versionMeta.source}
-                          </span>
-                          <ExternalLink className="h-3 w-3 shrink-0" />
-                        </a>
-                      }
-                    />
-                  )}
-                </DetailList>
-              </Card.Content>
-            </Card>
-
-            {/* Registry Info */}
-            <Card>
-              <Card.Header>
-                <Card.Title>Registry</Card.Title>
-              </Card.Header>
-              <Card.Content>
-                <DetailList orientation="inline">
-                  <DetailList.Item label="Registry" value={server.registryId} />
-                  <DetailList.Item
-                    label="Specifier"
-                    value={
-                      <span className="font-mono text-xs break-all">
-                        {server.registrySpecifier}
-                      </span>
-                    }
-                  />
-                </DetailList>
-              </Card.Content>
-            </Card>
-          </div>
-        </div>
+                  </DetailList>
+                </Card.Content>
+              </Card>
+            </DetailLayout.Aside>
+          </DetailLayout.Content>
+        </DetailLayout>
         <AddServerDialog
           servers={[server]}
           open={showAddDialog}

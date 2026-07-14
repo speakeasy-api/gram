@@ -1,4 +1,5 @@
 import { Page } from "@/components/page-layout";
+import { ListLayout } from "@/components/layouts/list-layout";
 import { RequireScope } from "@/components/require-scope";
 import { CardContextMenu } from "@/components/card-context-menu";
 import { ToolCollectionBadge } from "@/components/tool-collection-badge";
@@ -56,28 +57,27 @@ function CustomToolsInner() {
       {!isLoading && (!customTools || customTools.length === 0) ? (
         <CustomToolsEmptyState onCreateCustomTool={onNewCustomTool} />
       ) : (
-        <Page.Section>
-          <Page.Section.Title>Custom Tools</Page.Section.Title>
-          <Page.Section.Description>
-            Create higher-order tools by sequencing together tools and
-            instructions
-          </Page.Section.Description>
-          <Page.Section.CTA>
-            <Button onClick={onNewCustomTool}>
-              <Button.LeftIcon>
-                <Plus className="h-4 w-4" />
-              </Button.LeftIcon>
-              <Button.Text>New Custom Tool</Button.Text>
-            </Button>
-          </Page.Section.CTA>
-          <Page.Section.Body>
+        <ListLayout>
+          <ListLayout.Header
+            title="Custom Tools"
+            subtitle="Create higher-order tools by sequencing together tools and instructions"
+            actions={
+              <Button onClick={onNewCustomTool}>
+                <Button.LeftIcon>
+                  <Plus className="h-4 w-4" />
+                </Button.LeftIcon>
+                <Button.Text>New Custom Tool</Button.Text>
+              </Button>
+            }
+          />
+          <ListLayout.List>
             <Cards isLoading={isLoading}>
               {customTools?.map((template) => {
                 return <CustomToolCard key={template.id} template={template} />;
               })}
             </Cards>
-          </Page.Section.Body>
-        </Page.Section>
+          </ListLayout.List>
+        </ListLayout>
       )}
       <ToolifyDialog open={newToolDialogOpen} setOpen={setNewToolDialogOpen} />
     </>

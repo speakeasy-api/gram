@@ -1,4 +1,5 @@
 import { Page } from "@/components/page-layout";
+import { ListLayout } from "@/components/layouts/list-layout";
 import { Dialog } from "@/components/ui/dialog";
 import {
   Select,
@@ -824,10 +825,14 @@ function TriggerDialog({
 
 /**
  * Triggers list, dialog, and empty/loading states without a surrounding
- * `Page` shell. Rendered standalone by the `/triggers` route (`TriggersIndex`)
- * and embedded as a tab on the Assistants page.
+ * `Page` shell. Rendered standalone by the `/triggers` route (`TriggersIndex`,
+ * as a `ListLayout`) and embedded as a tab on the Assistants page (`embedded`,
+ * keeping the plain `Page.Section` block — a second page-level header inside
+ * a tab panel would be redundant with the tab's own label).
  */
-export function TriggersPanel(): JSX.Element {
+export function TriggersPanel({
+  embedded = false,
+}: { embedded?: boolean } = {}): JSX.Element {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingTrigger, setEditingTrigger] = useState<TriggerInstance | null>(
     null,
@@ -858,40 +863,51 @@ export function TriggersPanel(): JSX.Element {
     setDialogOpen(true);
   };
 
+  const createButton = triggers.length > 0 && (
+    <Button onClick={openCreate}>
+      <Button.LeftIcon>
+        <Plus className="h-4 w-4" />
+      </Button.LeftIcon>
+      <Button.Text>Create Trigger</Button.Text>
+    </Button>
+  );
+
+  const body = isLoading ? (
+    <Stack align="center" justify="center" className="py-16">
+      <LoaderCircle className="text-muted-foreground h-6 w-6 animate-spin" />
+    </Stack>
+  ) : triggers.length === 0 ? (
+    <TriggersEmptyState onCreate={openCreate} />
+  ) : (
+    <TriggersTable
+      triggers={triggers}
+      definitions={definitions}
+      onEdit={openEdit}
+    />
+  );
+
   return (
     <>
-      <Page.Section>
-        <Page.Section.Title>Triggers</Page.Section.Title>
-        <Page.Section.Description>
-          Connect external events to your assistants via webhooks or cron
-          schedules.
-        </Page.Section.Description>
-        <Page.Section.CTA>
-          {triggers.length > 0 && (
-            <Button onClick={openCreate}>
-              <Button.LeftIcon>
-                <Plus className="h-4 w-4" />
-              </Button.LeftIcon>
-              <Button.Text>Create Trigger</Button.Text>
-            </Button>
-          )}
-        </Page.Section.CTA>
-        <Page.Section.Body>
-          {isLoading ? (
-            <Stack align="center" justify="center" className="py-16">
-              <LoaderCircle className="text-muted-foreground h-6 w-6 animate-spin" />
-            </Stack>
-          ) : triggers.length === 0 ? (
-            <TriggersEmptyState onCreate={openCreate} />
-          ) : (
-            <TriggersTable
-              triggers={triggers}
-              definitions={definitions}
-              onEdit={openEdit}
-            />
-          )}
-        </Page.Section.Body>
-      </Page.Section>
+      {embedded ? (
+        <Page.Section>
+          <Page.Section.Title>Triggers</Page.Section.Title>
+          <Page.Section.Description>
+            Connect external events to your assistants via webhooks or cron
+            schedules.
+          </Page.Section.Description>
+          <Page.Section.CTA>{createButton}</Page.Section.CTA>
+          <Page.Section.Body>{body}</Page.Section.Body>
+        </Page.Section>
+      ) : (
+        <ListLayout>
+          <ListLayout.Header
+            title="Triggers"
+            subtitle="Connect external events to your assistants via webhooks or cron schedules."
+            actions={createButton}
+          />
+          <ListLayout.List>{body}</ListLayout.List>
+        </ListLayout>
+      )}
 
       <TriggerDialog
         open={dialogOpen}

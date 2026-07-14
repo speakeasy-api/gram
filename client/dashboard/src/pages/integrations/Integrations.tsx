@@ -3,6 +3,7 @@ import { AssetImage } from "@/components/asset-image";
 import { CreateThingCard } from "@/components/create-thing-card";
 import { InputDialog } from "@/components/input-dialog";
 import { Page } from "@/components/page-layout";
+import { ListLayout } from "@/components/layouts/list-layout";
 import { ToolCollectionBadge } from "@/components/tool-collection-badge";
 import { Card, Cards } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
@@ -45,18 +46,19 @@ export default function Integrations(): JSX.Element {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <Page.Section>
-          <Page.Section.Title>Integrations</Page.Section.Title>
-          <Page.Section.Description>
-            Distribute platform toolsets as installable packages your customers
-            can pull from npm.
-          </Page.Section.Description>
-          {isAdmin ? (
-            <Page.Section.CTA>
-              <AddButton onClick={() => setCreateIntegrationDialogOpen(true)} />
-            </Page.Section.CTA>
-          ) : null}
-          <Page.Section.Body>
+        <ListLayout>
+          <ListLayout.Header
+            title="Integrations"
+            subtitle="Distribute platform toolsets as installable packages your customers can pull from npm."
+            actions={
+              isAdmin ? (
+                <AddButton
+                  onClick={() => setCreateIntegrationDialogOpen(true)}
+                />
+              ) : undefined
+            }
+          />
+          <ListLayout.List>
             <Cards>
               {integrations?.integrations?.map((integration) => (
                 <IntegrationCard
@@ -73,8 +75,8 @@ export default function Integrations(): JSX.Element {
                 Request an Integration
               </CreateThingCard>
             </Cards>
-          </Page.Section.Body>
-        </Page.Section>
+          </ListLayout.List>
+        </ListLayout>
         <CreateIntegrationDialog
           open={createIntegrationDialogOpen}
           onOpenChange={setCreateIntegrationDialogOpen}

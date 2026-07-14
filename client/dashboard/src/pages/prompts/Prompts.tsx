@@ -1,4 +1,5 @@
 import { Page } from "@/components/page-layout";
+import { ListLayout } from "@/components/layouts/list-layout";
 import { RequireScope } from "@/components/require-scope";
 import { CardContextMenu } from "@/components/card-context-menu";
 import { Card, Cards } from "@/components/ui/card";
@@ -48,27 +49,27 @@ function PromptsInner() {
   }
 
   return (
-    <Page.Section>
-      <Page.Section.Title>Prompt Templates</Page.Section.Title>
-      <Page.Section.Description>
-        Provide your users with MCP-native prompt templates
-      </Page.Section.Description>
-      <Page.Section.CTA>
-        <Button onClick={() => routes.prompts.newPrompt.goTo()}>
-          <Button.LeftIcon>
-            <Plus className="h-4 w-4" />
-          </Button.LeftIcon>
-          <Button.Text>New Prompt</Button.Text>
-        </Button>
-      </Page.Section.CTA>
-      <Page.Section.Body>
+    <ListLayout>
+      <ListLayout.Header
+        title="Prompt Templates"
+        subtitle="Provide your users with MCP-native prompt templates"
+        actions={
+          <Button onClick={() => routes.prompts.newPrompt.goTo()}>
+            <Button.LeftIcon>
+              <Plus className="h-4 w-4" />
+            </Button.LeftIcon>
+            <Button.Text>New Prompt</Button.Text>
+          </Button>
+        }
+      />
+      <ListLayout.List>
         <Cards isLoading={isLoading}>
           {prompts?.map((template) => {
             return <PromptTemplateCard key={template.id} template={template} />;
           })}
         </Cards>
-      </Page.Section.Body>
-    </Page.Section>
+      </ListLayout.List>
+    </ListLayout>
   );
 }
 

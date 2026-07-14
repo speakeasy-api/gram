@@ -1,5 +1,6 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import { WorkbenchLayout } from "@/components/layouts/workbench-layout";
 import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import {
   Select,
@@ -155,56 +156,78 @@ function PlaygroundInner() {
     </Button>
   );
 
+  const previewNode = showLogs ? (
+    <ResizablePanel
+      direction="horizontal"
+      className="[&>[role='separator']]:bg-neutral-softest [&>[role='separator']]:hover:bg-primary h-full [&>[role='separator']]:relative [&>[role='separator']]:w-px [&>[role='separator']]:border-0 [&>[role='separator']]:before:absolute [&>[role='separator']]:before:inset-y-0 [&>[role='separator']]:before:-right-1 [&>[role='separator']]:before:-left-1 [&>[role='separator']]:before:cursor-col-resize"
+    >
+      <ResizablePanel.Pane minSize={35}>
+        <div className="flex h-full flex-col">
+          <PlaygroundElements
+            toolsetSlug={selectedToolset}
+            environmentSlug={selectedEnvironment}
+            model={model}
+            playgroundEnvironmentSlug={playgroundEnvironmentSlug}
+            additionalActions={
+              <div className="flex w-full items-center justify-end px-4">
+                <ShareChatButton />
+                {logsButton}
+              </div>
+            }
+          />
+        </div>
+      </ResizablePanel.Pane>
+      <ResizablePanel.Pane minSize={20} defaultSize={30}>
+        <PlaygroundLogsPanel
+          chatId={chat.id}
+          toolsetSlug={selectedToolset ?? undefined}
+          onClose={() => setShowLogs(false)}
+        />
+      </ResizablePanel.Pane>
+    </ResizablePanel>
+  ) : (
+    <div className="flex h-full flex-col">
+      <PlaygroundElements
+        toolsetSlug={selectedToolset}
+        environmentSlug={selectedEnvironment}
+        model={model}
+        playgroundEnvironmentSlug={playgroundEnvironmentSlug}
+        additionalActions={
+          <div className="flex w-full items-center justify-end px-4">
+            <ShareChatButton />
+            {logsButton}
+          </div>
+        }
+      />
+    </div>
+  );
+
   return (
     <Page>
       <Page.Header>
         <Page.Header.Breadcrumbs fullWidth />
       </Page.Header>
-      <Page.Body fullWidth fullHeight className="p-0">
-        <ResizablePanel
-          direction="horizontal"
-          className="[&>[role='separator']]:bg-neutral-softest [&>[role='separator']]:hover:bg-primary h-full [&>[role='separator']]:relative [&>[role='separator']]:w-px [&>[role='separator']]:border-0 [&>[role='separator']]:before:absolute [&>[role='separator']]:before:inset-y-0 [&>[role='separator']]:before:-right-1 [&>[role='separator']]:before:-left-1 [&>[role='separator']]:before:cursor-col-resize"
-        >
-          <ResizablePanel.Pane minSize={20} defaultSize={25}>
-            <ToolsetPanel
-              configRef={chatConfigRef}
-              setSelectedToolset={setSelectedToolset}
-              setSelectedEnvironment={setSelectedEnvironment}
-              temperature={temperature}
-              setTemperature={setTemperature}
-              model={model}
-              setModel={setModel}
-              maxTokens={maxTokens}
-              setMaxTokens={setMaxTokens}
-              onPlaygroundEnvironmentSlug={setPlaygroundEnvironmentSlug}
-            />
-          </ResizablePanel.Pane>
-          <ResizablePanel.Pane minSize={35} order={0}>
-            <div className="flex h-full flex-col">
-              <PlaygroundElements
-                toolsetSlug={selectedToolset}
-                environmentSlug={selectedEnvironment}
+      <Page.Body fullWidth fullHeight noPadding>
+        <WorkbenchLayout>
+          <WorkbenchLayout.Header eyebrow="Playground" title="Playground" />
+          <WorkbenchLayout.Body
+            config={
+              <ToolsetPanel
+                configRef={chatConfigRef}
+                setSelectedToolset={setSelectedToolset}
+                setSelectedEnvironment={setSelectedEnvironment}
+                temperature={temperature}
+                setTemperature={setTemperature}
                 model={model}
-                playgroundEnvironmentSlug={playgroundEnvironmentSlug}
-                additionalActions={
-                  <div className="flex w-full items-center justify-end px-4">
-                    <ShareChatButton />
-                    {logsButton}
-                  </div>
-                }
+                setModel={setModel}
+                maxTokens={maxTokens}
+                setMaxTokens={setMaxTokens}
+                onPlaygroundEnvironmentSlug={setPlaygroundEnvironmentSlug}
               />
-            </div>
-          </ResizablePanel.Pane>
-          {showLogs && (
-            <ResizablePanel.Pane minSize={20} defaultSize={30}>
-              <PlaygroundLogsPanel
-                chatId={chat.id}
-                toolsetSlug={selectedToolset ?? undefined}
-                onClose={() => setShowLogs(false)}
-              />
-            </ResizablePanel.Pane>
-          )}
-        </ResizablePanel>
+            }
+            preview={previewNode}
+          />
+        </WorkbenchLayout>
       </Page.Body>
     </Page>
   );

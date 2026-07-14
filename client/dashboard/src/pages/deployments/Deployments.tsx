@@ -1,6 +1,6 @@
 import { Page } from "@/components/page-layout";
+import { ListLayout } from "@/components/layouts/list-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Heading } from "@/components/ui/heading";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { useRoutes } from "@/routes";
@@ -228,48 +228,52 @@ function DeploymentsTable({
     },
   ];
 
+  const table = (
+    <Table<DeploymentSummary>
+      columns={columnsWithData}
+      rowKey={(row) => row.id}
+      data={deployments}
+      className="mb-8 overflow-auto"
+    />
+  );
+
+  if (!showHeader) {
+    return table;
+  }
+
   return (
-    <>
-      {showHeader && (
-        <>
-          <div className="mb-2 flex items-center justify-between">
-            <Heading variant="h2">Recent Deployments</Heading>
-            {activeDeployment && (
-              <routes.deployments.deployment.Link
-                params={[activeDeployment.id]}
-              >
-                <Button variant="secondary" size="sm">
-                  <Button.LeftIcon>
-                    <Radio className="size-4" />
-                  </Button.LeftIcon>
-                  <Button.Text>View Active Deployment</Button.Text>
-                </Button>
-              </routes.deployments.deployment.Link>
-            )}
-          </div>
-
-          <Alert variant="info" dismissible={false} className="mb-6">
-            <div className="space-y-2">
-              <Type small>
-                Each time you add a new source or update an existing source a
-                new deployment is created.
-              </Type>
-              <Type small>
-                For each deployment all sources are analyzed in the project to
-                generate or update the corresponding tool definitions.
-              </Type>
-            </div>
-          </Alert>
-        </>
-      )}
-
-      <Table<DeploymentSummary>
-        columns={columnsWithData}
-        rowKey={(row) => row.id}
-        data={deployments}
-        className="mb-8 overflow-auto"
+    <ListLayout>
+      <ListLayout.Header
+        title="Recent Deployments"
+        actions={
+          activeDeployment && (
+            <routes.deployments.deployment.Link params={[activeDeployment.id]}>
+              <Button variant="secondary" size="sm">
+                <Button.LeftIcon>
+                  <Radio className="size-4" />
+                </Button.LeftIcon>
+                <Button.Text>View Active Deployment</Button.Text>
+              </Button>
+            </routes.deployments.deployment.Link>
+          )
+        }
       />
-    </>
+      <ListLayout.List>
+        <Alert variant="info" dismissible={false} className="mb-6">
+          <div className="space-y-2">
+            <Type small>
+              Each time you add a new source or update an existing source a new
+              deployment is created.
+            </Type>
+            <Type small>
+              For each deployment all sources are analyzed in the project to
+              generate or update the corresponding tool definitions.
+            </Type>
+          </div>
+        </Alert>
+        {table}
+      </ListLayout.List>
+    </ListLayout>
   );
 }
 

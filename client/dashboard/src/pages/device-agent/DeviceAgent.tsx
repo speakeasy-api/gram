@@ -1,6 +1,8 @@
 import { KeyRound } from "lucide-react";
 import { CodeBlock } from "@/components/code";
 import { Page } from "@/components/page-layout";
+import { GuideLayout } from "@/components/layouts/guide-layout";
+import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { RequireScope } from "@/components/require-scope";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
@@ -787,51 +789,52 @@ export default function DeviceAgent(): React.JSX.Element | null {
       </Page.Header>
       <Page.Body>
         <RequireScope scope={["org:read", "org:admin"]} level="page">
-          <Page.Section>
-            <Page.Section.Title stage="preview">
-              Install the agent
-            </Page.Section.Title>
-            <Page.Section.Description>
-              The Speakeasy device agent runs on-device and enforces your org's
-              required AI-tool plugins and MCP configuration, then reports
-              compliance back to Speakeasy.
-            </Page.Section.Description>
-            <Page.Section.Body>
-              <InstallAgent />
-            </Page.Section.Body>
-          </Page.Section>
+          <GuideLayout>
+            <GuideLayout.Header
+              title={
+                <span className="inline-flex items-center gap-2">
+                  Device Agent
+                  <ReleaseStageBadge stage="preview" />
+                </span>
+              }
+              subtitle="The Speakeasy device agent runs on-device and enforces your org's required AI-tool plugins and MCP configuration, then reports compliance back to Speakeasy."
+            />
+            <GuideLayout.Body>
+              <GuideLayout.Step index={1} title="Install the agent">
+                <InstallAgent />
+              </GuideLayout.Step>
 
-          <Page.Section>
-            <Page.Section.Title>Set the user's identity</Page.Section.Title>
-            <Page.Section.Description>
-              How the agent learns who's on the device. Fleet is the recommended
-              path for an org; personal enrollment is handy for testing.
-            </Page.Section.Description>
-            <Page.Section.Body>
-              <Tabs defaultValue="fleet" className="gap-6">
-                <TabsList className="grid h-auto w-full items-stretch gap-4 bg-transparent p-0 @2xl/main:grid-cols-2">
-                  <SetupTab
-                    value="fleet"
-                    icon="building-2"
-                    title="Fleet (MDM)"
-                    desc="Deploy a managed.json so IT sets identity centrally — no per-user step."
-                  />
-                  <SetupTab
-                    value="personal"
-                    icon="user"
-                    title="Personal / PoC"
-                    desc="Each user signs in once with speakeasy enroll. Good for testing."
-                  />
-                </TabsList>
-                <TabsContent value="fleet" className="pt-2">
-                  <FleetIdentity />
-                </TabsContent>
-                <TabsContent value="personal" className="pt-2">
-                  <ManualIdentity />
-                </TabsContent>
-              </Tabs>
-            </Page.Section.Body>
-          </Page.Section>
+              <GuideLayout.Step index={2} title="Set the user's identity">
+                <Type muted small className="mb-4">
+                  How the agent learns who's on the device. Fleet is the
+                  recommended path for an org; personal enrollment is handy for
+                  testing.
+                </Type>
+                <Tabs defaultValue="fleet" className="gap-6">
+                  <TabsList className="grid h-auto w-full items-stretch gap-4 bg-transparent p-0 @2xl/main:grid-cols-2">
+                    <SetupTab
+                      value="fleet"
+                      icon="building-2"
+                      title="Fleet (MDM)"
+                      desc="Deploy a managed.json so IT sets identity centrally — no per-user step."
+                    />
+                    <SetupTab
+                      value="personal"
+                      icon="user"
+                      title="Personal / PoC"
+                      desc="Each user signs in once with speakeasy enroll. Good for testing."
+                    />
+                  </TabsList>
+                  <TabsContent value="fleet" className="pt-2">
+                    <FleetIdentity />
+                  </TabsContent>
+                  <TabsContent value="personal" className="pt-2">
+                    <ManualIdentity />
+                  </TabsContent>
+                </Tabs>
+              </GuideLayout.Step>
+            </GuideLayout.Body>
+          </GuideLayout>
         </RequireScope>
       </Page.Body>
     </Page>

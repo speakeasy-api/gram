@@ -1,4 +1,5 @@
 import { Page } from "@/components/page-layout";
+import { WorkbenchLayout } from "@/components/layouts/workbench-layout";
 import { useHideInsightsDock } from "@/components/insights-context";
 import { useProject, useSession } from "@/contexts/Auth";
 import { internalMcpUrl } from "@/hooks/useToolsetUrl";
@@ -12,7 +13,6 @@ import {
 } from "@gram-ai/elements";
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate.js";
-import { ResizablePanel } from "@/components/ui/resizable-panel";
 import { useTheme } from "@/contexts/theme-context";
 import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
@@ -99,18 +99,24 @@ function OnboardingShell() {
       <Page.Header>
         <Page.Header.Breadcrumbs fullWidth substitutions={substitutions} />
       </Page.Header>
-      <Page.Body fullWidth fullHeight className="p-0">
-        <ResizablePanel
-          direction="horizontal"
-          className="[&>[role='separator']]:bg-neutral-softest [&>[role='separator']]:hover:bg-primary h-full [&>[role='separator']]:relative [&>[role='separator']]:w-px [&>[role='separator']]:border-0 [&>[role='separator']]:before:absolute [&>[role='separator']]:before:inset-y-0 [&>[role='separator']]:before:-right-1 [&>[role='separator']]:before:-left-1 [&>[role='separator']]:before:cursor-col-resize"
-        >
-          <ResizablePanel.Pane minSize={35}>
-            <ChatPane mode={mode} />
-          </ResizablePanel.Pane>
-          <ResizablePanel.Pane minSize={24} defaultSize={36}>
-            <AssistantDraftPanel />
-          </ResizablePanel.Pane>
-        </ResizablePanel>
+      <Page.Body fullWidth fullHeight noPadding>
+        <WorkbenchLayout>
+          <WorkbenchLayout.Header
+            eyebrow="Assistant"
+            title={
+              mode === "edit"
+                ? (draft.assistant?.name ?? "Assistant")
+                : "New Assistant"
+            }
+          />
+          <WorkbenchLayout.Body
+            config={<AssistantDraftPanel />}
+            preview={<ChatPane mode={mode} />}
+            minConfigSize={24}
+            defaultPreviewSize={64}
+            minPreviewSize={35}
+          />
+        </WorkbenchLayout>
       </Page.Body>
     </Page>
   );

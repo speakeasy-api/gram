@@ -1,5 +1,5 @@
 import { CodeBlock } from "@/components/code";
-import { DetailHero } from "@/components/detail-hero";
+import { DetailLayout } from "@/components/layouts/detail-layout";
 import { Page } from "@/components/page-layout";
 import { Card } from "@/components/ui/card";
 import { CopyButton } from "@/components/ui/copy-button";
@@ -81,20 +81,21 @@ export function BuiltInMCPDetailPage(): JSX.Element {
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
-      <Page.Body fullWidth noPadding>
-        <DetailHero>
-          <div className="flex items-end justify-between">
-            <Stack gap={2}>
-              <div className="ml-1 flex items-center gap-3">
-                <Heading variant="h1">MCP Logs</Heading>
+      <Page.Body>
+        <DetailLayout>
+          <DetailLayout.Header
+            eyebrow="MCP Server"
+            title={
+              <span className="inline-flex items-center gap-3">
+                MCP Logs
                 <Badge variant="information">
                   <Badge.Text>Built-in</Badge.Text>
                 </Badge>
-              </div>
-              <div className="ml-1 flex items-center gap-2">
-                <Type className="text-muted-foreground max-w-2xl truncate">
-                  {mcpUrl}
-                </Type>
+              </span>
+            }
+            subtitle={
+              <span className="inline-flex items-center gap-2">
+                <span className="max-w-2xl truncate">{mcpUrl}</span>
                 <CopyButton
                   text={mcpUrl}
                   tooltip="Copy URL"
@@ -104,18 +105,16 @@ export function BuiltInMCPDetailPage(): JSX.Element {
                     toast.success("URL copied to clipboard");
                   }}
                 />
-              </div>
-            </Stack>
-          </div>
-        </DetailHero>
+              </span>
+            }
+          />
 
-        <Tabs
-          value={activeTab}
-          onValueChange={setActiveTab}
-          className="flex w-full flex-1 flex-col"
-        >
-          <div className="border-b">
-            <div className="mx-auto max-w-[1270px] px-8">
+          <Tabs
+            value={activeTab}
+            onValueChange={setActiveTab}
+            className="flex w-full flex-1 flex-col"
+          >
+            <DetailLayout.Tabs>
               <TabsList className="h-auto gap-6 rounded-none bg-transparent p-0">
                 <TabsTrigger value="overview" className={TAB_TRIGGER_CLASS}>
                   Overview
@@ -124,19 +123,21 @@ export function BuiltInMCPDetailPage(): JSX.Element {
                   Tools
                 </TabsTrigger>
               </TabsList>
-            </div>
-          </div>
+            </DetailLayout.Tabs>
 
-          <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
-            <TabsContent value="overview" className="mt-0 w-full">
-              <BuiltInOverviewTab mcpUrl={mcpUrl} />
-            </TabsContent>
+            <DetailLayout.Content>
+              <DetailLayout.Main>
+                <TabsContent value="overview" className="mt-0 w-full">
+                  <BuiltInOverviewTab mcpUrl={mcpUrl} />
+                </TabsContent>
 
-            <TabsContent value="tools" className="mt-0 w-full">
-              <BuiltInToolsTab />
-            </TabsContent>
-          </div>
-        </Tabs>
+                <TabsContent value="tools" className="mt-0 w-full">
+                  <BuiltInToolsTab />
+                </TabsContent>
+              </DetailLayout.Main>
+            </DetailLayout.Content>
+          </Tabs>
+        </DetailLayout>
       </Page.Body>
     </Page>
   );

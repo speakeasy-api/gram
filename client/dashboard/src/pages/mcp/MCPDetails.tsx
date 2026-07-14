@@ -1,7 +1,7 @@
 import { Block, BlockInner } from "@/components/block";
 import { CodeBlock } from "@/components/code";
 import { MCPPublishingSection as SharedMCPPublishingSection } from "./MCPPublishingSection";
-import { DetailHero } from "@/components/detail-hero";
+import { DetailLayout } from "@/components/layouts/detail-layout";
 import { MCPToolFilteringSection } from "@/components/mcp-tool-filtering-section";
 import { InstallPageConfigForm } from "@/components/mcp_install_page/config_form";
 import {
@@ -179,44 +179,40 @@ function MCPLoading() {
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
-      <Page.Body fullWidth noPadding>
-        {/* Hero skeleton */}
-        <div className="bg-muted/30 relative h-64 w-full">
-          <div className="absolute right-0 bottom-0 left-0 mx-auto w-full max-w-[1270px] px-8 py-8">
-            <Stack gap={2}>
-              <Skeleton className="h-8 w-64" />
-              <Skeleton className="h-4 w-96" />
-            </Stack>
-          </div>
-        </div>
+      <Page.Body>
+        <DetailLayout>
+          <DetailLayout.Header
+            eyebrow="MCP Server"
+            title={<Skeleton className="h-8 w-64" />}
+            subtitle={<Skeleton className="h-4 w-96" />}
+          />
 
-        {/* Tabs skeleton */}
-        <div className="border-b">
-          <div className="mx-auto max-w-[1270px] px-8">
+          <DetailLayout.Tabs>
             <div className="flex h-11 gap-6">
               <Skeleton className="h-4 w-20" />
               <Skeleton className="h-4 w-16" />
               <Skeleton className="h-4 w-20" />
               <Skeleton className="h-4 w-28" />
             </div>
-          </div>
-        </div>
+          </DetailLayout.Tabs>
 
-        {/* Content skeleton */}
-        <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
-          <Stack gap={6}>
-            <div className="space-y-4">
-              <Skeleton className="h-6 w-48" />
-              <Skeleton className="h-4 w-full max-w-2xl" />
-              <Skeleton className="h-32 w-full" />
-            </div>
-            <div className="space-y-4">
-              <Skeleton className="h-6 w-40" />
-              <Skeleton className="h-4 w-full max-w-2xl" />
-              <Skeleton className="h-24 w-full" />
-            </div>
-          </Stack>
-        </div>
+          <DetailLayout.Content>
+            <DetailLayout.Main>
+              <Stack gap={6}>
+                <div className="space-y-4">
+                  <Skeleton className="h-6 w-48" />
+                  <Skeleton className="h-4 w-full max-w-2xl" />
+                  <Skeleton className="h-32 w-full" />
+                </div>
+                <div className="space-y-4">
+                  <Skeleton className="h-6 w-40" />
+                  <Skeleton className="h-4 w-full max-w-2xl" />
+                  <Skeleton className="h-24 w-full" />
+                </div>
+              </Stack>
+            </DetailLayout.Main>
+          </DetailLayout.Content>
+        </DetailLayout>
       </Page.Body>
     </Page>
   );
@@ -384,41 +380,19 @@ function MCPDetailPageContent({
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
-      <Page.Body fullWidth noPadding className="gap-0">
-        <DetailHero
-          actions={
-            <>
-              <routes.playground.Link queryParams={{ toolset: toolset.slug }}>
-                <Button
-                  variant="secondary"
-                  size="md"
-                  className="bg-background hover:bg-accent border-border"
-                >
-                  <Button.LeftIcon>
-                    <Play className="h-4 w-4" />
-                  </Button.LeftIcon>
-                  <Button.Text>Playground</Button.Text>
-                </Button>
-              </routes.playground.Link>
-              <MCPStatusDropdown toolset={toolset} />
-            </>
-          }
-        >
-          <div className="flex items-end justify-between">
-            <Stack gap={2}>
-              <div className="ml-1 flex items-end gap-1">
-                <div className="flex items-baseline">
-                  <Heading variant="h1">{toolset.name}</Heading>
-                  <RenameMCPServerButton toolset={toolset} />
-                </div>
-                <div className="mb-1 flex items-center gap-2">
-                  {statusBadge}
-                </div>
-              </div>
-              <div className="ml-1 flex items-center gap-2">
-                <Type className="text-muted-foreground max-w-2xl truncate">
-                  {mcpUrl}
-                </Type>
+      <Page.Body>
+        <DetailLayout>
+          <DetailLayout.Header
+            eyebrow="MCP Server"
+            title={
+              <span className="inline-flex items-baseline gap-1">
+                {toolset.name}
+                <RenameMCPServerButton toolset={toolset} />
+              </span>
+            }
+            subtitle={
+              <span className="inline-flex items-center gap-2">
+                <span className="max-w-2xl truncate">{mcpUrl}</span>
                 {mcpUrl && (
                   <CopyButton
                     text={mcpUrl}
@@ -430,19 +404,35 @@ function MCPDetailPageContent({
                     }}
                   />
                 )}
-              </div>
-            </Stack>
-          </div>
-        </DetailHero>
+                {statusBadge}
+              </span>
+            }
+            actions={
+              <>
+                <routes.playground.Link queryParams={{ toolset: toolset.slug }}>
+                  <Button
+                    variant="secondary"
+                    size="md"
+                    className="bg-background hover:bg-accent border-border"
+                  >
+                    <Button.LeftIcon>
+                      <Play className="h-4 w-4" />
+                    </Button.LeftIcon>
+                    <Button.Text>Playground</Button.Text>
+                  </Button>
+                </routes.playground.Link>
+                <MCPStatusDropdown toolset={toolset} />
+              </>
+            }
+          />
 
-        {/* Sub-navigation tabs */}
-        <Tabs
-          value={activeTab}
-          onValueChange={handleTabChange}
-          className="flex w-full flex-1 flex-col"
-        >
-          <div className="border-b">
-            <div className="mx-auto max-w-[1270px] px-8">
+          {/* Sub-navigation tabs */}
+          <Tabs
+            value={activeTab}
+            onValueChange={handleTabChange}
+            className="flex w-full flex-1 flex-col"
+          >
+            <DetailLayout.Tabs>
               <TabsList className="h-auto gap-6 rounded-none bg-transparent p-0">
                 <PageTabsTrigger value="overview">Overview</PageTabsTrigger>
                 <PageTabsTrigger value="tools">Tools</PageTabsTrigger>
@@ -467,57 +457,58 @@ function MCPDetailPageContent({
                 )}
                 <PageTabsTrigger value="settings">Settings</PageTabsTrigger>
               </TabsList>
-            </div>
-          </div>
+            </DetailLayout.Tabs>
 
-          {/* Tab Content */}
-          <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
-            <TabsContent value="overview" className="mt-0 w-full">
-              <MCPOverviewTab toolset={toolset} />
-            </TabsContent>
+            <DetailLayout.Content>
+              <DetailLayout.Main>
+                <TabsContent value="overview" className="mt-0 w-full">
+                  <MCPOverviewTab toolset={toolset} />
+                </TabsContent>
 
-            <TabsContent value="tools" className="mt-0 w-full">
-              <MCPToolsTab toolset={toolset} />
-            </TabsContent>
+                <TabsContent value="tools" className="mt-0 w-full">
+                  <MCPToolsTab toolset={toolset} />
+                </TabsContent>
 
-            <TabsContent value="resources" className="mt-0 w-full">
-              <MCPResourcesTab toolset={toolset} />
-            </TabsContent>
+                <TabsContent value="resources" className="mt-0 w-full">
+                  <MCPResourcesTab toolset={toolset} />
+                </TabsContent>
 
-            <TabsContent value="prompts" className="mt-0 w-full">
-              <MCPPromptsTab toolset={toolset} />
-            </TabsContent>
+                <TabsContent value="prompts" className="mt-0 w-full">
+                  <MCPPromptsTab toolset={toolset} />
+                </TabsContent>
 
-            <TabsContent value="authentication" className="mt-0 w-full">
-              <RequireScope scope="mcp:write" level="page">
-                <MCPAuthenticationTab toolset={toolset} />
-              </RequireScope>
-            </TabsContent>
+                <TabsContent value="authentication" className="mt-0 w-full">
+                  <RequireScope scope="mcp:write" level="page">
+                    <MCPAuthenticationTab toolset={toolset} />
+                  </RequireScope>
+                </TabsContent>
 
-            <TabsContent value="performance" className="mt-0 w-full">
-              <RequireScope scope="mcp:write" level="page">
-                <MCPPerformanceTab toolset={toolset} />
-              </RequireScope>
-            </TabsContent>
+                <TabsContent value="performance" className="mt-0 w-full">
+                  <RequireScope scope="mcp:write" level="page">
+                    <MCPPerformanceTab toolset={toolset} />
+                  </RequireScope>
+                </TabsContent>
 
-            {isRbacEnabled && (
-              <TabsContent value="team-access" className="mt-0 w-full">
-                <RequireScope scope="mcp:read" level="page">
-                  <MCPTeamAccessTab
-                    resourceId={toolset.id}
-                    tools={toolset.tools}
-                  />
-                </RequireScope>
-              </TabsContent>
-            )}
+                {isRbacEnabled && (
+                  <TabsContent value="team-access" className="mt-0 w-full">
+                    <RequireScope scope="mcp:read" level="page">
+                      <MCPTeamAccessTab
+                        resourceId={toolset.id}
+                        tools={toolset.tools}
+                      />
+                    </RequireScope>
+                  </TabsContent>
+                )}
 
-            <TabsContent value="settings" className="mt-0 w-full">
-              <RequireScope scope="mcp:write" level="page">
-                <MCPSettingsTab toolset={toolset} />
-              </RequireScope>
-            </TabsContent>
-          </div>
-        </Tabs>
+                <TabsContent value="settings" className="mt-0 w-full">
+                  <RequireScope scope="mcp:write" level="page">
+                    <MCPSettingsTab toolset={toolset} />
+                  </RequireScope>
+                </TabsContent>
+              </DetailLayout.Main>
+            </DetailLayout.Content>
+          </Tabs>
+        </DetailLayout>
       </Page.Body>
     </Page>
   );

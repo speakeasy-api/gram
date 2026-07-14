@@ -2,6 +2,7 @@ import { Block, BlockInner } from "@/components/block";
 import { DeleteButton } from "@/components/delete-button";
 import { EditableText } from "@/components/editable-text";
 import { Page } from "@/components/page-layout";
+import { WorkbenchLayout } from "@/components/layouts/workbench-layout";
 import { ToolBadge } from "@/components/tool-badge";
 import {
   Command,
@@ -11,7 +12,6 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { Heading } from "@/components/ui/heading";
 import {
   Popover,
   PopoverContent,
@@ -42,7 +42,6 @@ import { useUpdateTemplateMutation } from "@gram/client/react-query/updateTempla
 import { Stack } from "@/components/ui/stack";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ResizablePanel } from "@/components/ui/resizable-panel";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowDown, ArrowUp, FileText, Play, Plus, Save } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
@@ -122,7 +121,7 @@ export function ToolBuilderNew(): React.JSX.Element {
       <Page.Header>
         <Page.Header.Breadcrumbs fullWidth />
       </Page.Header>
-      <Page.Body fullWidth fullHeight>
+      <Page.Body fullWidth fullHeight noPadding>
         <ToolBuilder initial={newTemplate} />
       </Page.Body>
     </Page>
@@ -154,7 +153,7 @@ export function ToolBuilderPage(): React.JSX.Element {
           substitutions={{ [toolName ?? ""]: template.template.name }}
         />
       </Page.Header>
-      <Page.Body fullWidth fullHeight>
+      <Page.Body fullWidth fullHeight noPadding>
         <ChatProvider>
           <ToolBuilder
             initial={{
@@ -493,24 +492,26 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
       onSubmit={setName}
       validate={validateName}
     >
-      <Heading variant="h3" className="normal-case">
-        {name}
-      </Heading>
+      {name}
     </EditableText>
   );
 
   return (
-    <ResizablePanel
-      direction="horizontal"
-      className="[&>[role='separator']]:border-border h-full [&>[role='separator']]:mx-8 [&>[role='separator']]:border-1"
-    >
-      <ResizablePanel.Pane minSize={35}>
-        <Stack gap={1} className="h-full overflow-y-scroll">
-          <Stack direction="horizontal" align="center" className="w-full">
-            <Block label="Tool name" className="w-2/3">
-              <BlockInner>{toolName}</BlockInner>
-            </Block>
-            <Block label="MCP Server" className="w-1/3">
+    <WorkbenchLayout>
+      <WorkbenchLayout.Header
+        eyebrow="Custom Tool"
+        title={toolName}
+        actions={
+          <>
+            {revertButton}
+            {saveButton}
+          </>
+        }
+      />
+      <WorkbenchLayout.Body
+        config={
+          <Stack gap={1} className="h-full overflow-y-scroll p-6">
+            <Block label="MCP Server">
               <BlockInner>
                 <ToolsetDropdown
                   selectedToolset={toolsetFilter}
@@ -525,139 +526,129 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
                 />
               </BlockInner>
             </Block>
-          </Stack>
-          <Block label="Description">
-            <BlockInner>
-              <EditableText
-                label="Tool Description"
-                description="Describe when and how this tool should be used. This field is how the LLM selects between tools."
-                value={description}
-                onSubmit={setDescription}
-                lines={4}
-              >
-                <Type variant="subheading">{description}</Type>
-              </EditableText>
-            </BlockInner>
-          </Block>
-          <Block label="Purpose">
-            <BlockInner>
-              <EditableText
-                label="Purpose"
-                description="Describe what this tool should do when invoked"
-                value={purpose}
-                onSubmit={setPurpose}
-                lines={4}
-              >
-                <MustacheHighlight>{purpose}</MustacheHighlight>
-              </EditableText>
-            </BlockInner>
-          </Block>
-          <Block label="Inputs">
-            <BlockInner>
-              <div className="flex flex-wrap gap-2">
-                {inputs.length === 0 && (
-                  <Type
-                    muted
-                    italic
-                  >{`Inputs will appear here. Use {{braces}} in step instructions to create or reference them.`}</Type>
-                )}
-                {inputs.map((input) => (
-                  <EditableText
-                    key={input.name}
-                    label={`{{${input.name}}} Description`}
-                    description={"Describe what this input is for"}
-                    value={input.description}
-                    placeholder="A short description of the input"
-                    onSubmit={(description) => {
-                      setInputs(
-                        inputs.map((i) =>
-                          i.name === input.name ? { ...i, description } : i,
-                        ),
-                      );
-                    }}
-                  >
-                    <Stack
-                      direction="horizontal"
-                      align="center"
-                      className={inputStyles}
-                      gap={1}
+            <Block label="Description">
+              <BlockInner>
+                <EditableText
+                  label="Tool Description"
+                  description="Describe when and how this tool should be used. This field is how the LLM selects between tools."
+                  value={description}
+                  onSubmit={setDescription}
+                  lines={4}
+                >
+                  <Type variant="subheading">{description}</Type>
+                </EditableText>
+              </BlockInner>
+            </Block>
+            <Block label="Purpose">
+              <BlockInner>
+                <EditableText
+                  label="Purpose"
+                  description="Describe what this tool should do when invoked"
+                  value={purpose}
+                  onSubmit={setPurpose}
+                  lines={4}
+                >
+                  <MustacheHighlight>{purpose}</MustacheHighlight>
+                </EditableText>
+              </BlockInner>
+            </Block>
+            <Block label="Inputs">
+              <BlockInner>
+                <div className="flex flex-wrap gap-2">
+                  {inputs.length === 0 && (
+                    <Type
+                      muted
+                      italic
+                    >{`Inputs will appear here. Use {{braces}} in step instructions to create or reference them.`}</Type>
+                  )}
+                  {inputs.map((input) => (
+                    <EditableText
+                      key={input.name}
+                      label={`{{${input.name}}} Description`}
+                      description={"Describe what this input is for"}
+                      value={input.description}
+                      placeholder="A short description of the input"
+                      onSubmit={(description) => {
+                        setInputs(
+                          inputs.map((i) =>
+                            i.name === input.name ? { ...i, description } : i,
+                          ),
+                        );
+                      }}
                     >
-                      <span>
-                        {input.description ? input.name + ":" : input.name}
-                      </span>
-                      {input.description && (
-                        <span className="text-blue-400">...</span>
-                      )}
-                    </Stack>
-                  </EditableText>
-                ))}
-              </div>
-            </BlockInner>
-          </Block>
-          <Block label="Steps" labelRHS={`${steps.length} / 10`}>
-            <Stack direction="vertical">
-              {steps.map((step, index) => (
-                <div key={index}>
-                  <StepCard
-                    step={step}
-                    tools={tools}
-                    remove={() =>
-                      setSteps(steps.filter((s) => s.id !== step.id))
-                    }
-                    moveUp={
-                      index > 0
-                        ? () => {
-                            const newSteps = [...steps];
-                            const temp = newSteps[index]!;
-                            newSteps[index] = newSteps[index - 1]!;
-                            newSteps[index - 1] = temp;
-                            setSteps(newSteps);
-                          }
-                        : undefined
-                    }
-                    moveDown={
-                      index < steps.length - 1
-                        ? () => {
-                            const newSteps = [...steps];
-                            const temp = newSteps[index]!;
-                            newSteps[index] = newSteps[index + 1]!;
-                            newSteps[index + 1] = temp;
-                            setSteps(newSteps);
-                          }
-                        : undefined
-                    }
-                  />
-                  <StepSeparator />
+                      <Stack
+                        direction="horizontal"
+                        align="center"
+                        className={inputStyles}
+                        gap={1}
+                      >
+                        <span>
+                          {input.description ? input.name + ":" : input.name}
+                        </span>
+                        {input.description && (
+                          <span className="text-blue-400">...</span>
+                        )}
+                      </Stack>
+                    </EditableText>
+                  ))}
                 </div>
-              ))}
-              <AddStepButton />
-            </Stack>
-          </Block>
-          <Stack
-            direction="horizontal"
-            align="center"
-            justify="end"
-            gap={1}
-            className="mt-4 mb-8"
-          >
-            {revertButton}
-            {saveButton}
+              </BlockInner>
+            </Block>
+            <Block label="Steps" labelRHS={`${steps.length} / 10`}>
+              <Stack direction="vertical">
+                {steps.map((step, index) => (
+                  <div key={index}>
+                    <StepCard
+                      step={step}
+                      tools={tools}
+                      remove={() =>
+                        setSteps(steps.filter((s) => s.id !== step.id))
+                      }
+                      moveUp={
+                        index > 0
+                          ? () => {
+                              const newSteps = [...steps];
+                              const temp = newSteps[index]!;
+                              newSteps[index] = newSteps[index - 1]!;
+                              newSteps[index - 1] = temp;
+                              setSteps(newSteps);
+                            }
+                          : undefined
+                      }
+                      moveDown={
+                        index < steps.length - 1
+                          ? () => {
+                              const newSteps = [...steps];
+                              const temp = newSteps[index]!;
+                              newSteps[index] = newSteps[index + 1]!;
+                              newSteps[index + 1] = temp;
+                              setSteps(newSteps);
+                            }
+                          : undefined
+                      }
+                    />
+                    <StepSeparator />
+                  </div>
+                ))}
+                <AddStepButton />
+              </Stack>
+            </Block>
           </Stack>
-        </Stack>
-      </ResizablePanel.Pane>
-      <ResizablePanel.Pane minSize={35}>
-        <ChatProvider>
-          <ChatPanel
-            toolsetSlug={toolsetFilter?.slug}
-            defaultEnvironmentSlug={toolsetData?.defaultEnvironmentSlug}
-            inputs={inputs}
-            steps={steps}
-            name={name}
-            purpose={purpose}
-          />
-        </ChatProvider>
-      </ResizablePanel.Pane>
-    </ResizablePanel>
+        }
+        preview={
+          <ChatProvider>
+            <ChatPanel
+              toolsetSlug={toolsetFilter?.slug}
+              defaultEnvironmentSlug={toolsetData?.defaultEnvironmentSlug}
+              inputs={inputs}
+              steps={steps}
+              name={name}
+              purpose={purpose}
+            />
+          </ChatProvider>
+        }
+      />
+    </WorkbenchLayout>
   );
 }
 

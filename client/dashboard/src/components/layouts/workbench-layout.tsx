@@ -64,7 +64,8 @@ function WorkbenchLayoutBody({
   minPreviewSize = 24,
   className,
 }: {
-  config: React.ReactNode;
+  /** Omit for a single, full-width surface (e.g. a "coming soon" state). */
+  config?: React.ReactNode;
   preview: React.ReactNode;
   direction?: "horizontal" | "vertical";
   defaultPreviewSize?: number;
@@ -72,6 +73,15 @@ function WorkbenchLayoutBody({
   minPreviewSize?: number;
   className?: string;
 }): JSX.Element {
+  // No config side → one full-width pane, no resize handle.
+  if (config == null) {
+    return (
+      <div className={cn("min-h-0 flex-1 overflow-y-auto", className)}>
+        {preview}
+      </div>
+    );
+  }
+
   return (
     <div className={cn("min-h-0 flex-1", className)}>
       <ResizablePanel

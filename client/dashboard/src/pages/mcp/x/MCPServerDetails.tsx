@@ -1,7 +1,6 @@
 import { MCPStatusIndicator } from "@/components/mcp/MCPStatusIndicator";
 import { Page } from "@/components/page-layout";
-import { DetailHero } from "@/components/detail-hero";
-import { Heading } from "@/components/ui/heading";
+import { DetailLayout } from "@/components/layouts/detail-layout";
 import {
   PageTabsTrigger,
   Tabs,
@@ -27,7 +26,6 @@ import {
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useUpdateMcpServerMutation } from "@gram/client/react-query/updateMcpServer.js";
-import { Stack } from "@/components/ui/stack";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -37,7 +35,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, Network } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import {
   Link,
   Navigate,
@@ -166,12 +164,12 @@ export default function MCPServerDetails(): JSX.Element {
         />
       </Page.Header>
 
-      <Page.Body fullWidth noPadding className="gap-0">
-        <MCPServerHero server={mcpServer} />
+      <Page.Body>
+        <DetailLayout>
+          <MCPServerHeader server={mcpServer} />
 
-        <Tabs value={activeTab} className="flex w-full flex-1 flex-col">
-          <div className="shrink-0 border-b">
-            <div className="mx-auto max-w-[1270px] px-8">
+          <Tabs value={activeTab} className="flex w-full flex-1 flex-col">
+            <DetailLayout.Tabs>
               <TabsList className="h-auto gap-6 rounded-none bg-transparent p-0">
                 <PageTabsTrigger value="overview" asChild>
                   <Link to={mcpServerTabHref(routes, idOrSlug, "overview")}>
@@ -203,74 +201,76 @@ export default function MCPServerDetails(): JSX.Element {
                   </Link>
                 </PageTabsTrigger>
               </TabsList>
-            </div>
-          </div>
+            </DetailLayout.Tabs>
 
-          <TabsContent
-            value="overview"
-            className="mt-0 w-full data-[state=inactive]:hidden"
-          >
-            <OverviewTab
-              mcpServer={mcpServer}
-              endpoints={endpoints}
-              isLoadingEndpoints={isLoadingEndpoints}
-              onShowEndpoints={handleShowServerUrlSettings}
-              onShowAuthentication={handleShowAuthentication}
-            />
-          </TabsContent>
+            <DetailLayout.Content>
+              <DetailLayout.Main>
+                <TabsContent
+                  value="overview"
+                  className="mt-0 w-full data-[state=inactive]:hidden"
+                >
+                  <OverviewTab
+                    mcpServer={mcpServer}
+                    endpoints={endpoints}
+                    isLoadingEndpoints={isLoadingEndpoints}
+                    onShowEndpoints={handleShowServerUrlSettings}
+                    onShowAuthentication={handleShowAuthentication}
+                  />
+                </TabsContent>
 
-          <TabsContent
-            value="tools"
-            className="mt-0 w-full data-[state=inactive]:hidden"
-          >
-            {mcpServer && (
-              <ToolsTab
-                mcpServer={mcpServer}
-                endpoints={endpoints}
-                isLoadingEndpoints={isLoadingEndpoints}
-              />
-            )}
-          </TabsContent>
+                <TabsContent
+                  value="tools"
+                  className="mt-0 w-full data-[state=inactive]:hidden"
+                >
+                  {mcpServer && (
+                    <ToolsTab
+                      mcpServer={mcpServer}
+                      endpoints={endpoints}
+                      isLoadingEndpoints={isLoadingEndpoints}
+                    />
+                  )}
+                </TabsContent>
 
-          <TabsContent
-            value="analytics"
-            className="mt-0 w-full data-[state=inactive]:hidden"
-          >
-            <AnalyticsTab mcpServer={mcpServer} />
-          </TabsContent>
+                <TabsContent
+                  value="analytics"
+                  className="mt-0 w-full data-[state=inactive]:hidden"
+                >
+                  <AnalyticsTab mcpServer={mcpServer} />
+                </TabsContent>
 
-          {isRbacEnabled && mcpServer && (
-            <TabsContent
-              value="team-access"
-              className="mt-0 w-full data-[state=inactive]:hidden"
-            >
-              <RequireScope scope="mcp:read" level="page">
-                <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
-                  {/* mcp_servers-backed servers grant under the same `mcp:*`
-                    scope kind as toolset-backed ones (see selector.go), so
-                    MCPTeamAccessTab is reused as-is with the mcp_server's
-                    id as the resource id. No `tools` prop because the
-                    Remote MCP backend doesn't expose a Gram-side tool
-                    catalog. */}
-                  <MCPTeamAccessTab resourceId={mcpServer.id} />
-                </div>
-              </RequireScope>
-            </TabsContent>
-          )}
+                {isRbacEnabled && mcpServer && (
+                  <TabsContent
+                    value="team-access"
+                    className="mt-0 w-full data-[state=inactive]:hidden"
+                  >
+                    <RequireScope scope="mcp:read" level="page">
+                      {/* mcp_servers-backed servers grant under the same
+                        `mcp:*` scope kind as toolset-backed ones (see
+                        selector.go), so MCPTeamAccessTab is reused as-is
+                        with the mcp_server's id as the resource id. No
+                        `tools` prop because the Remote MCP backend doesn't
+                        expose a Gram-side tool catalog. */}
+                      <MCPTeamAccessTab resourceId={mcpServer.id} />
+                    </RequireScope>
+                  </TabsContent>
+                )}
 
-          <TabsContent
-            value="settings"
-            className="mt-0 w-full data-[state=inactive]:hidden"
-          >
-            {mcpServer && (
-              <SettingsTab
-                mcpServer={mcpServer}
-                endpoints={endpoints}
-                isLoadingEndpoints={isLoadingEndpoints}
-              />
-            )}
-          </TabsContent>
-        </Tabs>
+                <TabsContent
+                  value="settings"
+                  className="mt-0 w-full data-[state=inactive]:hidden"
+                >
+                  {mcpServer && (
+                    <SettingsTab
+                      mcpServer={mcpServer}
+                      endpoints={endpoints}
+                      isLoadingEndpoints={isLoadingEndpoints}
+                    />
+                  )}
+                </TabsContent>
+              </DetailLayout.Main>
+            </DetailLayout.Content>
+          </Tabs>
+        </DetailLayout>
       </Page.Body>
     </Page>
   );
@@ -401,29 +401,28 @@ function MCPServerStatusDropdown({ server }: { server: McpServer }) {
   );
 }
 
-function MCPServerHero({ server }: { server: McpServer | undefined }) {
+function MCPServerHeader({ server }: { server: McpServer | undefined }) {
   const enabled = server?.visibility !== "disabled";
   const isPublic = server?.visibility === "public";
   const isHostedServer =
     !!server?.remoteMcpServerId || !!server?.tunneledMcpServerId;
   return (
-    <DetailHero actions={server && <MCPServerStatusDropdown server={server} />}>
-      <Stack gap={2}>
-        <Stack direction="horizontal" gap={3} align="center">
-          <div className="bg-muted text-muted-foreground flex size-10 shrink-0 items-center justify-center">
-            <Network className="size-5" />
-          </div>
-          <Heading variant="h1" className="break-all normal-case">
-            {server?.name || "MCP Server"}
-          </Heading>
+    <DetailLayout.Header
+      eyebrow="MCP Server"
+      title={
+        <span className="inline-flex items-center gap-3 break-all">
+          {server?.name || "MCP Server"}
           {isHostedServer && (
             <Badge variant="neutral">
               <Badge.Text>Hosted MCP</Badge.Text>
             </Badge>
           )}
-        </Stack>
+        </span>
+      }
+      subtitle={
         <MCPStatusIndicator mcpEnabled={enabled} mcpIsPublic={isPublic} />
-      </Stack>
-    </DetailHero>
+      }
+      actions={server && <MCPServerStatusDropdown server={server} />}
+    />
   );
 }

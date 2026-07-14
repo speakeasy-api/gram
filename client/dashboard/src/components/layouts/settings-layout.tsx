@@ -82,43 +82,10 @@ function SettingsLayoutGroup({
 }
 
 /** Destructive actions, held apart by a destructive-toned rule. */
-function SettingsLayoutDangerZone({
-  label = "Danger zone",
-  description,
-  children,
-  className,
-}: {
-  label?: React.ReactNode;
-  description?: React.ReactNode;
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <section
-      className={cn(
-        "border-destructive-softest mt-8 flex flex-col gap-4 border-t py-8",
-        className,
-      )}
-    >
-      <div className="flex flex-col gap-1">
-        <span className="text-default-destructive font-mono text-xs font-light tracking-[0.08em] uppercase">
-          {label}
-        </span>
-        {description ? (
-          <Type muted small>
-            {description}
-          </Type>
-        ) : null}
-      </div>
-      {children}
-    </section>
-  );
-}
-
 SettingsLayoutRoot.Header = Layout.Header;
 SettingsLayoutRoot.Body = SettingsLayoutBody;
 SettingsLayoutRoot.Group = SettingsLayoutGroup;
-SettingsLayoutRoot.DangerZone = SettingsLayoutDangerZone;
+SettingsLayoutRoot.DangerZone = Layout.DangerZone;
 SettingsLayoutRoot.Actions = Layout.Actions;
 
 export { SettingsLayoutRoot as SettingsLayout };
