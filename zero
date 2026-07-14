@@ -83,16 +83,21 @@ if $agent_mode && ! command -v mise &> /dev/null; then
     export PATH="$HOME/.local/bin:$PATH"
     mise trust
 
-    mise_bin="$HOME/.local/bin/mise"
+    # printf %q shell-quotes the path (valid in bash and zsh) so the rc
+    # entry survives a $HOME containing spaces.
+    mise_bin=$(printf '%q' "$HOME/.local/bin/mise")
 
+    # The grep only matches uncommented activation lines, so a
+    # commented-out one doesn't suppress installing a working one.
     bashrc="$HOME/.bashrc"
-    if [ ! -f "$bashrc" ] || ! grep -qF "mise activate bash" "$bashrc"; then
+    if [ ! -f "$bashrc" ] || ! grep -Eq '^[^#]*mise activate bash' "$bashrc"; then
         echo "eval \"\$($mise_bin activate bash)\"" >> "$bashrc"
         echo "✅ Added mise activation in $bashrc"
     fi
 
     zshrc="${ZDOTDIR-$HOME}/.zshrc"
-    if [ ! -f "$zshrc" ] || ! grep -qF "mise activate zsh" "$zshrc"; then
+    if [ ! -f "$zshrc" ] || ! grep -Eq '^[^#]*mise activate zsh' "$zshrc"; then
+        mkdir -p "${ZDOTDIR-$HOME}"
         echo "eval \"\$($mise_bin activate zsh)\"" >> "$zshrc"
         echo "✅ Added mise activation in $zshrc"
     fi
