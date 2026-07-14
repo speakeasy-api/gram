@@ -87,16 +87,20 @@ If a chart need doesn't fit these, check `ChartCard`, `MetricCard`, and `chartUt
 
 ### Page layouts (`components/layouts/`)
 
-Every page is one of four shapes. Pick the one that matches the page's job and compose its slots — don't hand-roll a page header, a KPI band, or a settings group.
+**Every in-app page composes exactly one of these six layouts** — never hand-roll a page header, a KPI band, a settings group, or a bespoke page shell. The layout goes _inside_ `Page.Body`; the `Page`/`Page.Header` top-bar chrome (breadcrumbs, sidebar trigger) stays. See `pages/access/Access.tsx` for the canonical integration.
 
-| Layout                | Use it when the page…                                 | Slots                                                        |
-| --------------------- | ----------------------------------------------------- | ------------------------------------------------------------ |
-| `ListLayout`          | helps the user find one of many (servers, keys, logs) | `.Header` `.Toolbar` `.List` `.Footer`                       |
-| `DetailLayout`        | is about a single entity                              | `.Header` `.Tabs` `.Content` (`.Main` + `.Aside`) `.Section` |
-| `ObservabilityLayout` | answers "what is happening" (insights, costs, risk)   | `.Header` `.Stats` `.Strip` `.Grid` `.Section`               |
-| `SettingsLayout`      | configures something                                  | `.Header` `.Body` `.Group` `.DangerZone`                     |
+| Layout                | Use it when the page…                                                                          | Slots                                                                  |
+| --------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `ListLayout`          | helps the user find one of many (servers, keys, logs)                                          | `.Header` `.Toolbar` `.List` `.Footer`                                 |
+| `DetailLayout`        | is about a single entity                                                                       | `.Header` `.Tabs` `.Content` (`.Main` + `.Aside`) `.Section`           |
+| `ObservabilityLayout` | answers "what is happening" (insights, costs, risk, home)                                      | `.Header` `.Stats` `.Strip` `.Grid` `.Section`                         |
+| `SettingsLayout`      | configures something (forms, toggles, danger zones)                                            | `.Header` `.Body` `.Group` `.DangerZone`                               |
+| `WorkbenchLayout`     | is a config + live-preview surface (playground, tool builder, assistant editor, Elements, SDK) | `.Header` `.Body` (`config` + `preview` props, resizable, full-height) |
+| `GuideLayout`         | is instructional / step-through (onboarding upload, getting-started, install guide)            | `.Header` `.Body` `.Step` `.Footer`                                    |
 
-All four share the `Layout` scaffold's header contract: `eyebrow` (mono caption), `title` (display serif), `subtitle` (quiet sans), `actions` (right-aligned controls), closed by a hairline rule. See `Layouts/Page Layouts` in Storybook.
+All six share the `Layout` scaffold's header contract: `eyebrow` (mono caption), `title` (display serif), `subtitle` (quiet sans), `actions` (right-aligned controls), closed by a hairline rule. See `Layouts/Page Layouts` in Storybook.
+
+**Exempt from the layout system** — full-screen surfaces that render _outside_ the main chrome (no sidebar/top-bar) and are intentionally bespoke: `login`/`register` (split-screen auth), the onboarding wizard and enterprise setup wizard (`outsideMainLayout`), and the immersive full-bleed `chat` surfaces. Do not force these into a layout. Everything else is one of the six.
 
 ## Visual rules ("Claude Design")
 

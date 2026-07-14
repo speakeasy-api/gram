@@ -10,9 +10,11 @@ import { StatTile } from "@/components/ui/stat-tile";
 import { StatusDot } from "@/components/ui/status-dot";
 import { Type } from "@/components/ui/type";
 import { DetailLayout } from "./detail-layout";
+import { GuideLayout } from "./guide-layout";
 import { ListLayout } from "./list-layout";
 import { ObservabilityLayout } from "./observability-layout";
 import { SettingsLayout } from "./settings-layout";
+import { WorkbenchLayout } from "./workbench-layout";
 
 const meta: Meta = {
   title: "Layouts/Page Layouts",
@@ -251,5 +253,66 @@ export const Settings: StoryObj = {
         </SettingsLayout.DangerZone>
       </SettingsLayout.Body>
     </SettingsLayout>
+  ),
+};
+
+export const Workbench: StoryObj = {
+  parameters: { layout: "fullscreen" },
+  render: () => (
+    <div className="h-screen">
+      <WorkbenchLayout>
+        <WorkbenchLayout.Header
+          eyebrow="Playground"
+          title="Untitled session"
+          actions={<Button>Run</Button>}
+        />
+        <WorkbenchLayout.Body
+          config={
+            <div className="flex flex-col gap-4 p-6">
+              <Type variant="small" muted mono className="uppercase">
+                Configuration
+              </Type>
+              <Card>
+                <Card.Header>
+                  <Card.Title>Model</Card.Title>
+                </Card.Header>
+                <Card.Content>
+                  <Type muted>Pick a model and tools, then run.</Type>
+                </Card.Content>
+              </Card>
+            </div>
+          }
+          preview={
+            <div className="flex h-full items-center justify-center p-6">
+              <Type muted>Live preview</Type>
+            </div>
+          }
+        />
+      </WorkbenchLayout>
+    </div>
+  ),
+};
+
+export const Guide: StoryObj = {
+  render: () => (
+    <GuideLayout>
+      <GuideLayout.Header
+        eyebrow="Setup"
+        title="Upload your OpenAPI document"
+        subtitle="We turn each operation into a tool your agents can call."
+      />
+      <GuideLayout.Body>
+        <GuideLayout.Step index={1} title="Choose a document">
+          <Type muted>Drop a JSON or YAML OpenAPI file.</Type>
+        </GuideLayout.Step>
+        <GuideLayout.Step index={2} title="Name the source">
+          <Type muted>Give it a name your team will recognize.</Type>
+        </GuideLayout.Step>
+        <GuideLayout.Footer>
+          <Button variant="secondary">Back</Button>
+          <Button>Continue</Button>
+        </GuideLayout.Footer>
+      </GuideLayout.Body>
+    </GuideLayout>
   ),
 };
