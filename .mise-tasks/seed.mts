@@ -382,11 +382,9 @@ async function seed() {
   }
   await seedTunnel();
 
-  // Seed observability data for the first seeded project
-  const firstSeededProjectSlug = Object.keys(projectToolUrns)[0];
-  const firstProject = firstSeededProjectSlug
-    ? projects[firstSeededProjectSlug]
-    : undefined;
+  // Seed observability data for the E-Commerce project.
+  const firstSeededProjectSlug = SEED_PROJECTS[0].slug;
+  const firstProject = projects[firstSeededProjectSlug];
   if (firstProject) {
     const toolUrns = projectToolUrns[firstProject.slug] ?? [];
     await seedObservabilityData({
@@ -394,6 +392,7 @@ async function seed() {
       organizationId: activeOrgID,
       toolUrns,
     });
+    await seedShadowMCPInventoryData({ projectId: firstProject.id });
     // Risk findings depend on the chats/messages seeded above (FK +
     // attachment), so seed them after observability data.
     await seedRiskFindings({
@@ -457,6 +456,115 @@ async function seed() {
   });
 
   success = true;
+}
+
+async function seedShadowMCPInventoryData(init: {
+  projectId: string;
+}): Promise<void> {
+  const { projectId } = init;
+  const now = Date.now();
+  const msPerHour = 60 * 60 * 1000;
+  const users = [
+    "maya.chen@example.com",
+    "liam.oconnor@example.com",
+    "priya.shah@example.com",
+    "noah.williams@example.com",
+    "sofia.martinez@example.com",
+    "ethan.kim@example.com",
+    "ava.johnson@example.com",
+    "lucas.brown@example.com",
+    "isabella.rossi@example.com",
+    "oliver.smith@example.com",
+  ];
+  const servers = [
+    ["GitHub", "https://api.githubcopilot.com/mcp"],
+    ["Notion", "https://mcp.notion.com/mcp"],
+    ["Linear", "https://mcp.linear.app/mcp"],
+    ["Slack", "https://mcp.slack.com/mcp"],
+    ["Sentry", "https://mcp.sentry.dev/mcp"],
+    ["Datadog", "https://mcp.datadoghq.com/api/mcp"],
+    ["Cloudflare", "https://mcp.cloudflare.com/mcp"],
+    ["Stripe", "https://mcp.stripe.com/mcp"],
+    ["Figma", "https://mcp.figma.com/mcp"],
+    ["Postgres Explorer", "https://postgres.internal.example.com/mcp"],
+    ["Customer Support", "https://support-tools.example.com/mcp"],
+    ["Production Admin", "https://prod-admin.example.com/mcp"],
+    ["Data Warehouse", "https://warehouse.example.com/mcp"],
+    ["Incident Commander", "https://incidents.example.com/mcp"],
+    ["Payroll Assistant", "https://payroll.example.com/mcp"],
+  ] as const;
+
+  const inventoryRows: string[] = [];
+  const telemetryRows: string[] = [];
+  const clickhouseDateTime64 = (date: Date) =>
+    date.toISOString().replace("T", " ").replace("Z", "");
+  for (const [serverIndex, [serverName, serverURL]] of servers.entries()) {
+    const firstSeen = new Date(now - (720 - serverIndex * 31) * msPerHour);
+    const lastSeen = new Date(now - (serverIndex + 1) * 2 * msPerHour);
+    const urlHost = new URL(serverURL).host;
+    inventoryRows.push(
+      `('${projectId}', '${serverURL}', '${urlHost}', '${serverName}', '${clickhouseDateTime64(firstSeen)}', '${clickhouseDateTime64(lastSeen)}', now64(9))`,
+    );
+
+    const userCount = 3 + (serverIndex % 6);
+    const callCount = 8 + serverIndex * 3;
+    for (let callIndex = 0; callIndex < callCount; callIndex++) {
+      const userEmail = users[(serverIndex * 2 + callIndex) % userCount];
+      const calledAt = new Date(
+        lastSeen.getTime() - callIndex * (35 + serverIndex * 4) * 60 * 1000,
+      );
+      const timeNano = BigInt(calledAt.getTime()) * BigInt(1000000);
+      const traceId = crypto
+        .createHash("sha256")
+        .update(`shadow-mcp:${projectId}:${serverIndex}:${callIndex}`)
+        .digest("hex")
+        .slice(0, 32);
+      const toolName = `mcp__${serverName.toLowerCase().replace(/[^a-z0-9]+/g, "_")}__search`;
+      const attributes = JSON.stringify({
+        "gen_ai.tool.call.result": "ok",
+        "gram.event.source": "hook",
+        "gram.hook.event": "PostToolUse",
+        "gram.hook.source": "claude-code",
+        "gram.mcp.server_url": serverURL,
+        "gram.project.id": projectId,
+        "gram.tool.name": toolName,
+        "gram.tool_call.source": serverName,
+        "user.email": userEmail,
+        "user.id": userEmail,
+      }).replace(/'/g, "\\'");
+      telemetryRows.push(
+        `(${timeNano}, ${timeNano}, 'INFO', 'Shadow MCP tool call', '${traceId}', '${attributes}', '{}', '${projectId}', 'hooks:${toolName}', 'gram-hooks', '')`,
+      );
+    }
+  }
+
+  const sql = `
+    SET mutations_sync = 1;
+    ALTER TABLE shadow_mcp_inventory_urls DELETE WHERE gram_project_id = '${projectId}';
+    INSERT INTO shadow_mcp_inventory_urls (gram_project_id, canonical_server_url, url_host, server_name, first_seen, last_seen, updated_at) VALUES
+    ${inventoryRows.join(",\n")};
+    INSERT INTO telemetry_logs (time_unix_nano, observed_time_unix_nano, severity_text, body, trace_id, attributes, resource_attributes, gram_project_id, gram_urn, service_name, gram_chat_id) VALUES
+    ${telemetryRows.join(",\n")};
+  `;
+
+  try {
+    const tmpFile = path.join(process.cwd(), ".seed-shadow-mcp.sql");
+    await fs.writeFile(tmpFile, sql, "utf-8");
+    try {
+      await $`docker cp ${tmpFile} gram-clickhouse-1:/tmp/seed-shadow-mcp.sql`.quiet();
+      await $`docker exec gram-clickhouse-1 clickhouse-client --multiquery --queries-file /tmp/seed-shadow-mcp.sql`.quiet();
+    } finally {
+      await fs.unlink(tmpFile).catch(() => {});
+    }
+    log.info(
+      `Seeded ${servers.length} Shadow MCP servers with ${telemetryRows.length} calls into '${SEED_PROJECTS[0].slug}'.`,
+    );
+  } catch (e: unknown) {
+    const err = e as { stderr?: string; stdout?: string; message?: string };
+    log.warn(
+      `Failed to seed Shadow MCP inventory: ${err.message || err.stderr || err.stdout || JSON.stringify(e)}`,
+    );
+  }
 }
 
 async function seedCurrentUserAdminRole(init: {

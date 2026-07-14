@@ -43,6 +43,7 @@ trackedFiles:
   src/funcs/accessEnableRBAC.ts: {}
   src/funcs/accessGetRBACStatus.ts: {}
   src/funcs/accessGetRole.ts: {}
+  src/funcs/accessGetShadowMCPInventoryServer.ts: {}
   src/funcs/accessListChallengeBuckets.ts: {}
   src/funcs/accessListChallenges.ts: {}
   src/funcs/accessListGrants.ts: {}
@@ -1216,6 +1217,7 @@ trackedFiles:
   src/models/operations/getriskrulebreakdown.ts: {}
   src/models/operations/getriskuserbreakdown.ts: {}
   src/models/operations/getrole.ts: {}
+  src/models/operations/getshadowmcpinventoryserver.ts: {}
   src/models/operations/getsourceenvironment.ts: {}
   src/models/operations/gettemplate.ts: {}
   src/models/operations/gettokensundermanagement.ts: {}
@@ -1922,6 +1924,8 @@ trackedFiles:
   src/react-query/shadowMCPApprovalRequests.ts: {}
   src/react-query/shadowMCPInventory.core.ts: {}
   src/react-query/shadowMCPInventory.ts: {}
+  src/react-query/shadowMCPInventoryServer.core.ts: {}
+  src/react-query/shadowMCPInventoryServer.ts: {}
   src/react-query/shadowMCPInventoryUsers.core.ts: {}
   src/react-query/shadowMCPInventoryUsers.ts: {}
   src/react-query/switchScopes.ts: {}
@@ -3968,6 +3972,20 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  getShadowMCPInventoryServer:
+    speakeasy-default-get-shadow-MCP-inventory-server:
+      parameters:
+        query:
+          project_id: "ff0a7551-9d09-4ebc-8f6f-4995812c0622"
+          server_url: "https://merry-middle.net"
+          server_slug: "<value>"
+      responses:
+        "200":
+          application/json: {"access": "allowed", "allowed_policy_ids": ["<value 1>", "<value 2>"], "canonical_server_url": "https://other-charlatan.com/", "first_seen": "2025-09-26T22:52:04.530Z", "last_seen": "2025-02-17T16:24:42.959Z", "observed_use_count": 376759, "request_count": 602872, "server_slug": "<value>", "top_users": ["<value 1>", "<value 2>", "<value 3>"], "url_host": "<value>", "user_count": 500085}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   getSlackApp:
     speakeasy-default-get-slack-app:
       parameters:

@@ -85,6 +85,16 @@ vi.mock("@/components/ui/skeleton", () => ({
   SkeletonTable: () => <div>Loading table</div>,
 }));
 
+vi.mock("@/routes", () => ({
+  useRoutes: () => ({
+    shadowMCP: {
+      detail: {
+        href: (serverURL: string) => `/shadow-mcp/${serverURL}`,
+      },
+    },
+  }),
+}));
+
 vi.mock("@/components/shadow-mcp/ShadowMCPInventoryTable", () => ({
   ShadowMCPInventoryTable: ({
     members,
