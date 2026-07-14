@@ -7,7 +7,7 @@ import App from "./App.tsx";
 // hover). `import.meta.env.DEV` is statically replaced with `false` in
 // production builds, so this dynamic import is tree-shaken out entirely.
 if (import.meta.env.DEV) {
-  import("react-grab");
+  void import("react-grab");
 }
 
 createRoot(document.getElementById("root")!).render(
