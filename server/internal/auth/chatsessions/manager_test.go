@@ -101,7 +101,8 @@ func TestManagerAuthorize_RevocationCheckUnavailable(t *testing.T) {
 	_, err = mgr.Authorize(ctx, token)
 	require.Error(t, err)
 	var se *oops.ShareableError
-	require.NotErrorAs(t, err, &se, "revocation-check failures must surface as server faults, not unauthorized")
+	require.ErrorAs(t, err, &se)
+	require.Equal(t, oops.CodeUnexpected, se.Code, "revocation-check failures must surface as server faults, not unauthorized")
 }
 
 func TestManagerAuthorize_ValidToken(t *testing.T) {

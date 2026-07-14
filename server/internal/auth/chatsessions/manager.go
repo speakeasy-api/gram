@@ -89,10 +89,6 @@ func (m *Manager) IsTokenRevoked(ctx context.Context, jti string) (bool, error) 
 }
 
 func (m *Manager) Authorize(ctx context.Context, token string) (context.Context, error) {
-	// ValidateToken only returns token-validity errors (malformed, bad
-	// signature, expired, revoked); revocation-check infra errors are
-	// currently discarded. If that changes, this mapping must distinguish
-	// server faults from unauthorized callers.
 	claims, invalidToken, err := m.ValidateToken(ctx, token)
 	if invalidToken {
 		return ctx, oops.E(oops.CodeUnauthorized, err, "unauthorized access")
@@ -100,7 +96,7 @@ func (m *Manager) Authorize(ctx context.Context, token string) (context.Context,
 	if err != nil {
 		// Not a verdict on the token — surface as a server fault rather than
 		// telling the caller to re-authenticate.
-		return ctx, fmt.Errorf("validate chat session token: %w", err)
+		return ctx, oops.E(oops.CodeUnexpected, err, "validate chat session token").LogError(ctx, m.logger)
 	}
 
 	// Parse project ID from string to UUID
