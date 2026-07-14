@@ -7,7 +7,7 @@ docker compose up -d || exit 1
 # up. Bounded so headless callers (e.g. `./zero --agent`) fail fast instead of
 # hanging forever when infra never becomes healthy. Override with
 # INFRA_READINESS_TIMEOUT.
-READINESS_TIMEOUT="${INFRA_READINESS_TIMEOUT:-120}"
+READINESS_TIMEOUT="${INFRA_READINESS_TIMEOUT:-30}"
 
 # wait_for <display-name> <compose-service> <check command...>
 # Retries the check until it succeeds or the timeout elapses. On timeout it
