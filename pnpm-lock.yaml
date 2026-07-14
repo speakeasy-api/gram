@@ -203,7 +203,7 @@ importers:
         version: 3.14.5(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@xstate/react':
         specifier: ^6.1.0
-        version: 6.1.0(@types/react@19.2.17)(react@19.2.7)(xstate@5.32.3)
+        version: 6.1.0(@types/react@19.2.17)(react@19.2.7)(xstate@5.32.4)
       '@xyflow/react':
         specifier: ^12.11.1
         version: 12.11.1(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -310,8 +310,8 @@ importers:
         specifier: ^13.0.2
         version: 13.0.2
       xstate:
-        specifier: ^5.32.3
-        version: 5.32.3
+        specifier: ^5.32.4
+        version: 5.32.4
       zod:
         specifier: ^4
         version: 4.4.3
@@ -8702,8 +8702,8 @@ packages:
     resolution: {integrity: sha512-bx8Q1STctnNaaDymWnkfQLKofs0mGNN7rLLapJlGuV3VlvegD7Ls4ggMjE3aUSWItCCzU0PEv45lI87iSigiCA==}
     engines: {node: '>=20.0'}
 
-  xstate@5.32.3:
-    resolution: {integrity: sha512-I8PDV+D9f5iuAGR/CjiQwf/7A+iiSWHsd16jWe/2Z1GQh4T4JQBYvpauqBK+SAU3TegOBtTvxcqAjhJnqeT0sg==}
+  xstate@5.32.4:
+    resolution: {integrity: sha512-E5WtDB8DBs2ZWliz2Ry9XfbSZTbBRcK/cwefBot04qQ/L5SLP16xpnTDU4/ZFXuXFhNxi7JP2RhuoGwBnM+S4A==}
 
   y18n@5.0.8:
     resolution: {integrity: sha512-0pfFzegeDWJHJIAmTLRP2DwHjdF5s7jo9tuztdQxAhINCdvS+3nGINqPd00AphqJR/0LhANUS6/+7SCb98YOfA==}
@@ -12675,13 +12675,13 @@ snapshots:
 
   '@webgpu/types@0.1.66': {}
 
-  '@xstate/react@6.1.0(@types/react@19.2.17)(react@19.2.7)(xstate@5.32.3)':
+  '@xstate/react@6.1.0(@types/react@19.2.17)(react@19.2.7)(xstate@5.32.4)':
     dependencies:
       react: 19.2.7
       use-isomorphic-layout-effect: 1.2.1(@types/react@19.2.17)(react@19.2.7)
       use-sync-external-store: 1.6.0(react@19.2.7)
     optionalDependencies:
-      xstate: 5.32.3
+      xstate: 5.32.4
     transitivePeerDependencies:
       - '@types/react'
 
@@ -17398,7 +17398,7 @@ snapshots:
       '@oozcitak/util': 10.0.0
       js-yaml: 4.3.0
 
-  xstate@5.32.3: {}
+  xstate@5.32.4: {}
 
   y18n@5.0.8: {}
 
