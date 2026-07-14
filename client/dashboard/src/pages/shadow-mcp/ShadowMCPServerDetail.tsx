@@ -266,6 +266,15 @@ function DetailActionButtons({
       >
         <Button.Text>{actionLabel(primaryMode)}</Button.Text>
       </Button>
+      {server.access === "allowed" && primaryMode !== "edit" && (
+        <Button
+          disabled={disabled}
+          onClick={() => onOpenAction("edit")}
+          variant="tertiary"
+        >
+          <Button.Text>{actionLabel("edit")}</Button.Text>
+        </Button>
+      )}
       {server.access === "allowed" && (
         <Button
           disabled={disabled}
@@ -545,9 +554,9 @@ export default function ShadowMCPServerDetail(): JSX.Element {
                         Users with observed calls to this Shadow MCP server.
                       </Type>
                     </div>
-                    {usersQuery.isLoading ? (
+                    {usersQuery.isLoading && !hasLoadedUserPages ? (
                       <SkeletonTable />
-                    ) : usersQuery.error ? (
+                    ) : usersQuery.error && !hasLoadedUserPages ? (
                       <div className="bg-background flex min-h-24 flex-col items-center justify-center gap-1 px-4 py-6 text-center">
                         <Type variant="body" className="font-medium">
                           Users could not be loaded

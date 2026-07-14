@@ -310,6 +310,49 @@ func TestService_GetShadowMCPInventoryServer_ComposesOneURL(t *testing.T) {
 	require.Equal(t, []string{"alex@example.com"}, server.TopUsers)
 }
 
+func TestShadowMCPInventorySlugHash_ReturnsHashSuffix(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "30d7c46c", shadowMCPInventorySlugHash("detail-example-com-mcp-30d7c46c"))
+}
+
+func TestShadowMCPInventorySlugHash_RejectsInvalidSuffix(t *testing.T) {
+	t.Parallel()
+
+	require.Empty(t, shadowMCPInventorySlugHash("detail-example-com-mcp-not-hash"))
+	require.Empty(t, shadowMCPInventorySlugHash("detail-example-com-mcp-30D7C46C"))
+	require.Empty(t, shadowMCPInventorySlugHash("30d7c46c"))
+}
+
+func TestService_GetShadowMCPInventoryServer_RejectsMismatchedReadableSlug(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	projectID := authCtx.ProjectID.String()
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+	seenAt := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
+
+	require.NoError(t, telemetryRepo.New(ti.chConn).UpsertShadowMCPInventoryURLs(ctx, []telemetryRepo.UpsertShadowMCPInventoryURLParams{
+		{
+			GramProjectID:      projectID,
+			CanonicalServerURL: "https://detail.example.com/mcp",
+			URLHost:            "detail.example.com",
+			ServerName:         "Detail MCP",
+			SeenAt:             seenAt,
+		},
+	}))
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	_, err := ti.service.GetShadowMCPInventoryServer(ctx, &gen.GetShadowMCPInventoryServerPayload{
+		ProjectID:  projectID,
+		ServerSlug: "wrong-readable-prefix-30d7c46c",
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
+}
+
 func TestService_ListShadowMCPInventory_RequiresOrgAdmin(t *testing.T) {
 	t.Parallel()
 

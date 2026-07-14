@@ -494,6 +494,70 @@ describe("ShadowMCPServerDetail", () => {
     expect(screen.queryByRole("columnheader", { name: "User" })).toBeNull();
   });
 
+  it("shows review, edit, and delete actions for an allowed server with a pending request", () => {
+    mocks.useShadowMCPInventoryServer.mockReturnValue({
+      data: inventoryServer({ requestCount: 1 }),
+      error: null,
+      isLoading: false,
+    });
+
+    renderDetailPage();
+
+    expect(screen.getByRole("button", { name: "Review Request" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Edit Rule" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Delete Rule" })).toBeTruthy();
+  });
+
+  it("keeps loaded users visible and retries after a next page error", async () => {
+    const refetchNextPage = vi.fn();
+    const firstPageResponse = {
+      data: {
+        nextCursor: "next-page",
+        users: [
+          {
+            lastCalled: new Date("2026-01-04T10:00:00Z"),
+            observedUseCount: 5,
+            userKey: "alex@example.com",
+          },
+        ],
+      },
+      error: null,
+      isFetching: false,
+      isLoading: false,
+      refetch: vi.fn(),
+    };
+    const nextPageErrorResponse = {
+      data: undefined,
+      error: new Error("next page failed"),
+      isFetching: false,
+      isLoading: false,
+      refetch: refetchNextPage,
+    };
+    mocks.useShadowMCPInventoryUsers.mockImplementation(
+      (request: { cursor?: string }) => {
+        if (request.cursor === "next-page") {
+          return nextPageErrorResponse;
+        }
+
+        return firstPageResponse;
+      },
+    );
+
+    renderDetailPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("alex@example.com")).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+
+    expect(screen.getByText("alex@example.com")).toBeTruthy();
+    expect(screen.queryByText("Users could not be loaded")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+
+    expect(refetchNextPage).toHaveBeenCalled();
+  });
+
   it("adds an allow decision from the detail page action menu", async () => {
     const upsertPolicyBypass = vi.fn().mockResolvedValue({});
     mocks.useShadowMCPInventoryServer.mockReturnValue({
