@@ -12,7 +12,7 @@ import {
 import { authInfo } from "@gram/client/funcs/authInfo";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useMutation } from "@tanstack/react-query";
-import { SpeakeasyLogo } from "@/components/speakeasy-logo/index";
+import { GramLogo } from "@/components/gram-logo/index";
 
 const unexpected = "Server error. Please try again later or contact support.";
 const authErrorMessages: Record<string, string> = {
@@ -113,7 +113,7 @@ export function AuthLayout({
             target="_blank"
             rel="noopener noreferrer"
           >
-            <SpeakeasyLogo
+            <GramLogo
               className="mb-2 w-[200px] dark:!invert-0"
               variant="vertical"
             />

@@ -20,7 +20,7 @@ import { AppRoute, useOrgRoutes } from "@/routes";
 import { Icon } from "@speakeasy-api/moonshine";
 import * as React from "react";
 import { Link } from "react-router";
-import { SpeakeasyLogo } from "./speakeasy-logo";
+import { GramLogo } from "./gram-logo";
 import { CommandPaletteTrigger } from "./command-palette/CommandPaletteTrigger";
 import { SidebarNavSkeleton } from "./sidebar-nav-skeleton";
 import { OnboardingResumeButton } from "./onboarding-resume-button";
@@ -128,7 +128,7 @@ export function OrgSidebar({
             to={orgRoutes.home.href()}
             className="flex h-(--header-height) items-center px-1 hover:no-underline group-data-[collapsible=icon]:hidden"
           >
-            <SpeakeasyLogo className="w-28" />
+            <GramLogo className="w-28" />
           </Link>
           <CommandPaletteTrigger />
         </div>

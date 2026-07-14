@@ -12,7 +12,7 @@ import {
   SidebarMenu,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { SpeakeasyLogo } from "./speakeasy-logo";
+import { GramLogo } from "./gram-logo";
 import { CommandPaletteTrigger } from "./command-palette/CommandPaletteTrigger";
 import { WorkspaceSwitcher } from "./workspace-switcher";
 import { InsightsDockResumeButton } from "./insights-dock-resume-button";
@@ -336,7 +336,7 @@ export function AppSidebar({
             to={`/${orgSlug}`}
             className="flex h-(--header-height) items-center px-1 hover:no-underline group-data-[collapsible=icon]:hidden"
           >
-            <SpeakeasyLogo className="w-28" />
+            <GramLogo className="w-28" />
           </Link>
           <CommandPaletteTrigger />
         </div>

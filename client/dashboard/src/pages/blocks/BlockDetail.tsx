@@ -1,4 +1,4 @@
-import { SpeakeasyLogo } from "@/components/speakeasy-logo";
+import { GramLogo } from "@/components/gram-logo";
 import { Type } from "@/components/ui/type";
 import { useSession } from "@/contexts/Auth";
 import { buildLoginRedirectURL } from "@/lib/utils";
@@ -32,7 +32,7 @@ export function BlockPage(): JSX.Element {
   return (
     <div className="bg-background flex min-h-screen w-full flex-col items-center justify-center p-8">
       <Stack gap={8} align="center" className="w-full max-w-xl">
-        <SpeakeasyLogo className="w-25" variant="vertical" />
+        <GramLogo className="w-25" variant="vertical" />
         {session.session ? (
           <BlockBody id={id} />
         ) : (

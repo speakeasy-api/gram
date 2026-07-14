@@ -1,9 +1,9 @@
 import { cn } from "@/lib/utils";
-import { SpeakeasyLogoHorizontal } from "./variants/horizontal";
-import { SpeakeasyIcon } from "./variants/icon";
-import { SpeakeasyLogoVertical } from "./variants/vertical";
+import { GramLogoHorizontal } from "./variants/horizontal";
+import { GramIcon } from "./variants/icon";
+import { GramLogoVertical } from "./variants/vertical";
 
-export const SpeakeasyLogo = ({
+export const GramLogo = ({
   variant = "horizontal",
   className,
 }: {
@@ -11,9 +11,9 @@ export const SpeakeasyLogo = ({
   className?: string;
 }): JSX.Element => {
   const variantsMap = {
-    horizontal: SpeakeasyLogoHorizontal,
-    vertical: SpeakeasyLogoVertical,
-    icon: SpeakeasyIcon,
+    horizontal: GramLogoHorizontal,
+    vertical: GramLogoVertical,
+    icon: GramIcon,
   };
   return (
     <div
