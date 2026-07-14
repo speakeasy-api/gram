@@ -1,12 +1,12 @@
 import { InputDialog } from "@/components/input-dialog";
 import { Page } from "@/components/page-layout";
+import { ListLayout } from "@/components/layouts/list-layout";
 import { MemberFacepile } from "@/components/member-facepile";
 import { ProjectAvatar } from "@/components/project-menu";
 import { RequireScope } from "@/components/require-scope";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Heading } from "@/components/ui/heading";
 import { InlineEmptyState } from "@/components/ui/inline-empty-state";
-import { SearchBar } from "@/components/ui/search-bar";
 import {
   Tooltip,
   TooltipContent,
@@ -238,130 +238,143 @@ function OrgHomeInner() {
 
   return (
     <>
-      <div className="flex flex-col gap-6">
-        <div className="flex items-center gap-2">
-          <SearchBar
+      <ListLayout>
+        <ListLayout.Header
+          title="Projects"
+          actions={
+            canAdmin && (
+              <AddNewMenu
+                onCreateProject={() => setCreateDialogOpen(true)}
+                onInviteMember={() => orgRoutes.team.goTo()}
+                onManageRoles={() => orgRoutes.access.roles.goTo()}
+              />
+            )
+          }
+        />
+
+        <ListLayout.Toolbar>
+          <ListLayout.Toolbar.Search
             value={search}
             onChange={setSearch}
             placeholder="Search projects..."
-            className="flex-1"
           />
-          <ViewModeToggle value={viewMode} onChange={setViewMode} />
-          {canAdmin && (
-            <AddNewMenu
-              onCreateProject={() => setCreateDialogOpen(true)}
-              onInviteMember={() => orgRoutes.team.goTo()}
-              onManageRoles={() => orgRoutes.access.roles.goTo()}
-            />
-          )}
-        </div>
+          <ListLayout.Toolbar.Actions>
+            <ViewModeToggle value={viewMode} onChange={setViewMode} />
+          </ListLayout.Toolbar.Actions>
+        </ListLayout.Toolbar>
 
-        <div className="grid grid-cols-1 gap-8 xl:grid-cols-[1fr_320px]">
-          <main className="flex min-w-0 flex-col gap-3">
-            <Heading variant="h4">Projects</Heading>
-
-            {filteredProjects.length === 0 && isSearching ? (
-              <InlineEmptyState
-                title={`No projects matching “${search}”`}
-                action={
-                  <RequireScope scope="org:admin" level="component">
-                    <Button
-                      size="sm"
-                      onClick={() => {
-                        setNewProjectName(search);
-                        setCreateDialogOpen(true);
-                      }}
-                    >
-                      <Button.LeftIcon>
-                        <Plus className="size-4" />
-                      </Button.LeftIcon>
-                      <Button.Text>Create &ldquo;{search}&rdquo;</Button.Text>
-                    </Button>
-                  </RequireScope>
-                }
-              />
-            ) : (
-              <>
-                {favoriteProjects.length > 0 && (
-                  <>
-                    <section className="flex flex-col gap-2">
-                      <div className="flex items-center gap-2">
-                        <Star className="text-foreground size-3.5 fill-current" />
-                        <Type small className="text-foreground font-medium">
-                          Your favorites
-                        </Type>
-                      </div>
-                      {renderProjectContainer(
-                        favoriteProjects.map(renderProjectItem),
-                      )}
-                    </section>
-                    {visibleOtherProjects.length > 0 && (
-                      <div
-                        className="flex items-center gap-3"
-                        aria-hidden="true"
+        <ListLayout.List>
+          <div className="grid grid-cols-1 gap-8 xl:grid-cols-[1fr_320px]">
+            <main className="flex min-w-0 flex-col gap-3">
+              {filteredProjects.length === 0 && isSearching ? (
+                <InlineEmptyState
+                  title={`No projects matching “${search}”`}
+                  action={
+                    <RequireScope scope="org:admin" level="component">
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          setNewProjectName(search);
+                          setCreateDialogOpen(true);
+                        }}
                       >
-                        <div className="bg-border h-px flex-1" />
-                        <Type muted small className="text-muted-foreground/80">
-                          All projects
-                        </Type>
-                        <div className="bg-border h-px flex-1" />
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {renderProjectContainer(
-                  visibleOtherProjects.map(renderProjectItem),
-                )}
-                {hasMore && (
-                  <button
-                    type="button"
-                    onClick={() => setExpanded((prev) => !prev)}
-                    className="text-muted-foreground hover:text-foreground border-border hover:bg-muted/40 flex items-center justify-center gap-1.5 border border-dashed py-3 text-sm font-medium transition-colors"
-                  >
-                    {expanded ? (
-                      <>
-                        Show less
-                        <ChevronUp className="size-4" />
-                      </>
-                    ) : (
-                      <>
-                        Show all {otherProjects.length} projects
-                        <ChevronDown className="size-4" />
-                      </>
-                    )}
-                  </button>
-                )}
-
-                {otherProjects.length === 0 &&
-                  favoriteProjects.length === 0 && (
-                    <InlineEmptyState
-                      title="No projects yet"
-                      action={
-                        <RequireScope scope="org:admin" level="component">
-                          <Button
-                            size="sm"
-                            onClick={() => setCreateDialogOpen(true)}
+                        <Button.LeftIcon>
+                          <Plus className="size-4" />
+                        </Button.LeftIcon>
+                        <Button.Text>Create &ldquo;{search}&rdquo;</Button.Text>
+                      </Button>
+                    </RequireScope>
+                  }
+                />
+              ) : (
+                <>
+                  {favoriteProjects.length > 0 && (
+                    <>
+                      <section className="flex flex-col gap-2">
+                        <div className="flex items-center gap-2">
+                          <Star className="text-foreground size-3.5 fill-current" />
+                          <Type small className="text-foreground font-medium">
+                            Your favorites
+                          </Type>
+                        </div>
+                        {renderProjectContainer(
+                          favoriteProjects.map(renderProjectItem),
+                        )}
+                      </section>
+                      {visibleOtherProjects.length > 0 && (
+                        <div
+                          className="flex items-center gap-3"
+                          aria-hidden="true"
+                        >
+                          <div className="bg-border h-px flex-1" />
+                          <Type
+                            muted
+                            small
+                            className="text-muted-foreground/80"
                           >
-                            <Button.LeftIcon>
-                              <Plus className="size-4" />
-                            </Button.LeftIcon>
-                            <Button.Text>Create your first project</Button.Text>
-                          </Button>
-                        </RequireScope>
-                      }
-                    />
+                            All projects
+                          </Type>
+                          <div className="bg-border h-px flex-1" />
+                        </div>
+                      )}
+                    </>
                   )}
-              </>
-            )}
-          </main>
 
-          <aside className="flex flex-col gap-8 xl:sticky xl:top-4 xl:self-start">
-            {isRbacEnabled && <RecentChallengesCompact />}
-            <RecentActivityCompact logs={auditLogs} />
-          </aside>
-        </div>
-      </div>
+                  {renderProjectContainer(
+                    visibleOtherProjects.map(renderProjectItem),
+                  )}
+                  {hasMore && (
+                    <button
+                      type="button"
+                      onClick={() => setExpanded((prev) => !prev)}
+                      className="text-muted-foreground hover:text-foreground border-border hover:bg-muted/40 flex items-center justify-center gap-1.5 border border-dashed py-3 text-sm font-medium transition-colors"
+                    >
+                      {expanded ? (
+                        <>
+                          Show less
+                          <ChevronUp className="size-4" />
+                        </>
+                      ) : (
+                        <>
+                          Show all {otherProjects.length} projects
+                          <ChevronDown className="size-4" />
+                        </>
+                      )}
+                    </button>
+                  )}
+
+                  {otherProjects.length === 0 &&
+                    favoriteProjects.length === 0 && (
+                      <InlineEmptyState
+                        title="No projects yet"
+                        action={
+                          <RequireScope scope="org:admin" level="component">
+                            <Button
+                              size="sm"
+                              onClick={() => setCreateDialogOpen(true)}
+                            >
+                              <Button.LeftIcon>
+                                <Plus className="size-4" />
+                              </Button.LeftIcon>
+                              <Button.Text>
+                                Create your first project
+                              </Button.Text>
+                            </Button>
+                          </RequireScope>
+                        }
+                      />
+                    )}
+                </>
+              )}
+            </main>
+
+            <aside className="flex flex-col gap-8 xl:sticky xl:top-4 xl:self-start">
+              {isRbacEnabled && <RecentChallengesCompact />}
+              <RecentActivityCompact logs={auditLogs} />
+            </aside>
+          </div>
+        </ListLayout.List>
+      </ListLayout>
 
       {createDialogOpen && (
         <InputDialog

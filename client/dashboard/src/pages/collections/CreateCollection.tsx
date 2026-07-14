@@ -1,4 +1,5 @@
 import { Page } from "@/components/page-layout";
+import { SettingsLayout } from "@/components/layouts/settings-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Checkbox } from "@/components/ui/checkbox";
 import { InlineEmptyState } from "@/components/ui/inline-empty-state";
@@ -205,20 +206,18 @@ function CreateCollectionForm() {
   };
 
   return (
-    <Page.Section>
-      <Page.Section.Title>Create Collection</Page.Section.Title>
-      <Page.Section.Description>
-        Create a curated collection of MCP servers that can be installed
-        together
-      </Page.Section.Description>
-      <Page.Section.Body>
+    <SettingsLayout>
+      <SettingsLayout.Header
+        title="Create Collection"
+        subtitle="Create a curated collection of MCP servers that can be installed together"
+      />
+      <SettingsLayout.Body>
         <form
           onSubmit={(e) => {
             void handleSubmit(e);
           }}
-          className="max-w-lg"
         >
-          <Stack direction="vertical" gap={4}>
+          <SettingsLayout.Group label="Details">
             <div>
               <label htmlFor="name" className="mb-1 block text-sm font-medium">
                 Name
@@ -321,11 +320,12 @@ function CreateCollectionForm() {
                   : "Public collections are visible to everyone."}
               </p>
             </div>
+          </SettingsLayout.Group>
 
+          <SettingsLayout.Group
+            label={`MCP Servers (${selectedCount} selected)`}
+          >
             <div>
-              <label className="mb-2 block text-sm font-medium">
-                MCP Servers ({selectedCount} selected)
-              </label>
               <div className="border">
                 <div className="border-b p-2">
                   <SearchBar
@@ -393,29 +393,29 @@ function CreateCollectionForm() {
                 </div>
               </div>
             </div>
+          </SettingsLayout.Group>
 
-            <Stack direction="horizontal" gap={2}>
-              <Button
-                type="submit"
-                disabled={!name || !slug || createCollection.isPending}
-              >
-                <Button.Text>
-                  {createCollection.isPending
-                    ? "Creating..."
-                    : "Create Collection"}
-                </Button.Text>
-              </Button>
-              <Button
-                variant="secondary"
-                type="button"
-                onClick={() => orgRoutes.collections.goTo()}
-              >
-                <Button.Text>Cancel</Button.Text>
-              </Button>
-            </Stack>
+          <Stack direction="horizontal" gap={2}>
+            <Button
+              type="submit"
+              disabled={!name || !slug || createCollection.isPending}
+            >
+              <Button.Text>
+                {createCollection.isPending
+                  ? "Creating..."
+                  : "Create Collection"}
+              </Button.Text>
+            </Button>
+            <Button
+              variant="secondary"
+              type="button"
+              onClick={() => orgRoutes.collections.goTo()}
+            >
+              <Button.Text>Cancel</Button.Text>
+            </Button>
           </Stack>
         </form>
-      </Page.Section.Body>
-    </Page.Section>
+      </SettingsLayout.Body>
+    </SettingsLayout>
   );
 }

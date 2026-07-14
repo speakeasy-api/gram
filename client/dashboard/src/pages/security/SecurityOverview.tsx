@@ -6,6 +6,8 @@ import { Timeseries, ChartNoData } from "@/components/chart/Timeseries";
 import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { Page } from "@/components/page-layout";
+import { ObservabilityLayout } from "@/components/layouts/observability-layout";
+import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { RequireScope } from "@/components/require-scope";
 import { DashboardCard } from "@/components/ui/dashboard-card";
 import { InlineEmptyState } from "@/components/ui/inline-empty-state";
@@ -67,51 +69,54 @@ export function RiskOverviewRoot(): JSX.Element {
   return <Outlet />;
 }
 
-function RiskOverviewShell({
-  children,
+/** The "Risk Overview" page header, shared across every render branch. */
+function RiskOverviewHeader({
   rangeLabel,
   controls,
 }: {
-  children: ReactNode;
   rangeLabel?: string;
   controls?: ReactNode;
 }) {
   return (
-    <Page.Section>
-      <Page.Section.Title stage="beta">Risk Overview</Page.Section.Title>
-      <Page.Section.Description>
-        Risk analysis summary for policy findings
-        {rangeLabel && ` across ${rangeLabel}.`}
-      </Page.Section.Description>
-      <Page.Section.CTA>{controls ?? null}</Page.Section.CTA>
-      <Page.Section.Body>
-        <div className="space-y-8">{children}</div>
-      </Page.Section.Body>
-    </Page.Section>
+    <ObservabilityLayout.Header
+      title={
+        <span className="inline-flex items-center gap-2">
+          Risk Overview
+          <ReleaseStageBadge stage="beta" />
+        </span>
+      }
+      subtitle={`Risk analysis summary for policy findings${
+        rangeLabel ? ` across ${rangeLabel}.` : ""
+      }`}
+      actions={controls}
+    />
   );
 }
 
 function NoPoliciesEmptyState() {
   const routes = useRoutes();
   return (
-    <RiskOverviewShell>
-      <InlineEmptyState
-        className="py-16"
-        icon={<Shield />}
-        title="Risk Analysis"
-        description="Create a risk policy to begin scanning chat messages for leaked secrets, sensitive data, and policy flags."
-        action={
-          <Button variant="primary" asChild>
-            <Link to={routes.policyCenter.href()}>
-              <Button.Text>Manage Policies</Button.Text>
-              <Button.RightIcon>
-                <ArrowRight />
-              </Button.RightIcon>
-            </Link>
-          </Button>
-        }
-      />
-    </RiskOverviewShell>
+    <ObservabilityLayout>
+      <RiskOverviewHeader />
+      <ObservabilityLayout.Section>
+        <InlineEmptyState
+          className="py-16"
+          icon={<Shield />}
+          title="Risk Analysis"
+          description="Create a risk policy to begin scanning chat messages for leaked secrets, sensitive data, and policy flags."
+          action={
+            <Button variant="primary" asChild>
+              <Link to={routes.policyCenter.href()}>
+                <Button.Text>Manage Policies</Button.Text>
+                <Button.RightIcon>
+                  <ArrowRight />
+                </Button.RightIcon>
+              </Link>
+            </Button>
+          }
+        />
+      </ObservabilityLayout.Section>
+    </ObservabilityLayout>
   );
 }
 
@@ -248,14 +253,17 @@ function SecurityOverviewContent() {
 
   if (overviewQuery.error) {
     return (
-      <RiskOverviewShell rangeLabel={rangeLabel} controls={controls}>
-        <InlineEmptyState
-          className="py-16"
-          icon={<CircleAlert />}
-          title="Error loading risk overview"
-          description={overviewQuery.error.message}
-        />
-      </RiskOverviewShell>
+      <ObservabilityLayout>
+        <RiskOverviewHeader rangeLabel={rangeLabel} controls={controls} />
+        <ObservabilityLayout.Section>
+          <InlineEmptyState
+            className="py-16"
+            icon={<CircleAlert />}
+            title="Error loading risk overview"
+            description={overviewQuery.error.message}
+          />
+        </ObservabilityLayout.Section>
+      </ObservabilityLayout>
     );
   }
 
@@ -304,9 +312,11 @@ function SecurityOverviewContent() {
           subtitle="Ask about policies, findings, and shadow MCP activity. Match content is redacted before it reaches the assistant."
         />
       )}
-      <RiskOverviewShell rangeLabel={rangeLabel} controls={controls}>
+      <ObservabilityLayout>
+        <RiskOverviewHeader rangeLabel={rangeLabel} controls={controls} />
+
         {policiesDisabledWithHistory && (
-          <div className="bg-muted/30 flex items-start gap-3 border border-dashed px-4 py-3">
+          <div className="bg-muted/30 mt-6 flex items-start gap-3 border border-dashed px-4 py-3">
             <CircleAlert className="text-muted-foreground mt-0.5 size-4 shrink-0" />
             <div className="min-w-0 flex-1">
               <Type small className="font-medium">
@@ -327,7 +337,8 @@ function SecurityOverviewContent() {
             </Button>
           </div>
         )}
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+
+        <ObservabilityLayout.Stats>
           {isOverviewLoading ? (
             <Skeleton className="h-[100px]" />
           ) : (
@@ -336,6 +347,7 @@ function SecurityOverviewContent() {
               value={overview?.messagesScanned ?? 0}
               format="compact"
               icon="scan-search"
+              bordered={false}
             />
           )}
           {isOverviewLoading ? (
@@ -346,6 +358,7 @@ function SecurityOverviewContent() {
               value={overview?.findings ?? 0}
               format="compact"
               icon="flag"
+              bordered={false}
             />
           )}
           {isOverviewLoading ? (
@@ -356,6 +369,7 @@ function SecurityOverviewContent() {
               value={overview?.flaggedSessions ?? 0}
               format="compact"
               icon="message-square"
+              bordered={false}
             />
           )}
           {isOverviewLoading ? (
@@ -366,78 +380,92 @@ function SecurityOverviewContent() {
               value={overview?.activePolicies ?? 0}
               format="compact"
               icon="shield-check"
+              bordered={false}
             />
           )}
-        </div>
-      </RiskOverviewShell>
+        </ObservabilityLayout.Stats>
 
-      <RiskActivitySection>
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
-          <DashboardChartCard
-            title="Top Risk Events by Category"
-            loading={isOverviewLoading}
-            empty={!hasFindings || topCategories.length === 0}
-            action={
-              <ViewAllLink
-                href={categoriesIndexHref}
-                label="View all categories"
-              />
-            }
-          >
-            <RankedBar items={topCategories} />
-          </DashboardChartCard>
-          <DashboardChartCard
-            title="Top Risk Events by Rule"
-            loading={isOverviewLoading}
-            empty={!hasFindings || topRules.length === 0}
-            action={
-              <ViewAllLink href={rulesIndexHref} label="View all rules" />
-            }
-          >
-            <RankedBar items={topRules} />
-          </DashboardChartCard>
-          <DashboardChartCard
-            title="Users with Most Findings"
-            loading={isOverviewLoading}
-            empty={!hasFindings || topUsers.length === 0}
-            action={
-              <ViewAllLink href={usersIndexHref} label="View all users" />
-            }
-          >
-            <RankedBar items={topUsers} />
-          </DashboardChartCard>
-        </div>
+        <ObservabilityLayout.Section
+          title="Policy Activity"
+          actions={<PolicyActivityActions />}
+        >
+          <div className="flex flex-col gap-8">
+            <Type muted small>
+              Review where policy findings are concentrated and how risk
+              activity changes over time.
+            </Type>
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
+              <DashboardChartCard
+                title="Top Risk Events by Category"
+                loading={isOverviewLoading}
+                empty={!hasFindings || topCategories.length === 0}
+                action={
+                  <ViewAllLink
+                    href={categoriesIndexHref}
+                    label="View all categories"
+                  />
+                }
+              >
+                <RankedBar items={topCategories} />
+              </DashboardChartCard>
+              <DashboardChartCard
+                title="Top Risk Events by Rule"
+                loading={isOverviewLoading}
+                empty={!hasFindings || topRules.length === 0}
+                action={
+                  <ViewAllLink href={rulesIndexHref} label="View all rules" />
+                }
+              >
+                <RankedBar items={topRules} />
+              </DashboardChartCard>
+              <DashboardChartCard
+                title="Users with Most Findings"
+                loading={isOverviewLoading}
+                empty={!hasFindings || topUsers.length === 0}
+                action={
+                  <ViewAllLink href={usersIndexHref} label="View all users" />
+                }
+              >
+                <RankedBar items={topUsers} />
+              </DashboardChartCard>
+            </div>
 
-        {isOverviewLoading || !overview ? (
-          <Skeleton className="h-[250px] w-full" />
-        ) : (
-          <ChartCard
-            title="Risk Events over Time"
-            chartId={RISK_TREND_CHART_ID}
-            expandedChart={null}
-            onExpand={() => {
-              void null;
-            }}
-            hasData={
-              hasFindings &&
-              overview.timeSeriesFindings.some((point) => point.findings > 0)
-            }
-            isZoomed={customRange !== null}
-            onResetZoom={clearCustomRange}
-          >
-            <RiskTrendChart
-              points={overview.timeSeriesFindings}
-              height={250}
-              onRangeSelect={handleChartRangeSelect}
-            />
-          </ChartCard>
-        )}
-      </RiskActivitySection>
+            {isOverviewLoading || !overview ? (
+              <Skeleton className="h-[250px] w-full" />
+            ) : (
+              <ChartCard
+                title="Risk Events over Time"
+                chartId={RISK_TREND_CHART_ID}
+                expandedChart={null}
+                onExpand={() => {
+                  void null;
+                }}
+                hasData={
+                  hasFindings &&
+                  overview.timeSeriesFindings.some(
+                    (point) => point.findings > 0,
+                  )
+                }
+                isZoomed={customRange !== null}
+                onResetZoom={clearCustomRange}
+              >
+                <RiskTrendChart
+                  points={overview.timeSeriesFindings}
+                  height={250}
+                  onRangeSelect={handleChartRangeSelect}
+                />
+              </ChartCard>
+            )}
+          </div>
+        </ObservabilityLayout.Section>
+      </ObservabilityLayout>
     </>
   );
 }
 
-function RiskActivitySection({ children }: { children: ReactNode }) {
+/** "View Sessions with Risk" / "View All Events" — carries the active date
+ * range filter into both destinations. */
+function PolicyActivityActions() {
   const routes = useRoutes();
   const location = useLocation();
 
@@ -460,36 +488,24 @@ function RiskActivitySection({ children }: { children: ReactNode }) {
     : routes.riskEvents.href();
 
   return (
-    <Page.Section>
-      <Page.Section.Title>Policy Activity</Page.Section.Title>
-      <Page.Section.Description>
-        Review where policy findings are concentrated and how risk activity
-        changes over time.
-      </Page.Section.Description>
-      <Page.Section.CTA>
-        <div className="flex items-center gap-2">
-          <Button variant="secondary" asChild>
-            <Link to={agentsHref}>
-              <Button.Text>View Sessions with Risk</Button.Text>
-              <Button.RightIcon>
-                <ArrowRight />
-              </Button.RightIcon>
-            </Link>
-          </Button>
-          <Button variant="secondary" asChild>
-            <Link to={riskEventsHref}>
-              <Button.Text>View All Events</Button.Text>
-              <Button.RightIcon>
-                <ArrowRight />
-              </Button.RightIcon>
-            </Link>
-          </Button>
-        </div>
-      </Page.Section.CTA>
-      <Page.Section.Body>
-        <div className="space-y-8">{children}</div>
-      </Page.Section.Body>
-    </Page.Section>
+    <div className="flex items-center gap-2">
+      <Button variant="secondary" asChild>
+        <Link to={agentsHref}>
+          <Button.Text>View Sessions with Risk</Button.Text>
+          <Button.RightIcon>
+            <ArrowRight />
+          </Button.RightIcon>
+        </Link>
+      </Button>
+      <Button variant="secondary" asChild>
+        <Link to={riskEventsHref}>
+          <Button.Text>View All Events</Button.Text>
+          <Button.RightIcon>
+            <ArrowRight />
+          </Button.RightIcon>
+        </Link>
+      </Button>
+    </div>
   );
 }
 

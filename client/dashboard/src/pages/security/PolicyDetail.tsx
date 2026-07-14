@@ -1,4 +1,5 @@
 import { Page } from "@/components/page-layout";
+import { SettingsLayout } from "@/components/layouts/settings-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Card } from "@/components/ui/card";
 import { Heading } from "@/components/ui/heading";
@@ -238,9 +239,14 @@ function PolicyDetailContent({ policyId }: { policyId: string }): JSX.Element {
       </Page.Header>
       <Page.Body>
         {isLoading || !policy ? (
-          <div className="flex items-center justify-center py-24">
-            <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
-          </div>
+          <SettingsLayout>
+            <SettingsLayout.Header title="Policy" />
+            <SettingsLayout.Body>
+              <div className="flex items-center justify-center py-24">
+                <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
+              </div>
+            </SettingsLayout.Body>
+          </SettingsLayout>
         ) : policy.policyType === "prompt_based" ? (
           <PromptPolicyEditor policy={policy} />
         ) : (
@@ -292,43 +298,40 @@ function PolicyKindChooser(): JSX.Element {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <Stack gap={4} className="mx-auto w-full max-w-2xl">
-          <Stack gap={1}>
-            <Heading variant="h3" className="normal-case">
-              Choose policy type
-            </Heading>
-            <Type small muted>
-              Start with a detector-based policy or define criteria in plain
-              language.
-            </Type>
-          </Stack>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <button
-              type="button"
-              onClick={() => void setKind("standard")}
-              className="hover:bg-muted/40 border p-5 text-left transition-colors"
-            >
-              <Shield className="text-muted-foreground mb-3 h-5 w-5" />
-              <Type className="font-medium">Detector-based</Type>
-              <Type small muted className="mt-1">
-                Scan for secrets, PII, and risky tool calls with built-in and
-                custom detection rules.
-              </Type>
-            </button>
-            <button
-              type="button"
-              onClick={() => void setKind("prompt")}
-              className="hover:bg-muted/40 border p-5 text-left transition-colors"
-            >
-              <Sparkles className="text-muted-foreground mb-3 h-5 w-5" />
-              <Type className="font-medium">Prompt-based</Type>
-              <Type small muted className="mt-1">
-                Describe the behavior to catch in plain language; an LLM judge
-                evaluates each in-scope message.
-              </Type>
-            </button>
-          </div>
-        </Stack>
+        <SettingsLayout>
+          <SettingsLayout.Header
+            title="Choose policy type"
+            subtitle="Start with a detector-based policy or define criteria in plain language."
+          />
+          <SettingsLayout.Body>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => void setKind("standard")}
+                className="hover:bg-muted/40 border p-5 text-left transition-colors"
+              >
+                <Shield className="text-muted-foreground mb-3 h-5 w-5" />
+                <Type className="font-medium">Detector-based</Type>
+                <Type small muted className="mt-1">
+                  Scan for secrets, PII, and risky tool calls with built-in and
+                  custom detection rules.
+                </Type>
+              </button>
+              <button
+                type="button"
+                onClick={() => void setKind("prompt")}
+                className="hover:bg-muted/40 border p-5 text-left transition-colors"
+              >
+                <Sparkles className="text-muted-foreground mb-3 h-5 w-5" />
+                <Type className="font-medium">Prompt-based</Type>
+                <Type small muted className="mt-1">
+                  Describe the behavior to catch in plain language; an LLM judge
+                  evaluates each in-scope message.
+                </Type>
+              </button>
+            </div>
+          </SettingsLayout.Body>
+        </SettingsLayout>
       </Page.Body>
     </Page>
   );
@@ -396,28 +399,39 @@ function HorizontalStepper({
 }
 
 function StepperShell({
+  eyebrow,
+  title,
   header,
   steps,
   current,
   onStep,
   children,
 }: {
+  eyebrow?: React.ReactNode;
+  title: React.ReactNode;
   header: React.ReactNode;
   steps: Step[];
   current: number;
   onStep: (index: number) => void;
   children: React.ReactNode;
 }): JSX.Element {
+  const activeStep = steps[current];
   return (
-    // Full width — Page.Body already centers content at max-w-7xl (the app's
-    // standard page width).
-    <Stack gap={6} className="w-full">
-      {header}
-      <div className="bg-muted/20 border px-4 py-3">
-        <HorizontalStepper steps={steps} current={current} onStep={onStep} />
-      </div>
-      <Stack gap={6}>{children}</Stack>
-    </Stack>
+    <SettingsLayout>
+      <SettingsLayout.Header eyebrow={eyebrow} title={title} />
+      <SettingsLayout.Body>
+        {header}
+        <div className="bg-muted/20 border px-4 py-3">
+          <HorizontalStepper steps={steps} current={current} onStep={onStep} />
+        </div>
+        <SettingsLayout.Group
+          label={activeStep?.title ?? ""}
+          description={activeStep?.description}
+        >
+          <Stack gap={6}>{children}</Stack>
+        </SettingsLayout.Group>
+      </SettingsLayout.Body>
+    </SettingsLayout>
   );
 }
 
@@ -831,6 +845,8 @@ function PromptPolicyEditor({
 
   return (
     <StepperShell
+      eyebrow="Policy"
+      title={isCreate ? "New prompt-based policy" : "Edit prompt-based policy"}
       header={header}
       steps={PROMPT_STEPS}
       current={step}
@@ -2947,6 +2963,8 @@ function StandardPolicyEditor({
   return (
     <>
       <StepperShell
+        eyebrow="Policy"
+        title={policy ? "Edit standard policy" : "New standard policy"}
         header={header}
         steps={STANDARD_STEPS}
         current={step}

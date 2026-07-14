@@ -4,6 +4,8 @@ import {
   useDateRangeFilter,
 } from "@/components/observe/useDateRangeFilter";
 import { Page } from "@/components/page-layout";
+import { ListLayout } from "@/components/layouts/list-layout";
+import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { RequireScope } from "@/components/require-scope";
 import { useRoutes } from "@/routes";
 import { type DateRangePreset } from "@gram-ai/elements";
@@ -106,14 +108,18 @@ function RiskOverviewRulesIndexContent() {
   );
 
   return (
-    <Page.Section>
-      <Page.Section.Title stage="beta">Rules</Page.Section.Title>
-      <Page.Section.Description>
-        All rules with finding counts
-        {rangeLabel && ` across ${rangeLabel}.`}
-      </Page.Section.Description>
-      <Page.Section.CTA>{controls}</Page.Section.CTA>
-      <Page.Section.Body>
+    <ListLayout>
+      <ListLayout.Header
+        title={
+          <span className="inline-flex items-center gap-2">
+            Rules
+            <ReleaseStageBadge stage="beta" />
+          </span>
+        }
+        subtitle={`All rules with finding counts${rangeLabel ? ` across ${rangeLabel}.` : ""}`}
+        actions={controls}
+      />
+      <ListLayout.List>
         {overviewQuery.isLoading ? (
           <div className="text-muted-foreground flex items-center justify-center gap-2 py-12">
             <LoaderCircle className="size-5 animate-spin" />
@@ -130,7 +136,7 @@ function RiskOverviewRulesIndexContent() {
             <RankedBar items={ruleItems} formatValue={formatFindingsValue} />
           </Card>
         )}
-      </Page.Section.Body>
-    </Page.Section>
+      </ListLayout.List>
+    </ListLayout>
   );
 }

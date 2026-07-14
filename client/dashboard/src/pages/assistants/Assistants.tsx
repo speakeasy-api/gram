@@ -1,7 +1,9 @@
 import { TopUpCTA, UsageProgress } from "@/components/billing/usage-controls";
 import { Page } from "@/components/page-layout";
+import { ListLayout } from "@/components/layouts/list-layout";
 import { getGradientColors } from "@/components/gradient-colors";
 import { RequireScope } from "@/components/require-scope";
+import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { AssistantActivitySparkline } from "@/components/assistants/activity-sparkline";
 import { AssistantOwner } from "@/components/assistants/assistant-owner";
 import { AssistantStatusToggle } from "@/components/assistants/status-toggle";
@@ -10,7 +12,6 @@ import { Card } from "@/components/ui/card";
 import { useConfirm } from "@/components/ui/use-confirm";
 import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import { Action, MoreActions } from "@/components/ui/more-actions";
-import { SearchBar } from "@/components/ui/search-bar";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   PageTabsTrigger,
@@ -116,51 +117,68 @@ export default function AssistantsIndex(): JSX.Element {
   const showNoMatches =
     !isLoading && search !== "" && filteredAssistants.length === 0;
 
+  const newAssistantButton = (
+    <RequireScope
+      scope={["project:write", "mcp:write"]}
+      all
+      level="component"
+      reason="You don't have permission to create assistants."
+    >
+      <Button onClick={() => routes.assistants.newAssistant.goTo()}>
+        <Button.LeftIcon>
+          <Plus className="h-4 w-4" />
+        </Button.LeftIcon>
+        <Button.Text>New Assistant</Button.Text>
+      </Button>
+    </RequireScope>
+  );
+
   const content =
     !isLoading && assistants.length === 0 ? (
-      <AssistantsEmptyState
-        onCreate={() => routes.assistants.newAssistant.goTo()}
-      />
+      <ListLayout>
+        <ListLayout.Header
+          title={
+            <>
+              Assistants <ReleaseStageBadge stage="beta" />
+            </>
+          }
+          actions={newAssistantButton}
+        />
+        <ListLayout.List>
+          <AssistantsEmptyState
+            onCreate={() => routes.assistants.newAssistant.goTo()}
+          />
+        </ListLayout.List>
+      </ListLayout>
     ) : (
-      <Page.Section>
-        <Page.Section.Title stage="beta">Assistants</Page.Section.Title>
-        <Page.Section.Description className="max-w-xl">
-          Openclaw-inspired secure Assistants. Every assistant connects through
-          the MCPs and Skills your org already uses, with identity, guardrails,
-          and audit built in. Deployed to Slack.
-        </Page.Section.Description>
-        <Page.Section.CTA>
-          <RequireScope
-            scope={["project:write", "mcp:write"]}
-            all
-            level="component"
-            reason="You don't have permission to create assistants."
-          >
-            <Button onClick={() => routes.assistants.newAssistant.goTo()}>
-              <Button.LeftIcon>
-                <Plus className="h-4 w-4" />
-              </Button.LeftIcon>
-              <Button.Text>New Assistant</Button.Text>
-            </Button>
-          </RequireScope>
-        </Page.Section.CTA>
-        <Page.Section.Body>
-          {showSearch && (
-            <SearchBar
+      <ListLayout>
+        <ListLayout.Header
+          title={
+            <>
+              Assistants <ReleaseStageBadge stage="beta" />
+            </>
+          }
+          subtitle="Openclaw-inspired secure Assistants. Every assistant connects through the MCPs and Skills your org already uses, with identity, guardrails, and audit built in. Deployed to Slack."
+          actions={newAssistantButton}
+        />
+        {showSearch && (
+          <ListLayout.Toolbar>
+            <ListLayout.Toolbar.Search
               value={search}
               onChange={setSearch}
               placeholder="Search assistants..."
-              className="mb-4"
             />
-          )}
+          </ListLayout.Toolbar>
+        )}
+        <ListLayout.List>
           <AssistantsBody
             isLoading={isLoading}
             showNoMatches={showNoMatches}
             search={search}
             assistants={filteredAssistants}
           />
-        </Page.Section.Body>
-      </Page.Section>
+        </ListLayout.List>
+      </ListLayout>
     );
 
   return (

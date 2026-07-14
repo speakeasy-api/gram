@@ -1,4 +1,5 @@
 import { Page } from "@/components/page-layout";
+import { SettingsLayout } from "@/components/layouts/settings-layout";
 import { Alert } from "@/components/ui/alert";
 import {
   invalidateTemplate,
@@ -61,7 +62,15 @@ export default function PromptPage(): JSX.Element {
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
-      <Page.Body>{content}</Page.Body>
+      <Page.Body>
+        <SettingsLayout>
+          <SettingsLayout.Header
+            title={promptName ?? "Prompt"}
+            subtitle="Edit this prompt template."
+          />
+          <SettingsLayout.Body>{content}</SettingsLayout.Body>
+        </SettingsLayout>
+      </Page.Body>
     </Page>
   );
 }

@@ -1,4 +1,5 @@
 import { Page } from "@/components/page-layout";
+import { SettingsLayout } from "@/components/layouts/settings-layout";
 import { ProductTierBadge } from "@/components/product-tier-badge";
 import { productTierColors } from "@/components/product-tier-utils";
 import { Card, Cards, CardSkeleton } from "@/components/ui/card";
@@ -47,25 +48,30 @@ function BillingInner() {
   const productTier = useProductTier();
   const isAdmin = useIsPlatformAdmin();
 
-  // Enterprise contracts bill on tokens under management, so enterprise orgs
-  // see the TUM view instead of the self-serve usage meters.
-  if (productTier === "enterprise") {
-    return (
-      <>
-        <TumUsageSection />
-        {isAdmin && <TumAdminSection />}
-      </>
-    );
-  }
-
   return (
-    <>
-      <UsageSection />
-      {/* The product tiers / self serve billing section is DEPRECATED, and thus only shown to users already on a paid, non-enterprise tier */}
-      {(productTier === "base_PAID" || productTier === "__deprecated__pro") && (
-        <UsageTiers />
-      )}
-    </>
+    <SettingsLayout>
+      <SettingsLayout.Header
+        title="Billing"
+        subtitle="Usage, pricing, and account management for your organization."
+      />
+      <SettingsLayout.Body>
+        {/* Enterprise contracts bill on tokens under management, so enterprise
+        orgs see the TUM view instead of the self-serve usage meters. */}
+        {productTier === "enterprise" ? (
+          <>
+            <TumUsageSection />
+            {isAdmin && <TumAdminSection />}
+          </>
+        ) : (
+          <>
+            <UsageSection />
+            {/* The product tiers / self serve billing section is DEPRECATED, and thus only shown to users already on a paid, non-enterprise tier */}
+            {(productTier === "base_PAID" ||
+              productTier === "__deprecated__pro") && <UsageTiers />}
+          </>
+        )}
+      </SettingsLayout.Body>
+    </SettingsLayout>
   );
 }
 
@@ -115,71 +121,69 @@ const UsageSection = () => {
   };
 
   return (
-    <Page.Section>
-      <Page.Section.Title>Usage</Page.Section.Title>
-      <Page.Section.Description>
-        A summary of your organization's usage this period. Please visit the
-        billing portal to see complete details or manage your account.
-      </Page.Section.Description>
-      <RequireScope scope="org:admin" level="section">
-        <TopUpCTA />
-      </RequireScope>
-      <Page.Section.Body>
-        <div className="space-y-4">
-          {periodUsage ? (
-            <>
-              <UsageItem
-                label="Tool Calls"
-                tooltip="The number of tool calls processed this period across all your organization's MCP servers."
-                value={periodUsage.toolCalls}
-                included={periodUsage.includedToolCalls || 1000}
-                overageIncrement={periodUsage.includedToolCalls}
-                noMax={productTier === "enterprise"}
-              />
-              <UsageItem
-                label="Servers"
-                tooltip="The number of MCP servers enabled across your organization. Note that this shows the current number of enabled servers, but you will be billed on the maximum number active simultaneously during the billing period."
-                value={periodUsage.actualEnabledServerCount}
-                included={periodUsage.includedServers || 1}
-                overageIncrement={1}
-                noMax={productTier === "enterprise"}
-              />
-              {isAdmin && (
-                <UsageItem
-                  label="Chat Based Credits (Polar) (ADMIN VIEW ONLY)"
-                  tooltip="The number of credits used this month for chat based products and other AI-powered dashboard experiences."
-                  value={periodUsage.credits}
-                  included={periodUsage.includedCredits}
-                  overageIncrement={periodUsage.includedCredits}
-                  noMax={productTier === "enterprise"}
-                />
-              )}
-            </>
-          ) : (
-            <>
-              <Skeleton className="h-4 w-1/3" />
-              <Skeleton className="h-4 w-full" />
-              <Skeleton className="h-4 w-1/3" />
-              <Skeleton className="h-4 w-full" />
-            </>
-          )}
-          {creditUsage ? (
+    <SettingsLayout.Group
+      label="Usage"
+      description="A summary of your organization's usage this period. Please visit the billing portal to see complete details or manage your account."
+      actions={
+        <RequireScope scope="org:admin" level="section">
+          <TopUpCTA />
+        </RequireScope>
+      }
+    >
+      <div className="space-y-4">
+        {periodUsage ? (
+          <>
             <UsageItem
-              label="Chat Based Credits"
-              tooltip="The number of credits used this month for chat based products and other AI-powered dashboard experiences."
-              value={creditUsage.creditsUsed}
-              included={creditUsage.monthlyCredits}
-              overageIncrement={creditUsage.monthlyCredits}
+              label="Tool Calls"
+              tooltip="The number of tool calls processed this period across all your organization's MCP servers."
+              value={periodUsage.toolCalls}
+              included={periodUsage.includedToolCalls || 1000}
+              overageIncrement={periodUsage.includedToolCalls}
+              noMax={productTier === "enterprise"}
             />
-          ) : (
-            <>
-              <Skeleton className="h-4 w-1/3" />
-              <Skeleton className="h-4 w-full" />
-            </>
-          )}
-        </div>
-      </Page.Section.Body>
-    </Page.Section>
+            <UsageItem
+              label="Servers"
+              tooltip="The number of MCP servers enabled across your organization. Note that this shows the current number of enabled servers, but you will be billed on the maximum number active simultaneously during the billing period."
+              value={periodUsage.actualEnabledServerCount}
+              included={periodUsage.includedServers || 1}
+              overageIncrement={1}
+              noMax={productTier === "enterprise"}
+            />
+            {isAdmin && (
+              <UsageItem
+                label="Chat Based Credits (Polar) (ADMIN VIEW ONLY)"
+                tooltip="The number of credits used this month for chat based products and other AI-powered dashboard experiences."
+                value={periodUsage.credits}
+                included={periodUsage.includedCredits}
+                overageIncrement={periodUsage.includedCredits}
+                noMax={productTier === "enterprise"}
+              />
+            )}
+          </>
+        ) : (
+          <>
+            <Skeleton className="h-4 w-1/3" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-1/3" />
+            <Skeleton className="h-4 w-full" />
+          </>
+        )}
+        {creditUsage ? (
+          <UsageItem
+            label="Chat Based Credits"
+            tooltip="The number of credits used this month for chat based products and other AI-powered dashboard experiences."
+            value={creditUsage.creditsUsed}
+            included={creditUsage.monthlyCredits}
+            overageIncrement={creditUsage.monthlyCredits}
+          />
+        ) : (
+          <>
+            <Skeleton className="h-4 w-1/3" />
+            <Skeleton className="h-4 w-full" />
+          </>
+        )}
+      </div>
+    </SettingsLayout.Group>
   );
 };
 
@@ -231,84 +235,74 @@ const UsageTiers = () => {
     });
   }, [telemetry, productTier]);
 
-  const UpgradeCTA = useMemo(() => {
+  const upgradeCTA = useMemo(() => {
     if (checkoutError) {
       return (
-        <Page.Section.CTA>
-          <div className="isolate">
-            <Button asChild variant="primary">
-              <a
-                href="mailto:gram@speakeasyapi.dev?subject=Upgrade%20Account"
-                className="inline-flex"
-                onClick={handleFallbackClick}
-              >
-                ADD CARD
-              </a>
-            </Button>
-          </div>
-        </Page.Section.CTA>
-      );
-    }
-
-    return (
-      <Page.Section.CTA>
-        {/* Isolate is needed to get the rainbow working */}
         <div className="isolate">
-          <Button disabled={isLoadingCheckout} asChild variant="primary">
+          <Button asChild variant="primary">
             <a
-              href={checkoutLink}
-              data-polar-checkout
-              data-polar-checkout-theme={"light"}
+              href="mailto:gram@speakeasyapi.dev?subject=Upgrade%20Account"
               className="inline-flex"
+              onClick={handleFallbackClick}
             >
               ADD CARD
             </a>
           </Button>
         </div>
-      </Page.Section.CTA>
+      );
+    }
+
+    return (
+      // Isolate is needed to get the rainbow working
+      <div className="isolate">
+        <Button disabled={isLoadingCheckout} asChild variant="primary">
+          <a
+            href={checkoutLink}
+            data-polar-checkout
+            data-polar-checkout-theme={"light"}
+            className="inline-flex"
+          >
+            ADD CARD
+          </a>
+        </Button>
+      </div>
     );
   }, [checkoutLink, checkoutError, isLoadingCheckout, handleFallbackClick]);
 
   const polarPortalCTA = (
-    <Page.Section.CTA>
-      <Button
-        onClick={() => {
-          void (async () => {
-            try {
-              const link = await client.usage.createCustomerSession();
-              if (!link) {
-                console.error(
-                  "Failed to create customer session: received empty link",
-                );
-                telemetry.capture("customer_session_error", {
-                  error: "Received empty customer session link",
-                  accountType: productTier,
-                });
-                return;
-              }
-              window.open(link, "_blank");
-            } catch (error) {
-              console.error("Error creating customer session:", error);
+    <Button
+      onClick={() => {
+        void (async () => {
+          try {
+            const link = await client.usage.createCustomerSession();
+            if (!link) {
+              console.error(
+                "Failed to create customer session: received empty link",
+              );
               telemetry.capture("customer_session_error", {
-                error:
-                  error instanceof Error
-                    ? error.message
-                    : "Failed to create customer session",
+                error: "Received empty customer session link",
                 accountType: productTier,
               });
+              return;
             }
-          })();
-        }}
-        disabled={productTier === "enterprise"}
-      >
-        MANAGE BILLING
-      </Button>
-    </Page.Section.CTA>
+            window.open(link, "_blank");
+          } catch (error) {
+            console.error("Error creating customer session:", error);
+            telemetry.capture("customer_session_error", {
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Failed to create customer session",
+              accountType: productTier,
+            });
+          }
+        })();
+      }}
+      disabled={productTier === "enterprise"}
+    >
+      MANAGE BILLING
+    </Button>
   );
-
-  if (!usageTiers) {
-    return <Cards isLoading={true} />;
-  }
 
   const UsageCard = ({
     tier,
@@ -410,15 +404,18 @@ const UsageTiers = () => {
   };
 
   return (
-    <Page.Section>
-      <Page.Section.Title>Pricing</Page.Section.Title>
-      <Page.Section.Description>
-        A breakdown of our pricing tiers.
-      </Page.Section.Description>
-      <RequireScope scope="org:admin" level="section">
-        {productTier === "base" ? UpgradeCTA : polarPortalCTA}
-      </RequireScope>
-      <Page.Section.Body>
+    <SettingsLayout.Group
+      label="Pricing"
+      description="A breakdown of our pricing tiers."
+      actions={
+        <RequireScope scope="org:admin" level="section">
+          {productTier === "base" ? upgradeCTA : polarPortalCTA}
+        </RequireScope>
+      }
+    >
+      {!usageTiers ? (
+        <Cards isLoading={true} />
+      ) : (
         <Stack direction={"horizontal"} gap={4}>
           {isLoading ? (
             <>
@@ -453,7 +450,7 @@ const UsageTiers = () => {
             </>
           )}
         </Stack>
-      </Page.Section.Body>
-    </Page.Section>
+      )}
+    </SettingsLayout.Group>
   );
 };

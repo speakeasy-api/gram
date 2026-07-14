@@ -1,4 +1,5 @@
 import { Page } from "@/components/page-layout";
+import { SettingsLayout } from "@/components/layouts/settings-layout";
 import { useRoutes } from "@/routes";
 import { useCreateTemplateMutation } from "@gram/client/react-query/createTemplate.js";
 import { invalidateAllTemplates } from "@gram/client/react-query/templates.js";
@@ -27,25 +28,33 @@ export default function NewPromptPage(): JSX.Element {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <PromptEditor
-          predecessor={undefined}
-          status={status}
-          error={error}
-          handleSubmit={(form) => {
-            createPrompt({
-              request: {
-                createPromptTemplateForm: {
-                  engine: "mustache",
-                  kind: "prompt",
-                  name: form.name,
-                  prompt: form.prompt,
-                  description: form.description ?? void 0,
-                  arguments: form.arguments ?? void 0,
-                },
-              },
-            });
-          }}
-        />
+        <SettingsLayout>
+          <SettingsLayout.Header
+            title="New prompt"
+            subtitle="Create a reusable prompt template with dynamic variables."
+          />
+          <SettingsLayout.Body>
+            <PromptEditor
+              predecessor={undefined}
+              status={status}
+              error={error}
+              handleSubmit={(form) => {
+                createPrompt({
+                  request: {
+                    createPromptTemplateForm: {
+                      engine: "mustache",
+                      kind: "prompt",
+                      name: form.name,
+                      prompt: form.prompt,
+                      description: form.description ?? void 0,
+                      arguments: form.arguments ?? void 0,
+                    },
+                  },
+                });
+              }}
+            />
+          </SettingsLayout.Body>
+        </SettingsLayout>
       </Page.Body>
     </Page>
   );

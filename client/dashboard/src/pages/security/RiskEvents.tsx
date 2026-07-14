@@ -1,12 +1,11 @@
-import { LogWorkbench } from "@/components/log-workbench";
 import {
   defineFilters,
   useFilterState,
   type FilterValue,
 } from "@/components/filters";
-import { Page } from "@/components/page-layout";
+import { ListLayout } from "@/components/layouts/list-layout";
+import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { useSdkClient } from "@/contexts/Sdk";
-import { cn } from "@/lib/utils";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
 import { getPresetRange } from "@gram-ai/elements";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
@@ -14,8 +13,8 @@ import { useRiskListPolicies } from "@gram/client/react-query/riskListPolicies.j
 import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
 import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import { LoadMoreFooter } from "@/components/ui/load-more-footer";
+import { Table, type Column } from "@/components/ui/table";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   CircleAlert,
   History,
@@ -23,7 +22,7 @@ import {
   LoaderCircle,
   Share2,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, type RefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import {
@@ -33,9 +32,6 @@ import {
   RevealAllToggle,
   RuleLabel,
 } from "./risk-ui";
-
-const RISK_EVENTS_GRID =
-  "grid grid-cols-[172px_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1.25fr)_minmax(0,1.1fr)_110px] gap-3";
 
 // Strongly-typed filter schema for Risk Events. `policy_id` and the date range
 // are pinned (always visible in the bar); the rest live behind "More filters".
@@ -210,31 +206,114 @@ export default function RiskEvents(): JSX.Element {
     [resultsQuery],
   );
 
+  const columns = useMemo<Column<RiskResult>[]>(
+    () => [
+      {
+        key: "createdAt",
+        header: "Timestamp",
+        width: "172px",
+        render: (r) => (
+          <span className="text-muted-foreground min-w-0 truncate font-mono text-xs">
+            {r.createdAt ? new Date(r.createdAt).toLocaleString() : "-"}
+          </span>
+        ),
+      },
+      {
+        key: "category",
+        header: "Category",
+        width: "0.9fr",
+        render: (r) => <CategoryLabel source={r.source} ruleId={r.ruleId} />,
+      },
+      {
+        key: "ruleId",
+        header: "Rule",
+        width: "1fr",
+        render: (r) => <RuleLabel source={r.source} ruleId={r.ruleId} />,
+      },
+      {
+        key: "chatTitle",
+        header: "Session Name",
+        width: "1.15fr",
+        render: (r) => (
+          <span className="min-w-0 truncate">{r.chatTitle ?? "Untitled"}</span>
+        ),
+      },
+      {
+        key: "userId",
+        header: "User",
+        width: "1fr",
+        render: (r) => (
+          <span className="min-w-0 truncate">{r.userId ?? "-"}</span>
+        ),
+      },
+      {
+        key: "match",
+        header: "Match",
+        width: "1.25fr",
+        render: (r) =>
+          r.source === "shadow_mcp" && r.matchRedacted ? (
+            <span
+              className="min-w-0 truncate font-mono text-xs"
+              title={r.matchRedacted}
+            >
+              {r.matchRedacted}
+            </span>
+          ) : (
+            <MaskedMatch resultId={r.id} matchRedacted={r.matchRedacted} />
+          ),
+      },
+      {
+        key: "policy",
+        header: "Policy",
+        width: "1.1fr",
+        render: (r) => (
+          <span
+            className="min-w-0 truncate"
+            title={policyNameById.get(r.policyId)}
+          >
+            {policyNameById.get(r.policyId) ?? "-"}
+          </span>
+        ),
+      },
+      {
+        key: "actions",
+        header: "",
+        width: "110px",
+        render: (r) => <ShareCell chatId={r.chatId} />,
+      },
+    ],
+    [policyNameById],
+  );
+
   return (
     <RevealAllProvider>
-      <LogWorkbench
-        title="Risk Events"
-        stage="beta"
-        description="Review policy findings across recent analyzed chats."
-        actions={<RevealAllToggle />}
-        filters={
-          <Page.Toolbar>
-            <Page.Toolbar.Filters
-              schema={RISK_FILTERS}
-              values={values}
-              optionsById={filterOptions}
-              onChange={setValue as (id: string, value: FilterValue) => void}
-              onClear={clearValue as (id: string) => void}
-              onClearAll={clearAll}
-            />
-            <Page.Toolbar.Refresh
-              onRefresh={() => void resultsQuery.refetch()}
-              isRefreshing={resultsQuery.isFetching}
-            />
-          </Page.Toolbar>
-        }
-        status={
-          <>
+      <ListLayout className="h-full min-h-0 flex-1 px-8 py-8">
+        <ListLayout.Header
+          title={
+            <span className="inline-flex items-center gap-2">
+              Risk Events
+              <ReleaseStageBadge stage="beta" />
+            </span>
+          }
+          subtitle="Review policy findings across recent analyzed chats."
+          actions={<RevealAllToggle />}
+        />
+        <ListLayout.Toolbar>
+          <ListLayout.Toolbar.Filters
+            schema={RISK_FILTERS}
+            values={values}
+            optionsById={filterOptions}
+            onChange={setValue as (id: string, value: FilterValue) => void}
+            onClear={clearValue as (id: string) => void}
+            onClearAll={clearAll}
+          />
+          <ListLayout.Toolbar.Refresh
+            onRefresh={() => void resultsQuery.refetch()}
+            isRefreshing={resultsQuery.isFetching}
+          />
+        </ListLayout.Toolbar>
+        <ListLayout.List className="min-h-0 flex-1 overflow-hidden">
+          <div className="bg-background flex h-full min-h-0 flex-1 flex-col overflow-hidden border">
             {viewingInactivePolicy ? (
               <InactivePolicyNotice policyName={selectedPolicy?.name} />
             ) : null}
@@ -243,15 +322,47 @@ export default function RiskEvents(): JSX.Element {
                 <div className="bg-primary h-full animate-pulse" />
               </div>
             ) : null}
-          </>
-        }
-        header={
-          <div className="min-w-[1120px]">
-            <RiskEventsHeader />
+            <div
+              ref={containerRef}
+              className="min-h-0 flex-1 overflow-auto"
+              onScroll={handleScroll}
+            >
+              {resultsQuery.error ? (
+                <InlineEmptyState
+                  className="py-12"
+                  icon={<CircleAlert className="text-destructive" />}
+                  title="Error loading risk events"
+                  description={resultsQuery.error.message}
+                />
+              ) : isInitialLoading ? (
+                <div className="text-muted-foreground flex items-center justify-center gap-2 py-12">
+                  <LoaderCircle className="size-5 animate-spin" />
+                  <span>Loading risk events...</span>
+                </div>
+              ) : (
+                <Table
+                  columns={columns}
+                  data={results}
+                  rowKey={(r) => r.id}
+                  onRowClick={(r) => {
+                    if (r.chatId) setSelectedChatId(r.chatId);
+                  }}
+                  className="min-w-[1120px] rounded-none border-none"
+                  noResultsMessage={
+                    <InlineEmptyState
+                      className="py-12"
+                      icon={<Inbox />}
+                      title="No risk events found"
+                      description="Findings will appear here as messages are analyzed."
+                    />
+                  }
+                />
+              )}
+            </div>
           </div>
-        }
-        footer={
-          results.length > 0 ? (
+        </ListLayout.List>
+        {results.length > 0 && (
+          <ListLayout.Footer>
             <LoadMoreFooter
               shown={results.length}
               total={totalCount}
@@ -262,30 +373,16 @@ export default function RiskEvents(): JSX.Element {
                 void resultsQuery.fetchNextPage();
               }}
             />
-          ) : null
-        }
-        detail={
-          <ChatDetailSheet
-            chatId={selectedChatId}
-            onClose={() => setSelectedChatId(null)}
-            onDelete={() => setSelectedChatId(null)}
-            riskFocus
-          />
-        }
-        scrollRef={containerRef}
-        onScroll={handleScroll}
-        surfaceClassName="overflow-x-auto"
-        contentClassName="min-w-[1120px]"
-      >
-        <RiskEventsRows
-          error={resultsQuery.error}
-          isLoading={isInitialLoading}
-          results={results}
-          policyNameById={policyNameById}
-          scrollRef={containerRef}
-          onSelectChat={setSelectedChatId}
-        />
-      </LogWorkbench>
+          </ListLayout.Footer>
+        )}
+      </ListLayout>
+
+      <ChatDetailSheet
+        chatId={selectedChatId}
+        onClose={() => setSelectedChatId(null)}
+        onDelete={() => setSelectedChatId(null)}
+        riskFocus
+      />
     </RevealAllProvider>
   );
 }
@@ -317,125 +414,15 @@ function InactivePolicyNotice({
   );
 }
 
-function RiskEventsHeader() {
-  return (
-    <div
-      className={cn(
-        RISK_EVENTS_GRID,
-        "bg-muted/30 text-muted-foreground shrink-0 items-center border-b px-5 py-2.5 font-mono text-xs tracking-[0.08em] uppercase",
-      )}
-    >
-      <div className="min-w-0">Timestamp</div>
-      <div className="min-w-0">Category</div>
-      <div className="min-w-0">Rule</div>
-      <div className="min-w-0">Session Name</div>
-      <div className="min-w-0">User</div>
-      <div className="min-w-0">Match</div>
-      <div className="min-w-0">Policy</div>
-      <div className="flex min-w-0 justify-center">Actions</div>
-    </div>
-  );
-}
-
-function RiskEventsRows({
-  error,
-  isLoading,
-  results,
-  policyNameById,
-  scrollRef,
-  onSelectChat,
-}: {
-  error: Error | null;
-  isLoading: boolean;
-  results: RiskResult[];
-  policyNameById: Map<string, string>;
-  scrollRef: RefObject<HTMLDivElement | null>;
-  onSelectChat: (chatId: string | null) => void;
-}) {
-  const rowVirtualizer = useVirtualizer({
-    count: results.length,
-    getScrollElement: () => scrollRef.current,
-    estimateSize: () => 52,
-    overscan: 12,
-  });
-
-  if (error) {
-    return (
-      <InlineEmptyState
-        className="py-12"
-        icon={<CircleAlert className="text-destructive" />}
-        title="Error loading risk events"
-        description={error.message}
-      />
-    );
-  }
-
-  if (isLoading) {
-    return (
-      <div className="text-muted-foreground flex items-center justify-center gap-2 py-12">
-        <LoaderCircle className="size-5 animate-spin" />
-        <span>Loading risk events...</span>
-      </div>
-    );
-  }
-
-  if (results.length === 0) {
-    return (
-      <InlineEmptyState
-        className="py-12"
-        icon={<Inbox />}
-        title="No risk events found"
-        description="Findings will appear here as messages are analyzed."
-      />
-    );
-  }
-
-  return (
-    <div
-      className="relative w-full"
-      style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
-    >
-      {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-        const result = results[virtualRow.index];
-        if (!result) return null;
-
-        return (
-          <div
-            key={result.id}
-            ref={rowVirtualizer.measureElement}
-            data-index={virtualRow.index}
-            className="absolute top-0 left-0 w-full"
-            style={{ transform: `translateY(${virtualRow.start}px)` }}
-          >
-            <RiskEventsRow
-              result={result}
-              policyName={policyNameById.get(result.policyId)}
-              onSelectChat={onSelectChat}
-            />
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function RiskEventsRow({
-  result,
-  policyName,
-  onSelectChat,
-}: {
-  result: RiskResult;
-  policyName: string | undefined;
-  onSelectChat: (chatId: string | null) => void;
-}) {
-  const isShadowMCP = result.source === "shadow_mcp";
-
+// The per-row "copy link" affordance. Stops propagation so clicking it doesn't
+// also open the chat detail sheet via the row's onRowClick.
+function ShareCell({ chatId }: { chatId: string | null | undefined }) {
   const handleShare = useCallback(
     async (e: React.MouseEvent) => {
       e.stopPropagation();
-      if (!result.chatId) return;
+      if (!chatId) return;
       const url = new URL(window.location.href);
-      url.searchParams.set("chat_id", result.chatId);
+      url.searchParams.set("chat_id", chatId);
       try {
         await navigator.clipboard.writeText(url.toString());
         toast.success("Link copied to clipboard");
@@ -443,73 +430,25 @@ function RiskEventsRow({
         toast.error("Failed to copy link");
       }
     },
-    [result.chatId],
+    [chatId],
   );
 
+  if (!chatId) return null;
+
   return (
-    <div
-      role={result.chatId ? "button" : undefined}
-      tabIndex={result.chatId ? 0 : undefined}
-      className={cn(
-        RISK_EVENTS_GRID,
-        "hover:bg-muted/30 w-full items-center border-b px-5 py-3 text-left text-sm transition-colors",
-        !result.chatId && "cursor-default",
-      )}
-      onClick={() => {
-        if (result.chatId) {
-          onSelectChat(result.chatId);
-        }
-      }}
-      onKeyDown={(e) => {
-        if (!result.chatId) return;
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onSelectChat(result.chatId);
-        }
-      }}
-    >
-      <div className="text-muted-foreground min-w-0 font-mono text-xs">
-        {result.createdAt ? new Date(result.createdAt).toLocaleString() : "-"}
-      </div>
-      <div className="min-w-0 truncate">
-        <CategoryLabel source={result.source} ruleId={result.ruleId} />
-      </div>
-      <div className="min-w-0 truncate">
-        <RuleLabel source={result.source} ruleId={result.ruleId} />
-      </div>
-      <div className="min-w-0 truncate">{result.chatTitle ?? "Untitled"}</div>
-      <div className="min-w-0 truncate">{result.userId ?? "-"}</div>
-      <div className="min-w-0 truncate">
-        {isShadowMCP && result.matchRedacted ? (
-          <span className="font-mono text-xs" title={result.matchRedacted}>
-            {result.matchRedacted}
-          </span>
-        ) : (
-          <MaskedMatch
-            resultId={result.id}
-            matchRedacted={result.matchRedacted}
-          />
-        )}
-      </div>
-      <div className="min-w-0 truncate" title={policyName}>
-        {policyName ?? "-"}
-      </div>
-      <div className="flex min-w-0 justify-center">
-        {result.chatId ? (
-          <button
-            type="button"
-            onClick={(e) => {
-              void handleShare(e);
-            }}
-            onKeyDown={(e) => e.stopPropagation()}
-            className="text-muted-foreground hover:text-foreground inline-flex items-center transition-colors"
-            aria-label="Copy link to this event"
-            title="Copy link to this event"
-          >
-            <Share2 className="h-3 w-3" />
-          </button>
-        ) : null}
-      </div>
+    <div className="flex w-full justify-center">
+      <button
+        type="button"
+        onClick={(e) => {
+          void handleShare(e);
+        }}
+        onKeyDown={(e) => e.stopPropagation()}
+        className="text-muted-foreground hover:text-foreground inline-flex items-center transition-colors"
+        aria-label="Copy link to this event"
+        title="Copy link to this event"
+      >
+        <Share2 className="h-3 w-3" />
+      </button>
     </div>
   );
 }

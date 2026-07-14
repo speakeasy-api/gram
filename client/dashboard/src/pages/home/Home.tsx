@@ -1,4 +1,5 @@
 import { useHideInsightsDock } from "@/components/insights-context";
+import { ObservabilityLayout } from "@/components/layouts/observability-layout";
 import { Page } from "@/components/page-layout";
 import { ProjectDashboard } from "@/components/project/ProjectDashboard";
 import { RequireScope } from "@/components/require-scope";
@@ -30,12 +31,14 @@ export default function Home(): JSX.Element {
       </Page.Header>
       <Page.Body>
         <RequireScope scope="project:read" level="page">
-          {/* Full content width so the widget lines up with the dashboard
-              below (the /chat page centers it; the home page does not). */}
-          <div className="w-full pt-2 pb-6">
-            <ChatLanding />
-          </div>
-          <ProjectDashboard />
+          <ObservabilityLayout>
+            <ObservabilityLayout.Strip>
+              <ChatLanding />
+            </ObservabilityLayout.Strip>
+            {/* Supplies its own Header (title + range picker), Stats and
+                chart Grids/Sections for the rest of the layout. */}
+            <ProjectDashboard />
+          </ObservabilityLayout>
         </RequireScope>
       </Page.Body>
     </Page>

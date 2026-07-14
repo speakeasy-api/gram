@@ -1,6 +1,8 @@
 import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
+import { ListLayout } from "@/components/layouts/list-layout";
 import { Page } from "@/components/page-layout";
+import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { RequireScope } from "@/components/require-scope";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -940,14 +942,12 @@ function PolicyCenterContent() {
   }
 
   const cta = isLoading ? null : (
-    <Page.Section.CTA>
-      <Button onClick={headerAction.onClick}>
-        <Button.LeftIcon>
-          <Plus className="mr-2 h-4 w-4" />
-        </Button.LeftIcon>
-        <Button.Text>{headerAction.label}</Button.Text>
-      </Button>
-    </Page.Section.CTA>
+    <Button onClick={headerAction.onClick}>
+      <Button.LeftIcon>
+        <Plus className="mr-2 h-4 w-4" />
+      </Button.LeftIcon>
+      <Button.Text>{headerAction.label}</Button.Text>
+    </Button>
   );
 
   return (
@@ -962,14 +962,18 @@ function PolicyCenterContent() {
           title="Policy insights"
           subtitle="Ask about policy status, coverage, and detector capabilities. Match content is redacted before it reaches the assistant."
         />
-        <Page.Section>
-          <Page.Section.Title stage="beta">Policies</Page.Section.Title>
-          <Page.Section.Description>
-            Configure policies to detect secrets, sensitive information, and
-            prompt-defined risks in agent session interactions.
-          </Page.Section.Description>
-          {cta}
-          <Page.Section.Body>
+        <ListLayout>
+          <ListLayout.Header
+            title={
+              <span className="inline-flex items-center gap-2">
+                Policies
+                <ReleaseStageBadge stage="beta" />
+              </span>
+            }
+            subtitle="Configure policies to detect secrets, sensitive information, and prompt-defined risks in agent session interactions."
+            actions={cta}
+          />
+          <ListLayout.List>
             <Tabs
               value={activeTab}
               onValueChange={(value) =>
@@ -995,8 +999,8 @@ function PolicyCenterContent() {
                 />
               </TabsContent>
             </Tabs>
-          </Page.Section.Body>
-        </Page.Section>
+          </ListLayout.List>
+        </ListLayout>
 
         {/* View Run Panel */}
         <Sheet

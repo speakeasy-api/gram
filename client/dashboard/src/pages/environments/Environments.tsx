@@ -1,5 +1,6 @@
 import { InputDialog } from "@/components/input-dialog";
 import { Page } from "@/components/page-layout";
+import { ListLayout } from "@/components/layouts/list-layout";
 import { RequireScope } from "@/components/require-scope";
 import { CardContextMenu } from "@/components/card-context-menu";
 import { Card } from "@/components/ui/card";
@@ -82,26 +83,24 @@ function EnvironmentsInner() {
 
   return (
     <>
-      <Page.Section>
-        <Page.Section.Title>Environments</Page.Section.Title>
-        <Page.Section.Description>
-          Create re-usable environment configurations and share amongst multiple
-          MCP servers and Assistants. Commonly used to securely store sensitive
-          secrets used to access various sources.
-        </Page.Section.Description>
-        <Page.Section.CTA>
-          {environments.length > 0 && (
-            <RequireScope scope="environment:write" level="component">
-              <Button onClick={() => setCreateEnvironmentDialogOpen(true)}>
-                <Button.LeftIcon>
-                  <Plus className="h-4 w-4" />
-                </Button.LeftIcon>
-                <Button.Text>New Environment</Button.Text>
-              </Button>
-            </RequireScope>
-          )}
-        </Page.Section.CTA>
-        <Page.Section.Body>
+      <ListLayout>
+        <ListLayout.Header
+          title="Environments"
+          subtitle="Create re-usable environment configurations and share amongst multiple MCP servers and Assistants. Commonly used to securely store sensitive secrets used to access various sources."
+          actions={
+            environments.length > 0 && (
+              <RequireScope scope="environment:write" level="component">
+                <Button onClick={() => setCreateEnvironmentDialogOpen(true)}>
+                  <Button.LeftIcon>
+                    <Plus className="h-4 w-4" />
+                  </Button.LeftIcon>
+                  <Button.Text>New Environment</Button.Text>
+                </Button>
+              </RequireScope>
+            )
+          }
+        />
+        <ListLayout.List>
           {environments.length === 0 ? (
             <InlineEmptyState
               icon={<Blocks />}
@@ -129,8 +128,8 @@ function EnvironmentsInner() {
               ))}
             </div>
           )}
-        </Page.Section.Body>
-      </Page.Section>
+        </ListLayout.List>
+      </ListLayout>
       <InputDialog
         open={createEnvironmentDialogOpen}
         onOpenChange={setCreateEnvironmentDialogOpen}

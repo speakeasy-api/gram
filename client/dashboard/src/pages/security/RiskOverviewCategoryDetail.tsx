@@ -1,5 +1,6 @@
 import { MetricCard } from "@/components/chart/MetricCard";
 import { RankedBar, type RankedBarItem } from "@/components/chart/RankedBar";
+import { DetailLayout } from "@/components/layouts/detail-layout";
 import {
   formatDateRangeLabel,
   useDateRangeFilter,
@@ -203,23 +204,28 @@ function RiskOverviewCategoryDetailContent() {
 
   return (
     <RevealAllProvider>
-      <Page.Section>
-        <Page.Section.Title stage="beta">{categoryLabel}</Page.Section.Title>
-        <Page.Section.Description>
-          {categoryMeta?.description ?? "Risk findings in this category"}
-          {rangeLabel && ` across ${rangeLabel}.`}
-        </Page.Section.Description>
-        <Page.Section.CTA>{controls}</Page.Section.CTA>
-        <Page.Section.Body>
-          <div className="space-y-6">
-            <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-              <MetricCard
-                title="Findings"
-                value={overviewCategory?.findings ?? totalCount}
-                format="compact"
-                icon="flag"
-              />
-            </div>
+      <DetailLayout>
+        <DetailLayout.Header
+          eyebrow="Category"
+          title={categoryLabel}
+          subtitle={`${
+            categoryMeta?.description ?? "Risk findings in this category"
+          }${rangeLabel ? ` across ${rangeLabel}.` : ""}`}
+          actions={controls}
+        />
+
+        <DetailLayout.Content>
+          <DetailLayout.Main>
+            <DetailLayout.Section>
+              <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+                <MetricCard
+                  title="Findings"
+                  value={overviewCategory?.findings ?? totalCount}
+                  format="compact"
+                  icon="flag"
+                />
+              </div>
+            </DetailLayout.Section>
             <RuleBreakdown
               rules={ruleBreakdownQuery.data?.rules ?? []}
               isLoading={ruleBreakdownQuery.isLoading}
@@ -242,9 +248,9 @@ function RiskOverviewCategoryDetailContent() {
               onScroll={handleScroll}
               onSelectChat={setSelectedChatId}
             />
-          </div>
-        </Page.Section.Body>
-      </Page.Section>
+          </DetailLayout.Main>
+        </DetailLayout.Content>
+      </DetailLayout>
 
       <ChatDetailSheet
         chatId={selectedChatId}

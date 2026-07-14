@@ -1,5 +1,6 @@
 import { MetricCard } from "@/components/chart/MetricCard";
 import { RankedBar, type RankedBarItem } from "@/components/chart/RankedBar";
+import { DetailLayout } from "@/components/layouts/detail-layout";
 import {
   formatDateRangeLabel,
   useDateRangeFilter,
@@ -133,31 +134,34 @@ function RiskOverviewUserDetailContent() {
 
   return (
     <>
-      <Page.Section>
-        <Page.Section.Title stage="beta" className="normal-case">
-          {userLabel}
-        </Page.Section.Title>
-        <Page.Section.Description>
-          Risk findings and chat sessions for this user
-          {rangeLabel && ` across ${rangeLabel}.`}
-        </Page.Section.Description>
-        <Page.Section.CTA>{controls}</Page.Section.CTA>
-        <Page.Section.Body>
-          <div className="space-y-6">
-            <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-              <MetricCard
-                title="Findings"
-                value={userEntry?.findings ?? 0}
-                format="compact"
-                icon="flag"
-              />
-              <MetricCard
-                title="Chat Sessions"
-                value={totalChats}
-                format="compact"
-                icon="message-square"
-              />
-            </div>
+      <DetailLayout>
+        <DetailLayout.Header
+          eyebrow="User"
+          title={userLabel}
+          subtitle={`Risk findings and chat sessions for this user${
+            rangeLabel ? ` across ${rangeLabel}.` : ""
+          }`}
+          actions={controls}
+        />
+
+        <DetailLayout.Content>
+          <DetailLayout.Main>
+            <DetailLayout.Section>
+              <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+                <MetricCard
+                  title="Findings"
+                  value={userEntry?.findings ?? 0}
+                  format="compact"
+                  icon="flag"
+                />
+                <MetricCard
+                  title="Chat Sessions"
+                  value={totalChats}
+                  format="compact"
+                  icon="message-square"
+                />
+              </div>
+            </DetailLayout.Section>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <CategoryBreakdown
                 categories={breakdownQuery.data?.categories ?? []}
@@ -173,9 +177,9 @@ function RiskOverviewUserDetailContent() {
               isLoading={chatsQuery.isLoading}
               onSelectChat={setSelectedChatId}
             />
-          </div>
-        </Page.Section.Body>
-      </Page.Section>
+          </DetailLayout.Main>
+        </DetailLayout.Content>
+      </DetailLayout>
 
       <ChatDetailSheet
         chatId={selectedChatId}

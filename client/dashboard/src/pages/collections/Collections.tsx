@@ -1,9 +1,8 @@
 import { Page } from "@/components/page-layout";
+import { ListLayout } from "@/components/layouts/list-layout";
 import { RequireScope } from "@/components/require-scope";
 import { CreateResourceCard } from "@/components/create-resource-card";
 import { Type } from "@/components/ui/type";
-import { Stack } from "@/components/ui/stack";
-import { SearchBar } from "@/components/ui/search-bar";
 import { useState } from "react";
 import { Outlet, useNavigate } from "react-router";
 import { useCollections } from "./hooks";
@@ -36,29 +35,26 @@ function CollectionsInner() {
   const handleCreateCollection = () => navigate("create");
 
   return (
-    <Page.Section>
-      <Page.Section.Title>Collections</Page.Section.Title>
-      <Page.Section.Description>
-        Collections allow you to create reusable groups of MCP servers and
-        skills to install into multiple projects in one go.
-      </Page.Section.Description>
-      <Page.Section.Body>
-        <Stack direction="vertical" gap={4}>
-          <SearchBar
-            value={searchQuery}
-            onChange={setSearchQuery}
-            placeholder="Search collections..."
-            className="w-64"
-          />
-
-          <CollectionGrid
-            collections={collections}
-            searchQuery={searchQuery}
-            onCreate={() => void handleCreateCollection()}
-          />
-        </Stack>
-      </Page.Section.Body>
-    </Page.Section>
+    <ListLayout>
+      <ListLayout.Header
+        title="Collections"
+        subtitle="Collections allow you to create reusable groups of MCP servers and skills to install into multiple projects in one go."
+      />
+      <ListLayout.Toolbar>
+        <ListLayout.Toolbar.Search
+          value={searchQuery}
+          onChange={setSearchQuery}
+          placeholder="Search collections..."
+        />
+      </ListLayout.Toolbar>
+      <ListLayout.List>
+        <CollectionGrid
+          collections={collections}
+          searchQuery={searchQuery}
+          onCreate={() => void handleCreateCollection()}
+        />
+      </ListLayout.List>
+    </ListLayout>
   );
 }
 

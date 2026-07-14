@@ -1,4 +1,5 @@
 import { Page } from "@/components/page-layout";
+import { DetailLayout } from "@/components/layouts/detail-layout";
 import { MCPStatusIndicator } from "@/components/mcp/MCPStatusIndicator";
 import { ToolCollectionBadge } from "@/components/tool-collection-badge";
 import { Card } from "@/components/ui/card";
@@ -336,169 +337,175 @@ export default function PluginDetail(): JSX.Element | null {
         />
       </Page.Header>
       <Page.Body>
-        {/* Plugin metadata */}
-        <Stack
-          direction="horizontal"
-          justify="space-between"
-          align="start"
-          className="mb-6"
-        >
-          <div>
-            <Heading variant="h4">{plugin.name}</Heading>
-            <Type muted small className="mt-1">
-              {plugin.description ?? "No description"}
-            </Type>
-            <Type muted small className="mt-1">
-              Slug: <code>{plugin.slug}</code>
-            </Type>
-            <PublishFreshnessIndicator publishStatus={publishStatus} />
-          </div>
-          <Stack direction="horizontal" gap={2} align="center">
-            <PublishStatusControl
-              publishStatus={publishStatus}
-              isPending={publishMutation.isPending}
-              onRepublish={() => handlePublish([])}
-              onOpenDialog={() => setIsPublishDialogOpen(true)}
-            />
-            <Button variant="secondary" onClick={() => setIsEditOpen(true)}>
-              Edit
-            </Button>
-          </Stack>
-        </Stack>
-
-        {/* Marketplace banner — durable path to the install instructions, so the
-            published marketplace URL is reachable without going back to the list.
-            Gated only on a connected repo URL (mirrors the plugins list); the
-            owner/name display and install button degrade independently so partial
-            metadata never hides the whole entrypoint. */}
-        {publishStatus?.connected && publishStatus.repoUrl && (
-          <Card className="mb-6 flex-row flex-wrap items-center justify-between gap-3 px-4 py-3">
-            <div className="flex flex-col gap-0.5">
-              <span className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-                Marketplace
-              </span>
-              <a
-                href={publishStatus.repoUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:text-primary text-foreground font-mono text-sm hover:underline"
-              >
-                {publishStatus.repoOwner && publishStatus.repoName
-                  ? `${publishStatus.repoOwner}/${publishStatus.repoName}`
-                  : publishStatus.repoUrl}
-              </a>
-            </div>
-            {publishStatus.repoOwner && publishStatus.repoName && (
-              <InstallInstructionsButton
-                repoOwner={publishStatus.repoOwner}
-                repoName={publishStatus.repoName}
-                marketplaceUrl={publishStatus.marketplaceUrl}
-              />
-            )}
-          </Card>
-        )}
-
-        {/* Servers section */}
-        <Stack
-          direction="horizontal"
-          justify="space-between"
-          align="center"
-          className="mb-3"
-        >
-          <Heading variant="h5">MCP Servers</Heading>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => setIsAddServerOpen(true)}
-          >
-            Add Server
-          </Button>
-        </Stack>
-        {servers.length === 0 ? (
-          <InlineEmptyState
-            className="mb-8"
-            title="No servers added yet"
-            action={
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => setIsAddServerOpen(true)}
-              >
-                <Button.LeftIcon>
-                  <Plus className="h-4 w-4" />
-                </Button.LeftIcon>
-                <Button.Text>Add Server</Button.Text>
-              </Button>
+        <DetailLayout>
+          <DetailLayout.Header
+            eyebrow="Plugin"
+            title={plugin.name}
+            subtitle={
+              <div className="flex flex-col gap-1">
+                <span>
+                  {plugin.description ?? "No description"} — Slug:{" "}
+                  <code>{plugin.slug}</code>
+                </span>
+                <PublishFreshnessIndicator publishStatus={publishStatus} />
+              </div>
+            }
+            actions={
+              <>
+                <PublishStatusControl
+                  publishStatus={publishStatus}
+                  isPending={publishMutation.isPending}
+                  onRepublish={() => handlePublish([])}
+                  onOpenDialog={() => setIsPublishDialogOpen(true)}
+                />
+                <Button variant="secondary" onClick={() => setIsEditOpen(true)}>
+                  Edit
+                </Button>
+              </>
             }
           />
-        ) : (
-          <div className="mb-8 grid grid-cols-1 gap-6 xl:grid-cols-2">
-            {servers.map((server) => (
-              <PluginServerCard
-                key={server.id}
-                server={server}
-                toolset={
-                  server.toolsetId
-                    ? toolsetById.get(server.toolsetId)
-                    : undefined
-                }
-                mcpServer={
-                  server.mcpServerId
-                    ? mcpServerById.get(server.mcpServerId)
-                    : undefined
-                }
-                isLoading={isLoadingServers}
-                onRemove={() => handleRemoveServer(server)}
-              />
-            ))}
-          </div>
-        )}
 
-        {/* Download section */}
-        <Heading variant="h5" className="mb-3">
-          Download
-        </Heading>
-        <div>
-          <DropdownMenu
-            open={isDownloadMenuOpen}
-            onOpenChange={setIsDownloadMenuOpen}
-          >
-            <DropdownMenuTrigger asChild>
-              <Button variant="secondary" size="sm">
-                <Button.LeftIcon>
-                  <Download className="h-4 w-4" />
-                </Button.LeftIcon>
-                <Button.Text>Download Plugin</Button.Text>
-                <Button.RightIcon>
-                  <ChevronDown className="h-4 w-4" />
-                </Button.RightIcon>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              <DropdownMenuItem
-                onClick={() => {
-                  void handleDownload("claude");
-                }}
-              >
-                Claude
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => {
-                  void handleDownload("cursor");
-                }}
-              >
-                Cursor
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => {
-                  void handleDownload("codex");
-                }}
-              >
-                Codex
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+          <DetailLayout.Content>
+            <DetailLayout.Main>
+              {/* Marketplace banner — durable path to the install instructions, so the
+                  published marketplace URL is reachable without going back to the list.
+                  Gated only on a connected repo URL (mirrors the plugins list); the
+                  owner/name display and install button degrade independently so partial
+                  metadata never hides the whole entrypoint. */}
+              {publishStatus?.connected && publishStatus.repoUrl && (
+                <Card className="flex-row flex-wrap items-center justify-between gap-3 px-4 py-3">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+                      Marketplace
+                    </span>
+                    <a
+                      href={publishStatus.repoUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="hover:text-primary text-foreground font-mono text-sm hover:underline"
+                    >
+                      {publishStatus.repoOwner && publishStatus.repoName
+                        ? `${publishStatus.repoOwner}/${publishStatus.repoName}`
+                        : publishStatus.repoUrl}
+                    </a>
+                  </div>
+                  {publishStatus.repoOwner && publishStatus.repoName && (
+                    <InstallInstructionsButton
+                      repoOwner={publishStatus.repoOwner}
+                      repoName={publishStatus.repoName}
+                      marketplaceUrl={publishStatus.marketplaceUrl}
+                    />
+                  )}
+                </Card>
+              )}
+
+              {/* Servers section */}
+              <div>
+                <Stack
+                  direction="horizontal"
+                  justify="space-between"
+                  align="center"
+                  className="mb-3"
+                >
+                  <Heading variant="h5">MCP Servers</Heading>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setIsAddServerOpen(true)}
+                  >
+                    Add Server
+                  </Button>
+                </Stack>
+                {servers.length === 0 ? (
+                  <InlineEmptyState
+                    title="No servers added yet"
+                    action={
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => setIsAddServerOpen(true)}
+                      >
+                        <Button.LeftIcon>
+                          <Plus className="h-4 w-4" />
+                        </Button.LeftIcon>
+                        <Button.Text>Add Server</Button.Text>
+                      </Button>
+                    }
+                  />
+                ) : (
+                  <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+                    {servers.map((server) => (
+                      <PluginServerCard
+                        key={server.id}
+                        server={server}
+                        toolset={
+                          server.toolsetId
+                            ? toolsetById.get(server.toolsetId)
+                            : undefined
+                        }
+                        mcpServer={
+                          server.mcpServerId
+                            ? mcpServerById.get(server.mcpServerId)
+                            : undefined
+                        }
+                        isLoading={isLoadingServers}
+                        onRemove={() => handleRemoveServer(server)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Download section */}
+              <div>
+                <Heading variant="h5" className="mb-3">
+                  Download
+                </Heading>
+                <div>
+                  <DropdownMenu
+                    open={isDownloadMenuOpen}
+                    onOpenChange={setIsDownloadMenuOpen}
+                  >
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="secondary" size="sm">
+                        <Button.LeftIcon>
+                          <Download className="h-4 w-4" />
+                        </Button.LeftIcon>
+                        <Button.Text>Download Plugin</Button.Text>
+                        <Button.RightIcon>
+                          <ChevronDown className="h-4 w-4" />
+                        </Button.RightIcon>
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start">
+                      <DropdownMenuItem
+                        onClick={() => {
+                          void handleDownload("claude");
+                        }}
+                      >
+                        Claude
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => {
+                          void handleDownload("cursor");
+                        }}
+                      >
+                        Cursor
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => {
+                          void handleDownload("codex");
+                        }}
+                      >
+                        Codex
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </div>
+            </DetailLayout.Main>
+          </DetailLayout.Content>
+        </DetailLayout>
 
         {/* Edit Dialog */}
         <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>

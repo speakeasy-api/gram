@@ -1,9 +1,11 @@
 import { Page } from "@/components/page-layout";
+import { ListLayout } from "@/components/layouts/list-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Dialog } from "@/components/ui/dialog";
 import { DotRow } from "@/components/ui/dot-row";
 import { DotTable } from "@/components/ui/dot-table";
 import { Field, FieldLabel } from "@/components/ui/field";
+import { Heading } from "@/components/ui/heading";
 import {
   Select,
   SelectContent,
@@ -101,57 +103,56 @@ function RemoteIdentityProvidersOverview() {
 
   return (
     <>
-      <Page.Section>
-        <Page.Section.Title>
-          Organizational Remote Identity Providers
-        </Page.Section.Title>
-        <Page.Section.CTA>
-          <RequireScope scope="org:admin" level="component">
-            <Button size="sm" onClick={() => setCreateOpen(true)}>
-              <Button.LeftIcon>
-                <Plus />
-              </Button.LeftIcon>
-              <Button.Text>New Remote Identity Provider</Button.Text>
-            </Button>
-          </RequireScope>
-        </Page.Section.CTA>
-        <Page.Section.Description className="max-w-2xl">
-          Upstream identity providers shared across every project in the
-          organization. These have no owning project and are inherited
-          everywhere.
-        </Page.Section.Description>
-        <Page.Section.Body>
-          <IssuerTable
-            items={organizational}
-            isLoading={isLoading}
-            showProject={false}
-            emptyMessage="No organizational identity providers yet."
-            onDelete={setDeleteTarget}
-            onMakeOrganizational={handleMakeOrganizational}
-            onMoveToProject={setMoveTarget}
-          />
-        </Page.Section.Body>
-      </Page.Section>
+      <ListLayout>
+        <ListLayout.Header
+          title="Remote Identity Providers"
+          actions={
+            <RequireScope scope="org:admin" level="component">
+              <Button size="sm" onClick={() => setCreateOpen(true)}>
+                <Button.LeftIcon>
+                  <Plus />
+                </Button.LeftIcon>
+                <Button.Text>New Remote Identity Provider</Button.Text>
+              </Button>
+            </RequireScope>
+          }
+        />
+        <ListLayout.List>
+          <div className="flex flex-col gap-3">
+            <Heading variant="h4">Organizational</Heading>
+            <Type muted small className="max-w-2xl">
+              Upstream identity providers shared across every project in the
+              organization. These have no owning project and are inherited
+              everywhere.
+            </Type>
+            <IssuerTable
+              items={organizational}
+              isLoading={isLoading}
+              showProject={false}
+              emptyMessage="No organizational identity providers yet."
+              onDelete={setDeleteTarget}
+              onMakeOrganizational={handleMakeOrganizational}
+              onMoveToProject={setMoveTarget}
+            />
+          </div>
 
-      <Page.Section>
-        <Page.Section.Title>
-          Project-Specific Remote Identity Providers
-        </Page.Section.Title>
-        <Page.Section.Description className="max-w-2xl">
-          Upstream identity providers scoped to a single project.
-        </Page.Section.Description>
-        <Page.Section.Body>
-          <IssuerTable
-            items={projectSpecific}
-            isLoading={isLoading}
-            showProject
-            emptyMessage="No project-specific identity providers yet."
-            onDelete={setDeleteTarget}
-            onMakeOrganizational={handleMakeOrganizational}
-            onMoveToProject={setMoveTarget}
-          />
-        </Page.Section.Body>
-      </Page.Section>
+          <div className="flex flex-col gap-3">
+            <Heading variant="h4">Project-Specific</Heading>
+            <Type muted small className="max-w-2xl">
+              Upstream identity providers scoped to a single project.
+            </Type>
+            <IssuerTable
+              items={projectSpecific}
+              isLoading={isLoading}
+              showProject
+              emptyMessage="No project-specific identity providers yet."
+              onDelete={setDeleteTarget}
+              onMakeOrganizational={handleMakeOrganizational}
+              onMoveToProject={setMoveTarget}
+            />
+          </div>
+        </ListLayout.List>
+      </ListLayout>
 
       <CreateRemoteIdentityProviderSheet
         open={createOpen}

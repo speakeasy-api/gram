@@ -1,9 +1,9 @@
 import { CreateResourceCard } from "@/components/create-resource-card";
 import { Page } from "@/components/page-layout";
+import { ListLayout } from "@/components/layouts/list-layout";
 import { Card } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { Field, FieldLabel } from "@/components/ui/field";
-import { SearchBar } from "@/components/ui/search-bar";
 import { Type } from "@/components/ui/type";
 import { InstallInstructionsButton } from "./InstallInstructionsDialog";
 import { useFetcher } from "@/contexts/Fetcher";
@@ -261,94 +261,91 @@ export default function Plugins(): JSX.Element {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <Page.Section>
-          <Page.Section.Title>Plugins</Page.Section.Title>
-          <Page.Section.Description className={hasPlugins ? "w-3/4" : ""}>
-            Create distributable plugin bundles that package MCP servers and
-            skills together. Assign plugins to roles and publish them to Claude
-            Code, Cursor, and Codex marketplaces via GitHub.
-          </Page.Section.Description>
-          <Page.Section.CTA>
-            <Stack direction="horizontal" gap={2} align="center">
-              <Button
-                variant="tertiary"
-                onClick={handleOpenMarketplaceSettings}
-                aria-label="Marketplace settings"
-                title="Marketplace settings"
-              >
-                <Button.LeftIcon>
-                  <Settings className="h-4 w-4" />
-                </Button.LeftIcon>
-              </Button>
-              {publishStatus?.configured && (
+        <ListLayout>
+          <ListLayout.Header
+            title="Plugins"
+            subtitle="Create distributable plugin bundles that package MCP servers and skills together. Assign plugins to roles and publish them to Claude Code, Cursor, and Codex marketplaces via GitHub."
+            actions={
+              <Stack direction="horizontal" gap={2} align="center">
                 <Button
-                  variant="secondary"
-                  onClick={() => setIsPublishDialogOpen(true)}
-                  disabled={publishMutation.isPending}
+                  variant="tertiary"
+                  onClick={handleOpenMarketplaceSettings}
+                  aria-label="Marketplace settings"
+                  title="Marketplace settings"
                 >
                   <Button.LeftIcon>
-                    {publishStatus.connected ? (
-                      <RefreshCw className="h-4 w-4" />
-                    ) : (
-                      <Upload className="h-4 w-4" />
-                    )}
+                    <Settings className="h-4 w-4" />
                   </Button.LeftIcon>
-                  <Button.Text>
-                    {publishMutation.isPending
-                      ? "Publishing..."
-                      : publishStatus.connected
-                        ? "Re-publish"
-                        : "Publish Private Marketplace"}
-                  </Button.Text>
                 </Button>
-              )}
-            </Stack>
-          </Page.Section.CTA>
-          <Page.Section.Body>
-            <Stack direction="vertical" gap={4}>
-              {publishStatus?.connected && publishStatus.repoUrl && (
-                <Card className="flex-row flex-wrap items-center justify-between gap-3 px-4 py-3">
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-                      Marketplace
-                    </span>
-                    <a
-                      href={publishStatus.repoUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="hover:text-primary text-foreground font-mono text-sm hover:underline"
-                    >
-                      {publishStatus.repoOwner && publishStatus.repoName
-                        ? `${publishStatus.repoOwner}/${publishStatus.repoName}`
-                        : publishStatus.repoUrl}
-                    </a>
-                  </div>
-                  {publishStatus.repoOwner && publishStatus.repoName && (
-                    <InstallInstructionsButton
-                      repoOwner={publishStatus.repoOwner}
-                      repoName={publishStatus.repoName}
-                      marketplaceUrl={publishStatus.marketplaceUrl}
-                    />
-                  )}
-                </Card>
-              )}
-              {hasPlugins && (
-                <SearchBar
-                  value={search}
-                  onChange={setSearch}
-                  placeholder="Search plugins"
-                  className="w-64"
+                {publishStatus?.configured && (
+                  <Button
+                    variant="secondary"
+                    onClick={() => setIsPublishDialogOpen(true)}
+                    disabled={publishMutation.isPending}
+                  >
+                    <Button.LeftIcon>
+                      {publishStatus.connected ? (
+                        <RefreshCw className="h-4 w-4" />
+                      ) : (
+                        <Upload className="h-4 w-4" />
+                      )}
+                    </Button.LeftIcon>
+                    <Button.Text>
+                      {publishMutation.isPending
+                        ? "Publishing..."
+                        : publishStatus.connected
+                          ? "Re-publish"
+                          : "Publish Private Marketplace"}
+                    </Button.Text>
+                  </Button>
+                )}
+              </Stack>
+            }
+          />
+          {publishStatus?.connected && publishStatus.repoUrl && (
+            <Card className="mt-6 flex-row flex-wrap items-center justify-between gap-3 px-4 py-3">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+                  Marketplace
+                </span>
+                <a
+                  href={publishStatus.repoUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-primary text-foreground font-mono text-sm hover:underline"
+                >
+                  {publishStatus.repoOwner && publishStatus.repoName
+                    ? `${publishStatus.repoOwner}/${publishStatus.repoName}`
+                    : publishStatus.repoUrl}
+                </a>
+              </div>
+              {publishStatus.repoOwner && publishStatus.repoName && (
+                <InstallInstructionsButton
+                  repoOwner={publishStatus.repoOwner}
+                  repoName={publishStatus.repoName}
+                  marketplaceUrl={publishStatus.marketplaceUrl}
                 />
               )}
-              <PluginGrid
-                plugins={filteredPlugins}
-                searchQuery={hasPlugins ? search : ""}
-                onDelete={setPluginToDelete}
-                createCard={createCard}
+            </Card>
+          )}
+          {hasPlugins && (
+            <ListLayout.Toolbar>
+              <ListLayout.Toolbar.Search
+                value={search}
+                onChange={setSearch}
+                placeholder="Search plugins"
               />
-            </Stack>
-          </Page.Section.Body>
-        </Page.Section>
+            </ListLayout.Toolbar>
+          )}
+          <ListLayout.List>
+            <PluginGrid
+              plugins={filteredPlugins}
+              searchQuery={hasPlugins ? search : ""}
+              onDelete={setPluginToDelete}
+              createCard={createCard}
+            />
+          </ListLayout.List>
+        </ListLayout>
 
         <Page.Section>
           <Page.Section.Title>Observability hooks</Page.Section.Title>

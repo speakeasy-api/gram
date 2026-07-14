@@ -1,4 +1,5 @@
 import { Page } from "@/components/page-layout";
+import { SettingsLayout } from "@/components/layouts/settings-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Label } from "@/components/ui/label";
 import {
@@ -154,33 +155,32 @@ function DetectionRulesContent() {
 
   return (
     <>
-      <Page.Section>
-        <Page.Section.Title stage="beta">Detection Rules</Page.Section.Title>
-        <Page.Section.Description>
-          Reusable built-in and custom rules your policies use to flag — or
-          exempt — messages.
-        </Page.Section.Description>
-        <Page.Section.CTA>
-          <Button onClick={() => setCreateOpen(true)}>
-            <Button.LeftIcon>
-              <Plus className="h-4 w-4" />
-            </Button.LeftIcon>
-            <Button.Text>Custom Detection Rule</Button.Text>
-          </Button>
-        </Page.Section.CTA>
-        <Page.Section.Body>
-          <div className="space-y-8">
-            {customRulesLoading && (
-              <div className="text-muted-foreground text-sm">
-                Loading custom rules...
-              </div>
-            )}
-            {customRulesError && (
-              <div className="text-destructive text-sm">
-                Failed to load custom rules.
-              </div>
-            )}
-            {customRules.length > 0 && (
+      <SettingsLayout>
+        <SettingsLayout.Header
+          title="Detection Rules"
+          subtitle="Reusable built-in and custom rules your policies use to flag — or exempt — messages."
+          actions={
+            <Button onClick={() => setCreateOpen(true)}>
+              <Button.LeftIcon>
+                <Plus className="h-4 w-4" />
+              </Button.LeftIcon>
+              <Button.Text>Custom Detection Rule</Button.Text>
+            </Button>
+          }
+        />
+        <SettingsLayout.Body>
+          {customRulesLoading && (
+            <div className="text-muted-foreground text-sm">
+              Loading custom rules...
+            </div>
+          )}
+          {customRulesError && (
+            <div className="text-destructive text-sm">
+              Failed to load custom rules.
+            </div>
+          )}
+          {customRules.length > 0 && (
+            <SettingsLayout.Group label="Custom">
               <CustomRulesSection
                 rules={customRules}
                 expanded={expanded === "custom"}
@@ -189,16 +189,18 @@ function DetectionRulesContent() {
                 }
                 onSelect={(rule) => setSelected({ kind: "custom", rule })}
               />
-            )}
+            </SettingsLayout.Group>
+          )}
 
+          <SettingsLayout.Group label="Built-in">
             <BuiltinRulesSection
               expanded={expanded}
               onToggle={(cat) => setExpanded(expanded === cat ? null : cat)}
               onSelect={(rule) => setSelected({ kind: "builtin", rule })}
             />
-          </div>
-        </Page.Section.Body>
-      </Page.Section>
+          </SettingsLayout.Group>
+        </SettingsLayout.Body>
+      </SettingsLayout>
 
       <RuleDetailSheet
         selection={selected}
@@ -247,9 +249,6 @@ function CustomRulesSection({
   const meta = RULE_CATEGORY_META.custom;
   return (
     <div>
-      <Type variant="subheading" className="mb-3">
-        Custom
-      </Type>
       <div className="border-border divide-border divide-y border">
         <CategoryHeader
           icon={meta.icon as IconName}
@@ -291,9 +290,6 @@ function BuiltinRulesSection({
 }) {
   return (
     <div>
-      <Type variant="subheading" className="mb-3">
-        Built-in
-      </Type>
       <div className="border-border divide-border divide-y border">
         {BUILTIN_CATEGORY_ORDER.map((cat) => {
           const meta = RULE_CATEGORY_META[cat];

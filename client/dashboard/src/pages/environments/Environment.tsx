@@ -1,4 +1,5 @@
 import { Page } from "@/components/page-layout";
+import { DetailLayout } from "@/components/layouts/detail-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -474,292 +475,303 @@ function EnvironmentPageInner() {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <Page.Section>
-          <Page.Section.Title>{environment.name}</Page.Section.Title>
-          <Page.Section.CTA>
-            <RequireScope scope="environment:write" level="component">
-              <Button
-                onClick={handleAddNewEntry}
-                disabled={isSaving || isAddingNew}
-              >
-                Add Variable
-              </Button>
-            </RequireScope>
-          </Page.Section.CTA>
-          <MoreActions
-            actions={[
-              {
-                label: "Fill for MCP Server",
-                onClick: () => setToolsetDialogOpen(true),
-                icon: "copy-plus",
-                disabled: !canLinkToolset,
-              },
-              {
-                label: "Delete Environment",
-                onClick: () =>
-                  deleteEnvironmentMutation.mutate({
-                    request: { slug: environment.slug },
-                  }),
-                icon: "trash",
-                destructive: true,
-                disabled: !canWrite,
-              },
-            ]}
+        <DetailLayout>
+          <DetailLayout.Header
+            eyebrow="Environment"
+            title={environment.name}
+            actions={
+              <>
+                <RequireScope scope="environment:write" level="component">
+                  <Button
+                    onClick={handleAddNewEntry}
+                    disabled={isSaving || isAddingNew}
+                  >
+                    Add Variable
+                  </Button>
+                </RequireScope>
+                <MoreActions
+                  actions={[
+                    {
+                      label: "Fill for MCP Server",
+                      onClick: () => setToolsetDialogOpen(true),
+                      icon: "copy-plus",
+                      disabled: !canLinkToolset,
+                    },
+                    {
+                      label: "Delete Environment",
+                      onClick: () =>
+                        deleteEnvironmentMutation.mutate({
+                          request: { slug: environment.slug },
+                        }),
+                      icon: "trash",
+                      destructive: true,
+                      disabled: !canWrite,
+                    },
+                  ]}
+                />
+              </>
+            }
           />
-          <Page.Section.Body>
-            <div className="space-y-6">
-              <div className="space-y-4">
-                {allEntries.map((entry) => {
-                  const isEdited = editedFields.has(entry.name);
-                  const originalEntry = environment.entries?.find(
-                    (e) => e.name === entry.name,
-                  );
-                  const isNew = !originalEntry;
-                  const isFocused = focusedField === entry.name;
-                  const hasExistingValue =
-                    originalEntry?.value != null &&
-                    originalEntry.value.trim() !== "";
 
-                  // Display logic matching ToolsetAuth:
-                  // - If edited, show the edited value
-                  // - If not focused and has existing value, show the original value
-                  // - If focused, show empty (to allow typing replacement)
-                  let displayValue = "";
-                  if (isEdited) {
-                    displayValue = envValues[entry.name] ?? "";
-                  } else if (
-                    !isFocused &&
-                    hasExistingValue &&
-                    originalEntry?.value
-                  ) {
-                    displayValue = originalEntry.value;
-                  }
+          <DetailLayout.Content>
+            <DetailLayout.Main>
+              <div className="space-y-6">
+                <div className="space-y-4">
+                  {allEntries.map((entry) => {
+                    const isEdited = editedFields.has(entry.name);
+                    const originalEntry = environment.entries?.find(
+                      (e) => e.name === entry.name,
+                    );
+                    const isNew = !originalEntry;
+                    const isFocused = focusedField === entry.name;
+                    const hasExistingValue =
+                      originalEntry?.value != null &&
+                      originalEntry.value.trim() !== "";
 
-                  return (
-                    <div
-                      key={entry.name}
-                      className="mb-2 grid grid-cols-2 items-center gap-4"
-                    >
-                      <label className="text-foreground text-sm font-medium">
-                        {entry.name}
-                        {isNew && (
-                          <span className="text-primary ml-2 text-xs font-normal">
-                            (new)
-                          </span>
-                        )}
-                      </label>
-                      <div className="flex w-full items-center gap-2">
-                        <div className="flex-1">
-                          <Input
-                            value={displayValue}
-                            onChange={(e) =>
-                              handleValueChange(entry.name, e.target.value)
-                            }
-                            onFocus={() => handleFieldFocus(entry.name)}
-                            onBlur={handleFieldBlur}
-                            placeholder={
-                              hasExistingValue
-                                ? "Replace existing value"
-                                : "Enter value"
-                            }
-                            type={
-                              canWrite && visibleFields.has(entry.name)
-                                ? "text"
-                                : "password"
-                            }
-                            className={`w-full font-mono text-sm ${isEdited ? "ring-1 ring-blue-500" : ""}`}
-                            disabled={isSaving || !canWrite}
-                          />
-                        </div>
-                        {canWrite && (
-                          <>
-                            <Button
-                              variant="tertiary"
-                              size="sm"
-                              className="mt-[1px] h-8 w-8 flex-shrink-0 self-start"
-                              onClick={() => handleToggleVisibility(entry.name)}
-                              disabled={isSaving}
-                              aria-label={
-                                visibleFields.has(entry.name)
-                                  ? `Hide ${entry.name}`
-                                  : `Show ${entry.name}`
+                    // Display logic matching ToolsetAuth:
+                    // - If edited, show the edited value
+                    // - If not focused and has existing value, show the original value
+                    // - If focused, show empty (to allow typing replacement)
+                    let displayValue = "";
+                    if (isEdited) {
+                      displayValue = envValues[entry.name] ?? "";
+                    } else if (
+                      !isFocused &&
+                      hasExistingValue &&
+                      originalEntry?.value
+                    ) {
+                      displayValue = originalEntry.value;
+                    }
+
+                    return (
+                      <div
+                        key={entry.name}
+                        className="mb-2 grid grid-cols-2 items-center gap-4"
+                      >
+                        <label className="text-foreground text-sm font-medium">
+                          {entry.name}
+                          {isNew && (
+                            <span className="text-primary ml-2 text-xs font-normal">
+                              (new)
+                            </span>
+                          )}
+                        </label>
+                        <div className="flex w-full items-center gap-2">
+                          <div className="flex-1">
+                            <Input
+                              value={displayValue}
+                              onChange={(e) =>
+                                handleValueChange(entry.name, e.target.value)
                               }
-                            >
-                              <Button.LeftIcon>
-                                {visibleFields.has(entry.name) ? (
-                                  <EyeOff className="h-4 w-4" />
-                                ) : (
-                                  <Eye className="h-4 w-4" />
-                                )}
-                              </Button.LeftIcon>
-                            </Button>
-                            <Button
-                              variant="tertiary"
-                              size="sm"
-                              className="mt-[1px] h-8 w-8 flex-shrink-0 self-start"
-                              onClick={() => handleRemoveVariable(entry.name)}
-                              disabled={isSaving}
-                              aria-label={`Remove ${entry.name}`}
-                            >
-                              <Button.LeftIcon>
-                                <Trash2 className="h-4 w-4" />
-                              </Button.LeftIcon>
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-
-                {isAddingNew && (
-                  <div className="space-y-2">
-                    <div className="mb-2 grid grid-cols-2 items-center gap-4">
-                      <Input
-                        value={newEntryName}
-                        onChange={(e) =>
-                          setNewEntryName(e.target.value.toUpperCase())
-                        }
-                        onKeyDown={(e) => {
-                          if (e.key === "Escape") {
-                            handleCancelNewEntry();
-                          }
-                        }}
-                        placeholder="NAME"
-                        className="w-full font-mono text-sm"
-                        disabled={isSaving}
-                        autoFocus
-                      />
-                      <div className="flex w-full items-center gap-2">
-                        <div className="flex-1">
-                          <Input
-                            value={newEntryValue}
-                            onChange={(e) => setNewEntryValue(e.target.value)}
-                            placeholder="Value"
-                            type={newEntryVisible ? "text" : "password"}
-                            className="w-full font-mono text-sm"
-                            disabled={isSaving}
-                          />
+                              onFocus={() => handleFieldFocus(entry.name)}
+                              onBlur={handleFieldBlur}
+                              placeholder={
+                                hasExistingValue
+                                  ? "Replace existing value"
+                                  : "Enter value"
+                              }
+                              type={
+                                canWrite && visibleFields.has(entry.name)
+                                  ? "text"
+                                  : "password"
+                              }
+                              className={`w-full font-mono text-sm ${isEdited ? "ring-1 ring-blue-500" : ""}`}
+                              disabled={isSaving || !canWrite}
+                            />
+                          </div>
+                          {canWrite && (
+                            <>
+                              <Button
+                                variant="tertiary"
+                                size="sm"
+                                className="mt-[1px] h-8 w-8 flex-shrink-0 self-start"
+                                onClick={() =>
+                                  handleToggleVisibility(entry.name)
+                                }
+                                disabled={isSaving}
+                                aria-label={
+                                  visibleFields.has(entry.name)
+                                    ? `Hide ${entry.name}`
+                                    : `Show ${entry.name}`
+                                }
+                              >
+                                <Button.LeftIcon>
+                                  {visibleFields.has(entry.name) ? (
+                                    <EyeOff className="h-4 w-4" />
+                                  ) : (
+                                    <Eye className="h-4 w-4" />
+                                  )}
+                                </Button.LeftIcon>
+                              </Button>
+                              <Button
+                                variant="tertiary"
+                                size="sm"
+                                className="mt-[1px] h-8 w-8 flex-shrink-0 self-start"
+                                onClick={() => handleRemoveVariable(entry.name)}
+                                disabled={isSaving}
+                                aria-label={`Remove ${entry.name}`}
+                              >
+                                <Button.LeftIcon>
+                                  <Trash2 className="h-4 w-4" />
+                                </Button.LeftIcon>
+                              </Button>
+                            </>
+                          )}
                         </div>
-                        <Button
-                          variant="tertiary"
-                          size="sm"
-                          className="mt-[1px] h-8 w-8 flex-shrink-0 self-start"
-                          onClick={() => setNewEntryVisible(!newEntryVisible)}
-                          disabled={isSaving}
-                          aria-label={
-                            newEntryVisible ? "Hide value" : "Show value"
+                      </div>
+                    );
+                  })}
+
+                  {isAddingNew && (
+                    <div className="space-y-2">
+                      <div className="mb-2 grid grid-cols-2 items-center gap-4">
+                        <Input
+                          value={newEntryName}
+                          onChange={(e) =>
+                            setNewEntryName(e.target.value.toUpperCase())
                           }
-                        >
-                          <Button.LeftIcon>
-                            {newEntryVisible ? (
-                              <EyeOff className="h-4 w-4" />
-                            ) : (
-                              <Eye className="h-4 w-4" />
-                            )}
-                          </Button.LeftIcon>
+                          onKeyDown={(e) => {
+                            if (e.key === "Escape") {
+                              handleCancelNewEntry();
+                            }
+                          }}
+                          placeholder="NAME"
+                          className="w-full font-mono text-sm"
+                          disabled={isSaving}
+                          autoFocus
+                        />
+                        <div className="flex w-full items-center gap-2">
+                          <div className="flex-1">
+                            <Input
+                              value={newEntryValue}
+                              onChange={(e) => setNewEntryValue(e.target.value)}
+                              placeholder="Value"
+                              type={newEntryVisible ? "text" : "password"}
+                              className="w-full font-mono text-sm"
+                              disabled={isSaving}
+                            />
+                          </div>
+                          <Button
+                            variant="tertiary"
+                            size="sm"
+                            className="mt-[1px] h-8 w-8 flex-shrink-0 self-start"
+                            onClick={() => setNewEntryVisible(!newEntryVisible)}
+                            disabled={isSaving}
+                            aria-label={
+                              newEntryVisible ? "Hide value" : "Show value"
+                            }
+                          >
+                            <Button.LeftIcon>
+                              {newEntryVisible ? (
+                                <EyeOff className="h-4 w-4" />
+                              ) : (
+                                <Eye className="h-4 w-4" />
+                              )}
+                            </Button.LeftIcon>
+                          </Button>
+                          <Button
+                            variant="tertiary"
+                            size="sm"
+                            className="mt-[1px] h-8 w-8 flex-shrink-0 self-start"
+                            onClick={handleCancelNewEntry}
+                            disabled={isSaving}
+                            aria-label="Cancel new entry"
+                          >
+                            <Button.LeftIcon>
+                              <X className="h-4 w-4" />
+                            </Button.LeftIcon>
+                          </Button>
+                        </div>
+                      </div>
+                      {!validateEntryName(newEntryName) &&
+                        newEntryName.length > 0 && (
+                          <p className="text-destructive text-xs">
+                            Variable name must start with a letter, underscore,
+                            dash, or period and contain only alphanumeric
+                            characters, underscores, dashes, or periods
+                          </p>
+                        )}
+                    </div>
+                  )}
+                </div>
+
+                {hasChangesOrNewEntry && (
+                  <SaveActionBar
+                    saveError={saveError}
+                    isSaving={isSaving}
+                    onSave={handleSave}
+                    onCancel={handleCancel}
+                  />
+                )}
+
+                {allEntries.length === 0 && !isAddingNew && (
+                  <div className="py-8 text-center">
+                    <p className="text-muted-foreground text-sm">
+                      No environment variables defined
+                    </p>
+                    {canWrite && (
+                      <div className="mt-4 flex flex-col items-center gap-2">
+                        <Button onClick={handleAddNewEntry}>
+                          <Plus className="mr-2 h-4 w-4" />
+                          ADD YOUR FIRST VARIABLE
                         </Button>
                         <Button
-                          variant="tertiary"
-                          size="sm"
-                          className="mt-[1px] h-8 w-8 flex-shrink-0 self-start"
-                          onClick={handleCancelNewEntry}
-                          disabled={isSaving}
-                          aria-label="Cancel new entry"
+                          variant="secondary"
+                          onClick={() => setToolsetDialogOpen(true)}
                         >
-                          <Button.LeftIcon>
-                            <X className="h-4 w-4" />
-                          </Button.LeftIcon>
+                          FILL FOR TOOLSET
                         </Button>
                       </div>
-                    </div>
-                    {!validateEntryName(newEntryName) &&
-                      newEntryName.length > 0 && (
-                        <p className="text-destructive text-xs">
-                          Variable name must start with a letter, underscore,
-                          dash, or period and contain only alphanumeric
-                          characters, underscores, dashes, or periods
-                        </p>
-                      )}
+                    )}
                   </div>
                 )}
               </div>
 
-              {hasChangesOrNewEntry && (
-                <SaveActionBar
-                  saveError={saveError}
-                  isSaving={isSaving}
-                  onSave={handleSave}
-                  onCancel={handleCancel}
-                />
-              )}
+              <ToolsetDialog
+                open={toolsetDialogOpen}
+                onOpenChange={setToolsetDialogOpen}
+                onSubmit={handleToolsetSubmit}
+              />
 
-              {allEntries.length === 0 && !isAddingNew && (
-                <div className="py-8 text-center">
-                  <p className="text-muted-foreground text-sm">
-                    No environment variables defined
-                  </p>
-                  {canWrite && (
-                    <div className="mt-4 flex flex-col items-center gap-2">
-                      <Button onClick={handleAddNewEntry}>
-                        <Plus className="mr-2 h-4 w-4" />
-                        ADD YOUR FIRST VARIABLE
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        onClick={() => setToolsetDialogOpen(true)}
-                      >
-                        FILL FOR TOOLSET
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <ToolsetDialog
-              open={toolsetDialogOpen}
-              onOpenChange={setToolsetDialogOpen}
-              onSubmit={handleToolsetSubmit}
-            />
-
-            <Dialog
-              open={deleteConfirmDialog.open}
-              onOpenChange={(open) => {
-                void (
-                  !open && setDeleteConfirmDialog({ open: false, varName: "" })
-                );
-              }}
-            >
-              <Dialog.Content>
-                <Dialog.Header>
-                  <Dialog.Title>Delete Environment Variable</Dialog.Title>
-                  <Dialog.Description>
-                    Are you sure you want to delete{" "}
-                    <strong>{deleteConfirmDialog.varName}</strong>? This action
-                    will be permanent once you save your changes.
-                  </Dialog.Description>
-                </Dialog.Header>
-                <Dialog.Footer>
-                  <Button
-                    variant="tertiary"
-                    onClick={() =>
-                      setDeleteConfirmDialog({ open: false, varName: "" })
-                    }
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    variant="destructive-primary"
-                    onClick={() => confirmDelete(deleteConfirmDialog.varName)}
-                  >
-                    Delete
-                  </Button>
-                </Dialog.Footer>
-              </Dialog.Content>
-            </Dialog>
-          </Page.Section.Body>
-        </Page.Section>
+              <Dialog
+                open={deleteConfirmDialog.open}
+                onOpenChange={(open) => {
+                  void (
+                    !open &&
+                    setDeleteConfirmDialog({ open: false, varName: "" })
+                  );
+                }}
+              >
+                <Dialog.Content>
+                  <Dialog.Header>
+                    <Dialog.Title>Delete Environment Variable</Dialog.Title>
+                    <Dialog.Description>
+                      Are you sure you want to delete{" "}
+                      <strong>{deleteConfirmDialog.varName}</strong>? This
+                      action will be permanent once you save your changes.
+                    </Dialog.Description>
+                  </Dialog.Header>
+                  <Dialog.Footer>
+                    <Button
+                      variant="tertiary"
+                      onClick={() =>
+                        setDeleteConfirmDialog({ open: false, varName: "" })
+                      }
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      variant="destructive-primary"
+                      onClick={() => confirmDelete(deleteConfirmDialog.varName)}
+                    >
+                      Delete
+                    </Button>
+                  </Dialog.Footer>
+                </Dialog.Content>
+              </Dialog>
+            </DetailLayout.Main>
+          </DetailLayout.Content>
+        </DetailLayout>
       </Page.Body>
     </Page>
   );
