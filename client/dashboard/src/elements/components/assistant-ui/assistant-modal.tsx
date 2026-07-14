@@ -80,10 +80,8 @@ export const AssistantModal: FC<AssistantModalProps> = ({ className }) => {
       },
     [config.modal?.dimensions?.expanded],
   );
-  const isGenerating = useAuiState(
-    ({ thread }) =>
-      thread.messages.some((message) => message.status?.type === "running") ??
-      false,
+  const isGenerating = useAuiState(({ thread }) =>
+    thread.messages.some((message) => message.status?.type === "running"),
   );
 
   const effectiveWidth = isExpanded

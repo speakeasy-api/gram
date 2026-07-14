@@ -25,7 +25,9 @@ vi.mock("@/elements/hooks/useElements", () => ({
   }),
 }));
 
-vi.mock("@/elements/components/assistant-ui/thread", () => ({ Thread: () => null }));
+vi.mock("@/elements/components/assistant-ui/thread", () => ({
+  Thread: () => null,
+}));
 vi.mock("@/elements/components/assistant-ui/thread-list", () => ({
   ThreadList: () => null,
 }));
@@ -45,6 +47,11 @@ describe("AssistantModal", () => {
     });
 
     expect(selected).toBe(false);
+    expect(
+      mocks.stateSelector?.({
+        thread: { messages: [{ status: { type: "running" } }] },
+      }),
+    ).toBe(true);
   });
 });
 
@@ -60,5 +67,10 @@ describe("AssistantSidecar", () => {
     });
 
     expect(selected).toBe(false);
+    expect(
+      mocks.stateSelector?.({
+        thread: { messages: [{ status: { type: "running" } }] },
+      }),
+    ).toBe(true);
   });
 });
