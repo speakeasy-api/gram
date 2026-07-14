@@ -1,9 +1,4 @@
-import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
-
-export function cn(...inputs: ClassValue[]): string {
-  return twMerge(clsx(inputs));
-}
+export { assert, cn } from "@/lib/utils";
 
 export function assertNever(value: unknown): never {
   throw new Error(`Unexpected value: ${String(value)}`);
@@ -26,12 +21,6 @@ export function initialsOf(identifier: string): string {
     ).toUpperCase();
   }
   return handle.trim().slice(0, 2).toUpperCase();
-}
-
-export function assert(condition: unknown, message: string): asserts condition {
-  if (!condition) {
-    throw new Error(message);
-  }
 }
 
 /** Sleep that respects AbortSignal for clean cancellation. */
