@@ -85,6 +85,7 @@ import {
   ALL_POLICY_MESSAGE_TYPES,
   CATEGORY_LEVEL_DETECTORS,
   FLAG_ONLY_CATEGORIES,
+  PRESIDIO_CATEGORIES,
   SCOPE_EXEMPT_CEL_EXAMPLES,
   SCOPE_INCLUDE_CEL_EXAMPLES,
   categoriesToPayload,
@@ -173,6 +174,11 @@ const STANDARD_STEPS: Step[] = [
     id: "detect",
     title: "Detect",
     description: "Turn on detector categories and custom rules.",
+  },
+  {
+    id: "sensitivity",
+    title: "Sensitivity",
+    description: "Tune detection confidence.",
   },
   {
     id: "scope",
@@ -1221,6 +1227,73 @@ function SeveritySection({
         />
       </div>
     </div>
+  );
+}
+
+// ── Sensitivity step (Presidio match-confidence threshold) ───────────────────
+// The minimum confidence a Presidio PII match must clear to be flagged. Applies
+// to every Presidio-backed detector in a standard policy and is only persisted
+// while at least one such category is active (see `presidioActive` in the
+// editor). Non-Presidio policies don't carry a stray threshold.
+const PRESIDIO_THRESHOLD_MIN = 0;
+const PRESIDIO_THRESHOLD_MAX = 1;
+const PRESIDIO_THRESHOLD_STEP = 0.05;
+const PRESIDIO_THRESHOLD_TICKS = [0, 0.25, 0.5, 0.75, 1];
+const DEFAULT_PRESIDIO_THRESHOLD = 0.5;
+
+function SensitivityStep({
+  active,
+  threshold,
+  setThreshold,
+}: {
+  active: boolean;
+  threshold: number;
+  setThreshold: React.Dispatch<React.SetStateAction<number>>;
+}): JSX.Element {
+  return (
+    <Card>
+      <SectionHeader description="Tune the confidence a match must clear before it's flagged." />
+      {active ? (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label className="text-sm font-medium">Detection sensitivity</Label>
+            <Type small mono>
+              {threshold.toFixed(2)}
+              {threshold === DEFAULT_PRESIDIO_THRESHOLD ? " · default" : ""}
+            </Type>
+          </div>
+          <Type small muted>
+            Minimum confidence a match must clear to be flagged, from{" "}
+            {PRESIDIO_THRESHOLD_MIN} to {PRESIDIO_THRESHOLD_MAX}. Higher means
+            fewer false positives but may miss borderline matches. Applies to
+            all Presidio-backed detectors in this policy.
+          </Type>
+          <div className="pt-3">
+            <Slider
+              value={threshold}
+              onChange={(v) =>
+                setThreshold(
+                  Math.max(
+                    PRESIDIO_THRESHOLD_MIN,
+                    Math.min(PRESIDIO_THRESHOLD_MAX, Math.round(v * 20) / 20),
+                  ),
+                )
+              }
+              min={PRESIDIO_THRESHOLD_MIN}
+              max={PRESIDIO_THRESHOLD_MAX}
+              step={PRESIDIO_THRESHOLD_STEP}
+              ticks={PRESIDIO_THRESHOLD_TICKS}
+            />
+          </div>
+        </div>
+      ) : (
+        <Type small muted>
+          Sensitivity applies to confidence-scored detectors. Turn on a
+          PII-style category (Financial, PII, Government IDs, Healthcare, or
+          Off-Policy) in the Detect step to adjust it.
+        </Type>
+      )}
+    </Card>
   );
 }
 
@@ -2820,6 +2893,8 @@ function StandardPolicyEditor({
           ? new Set(policy.audiencePrincipalUrns ?? [])
           : new Set<string>(),
       score: policy.score ?? 5,
+      presidioThreshold:
+        policy.presidioScoreThreshold ?? DEFAULT_PRESIDIO_THRESHOLD,
     };
   }, [policy]);
 
@@ -2865,6 +2940,9 @@ function StandardPolicyEditor({
     useState<RuleCategory | null>(null);
   const [detectionExpanded, setDetectionExpanded] = useState(true);
   const [score, setScore] = useState(policy?.score ?? 5);
+  const [presidioThreshold, setPresidioThreshold] = useState<number>(
+    policy?.presidioScoreThreshold ?? DEFAULT_PRESIDIO_THRESHOLD,
+  );
 
   // ── Derived state ──
   const includeCelStatus = useCelStatus(
@@ -2872,6 +2950,9 @@ function StandardPolicyEditor({
   );
   const exemptCelStatus = useCelStatus(scopeExempt);
   const flagOnlySelected = [...FLAG_ONLY_CATEGORIES].some((c) =>
+    selectedCategories.has(c),
+  );
+  const presidioActive = PRESIDIO_CATEGORIES.some((c) =>
     selectedCategories.has(c),
   );
   const hasEnabledDetector =
@@ -2912,6 +2993,7 @@ function StandardPolicyEditor({
       !sameSet(selectedCategories, orig.categories) ||
       approvedDomains !== orig.approvedDomains ||
       score !== orig.score ||
+      (presidioActive && presidioThreshold !== orig.presidioThreshold) ||
       !sameSet(audiencePrincipalUrns, orig.audiencePrincipalUrns));
 
   const updateMutation = useRiskPoliciesUpdateMutation({
@@ -3006,6 +3088,9 @@ function StandardPolicyEditor({
             autoName,
             userMessage,
             score,
+            ...(presidioActive
+              ? { presidioScoreThreshold: presidioThreshold }
+              : {}),
             ...(identityActive ? { approvedEmailDomains } : {}),
           },
         },
@@ -3030,6 +3115,9 @@ function StandardPolicyEditor({
             autoName,
             ...(userMessage.trim() ? { userMessage } : {}),
             score,
+            ...(presidioActive
+              ? { presidioScoreThreshold: presidioThreshold }
+              : {}),
             ...(identityActive ? { approvedEmailDomains } : {}),
           },
         },
@@ -3117,6 +3205,14 @@ function StandardPolicyEditor({
         )}
 
         {step === 1 && (
+          <SensitivityStep
+            active={presidioActive}
+            threshold={presidioThreshold}
+            setThreshold={setPresidioThreshold}
+          />
+        )}
+
+        {step === 2 && (
           <ScopeStep
             description="Apply everywhere, or narrow the scope to reduce noise and cost."
             messageTypes={selectedMessageTypes}
@@ -3130,7 +3226,7 @@ function StandardPolicyEditor({
           />
         )}
 
-        {step === 2 && (
+        {step === 3 && (
           <ActionStep
             action={action}
             setAction={setAction}
@@ -3146,7 +3242,7 @@ function StandardPolicyEditor({
           />
         )}
 
-        {step === 3 && (
+        {step === 4 && (
           <StandardReview
             name={name}
             categories={selectedCategories}
@@ -3157,6 +3253,8 @@ function StandardPolicyEditor({
             scopeExempt={scopeExempt}
             action={action}
             score={score}
+            presidioActive={presidioActive}
+            presidioThreshold={presidioThreshold}
             audienceType={audienceType}
             audiencePrincipalCount={audiencePrincipalUrns.size}
           />
@@ -3192,6 +3290,8 @@ function StandardReview({
   scopeExempt,
   action,
   score,
+  presidioActive,
+  presidioThreshold,
   audienceType,
   audiencePrincipalCount,
 }: {
@@ -3204,6 +3304,8 @@ function StandardReview({
   scopeExempt: string;
   action: PolicyAction;
   score: number;
+  presidioActive: boolean;
+  presidioThreshold: number;
   audienceType: "everyone" | "targeted";
   audiencePrincipalCount: number;
 }): JSX.Element {
@@ -3245,6 +3347,16 @@ function StandardReview({
             </Type>
           )}
         </SummaryRow>
+        {presidioActive ? (
+          <SummaryRow label="Sensitivity">
+            <Type small mono>
+              {presidioThreshold.toFixed(2)}
+              {presidioThreshold === DEFAULT_PRESIDIO_THRESHOLD
+                ? " · default"
+                : ""}
+            </Type>
+          </SummaryRow>
+        ) : null}
         <SummaryRow label="Scope">
           <Type small className="text-right">
             {scopeText}

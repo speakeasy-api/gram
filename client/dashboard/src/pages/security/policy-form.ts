@@ -8,7 +8,7 @@ import {
 import { ruleIdToPresidioEntity } from "./rule-ids";
 
 /** Presidio-backed categories */
-const PRESIDIO_CATEGORIES: RuleCategory[] = [
+export const PRESIDIO_CATEGORIES: RuleCategory[] = [
   "financial",
   "pii",
   "government_ids",
