@@ -3,6 +3,8 @@ server/cmd/risk-pi-report/main.go
   s_bd7cd997c597f2::t_344cd54ed44df4 64,179,775,804
 server/internal/scanners/promptinjection/scanner_test.go
   s_bd7cd997c597f2::t_726b2e48d865e5 39,70,72-74,79,81-84,86,89,92,98,103,105,110,115,118-121,127,129,132,134,139-140,149,152,156-158,172-174,176-184,187-189,191,194,197,201,204-207,209-215,217-218,223,228,231,235-237,242-243
+  s_bd7cd997c597f2::t_c948e1289f64eb 77,85,96,99,108,111,125,128,137,145,147,168-169,175,185-186,190,202-203,208,219-220,224,238-239,244
+  s_bd7cd997c597f2::t_99ad08c257eb89 143
 server/internal/scanners/promptinjection/testdata/prompt_injection/corpus_notes.md
   s_bd7cd997c597f2::t_f838fc20baa236 22,30,53
 .changeset/prompt-injection-judge-always-on.md
@@ -10,16 +12,22 @@ server/internal/scanners/promptinjection/testdata/prompt_injection/corpus_notes.
 server/internal/scanners/promptinjection/scanner.go
   s_bd7cd997c597f2::t_257ff206a6a267 106
   s_bd7cd997c597f2::t_feb67692b70f47 72,76,79,83,85,90-93,99
+  s_bd7cd997c597f2::t_e6066a00baae92 65,88
 server/internal/background/activities/risk_analysis/scan_prompt_injection.go
   s_bd7cd997c597f2::t_4c125039ea608c 15,17-18
+  s_bd7cd997c597f2::t_ce489f4192a352 16,19,22
 client/dashboard/src/pages/security/policy-data.ts
   s_bd7cd997c597f2::t_78fd40b13ae9a9 1577-1578
 server/internal/scanners/promptinjection/openrouter/judge.go
   s_bd7cd997c597f2::t_73ab400f2b7664 1,35,99,140
 server/internal/risk/scanner.go
   s_bd7cd997c597f2::t_6c68ebd0b3e916 176,184
+  s_bd7cd997c597f2::t_30bade959a2370 323,450,577
+  s_bd7cd997c597f2::t_92492476cf4a25 185
 server/internal/scanners/promptinjection/testdata/prompt_injection/floors.json
   s_bd7cd997c597f2::t_63e9ba7e40a44f 6
+server/internal/risk/impl.go
+  s_bd7cd997c597f2::t_54560f91bdea5a 2969
 ---
 {
   "schema_version": "authorship/3.0.0",
