@@ -132,8 +132,13 @@ function ObservabilityLayoutGrid({
     3: "grid-cols-1 md:grid-cols-2 xl:grid-cols-3",
   }[columns];
 
+  // Default top margin matches `.Section`'s rhythm so a Grid that follows the
+  // Stats band (or another Grid) isn't cramped; override with `mt-0` if a Grid
+  // ever leads the body.
   return (
-    <div className={cn("grid gap-6", columnClass, className)}>{children}</div>
+    <div className={cn("mt-10 grid gap-6", columnClass, className)}>
+      {children}
+    </div>
   );
 }
 
