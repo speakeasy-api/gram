@@ -1757,6 +1757,8 @@ func ParseEndpoint(
 		riskListRiskResultsRuleIDFlag           = riskListRiskResultsFlags.String("rule-id", "", "")
 		riskListRiskResultsUserIDFlag           = riskListRiskResultsFlags.String("user-id", "", "")
 		riskListRiskResultsUniqueMatchFlag      = riskListRiskResultsFlags.String("unique-match", "", "")
+		riskListRiskResultsNonAssistantFlag     = riskListRiskResultsFlags.String("non-assistant", "", "")
+		riskListRiskResultsAssistantIDFlag      = riskListRiskResultsFlags.String("assistant-id", "", "")
 		riskListRiskResultsFromFlag             = riskListRiskResultsFlags.String("from", "", "")
 		riskListRiskResultsToFlag               = riskListRiskResultsFlags.String("to", "", "")
 		riskListRiskResultsCursorFlag           = riskListRiskResultsFlags.String("cursor", "", "")
@@ -1772,6 +1774,8 @@ func ParseEndpoint(
 		riskListRiskResultsForAgentRuleIDFlag           = riskListRiskResultsForAgentFlags.String("rule-id", "", "")
 		riskListRiskResultsForAgentUserIDFlag           = riskListRiskResultsForAgentFlags.String("user-id", "", "")
 		riskListRiskResultsForAgentUniqueMatchFlag      = riskListRiskResultsForAgentFlags.String("unique-match", "", "")
+		riskListRiskResultsForAgentNonAssistantFlag     = riskListRiskResultsForAgentFlags.String("non-assistant", "", "")
+		riskListRiskResultsForAgentAssistantIDFlag      = riskListRiskResultsForAgentFlags.String("assistant-id", "", "")
 		riskListRiskResultsForAgentFromFlag             = riskListRiskResultsForAgentFlags.String("from", "", "")
 		riskListRiskResultsForAgentToFlag               = riskListRiskResultsForAgentFlags.String("to", "", "")
 		riskListRiskResultsForAgentCursorFlag           = riskListRiskResultsForAgentFlags.String("cursor", "", "")
@@ -5693,10 +5697,10 @@ func ParseEndpoint(
 				data, err = riskc.BuildDeleteRiskPolicyPayload(*riskDeleteRiskPolicyIDFlag, *riskDeleteRiskPolicyApikeyTokenFlag, *riskDeleteRiskPolicySessionTokenFlag, *riskDeleteRiskPolicyProjectSlugInputFlag)
 			case "list-risk-results":
 				endpoint = c.ListRiskResults()
-				data, err = riskc.BuildListRiskResultsPayload(*riskListRiskResultsPolicyIDFlag, *riskListRiskResultsChatIDFlag, *riskListRiskResultsCategoryFlag, *riskListRiskResultsRuleIDFlag, *riskListRiskResultsUserIDFlag, *riskListRiskResultsUniqueMatchFlag, *riskListRiskResultsFromFlag, *riskListRiskResultsToFlag, *riskListRiskResultsCursorFlag, *riskListRiskResultsLimitFlag, *riskListRiskResultsApikeyTokenFlag, *riskListRiskResultsSessionTokenFlag, *riskListRiskResultsProjectSlugInputFlag)
+				data, err = riskc.BuildListRiskResultsPayload(*riskListRiskResultsPolicyIDFlag, *riskListRiskResultsChatIDFlag, *riskListRiskResultsCategoryFlag, *riskListRiskResultsRuleIDFlag, *riskListRiskResultsUserIDFlag, *riskListRiskResultsUniqueMatchFlag, *riskListRiskResultsNonAssistantFlag, *riskListRiskResultsAssistantIDFlag, *riskListRiskResultsFromFlag, *riskListRiskResultsToFlag, *riskListRiskResultsCursorFlag, *riskListRiskResultsLimitFlag, *riskListRiskResultsApikeyTokenFlag, *riskListRiskResultsSessionTokenFlag, *riskListRiskResultsProjectSlugInputFlag)
 			case "list-risk-results-for-agent":
 				endpoint = c.ListRiskResultsForAgent()
-				data, err = riskc.BuildListRiskResultsForAgentPayload(*riskListRiskResultsForAgentPolicyIDFlag, *riskListRiskResultsForAgentChatIDFlag, *riskListRiskResultsForAgentCategoryFlag, *riskListRiskResultsForAgentRuleIDFlag, *riskListRiskResultsForAgentUserIDFlag, *riskListRiskResultsForAgentUniqueMatchFlag, *riskListRiskResultsForAgentFromFlag, *riskListRiskResultsForAgentToFlag, *riskListRiskResultsForAgentCursorFlag, *riskListRiskResultsForAgentLimitFlag, *riskListRiskResultsForAgentApikeyTokenFlag, *riskListRiskResultsForAgentSessionTokenFlag, *riskListRiskResultsForAgentProjectSlugInputFlag)
+				data, err = riskc.BuildListRiskResultsForAgentPayload(*riskListRiskResultsForAgentPolicyIDFlag, *riskListRiskResultsForAgentChatIDFlag, *riskListRiskResultsForAgentCategoryFlag, *riskListRiskResultsForAgentRuleIDFlag, *riskListRiskResultsForAgentUserIDFlag, *riskListRiskResultsForAgentUniqueMatchFlag, *riskListRiskResultsForAgentNonAssistantFlag, *riskListRiskResultsForAgentAssistantIDFlag, *riskListRiskResultsForAgentFromFlag, *riskListRiskResultsForAgentToFlag, *riskListRiskResultsForAgentCursorFlag, *riskListRiskResultsForAgentLimitFlag, *riskListRiskResultsForAgentApikeyTokenFlag, *riskListRiskResultsForAgentSessionTokenFlag, *riskListRiskResultsForAgentProjectSlugInputFlag)
 			case "unmask-risk-result":
 				endpoint = c.UnmaskRiskResult()
 				data, err = riskc.BuildUnmaskRiskResultPayload(*riskUnmaskRiskResultBodyFlag, *riskUnmaskRiskResultApikeyTokenFlag, *riskUnmaskRiskResultSessionTokenFlag, *riskUnmaskRiskResultProjectSlugInputFlag)
@@ -13302,6 +13306,8 @@ func riskListRiskResultsUsage() {
 	fmt.Fprint(os.Stderr, " -rule-id STRING")
 	fmt.Fprint(os.Stderr, " -user-id STRING")
 	fmt.Fprint(os.Stderr, " -unique-match BOOL")
+	fmt.Fprint(os.Stderr, " -non-assistant BOOL")
+	fmt.Fprint(os.Stderr, " -assistant-id STRING")
 	fmt.Fprint(os.Stderr, " -from STRING")
 	fmt.Fprint(os.Stderr, " -to STRING")
 	fmt.Fprint(os.Stderr, " -cursor STRING")
@@ -13322,6 +13328,8 @@ func riskListRiskResultsUsage() {
 	fmt.Fprintln(os.Stderr, `    -rule-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -user-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -unique-match BOOL: `)
+	fmt.Fprintln(os.Stderr, `    -non-assistant BOOL: `)
+	fmt.Fprintln(os.Stderr, `    -assistant-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -from STRING: `)
 	fmt.Fprintln(os.Stderr, `    -to STRING: `)
 	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
@@ -13332,7 +13340,7 @@ func riskListRiskResultsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-risk-results --policy-id \"550e8400-e29b-41d4-a716-446655440000\" --chat-id \"550e8400-e29b-41d4-a716-446655440000\" --category \"abc123\" --rule-id \"abc123\" --user-id \"abc123\" --unique-match false --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --cursor \"abc123\" --limit 2 --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-risk-results --policy-id \"550e8400-e29b-41d4-a716-446655440000\" --chat-id \"550e8400-e29b-41d4-a716-446655440000\" --category \"abc123\" --rule-id \"abc123\" --user-id \"abc123\" --unique-match false --non-assistant false --assistant-id \"550e8400-e29b-41d4-a716-446655440000\" --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --cursor \"abc123\" --limit 2 --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskListRiskResultsForAgentUsage() {
@@ -13344,6 +13352,8 @@ func riskListRiskResultsForAgentUsage() {
 	fmt.Fprint(os.Stderr, " -rule-id STRING")
 	fmt.Fprint(os.Stderr, " -user-id STRING")
 	fmt.Fprint(os.Stderr, " -unique-match BOOL")
+	fmt.Fprint(os.Stderr, " -non-assistant BOOL")
+	fmt.Fprint(os.Stderr, " -assistant-id STRING")
 	fmt.Fprint(os.Stderr, " -from STRING")
 	fmt.Fprint(os.Stderr, " -to STRING")
 	fmt.Fprint(os.Stderr, " -cursor STRING")
@@ -13364,6 +13374,8 @@ func riskListRiskResultsForAgentUsage() {
 	fmt.Fprintln(os.Stderr, `    -rule-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -user-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -unique-match BOOL: `)
+	fmt.Fprintln(os.Stderr, `    -non-assistant BOOL: `)
+	fmt.Fprintln(os.Stderr, `    -assistant-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -from STRING: `)
 	fmt.Fprintln(os.Stderr, `    -to STRING: `)
 	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
@@ -13374,7 +13386,7 @@ func riskListRiskResultsForAgentUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-risk-results-for-agent --policy-id \"550e8400-e29b-41d4-a716-446655440000\" --chat-id \"550e8400-e29b-41d4-a716-446655440000\" --category \"abc123\" --rule-id \"abc123\" --user-id \"abc123\" --unique-match false --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --cursor \"abc123\" --limit 2 --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-risk-results-for-agent --policy-id \"550e8400-e29b-41d4-a716-446655440000\" --chat-id \"550e8400-e29b-41d4-a716-446655440000\" --category \"abc123\" --rule-id \"abc123\" --user-id \"abc123\" --unique-match false --non-assistant false --assistant-id \"550e8400-e29b-41d4-a716-446655440000\" --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --cursor \"abc123\" --limit 2 --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskUnmaskRiskResultUsage() {
