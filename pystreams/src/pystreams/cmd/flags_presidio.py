@@ -1,6 +1,23 @@
+import math
 from collections.abc import Sequence
 
 import click
+
+
+def _finite_float(
+    ctx: click.Context, param: click.Parameter, value: float | None
+) -> float | None:
+    """Reject non-finite timeout values at parse time.
+
+    ``float`` parsing accepts ``nan`` and ``inf``, and NaN fails every
+    comparison — so it would slip past the scanners' ``<= 0`` disable checks
+    and *silently* turn a timeout off, reverting queued scans to unbounded
+    waits. A misconfigured bound should fail loudly here, where the error
+    names the flag; ``<= 0`` remains the one documented way to disable one.
+    """
+    if value is not None and not math.isfinite(value):
+        raise click.BadParameter("must be a finite number (use <=0 to disable)")
+    return value
 
 
 def presidio_options() -> Sequence[click.Option]:
@@ -45,6 +62,7 @@ def presidio_options() -> Sequence[click.Option]:
             ["--scan-timeout"],
             type=float,
             default=300.0,
+            callback=_finite_float,
             envvar="GRAM_PYSTREAMS_SCAN_TIMEOUT",
             help=(
                 "Seconds a single scan may execute before it is treated as a "
@@ -56,6 +74,7 @@ def presidio_options() -> Sequence[click.Option]:
             ["--scan-slot-timeout"],
             type=float,
             default=60.0,
+            callback=_finite_float,
             envvar="GRAM_PYSTREAMS_SCAN_SLOT_TIMEOUT",
             help=(
                 "Seconds a scan may wait for a free pool worker before the "
