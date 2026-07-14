@@ -47,6 +47,8 @@ type HeaderDraft = {
   isRequired: boolean;
   isSecret: boolean;
   hadSecret: boolean;
+  /** Row was seeded from the endpoint's catalog entry (and is unsaved). */
+  fromCatalog?: boolean;
 };
 
 function headerSourceFromServer(header: RemoteMcpServerHeader): HeaderSource {
@@ -153,6 +155,7 @@ function newHeaderDraft(): HeaderDraft {
 function headerDraftFromCatalog(header: ExternalMCPRemoteHeader): HeaderDraft {
   return {
     ...newHeaderDraft(),
+    fromCatalog: true,
     name: header.name,
     isRequired: header.isRequired ?? false,
     // Registries omit is_secret inconsistently; default suggested headers to
@@ -475,7 +478,7 @@ export function HeadersSection({
           </Type>
         ) : (
           <Stack gap={4}>
-            {suggestionsSeeded && drafts.some((draft) => !draft.id) && (
+            {drafts.some((draft) => draft.fromCatalog) && (
               <Type muted small>
                 These headers are suggested from this endpoint's MCP catalog
                 entry. Fill in the values and save, or remove the ones you don't
