@@ -862,7 +862,7 @@ jobs:
             git add -N -- server/migrations
             git diff -- server/migrations
             echo ""
-            echo "Fix: run 'mise run db:diff <name>' locally and commit the generated migration and atlas.sum."
+            echo "::error::Fix: run 'mise run db:diff <name>' locally and commit the generated migration and atlas.sum."
           fi
 
           mise run clickhouse:diff ci-drift-check
@@ -877,7 +877,7 @@ jobs:
             git add -N -- server/clickhouse server/internal/telemetry/repo
             git diff -- server/clickhouse server/internal/telemetry/repo
             echo ""
-            echo "Fix: run 'mise run clickhouse:diff <name>' locally and commit the generated files in both migration dirs."
+            echo "::error::Fix: run 'mise run clickhouse:diff <name>' locally and commit the generated files in both migration dirs."
           fi
 
           exit "$failed"
