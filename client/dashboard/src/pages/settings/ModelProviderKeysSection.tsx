@@ -102,7 +102,9 @@ function ModelProviderKeysTable({
 
   if (
     !customModelKeysEnabled &&
-    (isLoading || isError || (data?.keys.length ?? 0) === 0)
+    !isLoading &&
+    !isError &&
+    (data?.keys.length ?? 0) === 0
   ) {
     return null;
   }
