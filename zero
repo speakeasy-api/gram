@@ -95,9 +95,10 @@ if $agent_mode && ! command -v mise &> /dev/null; then
         echo "✅ Added mise activation in $bashrc"
     fi
 
-    zshrc="${ZDOTDIR-$HOME}/.zshrc"
+    # :- so a set-but-empty ZDOTDIR falls back to HOME too
+    zshrc="${ZDOTDIR:-$HOME}/.zshrc"
     if [ ! -f "$zshrc" ] || ! grep -Eq '^[^#]*mise activate zsh' "$zshrc"; then
-        mkdir -p "${ZDOTDIR-$HOME}"
+        mkdir -p "${ZDOTDIR:-$HOME}"
         echo "eval \"\$($mise_bin activate zsh)\"" >> "$zshrc"
         echo "✅ Added mise activation in $zshrc"
     fi
