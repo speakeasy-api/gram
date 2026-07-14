@@ -1590,6 +1590,18 @@ CREATE TABLE IF NOT EXISTS chat_messages (
 
 CREATE INDEX IF NOT EXISTS chat_messages_chat_id_idx ON chat_messages (chat_id);
 CREATE INDEX IF NOT EXISTS chat_messages_chat_id_generation_seq_idx ON chat_messages (chat_id, generation, seq);
+
+-- Chat listings derive each chat's message count and last-message time per
+-- request; this lets those be per-chat index-only probes instead of an
+-- aggregate over the chat's full message history.
+CREATE INDEX IF NOT EXISTS chat_messages_chat_id_created_at_idx
+ON chat_messages (chat_id, created_at);
+
+-- Latest non-empty source per chat as a single index-only probe (agent-type
+-- filter options via chats.listSources and the source filter on chats.list).
+CREATE INDEX IF NOT EXISTS chat_messages_chat_id_created_at_source_idx
+ON chat_messages (chat_id, created_at) INCLUDE (source)
+WHERE source IS NOT NULL AND source <> '';
 CREATE INDEX IF NOT EXISTS chat_messages_project_id_id_idx
 ON chat_messages (project_id, id)
 WHERE project_id IS NOT NULL;
