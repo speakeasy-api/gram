@@ -499,6 +499,248 @@ func DecodeUpsertKeyResponse(decoder func(*http.Response) goahttp.Decoder, resto
 	}
 }
 
+// BuildSetKeyEnabledRequest instantiates a HTTP request object with method and
+// path set to call the "modelKeys" service "setKeyEnabled" endpoint
+func (c *Client) BuildSetKeyEnabledRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetKeyEnabledModelKeysPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("modelKeys", "setKeyEnabled", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSetKeyEnabledRequest returns an encoder for requests sent to the
+// modelKeys setKeyEnabled server.
+func EncodeSetKeyEnabledRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*modelkeys.SetKeyEnabledPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("modelKeys", "setKeyEnabled", "*modelkeys.SetKeyEnabledPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewSetKeyEnabledRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("modelKeys", "setKeyEnabled", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSetKeyEnabledResponse returns a decoder for responses returned by the
+// modelKeys setKeyEnabled endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeSetKeyEnabledResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSetKeyEnabledResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SetKeyEnabledResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("modelKeys", "setKeyEnabled", err)
+			}
+			err = ValidateSetKeyEnabledResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("modelKeys", "setKeyEnabled", err)
+			}
+			res := NewSetKeyEnabledModelProviderKeyOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SetKeyEnabledUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("modelKeys", "setKeyEnabled", err)
+			}
+			err = ValidateSetKeyEnabledUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("modelKeys", "setKeyEnabled", err)
+			}
+			return nil, NewSetKeyEnabledUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SetKeyEnabledForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("modelKeys", "setKeyEnabled", err)
+			}
+			err = ValidateSetKeyEnabledForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("modelKeys", "setKeyEnabled", err)
+			}
+			return nil, NewSetKeyEnabledForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SetKeyEnabledBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("modelKeys", "setKeyEnabled", err)
+			}
+			err = ValidateSetKeyEnabledBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("modelKeys", "setKeyEnabled", err)
+			}
+			return nil, NewSetKeyEnabledBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SetKeyEnabledNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("modelKeys", "setKeyEnabled", err)
+			}
+			err = ValidateSetKeyEnabledNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("modelKeys", "setKeyEnabled", err)
+			}
+			return nil, NewSetKeyEnabledNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SetKeyEnabledConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("modelKeys", "setKeyEnabled", err)
+			}
+			err = ValidateSetKeyEnabledConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("modelKeys", "setKeyEnabled", err)
+			}
+			return nil, NewSetKeyEnabledConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SetKeyEnabledUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("modelKeys", "setKeyEnabled", err)
+			}
+			err = ValidateSetKeyEnabledUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("modelKeys", "setKeyEnabled", err)
+			}
+			return nil, NewSetKeyEnabledUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SetKeyEnabledInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("modelKeys", "setKeyEnabled", err)
+			}
+			err = ValidateSetKeyEnabledInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("modelKeys", "setKeyEnabled", err)
+			}
+			return nil, NewSetKeyEnabledInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SetKeyEnabledInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("modelKeys", "setKeyEnabled", err)
+				}
+				err = ValidateSetKeyEnabledInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("modelKeys", "setKeyEnabled", err)
+				}
+				return nil, NewSetKeyEnabledInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SetKeyEnabledUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("modelKeys", "setKeyEnabled", err)
+				}
+				err = ValidateSetKeyEnabledUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("modelKeys", "setKeyEnabled", err)
+				}
+				return nil, NewSetKeyEnabledUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("modelKeys", "setKeyEnabled", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SetKeyEnabledGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("modelKeys", "setKeyEnabled", err)
+			}
+			err = ValidateSetKeyEnabledGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("modelKeys", "setKeyEnabled", err)
+			}
+			return nil, NewSetKeyEnabledGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("modelKeys", "setKeyEnabled", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildDeleteKeyRequest instantiates a HTTP request object with method and
 // path set to call the "modelKeys" service "deleteKey" endpoint
 func (c *Client) BuildDeleteKeyRequest(ctx context.Context, v any) (*http.Request, error) {

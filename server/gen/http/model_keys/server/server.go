@@ -18,10 +18,11 @@ import (
 
 // Server lists the modelKeys service endpoint HTTP handlers.
 type Server struct {
-	Mounts    []*MountPoint
-	ListKeys  http.Handler
-	UpsertKey http.Handler
-	DeleteKey http.Handler
+	Mounts        []*MountPoint
+	ListKeys      http.Handler
+	UpsertKey     http.Handler
+	SetKeyEnabled http.Handler
+	DeleteKey     http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -53,11 +54,13 @@ func New(
 		Mounts: []*MountPoint{
 			{"ListKeys", "GET", "/rpc/modelKeys.listKeys"},
 			{"UpsertKey", "POST", "/rpc/modelKeys.upsertKey"},
+			{"SetKeyEnabled", "POST", "/rpc/modelKeys.setKeyEnabled"},
 			{"DeleteKey", "DELETE", "/rpc/modelKeys.deleteKey"},
 		},
-		ListKeys:  NewListKeysHandler(e.ListKeys, mux, decoder, encoder, errhandler, formatter),
-		UpsertKey: NewUpsertKeyHandler(e.UpsertKey, mux, decoder, encoder, errhandler, formatter),
-		DeleteKey: NewDeleteKeyHandler(e.DeleteKey, mux, decoder, encoder, errhandler, formatter),
+		ListKeys:      NewListKeysHandler(e.ListKeys, mux, decoder, encoder, errhandler, formatter),
+		UpsertKey:     NewUpsertKeyHandler(e.UpsertKey, mux, decoder, encoder, errhandler, formatter),
+		SetKeyEnabled: NewSetKeyEnabledHandler(e.SetKeyEnabled, mux, decoder, encoder, errhandler, formatter),
+		DeleteKey:     NewDeleteKeyHandler(e.DeleteKey, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -68,6 +71,7 @@ func (s *Server) Service() string { return "modelKeys" }
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListKeys = m(s.ListKeys)
 	s.UpsertKey = m(s.UpsertKey)
+	s.SetKeyEnabled = m(s.SetKeyEnabled)
 	s.DeleteKey = m(s.DeleteKey)
 }
 
@@ -78,6 +82,7 @@ func (s *Server) MethodNames() []string { return modelkeys.MethodNames[:] }
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountListKeysHandler(mux, h.ListKeys)
 	MountUpsertKeyHandler(mux, h.UpsertKey)
+	MountSetKeyEnabledHandler(mux, h.SetKeyEnabled)
 	MountDeleteKeyHandler(mux, h.DeleteKey)
 }
 
@@ -169,6 +174,59 @@ func NewUpsertKeyHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "upsertKey")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "modelKeys")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetKeyEnabledHandler configures the mux to serve the "modelKeys"
+// service "setKeyEnabled" endpoint.
+func MountSetKeyEnabledHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/modelKeys.setKeyEnabled", f)
+}
+
+// NewSetKeyEnabledHandler creates a HTTP handler which loads the HTTP request
+// and calls the "modelKeys" service "setKeyEnabled" endpoint.
+func NewSetKeyEnabledHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetKeyEnabledRequest(mux, decoder)
+		encodeResponse = EncodeSetKeyEnabledResponse(encoder)
+		encodeError    = EncodeSetKeyEnabledError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setKeyEnabled")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "modelKeys")
 		payload, err := decodeRequest(r)
 		if err != nil {

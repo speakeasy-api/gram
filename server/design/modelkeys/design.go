@@ -96,6 +96,35 @@ var _ = Service("modelKeys", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpsertModelProviderKey"}`)
 	})
 
+	Method("setKeyEnabled", func() {
+		Description("Enable or disable a model provider key without replacing its key material.")
+
+		Payload(func() {
+			Attribute("id", String, "The ID of the key to update.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("enabled", Boolean, "Whether the key participates in key resolution.")
+			Required("id", "enabled")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ModelProviderKey)
+
+		HTTP(func() {
+			POST("/rpc/modelKeys.setKeyEnabled")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "setModelProviderKeyEnabled")
+		Meta("openapi:extension:x-speakeasy-name-override", "setKeyEnabled")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetModelProviderKeyEnabled"}`)
+	})
+
 	Method("deleteKey", func() {
 		Description("Delete a model provider key. Completions on the affected slot fall back to the project default key or the platform key.")
 

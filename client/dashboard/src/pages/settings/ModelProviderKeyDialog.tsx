@@ -12,16 +12,17 @@ import { MODEL_KEY_PROVIDER, type ModelKeySlot } from "./model-key-slots";
 
 export function ModelProviderKeyDialog({
   slot,
-  hasExistingKey,
+  existingEnabled,
   onClose,
 }: {
   slot: ModelKeySlot;
-  hasExistingKey: boolean;
+  existingEnabled?: boolean;
   onClose: () => void;
 }): JSX.Element {
   const queryClient = useQueryClient();
   const [apiKey, setApiKey] = useState("");
   const fieldId = `model-key-${slot.slot}`;
+  const hasExistingKey = existingEnabled !== undefined;
 
   const { mutate: upsert, isPending: isMutating } =
     useUpsertModelProviderKeyMutation({
@@ -45,7 +46,7 @@ export function ModelProviderKeyDialog({
           slot: slot.slot,
           provider: MODEL_KEY_PROVIDER,
           apiKey: apiKey.trim(),
-          enabled: true,
+          enabled: existingEnabled ?? true,
         },
       },
     });
