@@ -92,7 +92,15 @@ func (s *Service) Ingest(ctx context.Context, payload *gen.IngestPayload) (*gen.
 		// Detach from request cancellation: the idempotency token is already
 		// claimed, so a client disconnect here would otherwise drop the event
 		// for good — the retry gets marked duplicate and skips persistence.
-		s.recordCanonicalHook(context.WithoutCancel(ctx), payload, authCtx, actor, timestamp, blockReason)
+		persistCtx := context.WithoutCancel(ctx)
+		s.upsertShadowMCPInventoryURLs(
+			persistCtx,
+			authCtx.ActiveOrganizationID,
+			authCtx.ProjectID.String(),
+			canonicalSessionID(payload),
+			canonicalMCPInventoryEntries(payload),
+		)
+		s.recordCanonicalHook(persistCtx, payload, authCtx, actor, timestamp, blockReason)
 	}
 	// Transcript-derived MCP attribution (Claude Stop/SubagentStop): stash
 	// tuples for the scheduled staged-telemetry sweep to join. Runs for
@@ -1000,6 +1008,32 @@ func canonicalMCPData(payload *gen.IngestPayload) *gen.HookMCPData {
 		return payload.Data.Mcp
 	}
 	return nil
+}
+
+func canonicalMCPInventoryEntries(payload *gen.IngestPayload) []MCPServerEntry {
+	if payload == nil || payload.Data == nil || len(payload.Data.McpInventory) == 0 {
+		return nil
+	}
+	entries := make([]MCPServerEntry, 0, len(payload.Data.McpInventory))
+	for _, mcp := range payload.Data.McpInventory {
+		if mcp == nil {
+			continue
+		}
+		entries = append(entries, MCPServerEntry{
+			RawLine:       "",
+			Source:        strings.TrimSpace(payload.Source.Adapter),
+			PluginName:    "",
+			Name:          strings.TrimSpace(conv.PtrValOr(mcp.ServerName, "")),
+			URL:           strings.TrimSpace(conv.PtrValOr(mcp.URL, "")),
+			Command:       strings.TrimSpace(conv.PtrValOr(mcp.Command, "")),
+			Transport:     "",
+			Status:        "unknown",
+			StatusRaw:     "",
+			ConnectorUUID: "",
+			ToolPrefix:    "",
+		})
+	}
+	return entries
 }
 
 func canonicalUsageData(payload *gen.IngestPayload) *gen.HookUsageData {

@@ -12,7 +12,10 @@ import (
 // evidence, so they are redacted before leaving the machine. Host, path, and
 // non-secret arguments survive so the evidence stays matchable server-side.
 
-var secretParamRE = regexp.MustCompile(`(?i)(key|token|secret|password|passwd|credential|auth)`)
+var (
+	secretParamRE    = regexp.MustCompile(`(?i)(key|token|secret|password|passwd|credential|auth)`)
+	signatureParamRE = regexp.MustCompile(`(?i)^(sig|signature|x-amz-signature|x-goog-signature)$`)
+)
 
 // redactURL strips basic-auth userinfo and fragments and masks secret-named
 // query values while preserving the host, path, and benign parameters.
@@ -30,7 +33,7 @@ func redactURL(raw string) string {
 	if u.RawQuery != "" {
 		q := u.Query()
 		for k := range q {
-			if secretParamRE.MatchString(k) {
+			if secretParamRE.MatchString(k) || signatureParamRE.MatchString(k) {
 				q.Set(k, "***")
 			}
 		}
