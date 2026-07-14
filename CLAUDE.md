@@ -137,3 +137,20 @@ Activate a skill when your task falls within its scope.
 - Make the plan extremely concise. Sacrifice grammar for the sake of concision.
 - Identify any of the skills above that are relevant to the task so you can activate when implementing.
 - At the end of each plan, give me a list of unresolved questions to answer, if any.
+
+## Cursor Cloud specific instructions
+
+This section covers non-obvious caveats for running Gram in a Cursor Cloud VM. The startup update script only refreshes dependencies (`mise install` + `mise run install`); everything below (Docker daemon, infra, migrations, services) must be started per session by the agent. Standard task commands live in the `<commands>` blocks above and in `.mise-tasks/`; only the non-obvious bits are captured here.
+
+- **`mise` entrypoint / PATH.** All tooling (go, node, pnpm, uv, atlas, temporal, etc.) is provided by `mise`, installed at `~/.local/bin/mise` with `mise activate` wired into `~/.bashrc`. Non-interactive shells may not have it on `PATH`; invoke it explicitly (e.g. `~/.local/bin/mise ...`) or `export PATH="$HOME/.local/bin:$PATH"` first.
+- **`.mts` mise tasks need Node 24.** Several setup/seed tasks (`zero:encryption`, `zero:migrations`, `seed`, etc.) are TypeScript `.mts` scripts requiring Node ≥ 24's type stripping. The VM's `/exec-daemon/node` (v22) can shadow mise's Node 24 inside task subshells, causing `ERR_UNKNOWN_FILE_EXTENSION ".mts"`. This is fixed by `_.path = ["/home/ubuntu/.local/share/mise/shims"]` under `[env]` in the gitignored `mise.local.toml`. If those tasks start failing with that error, re-add that line.
+- **Local dev secrets live in `mise.local.toml`** (gitignored, not in any PR): encryption keys, JWT signing key, TLS cert paths, and `CLICKHOUSE_MIGRATION_ENGINE`. If the file is missing on a fresh VM, regenerate with `mise run zero:encryption` and `mise run zero:tls` (idempotent).
+- **Docker daemon.** Docker is installed but not auto-started (no systemd). Start it once per session before infra: `sudo service docker start`. It is configured for this VM with the `fuse-overlayfs` storage driver and `iptables-legacy`.
+- **Bring up the stack (order matters):**
+  1. `mise run infra:start` — Postgres, Redis, Temporal, ClickHouse, Jaeger, Prometheus, OTEL collector, Pub/Sub emulator, Presidio (via `compose.yml`).
+  2. `mise run db:migrate` then `mise run clickhouse:migrate` — ClickHouse uses the `atlas` engine locally (works without an Atlas Pro login; `golang-migrate` is the fallback).
+  3. Services (each long-running; run in separate tmux sessions): `mise run start:dev-idp` (auth, :35291), `mise run start:server --dev-single-process` (API :8080 + Temporal worker in one process), `mise run start:dashboard` (Vite on https://localhost:5173; rebuilds `elements` first). `madprocs` runs the full set as a TUI but is not ideal headless.
+- **Do not rely on `./zero --agent` alone in cloud.** It skips `infra:start` (interactive-only) but still runs migrations, so it fails unless infra is already up. Prefer the explicit steps above.
+- **URLs / health.** Dashboard: `https://localhost:5173`. Server API: `https://localhost:8080` (health at `/healthz`; control port `8081` also has `/healthz` + `/livez`). TLS uses a local mkcert CA.
+- **Login is credential-less.** `GRAM_IDP_MODE=mock-workos` (default) makes dev-idp auto-approve login — just click "Login" in the dashboard, no username/password.
+- **Seed data:** `mise seed` (requires the server + dev-idp running; drives the generated SDK to create a sample `ecommerce-api` project, toolsets, an MCP server, and ClickHouse telemetry).
