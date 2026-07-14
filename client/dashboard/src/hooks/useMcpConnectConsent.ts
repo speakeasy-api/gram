@@ -1,4 +1,4 @@
-import { createDismissedCtaStore } from "@/hooks/useDismissedCtaStore";
+import { createPersistedFlagStore } from "@/hooks/usePersistedFlagStore";
 import { useCallback } from "react";
 
 // Persisted Connect consent for issuer-gated MCP surfaces, keyed by the
@@ -9,7 +9,7 @@ import { useCallback } from "react";
 // UUIDs, so the key needs no extra org/project scoping, and the key is not in
 // logout-storage's preserved list, so consent is cleared on logout rather than
 // leaking to the next user of the browser.
-const store = createDismissedCtaStore("gram-mcp-connect-consent");
+const store = createPersistedFlagStore("gram-mcp-connect-consent");
 
 export function useMcpConnectConsent(id: string | undefined): {
   /** True once the user has consented to connect for this id. */
@@ -17,7 +17,7 @@ export function useMcpConnectConsent(id: string | undefined): {
   /** Records consent for this id; no-op while the id is still loading. */
   requestConnect: () => void;
 } {
-  const connectRequested = store.useDismissed(id);
+  const connectRequested = store.useFlag(id);
 
   const requestConnect = useCallback(() => {
     if (id) store.write(id, true);
