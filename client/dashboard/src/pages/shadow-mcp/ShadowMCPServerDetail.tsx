@@ -1,4 +1,5 @@
 import { formatShortDate } from "@/components/access/shadow-mcp-utils";
+import { InlineEditableText } from "@/components/inline-editable-text";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import {
@@ -17,7 +18,6 @@ import {
   type ShadowMCPPolicyState,
 } from "@/components/shadow-mcp/shadowMCPInventoryStatus";
 import { SkeletonTable } from "@/components/ui/skeleton";
-import { Input } from "@/components/ui/input";
 import { Type } from "@/components/ui/type";
 import { useProject } from "@/contexts/Auth";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
@@ -46,8 +46,7 @@ import {
   Table,
 } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { Pencil } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router";
 import { toast } from "sonner";
 
@@ -294,81 +293,6 @@ function DetailActionButtons({
   );
 }
 
-function EditableServerName({
-  name,
-  onSave,
-  saving,
-}: {
-  name: string;
-  onSave: (name: string) => Promise<boolean>;
-  saving: boolean;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(name);
-  const cancelNextBlur = useRef(false);
-
-  useEffect(() => {
-    if (!editing) setDraft(name);
-  }, [editing, name]);
-
-  const save = async () => {
-    if (saving) return;
-
-    const nextName = draft.trim();
-    if (nextName === name) {
-      setEditing(false);
-      return;
-    }
-
-    const saved = await onSave(nextName);
-    if (saved) setEditing(false);
-  };
-
-  if (editing) {
-    return (
-      <Input
-        aria-label="Shadow MCP server name"
-        autoFocus
-        className="h-9 w-[24rem] max-w-full text-lg font-semibold"
-        disabled={saving}
-        maxLength={255}
-        onBlur={() => {
-          if (cancelNextBlur.current) {
-            cancelNextBlur.current = false;
-            return;
-          }
-          void save();
-        }}
-        onChange={setDraft}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") event.currentTarget.blur();
-          if (event.key === "Escape") {
-            cancelNextBlur.current = true;
-            setDraft(name);
-            setEditing(false);
-          }
-        }}
-        value={draft}
-      />
-    );
-  }
-
-  return (
-    <button
-      className="group flex min-w-0 items-center gap-2"
-      onClick={() => {
-        cancelNextBlur.current = false;
-        setEditing(true);
-      }}
-      title="Rename Shadow MCP server"
-      type="button"
-    >
-      <span className="truncate">{name}</span>
-      <Pencil className="text-muted-foreground h-4 w-4 shrink-0 opacity-0 transition-opacity group-hover:opacity-100" />
-    </button>
-  );
-}
-
 export default function ShadowMCPServerDetail(): JSX.Element {
   const { serverSlug = "" } = useParams<{ serverSlug: string }>();
   const project = useProject();
@@ -395,6 +319,8 @@ export default function ShadowMCPServerDetail(): JSX.Element {
     { enabled: queryEnabled },
   );
   const server = serverQuery.data;
+  const serverDisplayName =
+    server?.serverName || server?.urlHost || "Shadow MCP Server";
   const serverURL = server?.canonicalServerUrl ?? "";
   const usersQueryEnabled = queryEnabled && serverURL.length > 0;
   const usersScope = usersQueryEnabled ? `${project.id}:${serverURL}` : "";
@@ -607,13 +533,16 @@ export default function ShadowMCPServerDetail(): JSX.Element {
         <RequireScope scope="org:admin" level="page">
           <Page.Section>
             <Page.Section.Title stage="beta">
-              <EditableServerName
-                name={
-                  server?.serverName || server?.urlHost || "Shadow MCP Server"
-                }
-                onSave={saveServerName}
-                saving={updateServerName.isPending}
-              />
+              <InlineEditableText
+                value={serverDisplayName}
+                onSubmit={saveServerName}
+                inputLabel="Shadow MCP server name"
+                editTitle="Rename Shadow MCP server"
+                maxLength={255}
+                inputClassName="h-9 w-[24rem] max-w-full text-lg font-semibold"
+              >
+                <span className="truncate">{serverDisplayName}</span>
+              </InlineEditableText>
             </Page.Section.Title>
             <Page.Section.Description>
               {server?.canonicalServerUrl || serverSlug}
