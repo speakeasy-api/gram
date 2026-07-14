@@ -213,10 +213,6 @@ func (s *Service) GetMcpServer(ctx context.Context, payload *gen.GetMcpServerPay
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
-		return nil, err
-	}
-
 	idProvided := payload.ID != nil && *payload.ID != ""
 	slugProvided := payload.Slug != nil && *payload.Slug != ""
 	if !idProvided && !slugProvided {
@@ -250,6 +246,10 @@ func (s *Service) GetMcpServer(ctx context.Context, payload *gen.GetMcpServerPay
 			return nil, oops.E(oops.CodeNotFound, err, "mcp server not found").LogError(ctx, s.logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get mcp server").LogError(ctx, s.logger)
+	}
+
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, server.ID.String(), authCtx.ProjectID.String())); err != nil {
+		return nil, err
 	}
 
 	return mv.BuildMcpServerView(server), nil
@@ -354,10 +354,6 @@ func (s *Service) ListMcpServers(ctx context.Context, payload *gen.ListMcpServer
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
-		return nil, err
-	}
-
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
 	remoteMcpServerID, err := conv.PtrToNullUUID(payload.RemoteMcpServerID)
@@ -386,7 +382,28 @@ func (s *Service) ListMcpServers(ctx context.Context, payload *gen.ListMcpServer
 		return nil, oops.E(oops.CodeUnexpected, err, "list mcp servers").LogError(ctx, logger)
 	}
 
-	return &gen.ListMcpServersResult{McpServers: mv.BuildMcpServerListView(servers)}, nil
+	checks := make([]authz.Check, len(servers))
+	for i, server := range servers {
+		checks[i] = authz.MCPCheck(authz.ScopeMCPRead, server.ID.String(), authCtx.ProjectID.String())
+	}
+	allowedIDs, err := s.authz.Filter(ctx, checks)
+	if err != nil {
+		return nil, err
+	}
+
+	allowedSet := make(map[string]struct{}, len(allowedIDs))
+	for _, id := range allowedIDs {
+		allowedSet[id] = struct{}{}
+	}
+
+	allowedServers := make([]repo.McpServer, 0, len(allowedIDs))
+	for _, server := range servers {
+		if _, ok := allowedSet[server.ID.String()]; ok {
+			allowedServers = append(allowedServers, server)
+		}
+	}
+
+	return &gen.ListMcpServersResult{McpServers: mv.BuildMcpServerListView(allowedServers)}, nil
 }
 
 func (s *Service) ListMcpServersForOrg(ctx context.Context, payload *gen.ListMcpServersForOrgPayload) (*gen.ListMcpServersResult, error) {
@@ -406,7 +423,30 @@ func (s *Service) ListMcpServersForOrg(ctx context.Context, payload *gen.ListMcp
 		return nil, oops.E(oops.CodeUnexpected, err, "list mcp servers for organization").LogError(ctx, logger)
 	}
 
-	return &gen.ListMcpServersResult{McpServers: mv.BuildMcpServerListView(servers)}, nil
+	// Rows span every project in the org, so each check carries its own row's
+	// project id rather than the (possibly absent) auth context project.
+	checks := make([]authz.Check, len(servers))
+	for i, server := range servers {
+		checks[i] = authz.MCPCheck(authz.ScopeMCPRead, server.ID.String(), server.ProjectID.String())
+	}
+	allowedIDs, err := s.authz.Filter(ctx, checks)
+	if err != nil {
+		return nil, err
+	}
+
+	allowedSet := make(map[string]struct{}, len(allowedIDs))
+	for _, id := range allowedIDs {
+		allowedSet[id] = struct{}{}
+	}
+
+	allowedServers := make([]repo.McpServer, 0, len(allowedIDs))
+	for _, server := range servers {
+		if _, ok := allowedSet[server.ID.String()]; ok {
+			allowedServers = append(allowedServers, server)
+		}
+	}
+
+	return &gen.ListMcpServersResult{McpServers: mv.BuildMcpServerListView(allowedServers)}, nil
 }
 
 func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpServerPayload) (*types.McpServer, error) {
