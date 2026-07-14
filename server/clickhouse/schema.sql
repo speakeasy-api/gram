@@ -276,6 +276,10 @@ ORDER BY (gram_project_id, canonical_server_url)
 SETTINGS index_granularity = 8192
 COMMENT 'Project-scoped Shadow MCP inventory URLs and display metadata';
 
+CREATE INDEX IF NOT EXISTS idx_shadow_mcp_inventory_urls_slug_hash
+ON shadow_mcp_inventory_urls (substring(lower(hex(SHA256(canonical_server_url))), 1, 8))
+TYPE bloom_filter(0.01) GRANULARITY 1;
+
 CREATE TABLE IF NOT EXISTS metrics_summaries (
     -- Key columns
     gram_project_id UUID,
