@@ -1460,27 +1460,35 @@ CODEX_BIN="$(find_codex || true)"
 	// Step 1: marketplace registration differs for remote vs local ZIP installs.
 	if marketplaceURL != "" {
 		fmt.Fprintf(&b, "MARKETPLACE_URL=%q\n\n", marketplaceURL)
-		b.WriteString(`# ── 1. Register & sync marketplace ──────────────────────────────────────────
+		b.WriteString(`# ── 1. Register marketplace & install plugin ────────────────────────────────
 echo "→ Registering Speakeasy marketplace..."
 if [ -n "${CODEX_BIN}" ]; then
   # add is idempotent (no-ops if already registered); upgrade pulls any new commits.
   "${CODEX_BIN}" plugin marketplace add "${MARKETPLACE_URL}" || true
   "${CODEX_BIN}" plugin marketplace upgrade "${MARKETPLACE_KEY}"
+  # Registering the marketplace only makes the plugin available; it must also
+  # be installed. plugin add is idempotent.
+  "${CODEX_BIN}" plugin add "${PLUGIN_KEY}@${MARKETPLACE_KEY}"
 else
   echo "  ⚠  'codex' executable not found."
   echo "     Run manually: codex plugin marketplace add '${MARKETPLACE_URL}'"
+  echo "     Then:         codex plugin add '${PLUGIN_KEY}@${MARKETPLACE_KEY}'"
 fi
 
 `)
 	} else {
-		b.WriteString(`# ── 1. Register marketplace (local ZIP install) ──────────────────────────────
+		b.WriteString(`# ── 1. Register marketplace & install plugin (local ZIP install) ────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 echo "→ Registering Speakeasy marketplace from ${SCRIPT_DIR}..."
 if [ -n "${CODEX_BIN}" ]; then
-  "${CODEX_BIN}" plugin marketplace add "${SCRIPT_DIR}"
+  "${CODEX_BIN}" plugin marketplace add "${SCRIPT_DIR}" || true
+  # Registering the marketplace only makes the plugin available; it must also
+  # be installed. plugin add is idempotent.
+  "${CODEX_BIN}" plugin add "${PLUGIN_KEY}@${MARKETPLACE_KEY}"
 else
   echo "  ⚠  'codex' executable not found."
   echo "     Run manually: codex plugin marketplace add '${SCRIPT_DIR}'"
+  echo "     Then:         codex plugin add '${PLUGIN_KEY}@${MARKETPLACE_KEY}'"
 fi
 
 `)
@@ -1509,21 +1517,26 @@ config_path = os.path.expanduser("~/.codex/config.toml")
 os.makedirs(os.path.dirname(config_path), exist_ok=True)
 content = open(config_path).read() if os.path.exists(config_path) else ""
 
+# TOML permits leading whitespace before keys and table headers, and Codex's
+# own config writer emits indented entries — every line anchor below must
+# tolerate it or a re-install inserts duplicates into an indented config,
+# which fails to parse and takes Codex down entirely.
+
 # A root-level dotted key implicitly defines its parent table and conflicts
 # with an explicit [table] header elsewhere in the file. Only the region
 # before the first table header is touched.
 def strip_root_dotted_key(text, key):
-    m = re.search(r'(?m)^\[', text)
+    m = re.search(r'(?m)^[ \t]*\[', text)
     root, rest = (text[:m.start()], text[m.start():]) if m else (text, "")
-    root = re.sub(r'(?m)^' + re.escape(key) + r'\s*=.*\n?', '', root)
+    root = re.sub(r'(?m)^[ \t]*' + re.escape(key) + r'\s*=.*\n?', '', root)
     return root + rest
 
 def table_body_bounds(text, table_header):
-    m = re.search(r'(?m)^' + re.escape(table_header) + r'(?:\s*(?:#.*)?)?(?:\n|$)', text)
+    m = re.search(r'(?m)^[ \t]*' + re.escape(table_header) + r'(?:\s*(?:#.*)?)?(?:\n|$)', text)
     if not m:
         return None
     start = m.end()
-    m2 = re.search(r'(?m)^\[', text[start:])
+    m2 = re.search(r'(?m)^[ \t]*\[', text[start:])
     end = start + m2.start() if m2 else len(text)
     return start, end
 
@@ -1531,7 +1544,7 @@ def ensure_table_entry(text, table_header, key, value):
     bounds = table_body_bounds(text, table_header)
     if bounds is None:
         return text.rstrip('\n') + '\n\n' + table_header + '\n' + key + ' = ' + value + '\n'
-    if re.search(r'(?m)^' + re.escape(key) + r'\s*=', text[bounds[0]:bounds[1]]):
+    if re.search(r'(?m)^[ \t]*' + re.escape(key) + r'\s*=', text[bounds[0]:bounds[1]]):
         return text
     prefix = text[:bounds[0]]
     if not prefix.endswith('\n'):
@@ -1553,7 +1566,7 @@ content = ensure_table_entry(content, "[features]", "hooks", "true")
 content = ensure_table_entry(content, "[features]", "plugin_hooks", "true")
 
 # Qualified [hooks.state."…"] sections do not require a bare parent header.
-if not has_table_header(content, "[hooks.state]") and not re.search(r'(?m)^\[hooks\.state\.', content):
+if not has_table_header(content, "[hooks.state]") and not re.search(r'(?m)^[ \t]*\[hooks\.state\.', content):
     content = content.rstrip('\n') + '\n\n[hooks.state]\n'
 
 for state_key, trusted_hash, trusted_hash_windows in [

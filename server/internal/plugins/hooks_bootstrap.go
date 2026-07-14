@@ -94,7 +94,7 @@ install_failure_exit=%d
 
 install_failure() {
   printf 'speakeasy-hooks: %%s\n' "$1" >&2
-  printf 'speakeasy-hooks: ask your administrator to allow github.com release downloads or preinstall the hooks binary (GRAM_HOOKS_HOME overrides the cache location)\n' >&2
+  printf 'speakeasy-hooks: ask your administrator to allow downloads from github.com and release-assets.githubusercontent.com, or preinstall the hooks binary (GRAM_HOOKS_HOME overrides the cache location)\n' >&2
   exit "$install_failure_exit"
 }
 
@@ -263,7 +263,7 @@ $InstallFailureExit = %d
 
 function Exit-InstallFailure([string]$Message) {
     [Console]::Error.WriteLine("speakeasy-hooks: $Message")
-    [Console]::Error.WriteLine("speakeasy-hooks: ask your administrator to allow github.com release downloads or preinstall the hooks binary (GRAM_HOOKS_HOME overrides the cache location)")
+    [Console]::Error.WriteLine("speakeasy-hooks: ask your administrator to allow downloads from github.com and release-assets.githubusercontent.com, or preinstall the hooks binary (GRAM_HOOKS_HOME overrides the cache location)")
     exit $InstallFailureExit
 }
 
