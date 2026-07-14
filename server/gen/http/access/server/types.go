@@ -93,6 +93,23 @@ type DenyShadowMCPApprovalRequestRequestBody struct {
 	Reason                 *string  `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
 }
 
+// UpsertShadowMCPInventoryPolicyBypassRequestBody is the type of the "access"
+// service "upsertShadowMCPInventoryPolicyBypass" endpoint HTTP request body.
+type UpsertShadowMCPInventoryPolicyBypassRequestBody struct {
+	ProjectID *string  `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	ServerURL *string  `form:"server_url,omitempty" json:"server_url,omitempty" xml:"server_url,omitempty"`
+	PolicyIds []string `form:"policy_ids,omitempty" json:"policy_ids,omitempty" xml:"policy_ids,omitempty"`
+}
+
+// ResolveShadowMCPInventoryRequestRequestBody is the type of the "access"
+// service "resolveShadowMCPInventoryRequest" endpoint HTTP request body.
+type ResolveShadowMCPInventoryRequestRequestBody struct {
+	ProjectID *string  `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	ServerURL *string  `form:"server_url,omitempty" json:"server_url,omitempty" xml:"server_url,omitempty"`
+	Decision  *string  `form:"decision,omitempty" json:"decision,omitempty" xml:"decision,omitempty"`
+	PolicyIds []string `form:"policy_ids,omitempty" json:"policy_ids,omitempty" xml:"policy_ids,omitempty"`
+}
+
 // CreateShadowMCPAccessRuleRequestBody is the type of the "access" service
 // "createShadowMCPAccessRule" endpoint HTTP request body.
 type CreateShadowMCPAccessRuleRequestBody struct {
@@ -331,6 +348,60 @@ type ListShadowMCPInventoryResponseBody struct {
 	Servers []*ShadowMCPInventoryServerResponseBody `form:"servers" json:"servers" xml:"servers"`
 	// Cursor for the next page of results.
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
+
+// GetShadowMCPInventoryServerResponseBody is the type of the "access" service
+// "getShadowMCPInventoryServer" endpoint HTTP response body.
+type GetShadowMCPInventoryServerResponseBody struct {
+	CanonicalServerURL string                                        `form:"canonical_server_url" json:"canonical_server_url" xml:"canonical_server_url"`
+	ServerSlug         string                                        `form:"server_slug" json:"server_slug" xml:"server_slug"`
+	URLHost            string                                        `form:"url_host" json:"url_host" xml:"url_host"`
+	ServerName         *string                                       `form:"server_name,omitempty" json:"server_name,omitempty" xml:"server_name,omitempty"`
+	FirstSeen          string                                        `form:"first_seen" json:"first_seen" xml:"first_seen"`
+	LastSeen           string                                        `form:"last_seen" json:"last_seen" xml:"last_seen"`
+	LastCalled         *string                                       `form:"last_called,omitempty" json:"last_called,omitempty" xml:"last_called,omitempty"`
+	ObservedUseCount   int                                           `form:"observed_use_count" json:"observed_use_count" xml:"observed_use_count"`
+	UserCount          int                                           `form:"user_count" json:"user_count" xml:"user_count"`
+	TopUsers           []string                                      `form:"top_users" json:"top_users" xml:"top_users"`
+	Access             string                                        `form:"access" json:"access" xml:"access"`
+	RequestCount       int                                           `form:"request_count" json:"request_count" xml:"request_count"`
+	LatestRequest      *ShadowMCPInventoryRequestSummaryResponseBody `form:"latest_request,omitempty" json:"latest_request,omitempty" xml:"latest_request,omitempty"`
+	AllowedPolicyIds   []string                                      `form:"allowed_policy_ids" json:"allowed_policy_ids" xml:"allowed_policy_ids"`
+}
+
+// ListShadowMCPInventoryUsersResponseBody is the type of the "access" service
+// "listShadowMCPInventoryUsers" endpoint HTTP response body.
+type ListShadowMCPInventoryUsersResponseBody struct {
+	Users []*ShadowMCPInventoryUserResponseBody `form:"users" json:"users" xml:"users"`
+	// Cursor for the next page of results.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
+
+// UpsertShadowMCPInventoryPolicyBypassResponseBody is the type of the "access"
+// service "upsertShadowMCPInventoryPolicyBypass" endpoint HTTP response body.
+type UpsertShadowMCPInventoryPolicyBypassResponseBody struct {
+	Access           string                                        `form:"access" json:"access" xml:"access"`
+	RequestCount     int                                           `form:"request_count" json:"request_count" xml:"request_count"`
+	LatestRequest    *ShadowMCPInventoryRequestSummaryResponseBody `form:"latest_request,omitempty" json:"latest_request,omitempty" xml:"latest_request,omitempty"`
+	AllowedPolicyIds []string                                      `form:"allowed_policy_ids" json:"allowed_policy_ids" xml:"allowed_policy_ids"`
+}
+
+// DeleteShadowMCPInventoryPolicyBypassResponseBody is the type of the "access"
+// service "deleteShadowMCPInventoryPolicyBypass" endpoint HTTP response body.
+type DeleteShadowMCPInventoryPolicyBypassResponseBody struct {
+	Access           string                                        `form:"access" json:"access" xml:"access"`
+	RequestCount     int                                           `form:"request_count" json:"request_count" xml:"request_count"`
+	LatestRequest    *ShadowMCPInventoryRequestSummaryResponseBody `form:"latest_request,omitempty" json:"latest_request,omitempty" xml:"latest_request,omitempty"`
+	AllowedPolicyIds []string                                      `form:"allowed_policy_ids" json:"allowed_policy_ids" xml:"allowed_policy_ids"`
+}
+
+// ResolveShadowMCPInventoryRequestResponseBody is the type of the "access"
+// service "resolveShadowMCPInventoryRequest" endpoint HTTP response body.
+type ResolveShadowMCPInventoryRequestResponseBody struct {
+	Access           string                                        `form:"access" json:"access" xml:"access"`
+	RequestCount     int                                           `form:"request_count" json:"request_count" xml:"request_count"`
+	LatestRequest    *ShadowMCPInventoryRequestSummaryResponseBody `form:"latest_request,omitempty" json:"latest_request,omitempty" xml:"latest_request,omitempty"`
+	AllowedPolicyIds []string                                      `form:"allowed_policy_ids" json:"allowed_policy_ids" xml:"allowed_policy_ids"`
 }
 
 // CreateShadowMCPAccessRuleResponseBody is the type of the "access" service
@@ -3159,6 +3230,956 @@ type ListShadowMCPInventoryGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetShadowMCPInventoryServerUnauthorizedResponseBody is the type of the
+// "access" service "getShadowMCPInventoryServer" endpoint HTTP response body
+// for the "unauthorized" error.
+type GetShadowMCPInventoryServerUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetShadowMCPInventoryServerForbiddenResponseBody is the type of the "access"
+// service "getShadowMCPInventoryServer" endpoint HTTP response body for the
+// "forbidden" error.
+type GetShadowMCPInventoryServerForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetShadowMCPInventoryServerBadRequestResponseBody is the type of the
+// "access" service "getShadowMCPInventoryServer" endpoint HTTP response body
+// for the "bad_request" error.
+type GetShadowMCPInventoryServerBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetShadowMCPInventoryServerNotFoundResponseBody is the type of the "access"
+// service "getShadowMCPInventoryServer" endpoint HTTP response body for the
+// "not_found" error.
+type GetShadowMCPInventoryServerNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetShadowMCPInventoryServerConflictResponseBody is the type of the "access"
+// service "getShadowMCPInventoryServer" endpoint HTTP response body for the
+// "conflict" error.
+type GetShadowMCPInventoryServerConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetShadowMCPInventoryServerUnsupportedMediaResponseBody is the type of the
+// "access" service "getShadowMCPInventoryServer" endpoint HTTP response body
+// for the "unsupported_media" error.
+type GetShadowMCPInventoryServerUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetShadowMCPInventoryServerInvalidResponseBody is the type of the "access"
+// service "getShadowMCPInventoryServer" endpoint HTTP response body for the
+// "invalid" error.
+type GetShadowMCPInventoryServerInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetShadowMCPInventoryServerInvariantViolationResponseBody is the type of the
+// "access" service "getShadowMCPInventoryServer" endpoint HTTP response body
+// for the "invariant_violation" error.
+type GetShadowMCPInventoryServerInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetShadowMCPInventoryServerUnexpectedResponseBody is the type of the
+// "access" service "getShadowMCPInventoryServer" endpoint HTTP response body
+// for the "unexpected" error.
+type GetShadowMCPInventoryServerUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetShadowMCPInventoryServerGatewayErrorResponseBody is the type of the
+// "access" service "getShadowMCPInventoryServer" endpoint HTTP response body
+// for the "gateway_error" error.
+type GetShadowMCPInventoryServerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListShadowMCPInventoryUsersUnauthorizedResponseBody is the type of the
+// "access" service "listShadowMCPInventoryUsers" endpoint HTTP response body
+// for the "unauthorized" error.
+type ListShadowMCPInventoryUsersUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListShadowMCPInventoryUsersForbiddenResponseBody is the type of the "access"
+// service "listShadowMCPInventoryUsers" endpoint HTTP response body for the
+// "forbidden" error.
+type ListShadowMCPInventoryUsersForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListShadowMCPInventoryUsersBadRequestResponseBody is the type of the
+// "access" service "listShadowMCPInventoryUsers" endpoint HTTP response body
+// for the "bad_request" error.
+type ListShadowMCPInventoryUsersBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListShadowMCPInventoryUsersNotFoundResponseBody is the type of the "access"
+// service "listShadowMCPInventoryUsers" endpoint HTTP response body for the
+// "not_found" error.
+type ListShadowMCPInventoryUsersNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListShadowMCPInventoryUsersConflictResponseBody is the type of the "access"
+// service "listShadowMCPInventoryUsers" endpoint HTTP response body for the
+// "conflict" error.
+type ListShadowMCPInventoryUsersConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListShadowMCPInventoryUsersUnsupportedMediaResponseBody is the type of the
+// "access" service "listShadowMCPInventoryUsers" endpoint HTTP response body
+// for the "unsupported_media" error.
+type ListShadowMCPInventoryUsersUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListShadowMCPInventoryUsersInvalidResponseBody is the type of the "access"
+// service "listShadowMCPInventoryUsers" endpoint HTTP response body for the
+// "invalid" error.
+type ListShadowMCPInventoryUsersInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListShadowMCPInventoryUsersInvariantViolationResponseBody is the type of the
+// "access" service "listShadowMCPInventoryUsers" endpoint HTTP response body
+// for the "invariant_violation" error.
+type ListShadowMCPInventoryUsersInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListShadowMCPInventoryUsersUnexpectedResponseBody is the type of the
+// "access" service "listShadowMCPInventoryUsers" endpoint HTTP response body
+// for the "unexpected" error.
+type ListShadowMCPInventoryUsersUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListShadowMCPInventoryUsersGatewayErrorResponseBody is the type of the
+// "access" service "listShadowMCPInventoryUsers" endpoint HTTP response body
+// for the "gateway_error" error.
+type ListShadowMCPInventoryUsersGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpsertShadowMCPInventoryPolicyBypassUnauthorizedResponseBody is the type of
+// the "access" service "upsertShadowMCPInventoryPolicyBypass" endpoint HTTP
+// response body for the "unauthorized" error.
+type UpsertShadowMCPInventoryPolicyBypassUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpsertShadowMCPInventoryPolicyBypassForbiddenResponseBody is the type of the
+// "access" service "upsertShadowMCPInventoryPolicyBypass" endpoint HTTP
+// response body for the "forbidden" error.
+type UpsertShadowMCPInventoryPolicyBypassForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpsertShadowMCPInventoryPolicyBypassBadRequestResponseBody is the type of
+// the "access" service "upsertShadowMCPInventoryPolicyBypass" endpoint HTTP
+// response body for the "bad_request" error.
+type UpsertShadowMCPInventoryPolicyBypassBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpsertShadowMCPInventoryPolicyBypassNotFoundResponseBody is the type of the
+// "access" service "upsertShadowMCPInventoryPolicyBypass" endpoint HTTP
+// response body for the "not_found" error.
+type UpsertShadowMCPInventoryPolicyBypassNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpsertShadowMCPInventoryPolicyBypassConflictResponseBody is the type of the
+// "access" service "upsertShadowMCPInventoryPolicyBypass" endpoint HTTP
+// response body for the "conflict" error.
+type UpsertShadowMCPInventoryPolicyBypassConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpsertShadowMCPInventoryPolicyBypassUnsupportedMediaResponseBody is the type
+// of the "access" service "upsertShadowMCPInventoryPolicyBypass" endpoint HTTP
+// response body for the "unsupported_media" error.
+type UpsertShadowMCPInventoryPolicyBypassUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpsertShadowMCPInventoryPolicyBypassInvalidResponseBody is the type of the
+// "access" service "upsertShadowMCPInventoryPolicyBypass" endpoint HTTP
+// response body for the "invalid" error.
+type UpsertShadowMCPInventoryPolicyBypassInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpsertShadowMCPInventoryPolicyBypassInvariantViolationResponseBody is the
+// type of the "access" service "upsertShadowMCPInventoryPolicyBypass" endpoint
+// HTTP response body for the "invariant_violation" error.
+type UpsertShadowMCPInventoryPolicyBypassInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpsertShadowMCPInventoryPolicyBypassUnexpectedResponseBody is the type of
+// the "access" service "upsertShadowMCPInventoryPolicyBypass" endpoint HTTP
+// response body for the "unexpected" error.
+type UpsertShadowMCPInventoryPolicyBypassUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpsertShadowMCPInventoryPolicyBypassGatewayErrorResponseBody is the type of
+// the "access" service "upsertShadowMCPInventoryPolicyBypass" endpoint HTTP
+// response body for the "gateway_error" error.
+type UpsertShadowMCPInventoryPolicyBypassGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteShadowMCPInventoryPolicyBypassUnauthorizedResponseBody is the type of
+// the "access" service "deleteShadowMCPInventoryPolicyBypass" endpoint HTTP
+// response body for the "unauthorized" error.
+type DeleteShadowMCPInventoryPolicyBypassUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteShadowMCPInventoryPolicyBypassForbiddenResponseBody is the type of the
+// "access" service "deleteShadowMCPInventoryPolicyBypass" endpoint HTTP
+// response body for the "forbidden" error.
+type DeleteShadowMCPInventoryPolicyBypassForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteShadowMCPInventoryPolicyBypassBadRequestResponseBody is the type of
+// the "access" service "deleteShadowMCPInventoryPolicyBypass" endpoint HTTP
+// response body for the "bad_request" error.
+type DeleteShadowMCPInventoryPolicyBypassBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteShadowMCPInventoryPolicyBypassNotFoundResponseBody is the type of the
+// "access" service "deleteShadowMCPInventoryPolicyBypass" endpoint HTTP
+// response body for the "not_found" error.
+type DeleteShadowMCPInventoryPolicyBypassNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteShadowMCPInventoryPolicyBypassConflictResponseBody is the type of the
+// "access" service "deleteShadowMCPInventoryPolicyBypass" endpoint HTTP
+// response body for the "conflict" error.
+type DeleteShadowMCPInventoryPolicyBypassConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteShadowMCPInventoryPolicyBypassUnsupportedMediaResponseBody is the type
+// of the "access" service "deleteShadowMCPInventoryPolicyBypass" endpoint HTTP
+// response body for the "unsupported_media" error.
+type DeleteShadowMCPInventoryPolicyBypassUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteShadowMCPInventoryPolicyBypassInvalidResponseBody is the type of the
+// "access" service "deleteShadowMCPInventoryPolicyBypass" endpoint HTTP
+// response body for the "invalid" error.
+type DeleteShadowMCPInventoryPolicyBypassInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteShadowMCPInventoryPolicyBypassInvariantViolationResponseBody is the
+// type of the "access" service "deleteShadowMCPInventoryPolicyBypass" endpoint
+// HTTP response body for the "invariant_violation" error.
+type DeleteShadowMCPInventoryPolicyBypassInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteShadowMCPInventoryPolicyBypassUnexpectedResponseBody is the type of
+// the "access" service "deleteShadowMCPInventoryPolicyBypass" endpoint HTTP
+// response body for the "unexpected" error.
+type DeleteShadowMCPInventoryPolicyBypassUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteShadowMCPInventoryPolicyBypassGatewayErrorResponseBody is the type of
+// the "access" service "deleteShadowMCPInventoryPolicyBypass" endpoint HTTP
+// response body for the "gateway_error" error.
+type DeleteShadowMCPInventoryPolicyBypassGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResolveShadowMCPInventoryRequestUnauthorizedResponseBody is the type of the
+// "access" service "resolveShadowMCPInventoryRequest" endpoint HTTP response
+// body for the "unauthorized" error.
+type ResolveShadowMCPInventoryRequestUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResolveShadowMCPInventoryRequestForbiddenResponseBody is the type of the
+// "access" service "resolveShadowMCPInventoryRequest" endpoint HTTP response
+// body for the "forbidden" error.
+type ResolveShadowMCPInventoryRequestForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResolveShadowMCPInventoryRequestBadRequestResponseBody is the type of the
+// "access" service "resolveShadowMCPInventoryRequest" endpoint HTTP response
+// body for the "bad_request" error.
+type ResolveShadowMCPInventoryRequestBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResolveShadowMCPInventoryRequestNotFoundResponseBody is the type of the
+// "access" service "resolveShadowMCPInventoryRequest" endpoint HTTP response
+// body for the "not_found" error.
+type ResolveShadowMCPInventoryRequestNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResolveShadowMCPInventoryRequestConflictResponseBody is the type of the
+// "access" service "resolveShadowMCPInventoryRequest" endpoint HTTP response
+// body for the "conflict" error.
+type ResolveShadowMCPInventoryRequestConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResolveShadowMCPInventoryRequestUnsupportedMediaResponseBody is the type of
+// the "access" service "resolveShadowMCPInventoryRequest" endpoint HTTP
+// response body for the "unsupported_media" error.
+type ResolveShadowMCPInventoryRequestUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResolveShadowMCPInventoryRequestInvalidResponseBody is the type of the
+// "access" service "resolveShadowMCPInventoryRequest" endpoint HTTP response
+// body for the "invalid" error.
+type ResolveShadowMCPInventoryRequestInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResolveShadowMCPInventoryRequestInvariantViolationResponseBody is the type
+// of the "access" service "resolveShadowMCPInventoryRequest" endpoint HTTP
+// response body for the "invariant_violation" error.
+type ResolveShadowMCPInventoryRequestInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResolveShadowMCPInventoryRequestUnexpectedResponseBody is the type of the
+// "access" service "resolveShadowMCPInventoryRequest" endpoint HTTP response
+// body for the "unexpected" error.
+type ResolveShadowMCPInventoryRequestUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResolveShadowMCPInventoryRequestGatewayErrorResponseBody is the type of the
+// "access" service "resolveShadowMCPInventoryRequest" endpoint HTTP response
+// body for the "gateway_error" error.
+type ResolveShadowMCPInventoryRequestGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // CreateShadowMCPAccessRuleUnauthorizedResponseBody is the type of the
 // "access" service "createShadowMCPAccessRule" endpoint HTTP response body for
 // the "unauthorized" error.
@@ -4972,6 +5993,7 @@ type ShadowMCPAccessRuleResponseBody struct {
 // body types.
 type ShadowMCPInventoryServerResponseBody struct {
 	CanonicalServerURL string                                        `form:"canonical_server_url" json:"canonical_server_url" xml:"canonical_server_url"`
+	ServerSlug         string                                        `form:"server_slug" json:"server_slug" xml:"server_slug"`
 	URLHost            string                                        `form:"url_host" json:"url_host" xml:"url_host"`
 	ServerName         *string                                       `form:"server_name,omitempty" json:"server_name,omitempty" xml:"server_name,omitempty"`
 	FirstSeen          string                                        `form:"first_seen" json:"first_seen" xml:"first_seen"`
@@ -4994,6 +6016,16 @@ type ShadowMCPInventoryRequestSummaryResponseBody struct {
 	RequesterUserID string `form:"requester_user_id" json:"requester_user_id" xml:"requester_user_id"`
 	RequesterEmail  string `form:"requester_email" json:"requester_email" xml:"requester_email"`
 	RequestedAt     string `form:"requested_at" json:"requested_at" xml:"requested_at"`
+}
+
+// ShadowMCPInventoryUserResponseBody is used to define fields on response body
+// types.
+type ShadowMCPInventoryUserResponseBody struct {
+	UserKey          string  `form:"user_key" json:"user_key" xml:"user_key"`
+	Name             *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	Email            *string `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`
+	LastCalled       string  `form:"last_called" json:"last_called" xml:"last_called"`
+	ObservedUseCount int     `form:"observed_use_count" json:"observed_use_count" xml:"observed_use_count"`
 }
 
 // AuthzChallengeResponseBody is used to define fields on response body types.
@@ -5472,6 +6504,133 @@ func NewListShadowMCPInventoryResponseBody(res *access.ListShadowMCPInventoryRes
 		}
 	} else {
 		body.Servers = []*ShadowMCPInventoryServerResponseBody{}
+	}
+	return body
+}
+
+// NewGetShadowMCPInventoryServerResponseBody builds the HTTP response body
+// from the result of the "getShadowMCPInventoryServer" endpoint of the
+// "access" service.
+func NewGetShadowMCPInventoryServerResponseBody(res *access.ShadowMCPInventoryServer) *GetShadowMCPInventoryServerResponseBody {
+	body := &GetShadowMCPInventoryServerResponseBody{
+		CanonicalServerURL: res.CanonicalServerURL,
+		ServerSlug:         res.ServerSlug,
+		URLHost:            res.URLHost,
+		ServerName:         res.ServerName,
+		FirstSeen:          res.FirstSeen,
+		LastSeen:           res.LastSeen,
+		LastCalled:         res.LastCalled,
+		ObservedUseCount:   res.ObservedUseCount,
+		UserCount:          res.UserCount,
+		Access:             res.Access,
+		RequestCount:       res.RequestCount,
+	}
+	if res.TopUsers != nil {
+		body.TopUsers = make([]string, len(res.TopUsers))
+		for i, val := range res.TopUsers {
+			body.TopUsers[i] = val
+		}
+	} else {
+		body.TopUsers = []string{}
+	}
+	if res.LatestRequest != nil {
+		body.LatestRequest = marshalAccessShadowMCPInventoryRequestSummaryToShadowMCPInventoryRequestSummaryResponseBody(res.LatestRequest)
+	}
+	if res.AllowedPolicyIds != nil {
+		body.AllowedPolicyIds = make([]string, len(res.AllowedPolicyIds))
+		for i, val := range res.AllowedPolicyIds {
+			body.AllowedPolicyIds[i] = val
+		}
+	} else {
+		body.AllowedPolicyIds = []string{}
+	}
+	return body
+}
+
+// NewListShadowMCPInventoryUsersResponseBody builds the HTTP response body
+// from the result of the "listShadowMCPInventoryUsers" endpoint of the
+// "access" service.
+func NewListShadowMCPInventoryUsersResponseBody(res *access.ListShadowMCPInventoryUsersResult) *ListShadowMCPInventoryUsersResponseBody {
+	body := &ListShadowMCPInventoryUsersResponseBody{
+		NextCursor: res.NextCursor,
+	}
+	if res.Users != nil {
+		body.Users = make([]*ShadowMCPInventoryUserResponseBody, len(res.Users))
+		for i, val := range res.Users {
+			if val == nil {
+				body.Users[i] = nil
+				continue
+			}
+			body.Users[i] = marshalAccessShadowMCPInventoryUserToShadowMCPInventoryUserResponseBody(val)
+		}
+	} else {
+		body.Users = []*ShadowMCPInventoryUserResponseBody{}
+	}
+	return body
+}
+
+// NewUpsertShadowMCPInventoryPolicyBypassResponseBody builds the HTTP response
+// body from the result of the "upsertShadowMCPInventoryPolicyBypass" endpoint
+// of the "access" service.
+func NewUpsertShadowMCPInventoryPolicyBypassResponseBody(res *access.ShadowMCPInventoryURLState) *UpsertShadowMCPInventoryPolicyBypassResponseBody {
+	body := &UpsertShadowMCPInventoryPolicyBypassResponseBody{
+		Access:       res.Access,
+		RequestCount: res.RequestCount,
+	}
+	if res.LatestRequest != nil {
+		body.LatestRequest = marshalAccessShadowMCPInventoryRequestSummaryToShadowMCPInventoryRequestSummaryResponseBody(res.LatestRequest)
+	}
+	if res.AllowedPolicyIds != nil {
+		body.AllowedPolicyIds = make([]string, len(res.AllowedPolicyIds))
+		for i, val := range res.AllowedPolicyIds {
+			body.AllowedPolicyIds[i] = val
+		}
+	} else {
+		body.AllowedPolicyIds = []string{}
+	}
+	return body
+}
+
+// NewDeleteShadowMCPInventoryPolicyBypassResponseBody builds the HTTP response
+// body from the result of the "deleteShadowMCPInventoryPolicyBypass" endpoint
+// of the "access" service.
+func NewDeleteShadowMCPInventoryPolicyBypassResponseBody(res *access.ShadowMCPInventoryURLState) *DeleteShadowMCPInventoryPolicyBypassResponseBody {
+	body := &DeleteShadowMCPInventoryPolicyBypassResponseBody{
+		Access:       res.Access,
+		RequestCount: res.RequestCount,
+	}
+	if res.LatestRequest != nil {
+		body.LatestRequest = marshalAccessShadowMCPInventoryRequestSummaryToShadowMCPInventoryRequestSummaryResponseBody(res.LatestRequest)
+	}
+	if res.AllowedPolicyIds != nil {
+		body.AllowedPolicyIds = make([]string, len(res.AllowedPolicyIds))
+		for i, val := range res.AllowedPolicyIds {
+			body.AllowedPolicyIds[i] = val
+		}
+	} else {
+		body.AllowedPolicyIds = []string{}
+	}
+	return body
+}
+
+// NewResolveShadowMCPInventoryRequestResponseBody builds the HTTP response
+// body from the result of the "resolveShadowMCPInventoryRequest" endpoint of
+// the "access" service.
+func NewResolveShadowMCPInventoryRequestResponseBody(res *access.ShadowMCPInventoryURLState) *ResolveShadowMCPInventoryRequestResponseBody {
+	body := &ResolveShadowMCPInventoryRequestResponseBody{
+		Access:       res.Access,
+		RequestCount: res.RequestCount,
+	}
+	if res.LatestRequest != nil {
+		body.LatestRequest = marshalAccessShadowMCPInventoryRequestSummaryToShadowMCPInventoryRequestSummaryResponseBody(res.LatestRequest)
+	}
+	if res.AllowedPolicyIds != nil {
+		body.AllowedPolicyIds = make([]string, len(res.AllowedPolicyIds))
+		for i, val := range res.AllowedPolicyIds {
+			body.AllowedPolicyIds[i] = val
+		}
+	} else {
+		body.AllowedPolicyIds = []string{}
 	}
 	return body
 }
@@ -7755,6 +8914,756 @@ func NewListShadowMCPInventoryGatewayErrorResponseBody(res *goa.ServiceError) *L
 	return body
 }
 
+// NewGetShadowMCPInventoryServerUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "getShadowMCPInventoryServer" endpoint
+// of the "access" service.
+func NewGetShadowMCPInventoryServerUnauthorizedResponseBody(res *goa.ServiceError) *GetShadowMCPInventoryServerUnauthorizedResponseBody {
+	body := &GetShadowMCPInventoryServerUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetShadowMCPInventoryServerForbiddenResponseBody builds the HTTP response
+// body from the result of the "getShadowMCPInventoryServer" endpoint of the
+// "access" service.
+func NewGetShadowMCPInventoryServerForbiddenResponseBody(res *goa.ServiceError) *GetShadowMCPInventoryServerForbiddenResponseBody {
+	body := &GetShadowMCPInventoryServerForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetShadowMCPInventoryServerBadRequestResponseBody builds the HTTP
+// response body from the result of the "getShadowMCPInventoryServer" endpoint
+// of the "access" service.
+func NewGetShadowMCPInventoryServerBadRequestResponseBody(res *goa.ServiceError) *GetShadowMCPInventoryServerBadRequestResponseBody {
+	body := &GetShadowMCPInventoryServerBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetShadowMCPInventoryServerNotFoundResponseBody builds the HTTP response
+// body from the result of the "getShadowMCPInventoryServer" endpoint of the
+// "access" service.
+func NewGetShadowMCPInventoryServerNotFoundResponseBody(res *goa.ServiceError) *GetShadowMCPInventoryServerNotFoundResponseBody {
+	body := &GetShadowMCPInventoryServerNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetShadowMCPInventoryServerConflictResponseBody builds the HTTP response
+// body from the result of the "getShadowMCPInventoryServer" endpoint of the
+// "access" service.
+func NewGetShadowMCPInventoryServerConflictResponseBody(res *goa.ServiceError) *GetShadowMCPInventoryServerConflictResponseBody {
+	body := &GetShadowMCPInventoryServerConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetShadowMCPInventoryServerUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getShadowMCPInventoryServer" endpoint
+// of the "access" service.
+func NewGetShadowMCPInventoryServerUnsupportedMediaResponseBody(res *goa.ServiceError) *GetShadowMCPInventoryServerUnsupportedMediaResponseBody {
+	body := &GetShadowMCPInventoryServerUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetShadowMCPInventoryServerInvalidResponseBody builds the HTTP response
+// body from the result of the "getShadowMCPInventoryServer" endpoint of the
+// "access" service.
+func NewGetShadowMCPInventoryServerInvalidResponseBody(res *goa.ServiceError) *GetShadowMCPInventoryServerInvalidResponseBody {
+	body := &GetShadowMCPInventoryServerInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetShadowMCPInventoryServerInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getShadowMCPInventoryServer" endpoint
+// of the "access" service.
+func NewGetShadowMCPInventoryServerInvariantViolationResponseBody(res *goa.ServiceError) *GetShadowMCPInventoryServerInvariantViolationResponseBody {
+	body := &GetShadowMCPInventoryServerInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetShadowMCPInventoryServerUnexpectedResponseBody builds the HTTP
+// response body from the result of the "getShadowMCPInventoryServer" endpoint
+// of the "access" service.
+func NewGetShadowMCPInventoryServerUnexpectedResponseBody(res *goa.ServiceError) *GetShadowMCPInventoryServerUnexpectedResponseBody {
+	body := &GetShadowMCPInventoryServerUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetShadowMCPInventoryServerGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "getShadowMCPInventoryServer" endpoint
+// of the "access" service.
+func NewGetShadowMCPInventoryServerGatewayErrorResponseBody(res *goa.ServiceError) *GetShadowMCPInventoryServerGatewayErrorResponseBody {
+	body := &GetShadowMCPInventoryServerGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListShadowMCPInventoryUsersUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "listShadowMCPInventoryUsers" endpoint
+// of the "access" service.
+func NewListShadowMCPInventoryUsersUnauthorizedResponseBody(res *goa.ServiceError) *ListShadowMCPInventoryUsersUnauthorizedResponseBody {
+	body := &ListShadowMCPInventoryUsersUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListShadowMCPInventoryUsersForbiddenResponseBody builds the HTTP response
+// body from the result of the "listShadowMCPInventoryUsers" endpoint of the
+// "access" service.
+func NewListShadowMCPInventoryUsersForbiddenResponseBody(res *goa.ServiceError) *ListShadowMCPInventoryUsersForbiddenResponseBody {
+	body := &ListShadowMCPInventoryUsersForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListShadowMCPInventoryUsersBadRequestResponseBody builds the HTTP
+// response body from the result of the "listShadowMCPInventoryUsers" endpoint
+// of the "access" service.
+func NewListShadowMCPInventoryUsersBadRequestResponseBody(res *goa.ServiceError) *ListShadowMCPInventoryUsersBadRequestResponseBody {
+	body := &ListShadowMCPInventoryUsersBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListShadowMCPInventoryUsersNotFoundResponseBody builds the HTTP response
+// body from the result of the "listShadowMCPInventoryUsers" endpoint of the
+// "access" service.
+func NewListShadowMCPInventoryUsersNotFoundResponseBody(res *goa.ServiceError) *ListShadowMCPInventoryUsersNotFoundResponseBody {
+	body := &ListShadowMCPInventoryUsersNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListShadowMCPInventoryUsersConflictResponseBody builds the HTTP response
+// body from the result of the "listShadowMCPInventoryUsers" endpoint of the
+// "access" service.
+func NewListShadowMCPInventoryUsersConflictResponseBody(res *goa.ServiceError) *ListShadowMCPInventoryUsersConflictResponseBody {
+	body := &ListShadowMCPInventoryUsersConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListShadowMCPInventoryUsersUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "listShadowMCPInventoryUsers" endpoint
+// of the "access" service.
+func NewListShadowMCPInventoryUsersUnsupportedMediaResponseBody(res *goa.ServiceError) *ListShadowMCPInventoryUsersUnsupportedMediaResponseBody {
+	body := &ListShadowMCPInventoryUsersUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListShadowMCPInventoryUsersInvalidResponseBody builds the HTTP response
+// body from the result of the "listShadowMCPInventoryUsers" endpoint of the
+// "access" service.
+func NewListShadowMCPInventoryUsersInvalidResponseBody(res *goa.ServiceError) *ListShadowMCPInventoryUsersInvalidResponseBody {
+	body := &ListShadowMCPInventoryUsersInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListShadowMCPInventoryUsersInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "listShadowMCPInventoryUsers" endpoint
+// of the "access" service.
+func NewListShadowMCPInventoryUsersInvariantViolationResponseBody(res *goa.ServiceError) *ListShadowMCPInventoryUsersInvariantViolationResponseBody {
+	body := &ListShadowMCPInventoryUsersInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListShadowMCPInventoryUsersUnexpectedResponseBody builds the HTTP
+// response body from the result of the "listShadowMCPInventoryUsers" endpoint
+// of the "access" service.
+func NewListShadowMCPInventoryUsersUnexpectedResponseBody(res *goa.ServiceError) *ListShadowMCPInventoryUsersUnexpectedResponseBody {
+	body := &ListShadowMCPInventoryUsersUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListShadowMCPInventoryUsersGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "listShadowMCPInventoryUsers" endpoint
+// of the "access" service.
+func NewListShadowMCPInventoryUsersGatewayErrorResponseBody(res *goa.ServiceError) *ListShadowMCPInventoryUsersGatewayErrorResponseBody {
+	body := &ListShadowMCPInventoryUsersGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpsertShadowMCPInventoryPolicyBypassUnauthorizedResponseBody builds the
+// HTTP response body from the result of the
+// "upsertShadowMCPInventoryPolicyBypass" endpoint of the "access" service.
+func NewUpsertShadowMCPInventoryPolicyBypassUnauthorizedResponseBody(res *goa.ServiceError) *UpsertShadowMCPInventoryPolicyBypassUnauthorizedResponseBody {
+	body := &UpsertShadowMCPInventoryPolicyBypassUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpsertShadowMCPInventoryPolicyBypassForbiddenResponseBody builds the HTTP
+// response body from the result of the "upsertShadowMCPInventoryPolicyBypass"
+// endpoint of the "access" service.
+func NewUpsertShadowMCPInventoryPolicyBypassForbiddenResponseBody(res *goa.ServiceError) *UpsertShadowMCPInventoryPolicyBypassForbiddenResponseBody {
+	body := &UpsertShadowMCPInventoryPolicyBypassForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpsertShadowMCPInventoryPolicyBypassBadRequestResponseBody builds the
+// HTTP response body from the result of the
+// "upsertShadowMCPInventoryPolicyBypass" endpoint of the "access" service.
+func NewUpsertShadowMCPInventoryPolicyBypassBadRequestResponseBody(res *goa.ServiceError) *UpsertShadowMCPInventoryPolicyBypassBadRequestResponseBody {
+	body := &UpsertShadowMCPInventoryPolicyBypassBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpsertShadowMCPInventoryPolicyBypassNotFoundResponseBody builds the HTTP
+// response body from the result of the "upsertShadowMCPInventoryPolicyBypass"
+// endpoint of the "access" service.
+func NewUpsertShadowMCPInventoryPolicyBypassNotFoundResponseBody(res *goa.ServiceError) *UpsertShadowMCPInventoryPolicyBypassNotFoundResponseBody {
+	body := &UpsertShadowMCPInventoryPolicyBypassNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpsertShadowMCPInventoryPolicyBypassConflictResponseBody builds the HTTP
+// response body from the result of the "upsertShadowMCPInventoryPolicyBypass"
+// endpoint of the "access" service.
+func NewUpsertShadowMCPInventoryPolicyBypassConflictResponseBody(res *goa.ServiceError) *UpsertShadowMCPInventoryPolicyBypassConflictResponseBody {
+	body := &UpsertShadowMCPInventoryPolicyBypassConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpsertShadowMCPInventoryPolicyBypassUnsupportedMediaResponseBody builds
+// the HTTP response body from the result of the
+// "upsertShadowMCPInventoryPolicyBypass" endpoint of the "access" service.
+func NewUpsertShadowMCPInventoryPolicyBypassUnsupportedMediaResponseBody(res *goa.ServiceError) *UpsertShadowMCPInventoryPolicyBypassUnsupportedMediaResponseBody {
+	body := &UpsertShadowMCPInventoryPolicyBypassUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpsertShadowMCPInventoryPolicyBypassInvalidResponseBody builds the HTTP
+// response body from the result of the "upsertShadowMCPInventoryPolicyBypass"
+// endpoint of the "access" service.
+func NewUpsertShadowMCPInventoryPolicyBypassInvalidResponseBody(res *goa.ServiceError) *UpsertShadowMCPInventoryPolicyBypassInvalidResponseBody {
+	body := &UpsertShadowMCPInventoryPolicyBypassInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpsertShadowMCPInventoryPolicyBypassInvariantViolationResponseBody builds
+// the HTTP response body from the result of the
+// "upsertShadowMCPInventoryPolicyBypass" endpoint of the "access" service.
+func NewUpsertShadowMCPInventoryPolicyBypassInvariantViolationResponseBody(res *goa.ServiceError) *UpsertShadowMCPInventoryPolicyBypassInvariantViolationResponseBody {
+	body := &UpsertShadowMCPInventoryPolicyBypassInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpsertShadowMCPInventoryPolicyBypassUnexpectedResponseBody builds the
+// HTTP response body from the result of the
+// "upsertShadowMCPInventoryPolicyBypass" endpoint of the "access" service.
+func NewUpsertShadowMCPInventoryPolicyBypassUnexpectedResponseBody(res *goa.ServiceError) *UpsertShadowMCPInventoryPolicyBypassUnexpectedResponseBody {
+	body := &UpsertShadowMCPInventoryPolicyBypassUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpsertShadowMCPInventoryPolicyBypassGatewayErrorResponseBody builds the
+// HTTP response body from the result of the
+// "upsertShadowMCPInventoryPolicyBypass" endpoint of the "access" service.
+func NewUpsertShadowMCPInventoryPolicyBypassGatewayErrorResponseBody(res *goa.ServiceError) *UpsertShadowMCPInventoryPolicyBypassGatewayErrorResponseBody {
+	body := &UpsertShadowMCPInventoryPolicyBypassGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteShadowMCPInventoryPolicyBypassUnauthorizedResponseBody builds the
+// HTTP response body from the result of the
+// "deleteShadowMCPInventoryPolicyBypass" endpoint of the "access" service.
+func NewDeleteShadowMCPInventoryPolicyBypassUnauthorizedResponseBody(res *goa.ServiceError) *DeleteShadowMCPInventoryPolicyBypassUnauthorizedResponseBody {
+	body := &DeleteShadowMCPInventoryPolicyBypassUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteShadowMCPInventoryPolicyBypassForbiddenResponseBody builds the HTTP
+// response body from the result of the "deleteShadowMCPInventoryPolicyBypass"
+// endpoint of the "access" service.
+func NewDeleteShadowMCPInventoryPolicyBypassForbiddenResponseBody(res *goa.ServiceError) *DeleteShadowMCPInventoryPolicyBypassForbiddenResponseBody {
+	body := &DeleteShadowMCPInventoryPolicyBypassForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteShadowMCPInventoryPolicyBypassBadRequestResponseBody builds the
+// HTTP response body from the result of the
+// "deleteShadowMCPInventoryPolicyBypass" endpoint of the "access" service.
+func NewDeleteShadowMCPInventoryPolicyBypassBadRequestResponseBody(res *goa.ServiceError) *DeleteShadowMCPInventoryPolicyBypassBadRequestResponseBody {
+	body := &DeleteShadowMCPInventoryPolicyBypassBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteShadowMCPInventoryPolicyBypassNotFoundResponseBody builds the HTTP
+// response body from the result of the "deleteShadowMCPInventoryPolicyBypass"
+// endpoint of the "access" service.
+func NewDeleteShadowMCPInventoryPolicyBypassNotFoundResponseBody(res *goa.ServiceError) *DeleteShadowMCPInventoryPolicyBypassNotFoundResponseBody {
+	body := &DeleteShadowMCPInventoryPolicyBypassNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteShadowMCPInventoryPolicyBypassConflictResponseBody builds the HTTP
+// response body from the result of the "deleteShadowMCPInventoryPolicyBypass"
+// endpoint of the "access" service.
+func NewDeleteShadowMCPInventoryPolicyBypassConflictResponseBody(res *goa.ServiceError) *DeleteShadowMCPInventoryPolicyBypassConflictResponseBody {
+	body := &DeleteShadowMCPInventoryPolicyBypassConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteShadowMCPInventoryPolicyBypassUnsupportedMediaResponseBody builds
+// the HTTP response body from the result of the
+// "deleteShadowMCPInventoryPolicyBypass" endpoint of the "access" service.
+func NewDeleteShadowMCPInventoryPolicyBypassUnsupportedMediaResponseBody(res *goa.ServiceError) *DeleteShadowMCPInventoryPolicyBypassUnsupportedMediaResponseBody {
+	body := &DeleteShadowMCPInventoryPolicyBypassUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteShadowMCPInventoryPolicyBypassInvalidResponseBody builds the HTTP
+// response body from the result of the "deleteShadowMCPInventoryPolicyBypass"
+// endpoint of the "access" service.
+func NewDeleteShadowMCPInventoryPolicyBypassInvalidResponseBody(res *goa.ServiceError) *DeleteShadowMCPInventoryPolicyBypassInvalidResponseBody {
+	body := &DeleteShadowMCPInventoryPolicyBypassInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteShadowMCPInventoryPolicyBypassInvariantViolationResponseBody builds
+// the HTTP response body from the result of the
+// "deleteShadowMCPInventoryPolicyBypass" endpoint of the "access" service.
+func NewDeleteShadowMCPInventoryPolicyBypassInvariantViolationResponseBody(res *goa.ServiceError) *DeleteShadowMCPInventoryPolicyBypassInvariantViolationResponseBody {
+	body := &DeleteShadowMCPInventoryPolicyBypassInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteShadowMCPInventoryPolicyBypassUnexpectedResponseBody builds the
+// HTTP response body from the result of the
+// "deleteShadowMCPInventoryPolicyBypass" endpoint of the "access" service.
+func NewDeleteShadowMCPInventoryPolicyBypassUnexpectedResponseBody(res *goa.ServiceError) *DeleteShadowMCPInventoryPolicyBypassUnexpectedResponseBody {
+	body := &DeleteShadowMCPInventoryPolicyBypassUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteShadowMCPInventoryPolicyBypassGatewayErrorResponseBody builds the
+// HTTP response body from the result of the
+// "deleteShadowMCPInventoryPolicyBypass" endpoint of the "access" service.
+func NewDeleteShadowMCPInventoryPolicyBypassGatewayErrorResponseBody(res *goa.ServiceError) *DeleteShadowMCPInventoryPolicyBypassGatewayErrorResponseBody {
+	body := &DeleteShadowMCPInventoryPolicyBypassGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResolveShadowMCPInventoryRequestUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "resolveShadowMCPInventoryRequest"
+// endpoint of the "access" service.
+func NewResolveShadowMCPInventoryRequestUnauthorizedResponseBody(res *goa.ServiceError) *ResolveShadowMCPInventoryRequestUnauthorizedResponseBody {
+	body := &ResolveShadowMCPInventoryRequestUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResolveShadowMCPInventoryRequestForbiddenResponseBody builds the HTTP
+// response body from the result of the "resolveShadowMCPInventoryRequest"
+// endpoint of the "access" service.
+func NewResolveShadowMCPInventoryRequestForbiddenResponseBody(res *goa.ServiceError) *ResolveShadowMCPInventoryRequestForbiddenResponseBody {
+	body := &ResolveShadowMCPInventoryRequestForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResolveShadowMCPInventoryRequestBadRequestResponseBody builds the HTTP
+// response body from the result of the "resolveShadowMCPInventoryRequest"
+// endpoint of the "access" service.
+func NewResolveShadowMCPInventoryRequestBadRequestResponseBody(res *goa.ServiceError) *ResolveShadowMCPInventoryRequestBadRequestResponseBody {
+	body := &ResolveShadowMCPInventoryRequestBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResolveShadowMCPInventoryRequestNotFoundResponseBody builds the HTTP
+// response body from the result of the "resolveShadowMCPInventoryRequest"
+// endpoint of the "access" service.
+func NewResolveShadowMCPInventoryRequestNotFoundResponseBody(res *goa.ServiceError) *ResolveShadowMCPInventoryRequestNotFoundResponseBody {
+	body := &ResolveShadowMCPInventoryRequestNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResolveShadowMCPInventoryRequestConflictResponseBody builds the HTTP
+// response body from the result of the "resolveShadowMCPInventoryRequest"
+// endpoint of the "access" service.
+func NewResolveShadowMCPInventoryRequestConflictResponseBody(res *goa.ServiceError) *ResolveShadowMCPInventoryRequestConflictResponseBody {
+	body := &ResolveShadowMCPInventoryRequestConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResolveShadowMCPInventoryRequestUnsupportedMediaResponseBody builds the
+// HTTP response body from the result of the "resolveShadowMCPInventoryRequest"
+// endpoint of the "access" service.
+func NewResolveShadowMCPInventoryRequestUnsupportedMediaResponseBody(res *goa.ServiceError) *ResolveShadowMCPInventoryRequestUnsupportedMediaResponseBody {
+	body := &ResolveShadowMCPInventoryRequestUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResolveShadowMCPInventoryRequestInvalidResponseBody builds the HTTP
+// response body from the result of the "resolveShadowMCPInventoryRequest"
+// endpoint of the "access" service.
+func NewResolveShadowMCPInventoryRequestInvalidResponseBody(res *goa.ServiceError) *ResolveShadowMCPInventoryRequestInvalidResponseBody {
+	body := &ResolveShadowMCPInventoryRequestInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResolveShadowMCPInventoryRequestInvariantViolationResponseBody builds the
+// HTTP response body from the result of the "resolveShadowMCPInventoryRequest"
+// endpoint of the "access" service.
+func NewResolveShadowMCPInventoryRequestInvariantViolationResponseBody(res *goa.ServiceError) *ResolveShadowMCPInventoryRequestInvariantViolationResponseBody {
+	body := &ResolveShadowMCPInventoryRequestInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResolveShadowMCPInventoryRequestUnexpectedResponseBody builds the HTTP
+// response body from the result of the "resolveShadowMCPInventoryRequest"
+// endpoint of the "access" service.
+func NewResolveShadowMCPInventoryRequestUnexpectedResponseBody(res *goa.ServiceError) *ResolveShadowMCPInventoryRequestUnexpectedResponseBody {
+	body := &ResolveShadowMCPInventoryRequestUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResolveShadowMCPInventoryRequestGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "resolveShadowMCPInventoryRequest"
+// endpoint of the "access" service.
+func NewResolveShadowMCPInventoryRequestGatewayErrorResponseBody(res *goa.ServiceError) *ResolveShadowMCPInventoryRequestGatewayErrorResponseBody {
+	body := &ResolveShadowMCPInventoryRequestGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewCreateShadowMCPAccessRuleUnauthorizedResponseBody builds the HTTP
 // response body from the result of the "createShadowMCPAccessRule" endpoint of
 // the "access" service.
@@ -9295,6 +11204,76 @@ func NewListShadowMCPInventoryPayload(projectID string, limit int, cursor *strin
 	return v
 }
 
+// NewGetShadowMCPInventoryServerPayload builds a access service
+// getShadowMCPInventoryServer endpoint payload.
+func NewGetShadowMCPInventoryServerPayload(projectID string, serverSlug string, sessionToken *string) *access.GetShadowMCPInventoryServerPayload {
+	v := &access.GetShadowMCPInventoryServerPayload{}
+	v.ProjectID = projectID
+	v.ServerSlug = serverSlug
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewListShadowMCPInventoryUsersPayload builds a access service
+// listShadowMCPInventoryUsers endpoint payload.
+func NewListShadowMCPInventoryUsersPayload(projectID string, serverURL string, limit int, cursor *string, sessionToken *string) *access.ListShadowMCPInventoryUsersPayload {
+	v := &access.ListShadowMCPInventoryUsersPayload{}
+	v.ProjectID = projectID
+	v.ServerURL = serverURL
+	v.Limit = limit
+	v.Cursor = cursor
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewUpsertShadowMCPInventoryPolicyBypassPayload builds a access service
+// upsertShadowMCPInventoryPolicyBypass endpoint payload.
+func NewUpsertShadowMCPInventoryPolicyBypassPayload(body *UpsertShadowMCPInventoryPolicyBypassRequestBody, sessionToken *string) *access.UpsertShadowMCPInventoryPolicyBypassPayload {
+	v := &access.UpsertShadowMCPInventoryPolicyBypassPayload{
+		ProjectID: *body.ProjectID,
+		ServerURL: *body.ServerURL,
+	}
+	v.PolicyIds = make([]string, len(body.PolicyIds))
+	for i, val := range body.PolicyIds {
+		v.PolicyIds[i] = val
+	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewDeleteShadowMCPInventoryPolicyBypassPayload builds a access service
+// deleteShadowMCPInventoryPolicyBypass endpoint payload.
+func NewDeleteShadowMCPInventoryPolicyBypassPayload(projectID string, serverURL string, sessionToken *string) *access.DeleteShadowMCPInventoryPolicyBypassPayload {
+	v := &access.DeleteShadowMCPInventoryPolicyBypassPayload{}
+	v.ProjectID = projectID
+	v.ServerURL = serverURL
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewResolveShadowMCPInventoryRequestPayload builds a access service
+// resolveShadowMCPInventoryRequest endpoint payload.
+func NewResolveShadowMCPInventoryRequestPayload(body *ResolveShadowMCPInventoryRequestRequestBody, sessionToken *string) *access.ResolveShadowMCPInventoryRequestPayload {
+	v := &access.ResolveShadowMCPInventoryRequestPayload{
+		ProjectID: *body.ProjectID,
+		ServerURL: *body.ServerURL,
+		Decision:  access.ShadowMCPInventoryRequestDecision(*body.Decision),
+	}
+	if body.PolicyIds != nil {
+		v.PolicyIds = make([]string, len(body.PolicyIds))
+		for i, val := range body.PolicyIds {
+			v.PolicyIds[i] = val
+		}
+	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
 // NewCreateShadowMCPAccessRulePayload builds a access service
 // createShadowMCPAccessRule endpoint payload.
 func NewCreateShadowMCPAccessRulePayload(body *CreateShadowMCPAccessRuleRequestBody, sessionToken *string) *access.CreateShadowMCPAccessRulePayload {
@@ -9549,6 +11528,59 @@ func ValidateDenyShadowMCPApprovalRequestRequestBody(body *DenyShadowMCPApproval
 		if !(*body.MatchBreadth == "full_url" || *body.MatchBreadth == "url_host") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.match_breadth", *body.MatchBreadth, []any{"full_url", "url_host"}))
 		}
+	}
+	return
+}
+
+// ValidateUpsertShadowMCPInventoryPolicyBypassRequestBody runs the validations
+// defined on UpsertShadowMCPInventoryPolicyBypassRequestBody
+func ValidateUpsertShadowMCPInventoryPolicyBypassRequestBody(body *UpsertShadowMCPInventoryPolicyBypassRequestBody) (err error) {
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.ServerURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("server_url", "body"))
+	}
+	if body.PolicyIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("policy_ids", "body"))
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.ServerURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.server_url", *body.ServerURL, goa.FormatURI))
+	}
+	for _, e := range body.PolicyIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.policy_ids[*]", e, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateResolveShadowMCPInventoryRequestRequestBody runs the validations
+// defined on ResolveShadowMCPInventoryRequestRequestBody
+func ValidateResolveShadowMCPInventoryRequestRequestBody(body *ResolveShadowMCPInventoryRequestRequestBody) (err error) {
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.ServerURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("server_url", "body"))
+	}
+	if body.Decision == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("decision", "body"))
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.ServerURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.server_url", *body.ServerURL, goa.FormatURI))
+	}
+	if body.Decision != nil {
+		if !(*body.Decision == "allow" || *body.Decision == "deny") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.decision", *body.Decision, []any{"allow", "deny"}))
+		}
+	}
+	for _, e := range body.PolicyIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.policy_ids[*]", e, goa.FormatUUID))
 	}
 	return
 }

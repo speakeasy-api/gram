@@ -1785,11 +1785,16 @@ func AssembleEnvironmentVariablesForToolset(
 	if len(serverEnvVarsMap) > 0 {
 		serverVars = append(serverVars, &types.ServerVariable{
 			Description:  "",
-			EnvVariables: slices.Collect(maps.Keys(serverEnvVarsMap)),
+			EnvVariables: slices.Sorted(maps.Keys(serverEnvVarsMap)),
 		})
 	}
 
-	return slices.Collect(maps.Values(securityVarsMap)), serverVars
+	securityVars := make([]*types.SecurityVariable, 0, len(securityVarsMap))
+	for _, key := range slices.Sorted(maps.Keys(securityVarsMap)) {
+		securityVars = append(securityVars, securityVarsMap[key])
+	}
+
+	return securityVars, serverVars
 }
 
 func environmentVariablesForTools(ctx context.Context, tx DBTX, toolsetID uuid.UUID, tools []ToolEnvLookupParams) ([]*types.SecurityVariable, []*types.ServerVariable, error) {
@@ -1834,7 +1839,11 @@ func dedupeFunctionEnvVars(vars []*types.FunctionEnvironmentVariable) []*types.F
 		deduped[envVar.Name] = envVar
 	}
 
-	return slices.Collect(maps.Values(deduped))
+	result := make([]*types.FunctionEnvironmentVariable, 0, len(deduped))
+	for _, name := range slices.Sorted(maps.Keys(deduped)) {
+		result = append(result, deduped[name])
+	}
+	return result
 }
 
 func extractExternalMCPHeaderDefinitions(ctx context.Context, logger *slog.Logger, headerData []byte, sourceSlug string) ([]*types.ExternalMCPHeaderDefinition, error) {

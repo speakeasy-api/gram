@@ -82,10 +82,38 @@ if $agent_mode && ! command -v mise &> /dev/null; then
     curl -fsSL https://mise.run | sh
     export PATH="$HOME/.local/bin:$PATH"
     mise trust
+
+    # printf %q shell-quotes the path (valid in bash and zsh) so the rc
+    # entry survives a $HOME containing spaces.
+    mise_bin=$(printf '%q' "$HOME/.local/bin/mise")
+
+    # The grep only matches uncommented activation lines, so a
+    # commented-out one doesn't suppress installing a working one.
+    bashrc="$HOME/.bashrc"
+    if [ ! -f "$bashrc" ] || ! grep -Eq '^[^#]*mise activate bash' "$bashrc"; then
+        echo "eval \"\$($mise_bin activate bash)\"" >> "$bashrc"
+        echo "✅ Added mise activation in $bashrc"
+    fi
+
+    # :- so a set-but-empty ZDOTDIR falls back to HOME too
+    zshrc="${ZDOTDIR:-$HOME}/.zshrc"
+    if [ ! -f "$zshrc" ] || ! grep -Eq '^[^#]*mise activate zsh' "$zshrc"; then
+        mkdir -p "${ZDOTDIR:-$HOME}"
+        echo "eval \"\$($mise_bin activate zsh)\"" >> "$zshrc"
+        echo "✅ Added mise activation in $zshrc"
+    fi
+
+    # mise activate exports MISE_SHELL; if it's unset, the current shell
+    # hasn't been activated yet.
+    if [ -z "${MISE_SHELL:-}" ]; then
+        echo "ℹ️ To take effect in your current shell, run:"
+        echo "   eval \"\$($mise_bin activate bash)\"   # bash"
+        echo "   eval \"\$($mise_bin activate zsh)\"    # zsh"
+    fi
 else
     check_command "mise" "
     Install it from here: https://mise.jdx.dev/
-    - Make sure to update your .zprofile (zsh), .profile (bash), ...
+    - Make sure to update your .zshrc (zsh), .bashrc (bash), ...
     - Additionaly enable completions for better DX: https://mise.jdx.dev/installing-mise.html#autocompletion
     "
 fi

@@ -122,6 +122,7 @@ export function AppSidebar({
     routes.riskOverview,
     routes.policyCenter,
     routes.riskEvents,
+    routes.shadowMCP,
     routes.approvalRequests,
     routes.detectionRules,
   ].some((r) => r.active);
@@ -247,8 +248,8 @@ export function AppSidebar({
               scope={scopeFor(routes.riskEvents)}
             />
             <ScopeGatedNavItem
-              item={routes.approvalRequests}
-              scope={scopeFor(routes.approvalRequests)}
+              item={routes.shadowMCP}
+              scope={scopeFor(routes.shadowMCP)}
             />
             <ScopeGatedNavItem
               item={routes.detectionRules}

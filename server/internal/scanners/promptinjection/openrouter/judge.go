@@ -1,4 +1,4 @@
-// Package openrouter holds the OpenRouter-backed L1 engine for prompt-injection detection.
+// Package openrouter holds the OpenRouter-backed prompt-injection judge.
 package openrouter
 
 import (
@@ -32,7 +32,7 @@ const (
 	// on the realtime hook path, so this is also the worst-case added latency
 	// before a fail-open allow on a stuck model.
 	judgeTimeout = 10 * time.Second
-	// defaultModel is the stage-1 judge. Gemini 3.1 Flash Lite, chosen from a
+	// defaultModel is the prompt-injection judge. Gemini 3.1 Flash Lite, chosen from a
 	// multi-model sweep over real speakeasy-team traffic (POC-193). On the
 	// production form factors it had the cleanest false-positive profile of the
 	// models tested — the only one that stops over-flagging the agent's own
@@ -96,8 +96,7 @@ Output ONLY the JSON object, no prose or markdown fences.`
 
 // Engine is the OpenRouter-backed prompt-attack judge. Each message is judged
 // with a strict JSON schema, low temperature, and a hard timeout. Errors and
-// rate-limited calls fail open (SAFE) so a judge outage degrades to the L0
-// heuristics rather than dropping the whole scan.
+// rate-limited calls fail open (SAFE) so a judge outage drops PI findings.
 type Engine struct {
 	logger      *slog.Logger
 	tracer      trace.Tracer
@@ -138,7 +137,7 @@ func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider
 // Classify judges each message independently and returns one result per input,
 // aligned by index. It never returns an error: a per-message judge failure or
 // rate limit yields a SAFE result for that message (fail open) so the scanner
-// keeps the other verdicts and its L0 findings. Messages with no content are
+// keeps the other verdicts. Messages with no content are
 // SAFE without a call.
 func (c *Engine) Classify(ctx context.Context, req promptinjection.Request) (_ []promptinjection.Result, err error) {
 	n := len(req.Messages)
@@ -309,6 +308,7 @@ func (c *Engine) call(ctx context.Context, req promptinjection.Request, msg judg
 		Stream:                    false,
 		UsageSource:               billing.ModelUsageSourceRiskAnalysis,
 		KeyType:                   gramopenrouter.KeyTypeInternal,
+		KeySlot:                   billing.ModelUsageSourcePromptInjection,
 		ChatID:                    uuid.Nil,
 		UserID:                    userID,
 		ExternalUserID:            "",

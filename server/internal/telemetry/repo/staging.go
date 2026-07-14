@@ -52,6 +52,11 @@ type StagedTelemetryLogRow struct {
 	ServiceVersion       *string `ch:"service_version"`
 	GramChatID           *string `ch:"gram_chat_id"`
 	RequestID            string  `ch:"request_id"`
+	// OrgID scopes the attribution tuple lookup. The tuple's Redis key is
+	// org-scoped (see telemetry.MCPAttributionTupleKey): the hooks key that
+	// writes the tuple and the OTEL exporter key that staged this row can
+	// resolve different projects, but always agree on the org.
+	OrgID string `ch:"org_id"`
 }
 
 // stagedTelemetryRowsLimit bounds one promotion pass's batch so a large
@@ -169,6 +174,7 @@ func (q *Queries) ListStagedTelemetryLogs(ctx context.Context, projectID string)
 		"service_version",
 		"gram_chat_id",
 		"request_id",
+		"org_id",
 	).
 		From("telemetry_logs_staging").
 		Where(squirrel.Eq{"gram_project_id": projectID}).

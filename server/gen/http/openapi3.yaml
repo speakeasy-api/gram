@@ -1236,6 +1236,102 @@ paths:
             x-speakeasy-name-override: deleteRole
             x-speakeasy-react-hook:
                 name: DeleteRole
+    /rpc/access.deleteShadowMCPInventoryPolicyBypass:
+        delete:
+            description: Remove a Shadow MCP URL allow decision.
+            operationId: deleteShadowMCPInventoryPolicyBypass
+            parameters:
+                - allowEmptyValue: true
+                  in: query
+                  name: project_id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  in: query
+                  name: server_url
+                  required: true
+                  schema:
+                    format: uri
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ShadowMCPInventoryURLState'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: deleteShadowMCPInventoryPolicyBypass access
+            tags:
+                - access
+            x-speakeasy-name-override: deleteShadowMCPInventoryPolicyBypass
+            x-speakeasy-react-hook:
+                name: DeleteShadowMCPInventoryPolicyBypass
+                type: mutation
     /rpc/access.deleteShadowMcpRule:
         delete:
             description: Delete a managed Shadow MCP access rule.
@@ -1741,6 +1837,102 @@ paths:
             x-speakeasy-name-override: getRole
             x-speakeasy-react-hook:
                 name: Role
+    /rpc/access.getShadowMCPInventoryServer:
+        get:
+            description: Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state.
+            operationId: getShadowMCPInventoryServer
+            parameters:
+                - allowEmptyValue: true
+                  in: query
+                  name: project_id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Shadow MCP server slug to inspect.
+                  in: query
+                  name: server_slug
+                  required: true
+                  schema:
+                    description: Shadow MCP server slug to inspect.
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ShadowMCPInventoryServer'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: getShadowMCPInventoryServer access
+            tags:
+                - access
+            x-speakeasy-name-override: getShadowMCPInventoryServer
+            x-speakeasy-react-hook:
+                name: ShadowMCPInventoryServer
     /rpc/access.listChallengeBuckets:
         get:
             description: List authz challenges grouped into time-based burst buckets. Consecutive challenges with the same dimensions within a 10-minute window are collapsed into a single bucket.
@@ -2506,6 +2698,119 @@ paths:
             x-speakeasy-name-override: listShadowMCPInventory
             x-speakeasy-react-hook:
                 name: ShadowMCPInventory
+    /rpc/access.listShadowMCPInventoryUsers:
+        get:
+            description: List users with observed telemetry usage for one project-scoped Shadow MCP server URL.
+            operationId: listShadowMCPInventoryUsers
+            parameters:
+                - allowEmptyValue: true
+                  in: query
+                  name: project_id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Shadow MCP server URL to expand.
+                  in: query
+                  name: server_url
+                  required: true
+                  schema:
+                    description: Shadow MCP server URL to expand.
+                    format: uri
+                    type: string
+                - allowEmptyValue: true
+                  in: query
+                  name: limit
+                  schema:
+                    default: 50
+                    format: int64
+                    maximum: 200
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: Cursor for the next page of results.
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Cursor for the next page of results.
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListShadowMCPInventoryUsersResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: listShadowMCPInventoryUsers access
+            tags:
+                - access
+            x-speakeasy-name-override: listShadowMCPInventoryUsers
+            x-speakeasy-react-hook:
+                name: ShadowMCPInventoryUsers
     /rpc/access.listShadowMcpRequests:
         get:
             description: List Shadow MCP approval requests for the current organization. Requires organization admin access because requests include requester and block details.
@@ -2832,6 +3137,94 @@ paths:
             x-speakeasy-name-override: resolveChallenge
             x-speakeasy-react-hook:
                 name: ResolveChallenge
+    /rpc/access.resolveShadowMCPInventoryRequest:
+        post:
+            description: Review the latest pending Shadow MCP URL request and resolve all pending requests for that URL.
+            operationId: resolveShadowMCPInventoryRequest
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ResolveShadowMCPInventoryRequestForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ShadowMCPInventoryURLState'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: resolveShadowMCPInventoryRequest access
+            tags:
+                - access
+            x-speakeasy-name-override: resolveShadowMCPInventoryRequest
+            x-speakeasy-react-hook:
+                name: ResolveShadowMCPInventoryRequest
+                type: mutation
     /rpc/access.updateMemberRoles:
         put:
             description: Update a team member's role assignments.
@@ -3109,6 +3502,94 @@ paths:
             x-speakeasy-name-override: updateShadowMCPAccessRule
             x-speakeasy-react-hook:
                 name: UpdateShadowMCPAccessRule
+                type: mutation
+    /rpc/access.upsertShadowMCPInventoryPolicyBypass:
+        post:
+            description: Create or modify a Shadow MCP URL allow decision for selected blocking policies.
+            operationId: upsertShadowMCPInventoryPolicyBypass
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ShadowMCPInventoryPolicyBypassForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ShadowMCPInventoryURLState'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: upsertShadowMCPInventoryPolicyBypass access
+            tags:
+                - access
+            x-speakeasy-name-override: upsertShadowMCPInventoryPolicyBypass
+            x-speakeasy-react-hook:
+                name: UpsertShadowMCPInventoryPolicyBypass
                 type: mutation
     /rpc/adminRemoteSessions.createGlobalClient:
         post:
@@ -16310,6 +16791,87 @@ paths:
             x-speakeasy-name-override: list
             x-speakeasy-react-hook:
                 name: McpServers
+    /rpc/mcpServers.listForOrg:
+        get:
+            description: List all MCP servers across the organization
+            operationId: listMcpServersForOrg
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListMcpServersResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: listMcpServersForOrg mcpServers
+            tags:
+                - mcpServers
+            x-speakeasy-name-override: listForOrg
+            x-speakeasy-react-hook:
+                name: ListMcpServersForOrg
     /rpc/mcpServers.listToolFilters:
         get:
             description: List the tool filter scopes (tags) available on an MCP server and the tools under each, including tools excluded from all filters. Exactly one of id or slug must be provided. Read-only; reflects the explicit tool variations group resolved from the chain (mcp_servers then toolsets), deriving effective tags with the same logic as the runtime ?tags= filter. Returns filtering disabled when no explicit group is set.
@@ -16527,6 +17089,415 @@ paths:
             x-speakeasy-name-override: update
             x-speakeasy-react-hook:
                 name: UpdateMcpServer
+    /rpc/modelKeys.deleteKey:
+        delete:
+            description: Delete a model provider key. Completions on the affected slot fall back to the project default key or the platform key.
+            operationId: deleteModelProviderKey
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the key to delete.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The ID of the key to delete.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: deleteKey modelKeys
+            tags:
+                - modelKeys
+            x-speakeasy-name-override: deleteKey
+            x-speakeasy-react-hook:
+                name: DeleteModelProviderKey
+    /rpc/modelKeys.listKeys:
+        get:
+            description: List the model provider keys configured for a project. Key material is never returned.
+            operationId: listModelProviderKeys
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListKeysResponseBody'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: listKeys modelKeys
+            tags:
+                - modelKeys
+            x-speakeasy-name-override: listKeys
+            x-speakeasy-react-hook:
+                name: ModelProviderKeys
+    /rpc/modelKeys.setKeyEnabled:
+        post:
+            description: Enable or disable a model provider key without replacing its key material.
+            operationId: setModelProviderKeyEnabled
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetKeyEnabledRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ModelProviderKey'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: setKeyEnabled modelKeys
+            tags:
+                - modelKeys
+            x-speakeasy-name-override: setKeyEnabled
+            x-speakeasy-react-hook:
+                name: SetModelProviderKeyEnabled
+    /rpc/modelKeys.upsertKey:
+        post:
+            description: Create or replace the model provider key for a slot. The key is validated with the provider, then stored encrypted.
+            operationId: upsertModelProviderKey
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpsertKeyRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ModelProviderKey'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: upsertKey modelKeys
+            tags:
+                - modelKeys
+            x-speakeasy-name-override: upsertKey
+            x-speakeasy-react-hook:
+                name: UpsertModelProviderKey
     /rpc/organizationRemoteSessionClients.create:
         post:
             description: 'Register a standalone remote_session_client under an existing remote_session_issuer in the caller''s organization, with no user_session_issuer attachments. The client is project-scoped: it inherits a project-specific issuer''s project, or the caller names a project (which must belong to the organization) when the issuer is organization-level. Requires org:admin.'
@@ -32345,97 +33316,9 @@ paths:
             x-speakeasy-react-hook:
                 name: TelemetryQuery
                 type: query
-    /rpc/telemetry.queryRiskTokens:
-        post:
-            description: 'Org-scoped daily token usage split by risk involvement: tokens from sessions with at least one active risk finding in the window versus all session tokens. Powers the token-usage panel''s risk breakdown on the costs page.'
-            operationId: queryRiskTokens
-            parameters:
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/TelemetryWindowPayload'
-                required: true
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/QueryRiskTokensResult'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - session_header_Gram-Session: []
-            summary: queryRiskTokens telemetry
-            tags:
-                - telemetry
-            x-speakeasy-name-override: queryRiskTokens
-            x-speakeasy-react-hook:
-                name: TelemetryQueryRiskTokens
-                type: query
     /rpc/telemetry.queryTumDetails:
         post:
-            description: 'Org-scoped daily usage details for the billing page''s metrics table, computed in one pass: token type sums, session/tool-call/active-user counts, attribution slices (MCP tools, skills, unattributed users), and message-level stats (tokens in messages with active risk findings, tokens in tool-call messages).'
+            description: 'Org-scoped daily usage details for the billing page, computed in one pass: the tokens-under-management daily token-type split (observed agent traffic; cache reads excluded) and per-dimension breakdowns over the same population.'
             operationId: queryTumDetails
             parameters:
                 - allowEmptyValue: true
@@ -45236,6 +46119,9 @@ components:
                 authz_challenge_logging_enabled:
                     type: boolean
                     description: Whether authz challenge logging to ClickHouse is enabled
+                custom_model_keys_enabled:
+                    type: boolean
+                    description: Whether the organization can supply its own model provider API keys (BYOK)
                 hooks_browser_login_enabled:
                     type: boolean
                     description: Whether generated hook plugins may mint per-user keys via the interactive browser login
@@ -45270,6 +46156,7 @@ components:
                 - scim_enabled
                 - observability_mode_enabled
                 - hooks_browser_login_enabled
+                - custom_model_keys_enabled
         GetProjectForm:
             type: object
             properties:
@@ -45687,6 +46574,11 @@ components:
                     items:
                         $ref: '#/components/schemas/HookMCPAttributionEntry'
                     description: Transcript-derived per-request MCP attribution (Claude Stop/SubagentStop).
+                mcp_inventory:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/HookMCPData'
+                    description: Configured MCP server snapshot captured at session start or configuration change. Transport credentials must be redacted by the sender.
                 message:
                     $ref: '#/components/schemas/HookMessageData'
                 notification:
@@ -46752,6 +47644,16 @@ components:
                     description: Pending invitations for the organization only; accepted, expired, and revoked invitations are omitted.
             required:
                 - invitations
+        ListKeysResponseBody:
+            type: object
+            properties:
+                keys:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ModelProviderKey'
+                    description: The model provider keys configured for the project.
+            required:
+                - keys
         ListKeysResult:
             type: object
             properties:
@@ -47259,6 +48161,18 @@ components:
                         $ref: '#/components/schemas/ShadowMCPInventoryServer'
             required:
                 - servers
+        ListShadowMCPInventoryUsersResult:
+            type: object
+            properties:
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page of results.
+                users:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ShadowMCPInventoryUser'
+            required:
+                - users
         ListSourcesResult:
             type: object
             properties:
@@ -48032,6 +48946,43 @@ components:
             required:
                 - access_token
                 - expires_in
+        ModelProviderKey:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: ISO 8601 timestamp when the key was created.
+                    format: date-time
+                enabled:
+                    type: boolean
+                    description: Whether the key participates in key resolution.
+                id:
+                    type: string
+                    description: The ID of the key
+                    format: uuid
+                project_id:
+                    type: string
+                    description: The project the key belongs to
+                    format: uuid
+                provider:
+                    type: string
+                    description: The model provider the key authenticates with. Supported values include openrouter.
+                slot:
+                    type: string
+                    description: The responsibility slot the key applies to. The 'default' slot covers every slot without a dedicated override.
+                updated_at:
+                    type: string
+                    description: ISO 8601 timestamp of the most recent change.
+                    format: date-time
+            description: A customer-supplied model provider API key bound to a project and responsibility slot. Key material is write-only and never returned.
+            required:
+                - id
+                - project_id
+                - slot
+                - provider
+                - enabled
+                - created_at
+                - updated_at
         ModelUsage:
             type: object
             properties:
@@ -50036,22 +50987,6 @@ components:
                 - interval_seconds
                 - table
                 - timeseries
-        QueryRiskTokensResult:
-            type: object
-            properties:
-                interval_seconds:
-                    type: integer
-                    description: Timeseries bucket width in seconds. Always 86400 — the source aggregate is bucketed daily.
-                    format: int64
-                points:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/RiskTokensPoint'
-                    description: Gap-filled daily buckets in ascending time order
-            description: Result of the token-by-risk breakdown query
-            required:
-                - interval_seconds
-                - points
         QueryRow:
             type: object
             properties:
@@ -50607,6 +51542,30 @@ components:
                     description: The created resolution records.
             required:
                 - resolutions
+        ResolveShadowMCPInventoryRequestForm:
+            type: object
+            properties:
+                decision:
+                    type: string
+                    description: Decision used when resolving a Shadow MCP inventory request.
+                    enum:
+                        - allow
+                        - deny
+                policy_ids:
+                    type: array
+                    items:
+                        type: string
+                        format: uuid
+                project_id:
+                    type: string
+                    format: uuid
+                server_url:
+                    type: string
+                    format: uri
+            required:
+                - project_id
+                - server_url
+                - decision
         Resource:
             type: object
             properties:
@@ -51588,25 +52547,6 @@ components:
             required:
                 - match_redacted
                 - position_known
-        RiskTokensPoint:
-            type: object
-            properties:
-                bucket_time_unix_nano:
-                    type: string
-                    description: Bucket start time in Unix nanoseconds (string for JS precision)
-                risky_tokens:
-                    type: integer
-                    description: Tokens from sessions with at least one active risk finding created in the query window
-                    format: int64
-                total_tokens:
-                    type: integer
-                    description: All session tokens in the bucket
-                    format: int64
-            description: One UTC day of token usage split by risk involvement
-            required:
-                - bucket_time_unix_nano
-                - risky_tokens
-                - total_tokens
         RiskUnmaskResultResult:
             type: object
             properties:
@@ -52690,6 +53630,19 @@ components:
                     minimum: 0
             required:
                 - billing_cycle_anchor_day
+        SetKeyEnabledRequestBody:
+            type: object
+            properties:
+                enabled:
+                    type: boolean
+                    description: Whether the key participates in key resolution.
+                id:
+                    type: string
+                    description: The ID of the key to update.
+                    format: uuid
+            required:
+                - id
+                - enabled
         SetMcpMetadataRequestBody:
             type: object
             properties:
@@ -52794,6 +53747,7 @@ components:
                         - scim
                         - observability_mode
                         - hooks_browser_login
+                        - custom_model_keys
                     maxLength: 60
             required:
                 - feature_name
@@ -53090,6 +54044,24 @@ components:
                 - requested_at
                 - created_at
                 - updated_at
+        ShadowMCPInventoryPolicyBypassForm:
+            type: object
+            properties:
+                policy_ids:
+                    type: array
+                    items:
+                        type: string
+                        format: uuid
+                project_id:
+                    type: string
+                    format: uuid
+                server_url:
+                    type: string
+                    format: uri
+            required:
+                - project_id
+                - server_url
+                - policy_ids
         ShadowMCPInventoryRequestSummary:
             type: object
             properties:
@@ -53146,6 +54118,8 @@ components:
                     format: int64
                 server_name:
                     type: string
+                server_slug:
+                    type: string
                 top_users:
                     type: array
                     items:
@@ -53157,6 +54131,7 @@ components:
                     format: int64
             required:
                 - canonical_server_url
+                - server_slug
                 - url_host
                 - first_seen
                 - last_seen
@@ -53166,6 +54141,43 @@ components:
                 - access
                 - request_count
                 - allowed_policy_ids
+        ShadowMCPInventoryURLState:
+            type: object
+            properties:
+                access:
+                    type: string
+                allowed_policy_ids:
+                    type: array
+                    items:
+                        type: string
+                latest_request:
+                    $ref: '#/components/schemas/ShadowMCPInventoryRequestSummary'
+                request_count:
+                    type: integer
+                    format: int64
+            required:
+                - access
+                - request_count
+                - allowed_policy_ids
+        ShadowMCPInventoryUser:
+            type: object
+            properties:
+                email:
+                    type: string
+                last_called:
+                    type: string
+                    format: date-time
+                name:
+                    type: string
+                observed_use_count:
+                    type: integer
+                    format: int64
+                user_key:
+                    type: string
+            required:
+                - user_key
+                - last_called
+                - observed_use_count
         SkillBreakdownRow:
             type: object
             properties:
@@ -55085,7 +56097,7 @@ components:
             properties:
                 key:
                     type: string
-                    description: 'The breakdown dimension key (hook_source, risk_analysis_model, completion_model, division_name, role). The two model keys partition the billed population: risk_analysis_model covers the platform''s risk-policy scanning inference, completion_model covers user-facing completion surfaces.'
+                    description: The breakdown dimension key (model, hook_source, provider, account_type, email, division_name, department_name, role, project_id) — the public telemetry dimension identifiers, so the same keys work as telemetry.query filters. project_id rows carry project UUIDs; clients map them to names.
                 rows:
                     type: array
                     items:
@@ -55122,22 +56134,27 @@ components:
                 bucket_time_unix_nano:
                     type: string
                     description: Bucket start time in Unix nanoseconds (string for JS precision)
+                cache_creation_tokens:
+                    type: integer
+                    description: Observed cache-write tokens — prompt content entering the provider cache, counted once
+                    format: int64
                 input_tokens:
                     type: integer
-                    description: Billed input tokens
+                    description: Observed input tokens (cache reads excluded)
                     format: int64
                 output_tokens:
                     type: integer
-                    description: Billed output tokens
+                    description: Observed output tokens
                     format: int64
                 total_tokens:
                     type: integer
-                    description: Billed tokens under management
+                    description: 'Tokens under management: input + output + cache writes'
                     format: int64
             description: One UTC day of billing usage details
             required:
                 - input_tokens
                 - output_tokens
+                - cache_creation_tokens
                 - total_tokens
                 - bucket_time_unix_nano
         TumDetailsResult:
@@ -55159,7 +56176,7 @@ components:
                     description: Gap-filled daily buckets in ascending time order
                 totals:
                     $ref: '#/components/schemas/TumDetailsTotals'
-            description: Result of the billing usage details query. Everything derives from the billed population (registered completion surfaces), matching the invoiced totals exactly.
+            description: Result of the billing usage details query. Everything derives from the tokens-under-management population — observed agent traffic with cache reads excluded — computed live from the telemetry aggregate. Matches the billed totals for cycles billed under this definition; cycles finalized before the observed-traffic redefinition serve immutable snapshot totals on the usage endpoint that can differ from this live compute.
             required:
                 - interval_seconds
                 - points
@@ -55168,22 +56185,27 @@ components:
         TumDetailsTotals:
             type: object
             properties:
+                cache_creation_tokens:
+                    type: integer
+                    description: Observed cache-write tokens — prompt content entering the provider cache, counted once
+                    format: int64
                 input_tokens:
                     type: integer
-                    description: Billed input tokens
+                    description: Observed input tokens (cache reads excluded)
                     format: int64
                 output_tokens:
                     type: integer
-                    description: Billed output tokens
+                    description: Observed output tokens
                     format: int64
                 total_tokens:
                     type: integer
-                    description: Billed tokens under management
+                    description: 'Tokens under management: input + output + cache writes'
                     format: int64
             description: Whole-range totals for the billing usage details
             required:
                 - input_tokens
                 - output_tokens
+                - cache_creation_tokens
                 - total_tokens
         TunneledMcpConnection:
             type: object
@@ -56591,6 +57613,26 @@ components:
                     $ref: '#/components/schemas/ToolVariation'
             required:
                 - variation
+        UpsertKeyRequestBody:
+            type: object
+            properties:
+                api_key:
+                    type: string
+                    description: The provider API key. Stored encrypted at rest; never returned on reads.
+                enabled:
+                    type: boolean
+                    description: Whether the key participates in key resolution.
+                    default: true
+                provider:
+                    type: string
+                    description: The model provider the key authenticates with. Supported values include openrouter.
+                slot:
+                    type: string
+                    description: The responsibility slot the key applies to. Use 'default' to cover every slot without a dedicated override.
+            required:
+                - slot
+                - provider
+                - api_key
         UpsertRequestBody:
             type: object
             properties:
@@ -57147,6 +58189,8 @@ tags:
       description: Manages metadata for the MCP install page shown to users.
     - name: mcpServers
       description: Managing MCP servers, which configure authentication, environment, and backend selection for an MCP server.
+    - name: modelKeys
+      description: Manage customer-supplied model provider API keys, scoped per project and responsibility slot.
     - name: organizations
       description: Organization membership, invitations, and directory.
     - name: otelForwarding

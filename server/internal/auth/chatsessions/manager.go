@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 // Manager handles chat session token lifecycle
@@ -88,9 +89,14 @@ func (m *Manager) IsTokenRevoked(ctx context.Context, jti string) (bool, error) 
 }
 
 func (m *Manager) Authorize(ctx context.Context, token string) (context.Context, error) {
-	claims, err := m.ValidateToken(ctx, token)
+	claims, invalidToken, err := m.ValidateToken(ctx, token)
+	if invalidToken {
+		return ctx, oops.E(oops.CodeUnauthorized, err, "unauthorized access")
+	}
 	if err != nil {
-		return ctx, err
+		// Not a verdict on the token — surface as a server fault rather than
+		// telling the caller to re-authenticate.
+		return ctx, oops.E(oops.CodeUnexpected, err, "validate chat session token").LogError(ctx, m.logger)
 	}
 
 	// Parse project ID from string to UUID

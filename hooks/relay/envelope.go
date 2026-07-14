@@ -71,13 +71,15 @@ func buildEnvelope(typed any, hostname string) components.IngestRequestBody {
 	base := agenthooks.EventOf(typed)
 	eventType := canonicalEventType(base)
 	data := &components.HookIngestData{
-		Prompt:       nil,
-		ToolCall:     nil,
-		Mcp:          nil,
-		Usage:        nil,
-		Message:      nil,
-		Skill:        nil,
-		Notification: nil,
+		Mcp:            nil,
+		McpAttribution: nil,
+		McpInventory:   nil,
+		Message:        nil,
+		Notification:   nil,
+		Prompt:         nil,
+		Skill:          nil,
+		ToolCall:       nil,
+		Usage:          nil,
 	}
 
 	switch ev := typed.(type) {
@@ -391,7 +393,8 @@ func skillNameOf(input json.RawMessage) string {
 
 func isEmptyData(d *components.HookIngestData) bool {
 	return d.Prompt == nil && d.ToolCall == nil && d.Mcp == nil && d.Usage == nil &&
-		d.Message == nil && d.Skill == nil && d.Notification == nil
+		d.Message == nil && d.Skill == nil && d.Notification == nil &&
+		len(d.McpAttribution) == 0 && len(d.McpInventory) == 0
 }
 
 // optStr returns a pointer to s, or nil when s is empty so the field is

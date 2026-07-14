@@ -1,19 +1,23 @@
 import { Dimension } from "@gram/client/models/components/queryfilter.js";
 import {
+  BadgeCheck,
   Bot,
+  Building2,
+  Cloud,
   Cpu,
+  FolderKanban,
   Layers,
   type LucideIcon,
   Network,
   Shield,
-  ShieldAlert,
   Sigma,
+  UserRound,
 } from "lucide-react";
 
 // The token-usage panel's breakdown catalog: every group-by dimension plus the
-// two special stackings (token type, risk), organized into scannable groups
-// for the picker. Kept in a non-component module so the picker component file
-// satisfies the react-refresh "only export components" rule.
+// special token-type stacking, organized into scannable groups for the picker.
+// Kept in a non-component module so the picker component file satisfies the
+// react-refresh "only export components" rule.
 
 // How the chart's bars stack: by the selected dimension's groups, by token
 // type, or as a single un-broken-down total. Lives here (not in the panel
@@ -26,12 +30,6 @@ export type StackMode = "group" | "tokenType" | "total";
 // series, so the billing page opens on the number that matches the usage card.
 export const BREAKDOWN_TOTAL = "total";
 const BREAKDOWN_TOKEN_TYPE = "tokenType";
-
-// The two halves of the billed population's model cut (see the server's
-// tumBreakdownDims): the platform's risk-policy scanning inference — the
-// metered unit of the TUM contracts — and user-facing completion surfaces.
-export const RISK_ANALYSIS_MODEL_DIM = "risk_analysis_model";
-export const COMPLETION_MODEL_DIM = "completion_model";
 
 // The chart series palette, shared with the usage details table so a metric's
 // dot color matches its chart legend color.
@@ -60,12 +58,12 @@ export type BreakdownGroup = {
   options: BreakdownOption[];
 };
 
-// Only dimensions billed completion rows genuinely carry: the model, the
-// identity snapshot hydrated at emit time (division, roles — a per-user cut
-// is deliberately not exposed on the billing page yet), and the consuming
-// surface. Fleet-only concepts (provider, account type, skill, MCP
-// server/tool, cache token types) live on the costs/insights pages, whose
-// analytics aggregate is scoped to agent-fleet provenance.
+// The dimensions the observed agent traffic — the tokens-under-management
+// population — genuinely carries (see the server's tumBreakdownDims): the
+// session's model and agent surface, the AI account's provider and
+// team/personal classification, and the user-identity snapshot hydrated at
+// emit time. Gram-hosted surfaces (playground, risk-analysis inference) are
+// not tokens under management and never appear here.
 export const BREAKDOWN_GROUPS: BreakdownGroup[] = [
   {
     // Ungrouped: the no-breakdown view leads the list, above every category.
@@ -73,38 +71,44 @@ export const BREAKDOWN_GROUPS: BreakdownGroup[] = [
     options: [{ value: BREAKDOWN_TOTAL, label: "Total", icon: Sigma }],
   },
   {
-    heading: "Model",
+    heading: "Usage",
     options: [
-      {
-        value: RISK_ANALYSIS_MODEL_DIM,
-        label: "Risk Policy Analysis Model",
-        icon: ShieldAlert,
-      },
-      { value: COMPLETION_MODEL_DIM, label: "Completion Model", icon: Cpu },
+      { value: Dimension.Model, label: "Model", icon: Cpu },
+      { value: BREAKDOWN_TOKEN_TYPE, label: "Token type", icon: Layers },
     ],
   },
   {
-    heading: "Usage",
+    heading: "Agents",
     options: [
-      { value: BREAKDOWN_TOKEN_TYPE, label: "Token type", icon: Layers },
+      // hook_source: the observed agent surface the session ran on
+      // (claude-code, cursor, codex, …).
+      { value: Dimension.HookSource, label: "Agent", icon: Bot },
+      { value: Dimension.Provider, label: "Provider", icon: Cloud },
+      {
+        value: Dimension.AccountType,
+        label: "Account type",
+        icon: BadgeCheck,
+      },
     ],
   },
   {
     heading: "Organization",
     options: [
+      // project_id values are project UUIDs; the section maps them to names.
+      { value: Dimension.ProjectId, label: "Project", icon: FolderKanban },
       { value: Dimension.DivisionName, label: "Division", icon: Network },
+      {
+        value: Dimension.DepartmentName,
+        label: "Department",
+        icon: Building2,
+      },
     ],
   },
   {
     heading: "People",
-    options: [{ value: Dimension.Role, label: "Role", icon: Shield }],
-  },
-  {
-    heading: "Surfaces",
     options: [
-      // hook_source: for billed completions this is the Gram surface the
-      // request ran through (playground, MCP chat, …).
-      { value: Dimension.HookSource, label: "Source", icon: Bot },
+      { value: Dimension.Email, label: "User", icon: UserRound },
+      { value: Dimension.Role, label: "Role", icon: Shield },
     ],
   },
 ];
@@ -120,24 +124,25 @@ export function stackModeFor(breakdown: string): StackMode {
   }
 }
 
-// The model cut is the one breakdown whose bars do NOT sum to the billed
-// total: each option charts only its half of the population. The panel shows
-// this note so lower bars read as a narrower scope, not less usage.
-export function scopeNoteFor(breakdown: string): string | null {
-  switch (breakdown) {
-    case RISK_ANALYSIS_MODEL_DIM:
-      return "Risk policy analysis inference only — one slice of the billed total";
-    case COMPLETION_MODEL_DIM:
-      return "Completion surfaces only — one slice of the billed total";
-    default:
-      return null;
-  }
-}
-
 export function breakdownLabel(value: string): string {
   for (const group of BREAKDOWN_GROUPS) {
     const hit = group.options.find((o) => o.value === value);
     if (hit) return hit.label;
+  }
+  return value;
+}
+
+// Display label for one breakdown row value: "" is observed traffic that
+// lacks the attribute, and project_id values are UUIDs mapped to project
+// names (a deleted project falls back to its raw id).
+export function breakdownValueLabel(
+  dimension: string,
+  value: string,
+  projectNames: Map<string, string>,
+): string {
+  if (value === "") return "(unset)";
+  if (dimension === Dimension.ProjectId) {
+    return projectNames.get(value) ?? value;
   }
   return value;
 }
