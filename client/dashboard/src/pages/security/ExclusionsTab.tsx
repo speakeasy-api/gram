@@ -1,4 +1,6 @@
 import { Badge } from "@/components/ui/badge";
+import { TableRowContextMenu } from "@/components/table-row-context-menu";
+import type { Action } from "@/components/ui/more-actions";
 import { Type } from "@/components/ui/type";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -73,6 +75,20 @@ export function ExclusionsTab({
     });
   };
 
+  const exclusionActions = (exclusion: RiskExclusion): Action[] => [
+    {
+      label: "Edit",
+      onClick: () => onSheetChange({ mode: "edit", exclusion }),
+    },
+    {
+      label: "Delete",
+      destructive: true,
+      onClick: () => {
+        deleteMutation.mutate({ request: { id: exclusion.id } });
+      },
+    },
+  ];
+
   const columns: Column<RiskExclusion>[] = [
     {
       key: "criteria",
@@ -131,12 +147,7 @@ export function ExclusionsTab({
       width: "0.3fr",
       render: (exclusion) => (
         <div onClick={(e) => e.stopPropagation()}>
-          <ExclusionActionsMenu
-            onEdit={() => onSheetChange({ mode: "edit", exclusion })}
-            onDelete={() => {
-              deleteMutation.mutate({ request: { id: exclusion.id } });
-            }}
-          />
+          <ExclusionActionsMenu actions={exclusionActions(exclusion)} />
         </div>
       ),
     },
@@ -158,6 +169,14 @@ export function ExclusionsTab({
         data={exclusions}
         rowKey={(exclusion) => exclusion.id}
         onRowClick={(exclusion) => onSheetChange({ mode: "edit", exclusion })}
+        renderRow={(exclusion, rowElement) => (
+          <TableRowContextMenu
+            key={exclusion.id}
+            actions={exclusionActions(exclusion)}
+          >
+            {rowElement}
+          </TableRowContextMenu>
+        )}
       />
     );
   }
@@ -176,13 +195,7 @@ export function ExclusionsTab({
   );
 }
 
-function ExclusionActionsMenu({
-  onEdit,
-  onDelete,
-}: {
-  onEdit: () => void;
-  onDelete: () => void;
-}): JSX.Element {
+function ExclusionActionsMenu({ actions }: { actions: Action[] }): JSX.Element {
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
@@ -193,22 +206,21 @@ function ExclusionActionsMenu({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuItem
-          className="cursor-pointer"
-          onSelect={() => {
-            setTimeout(onEdit, 0);
-          }}
-        >
-          Edit
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          className="text-destructive focus:text-destructive cursor-pointer"
-          onSelect={() => {
-            setTimeout(onDelete, 0);
-          }}
-        >
-          Delete
-        </DropdownMenuItem>
+        {actions.map((action) => (
+          <DropdownMenuItem
+            key={action.label}
+            className={
+              action.destructive
+                ? "text-destructive focus:text-destructive cursor-pointer"
+                : "cursor-pointer"
+            }
+            onSelect={() => {
+              setTimeout(action.onClick, 0);
+            }}
+          >
+            {action.label}
+          </DropdownMenuItem>
+        ))}
       </DropdownMenuContent>
     </DropdownMenu>
   );

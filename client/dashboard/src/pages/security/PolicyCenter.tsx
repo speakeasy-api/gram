@@ -2,6 +2,8 @@ import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import { TableRowContextMenu } from "@/components/table-row-context-menu";
+import type { Action } from "@/components/ui/more-actions";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -670,6 +672,34 @@ function PolicyCenterContent() {
     setPolicyToDelete(row);
   };
 
+  const policyActions = (row: PolicyRow): Action[] => [
+    {
+      label: "Edit",
+      onClick: () => {
+        // Both prompt and standard policies now edit on their
+        // dedicated detail page.
+        routes.policyCenter.detail.goTo(row.policy.id);
+      },
+    },
+    ...(row.kind === "risk"
+      ? [
+          {
+            label: "View Progress",
+            onClick: () => {
+              setTimeout(() => setRunPanelPolicy(row.policy), 0);
+            },
+          },
+        ]
+      : []),
+    {
+      label: "Delete",
+      destructive: true,
+      onClick: () => {
+        setTimeout(() => handleDelete(row), 0);
+      },
+    },
+  ];
+
   const confirmDelete = () => {
     if (!policyToDelete) return;
     deleteMutation.mutate({ request: { id: policyToDelete.policy.id } });
@@ -876,34 +906,19 @@ function PolicyCenterContent() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                className="cursor-pointer"
-                onSelect={() => {
-                  // Both prompt and standard policies now edit on their
-                  // dedicated detail page.
-                  routes.policyCenter.detail.goTo(row.policy.id);
-                }}
-              >
-                Edit
-              </DropdownMenuItem>
-              {row.kind === "risk" && (
+              {policyActions(row).map((action) => (
                 <DropdownMenuItem
-                  className="cursor-pointer"
-                  onSelect={() => {
-                    setTimeout(() => setRunPanelPolicy(row.policy), 0);
-                  }}
+                  key={action.label}
+                  className={cn(
+                    "cursor-pointer",
+                    action.destructive &&
+                      "text-destructive focus:text-destructive",
+                  )}
+                  onSelect={() => action.onClick()}
                 >
-                  View Progress
+                  {action.label}
                 </DropdownMenuItem>
-              )}
-              <DropdownMenuItem
-                className="text-destructive focus:text-destructive cursor-pointer"
-                onSelect={() => {
-                  setTimeout(() => handleDelete(row), 0);
-                }}
-              >
-                Delete
-              </DropdownMenuItem>
+              ))}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -940,6 +955,11 @@ function PolicyCenterContent() {
         // (eval workbench for prompt, on-page editor for standard).
         routes.policyCenter.detail.goTo(row.policy.id)
       }
+      renderRow={(row, rowElement) => (
+        <TableRowContextMenu key={row.policy.id} actions={policyActions(row)}>
+          {rowElement}
+        </TableRowContextMenu>
+      )}
     />
   );
   if (isLoading) {

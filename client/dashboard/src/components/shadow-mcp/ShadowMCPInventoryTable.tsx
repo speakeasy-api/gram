@@ -28,7 +28,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { formatShortDate } from "@/components/access/shadow-mcp-utils";
+import { TableRowContextMenu } from "@/components/table-row-context-menu";
 import { Checkbox } from "@/components/ui/checkbox";
+import type { Action } from "@/components/ui/more-actions";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Sheet,
@@ -260,6 +262,44 @@ function initialPolicyIDsForAction(
   return shadowMCPPolicyIDs;
 }
 
+function inventoryActions(
+  server: ShadowMCPInventoryServer,
+  {
+    disabled,
+    onOpenAction,
+  }: {
+    disabled: boolean;
+    onOpenAction: (
+      mode: InventoryActionMode,
+      server: ShadowMCPInventoryServer,
+    ) => void;
+  },
+): Action[] {
+  const hasRequest = server.requestCount > 0;
+  const hasAllowDecision = server.access === "allowed";
+  const openAction = (mode: InventoryActionMode) => () => {
+    window.setTimeout(() => onOpenAction(mode, server), 0);
+  };
+
+  if (hasRequest) {
+    return [
+      { label: "Review Request", disabled, onClick: openAction("review") },
+    ];
+  }
+  if (!hasAllowDecision) {
+    return [{ label: "Add Allow Rule", disabled, onClick: openAction("add") }];
+  }
+  return [
+    { label: "Edit Rule", disabled, onClick: openAction("edit") },
+    {
+      label: "Delete Rule",
+      destructive: true,
+      disabled,
+      onClick: openAction("delete"),
+    },
+  ];
+}
+
 function InventoryActionMenu({
   disabled,
   onOpenAction,
@@ -272,8 +312,7 @@ function InventoryActionMenu({
   ) => void;
   server: ShadowMCPInventoryServer;
 }) {
-  const hasRequest = server.requestCount > 0;
-  const hasAllowDecision = server.access === "allowed";
+  const actions = inventoryActions(server, { disabled, onOpenAction });
 
   return (
     <DropdownMenu modal={false}>
@@ -288,42 +327,15 @@ function InventoryActionMenu({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        {hasRequest && (
+        {actions.map((action) => (
           <DropdownMenuItem
-            onSelect={() => {
-              window.setTimeout(() => onOpenAction("review", server), 0);
-            }}
+            key={action.label}
+            disabled={action.disabled}
+            onSelect={() => action.onClick()}
           >
-            Review Request
+            {action.label}
           </DropdownMenuItem>
-        )}
-        {!hasRequest && !hasAllowDecision && (
-          <DropdownMenuItem
-            onSelect={() => {
-              window.setTimeout(() => onOpenAction("add", server), 0);
-            }}
-          >
-            Add Allow Rule
-          </DropdownMenuItem>
-        )}
-        {hasAllowDecision && (
-          <>
-            <DropdownMenuItem
-              onSelect={() => {
-                window.setTimeout(() => onOpenAction("edit", server), 0);
-              }}
-            >
-              Edit Rule
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() => {
-                window.setTimeout(() => onOpenAction("delete", server), 0);
-              }}
-            >
-              Delete Rule
-            </DropdownMenuItem>
-          </>
-        )}
+        ))}
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -887,6 +899,18 @@ export function ShadowMCPInventoryTable({
           hasMore={Boolean(nextCursor)}
           isLoading={isLoadingMore}
           rowKey={(row) => row.canonicalServerUrl}
+          renderRow={(row, rowElement) => (
+            <TableRowContextMenu
+              key={row.canonicalServerUrl}
+              actions={inventoryActions(row, {
+                disabled: isActionPending,
+                onOpenAction: (mode, server) =>
+                  setActiveAction({ mode, server }),
+              })}
+            >
+              {rowElement}
+            </TableRowContextMenu>
+          )}
           className="min-h-0 content-start overflow-y-auto"
         />
       </Table>

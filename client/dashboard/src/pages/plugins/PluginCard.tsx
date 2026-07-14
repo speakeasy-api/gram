@@ -1,4 +1,6 @@
+import { CardContextMenu } from "@/components/card-context-menu";
 import { DotCard } from "@/components/ui/dot-card";
+import type { Action } from "@/components/ui/more-actions";
 import { Type } from "@/components/ui/type";
 import { HumanizeDateTime } from "@/lib/dates";
 import { useRoutes } from "@/routes";
@@ -60,164 +62,207 @@ export function PluginCard({
     }
   };
 
+  // Right-click context menu mirroring the Install split-button dropdown plus
+  // the View button, so every card action is reachable from either menu.
+  const actions: Action[] = [
+    {
+      label: "GitHub installation (preferred)",
+      disabled: !installTarget,
+      onClick: () => {
+        // Defer until after the menu has fully closed to avoid a Radix
+        // focus-trap/body-lock conflict between the closing menu and the
+        // opening sheet (same pattern as the dropdown item below).
+        setTimeout(() => setIsInstallOpen(true), 0);
+      },
+    },
+    {
+      label: "Download as zip — Claude",
+      onClick: () => {
+        void handleDownload("claude");
+      },
+    },
+    {
+      label: "Download as zip — Cursor",
+      onClick: () => {
+        void handleDownload("cursor");
+      },
+    },
+    {
+      label: "Download as zip — Codex",
+      onClick: () => {
+        void handleDownload("codex");
+      },
+    },
+    {
+      label: "View",
+      onClick: () => {
+        void navigate(detailHref);
+      },
+    },
+  ];
+
   return (
-    <div>
-      <DotCard
-        className="cursor-pointer"
-        onClick={() => {
-          void navigate(detailHref);
-        }}
-        icon={<Puzzle className="text-muted-foreground h-10 w-10 opacity-60" />}
-      >
-        <div className="mb-2 flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5">
+    <CardContextMenu actions={actions}>
+      <div>
+        <DotCard
+          className="cursor-pointer"
+          onClick={() => {
+            void navigate(detailHref);
+          }}
+          icon={
+            <Puzzle className="text-muted-foreground h-10 w-10 opacity-60" />
+          }
+        >
+          <div className="mb-2 flex items-start justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                <Type
+                  variant="subheading"
+                  as="div"
+                  className="text-md group-hover:text-primary truncate transition-colors"
+                  title={plugin.name}
+                >
+                  {plugin.name}
+                </Type>
+                {isDefault && (
+                  <Badge variant="information">
+                    <Badge.Text>Default</Badge.Text>
+                  </Badge>
+                )}
+                {publishStatus?.upToDate === false && (
+                  <Badge variant="warning">
+                    <Badge.Text>Needs syncing</Badge.Text>
+                  </Badge>
+                )}
+              </div>
               <Type
-                variant="subheading"
-                as="div"
-                className="text-md group-hover:text-primary truncate transition-colors"
-                title={plugin.name}
+                small
+                muted
+                className="truncate font-mono"
+                title={plugin.slug}
               >
-                {plugin.name}
+                {plugin.slug}
               </Type>
-              {isDefault && (
-                <Badge variant="information">
-                  <Badge.Text>Default</Badge.Text>
-                </Badge>
-              )}
-              {publishStatus?.upToDate === false && (
-                <Badge variant="warning">
-                  <Badge.Text>Needs syncing</Badge.Text>
-                </Badge>
-              )}
             </div>
-            <Type
-              small
-              muted
-              className="truncate font-mono"
-              title={plugin.slug}
-            >
-              {plugin.slug}
+            <Badge variant="neutral" className="shrink-0">
+              <Badge.LeftIcon>
+                <Server className="h-3 w-3" />
+              </Badge.LeftIcon>
+              <Badge.Text>
+                {serverCount} {serverCount === 1 ? "server" : "servers"}
+              </Badge.Text>
+            </Badge>
+          </div>
+
+          {description && (
+            <Type small muted className="mb-1 line-clamp-3">
+              {description}
             </Type>
-          </div>
-          <Badge variant="neutral" className="shrink-0">
-            <Badge.LeftIcon>
-              <Server className="h-3 w-3" />
-            </Badge.LeftIcon>
-            <Badge.Text>
-              {serverCount} {serverCount === 1 ? "server" : "servers"}
-            </Badge.Text>
-          </Badge>
-        </div>
-
-        {description && (
-          <Type small muted className="mb-1 line-clamp-3">
-            {description}
-          </Type>
-        )}
-        <Type small className="text-muted-foreground/60 mt-2 mb-3">
-          {publishStatus?.lastPublishedAt ? (
-            <>
-              Published{" "}
-              <HumanizeDateTime date={publishStatus.lastPublishedAt} />
-            </>
-          ) : (
-            <>
-              Updated <HumanizeDateTime date={plugin.updatedAt} />
-            </>
           )}
-        </Type>
+          <Type small className="text-muted-foreground/60 mt-2 mb-3">
+            {publishStatus?.lastPublishedAt ? (
+              <>
+                Published{" "}
+                <HumanizeDateTime date={publishStatus.lastPublishedAt} />
+              </>
+            ) : (
+              <>
+                Updated <HumanizeDateTime date={plugin.updatedAt} />
+              </>
+            )}
+          </Type>
 
-        <div className="mt-auto flex items-center justify-end gap-2 pt-2">
-          <div className="flex items-center gap-2">
-            <div onClick={(e) => e.stopPropagation()}>
-              <DropdownMenu
-                open={isDownloadMenuOpen}
-                onOpenChange={setIsDownloadMenuOpen}
-              >
-                <DropdownMenuTrigger asChild>
-                  <Button variant="primary" size="sm">
-                    <Button.Text>Install</Button.Text>
-                    <span className="bg-primary-foreground/25 mx-1 h-4 w-px self-center" />
-                    <Button.RightIcon>
-                      <Icon name="chevron-down" className="h-4 w-4" />
-                    </Button.RightIcon>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem
-                    disabled={!installTarget}
-                    onClick={() => {
-                      // Defer until after the dropdown has fully closed to
-                      // avoid a Radix focus-trap/body-lock conflict between
-                      // the closing menu and the opening sheet (same pattern
-                      // as MCPDetails.tsx).
-                      setTimeout(() => setIsInstallOpen(true), 0);
-                    }}
-                  >
-                    <div className="flex flex-col">
-                      <span>GitHub installation (preferred)</span>
-                      {!installTarget && (
-                        <span className="text-muted-foreground text-xs">
-                          Requires marketplace setup
-                        </span>
-                      )}
-                    </div>
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={() => {
-                      void handleDownload("claude");
-                    }}
-                  >
-                    Download as zip — Claude
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      void handleDownload("cursor");
-                    }}
-                  >
-                    Download as zip — Cursor
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      void handleDownload("codex");
-                    }}
-                  >
-                    Download as zip — Codex
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+          <div className="mt-auto flex items-center justify-end gap-2 pt-2">
+            <div className="flex items-center gap-2">
+              <div onClick={(e) => e.stopPropagation()}>
+                <DropdownMenu
+                  open={isDownloadMenuOpen}
+                  onOpenChange={setIsDownloadMenuOpen}
+                >
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="primary" size="sm">
+                      <Button.Text>Install</Button.Text>
+                      <span className="bg-primary-foreground/25 mx-1 h-4 w-px self-center" />
+                      <Button.RightIcon>
+                        <Icon name="chevron-down" className="h-4 w-4" />
+                      </Button.RightIcon>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      disabled={!installTarget}
+                      onClick={() => {
+                        // Defer until after the dropdown has fully closed to
+                        // avoid a Radix focus-trap/body-lock conflict between
+                        // the closing menu and the opening sheet (same pattern
+                        // as MCPDetails.tsx).
+                        setTimeout(() => setIsInstallOpen(true), 0);
+                      }}
+                    >
+                      <div className="flex flex-col">
+                        <span>GitHub installation (preferred)</span>
+                        {!installTarget && (
+                          <span className="text-muted-foreground text-xs">
+                            Requires marketplace setup
+                          </span>
+                        )}
+                      </div>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => {
+                        void handleDownload("claude");
+                      }}
+                    >
+                      Download as zip — Claude
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => {
+                        void handleDownload("cursor");
+                      }}
+                    >
+                      Download as zip — Cursor
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => {
+                        void handleDownload("codex");
+                      }}
+                    >
+                      Download as zip — Codex
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+              <Link to={detailHref} onClick={(e) => e.stopPropagation()}>
+                <Button variant="secondary" size="sm">
+                  <Button.Text>View</Button.Text>
+                  <Button.RightIcon>
+                    <ArrowRight className="h-4 w-4" />
+                  </Button.RightIcon>
+                </Button>
+              </Link>
             </div>
-            <Link to={detailHref} onClick={(e) => e.stopPropagation()}>
-              <Button variant="secondary" size="sm">
-                <Button.Text>View</Button.Text>
-                <Button.RightIcon>
-                  <ArrowRight className="h-4 w-4" />
-                </Button.RightIcon>
-              </Button>
-            </Link>
           </div>
-        </div>
-      </DotCard>
-      {installTarget && (
-        <div onClick={(e) => e.stopPropagation()}>
-          <InstallInstructionsDialog
-            open={isInstallOpen}
-            onOpenChange={setIsInstallOpen}
-            repoOwner={installTarget.repoOwner}
-            repoName={installTarget.repoName}
-            marketplaceUrl={installTarget.marketplaceUrl}
-            candidatePlugins={[
-              {
-                name: plugin.name,
-                slug: plugin.slug,
-                description: plugin.description,
-              },
-            ]}
-          />
-        </div>
-      )}
-    </div>
+        </DotCard>
+        {installTarget && (
+          <div onClick={(e) => e.stopPropagation()}>
+            <InstallInstructionsDialog
+              open={isInstallOpen}
+              onOpenChange={setIsInstallOpen}
+              repoOwner={installTarget.repoOwner}
+              repoName={installTarget.repoName}
+              marketplaceUrl={installTarget.marketplaceUrl}
+              candidatePlugins={[
+                {
+                  name: plugin.name,
+                  slug: plugin.slug,
+                  description: plugin.description,
+                },
+              ]}
+            />
+          </div>
+        )}
+      </div>
+    </CardContextMenu>
   );
 }

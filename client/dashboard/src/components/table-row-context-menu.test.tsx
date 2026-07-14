@@ -25,7 +25,11 @@ vi.mock("./ui/context-menu", () => ({
     disabled?: boolean;
     variant?: string;
   }) => (
-    <button disabled={disabled} data-variant={variant} onClick={() => onSelect?.()}>
+    <button
+      disabled={disabled}
+      data-variant={variant}
+      onClick={() => onSelect?.()}
+    >
       {children}
     </button>
   ),

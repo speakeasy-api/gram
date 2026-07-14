@@ -28,6 +28,8 @@ import { DeleteRoleDialog } from "./DeleteRoleDialog";
 import { MemberFacepile } from "@/components/member-facepile";
 import { Ellipsis } from "lucide-react";
 import { RequireScope } from "@/components/require-scope";
+import { TableRowContextMenu } from "@/components/table-row-context-menu";
+import type { Action } from "@/components/ui/more-actions";
 import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
 import { visiblePermissionCount } from "./roleDialogState";
@@ -117,46 +119,59 @@ function RoleRow({
       photoUrl: m.photoUrl,
     }));
 
+  // Mirror the row-actions menu: Edit always, Delete only for non-system
+  // roles. Without org:admin the menu is empty and the row stays unwrapped.
+  const actions: Action[] = canManageRoles
+    ? [
+        { label: "Edit", onClick: onEdit },
+        ...(!role.isSystem
+          ? [{ label: "Delete", destructive: true as const, onClick: onDelete }]
+          : []),
+      ]
+    : [];
+
   return (
-    <div
-      role={canManageRoles ? "button" : undefined}
-      tabIndex={canManageRoles ? 0 : undefined}
-      onClick={canManageRoles ? onEdit : undefined}
-      onKeyDown={
-        canManageRoles
-          ? (e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                onEdit();
+    <TableRowContextMenu actions={actions}>
+      <div
+        role={canManageRoles ? "button" : undefined}
+        tabIndex={canManageRoles ? 0 : undefined}
+        onClick={canManageRoles ? onEdit : undefined}
+        onKeyDown={
+          canManageRoles
+            ? (e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onEdit();
+                }
               }
-            }
-          : undefined
-      }
-      className={cn(
-        "border-border col-span-full grid grid-cols-subgrid items-center gap-x-6 border-b px-4 py-3 last:border-b-0",
-        canManageRoles && "hover:bg-muted/50 cursor-pointer",
-      )}
-    >
-      <div className="flex items-center gap-2">
-        <Type variant="body" className="font-medium">
-          {role.name}
-        </Type>
-        {role.isSystem && (
-          <Badge variant="outline" size="sm">
-            System
-          </Badge>
+            : undefined
+        }
+        className={cn(
+          "border-border col-span-full grid grid-cols-subgrid items-center gap-x-6 border-b px-4 py-3 last:border-b-0",
+          canManageRoles && "hover:bg-muted/50 cursor-pointer",
         )}
+      >
+        <div className="flex items-center gap-2">
+          <Type variant="body" className="font-medium">
+            {role.name}
+          </Type>
+          {role.isSystem && (
+            <Badge variant="outline" size="sm">
+              System
+            </Badge>
+          )}
+        </div>
+        <Type variant="body" className="text-muted-foreground min-w-0 truncate">
+          {role.description}
+        </Type>
+        <Type variant="body">{visiblePermissionCount(role.grants)}</Type>
+        <MemberFacepile members={roleMembers} />
+        <div aria-hidden />
+        <div onClick={(e) => e.stopPropagation()} className="flex justify-end">
+          <RoleActionsMenu role={role} onEdit={onEdit} onDelete={onDelete} />
+        </div>
       </div>
-      <Type variant="body" className="text-muted-foreground min-w-0 truncate">
-        {role.description}
-      </Type>
-      <Type variant="body">{visiblePermissionCount(role.grants)}</Type>
-      <MemberFacepile members={roleMembers} />
-      <div aria-hidden />
-      <div onClick={(e) => e.stopPropagation()} className="flex justify-end">
-        <RoleActionsMenu role={role} onEdit={onEdit} onDelete={onDelete} />
-      </div>
-    </div>
+    </TableRowContextMenu>
   );
 }
 
