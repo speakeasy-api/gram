@@ -222,7 +222,7 @@
     "storybook": "^10.4.6",
     "tailwindcss": "^4.3.2",
     "tw-animate-css": "^1.3.8",
-    "typedoc": "^0.28.19",
+    "typedoc": "^0.28.20",
     "typedoc-plugin-markdown": "^4.12.0",
     "typescript": "catalog:",
     "vite": "catalog:",
