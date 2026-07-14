@@ -263,7 +263,9 @@ DO NOTHING;
 -- name: CountChats :one
 -- Fallback for chats.list pagination: ListChats returns the total alongside
 -- each page via a window count, so this only runs when a requested page is
--- past the end of the result set (no rows to carry the total).
+-- past the end of the result set (no rows to carry the total). The handler
+-- runs it in the same repeatable-read transaction as the ListChats page read,
+-- so the total reflects the same snapshot the empty page came from.
 --
 -- risk_counts pre-aggregates active findings per chat once for the whole
 -- project (one pass over risk_results), so the risk presence + threshold

@@ -261,7 +261,32 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	sources := parseSourceFilter(conv.PtrValOr(payload.Source, ""))
 	accountType := conv.PtrValOr(payload.AccountType, "")
 
-	rows, err := s.repo.ListChats(ctx, repo.ListChatsParams{
+	// When the requested offset is past the end of the result set, the page
+	// query returns no rows to carry the window total, and the fallback count
+	// below runs as a second statement. Share one repeatable-read snapshot
+	// between the two so the total can't come from a different point in time
+	// than the empty page (e.g. an empty page whose total implies the page
+	// exists). Offset-zero requests can't hit the fallback, so they skip the
+	// transaction.
+	querier := s.repo
+	var listTx pgx.Tx
+	if payload.Offset > 0 {
+		tx, err := s.db.BeginTx(ctx, pgx.TxOptions{
+			IsoLevel:       pgx.RepeatableRead,
+			AccessMode:     pgx.ReadOnly,
+			DeferrableMode: "",
+			BeginQuery:     "",
+			CommitQuery:    "",
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list chats").LogError(ctx, s.logger)
+		}
+		defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+		listTx = tx
+		querier = s.repo.WithTx(tx)
+	}
+
+	rows, err := querier.ListChats(ctx, repo.ListChatsParams{
 		ProjectID:         *authCtx.ProjectID,
 		ExternalUserID:    externalUserID,
 		UserID:            userID,
@@ -293,7 +318,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	case len(rows) > 0:
 		total = rows[0].TotalCount
 	case payload.Offset > 0:
-		total, err = s.repo.CountChats(ctx, repo.CountChatsParams{
+		total, err = querier.CountChats(ctx, repo.CountChatsParams{
 			ProjectID:         *authCtx.ProjectID,
 			ExternalUserID:    externalUserID,
 			UserID:            userID,
@@ -311,6 +336,12 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "count chats").LogError(ctx, s.logger)
+		}
+	}
+
+	if listTx != nil {
+		if err := listTx.Commit(ctx); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list chats").LogError(ctx, s.logger)
 		}
 	}
 
