@@ -25,9 +25,8 @@ export const AssistantSidecar: FC<AssistantSidecarProps> = ({ className }) => {
   const sidecarConfig = config.sidecar ?? {};
   const { title, dimensions } = sidecarConfig;
   const { expandable, isExpanded, setIsExpanded } = useExpanded();
-  const thread = useAuiState(({ thread }) => thread);
-  const isGenerating = thread.messages.some(
-    (message) => message.status?.type === "running",
+  const isGenerating = useAuiState(({ thread }) =>
+    thread.messages.some((message) => message.status?.type === "running"),
   );
 
   // Check if thread list should be shown

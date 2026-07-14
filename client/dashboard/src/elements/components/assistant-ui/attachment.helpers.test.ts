@@ -6,4 +6,8 @@ describe("attachmentTypeLabel", () => {
     expect(attachmentTypeLabel("spreadsheet")).toBe("Spreadsheet");
     expect(attachmentTypeLabel("custom-data")).toBe("Custom data");
   });
+
+  it("formats snake_case custom attachment types", () => {
+    expect(attachmentTypeLabel("custom_data")).toBe("Custom data");
+  });
 });
