@@ -3168,7 +3168,7 @@ CREATE TABLE IF NOT EXISTS mcp_server_tool_metadata (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
   mcp_server_id uuid NOT NULL,
-  name TEXT NOT NULL,
+  tool_name TEXT NOT NULL,
 
   -- MCP tool annotations (admin-set behavioral hints)
   title TEXT,
@@ -3191,8 +3191,8 @@ CREATE INDEX IF NOT EXISTS mcp_server_tool_metadata_project_id_idx
 ON mcp_server_tool_metadata (project_id)
 WHERE deleted IS FALSE;
 
-CREATE UNIQUE INDEX IF NOT EXISTS mcp_server_tool_metadata_mcp_server_id_name_key
-ON mcp_server_tool_metadata (mcp_server_id, name)
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_server_tool_metadata_mcp_server_id_tool_name_key
+ON mcp_server_tool_metadata (mcp_server_id, tool_name)
 WHERE deleted IS FALSE;
 
 -- Plugin definitions: project-scoped distributable bundles of MCP servers.

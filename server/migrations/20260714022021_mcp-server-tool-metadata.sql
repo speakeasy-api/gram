@@ -3,7 +3,7 @@ CREATE TABLE "mcp_server_tool_metadata" (
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),
   "project_id" uuid NOT NULL,
   "mcp_server_id" uuid NOT NULL,
-  "name" text NOT NULL,
+  "tool_name" text NOT NULL,
   "title" text NULL,
   "read_only_hint" boolean NULL,
   "destructive_hint" boolean NULL,
@@ -17,7 +17,7 @@ CREATE TABLE "mcp_server_tool_metadata" (
   CONSTRAINT "mcp_server_tool_metadata_mcp_server_id_fkey" FOREIGN KEY ("mcp_server_id") REFERENCES "mcp_servers" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
   CONSTRAINT "mcp_server_tool_metadata_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "projects" ("id") ON UPDATE NO ACTION ON DELETE CASCADE
 );
--- Create index "mcp_server_tool_metadata_mcp_server_id_name_key" to table: "mcp_server_tool_metadata"
-CREATE UNIQUE INDEX "mcp_server_tool_metadata_mcp_server_id_name_key" ON "mcp_server_tool_metadata" ("mcp_server_id", "name") WHERE (deleted IS FALSE);
+-- Create index "mcp_server_tool_metadata_mcp_server_id_tool_name_key" to table: "mcp_server_tool_metadata"
+CREATE UNIQUE INDEX "mcp_server_tool_metadata_mcp_server_id_tool_name_key" ON "mcp_server_tool_metadata" ("mcp_server_id", "tool_name") WHERE (deleted IS FALSE);
 -- Create index "mcp_server_tool_metadata_project_id_idx" to table: "mcp_server_tool_metadata"
 CREATE INDEX "mcp_server_tool_metadata_project_id_idx" ON "mcp_server_tool_metadata" ("project_id") WHERE (deleted IS FALSE);
