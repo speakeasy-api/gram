@@ -154,7 +154,11 @@ echo -e "\n⏳ Updating VS Code and Cursor editor settings"
 mise run install:vscode
 
 echo -e "\n⏳ Setting up hooks"
-interactive_only mise run zero:hk
+if $agent_mode; then
+    mise run zero:hk --yes
+else
+    mise run zero:hk
+fi
 interactive_only mise run zero:claude
 
 echo -e "\n⏳ Cleaning up stale processes and Temporal state"
