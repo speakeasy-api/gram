@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/speakeasy-api/gram/hooks/relay"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 const hooksBinaryVersion = "0.1.0"
@@ -16,32 +17,27 @@ type hooksBinaryTarget struct {
 	SHA256 string `json:"sha256"`
 }
 
-var hooksBinaryTargets = map[string]hooksBinaryTarget{
-	"darwin-amd64": {
-		URL:    "https://github.com/speakeasy-api/gram/releases/download/hooks%400.1.0/speakeasy-hooks_darwin_amd64.zip",
-		SHA256: "db80bb7d5ccd42e44db76822765bf9838c1b6b9ea8e4a799f99d990a9e625775",
-	},
-	"darwin-arm64": {
-		URL:    "https://github.com/speakeasy-api/gram/releases/download/hooks%400.1.0/speakeasy-hooks_darwin_arm64.zip",
-		SHA256: "1eeef8fc011e09ea2d7b14e332ffc809f64cac885ab4aa22b4199d3828d80fc9",
-	},
-	"linux-amd64": {
-		URL:    "https://github.com/speakeasy-api/gram/releases/download/hooks%400.1.0/speakeasy-hooks_linux_amd64.zip",
-		SHA256: "32cae9b4bca253e0056a479460a5804c36f3087432a71ff33a7ad143833547c1",
-	},
-	"linux-arm64": {
-		URL:    "https://github.com/speakeasy-api/gram/releases/download/hooks%400.1.0/speakeasy-hooks_linux_arm64.zip",
-		SHA256: "e7706abf84d86f0e524eb395f0657eec459cc1597bc48c6fc18bd7b7f6896c06",
-	},
-	"windows-amd64": {
-		URL:    "https://github.com/speakeasy-api/gram/releases/download/hooks%400.1.0/speakeasy-hooks_windows_amd64.zip",
-		SHA256: "ba8a1952f31c43e9e00d3bb35fc12c008980a0a8d2b2c38b6facd8b24f4e15a8",
-	},
-	"windows-arm64": {
-		URL:    "https://github.com/speakeasy-api/gram/releases/download/hooks%400.1.0/speakeasy-hooks_windows_arm64.zip",
-		SHA256: "2cb9d69dd082ffcd96ebe289ac7d7f818d3c93482e8e30fb487ca56708d5f465",
-	},
+// hooksReleaseTargets derives each target's immutable release-artifact URL
+// from the version so a version bump can never skew from the pinned URLs.
+func hooksReleaseTargets(version string, sha256s map[string]string) map[string]hooksBinaryTarget {
+	out := make(map[string]hooksBinaryTarget, len(sha256s))
+	for target, sha := range sha256s {
+		out[target] = hooksBinaryTarget{
+			URL:    fmt.Sprintf("https://github.com/speakeasy-api/gram/releases/download/hooks%%40%s/speakeasy-hooks_%s.zip", version, strings.ReplaceAll(target, "-", "_")),
+			SHA256: sha,
+		}
+	}
+	return out
 }
+
+var hooksBinaryTargets = hooksReleaseTargets(hooksBinaryVersion, map[string]string{
+	"darwin-amd64":  "db80bb7d5ccd42e44db76822765bf9838c1b6b9ea8e4a799f99d990a9e625775",
+	"darwin-arm64":  "1eeef8fc011e09ea2d7b14e332ffc809f64cac885ab4aa22b4199d3828d80fc9",
+	"linux-amd64":   "32cae9b4bca253e0056a479460a5804c36f3087432a71ff33a7ad143833547c1",
+	"linux-arm64":   "e7706abf84d86f0e524eb395f0657eec459cc1597bc48c6fc18bd7b7f6896c06",
+	"windows-amd64": "ba8a1952f31c43e9e00d3bb35fc12c008980a0a8d2b2c38b6facd8b24f4e15a8",
+	"windows-arm64": "2cb9d69dd082ffcd96ebe289ac7d7f818d3c93482e8e30fb487ca56708d5f465",
+})
 
 func renderHooksConfig(cfg GenerateConfig) ([]byte, error) {
 	b, err := json.MarshalIndent(relay.FileConfig{
@@ -49,7 +45,7 @@ func renderHooksConfig(cfg GenerateConfig) ([]byte, error) {
 		Project:      cfg.ProjectSlug,
 		Org:          cfg.OrgID,
 		HooksAPIKey:  cfg.HooksAPIKey,
-		BrowserLogin: cfg.BrowserLogin && !cfg.ObservabilityMode,
+		BrowserLogin: cfg.BrowserLogin,
 		Nonblocking:  cfg.ObservabilityMode,
 	}, "", "  ")
 	if err != nil {
@@ -58,11 +54,17 @@ func renderHooksConfig(cfg GenerateConfig) ([]byte, error) {
 	return append(b, '\n'), nil
 }
 
-func renderHooksBootstrap() []byte {
-	return renderHooksBootstrapForRelease(hooksBinaryVersion, hooksBinaryTargets)
+func renderHooksBootstrap(cfg GenerateConfig) []byte {
+	return renderHooksBootstrapForRelease(hooksBinaryVersion, hooksBinaryTargets, cfg.InstallFailOpen)
 }
 
-func renderHooksBootstrapForRelease(version string, targets map[string]hooksBinaryTarget) []byte {
+// renderHooksBootstrapForRelease renders the Unix bootstrap script. failOpen
+// selects the org's install-failure policy: when true, every distribution
+// failure (download, missing tooling, lock-wait timeout, checksum mismatch)
+// exits 0 so providers treat the hook as passed; when false it exits 1 and
+// decision-capable hooks fail per provider semantics. A checksum mismatch
+// never executes the artifact under either policy.
+func renderHooksBootstrapForRelease(version string, targets map[string]hooksBinaryTarget, failOpen bool) []byte {
 	var cases strings.Builder
 	keys := make([]string, 0, len(targets))
 	for target := range targets {
@@ -79,21 +81,28 @@ func renderHooksBootstrapForRelease(version string, targets map[string]hooksBina
 set -eu
 
 version=%q
+install_failure_exit=%d
+
+install_failure() {
+  printf 'speakeasy-hooks: %%s\n' "$1" >&2
+  printf 'speakeasy-hooks: ask your administrator to allow github.com release downloads or preinstall the hooks binary (GRAM_HOOKS_HOME overrides the cache location)\n' >&2
+  exit "$install_failure_exit"
+}
 
 case "$(uname -s)" in
   Darwin) os=darwin ;;
   Linux) os=linux ;;
   MINGW*|MSYS*|CYGWIN*) os=windows ;;
-  *) printf 'speakeasy-hooks: unsupported operating system\n' >&2; exit 1 ;;
+  *) install_failure 'unsupported operating system' ;;
 esac
 case "$(uname -m)" in
   x86_64|amd64) arch=amd64 ;;
   arm64|aarch64) arch=arm64 ;;
-  *) printf 'speakeasy-hooks: unsupported architecture\n' >&2; exit 1 ;;
+  *) install_failure 'unsupported architecture' ;;
 esac
 target="${os}-${arch}"
 case "$target" in
-%s  *) printf 'speakeasy-hooks: unsupported target %%s\n' "$target" >&2; exit 1 ;;
+%s  *) install_failure "unsupported target ${target}" ;;
 esac
 
 if [ -n "${GRAM_HOOKS_HOME:-}" ]; then
@@ -112,10 +121,14 @@ binary_name=speakeasy-hooks
 binary="${install_dir}/${binary_name}"
 marker="${install_dir}/archive.sha256"
 
+# The PowerShell bootstrapper shares this cache on Windows: tolerate a marker
+# with a CRLF ending or no trailing newline.
 cache_valid() {
   [ -x "$binary" ] && [ -r "$marker" ] || return 1
-  IFS= read -r cached_sha < "$marker" || return 1
-  [ "$cached_sha" = "$expected_sha" ]
+  cached_sha=
+  IFS= read -r cached_sha < "$marker" || true
+  cached_sha=${cached_sha%%$'\r'}
+  [ -n "$cached_sha" ] && [ "$cached_sha" = "$expected_sha" ]
 }
 
 if cache_valid; then
@@ -129,21 +142,29 @@ while ! mkdir "$lock" 2>/dev/null; do
   if cache_valid; then
     exec "$binary" "$@"
   fi
+  stale=
   if [ -r "$lock/pid" ]; then
     IFS= read -r owner_pid < "$lock/pid" || owner_pid=
     case "$owner_pid" in
       *[!0-9]*|'') ;;
-      *)
-        if ! kill -0 "$owner_pid" 2>/dev/null; then
-          rm -rf "$lock"
-          continue
-        fi
-        ;;
+      *) kill -0 "$owner_pid" 2>/dev/null || stale=1 ;;
     esac
   fi
-  if [ "$waited" -ge 120 ]; then
-    printf 'speakeasy-hooks: timed out waiting for concurrent installation\n' >&2
-    exit 1
+  # An owner that died before writing its pid (or a PowerShell owner, which
+  # writes none) leaves no process to probe; reclaim such locks by age.
+  # Legitimate installs finish well under this threshold.
+  if [ -z "$stale" ] && [ -n "$(find "$lock" -maxdepth 0 -mmin +5 2>/dev/null)" ]; then
+    stale=1
+  fi
+  if [ -n "$stale" ]; then
+    rm -rf "$lock"
+    continue
+  fi
+  # Providers kill blocking hooks at around 60 seconds; give up before that so
+  # the outcome is the configured install-failure policy, not an opaque
+  # provider timeout.
+  if [ "$waited" -ge 45 ]; then
+    install_failure 'timed out waiting for a concurrent installation'
   fi
   sleep 1
   waited=$((waited + 1))
@@ -159,55 +180,55 @@ trap cleanup EXIT HUP INT TERM
 
 # Another process may have completed between the warm-path check and lock claim.
 if ! cache_valid; then
-  work=$(mktemp -d "$(dirname "$install_dir")/.speakeasy-hooks.XXXXXX")
+  work=$(mktemp -d "$(dirname "$install_dir")/.speakeasy-hooks.XXXXXX") || install_failure 'could not create a working directory'
   archive="${work}/hooks.zip"
   if command -v curl >/dev/null 2>&1; then
-    curl --fail --silent --show-error --location --connect-timeout 10 --max-time 90 "$url" --output "$archive"
+    curl --fail --silent --show-error --location --connect-timeout 10 --max-time 90 "$url" --output "$archive" || install_failure 'download failed'
   elif command -v wget >/dev/null 2>&1; then
-    wget -q --timeout=90 --tries=1 "$url" -O "$archive"
+    wget -q --timeout=90 --tries=1 "$url" -O "$archive" || install_failure 'download failed'
   else
-    printf 'speakeasy-hooks: curl or wget is required for first install\n' >&2
-    exit 1
+    install_failure 'curl or wget is required for first install'
   fi
 
   if command -v sha256sum >/dev/null 2>&1; then
-    actual_sha=$(sha256sum "$archive" | cut -d ' ' -f 1)
+    actual_sha=$(sha256sum "$archive" | cut -d ' ' -f 1) || install_failure 'checksum computation failed'
   elif command -v shasum >/dev/null 2>&1; then
-    actual_sha=$(shasum -a 256 "$archive" | cut -d ' ' -f 1)
+    actual_sha=$(shasum -a 256 "$archive" | cut -d ' ' -f 1) || install_failure 'checksum computation failed'
   elif command -v openssl >/dev/null 2>&1; then
-    actual_sha=$(openssl dgst -sha256 "$archive" | sed 's/^.*= //')
+    actual_sha=$(openssl dgst -sha256 "$archive" | sed 's/^.*= //') || install_failure 'checksum computation failed'
   else
-    printf 'speakeasy-hooks: no SHA-256 utility is available\n' >&2
-    exit 1
+    install_failure 'no SHA-256 utility is available'
   fi
   if [ "$actual_sha" != "$expected_sha" ]; then
-    printf 'speakeasy-hooks: downloaded archive checksum mismatch\n' >&2
-    exit 1
+    install_failure 'downloaded archive checksum mismatch'
   fi
 
   extracted="${work}/${binary_name}"
   if command -v unzip >/dev/null 2>&1; then
-    unzip -p "$archive" "$binary_name" > "$extracted"
+    unzip -p "$archive" "$binary_name" > "$extracted" || install_failure 'archive extraction failed'
   elif command -v busybox >/dev/null 2>&1; then
-    busybox unzip -p "$archive" "$binary_name" > "$extracted"
+    busybox unzip -p "$archive" "$binary_name" > "$extracted" || install_failure 'archive extraction failed'
   else
-    printf 'speakeasy-hooks: unzip is required for first install\n' >&2
-    exit 1
+    install_failure 'unzip is required for first install'
   fi
-  chmod 755 "$extracted"
-  mkdir -p "$install_dir"
-  mv "$extracted" "$binary"
-  printf '%%s\n' "$expected_sha" > "${work}/archive.sha256"
-  mv "${work}/archive.sha256" "$marker"
+  chmod 755 "$extracted" || install_failure 'could not mark the binary executable'
+  mkdir -p "$install_dir" || install_failure 'could not create the install directory'
+  mv "$extracted" "$binary" || install_failure 'could not install the binary'
+  printf '%%s\n' "$expected_sha" > "${work}/archive.sha256" || install_failure 'could not record the installed checksum'
+  mv "${work}/archive.sha256" "$marker" || install_failure 'could not record the installed checksum'
 fi
 
 trap - EXIT HUP INT TERM
 cleanup
 exec "$binary" "$@"
-`, version, cases.String())
+`, version, conv.Ternary(failOpen, 0, 1), cases.String())
 }
 
-func renderHooksPowerShellBootstrap() []byte {
+// renderHooksPowerShellBootstrap renders the Windows bootstrap script. It
+// mirrors the Unix script's cache layout, directory-based lock protocol, and
+// install-failure policy so both can share one cache on machines that also
+// run hooks under Git Bash.
+func renderHooksPowerShellBootstrap(cfg GenerateConfig) []byte {
 	var cases strings.Builder
 	for _, arch := range []string{"amd64", "arm64"} {
 		asset := hooksBinaryTargets["windows-"+arch]
@@ -219,12 +240,20 @@ $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 $ForwardArgs = @($args)
 $Version = %q
+$InstallFailureExit = %d
+
+function Exit-InstallFailure([string]$Message) {
+    [Console]::Error.WriteLine("speakeasy-hooks: $Message")
+    [Console]::Error.WriteLine("speakeasy-hooks: ask your administrator to allow github.com release downloads or preinstall the hooks binary (GRAM_HOOKS_HOME overrides the cache location)")
+    exit $InstallFailureExit
+}
 
 $Arch = switch ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()) {
     "X64" { "amd64" }
     "Arm64" { "arm64" }
-    default { throw "speakeasy-hooks: unsupported architecture" }
+    default { "" }
 }
+if (-not $Arch) { Exit-InstallFailure "unsupported architecture" }
 switch ($Arch) {
 %s}
 
@@ -238,7 +267,7 @@ $Binary = Join-Path $InstallDir "speakeasy-hooks.exe"
 $Marker = Join-Path $InstallDir "archive.sha256"
 function Test-Cache {
     if (-not (Test-Path -LiteralPath $Binary -PathType Leaf) -or -not (Test-Path -LiteralPath $Marker -PathType Leaf)) { return $false }
-    return (Get-Content -LiteralPath $Marker -Raw).Trim() -eq $ExpectedSha
+    return [System.IO.File]::ReadAllText($Marker).Trim() -eq $ExpectedSha
 }
 if (Test-Cache) {
     & $Binary @ForwardArgs
@@ -247,48 +276,63 @@ if (Test-Cache) {
 
 $null = New-Item -ItemType Directory -Force -Path (Split-Path $InstallDir -Parent)
 $LockPath = "$InstallDir.lock"
-$Lock = $null
-for ($Attempt = 0; $Attempt -lt 120; $Attempt++) {
+$Waited = 0
+while ($true) {
     try {
-        $Lock = [System.IO.File]::Open($LockPath, [System.IO.FileMode]::OpenOrCreate, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
+        New-Item -ItemType Directory -Path $LockPath -ErrorAction Stop | Out-Null
         break
-    } catch [System.IO.IOException] {
+    } catch {
         if (Test-Cache) {
             & $Binary @ForwardArgs
             exit $LASTEXITCODE
         }
+        $Stale = $false
+        try {
+            $Stale = (Get-Item -LiteralPath $LockPath -Force -ErrorAction Stop).LastWriteTimeUtc -lt [DateTime]::UtcNow.AddMinutes(-5)
+        } catch {}
+        if ($Stale) {
+            Remove-Item -LiteralPath $LockPath -Recurse -Force -ErrorAction SilentlyContinue
+            continue
+        }
+        if ($Waited -ge 45) { Exit-InstallFailure "timed out waiting for a concurrent installation" }
         Start-Sleep -Seconds 1
+        $Waited++
     }
 }
-if ($null -eq $Lock) { throw "speakeasy-hooks: timed out waiting for concurrent installation" }
 
 $Work = Join-Path (Split-Path $InstallDir -Parent) (".speakeasy-hooks-" + [guid]::NewGuid())
 try {
     if (-not (Test-Cache)) {
         New-Item -ItemType Directory -Force -Path $Work | Out-Null
         $Archive = Join-Path $Work "hooks.zip"
-        Invoke-WebRequest -UseBasicParsing -TimeoutSec 90 -Uri $Url -OutFile $Archive
+        try {
+            Invoke-WebRequest -UseBasicParsing -TimeoutSec 90 -Uri $Url -OutFile $Archive
+        } catch {
+            Exit-InstallFailure "download failed"
+        }
         $ActualSha = (Get-FileHash -Algorithm SHA256 -LiteralPath $Archive).Hash.ToLowerInvariant()
-        if ($ActualSha -ne $ExpectedSha) { throw "speakeasy-hooks: downloaded archive checksum mismatch" }
+        if ($ActualSha -ne $ExpectedSha) { Exit-InstallFailure "downloaded archive checksum mismatch" }
 
         $Extracted = Join-Path $Work "extracted"
         Expand-Archive -LiteralPath $Archive -DestinationPath $Extracted
         $Source = Join-Path $Extracted "speakeasy-hooks.exe"
-        if (-not (Test-Path -LiteralPath $Source -PathType Leaf)) { throw "speakeasy-hooks: archive is missing speakeasy-hooks.exe" }
+        if (-not (Test-Path -LiteralPath $Source -PathType Leaf)) { Exit-InstallFailure "archive is missing speakeasy-hooks.exe" }
         New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
         Move-Item -LiteralPath $Source -Destination $Binary -Force
-        $ExpectedSha | Set-Content -LiteralPath (Join-Path $Work "archive.sha256") -NoNewline
-        Move-Item -LiteralPath (Join-Path $Work "archive.sha256") -Destination $Marker -Force
+        $MarkerTmp = Join-Path $Work "archive.sha256"
+        [System.IO.File]::WriteAllText($MarkerTmp, $ExpectedSha + [char]10)
+        Move-Item -LiteralPath $MarkerTmp -Destination $Marker -Force
     }
+} catch {
+    Exit-InstallFailure $_.Exception.Message
 } finally {
-    if ($Lock) { $Lock.Dispose() }
-    Remove-Item -LiteralPath $LockPath -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $LockPath -Recurse -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $Work -Recurse -Force -ErrorAction SilentlyContinue
 }
 
 & $Binary @ForwardArgs
 exit $LASTEXITCODE
-`, hooksBinaryVersion, cases.String())
+`, hooksBinaryVersion, conv.Ternary(cfg.InstallFailOpen, 0, 1), cases.String())
 }
 
 func hooksBootstrapCommand(root, provider string, timeoutSeconds int, async bool) string {

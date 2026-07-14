@@ -22,6 +22,10 @@ export type GetProductFeaturesResponseBody = {
    */
   hooksBrowserLoginEnabled: boolean;
   /**
+   * Whether a hooks binary installation failure lets the hook pass instead of failing closed
+   */
+  hooksInstallFailOpenEnabled: boolean;
+  /**
    * Whether logging is enabled
    */
   logsEnabled: boolean;
@@ -60,6 +64,7 @@ export const GetProductFeaturesResponseBody$inboundSchema: z.ZodMiniType<
     authz_challenge_logging_enabled: z.boolean(),
     custom_model_keys_enabled: z.boolean(),
     hooks_browser_login_enabled: z.boolean(),
+    hooks_install_fail_open_enabled: z.boolean(),
     logs_enabled: z.boolean(),
     observability_mode_enabled: z.boolean(),
     scim_enabled: z.boolean(),
@@ -73,6 +78,7 @@ export const GetProductFeaturesResponseBody$inboundSchema: z.ZodMiniType<
       "authz_challenge_logging_enabled": "authzChallengeLoggingEnabled",
       "custom_model_keys_enabled": "customModelKeysEnabled",
       "hooks_browser_login_enabled": "hooksBrowserLoginEnabled",
+      "hooks_install_fail_open_enabled": "hooksInstallFailOpenEnabled",
       "logs_enabled": "logsEnabled",
       "observability_mode_enabled": "observabilityModeEnabled",
       "scim_enabled": "scimEnabled",

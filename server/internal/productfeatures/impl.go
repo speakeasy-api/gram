@@ -100,26 +100,28 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 
 	orgID := authCtx.ActiveOrganizationID
 
-	// Observability mode changes the generated observability (hooks) plugin output
-	// (every event becomes non-blocking). That output can only be regenerated at
-	// the current hooks generator version, so a toggle can't take effect for an org
-	// that isn't cleared for it. Reject the change up front — before writing the
-	// feature — so the persisted feature state never claims a hook behavior that
-	// isn't actually published. Only gate a real change, and only when plugin
+	// Observability mode and the install-failure policy change the generated
+	// observability (hooks) plugin output (non-blocking events, bootstrap exit
+	// behavior). That output can only be regenerated at the current hooks
+	// generator version, so a toggle can't take effect for an org that isn't
+	// cleared for it. Reject the change up front — before writing the feature —
+	// so the persisted feature state never claims a hook behavior that isn't
+	// actually published. Only gate a real change, and only when plugin
 	// publishing is wired.
-	observabilityToggle := payload.FeatureName == string(FeatureObservabilityMode)
-	observabilityChanged := false
-	if observabilityToggle && s.plugins != nil {
+	hookOutputToggle := payload.FeatureName == string(FeatureObservabilityMode) ||
+		payload.FeatureName == string(FeatureHooksInstallFailOpen)
+	hookOutputChanged := false
+	if hookOutputToggle && s.plugins != nil {
 		current, ferr := s.repo.IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{
 			OrganizationID: orgID,
 			FeatureName:    payload.FeatureName,
 		})
 		if ferr != nil {
-			return oops.E(oops.CodeUnexpected, ferr, "check observability mode state").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
+			return oops.E(oops.CodeUnexpected, ferr, "check hooks feature state").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
 		}
-		observabilityChanged = current != payload.Enabled
-		if observabilityChanged && !s.plugins.HooksRolloutEligible(ctx, orgID, authCtx.OrganizationSlug) {
-			return oops.E(oops.CodeConflict, nil, "can't change observability mode yet: your organization isn't approved for the latest observability hooks version. It will become available soon.")
+		hookOutputChanged = current != payload.Enabled
+		if hookOutputChanged && !s.plugins.HooksRolloutEligible(ctx, orgID, authCtx.OrganizationSlug) {
+			return oops.E(oops.CodeConflict, nil, "can't change this hooks setting yet: your organization isn't approved for the latest observability hooks version. It will become available soon.")
 		}
 	}
 
@@ -159,15 +161,15 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 		)
 	}
 
-	// Propagate an observability-mode change to the org's published marketplaces
-	// now. Eligibility was already verified above, so eligible orgs regenerate
-	// their hooks immediately. This is best-effort: on failure the feature is
-	// already written and the automated generator rollout republishes the org on
-	// its next tick (the config-hash signal detects the drift), so we log rather
-	// than fail the toggle.
-	if observabilityToggle && observabilityChanged && s.plugins != nil {
+	// Propagate a hook-output-affecting change to the org's published
+	// marketplaces now. Eligibility was already verified above, so eligible
+	// orgs regenerate their hooks immediately. This is best-effort: on failure
+	// the feature is already written and the automated generator rollout
+	// republishes the org on its next tick (the config-hash signal detects the
+	// drift), so we log rather than fail the toggle.
+	if hookOutputToggle && hookOutputChanged && s.plugins != nil {
 		if repErr := s.plugins.RepublishOrganizationProjects(ctx, orgID); repErr != nil {
-			s.logger.WarnContext(ctx, "failed to republish org plugins after observability mode change; automated rollout will retry",
+			s.logger.WarnContext(ctx, "failed to republish org plugins after hooks feature change; automated rollout will retry",
 				attr.SlogError(repErr),
 				attr.SlogOrganizationID(orgID),
 			)
@@ -239,6 +241,7 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 		ScimEnabled:                  isEnabled(FeatureSCIM),
 		ObservabilityModeEnabled:     isEnabled(FeatureObservabilityMode),
 		HooksBrowserLoginEnabled:     isEnabled(FeatureHooksBrowserLogin),
+		HooksInstallFailOpenEnabled:  isEnabled(FeatureHooksInstallFailOpen),
 		CustomModelKeysEnabled:       isEnabled(FeatureCustomModelKeys),
 	}, nil
 }

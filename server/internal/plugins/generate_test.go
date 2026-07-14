@@ -853,16 +853,19 @@ func TestGenerateObservabilityPluginsIncludeBootstrapLayout(t *testing.T) {
   "project": "acme-prod",
   "org": "org_123",
   "hooks_api_key": "gram_local_secret_xyz",
+  "browser_login": true,
   "nonblocking": true
 }`, string(files[root+"/speakeasy.json"]), "%s/speakeasy.json", root)
 		require.NotEmpty(t, files[root+"/hooks/bootstrap.sh"], "%s/hooks/bootstrap.sh", root)
-		require.NotEmpty(t, files[root+"/hooks/bootstrap.ps1"], "%s/hooks/bootstrap.ps1", root)
 		require.NotContains(t, string(files[root+"/hooks/bootstrap.sh"]), cfg.HooksAPIKey)
 		require.NotContains(t, string(files[root+"/hooks/hooks.json"]), cfg.HooksAPIKey)
-		for _, obsolete := range []string{"identity.sh", "http.sh", "auth.sh", "login.sh", "auth_preflight.sh", "hook.sh", "hook_async.sh"} {
-			require.NotContains(t, files, root+"/hooks/"+obsolete)
-		}
 	}
+
+	// Only Codex invokes the PowerShell bootstrapper (via commandWindows);
+	// Claude and Cursor run hooks through bash on every platform.
+	require.NotEmpty(t, files[CodexObservabilitySlug(cfg)+"/hooks/bootstrap.ps1"])
+	require.NotContains(t, files, ClaudeObservabilitySlug(cfg)+"/hooks/bootstrap.ps1")
+	require.NotContains(t, files, "cursor-plugins/"+CursorObservabilitySlug(cfg)+"/hooks/bootstrap.ps1")
 }
 
 // Claude only invokes events listed in hooks.json. The Claude() handler in
@@ -912,8 +915,8 @@ func TestGenerateClaudeObservabilityPluginHooksJSONIncludesAllRegisteredEvents(t
 			matchers[0].Hooks[0].Command,
 		)
 		require.NotNil(t, matchers[0].Hooks[0].Async)
-		require.Equal(t, event != "SessionStart" && event != "Stop", *matchers[0].Hooks[0].Async,
-			"SessionStart and Stop remain synchronous even in observability mode")
+		require.True(t, *matchers[0].Hooks[0].Async,
+			"observability mode forces every event async so no hook can delay the session")
 	}
 }
 
@@ -1017,13 +1020,13 @@ func TestGenerateCodexObservabilityPluginHooksJSONIncludesBootstrapCommands(t *t
 			timeoutSeconds = 330
 		}
 		expectedSuffix := fmt.Sprintf(` --config="${PLUGIN_ROOT}/speakeasy.json" agenthooks run --provider=codex --timeout=%ds`, timeoutSeconds)
-		expectedWindowsSuffix := fmt.Sprintf(` --config="$env:PLUGIN_ROOT\speakeasy.json" agenthooks run --provider=codex --timeout=%ds`, timeoutSeconds)
+		expectedWindowsSuffix := fmt.Sprintf(` --config="${PLUGIN_ROOT}\speakeasy.json" agenthooks run --provider=codex --timeout=%ds`, timeoutSeconds)
 		if async {
 			expectedSuffix += " --async"
 			expectedWindowsSuffix += " --async"
 		}
 		require.Equal(t, `bash "${PLUGIN_ROOT}/hooks/bootstrap.sh"`+expectedSuffix, groups[0].Hooks[0].Command)
-		require.Equal(t, `powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "$env:PLUGIN_ROOT\hooks\bootstrap.ps1"`+expectedWindowsSuffix, groups[0].Hooks[0].CommandWindows)
+		require.Equal(t, `powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "${PLUGIN_ROOT}\hooks\bootstrap.ps1"`+expectedWindowsSuffix, groups[0].Hooks[0].CommandWindows)
 		require.Equal(t, async, strings.HasSuffix(groups[0].Hooks[0].Command, " --async"))
 		require.Equal(t, async, strings.HasSuffix(groups[0].Hooks[0].CommandWindows, " --async"))
 	}
@@ -1035,7 +1038,7 @@ func TestComputeCodexHookApprovalsIncludesSingleSessionStartCommand(t *testing.T
 	marketplace := conv.ToSlug(cfg.OrgName) + "-speakeasy"
 	plugin := CodexObservabilitySlug(cfg)
 
-	approvals, err := computeCodexHookApprovals(marketplace, plugin)
+	approvals, err := computeCodexHookApprovals(marketplace, plugin, false)
 	require.NoError(t, err)
 
 	sessionStartPrefix := plugin + "@" + marketplace + ":hooks/hooks.json:session_start:0:"
@@ -1179,7 +1182,7 @@ func TestHooksBootstrapColdAndWarmPathsPreserveInput(t *testing.T) {
 
 	script := renderHooksBootstrapForRelease("test-version", map[string]hooksBinaryTarget{
 		target: {URL: server.URL + "/hooks.zip", SHA256: fmt.Sprintf("%x", sum)},
-	})
+	}, false)
 	cache := t.TempDir()
 	first, err := runHooksBootstrap(t, script, cache, "cold-input", "--first", "value")
 	require.NoError(t, err, string(first))
@@ -1190,6 +1193,20 @@ func TestHooksBootstrapColdAndWarmPathsPreserveInput(t *testing.T) {
 	require.NoError(t, err, string(second))
 	require.Equal(t, "args:--second\nwarm-input", string(second))
 	require.Equal(t, int64(1), downloads.Load())
+
+	// The PowerShell bootstrapper writes the marker into the same cache; a
+	// missing trailing newline or a CRLF ending must not invalidate it (the
+	// server is closed, so a re-download would fail).
+	markerPath := filepath.Join(cache, "test-version", target, "archive.sha256")
+	markerContent, err := os.ReadFile(markerPath)
+	require.NoError(t, err)
+	sha := strings.TrimSpace(string(markerContent))
+	for _, variant := range []string{sha, sha + "\r\n"} {
+		require.NoError(t, os.WriteFile(markerPath, []byte(variant), 0o644))
+		out, err := runHooksBootstrap(t, script, cache, "still-warm")
+		require.NoError(t, err, string(out))
+		require.Equal(t, "args:\nstill-warm", string(out))
+	}
 }
 
 func TestHooksBootstrapChecksumMismatchNeverExecutes(t *testing.T) {
@@ -1204,11 +1221,53 @@ func TestHooksBootstrapChecksumMismatchNeverExecutes(t *testing.T) {
 
 	script := renderHooksBootstrapForRelease("bad-checksum", map[string]hooksBinaryTarget{
 		target: {URL: server.URL + "/hooks.zip", SHA256: strings.Repeat("0", 64)},
-	})
+	}, false)
 	out, err := runHooksBootstrap(t, script, t.TempDir(), "payload")
 	require.Error(t, err)
 	require.Contains(t, string(out), "checksum mismatch")
 	require.NoFileExists(t, marker)
+}
+
+func TestHooksBootstrapInstallFailOpenExitsZeroWithoutExecuting(t *testing.T) {
+	t.Parallel()
+	target := currentHooksBootstrapTarget(t)
+	marker := filepath.Join(t.TempDir(), "executed")
+	archive := hooksBootstrapArchive(t, fmt.Appendf(nil, "#!/bin/sh\ntouch %q\n", marker))
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(archive)
+	}))
+	defer server.Close()
+
+	script := renderHooksBootstrapForRelease("fail-open", map[string]hooksBinaryTarget{
+		target: {URL: server.URL + "/hooks.zip", SHA256: strings.Repeat("0", 64)},
+	}, true)
+	out, err := runHooksBootstrap(t, script, t.TempDir(), "payload")
+	require.NoError(t, err, string(out))
+	require.Contains(t, string(out), "checksum mismatch")
+	require.NoFileExists(t, marker)
+}
+
+func TestCarryHooksSubtreeIsLayoutIndependent(t *testing.T) {
+	t.Parallel()
+	prefixes := hooksSubtreePrefixes("Acme")
+	published := map[string][]byte{
+		prefixes[0] + "hooks/hook.sh":                []byte("v14 claude"),
+		prefixes[0] + ".claude-plugin/plugin.json":   []byte("{}"),
+		prefixes[1] + "hooks/hook.sh":                []byte("v14 cursor"),
+		prefixes[2] + "hooks/hook.sh":                []byte("v14 codex"),
+		"some-mcp-plugin/.claude-plugin/plugin.json": []byte("{}"),
+	}
+
+	dst := map[string][]byte{}
+	require.True(t, carryHooksSubtree(dst, published, []byte(`{"org_name":"Acme"}`), "Renamed Since Publish"))
+	require.Len(t, dst, 4)
+	require.Equal(t, []byte("v14 claude"), dst[prefixes[0]+"hooks/hook.sh"])
+	require.NotContains(t, dst, "some-mcp-plugin/.claude-plugin/plugin.json")
+
+	// A platform subtree missing from the published repo means the component
+	// is not recoverable and the caller must regenerate.
+	delete(published, prefixes[2]+"hooks/hook.sh")
+	require.False(t, carryHooksSubtree(map[string][]byte{}, published, []byte(`{"org_name":"Acme"}`), "Acme"))
 }
 
 func TestHooksBootstrapConcurrentColdInvocationsDownloadOnce(t *testing.T) {
@@ -1225,7 +1284,7 @@ func TestHooksBootstrapConcurrentColdInvocationsDownloadOnce(t *testing.T) {
 
 	script := renderHooksBootstrapForRelease("concurrent", map[string]hooksBinaryTarget{
 		target: {URL: server.URL + "/hooks.zip", SHA256: fmt.Sprintf("%x", sum)},
-	})
+	}, false)
 	cache := t.TempDir()
 	var wg sync.WaitGroup
 	errs := make(chan error, 2)
@@ -1262,7 +1321,7 @@ func TestHooksBootstrapRecoversStaleInstallLock(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(lock, "pid"), []byte("99999999\n"), 0o644))
 	script := renderHooksBootstrapForRelease("stale-lock", map[string]hooksBinaryTarget{
 		target: {URL: server.URL + "/hooks.zip", SHA256: fmt.Sprintf("%x", sum)},
-	})
+	}, false)
 	out, err := runHooksBootstrap(t, script, cache, "event")
 	require.NoError(t, err, string(out))
 	require.Equal(t, "event", string(out))
@@ -1287,14 +1346,14 @@ func TestHooksBootstrapChecksumChangeInvalidatesWarmCache(t *testing.T) {
 	cache := t.TempDir()
 	firstScript := renderHooksBootstrapForRelease("same-version", map[string]hooksBinaryTarget{
 		target: {URL: firstServer.URL + "/hooks.zip", SHA256: fmt.Sprintf("%x", firstSum)},
-	})
+	}, false)
 	out, err := runHooksBootstrap(t, firstScript, cache, "")
 	require.NoError(t, err, string(out))
 	require.Equal(t, "first", string(out))
 
 	secondScript := renderHooksBootstrapForRelease("same-version", map[string]hooksBinaryTarget{
 		target: {URL: secondServer.URL + "/hooks.zip", SHA256: fmt.Sprintf("%x", secondSum)},
-	})
+	}, false)
 	out, err = runHooksBootstrap(t, secondScript, cache, "")
 	require.NoError(t, err, string(out))
 	require.Equal(t, "second", string(out))
@@ -1303,7 +1362,7 @@ func TestHooksBootstrapChecksumChangeInvalidatesWarmCache(t *testing.T) {
 func TestHooksBootstrapEmbedsPinnedReleaseMetadata(t *testing.T) {
 	t.Parallel()
 	require.Len(t, hooksBinaryTargets, 6)
-	script := string(renderHooksBootstrap())
+	script := string(renderHooksBootstrap(GenerateConfig{}))
 	for target, asset := range hooksBinaryTargets {
 		require.Contains(t, script, target)
 		require.Contains(t, asset.URL, "releases/download/hooks%40"+hooksBinaryVersion+"/")
@@ -1369,7 +1428,7 @@ func TestGenerateCodexInstallScriptRefreshesStaleTrustedHashes(t *testing.T) {
 	marketplace := conv.ToSlug(cfg.OrgName) + "-speakeasy"
 	plugin := CodexObservabilitySlug(cfg)
 
-	approvals, err := computeCodexHookApprovals(marketplace, plugin)
+	approvals, err := computeCodexHookApprovals(marketplace, plugin, false)
 	require.NoError(t, err)
 	require.NotEmpty(t, approvals)
 	target := approvals[0]
@@ -1464,7 +1523,7 @@ func TestGenerateCodexInstallScriptIsIdempotent(t *testing.T) {
 	marketplace := conv.ToSlug(cfg.OrgName) + "-speakeasy"
 	plugin := CodexObservabilitySlug(cfg)
 
-	approvals, err := computeCodexHookApprovals(marketplace, plugin)
+	approvals, err := computeCodexHookApprovals(marketplace, plugin, false)
 	require.NoError(t, err)
 	require.NotEmpty(t, approvals)
 

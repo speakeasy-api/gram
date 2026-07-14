@@ -19,6 +19,7 @@ export const FeatureName = {
   Scim: "scim",
   ObservabilityMode: "observability_mode",
   HooksBrowserLogin: "hooks_browser_login",
+  HooksInstallFailOpen: "hooks_install_fail_open",
   CustomModelKeys: "custom_model_keys",
 } as const;
 /**

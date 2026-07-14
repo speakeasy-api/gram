@@ -20,6 +20,7 @@ const (
 	FeatureSCIM                  Feature = "scim"
 	FeatureObservabilityMode     Feature = "observability_mode"
 	FeatureHooksBrowserLogin     Feature = "hooks_browser_login"
+	FeatureHooksInstallFailOpen  Feature = "hooks_install_fail_open"
 	FeatureCustomModelKeys       Feature = "custom_model_keys"
 )
 

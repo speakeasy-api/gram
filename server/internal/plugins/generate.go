@@ -93,6 +93,14 @@ type GenerateConfig struct {
 	// GRAM_HOOKS_* env credentials, a previously cached key, or the baked
 	// org-wide key instead of opening a browser.
 	BrowserLogin bool
+	// InstallFailOpen selects the org's binary install-failure policy. When
+	// set, a bootstrap distribution failure (unreachable download origin,
+	// missing tooling, lock-wait timeout, checksum mismatch) exits 0 so the
+	// provider treats the hook as passed; off keeps the fail-closed default
+	// where decision-capable hooks fail per provider semantics. It only covers
+	// installation — a verified installed binary always runs, and a checksum
+	// mismatch never executes the artifact under either policy.
+	InstallFailOpen bool
 }
 
 // PublishedHooksFiles renders the complete hooks (observability) subtree the
@@ -118,20 +126,24 @@ func PublishedHooksFiles() (map[string][]byte, error) {
 		MarketplaceName:   "",
 		ObservabilityMode: false,
 		BrowserLogin:      false,
+		InstallFailOpen:   false,
 	}
 	out := make(map[string][]byte)
 	for _, mode := range []struct {
-		prefix        string
-		observability bool
-		browserLogin  bool
+		prefix          string
+		observability   bool
+		browserLogin    bool
+		installFailOpen bool
 	}{
-		{"default", false, false},
-		{"observability-mode", true, false},
-		{"browser-login", false, true},
-		{"observability-mode-browser-login", true, true},
+		{"default", false, false, false},
+		{"observability-mode", true, false, false},
+		{"browser-login", false, true, false},
+		{"observability-mode-browser-login", true, true, false},
+		{"install-fail-open", false, false, true},
 	} {
 		cfg.ObservabilityMode = mode.observability
 		cfg.BrowserLogin = mode.browserLogin
+		cfg.InstallFailOpen = mode.installFailOpen
 		files, err := generateHooksFiles(cfg)
 		if err != nil {
 			return nil, fmt.Errorf("generate hooks files (%s): %w", mode.prefix, err)
@@ -169,7 +181,8 @@ func DogfoodPluginFiles() (map[string][]byte, error) {
 		ObservabilityMode: false,
 		// The dogfood harness is how the browser flow itself gets exercised
 		// locally, so it stays on here regardless of the publish default.
-		BrowserLogin: true,
+		BrowserLogin:    true,
+		InstallFailOpen: false,
 	}
 	files := make(map[string][]byte)
 	if err := generateClaudeObservabilityPluginInDir(files, "plugin-claude", cfg); err != nil {
@@ -259,6 +272,7 @@ type HooksConfig struct {
 	OrgID             string                       `json:"org_id"`
 	ObservabilityMode bool                         `json:"observability_mode"`
 	BrowserLogin      bool                         `json:"browser_login"`
+	InstallFailOpen   bool                         `json:"install_fail_open"`
 	BinaryVersion     string                       `json:"binary_version"`
 	BinaryTargets     map[string]hooksBinaryTarget `json:"binary_targets"`
 }
@@ -276,6 +290,7 @@ func hooksConfigSnapshot(cfg GenerateConfig) HooksConfig {
 		OrgID:             cfg.OrgID,
 		ObservabilityMode: cfg.ObservabilityMode,
 		BrowserLogin:      cfg.BrowserLogin,
+		InstallFailOpen:   cfg.InstallFailOpen,
 		BinaryVersion:     hooksBinaryVersion,
 		BinaryTargets:     hooksBinaryTargets,
 	}
@@ -422,21 +437,23 @@ func hashFiles(salt string, files map[string][]byte) string {
 // return true for fire-and-forget telemetry so Claude is not held up while
 // the MCP inventory is re-synced mid-session.
 //
-// In observability mode, decision hooks become async except SessionStart and
-// Stop. SessionStart must preserve the cold event while the binary installs,
-// and Cowork skips async Stop hooks; the relay's nonblocking config keeps both
-// from enforcing server decisions.
+// SessionStart is also blocking so a cold install completes while the
+// session-start payload waits on stdin, and the plugin's first event is
+// never lost.
+//
+// When observabilityMode is set, every event is forced async so the plugin
+// can only observe and report — no hook can deny or delay a tool call, and a
+// cold binary install happens in the background of the same invocation. This
+// is the low-risk path for orgs that cannot tolerate hook errors or brief
+// server unavailability disrupting the user, and it accepts the async-Stop
+// dispatch gap above as part of that trade.
 func claudeHookAsyncFlag(event string, observabilityMode bool) *bool {
-	if event == "Stop" || event == "SessionStart" {
-		f := false
-		return &f
-	}
 	if observabilityMode {
 		t := true
 		return &t
 	}
 	switch event {
-	case "UserPromptSubmit", "PreToolUse":
+	case "UserPromptSubmit", "PreToolUse", "Stop", "SessionStart":
 		f := false
 		return &f
 	default:
@@ -536,19 +553,19 @@ func generateHooksFiles(cfg GenerateConfig) (map[string][]byte, error) {
 	return files, nil
 }
 
-// hooksFilePaths returns the sorted set of repo paths the hooks (observability)
-// subtree occupies for the given config. The publish path uses it to carry the
-// hooks files verbatim from the existing repo when only the MCP component
-// changed. A non-empty hooks key sentinel is forced so the subtree is generated
-// (an empty key omits it), and it never reaches output because only the paths
-// are used.
-func hooksFilePaths(cfg GenerateConfig) ([]string, error) {
-	cfg.HooksAPIKey = fingerprintHooksKeySentinel
-	files, err := generateHooksFiles(cfg)
+// writeHooksRuntimeFiles emits the files every observability plugin carries:
+// the deployment-identity speakeasy.json and the pinned-binary bootstrap
+// script. Only Codex additionally ships the PowerShell bootstrapper (via
+// commandWindows); Claude and Cursor invoke hooks through bash on every
+// platform.
+func writeHooksRuntimeFiles(files map[string][]byte, subdir string, cfg GenerateConfig) error {
+	configJSON, err := renderHooksConfig(cfg)
 	if err != nil {
-		return nil, fmt.Errorf("enumerate hooks file paths: %w", err)
+		return err
 	}
-	return slices.Sorted(maps.Keys(files)), nil
+	files[path.Join(subdir, "speakeasy.json")] = configJSON
+	files[path.Join(subdir, "hooks/bootstrap.sh")] = renderHooksBootstrap(cfg)
+	return nil
 }
 
 // mcpFilePaths returns the sorted set of repo paths the MCP (feature) plugin
@@ -968,6 +985,21 @@ func CodexObservabilitySlug(cfg GenerateConfig) string {
 	return conv.ToSlug(cfg.OrgName) + "-observability-codex"
 }
 
+// hooksSubtreePrefixes returns the repo directory prefixes the hooks
+// (observability) subtree occupies for a given org name — every hooks
+// generator version to date has kept each platform's observability plugin
+// under these org-derived directories, so the publish path can carry the
+// subtree verbatim by prefix without knowing which generator version produced
+// it. The rollout gate depends on that layout independence to hold orgs on
+// their published version.
+func hooksSubtreePrefixes(orgName string) []string {
+	return []string{
+		naming.ObservabilitySlug(orgName) + "/",
+		cursorPluginRoot + "/" + conv.ToSlug(orgName) + "-observability-cursor/",
+		conv.ToSlug(orgName) + "-observability-codex/",
+	}
+}
+
 // generateClaudeObservabilityPlugin emits the per-org observability plugin
 // containing Gram hooks for Claude Code. The generated runtime configuration
 // carries the org's hooks-scoped API key so no per-machine setup is required.
@@ -1023,14 +1055,10 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 		return fmt.Errorf("marshal hooks.json: %w", err)
 	}
 	files[path.Join(subdir, "hooks/hooks.json")] = hooksJSON
-	configJSON, err := renderHooksConfig(cfg)
-	if err != nil {
+
+	if err := writeHooksRuntimeFiles(files, subdir, cfg); err != nil {
 		return err
 	}
-	files[path.Join(subdir, "speakeasy.json")] = configJSON
-	files[path.Join(subdir, "hooks/bootstrap.sh")] = renderHooksBootstrap()
-	files[path.Join(subdir, "hooks/bootstrap.ps1")] = renderHooksPowerShellBootstrap()
-
 	return nil
 }
 
@@ -1109,14 +1137,10 @@ func generateCursorObservabilityPluginInDir(files map[string][]byte, subdir, nam
 		return fmt.Errorf("marshal hooks.json: %w", err)
 	}
 	files[path.Join(subdir, "hooks/hooks.json")] = hooksJSON
-	configJSON, err := renderHooksConfig(cfg)
-	if err != nil {
+
+	if err := writeHooksRuntimeFiles(files, subdir, cfg); err != nil {
 		return err
 	}
-	files[path.Join(subdir, "speakeasy.json")] = configJSON
-	files[path.Join(subdir, "hooks/bootstrap.sh")] = renderHooksBootstrap()
-	files[path.Join(subdir, "hooks/bootstrap.ps1")] = renderHooksPowerShellBootstrap()
-
 	return nil
 }
 
@@ -1192,15 +1216,11 @@ func generateCodexObservabilityPluginInDir(files map[string][]byte, subdir strin
 
 	hookEvents := make(map[string][]codexMatcherGroup, len(CodexObservabilityHookEvents))
 	for _, event := range CodexObservabilityHookEvents {
-		async := event == "PostToolUse" || event == "Stop"
-		timeoutSeconds := 60
-		if event == "SessionStart" {
-			timeoutSeconds = 330
-		}
+		timeoutSeconds, async := codexHookParams(event, cfg.ObservabilityMode)
 		hooks := []codexHookCommand{{
 			Type:           "command",
 			Command:        codexHookCommandString(timeoutSeconds, async),
-			CommandWindows: hooksPowerShellCommand(`$env:PLUGIN_ROOT`, "codex", timeoutSeconds, async),
+			CommandWindows: hooksPowerShellCommand(`${PLUGIN_ROOT}`, "codex", timeoutSeconds, async),
 		}}
 		hookEvents[event] = []codexMatcherGroup{{
 			Matcher: "",
@@ -1212,13 +1232,11 @@ func generateCodexObservabilityPluginInDir(files map[string][]byte, subdir strin
 		return fmt.Errorf("marshal hooks.json: %w", err)
 	}
 	files[path.Join(subdir, "hooks/hooks.json")] = hooksJSON
-	configJSON, err := renderHooksConfig(cfg)
-	if err != nil {
+
+	if err := writeHooksRuntimeFiles(files, subdir, cfg); err != nil {
 		return err
 	}
-	files[path.Join(subdir, "speakeasy.json")] = configJSON
-	files[path.Join(subdir, "hooks/bootstrap.sh")] = renderHooksBootstrap()
-	files[path.Join(subdir, "hooks/bootstrap.ps1")] = renderHooksPowerShellBootstrap()
+	files[path.Join(subdir, "hooks/bootstrap.ps1")] = renderHooksPowerShellBootstrap(cfg)
 
 	return nil
 }
@@ -1317,17 +1335,27 @@ func computeCodexHookHash(event, command string) (string, error) {
 	return fmt.Sprintf("sha256:%x", sum), nil
 }
 
+// codexHookParams returns the timeout and relay --async flag for a Codex hook
+// event. The command string embeds both, and Codex trust-hashes the command,
+// so the hooks.json generator and the precomputed approvals must derive them
+// from this single source. In observability mode every event runs async so no
+// hook (or cold binary install) can delay the agent.
+func codexHookParams(event string, observabilityMode bool) (timeoutSeconds int, async bool) {
+	async = observabilityMode || event == "PostToolUse" || event == "Stop"
+	timeoutSeconds = 60
+	if event == "SessionStart" {
+		timeoutSeconds = 330
+	}
+	return timeoutSeconds, async
+}
+
 // computeCodexHookApprovals returns pre-computed [hooks.state] entries for all
 // Codex observability hook events for a given marketplace and plugin name.
-func computeCodexHookApprovals(marketplace, plugin string) ([]codexHookApproval, error) {
+func computeCodexHookApprovals(marketplace, plugin string, observabilityMode bool) ([]codexHookApproval, error) {
 	approvals := make([]codexHookApproval, 0, len(CodexObservabilityHookEvents))
 	for _, event := range CodexObservabilityHookEvents {
 		snake := codexEventSnakeCase(event)
-		async := event == "PostToolUse" || event == "Stop"
-		timeoutSeconds := 60
-		if event == "SessionStart" {
-			timeoutSeconds = 330
-		}
+		timeoutSeconds, async := codexHookParams(event, observabilityMode)
 		command := codexHookCommandString(timeoutSeconds, async)
 		hash, err := computeCodexHookHash(event, command)
 		if err != nil {
@@ -1357,7 +1385,7 @@ func GenerateCodexInstallScript(marketplaceURL string, cfg GenerateConfig) ([]by
 	marketplace := resolveMarketplaceName(cfg)
 	plugin := CodexObservabilitySlug(cfg)
 
-	approvals, err := computeCodexHookApprovals(marketplace, plugin)
+	approvals, err := computeCodexHookApprovals(marketplace, plugin, cfg.ObservabilityMode)
 	if err != nil {
 		return nil, fmt.Errorf("compute hook approvals: %w", err)
 	}
@@ -1784,7 +1812,11 @@ type codexMatcherGroup struct {
 
 // commandWindows is supported by Codex hook_config.rs at
 // 5bed6447998c754d154dbd796517310b8f04d4ce. On Windows it replaces command
-// before execution; Unix trust approvals continue to hash command.
+// before execution. Codex substitutes plugin variables only in the ${KEY}
+// textual form (discovery.rs), so commandWindows must use ${PLUGIN_ROOT},
+// never PowerShell-only $env: expansion. Trust hashing normalizes
+// command_windows to None at that commit (see computeCodexHookHash), so the
+// field is deliberately absent from the precomputed approvals.
 type codexHookCommand struct {
 	Type           string `json:"type"`
 	Command        string `json:"command"`

@@ -45756,6 +45756,9 @@ components:
         hooks_browser_login_enabled:
           type: boolean
           description: Whether generated hook plugins may mint per-user keys via the interactive browser login
+        hooks_install_fail_open_enabled:
+          type: boolean
+          description: Whether a hooks binary installation failure lets the hook pass instead of failing closed
         logs_enabled:
           type: boolean
           description: Whether logging is enabled
@@ -45787,6 +45790,7 @@ components:
         - scim_enabled
         - observability_mode_enabled
         - hooks_browser_login_enabled
+        - hooks_install_fail_open_enabled
         - custom_model_keys_enabled
     GetProjectForm:
       type: object
@@ -53373,6 +53377,7 @@ components:
             - scim
             - observability_mode
             - hooks_browser_login
+            - hooks_install_fail_open
             - custom_model_keys
           maxLength: 60
       required:

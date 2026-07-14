@@ -1346,6 +1346,7 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 				MarketplaceName:   "",
 				ObservabilityMode: false,
 				BrowserLogin:      false,
+				InstallFailOpen:   false,
 			}
 			result.ClaudeObservabilityPlugin = conv.PtrEmpty(ClaudeObservabilitySlug(slugCfg))
 			result.CodexObservabilityPlugin = conv.PtrEmpty(CodexObservabilitySlug(slugCfg))
@@ -1904,15 +1905,15 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		candidates = append(candidates, mcpCandidate)
 	}
 
-	// Hooks component: carry when the generator version is unchanged, otherwise
-	// regenerate with a fresh hooks key.
+	// Hooks component: carry when the target version+config match what's
+	// published (including gated orgs pinned to an older version), otherwise
+	// regenerate with a fresh hooks key. The carry is prefix-based so it works
+	// across generator versions with different file layouts — enumerating the
+	// CURRENT generator's paths would fail against an older published layout
+	// and silently regenerate past the rollout gate.
 	carriedHooks := false
 	if !hooksChanged {
-		paths, err := hooksFilePaths(cfg)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "enumerate hooks files").LogError(ctx, s.logger)
-		}
-		carriedHooks = carry(files, paths)
+		carriedHooks = carryHooksSubtree(files, existingFiles, targetHooksConfigJSON, cfg.OrgName)
 	}
 	if !carriedHooks {
 		hooksCandidate, err := s.buildPluginAPIKeyCandidate(auth.APIKeyScopeHooks, "hooks")
@@ -1926,6 +1927,20 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		}
 		maps.Copy(files, hooksFiles)
 		candidates = append(candidates, hooksCandidate)
+		// What lands in the repo is the CURRENT generator's output; persist that
+		// truthfully even when the rollout gate had pinned an older published
+		// version — recording the stale version would make every subsequent
+		// publish repeat this fallback and mint another hooks key. Reaching here
+		// past the gate is only possible when the published subtree is missing
+		// or unreadable, and regenerating is the one way to keep the repo
+		// installable.
+		if targetHooksVersion != hooksGeneratorVersion {
+			s.logger.WarnContext(ctx, "published hooks subtree not carriable; regenerating at current hooks version despite rollout gate",
+				attr.SlogOrganizationID(input.OrganizationID))
+		}
+		targetHooksVersion = hooksGeneratorVersion
+		targetHooksConfigJSON = currentHooksConfigJSON
+		hooksConfigDeferred = false
 	}
 
 	// Shared files (marketplace manifests + README) reference both components but
@@ -1997,6 +2012,38 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	}
 
 	return &publishOutcome{RepoURL: repoURL, Skipped: false, HooksConfigDeferred: hooksConfigDeferred}, nil
+}
+
+// carryHooksSubtree copies the published hooks (observability) subtree
+// verbatim into dst by directory prefix (see hooksSubtreePrefixes). The
+// prefixes derive from the published hooks config's org name — the org may
+// have been renamed since publish — falling back to the current org name when
+// the stored config predates the snapshot. Reports false when any platform's
+// subtree is missing, in which case the caller must regenerate.
+func carryHooksSubtree(dst, existing map[string][]byte, publishedConfig []byte, currentOrgName string) bool {
+	if len(existing) == 0 {
+		return false
+	}
+	orgName := currentOrgName
+	var hc HooksConfig
+	if err := json.Unmarshal(publishedConfig, &hc); err == nil && hc.OrgName != "" {
+		orgName = hc.OrgName
+	}
+	staged := make(map[string][]byte)
+	for _, prefix := range hooksSubtreePrefixes(orgName) {
+		found := false
+		for p, content := range existing {
+			if strings.HasPrefix(p, prefix) {
+				staged[p] = content
+				found = true
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	maps.Copy(dst, staged)
+	return true
 }
 
 // validMarketplaceName matches identifiers Claude Code, Cursor, and Codex
@@ -2552,6 +2599,7 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlu
 		IsDefaultProject:  s.isDefaultProject(ctx, projectID),
 		ObservabilityMode: false,
 		BrowserLogin:      false,
+		InstallFailOpen:   false,
 	}
 	orgName, err := s.repo.GetOrganizationName(ctx, orgID)
 	switch {
@@ -2604,6 +2652,20 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlu
 		)
 	}
 	cfg.BrowserLogin = browserLogin
+	// hooks_install_fail_open is the org-level install-failure policy for the
+	// hooks binary bootstrap. Off (or unreadable), a distribution failure fails
+	// closed — the same posture as every other hook failure in enforcement mode.
+	installFailOpen, err := s.repo.IsOrganizationFeatureEnabled(ctx, repo.IsOrganizationFeatureEnabledParams{
+		OrganizationID: orgID,
+		FeatureName:    string(productfeatures.FeatureHooksInstallFailOpen),
+	})
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to read hooks install-fail-open flag, defaulting to fail closed",
+			attr.SlogOrganizationID(orgID),
+			attr.SlogError(err),
+		)
+	}
+	cfg.InstallFailOpen = installFailOpen
 	return cfg
 }
 

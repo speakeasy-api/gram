@@ -30,8 +30,9 @@ var _ = Service("features", func() {
 			Attribute("scim_enabled", Boolean, "Whether SCIM/directory sync setup is enabled for the organization")
 			Attribute("observability_mode_enabled", Boolean, "Whether observability mode is enabled, making generated hook plugins fully non-blocking")
 			Attribute("hooks_browser_login_enabled", Boolean, "Whether generated hook plugins may mint per-user keys via the interactive browser login")
+			Attribute("hooks_install_fail_open_enabled", Boolean, "Whether a hooks binary installation failure lets the hook pass instead of failing closed")
 			Attribute("custom_model_keys_enabled", Boolean, "Whether the organization can supply its own model provider API keys (BYOK)")
-			Required("logs_enabled", "tool_io_logs_enabled", "session_capture_enabled", "authz_challenge_logging_enabled", "webhooks", "sso_enabled", "scim_enabled", "observability_mode_enabled", "hooks_browser_login_enabled", "custom_model_keys_enabled")
+			Required("logs_enabled", "tool_io_logs_enabled", "session_capture_enabled", "authz_challenge_logging_enabled", "webhooks", "sso_enabled", "scim_enabled", "observability_mode_enabled", "hooks_browser_login_enabled", "hooks_install_fail_open_enabled", "custom_model_keys_enabled")
 		})
 
 		HTTP(func() {
@@ -51,7 +52,7 @@ var _ = Service("features", func() {
 		Payload(func() {
 			Attribute("feature_name", String, "Name of the feature to update", func() {
 				MaxLength(60)
-				Enum("logs", "tool_io_logs", "session_capture", "authz_challenge_logging", "webhooks", "sso", "scim", "observability_mode", "hooks_browser_login", "custom_model_keys")
+				Enum("logs", "tool_io_logs", "session_capture", "authz_challenge_logging", "webhooks", "sso", "scim", "observability_mode", "hooks_browser_login", "hooks_install_fail_open", "custom_model_keys")
 			})
 			Attribute("enabled", Boolean, "Whether the feature should be enabled")
 			Required("feature_name", "enabled")

@@ -6,7 +6,14 @@ import { Type } from "@/components/ui/type";
 import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
 import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet";
 import { Stack } from "@speakeasy-api/moonshine";
-import { Eye, FileText, LogIn, Monitor, ShieldCheck } from "lucide-react";
+import {
+  Eye,
+  FileText,
+  LogIn,
+  Monitor,
+  ShieldCheck,
+  ShieldOff,
+} from "lucide-react";
 import { useState } from "react";
 import { AIIntegrationsSection } from "./AIIntegrationsSection";
 import { OtelForwardingSection } from "./OtelForwardingSection";
@@ -44,6 +51,8 @@ function OrgLogsInner() {
   const [hooksBrowserLoginEnabled, setHooksBrowserLoginEnabled] = useState<
     boolean | null
   >(null);
+  const [hooksInstallFailOpenEnabled, setHooksInstallFailOpenEnabled] =
+    useState<boolean | null>(null);
 
   const effectiveLogsEnabled =
     logsEnabled ?? featuresData?.logsEnabled ?? false;
@@ -55,6 +64,10 @@ function OrgLogsInner() {
     observabilityModeEnabled ?? featuresData?.observabilityModeEnabled ?? false;
   const effectiveHooksBrowserLoginEnabled =
     hooksBrowserLoginEnabled ?? featuresData?.hooksBrowserLoginEnabled ?? false;
+  const effectiveHooksInstallFailOpenEnabled =
+    hooksInstallFailOpenEnabled ??
+    featuresData?.hooksInstallFailOpenEnabled ??
+    false;
 
   const { mutate: setLogsFeature, status: logsMutationStatus } =
     useFeaturesSetMutation({
@@ -71,6 +84,8 @@ function OrgLogsInner() {
           setObservabilityModeEnabled(enabled);
         } else if (featureName === FeatureName.HooksBrowserLogin) {
           setHooksBrowserLoginEnabled(enabled);
+        } else if (featureName === FeatureName.HooksInstallFailOpen) {
+          setHooksInstallFailOpenEnabled(enabled);
         }
       },
       onError: (error) => {
@@ -144,6 +159,17 @@ function OrgLogsInner() {
       request: {
         setProductFeatureRequestBody: {
           featureName: FeatureName.HooksBrowserLogin,
+          enabled,
+        },
+      },
+    });
+  };
+
+  const handleSetHooksInstallFailOpen = (enabled: boolean) => {
+    setLogsFeature({
+      request: {
+        setProductFeatureRequestBody: {
+          featureName: FeatureName.HooksInstallFailOpen,
           enabled,
         },
       },
@@ -306,6 +332,38 @@ function OrgLogsInner() {
                   onCheckedChange={handleSetHooksBrowserLogin}
                   disabled={isMutatingLogs}
                   aria-label="Enable hook browser sign-in"
+                />
+              </RequireScope>
+            )}
+          </Stack>
+
+          <div className="border-border border-t" />
+
+          <Stack direction="horizontal" justify="space-between" align="center">
+            <Stack gap={1}>
+              <Stack direction="horizontal" align="center" gap={2}>
+                <ShieldOff className="text-muted-foreground h-4 w-4" />
+                <Type variant="body" className="font-medium">
+                  Allow on Install Failure
+                </Type>
+              </Stack>
+              <Type
+                variant="body"
+                className="text-muted-foreground ml-6 text-sm"
+              >
+                If a developer machine can't download the hooks binary (blocked
+                network, missing tools), let the action continue instead of
+                blocking it. Installed hooks and checksum verification are
+                unaffected.
+              </Type>
+            </Stack>
+            {!featuresLoading && (
+              <RequireScope scope="org:admin" level="component">
+                <Switch
+                  checked={effectiveHooksInstallFailOpenEnabled}
+                  onCheckedChange={handleSetHooksInstallFailOpen}
+                  disabled={isMutatingLogs}
+                  aria-label="Allow actions when hooks binary install fails"
                 />
               </RequireScope>
             )}
