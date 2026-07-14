@@ -2,10 +2,26 @@
 -- (ported late: PR #4062 added only the Atlas version, leaving the two
 -- migration directories drifted). The timestamp is later than the source
 -- because golang-migrate only applies versions above a database's current
--- one. SQL is copied verbatim with the narrative comments stripped (some
--- contained semicolons, which break golang-migrate's naive statement
--- splitter). See the Atlas file for the full rationale, including why the
--- MV is created after the backfill and why the windows use static dates.
+-- one. SQL is copied from the Atlas file with the narrative comments
+-- stripped (some contained semicolons, which break golang-migrate's naive
+-- statement splitter) and one behavioral deviation described below. See the
+-- Atlas file for the full rationale, including why the MV is created after
+-- the backfill.
+--
+-- Deviation: the split between the two backfill passes is
+-- toStartOfDay(now('UTC')) rather than the static 2026-07-08 literal. Rows
+-- ingested after the final pass's snapshot and before the MV creation are
+-- never materialized, so the loss window is roughly that pass's scan
+-- duration. The static split kept the Atlas run's final pass small because
+-- it sat just before the production deploy date, but this file runs
+-- whenever a local database catches up -- possibly months later -- and a
+-- stale split would make the final MV-off pass scan everything since July,
+-- widening the window in which live local ingestion silently vanishes from
+-- the summary. The day-aligned dynamic split caps the final pass at one day
+-- of data however late the migration is applied. If UTC midnight passes
+-- between the two INSERTs the day between their split evaluations is
+-- skipped -- a bounded undercount, which the Atlas rationale calls out as
+-- the safe failure direction for a billing record.
 CREATE TABLE `tum_breakdown_summaries` (
     `gram_project_id` UUID,
     `chat_id` String,
@@ -40,7 +56,7 @@ FROM telemetry_logs
 WHERE chat_id != ''
   AND toString(attributes.gen_ai.usage.total_tokens) != ''
   AND fromUnixTimestamp64Nano(time_unix_nano, 'UTC') >= toDateTime('2026-05-25 00:00:00', 'UTC')
-  AND fromUnixTimestamp64Nano(time_unix_nano, 'UTC') < toDateTime('2026-07-08 00:00:00', 'UTC')
+  AND fromUnixTimestamp64Nano(time_unix_nano, 'UTC') < toStartOfDay(now('UTC'))
 GROUP BY gram_project_id, chat_id, time_bucket, hook_source, model, user_email, division_name, roles;
 INSERT INTO `tum_breakdown_summaries` (gram_project_id, chat_id, time_bucket, hook_source, model, user_email, division_name, roles, input_tokens, output_tokens, total_tokens)
 SELECT
@@ -58,7 +74,7 @@ SELECT
 FROM telemetry_logs
 WHERE chat_id != ''
   AND toString(attributes.gen_ai.usage.total_tokens) != ''
-  AND fromUnixTimestamp64Nano(time_unix_nano, 'UTC') >= toDateTime('2026-07-08 00:00:00', 'UTC')
+  AND fromUnixTimestamp64Nano(time_unix_nano, 'UTC') >= toStartOfDay(now('UTC'))
 GROUP BY gram_project_id, chat_id, time_bucket, hook_source, model, user_email, division_name, roles;
 CREATE MATERIALIZED VIEW `tum_breakdown_summaries_mv` TO `tum_breakdown_summaries` AS
 SELECT
