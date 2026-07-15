@@ -38,6 +38,7 @@ WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
 UPDATE tunneled_mcp_servers
 SET
     name = @name,
+    allow_public = COALESCE(sqlc.narg('allow_public'), allow_public),
     updated_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;

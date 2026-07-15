@@ -254,19 +254,26 @@ const updateServer = `-- name: UpdateServer :one
 UPDATE tunneled_mcp_servers
 SET
     name = $1,
+    allow_public = COALESCE($2, allow_public),
     updated_at = clock_timestamp()
-WHERE id = $2 AND project_id = $3 AND deleted IS FALSE
+WHERE id = $3 AND project_id = $4 AND deleted IS FALSE
 RETURNING id, project_id, name, key_hash, key_prefix, status, allow_public, agent_version, last_seen_at, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateServerParams struct {
-	Name      string
-	ID        uuid.UUID
-	ProjectID uuid.UUID
+	Name        string
+	AllowPublic pgtype.Bool
+	ID          uuid.UUID
+	ProjectID   uuid.UUID
 }
 
 func (q *Queries) UpdateServer(ctx context.Context, arg UpdateServerParams) (TunneledMcpServer, error) {
-	row := q.db.QueryRow(ctx, updateServer, arg.Name, arg.ID, arg.ProjectID)
+	row := q.db.QueryRow(ctx, updateServer,
+		arg.Name,
+		arg.AllowPublic,
+		arg.ID,
+		arg.ProjectID,
+	)
 	var i TunneledMcpServer
 	err := row.Scan(
 		&i.ID,

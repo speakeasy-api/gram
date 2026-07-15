@@ -22,6 +22,9 @@ type TunneledMcpServer struct {
 	Status TunneledMcpLifecycleStatus
 	// Derived connection status
 	ConnectionStatus TunneledMcpConnectionStatus
+	// Whether the owner has consented to serving this source through a public,
+	// anonymous MCP endpoint
+	AllowPublic bool
 	// Most recent agent version reported by the tunnel
 	AgentVersion *string
 	// Most recent persisted heartbeat timestamp

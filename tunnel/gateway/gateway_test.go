@@ -131,9 +131,9 @@ func TestRegistryBeginForwardRoundRobinsWithoutConsumerSession(t *testing.T) {
 	t.Cleanup(removeA)
 	t.Cleanup(removeB)
 
-	first, failure := reg.beginForward("tunnel-1", "", time.Now().UTC(), 0)
+	first, failure := reg.beginForward("tunnel-1", "", "", time.Now().UTC(), 0)
 	require.Equal(t, forwardReserved, failure)
-	second, failure := reg.beginForward("tunnel-1", "", time.Now().UTC(), 0)
+	second, failure := reg.beginForward("tunnel-1", "", "", time.Now().UTC(), 0)
 	require.Equal(t, forwardReserved, failure)
 
 	require.NotEqual(t, first.id, second.id)
@@ -148,10 +148,10 @@ func TestRegistryBeginForwardSticksStableConsumerSession(t *testing.T) {
 	t.Cleanup(removeA)
 	t.Cleanup(removeB)
 
-	first, failure := reg.beginForward("tunnel-1", "consumer-1", time.Now().UTC(), 0)
+	first, failure := reg.beginForward("tunnel-1", "consumer-1", "", time.Now().UTC(), 0)
 	require.Equal(t, forwardReserved, failure)
 	for range 5 {
-		entry, failure := reg.beginForward("tunnel-1", "consumer-1", time.Now().UTC(), 0)
+		entry, failure := reg.beginForward("tunnel-1", "consumer-1", "", time.Now().UTC(), 0)
 		require.Equal(t, forwardReserved, failure)
 		require.Equal(t, first.id, entry.id)
 	}
@@ -166,9 +166,9 @@ func TestRegistryBeginForwardUsesNextRankedEligibleSession(t *testing.T) {
 	t.Cleanup(removeA)
 	t.Cleanup(removeB)
 
-	first, failure := reg.beginForward("tunnel-1", "consumer-1", time.Now().UTC(), 1)
+	first, failure := reg.beginForward("tunnel-1", "consumer-1", "", time.Now().UTC(), 1)
 	require.Equal(t, forwardReserved, failure)
-	second, failure := reg.beginForward("tunnel-1", "consumer-1", time.Now().UTC(), 1)
+	second, failure := reg.beginForward("tunnel-1", "consumer-1", "", time.Now().UTC(), 1)
 	require.Equal(t, forwardReserved, failure)
 
 	require.NotEqual(t, first.id, second.id)
@@ -181,21 +181,21 @@ func TestRegistryBeginForwardUsesNextRankedEligibleSession(t *testing.T) {
 func TestRegistryBeginForwardDistinguishesBusyFromNoSession(t *testing.T) {
 	reg := newRegistry()
 
-	_, failure := reg.beginForward("tunnel-1", "", time.Now().UTC(), 1)
+	_, failure := reg.beginForward("tunnel-1", "", "", time.Now().UTC(), 1)
 	require.Equal(t, forwardNoSession, failure)
 
 	session := newYamuxSession(t)
 	remove := reg.add("tunnel-1", "session-a", session, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
 	t.Cleanup(remove)
 
-	entry, failure := reg.beginForward("tunnel-1", "", time.Now().UTC(), 1)
+	entry, failure := reg.beginForward("tunnel-1", "", "", time.Now().UTC(), 1)
 	require.Equal(t, forwardReserved, failure)
 
-	_, failure = reg.beginForward("tunnel-1", "", time.Now().UTC(), 1)
+	_, failure = reg.beginForward("tunnel-1", "", "", time.Now().UTC(), 1)
 	require.Equal(t, forwardBusy, failure)
 
 	reg.finishForward(entry, time.Now().UTC())
-	_, failure = reg.beginForward("tunnel-1", "", time.Now().UTC(), 1)
+	_, failure = reg.beginForward("tunnel-1", "", "", time.Now().UTC(), 1)
 	require.Equal(t, forwardReserved, failure)
 }
 
@@ -208,7 +208,7 @@ func TestForwardHandlerReportsTunnelBusyAtCap(t *testing.T) {
 	t.Cleanup(remove)
 
 	// Occupy the single substream slot so the next forward hits the cap.
-	_, failure := gw.reg.beginForward("tunnel-1", "", time.Now().UTC(), 1)
+	_, failure := gw.reg.beginForward("tunnel-1", "", "", time.Now().UTC(), 1)
 	require.Equal(t, forwardReserved, failure)
 
 	rec := httptest.NewRecorder()
@@ -333,4 +333,85 @@ func newYamuxSession(t *testing.T) *yamux.Session {
 		require.NoError(t, server.Close())
 	})
 	return client
+}
+
+// TestRegistryBeginForwardExactSessionHitsOnlyThatSession: an exact-target
+// forward must land on the named agent session every time, regardless of
+// round-robin or consumer-session rendezvous state.
+func TestRegistryBeginForwardExactSessionHitsOnlyThatSession(t *testing.T) {
+	reg := newRegistry()
+	sessionA := newYamuxSession(t)
+	sessionB := newYamuxSession(t)
+	removeA := reg.add("tunnel-1", "session-a", sessionA, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
+	removeB := reg.add("tunnel-1", "session-b", sessionB, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-b", Metadata: map[string]string{}})
+	t.Cleanup(removeA)
+	t.Cleanup(removeB)
+
+	for range 5 {
+		entry, failure := reg.beginForward("tunnel-1", "", "session-b", time.Now().UTC(), 0)
+		require.Equal(t, forwardReserved, failure)
+		require.Equal(t, "session-b", entry.id)
+	}
+}
+
+// TestRegistryBeginForwardExactSessionMissingIsNoSession: when the exact
+// target agent session is gone, the forward must fail with no-live-session
+// rather than spill to a live sibling — the sibling's backend does not know
+// the MCP session pinned to the dead agent.
+func TestRegistryBeginForwardExactSessionMissingIsNoSession(t *testing.T) {
+	reg := newRegistry()
+	sessionA := newYamuxSession(t)
+	removeA := reg.add("tunnel-1", "session-a", sessionA, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
+	t.Cleanup(removeA)
+
+	_, failure := reg.beginForward("tunnel-1", "", "session-gone", time.Now().UTC(), 0)
+	require.Equal(t, forwardNoSession, failure)
+}
+
+// TestRegistryBeginForwardExactSessionAtCapIsBusy: an exact target at its
+// substream cap is busy (healthy, do not unpublish), not no-session.
+func TestRegistryBeginForwardExactSessionAtCapIsBusy(t *testing.T) {
+	reg := newRegistry()
+	sessionA := newYamuxSession(t)
+	removeA := reg.add("tunnel-1", "session-a", sessionA, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
+	t.Cleanup(removeA)
+
+	entry, failure := reg.beginForward("tunnel-1", "", "session-a", time.Now().UTC(), 1)
+	require.Equal(t, forwardReserved, failure)
+	require.Equal(t, "session-a", entry.id)
+
+	_, failure = reg.beginForward("tunnel-1", "", "session-a", time.Now().UTC(), 1)
+	require.Equal(t, forwardBusy, failure)
+}
+
+// TestForwardHandlerReportsAgentSessionAndStripsExactHeader: the gateway must
+// echo the served agent session id in the response header and must not leak
+// the exact-target request header (or any internal tunnel header) to the
+// agent.
+func TestForwardHandlerReportsAgentSessionAndStripsExactHeader(t *testing.T) {
+	t.Parallel()
+
+	gw := newForwardTestGateway(t, Config{ForwardToken: "s3cret"})
+	session := newYamuxSession(t)
+	var forwarded http.Header
+	captureProxy := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		forwarded = r.Header.Clone()
+		w.WriteHeader(http.StatusOK)
+	})
+	remove := gw.reg.add("tunnel-1", "session-a", session, captureProxy, route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
+	t.Cleanup(remove)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0"}`))
+	req.Header.Set(wire.HeaderTunnelID, "tunnel-1")
+	req.Header.Set(wire.HeaderTunnelForwardToken, "s3cret")
+	req.Header.Set(wire.HeaderTunnelAgentSession, "session-a")
+
+	gw.ForwardHandler().ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "session-a", rec.Header().Get(wire.HeaderTunnelAgentSession))
+	require.Empty(t, forwarded.Get(wire.HeaderTunnelAgentSession))
+	require.Empty(t, forwarded.Get(wire.HeaderTunnelID))
+	require.Empty(t, forwarded.Get(wire.HeaderTunnelForwardToken))
 }
