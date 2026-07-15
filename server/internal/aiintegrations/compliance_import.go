@@ -46,9 +46,9 @@ const (
 type discoveredActivity struct {
 	activity anthropicapi.Activity
 	// activitiesCursor is set on the final importable activity of an
-	// activities page: once that activity's messages are durably written,
-	// every activity up to the page's pagination token is fully imported
-	// and the token may be persisted as the global activities cursor.
+	// activities page during forward walks: once that activity's messages
+	// are durably written, the whole page is fully imported and its first_id
+	// token may be persisted as the global activities cursor.
 	activitiesCursor string
 	// cursorOnly marks a sentinel for a page with no importable activities.
 	// It carries just the page's pagination token; the import stage forwards
@@ -94,13 +94,14 @@ func NewComplianceImportService(logger *slog.Logger, db *pgxpool.Pool, guardianP
 }
 
 // SyncAnthropicCompliance imports new compliance activity and chat messages.
-// It returns the activities pagination cursor reached by this run; callers
-// must persist it on success so the next run resumes after the last imported
-// activity instead of re-discovering by time window. The cursor is also
-// persisted incrementally during the run — after each activities page whose
-// chats are fully written — so retries of a failed or timed-out run resume
-// from the last completed page rather than repaying the whole discovery
-// cost.
+// It returns the activities feed position reached by this run: the newest
+// first_id token seen. Callers must persist it on success so the next run
+// walks forward (before_id) from that position — the feed is sorted newest
+// first, so this is the only direction that ever discovers new activity.
+// During forward walks the cursor is also persisted incrementally — after
+// each activities page whose chats are fully written — so retries of a
+// failed or timed-out run resume from the last completed page rather than
+// repaying the whole discovery cost.
 //
 // The sync is a three-stage pipeline: a producer goroutine streams chat
 // activities from the feed page by page, a fetch goroutine resolves each chat
@@ -248,24 +249,70 @@ func (s *ComplianceImportService) writeMessagePages(ctx context.Context, cfg Con
 	return nil
 }
 
-// streamChatActivities pages through the activities feed starting after the
-// persisted cursor and sends chat activities to out as they are discovered.
-// It returns the cursor reached by this run: the verbatim last_id pagination
-// token from the final page, not an id derived from imported rows.
+// streamChatActivities discovers importable chat activities and sends them
+// to out. The activities feed is always sorted newest first, so the walk
+// direction depends on cursor state:
 //
-// The final importable activity of each page carries the page's pagination
-// token so the writer stage can persist the global cursor once that
-// activity's messages are durably written.
+//   - First sync (no cursor): a bounded backfill pages OLDER via after_id
+//     down to the watermark window. It returns the newest edge seen so all
+//     later syncs walk forward from there.
+//   - Every later sync: pages NEWER via before_id from the stored cursor
+//     and returns the newest first_id reached.
+//
+// During forward walks the final importable activity of each page carries
+// the page's first_id so the writer stage persists the global cursor once
+// the page is durably written. Backfill pages carry no markers: an
+// interrupted first sync restarts its bounded window instead of risking a
+// forward resume that would skip the window's unimported older tail.
 func (s *ComplianceImportService) streamChatActivities(ctx context.Context, client *anthropicapi.Client, cfg Config, out chan<- discoveredActivity, progress *ComplianceSyncProgress) (string, error) {
-	// First sync has no cursor yet; bound the initial backfill with a time
-	// window around the watermark. Every later sync resumes from the cursor.
-	createdAtGTE := time.Time{}
 	if cfg.LastCursor == "" {
-		createdAtGTE = cfg.PollWatermarkAt.Add(-time.Hour * 24)
+		return s.backfillChatActivities(ctx, client, cfg, out, progress)
 	}
 
-	afterID := cfg.LastCursor
+	beforeID := cfg.LastCursor
 	nextCursor := cfg.LastCursor
+	for pageNum := 1; ; pageNum++ {
+		s.heartbeat(ctx, "activity_discovery", pageNum)
+		page, err := client.ListActivities(ctx, anthropicapi.ListActivitiesParams{
+			ActivityTypes: []string{
+				anthropicComplianceActivityCreated,
+				anthropicComplianceActivityUpdated,
+			},
+			OrganizationIDs: []string{*cfg.ExternalOrganizationID},
+			CreatedAtGTE:    time.Time{},
+			AfterID:         "",
+			BeforeID:        beforeID,
+			Limit:           anthropicComplianceActivityPageLimit,
+		})
+		if err != nil {
+			return nextCursor, oops.E(oops.CodeUnexpected, err, "list anthropic compliance activities")
+		}
+		progress.ActivityPages++
+
+		if err := s.emitPageActivities(ctx, page, page.FirstID, out, progress); err != nil {
+			return nextCursor, err
+		}
+
+		if page.FirstID != "" {
+			nextCursor = page.FirstID
+		}
+
+		if !page.HasMore || page.FirstID == "" {
+			return nextCursor, nil
+		}
+		beforeID = page.FirstID
+	}
+}
+
+// backfillChatActivities bootstraps a config that has no cursor yet by
+// paging OLDER via after_id, bounded to a time window around the watermark.
+// It returns the newest edge of the feed seen — the first page's first_id —
+// so the next sync walks forward from there with before_id.
+func (s *ComplianceImportService) backfillChatActivities(ctx context.Context, client *anthropicapi.Client, cfg Config, out chan<- discoveredActivity, progress *ComplianceSyncProgress) (string, error) {
+	createdAtGTE := cfg.PollWatermarkAt.Add(-time.Hour * 24)
+
+	afterID := ""
+	nextCursor := ""
 	for pageNum := 1; ; pageNum++ {
 		s.heartbeat(ctx, "activity_discovery", pageNum)
 		page, err := client.ListActivities(ctx, anthropicapi.ListActivitiesParams{
@@ -276,6 +323,7 @@ func (s *ComplianceImportService) streamChatActivities(ctx context.Context, clie
 			OrganizationIDs: []string{*cfg.ExternalOrganizationID},
 			CreatedAtGTE:    createdAtGTE,
 			AfterID:         afterID,
+			BeforeID:        "",
 			Limit:           anthropicComplianceActivityPageLimit,
 		})
 		if err != nil {
@@ -283,43 +331,18 @@ func (s *ComplianceImportService) streamChatActivities(ctx context.Context, clie
 		}
 		progress.ActivityPages++
 
-		importable := make([]anthropicapi.Activity, 0, len(page.Data))
-		for _, activity := range page.Data {
-			if activity.Actor.Type != "user_actor" || activity.ClaudeChatID == "" {
-				continue
-			}
-			importable = append(importable, activity)
+		// The feed is newest first, so the first page's first_id is the
+		// newest activity this run can see; it becomes the forward-walk
+		// cursor once the whole window is imported.
+		if pageNum == 1 && page.FirstID != "" {
+			nextCursor = page.FirstID
 		}
 
-		for i, activity := range importable {
-			discovered := discoveredActivity{activity: activity, activitiesCursor: "", cursorOnly: false}
-			if i == len(importable)-1 && page.LastID != "" {
-				discovered.activitiesCursor = page.LastID
-			}
-			select {
-			case <-ctx.Done():
-				return nextCursor, ctx.Err() //nolint:wrapcheck // Preserve context cancellation sentinel errors for callers.
-			case out <- discovered:
-				progress.ChatActivities++
-			}
-		}
-
-		if len(importable) == 0 && page.LastID != "" {
-			// A page with no importable activities still advances the feed.
-			// Emit a cursor-only sentinel so the writer persists the page's
-			// token once all previously discovered work is durably written;
-			// otherwise retries would re-fetch fully-filtered pages forever
-			// on feeds dominated by non-user activities.
-			var none anthropicapi.Activity
-			select {
-			case <-ctx.Done():
-				return nextCursor, ctx.Err() //nolint:wrapcheck // Preserve context cancellation sentinel errors for callers.
-			case out <- discoveredActivity{activity: none, activitiesCursor: page.LastID, cursorOnly: true}:
-			}
-		}
-
-		if page.LastID != "" {
-			nextCursor = page.LastID
+		// No checkpoint markers during a backfill: the walk moves toward
+		// older activities, so a mid-window token would make a resumed run
+		// skip the window's remaining older activities entirely.
+		if err := s.emitPageActivities(ctx, page, "", out, progress); err != nil {
+			return nextCursor, err
 		}
 
 		if !page.HasMore || page.LastID == "" {
@@ -327,6 +350,44 @@ func (s *ComplianceImportService) streamChatActivities(ctx context.Context, clie
 		}
 		afterID = page.LastID
 	}
+}
+
+// emitPageActivities filters one activities page down to importable chat
+// activities and sends them to out. When pageCursor is set, the final
+// importable activity carries it as the page's durable checkpoint marker —
+// or a cursor-only sentinel carries it when the whole page was filtered
+// out, so fully-filtered pages still advance the persisted cursor.
+func (s *ComplianceImportService) emitPageActivities(ctx context.Context, page *anthropicapi.ActivitiesPage, pageCursor string, out chan<- discoveredActivity, progress *ComplianceSyncProgress) error {
+	importable := make([]anthropicapi.Activity, 0, len(page.Data))
+	for _, activity := range page.Data {
+		if activity.Actor.Type != "user_actor" || activity.ClaudeChatID == "" {
+			continue
+		}
+		importable = append(importable, activity)
+	}
+
+	for i, activity := range importable {
+		discovered := discoveredActivity{activity: activity, activitiesCursor: "", cursorOnly: false}
+		if i == len(importable)-1 {
+			discovered.activitiesCursor = pageCursor
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err() //nolint:wrapcheck // Preserve context cancellation sentinel errors for callers.
+		case out <- discovered:
+			progress.ChatActivities++
+		}
+	}
+
+	if len(importable) == 0 && pageCursor != "" {
+		var none anthropicapi.Activity
+		select {
+		case <-ctx.Done():
+			return ctx.Err() //nolint:wrapcheck // Preserve context cancellation sentinel errors for callers.
+		case out <- discoveredActivity{activity: none, activitiesCursor: pageCursor, cursorOnly: true}:
+		}
+	}
+	return nil
 }
 
 // upsertActivityChat resolves the chat row for an activity and returns its
