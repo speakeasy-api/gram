@@ -6,6 +6,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
@@ -26,6 +27,8 @@ func TestProductFeaturesService_SkillsDefaultsOffAndEnables(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestProductFeaturesService(t)
+	organizationID := activeOrganizationID(t, ctx)
+	seedOrganization(t, ctx, ti.conn, organizationID)
 	result, err := ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{SessionToken: nil})
 	require.NoError(t, err)
 	require.False(t, result.SkillsEnabled)
@@ -161,11 +164,115 @@ func TestProductFeaturesService_SkillsBeforeRBACPatchesRetainedSystemRoleGrants(
 	require.Len(t, grants, len(authz.SystemRoleGrants[authz.SystemRoleAdmin])+len(authz.SystemRoleGrants[authz.SystemRoleMember])+2)
 }
 
+func TestProductFeaturesService_ConcurrentSkillsAndRBACEnablePreservesInvariant(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestProductFeaturesService(t)
+	organizationID := activeOrganizationID(t, ctx)
+	seedOrganization(t, ctx, ti.conn, organizationID)
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	client := productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), ti.conn, redisClient)
+
+	start := make(chan struct{})
+	errs := make(chan error, 2)
+	go func() {
+		<-start
+		errs <- ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
+			FeatureName: string(productfeatures.FeatureSkills),
+			Enabled:     true,
+		})
+	}()
+	go func() {
+		<-start
+		errs <- client.EnableRBAC(ctx, organizationID)
+	}()
+	close(start)
+
+	require.NoError(t, <-errs)
+	require.NoError(t, <-errs)
+
+	features := featurerepo.New(ti.conn)
+	for _, feature := range []productfeatures.Feature{productfeatures.FeatureSkills, productfeatures.FeatureRBAC} {
+		enabled, err := features.IsFeatureEnabled(ctx, featurerepo.IsFeatureEnabledParams{
+			OrganizationID: organizationID,
+			FeatureName:    string(feature),
+		})
+		require.NoError(t, err)
+		require.True(t, enabled)
+	}
+
+	q := accessrepo.New(ti.conn)
+	for _, roleSlug := range []string{authz.SystemRoleAdmin, authz.SystemRoleMember} {
+		principal := systemRolePrincipal(t, ctx, q, roleSlug)
+		requireSystemRoleDefaults(t, ctx, q, organizationID, principal, authz.SystemRoleGrants[roleSlug])
+	}
+}
+
+func TestEnableRBACTx_ReprovisionsSkillsOnlyOnOffToOnTransition(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestProductFeaturesService(t)
+	organizationID := activeOrganizationID(t, ctx)
+	seedOrganization(t, ctx, ti.conn, organizationID)
+
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, productfeatures.EnableRBACTx(ctx, tx, organizationID))
+	require.NoError(t, tx.Commit(ctx))
+	require.NoError(t, ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
+		FeatureName: string(productfeatures.FeatureSkills),
+		Enabled:     true,
+	}))
+
+	q := accessrepo.New(ti.conn)
+	admin := systemRolePrincipal(t, ctx, q, authz.SystemRoleAdmin)
+	member := systemRolePrincipal(t, ctx, q, authz.SystemRoleMember)
+	deleteGrant(t, ctx, q, organizationID, member, authz.ScopeSkillRead, authz.WildcardResource)
+	upsertGrant(t, ctx, q, organizationID, admin, authz.ScopeRiskPolicyEvaluate, "policy-retained")
+	upsertGrant(t, ctx, q, organizationID, member, authz.ScopeSkillBlockedRead, "project-excluded")
+
+	recurringTx := testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, productfeatures.EnableRBACTx(ctx, recurringTx, organizationID))
+	require.NoError(t, recurringTx.Commit(ctx))
+	grants := organizationGrantKeys(t, ctx, q, organizationID)
+	require.Zero(t, grants[grantKey(member, authz.ScopeSkillRead, authz.WildcardResource)])
+	require.Equal(t, 1, grants[grantKey(admin, authz.ScopeRiskPolicyEvaluate, "policy-retained")])
+	require.Equal(t, 1, grants[grantKey(member, authz.ScopeSkillBlockedRead, "project-excluded")])
+
+	_, err := featurerepo.New(ti.conn).DeleteFeature(ctx, featurerepo.DeleteFeatureParams{
+		OrganizationID: organizationID,
+		FeatureName:    string(productfeatures.FeatureRBAC),
+	})
+	require.NoError(t, err)
+	reenableTx := testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, productfeatures.EnableRBACTx(ctx, reenableTx, organizationID))
+	require.NoError(t, reenableTx.Commit(ctx))
+
+	grants = organizationGrantKeys(t, ctx, q, organizationID)
+	require.Equal(t, 1, grants[grantKey(member, authz.ScopeSkillRead, authz.WildcardResource)])
+	require.Equal(t, 1, grants[grantKey(admin, authz.ScopeRiskPolicyEvaluate, "policy-retained")])
+	require.Equal(t, 1, grants[grantKey(member, authz.ScopeSkillBlockedRead, "project-excluded")])
+}
+
+func TestProductFeatureEnableTx_RequiresExistingOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestProductFeaturesService(t)
+	skillsTx := testenv.BeginTx(t, ctx, ti.conn)
+	err := productfeatures.EnableSkillsTx(ctx, skillsTx, "org_missing_skills_lock")
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+
+	rbacTx := testenv.BeginTx(t, ctx, ti.conn)
+	err = productfeatures.EnableRBACTx(ctx, rbacTx, "org_missing_rbac_lock")
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+}
+
 func TestEnableSkillsTx_RollsBackWithCallerTransaction(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestProductFeaturesService(t)
 	organizationID := activeOrganizationID(t, ctx)
+	seedOrganization(t, ctx, ti.conn, organizationID)
 	tx := testenv.BeginTx(t, ctx, ti.conn)
 
 	require.NoError(t, productfeatures.EnableSkillsTx(ctx, tx, organizationID))

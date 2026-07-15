@@ -4,7 +4,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import CLIs from "./CLIs";
 
 const testState = vi.hoisted(() => ({
-  productFeatureOptions: undefined as { staleTime?: number } | undefined,
+  productFeatureOptions: undefined as
+    | { staleTime?: number; throwOnError?: boolean }
+    | undefined,
   projectId: "project_a",
   skillsEnabled: false,
 }));
@@ -17,7 +19,7 @@ vi.mock("@gram/client/react-query/productFeatures.js", () => ({
   useProductFeatures: (
     _request: unknown,
     _security: unknown,
-    options: { staleTime?: number } | undefined,
+    options: { staleTime?: number; throwOnError?: boolean } | undefined,
   ) => {
     testState.productFeatureOptions = options;
     return { data: { skillsEnabled: testState.skillsEnabled } };
@@ -108,6 +110,7 @@ describe("CLIs", () => {
       screen.getByTestId("scope-gate").getAttribute("data-resource-id"),
     ).toBe("project_a");
     expect(testState.productFeatureOptions?.staleTime).toBe(30_000);
+    expect(testState.productFeatureOptions?.throwOnError).toBe(false);
     expect(screen.queryByText("Coming Soon")).toBeNull();
     expect(screen.getByText("No skills yet")).toBeTruthy();
   });

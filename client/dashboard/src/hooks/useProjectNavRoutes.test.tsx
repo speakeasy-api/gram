@@ -4,7 +4,9 @@ import type { AppRoute } from "@/routes";
 import { useProjectNavRoutes } from "./useProjectNavRoutes";
 
 const testState = vi.hoisted(() => ({
-  productFeatureOptions: undefined as { staleTime?: number } | undefined,
+  productFeatureOptions: undefined as
+    | { staleTime?: number; throwOnError?: boolean }
+    | undefined,
   projectId: "project_a",
   skillsEnabled: false,
 }));
@@ -66,7 +68,7 @@ vi.mock("@gram/client/react-query/productFeatures.js", () => ({
   useProductFeatures: (
     _request: unknown,
     _security: unknown,
-    options: { staleTime?: number } | undefined,
+    options: { staleTime?: number; throwOnError?: boolean } | undefined,
   ) => {
     testState.productFeatureOptions = options;
     return { data: { skillsEnabled: testState.skillsEnabled } };
@@ -102,5 +104,6 @@ describe("useProjectNavRoutes", () => {
     expect(skills?.scope).toEqual(["skill:read"]);
     expect(skills?.resourceId).toBe("project_a");
     expect(testState.productFeatureOptions?.staleTime).toBe(30_000);
+    expect(testState.productFeatureOptions?.throwOnError).toBe(false);
   });
 });
