@@ -1,7 +1,8 @@
 import { CodeBlock, type CodeBlockSlot } from "@/components/code";
+import { McpSidebarInfoLabel } from "@/components/mcp-sidebar-nav-shell";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
 import { cn, tunnelGatewayURL } from "@/lib/utils";
 import { Badge } from "@speakeasy-api/moonshine";
@@ -17,6 +18,8 @@ const MCP_URL_SENTINEL = "__SLOT_mcpUrl__";
 const SERVICE_VERSION_SENTINEL = "__SLOT_serviceVersion__";
 
 type SetupMode = "existing" | "new";
+
+type Platform = "kubernetes" | "docker" | "cli";
 
 type SnippetTab = {
   value: string;
@@ -45,6 +48,7 @@ export function TunneledMcpSetupTabs({
   serverName?: string;
 }): JSX.Element {
   const [mode, setMode] = useState<SetupMode>("existing");
+  const [platform, setPlatform] = useState<Platform>("kubernetes");
   const [mcpUrlDraft, setMcpUrlDraft] = useState("");
   const [serviceVersionDraft, setServiceVersionDraft] = useState("");
 
@@ -58,9 +62,17 @@ export function TunneledMcpSetupTabs({
 
   const snippetTabs =
     mode === "existing" ? existingServerTabs(ctx) : newServerTabs(ctx);
+  const activeSnippet =
+    snippetTabs.find((tab) => tab.value === platform) ?? snippetTabs[0]!;
 
   const handleModeChange = (value: string) => {
     if (value === "existing" || value === "new") setMode(value);
+  };
+
+  const handlePlatformChange = (value: string) => {
+    if (value === "kubernetes" || value === "docker" || value === "cli") {
+      setPlatform(value);
+    }
   };
 
   return (
@@ -82,32 +94,39 @@ export function TunneledMcpSetupTabs({
       <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">
         <div className="bg-card border-border flex flex-col gap-3 rounded-lg border px-4 py-3 shadow-md lg:sticky lg:top-6 dark:bg-neutral-950">
           <Type className="font-semibold">Tunnel config</Type>
-          <Tabs value={mode} onValueChange={handleModeChange}>
-            <TabsList className="w-full">
-              <TabsTrigger value="existing">Existing server</TabsTrigger>
-              <TabsTrigger value="new">New server</TabsTrigger>
-            </TabsList>
-          </Tabs>
-          {mode === "existing" ? (
-            <>
-              <Type muted small>
-                Point the tunnel agent at an MCP server you already run. Values
-                are templated into the setup snippets.
-              </Type>
-              <SnippetField
-                id="tunnel-config-mcp-url"
-                label="MCP server address"
-                description="Internal Streamable HTTP endpoint the agent proxies to."
-                value={mcpUrlDraft}
-                onChange={setMcpUrlDraft}
-                placeholder={DEFAULT_MCP_URL}
-              />
-            </>
-          ) : (
+          <ConfigGroup label="Tunnel endpoint">
+            <Tabs value={mode} onValueChange={handleModeChange}>
+              <TabsList className="w-full">
+                <TabsTrigger value="existing">Existing server</TabsTrigger>
+                <TabsTrigger value="new">New server</TabsTrigger>
+              </TabsList>
+            </Tabs>
             <Type muted small>
-              Deploy a sample hello-world MCP server together with the tunnel
-              agent to try the tunnel end to end.
+              {mode === "existing"
+                ? "Point the tunnel agent at an MCP server you already run. Values are templated into the setup snippet."
+                : "Deploy a sample hello-world MCP server together with the tunnel agent to try the tunnel end to end."}
             </Type>
+          </ConfigGroup>
+          <ConfigGroup label="Platform">
+            <Tabs value={platform} onValueChange={handlePlatformChange}>
+              <TabsList className="w-full">
+                {snippetTabs.map((tab) => (
+                  <TabsTrigger key={tab.value} value={tab.value}>
+                    {tab.label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+          </ConfigGroup>
+          {mode === "existing" && (
+            <SnippetField
+              id="tunnel-config-mcp-url"
+              label="MCP server address"
+              description="Internal Streamable HTTP endpoint the agent proxies to."
+              value={mcpUrlDraft}
+              onChange={setMcpUrlDraft}
+              placeholder={DEFAULT_MCP_URL}
+            />
           )}
           <SnippetField
             id="tunnel-config-service-version"
@@ -119,25 +138,17 @@ export function TunneledMcpSetupTabs({
           />
         </div>
 
-        <Tabs defaultValue="kubernetes">
-          <TabsList>
-            {snippetTabs.map((tab) => (
-              <TabsTrigger key={tab.value} value={tab.value}>
-                {tab.label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-          {snippetTabs.map((tab) => (
-            <TabsContent key={tab.value} value={tab.value} className="mt-4">
-              <Type muted small className="mb-3">
-                {tab.hint}
-              </Type>
-              <CodeBlock language={tab.language} slots={tab.slots}>
-                {tab.code}
-              </CodeBlock>
-            </TabsContent>
-          ))}
-        </Tabs>
+        <div>
+          <Type muted small className="mb-3">
+            {activeSnippet.hint}
+          </Type>
+          <CodeBlock
+            language={activeSnippet.language}
+            slots={activeSnippet.slots}
+          >
+            {activeSnippet.code}
+          </CodeBlock>
+        </div>
       </div>
     </div>
   );
@@ -452,6 +463,23 @@ function FlashOnChange({ text }: { text: string }) {
     >
       {text}
     </span>
+  );
+}
+
+// A labeled group in the config card, using the same eyebrow label style as
+// the MCP sidebar "At a glance" card.
+function ConfigGroup({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <McpSidebarInfoLabel>{label}</McpSidebarInfoLabel>
+      {children}
+    </div>
   );
 }
 
