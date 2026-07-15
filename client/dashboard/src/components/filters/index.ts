@@ -1,6 +1,7 @@
 export { defineFilters } from "./filter-schema";
 export type {
   FilterDimension,
+  FilterOption,
   FilterValue,
   FilterValues,
   OptionsById,

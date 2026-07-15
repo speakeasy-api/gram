@@ -1,0 +1,22 @@
+# CreateCimdOrganizationRemoteSessionClientForm
+
+Form for an org admin to register a standalone remote_session_client in Client ID Metadata Document (CIMD) mode under an existing issuer, with no user_session_issuer attachments. Gram generates the client_id and hosts the metadata document; the issuer must advertise client_id_metadata_document_supported.
+
+## Example Usage
+
+```typescript
+import { CreateCimdOrganizationRemoteSessionClientForm } from "@gram/client/models/components/createcimdorganizationremotesessionclientform.js";
+
+let value: CreateCimdOrganizationRemoteSessionClientForm = {
+  remoteSessionIssuerId: "e3717b46-d522-49a7-98be-486c6f4d86e0",
+};
+```
+
+## Fields
+
+| Field                   | Type       | Required           | Description                                                                                                                                                                                                                                                              |
+| ----------------------- | ---------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `audience`              | _string_   | :heavy_minus_sign: | Optional upstream OAuth audience to send on the authorize redirect and token exchange.                                                                                                                                                                                   |
+| `projectId`             | _string_   | :heavy_minus_sign: | Owning project id for the new client; the project must belong to the caller's organization. Omit to inherit a project-specific issuer's project, or to create an organization-level client (no project, attachable by every project) under an organization-level issuer. |
+| `remoteSessionIssuerId` | _string_   | :heavy_check_mark: | The owning remote_session_issuer id; must belong to the caller's organization and advertise client_id_metadata_document_supported.                                                                                                                                       |
+| `scope`                 | _string_[] | :heavy_minus_sign: | Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.                                                                                                                                             |

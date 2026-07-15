@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_servers"
@@ -12,7 +13,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 func TestDeleteMcpServer(t *testing.T) {
@@ -36,8 +39,12 @@ func TestDeleteMcpServer(t *testing.T) {
 		Visibility:        types.McpServerVisibility("disabled"),
 	})
 	require.NoError(t, err)
+	require.NotNil(t, created.UserSessionIssuerID)
+	issuerID := uuid.MustParse(*created.UserSessionIssuerID)
 
 	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMcpServerDelete)
+	require.NoError(t, err)
+	beforeIssuerCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionUserSessionIssuerDelete)
 	require.NoError(t, err)
 
 	err = ti.service.DeleteMcpServer(ctx, &gen.DeleteMcpServerPayload{
@@ -51,6 +58,15 @@ func TestDeleteMcpServer(t *testing.T) {
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMcpServerDelete)
 	require.NoError(t, err)
 	require.Equal(t, beforeCount+1, afterCount)
+	afterIssuerCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionUserSessionIssuerDelete)
+	require.NoError(t, err)
+	require.Equal(t, beforeIssuerCount+1, afterIssuerCount)
+
+	_, err = usersessionsrepo.New(ti.conn).GetUserSessionIssuerByID(ctx, usersessionsrepo.GetUserSessionIssuerByIDParams{
+		ID:        issuerID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
 
 	// Confirm subsequent get returns not-found.
 	_, err = ti.service.GetMcpServer(ctx, &gen.GetMcpServerPayload{
@@ -75,6 +91,86 @@ func TestDeleteMcpServer_NotFound(t *testing.T) {
 		ProjectSlugInput: nil,
 	})
 	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+func TestDeleteMcpServer_PreservesIssuerWithAnotherActiveOwner(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	firstBackendID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+	first, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		Name:              "first shared issuer server",
+		EnvironmentID:     nil,
+		RemoteMcpServerID: &firstBackendID,
+		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("disabled"),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, first.UserSessionIssuerID)
+	sharedIssuerID := uuid.MustParse(*first.UserSessionIssuerID)
+
+	secondBackendID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+	second, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		Name:              "second shared issuer server",
+		EnvironmentID:     nil,
+		RemoteMcpServerID: &secondBackendID,
+		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("disabled"),
+	})
+	require.NoError(t, err)
+
+	serverRepo := mcpserversrepo.New(ti.conn)
+	secondRow, err := serverRepo.GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
+		ID:        uuid.MustParse(second.ID),
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+
+	_, err = serverRepo.UpdateMCPServer(ctx, mcpserversrepo.UpdateMCPServerParams{
+		Name:                  secondRow.Name,
+		Slug:                  secondRow.Slug,
+		EnvironmentID:         secondRow.EnvironmentID,
+		UserSessionIssuerID:   uuid.NullUUID{UUID: sharedIssuerID, Valid: true},
+		RemoteMcpServerID:     secondRow.RemoteMcpServerID,
+		TunneledMcpServerID:   secondRow.TunneledMcpServerID,
+		ToolsetID:             secondRow.ToolsetID,
+		ToolVariationsGroupID: secondRow.ToolVariationsGroupID,
+		Visibility:            secondRow.Visibility,
+		ID:                    secondRow.ID,
+		ProjectID:             secondRow.ProjectID,
+	})
+	require.NoError(t, err)
+
+	beforeIssuerCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionUserSessionIssuerDelete)
+	require.NoError(t, err)
+
+	err = ti.service.DeleteMcpServer(ctx, &gen.DeleteMcpServerPayload{
+		ID:               first.ID,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	_, err = usersessionsrepo.New(ti.conn).GetUserSessionIssuerByID(ctx, usersessionsrepo.GetUserSessionIssuerByIDParams{
+		ID:        sharedIssuerID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+
+	afterIssuerCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionUserSessionIssuerDelete)
+	require.NoError(t, err)
+	require.Equal(t, beforeIssuerCount, afterIssuerCount)
 }
 
 func TestDeleteMcpServer_CascadesSoftDeleteToSlugs(t *testing.T) {

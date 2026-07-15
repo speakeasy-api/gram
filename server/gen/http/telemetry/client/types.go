@@ -202,17 +202,6 @@ type QueryRequestBody struct {
 	SortBy string `form:"sort_by" json:"sort_by" xml:"sort_by"`
 }
 
-// QueryRiskTokensRequestBody is the type of the "telemetry" service
-// "queryRiskTokens" endpoint HTTP request body.
-type QueryRiskTokensRequestBody struct {
-	// Start time in ISO 8601 format
-	From string `form:"from" json:"from" xml:"from"`
-	// End time in ISO 8601 format
-	To string `form:"to" json:"to" xml:"to"`
-	// Optional project to scope to; defaults to every project in the organization.
-	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-}
-
 // QueryTumDetailsRequestBody is the type of the "telemetry" service
 // "queryTumDetails" endpoint HTTP request body.
 type QueryTumDetailsRequestBody struct {
@@ -476,16 +465,6 @@ type QueryResponseBody struct {
 	Timeseries []*QuerySeriesResponseBody `form:"timeseries,omitempty" json:"timeseries,omitempty" xml:"timeseries,omitempty"`
 }
 
-// QueryRiskTokensResponseBody is the type of the "telemetry" service
-// "queryRiskTokens" endpoint HTTP response body.
-type QueryRiskTokensResponseBody struct {
-	// Timeseries bucket width in seconds. Always 86400 — the source aggregate is
-	// bucketed daily.
-	IntervalSeconds *int64 `form:"interval_seconds,omitempty" json:"interval_seconds,omitempty" xml:"interval_seconds,omitempty"`
-	// Gap-filled daily buckets in ascending time order
-	Points []*RiskTokensPointResponseBody `form:"points,omitempty" json:"points,omitempty" xml:"points,omitempty"`
-}
-
 // QueryTumDetailsResponseBody is the type of the "telemetry" service
 // "queryTumDetails" endpoint HTTP response body.
 type QueryTumDetailsResponseBody struct {
@@ -496,7 +475,7 @@ type QueryTumDetailsResponseBody struct {
 	Points []*TumDetailsPointResponseBody `form:"points,omitempty" json:"points,omitempty" xml:"points,omitempty"`
 	// Whole-range totals
 	Totals *TumDetailsTotalsResponseBody `form:"totals,omitempty" json:"totals,omitempty" xml:"totals,omitempty"`
-	// Token usage per breakdown dimension, one entry per supported dimension
+	// Billed token usage per breakdown dimension
 	Breakdowns []*TumDetailsBreakdownResponseBody `form:"breakdowns,omitempty" json:"breakdowns,omitempty" xml:"breakdowns,omitempty"`
 }
 
@@ -2620,190 +2599,6 @@ type QueryUnexpectedResponseBody struct {
 // QueryGatewayErrorResponseBody is the type of the "telemetry" service "query"
 // endpoint HTTP response body for the "gateway_error" error.
 type QueryGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// QueryRiskTokensUnauthorizedResponseBody is the type of the "telemetry"
-// service "queryRiskTokens" endpoint HTTP response body for the "unauthorized"
-// error.
-type QueryRiskTokensUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// QueryRiskTokensForbiddenResponseBody is the type of the "telemetry" service
-// "queryRiskTokens" endpoint HTTP response body for the "forbidden" error.
-type QueryRiskTokensForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// QueryRiskTokensBadRequestResponseBody is the type of the "telemetry" service
-// "queryRiskTokens" endpoint HTTP response body for the "bad_request" error.
-type QueryRiskTokensBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// QueryRiskTokensNotFoundResponseBody is the type of the "telemetry" service
-// "queryRiskTokens" endpoint HTTP response body for the "not_found" error.
-type QueryRiskTokensNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// QueryRiskTokensConflictResponseBody is the type of the "telemetry" service
-// "queryRiskTokens" endpoint HTTP response body for the "conflict" error.
-type QueryRiskTokensConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// QueryRiskTokensUnsupportedMediaResponseBody is the type of the "telemetry"
-// service "queryRiskTokens" endpoint HTTP response body for the
-// "unsupported_media" error.
-type QueryRiskTokensUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// QueryRiskTokensInvalidResponseBody is the type of the "telemetry" service
-// "queryRiskTokens" endpoint HTTP response body for the "invalid" error.
-type QueryRiskTokensInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// QueryRiskTokensInvariantViolationResponseBody is the type of the "telemetry"
-// service "queryRiskTokens" endpoint HTTP response body for the
-// "invariant_violation" error.
-type QueryRiskTokensInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// QueryRiskTokensUnexpectedResponseBody is the type of the "telemetry" service
-// "queryRiskTokens" endpoint HTTP response body for the "unexpected" error.
-type QueryRiskTokensUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// QueryRiskTokensGatewayErrorResponseBody is the type of the "telemetry"
-// service "queryRiskTokens" endpoint HTTP response body for the
-// "gateway_error" error.
-type QueryRiskTokensGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -5088,83 +4883,41 @@ type QueryPointResponseBody struct {
 	Measures *QueryMeasuresResponseBody `form:"measures,omitempty" json:"measures,omitempty" xml:"measures,omitempty"`
 }
 
-// RiskTokensPointResponseBody is used to define fields on response body types.
-type RiskTokensPointResponseBody struct {
-	// Bucket start time in Unix nanoseconds (string for JS precision)
-	BucketTimeUnixNano *string `form:"bucket_time_unix_nano,omitempty" json:"bucket_time_unix_nano,omitempty" xml:"bucket_time_unix_nano,omitempty"`
-	// Tokens from sessions with at least one active risk finding created in the
-	// query window
-	RiskyTokens *int64 `form:"risky_tokens,omitempty" json:"risky_tokens,omitempty" xml:"risky_tokens,omitempty"`
-	// All session tokens in the bucket
-	TotalTokens *int64 `form:"total_tokens,omitempty" json:"total_tokens,omitempty" xml:"total_tokens,omitempty"`
-}
-
 // TumDetailsPointResponseBody is used to define fields on response body types.
 type TumDetailsPointResponseBody struct {
 	// Bucket start time in Unix nanoseconds (string for JS precision)
 	BucketTimeUnixNano *string `form:"bucket_time_unix_nano,omitempty" json:"bucket_time_unix_nano,omitempty" xml:"bucket_time_unix_nano,omitempty"`
-	// Input tokens
+	// Observed input tokens (cache reads excluded)
 	InputTokens *int64 `form:"input_tokens,omitempty" json:"input_tokens,omitempty" xml:"input_tokens,omitempty"`
-	// Output tokens
+	// Observed output tokens
 	OutputTokens *int64 `form:"output_tokens,omitempty" json:"output_tokens,omitempty" xml:"output_tokens,omitempty"`
-	// Cache read input tokens
-	CacheReadTokens *int64 `form:"cache_read_tokens,omitempty" json:"cache_read_tokens,omitempty" xml:"cache_read_tokens,omitempty"`
-	// Cache creation input tokens
-	CacheWriteTokens *int64 `form:"cache_write_tokens,omitempty" json:"cache_write_tokens,omitempty" xml:"cache_write_tokens,omitempty"`
-	// All tokens
+	// Observed cache-write tokens — prompt content entering the provider cache,
+	// counted once
+	CacheCreationTokens *int64 `form:"cache_creation_tokens,omitempty" json:"cache_creation_tokens,omitempty" xml:"cache_creation_tokens,omitempty"`
+	// Tokens under management: input + output + cache writes
 	TotalTokens *int64 `form:"total_tokens,omitempty" json:"total_tokens,omitempty" xml:"total_tokens,omitempty"`
-	// Distinct chat sessions
-	AgentSessions *int64 `form:"agent_sessions,omitempty" json:"agent_sessions,omitempty" xml:"agent_sessions,omitempty"`
-	// Completed tool calls
-	ToolCalls *int64 `form:"tool_calls,omitempty" json:"tool_calls,omitempty" xml:"tool_calls,omitempty"`
-	// Distinct attributed users with usage
-	ActiveUsers *int64 `form:"active_users,omitempty" json:"active_users,omitempty" xml:"active_users,omitempty"`
-	// Tokens attributed to MCP tool usage
-	McpToolTokens *int64 `form:"mcp_tool_tokens,omitempty" json:"mcp_tool_tokens,omitempty" xml:"mcp_tool_tokens,omitempty"`
-	// Tokens attributed to skill usage
-	SkillTokens *int64 `form:"skill_tokens,omitempty" json:"skill_tokens,omitempty" xml:"skill_tokens,omitempty"`
-	// Tokens without user attribution
-	UnattributedTokens *int64 `form:"unattributed_tokens,omitempty" json:"unattributed_tokens,omitempty" xml:"unattributed_tokens,omitempty"`
-	// Tokens in messages carrying at least one active risk finding
-	RiskyMessageTokens *int64 `form:"risky_message_tokens,omitempty" json:"risky_message_tokens,omitempty" xml:"risky_message_tokens,omitempty"`
-	// Tokens in tool-call messages
-	ToolMessageTokens *int64 `form:"tool_message_tokens,omitempty" json:"tool_message_tokens,omitempty" xml:"tool_message_tokens,omitempty"`
 }
 
 // TumDetailsTotalsResponseBody is used to define fields on response body types.
 type TumDetailsTotalsResponseBody struct {
-	// Input tokens
+	// Observed input tokens (cache reads excluded)
 	InputTokens *int64 `form:"input_tokens,omitempty" json:"input_tokens,omitempty" xml:"input_tokens,omitempty"`
-	// Output tokens
+	// Observed output tokens
 	OutputTokens *int64 `form:"output_tokens,omitempty" json:"output_tokens,omitempty" xml:"output_tokens,omitempty"`
-	// Cache read input tokens
-	CacheReadTokens *int64 `form:"cache_read_tokens,omitempty" json:"cache_read_tokens,omitempty" xml:"cache_read_tokens,omitempty"`
-	// Cache creation input tokens
-	CacheWriteTokens *int64 `form:"cache_write_tokens,omitempty" json:"cache_write_tokens,omitempty" xml:"cache_write_tokens,omitempty"`
-	// All tokens
+	// Observed cache-write tokens — prompt content entering the provider cache,
+	// counted once
+	CacheCreationTokens *int64 `form:"cache_creation_tokens,omitempty" json:"cache_creation_tokens,omitempty" xml:"cache_creation_tokens,omitempty"`
+	// Tokens under management: input + output + cache writes
 	TotalTokens *int64 `form:"total_tokens,omitempty" json:"total_tokens,omitempty" xml:"total_tokens,omitempty"`
-	// Distinct chat sessions
-	AgentSessions *int64 `form:"agent_sessions,omitempty" json:"agent_sessions,omitempty" xml:"agent_sessions,omitempty"`
-	// Completed tool calls
-	ToolCalls *int64 `form:"tool_calls,omitempty" json:"tool_calls,omitempty" xml:"tool_calls,omitempty"`
-	// Distinct attributed users with usage
-	ActiveUsers *int64 `form:"active_users,omitempty" json:"active_users,omitempty" xml:"active_users,omitempty"`
-	// Tokens attributed to MCP tool usage
-	McpToolTokens *int64 `form:"mcp_tool_tokens,omitempty" json:"mcp_tool_tokens,omitempty" xml:"mcp_tool_tokens,omitempty"`
-	// Tokens attributed to skill usage
-	SkillTokens *int64 `form:"skill_tokens,omitempty" json:"skill_tokens,omitempty" xml:"skill_tokens,omitempty"`
-	// Tokens without user attribution
-	UnattributedTokens *int64 `form:"unattributed_tokens,omitempty" json:"unattributed_tokens,omitempty" xml:"unattributed_tokens,omitempty"`
-	// Tokens in messages carrying at least one active risk finding
-	RiskyMessageTokens *int64 `form:"risky_message_tokens,omitempty" json:"risky_message_tokens,omitempty" xml:"risky_message_tokens,omitempty"`
-	// Tokens in tool-call messages
-	ToolMessageTokens *int64 `form:"tool_message_tokens,omitempty" json:"tool_message_tokens,omitempty" xml:"tool_message_tokens,omitempty"`
 }
 
 // TumDetailsBreakdownResponseBody is used to define fields on response body
 // types.
 type TumDetailsBreakdownResponseBody struct {
-	// The breakdown dimension key (matches telemetry.query group_by)
+	// The breakdown dimension key (model, hook_source, provider, account_type,
+	// email, division_name, department_name, role, project_id) — the public
+	// telemetry dimension identifiers, so the same keys work as telemetry.query
+	// filters. project_id rows carry project UUIDs; clients map them to names.
 	Key *string `form:"key,omitempty" json:"key,omitempty" xml:"key,omitempty"`
 	// Top values by tokens in descending order, with the remainder rolled into
 	// 'Other'
@@ -5174,10 +4927,9 @@ type TumDetailsBreakdownResponseBody struct {
 // TumDetailsBreakdownRowResponseBody is used to define fields on response body
 // types.
 type TumDetailsBreakdownRowResponseBody struct {
-	// The dimension value; empty for rows without the attribute, 'Other' for the
-	// top-N remainder rollup
+	// The dimension value; empty for rows recorded before the dimension existed
 	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
-	// Tokens for this value over the range
+	// Billed tokens for this value over the range
 	TotalTokens *int64 `form:"total_tokens,omitempty" json:"total_tokens,omitempty" xml:"total_tokens,omitempty"`
 	// Daily tokens aligned to the result's points buckets
 	Series []int64 `form:"series,omitempty" json:"series,omitempty" xml:"series,omitempty"`
@@ -5852,17 +5604,6 @@ func NewQueryRequestBody(p *telemetry.QueryPayload) *QueryRequestBody {
 		if body.SortBy == zero {
 			body.SortBy = "total_cost"
 		}
-	}
-	return body
-}
-
-// NewQueryRiskTokensRequestBody builds the HTTP request body from the payload
-// of the "queryRiskTokens" endpoint of the "telemetry" service.
-func NewQueryRiskTokensRequestBody(p *telemetry.QueryRiskTokensPayload) *QueryRiskTokensRequestBody {
-	body := &QueryRiskTokensRequestBody{
-		From:      p.From,
-		To:        p.To,
-		ProjectID: p.ProjectID,
 	}
 	return body
 }
@@ -7996,174 +7737,6 @@ func NewQueryGatewayError(body *QueryGatewayErrorResponseBody) *goa.ServiceError
 	return v
 }
 
-// NewQueryRiskTokensResultOK builds a "telemetry" service "queryRiskTokens"
-// endpoint result from a HTTP "OK" response.
-func NewQueryRiskTokensResultOK(body *QueryRiskTokensResponseBody) *telemetry.QueryRiskTokensResult {
-	v := &telemetry.QueryRiskTokensResult{
-		IntervalSeconds: *body.IntervalSeconds,
-	}
-	v.Points = make([]*telemetry.RiskTokensPoint, len(body.Points))
-	for i, val := range body.Points {
-		if val == nil {
-			v.Points[i] = nil
-			continue
-		}
-		v.Points[i] = unmarshalRiskTokensPointResponseBodyToTelemetryRiskTokensPoint(val)
-	}
-
-	return v
-}
-
-// NewQueryRiskTokensUnauthorized builds a telemetry service queryRiskTokens
-// endpoint unauthorized error.
-func NewQueryRiskTokensUnauthorized(body *QueryRiskTokensUnauthorizedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewQueryRiskTokensForbidden builds a telemetry service queryRiskTokens
-// endpoint forbidden error.
-func NewQueryRiskTokensForbidden(body *QueryRiskTokensForbiddenResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewQueryRiskTokensBadRequest builds a telemetry service queryRiskTokens
-// endpoint bad_request error.
-func NewQueryRiskTokensBadRequest(body *QueryRiskTokensBadRequestResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewQueryRiskTokensNotFound builds a telemetry service queryRiskTokens
-// endpoint not_found error.
-func NewQueryRiskTokensNotFound(body *QueryRiskTokensNotFoundResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewQueryRiskTokensConflict builds a telemetry service queryRiskTokens
-// endpoint conflict error.
-func NewQueryRiskTokensConflict(body *QueryRiskTokensConflictResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewQueryRiskTokensUnsupportedMedia builds a telemetry service
-// queryRiskTokens endpoint unsupported_media error.
-func NewQueryRiskTokensUnsupportedMedia(body *QueryRiskTokensUnsupportedMediaResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewQueryRiskTokensInvalid builds a telemetry service queryRiskTokens
-// endpoint invalid error.
-func NewQueryRiskTokensInvalid(body *QueryRiskTokensInvalidResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewQueryRiskTokensInvariantViolation builds a telemetry service
-// queryRiskTokens endpoint invariant_violation error.
-func NewQueryRiskTokensInvariantViolation(body *QueryRiskTokensInvariantViolationResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewQueryRiskTokensUnexpected builds a telemetry service queryRiskTokens
-// endpoint unexpected error.
-func NewQueryRiskTokensUnexpected(body *QueryRiskTokensUnexpectedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewQueryRiskTokensGatewayError builds a telemetry service queryRiskTokens
-// endpoint gateway_error error.
-func NewQueryRiskTokensGatewayError(body *QueryRiskTokensGatewayErrorResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
 // NewQueryTumDetailsTumDetailsResultOK builds a "telemetry" service
 // "queryTumDetails" endpoint result from a HTTP "OK" response.
 func NewQueryTumDetailsTumDetailsResultOK(body *QueryTumDetailsResponseBody) *telemetry.TumDetailsResult {
@@ -10022,25 +9595,6 @@ func ValidateQueryResponseBody(body *QueryResponseBody) (err error) {
 	for _, e := range body.Timeseries {
 		if e != nil {
 			if err2 := ValidateQuerySeriesResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	return
-}
-
-// ValidateQueryRiskTokensResponseBody runs the validations defined on
-// QueryRiskTokensResponseBody
-func ValidateQueryRiskTokensResponseBody(body *QueryRiskTokensResponseBody) (err error) {
-	if body.IntervalSeconds == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("interval_seconds", "body"))
-	}
-	if body.Points == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("points", "body"))
-	}
-	for _, e := range body.Points {
-		if e != nil {
-			if err2 := ValidateRiskTokensPointResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -12976,246 +12530,6 @@ func ValidateQueryUnexpectedResponseBody(body *QueryUnexpectedResponseBody) (err
 // ValidateQueryGatewayErrorResponseBody runs the validations defined on
 // query_gateway_error_response_body
 func ValidateQueryGatewayErrorResponseBody(body *QueryGatewayErrorResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateQueryRiskTokensUnauthorizedResponseBody runs the validations defined
-// on queryRiskTokens_unauthorized_response_body
-func ValidateQueryRiskTokensUnauthorizedResponseBody(body *QueryRiskTokensUnauthorizedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateQueryRiskTokensForbiddenResponseBody runs the validations defined on
-// queryRiskTokens_forbidden_response_body
-func ValidateQueryRiskTokensForbiddenResponseBody(body *QueryRiskTokensForbiddenResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateQueryRiskTokensBadRequestResponseBody runs the validations defined
-// on queryRiskTokens_bad_request_response_body
-func ValidateQueryRiskTokensBadRequestResponseBody(body *QueryRiskTokensBadRequestResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateQueryRiskTokensNotFoundResponseBody runs the validations defined on
-// queryRiskTokens_not_found_response_body
-func ValidateQueryRiskTokensNotFoundResponseBody(body *QueryRiskTokensNotFoundResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateQueryRiskTokensConflictResponseBody runs the validations defined on
-// queryRiskTokens_conflict_response_body
-func ValidateQueryRiskTokensConflictResponseBody(body *QueryRiskTokensConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateQueryRiskTokensUnsupportedMediaResponseBody runs the validations
-// defined on queryRiskTokens_unsupported_media_response_body
-func ValidateQueryRiskTokensUnsupportedMediaResponseBody(body *QueryRiskTokensUnsupportedMediaResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateQueryRiskTokensInvalidResponseBody runs the validations defined on
-// queryRiskTokens_invalid_response_body
-func ValidateQueryRiskTokensInvalidResponseBody(body *QueryRiskTokensInvalidResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateQueryRiskTokensInvariantViolationResponseBody runs the validations
-// defined on queryRiskTokens_invariant_violation_response_body
-func ValidateQueryRiskTokensInvariantViolationResponseBody(body *QueryRiskTokensInvariantViolationResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateQueryRiskTokensUnexpectedResponseBody runs the validations defined
-// on queryRiskTokens_unexpected_response_body
-func ValidateQueryRiskTokensUnexpectedResponseBody(body *QueryRiskTokensUnexpectedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateQueryRiskTokensGatewayErrorResponseBody runs the validations defined
-// on queryRiskTokens_gateway_error_response_body
-func ValidateQueryRiskTokensGatewayErrorResponseBody(body *QueryRiskTokensGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -16248,21 +15562,6 @@ func ValidateQueryPointResponseBody(body *QueryPointResponseBody) (err error) {
 	return
 }
 
-// ValidateRiskTokensPointResponseBody runs the validations defined on
-// RiskTokensPointResponseBody
-func ValidateRiskTokensPointResponseBody(body *RiskTokensPointResponseBody) (err error) {
-	if body.BucketTimeUnixNano == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("bucket_time_unix_nano", "body"))
-	}
-	if body.RiskyTokens == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("risky_tokens", "body"))
-	}
-	if body.TotalTokens == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("total_tokens", "body"))
-	}
-	return
-}
-
 // ValidateTumDetailsPointResponseBody runs the validations defined on
 // TumDetailsPointResponseBody
 func ValidateTumDetailsPointResponseBody(body *TumDetailsPointResponseBody) (err error) {
@@ -16272,38 +15571,11 @@ func ValidateTumDetailsPointResponseBody(body *TumDetailsPointResponseBody) (err
 	if body.OutputTokens == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("output_tokens", "body"))
 	}
-	if body.CacheReadTokens == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("cache_read_tokens", "body"))
-	}
-	if body.CacheWriteTokens == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("cache_write_tokens", "body"))
+	if body.CacheCreationTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cache_creation_tokens", "body"))
 	}
 	if body.TotalTokens == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("total_tokens", "body"))
-	}
-	if body.AgentSessions == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("agent_sessions", "body"))
-	}
-	if body.ToolCalls == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("tool_calls", "body"))
-	}
-	if body.ActiveUsers == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("active_users", "body"))
-	}
-	if body.McpToolTokens == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_tool_tokens", "body"))
-	}
-	if body.SkillTokens == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("skill_tokens", "body"))
-	}
-	if body.UnattributedTokens == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("unattributed_tokens", "body"))
-	}
-	if body.RiskyMessageTokens == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("risky_message_tokens", "body"))
-	}
-	if body.ToolMessageTokens == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("tool_message_tokens", "body"))
 	}
 	if body.BucketTimeUnixNano == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("bucket_time_unix_nano", "body"))
@@ -16320,38 +15592,11 @@ func ValidateTumDetailsTotalsResponseBody(body *TumDetailsTotalsResponseBody) (e
 	if body.OutputTokens == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("output_tokens", "body"))
 	}
-	if body.CacheReadTokens == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("cache_read_tokens", "body"))
-	}
-	if body.CacheWriteTokens == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("cache_write_tokens", "body"))
+	if body.CacheCreationTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cache_creation_tokens", "body"))
 	}
 	if body.TotalTokens == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("total_tokens", "body"))
-	}
-	if body.AgentSessions == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("agent_sessions", "body"))
-	}
-	if body.ToolCalls == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("tool_calls", "body"))
-	}
-	if body.ActiveUsers == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("active_users", "body"))
-	}
-	if body.McpToolTokens == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_tool_tokens", "body"))
-	}
-	if body.SkillTokens == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("skill_tokens", "body"))
-	}
-	if body.UnattributedTokens == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("unattributed_tokens", "body"))
-	}
-	if body.RiskyMessageTokens == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("risky_message_tokens", "body"))
-	}
-	if body.ToolMessageTokens == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("tool_message_tokens", "body"))
 	}
 	return
 }

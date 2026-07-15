@@ -1,5 +1,10 @@
 {
   "mcpServers": {
+    "assistants-dev": {
+      "type": "stdio",
+      "command": "mise",
+      "args": ["x", "--", "go", "run", "./server/cmd/dev-mcp"]
+    },
     "madprocs": {
       "type": "http",
       "url": "https://localhost:35294/mcp"

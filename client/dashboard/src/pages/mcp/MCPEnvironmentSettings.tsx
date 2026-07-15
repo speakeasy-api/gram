@@ -48,6 +48,7 @@ import {
 import {
   EnvVarState,
   EnvironmentVariable,
+  getSystemValueSaveOp,
   getValueForEnvironment,
 } from "./environmentVariableUtils";
 import {
@@ -589,11 +590,13 @@ export function MCPAuthenticationTab({
 
       // Collect environment variable values for system state
       if (envVar.state === "system") {
-        const value = getEditingValue(envVar);
-        if (value) {
-          entriesToUpdate.push({ name: envVar.key, value });
-        } else {
-          // Value was cleared - remove from environment
+        const saveOp = getSystemValueSaveOp(
+          editing?.value,
+          getValueForEnvironment(envVar, selectedEnvironmentView),
+        );
+        if (saveOp.kind === "update") {
+          entriesToUpdate.push({ name: envVar.key, value: saveOp.value });
+        } else if (saveOp.kind === "remove") {
           entriesToRemove.push(envVar.key);
         }
       }

@@ -446,6 +446,18 @@ func (s *Service) captureMCPListSnapshot(ctx context.Context, payload *gen.Claud
 		return
 	}
 	s.cacheMCPListSnapshot(ctx, *payload.SessionID, entries, variant)
+	orgID := ""
+	projectID := ""
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ProjectID != nil {
+		orgID = authCtx.ActiveOrganizationID
+		projectID = authCtx.ProjectID.String()
+	} else if metadata, err := s.resolveClaudeSessionMetadata(ctx, *payload.SessionID, strings.TrimSpace(conv.PtrValOr(payload.UserEmail, ""))); err == nil {
+		orgID = metadata.GramOrgID
+		projectID = metadata.ProjectID
+	}
+	if projectID != "" {
+		s.upsertShadowMCPInventoryURLs(ctx, orgID, projectID, *payload.SessionID, entries)
+	}
 }
 
 // parseMCPInventoryFromPayload extracts the MCP inventory carried in the hook
@@ -627,9 +639,10 @@ func hasOptionalPluginAuth(payload *gen.ClaudePayload) bool {
 }
 
 // authorizePluginRequest validates the API key and project slug supplied
-// by a plugin-driven Claude request. Returns the auth-populated context
-// on success, or a 401 on either failure (the request explicitly tried
-// to authenticate, so we don't silently fall back to OTEL on bad creds).
+// by a plugin-driven request on the optional-auth hook endpoints (claude,
+// ingest). Returns the auth-populated context on success, or an error on
+// either failure (the request explicitly tried to authenticate, so callers
+// don't silently treat it as an unauthenticated request).
 func (s *Service) authorizePluginRequest(ctx context.Context, key, projectSlug string) (context.Context, error) {
 	keyScheme := &security.APIKeyScheme{
 		Name:           constants.KeySecurityScheme,
@@ -638,7 +651,7 @@ func (s *Service) authorizePluginRequest(ctx context.Context, key, projectSlug s
 	}
 	ctx, err := s.auth.Authorize(ctx, key, keyScheme)
 	if err != nil {
-		return ctx, fmt.Errorf("authorize claude hook api key: %w", err)
+		return ctx, fmt.Errorf("authorize hook api key: %w", err)
 	}
 	projectScheme := &security.APIKeyScheme{
 		Name:           constants.ProjectSlugSecuritySchema,
@@ -647,7 +660,7 @@ func (s *Service) authorizePluginRequest(ctx context.Context, key, projectSlug s
 	}
 	ctx, err = s.auth.Authorize(ctx, projectSlug, projectScheme)
 	if err != nil {
-		return ctx, fmt.Errorf("authorize claude hook project slug: %w", err)
+		return ctx, fmt.Errorf("authorize hook project slug: %w", err)
 	}
 	return ctx, nil
 }
@@ -832,13 +845,31 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 		return makeHookResult(ev.RawEventType), nil
 	}
 	if s.riskScanner != nil && ev.ConversationID != "" {
-		if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil {
+		// Acknowledged warn is excluded from the enforcement block so it falls
+		// through to the shadow-MCP guard below: an ack clears the risk
+		// challenge but must never bypass unapproved-toolset validation.
+		if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil &&
+			(scanResult.Action != "warn" || !s.warnAcknowledged(ctx, ev.Event, scanResult, ev.ToolName)) {
+			// Unacknowledged warn → deny + out-of-band acknowledgement link
+			// (challenge). Claude is unified with Cursor/Codex on the link flow
+			// rather than the native permissionDecision "ask", which
+			// `--dangerously-skip-permissions` bypasses. No ack link buildable
+			// (missing site URL / cache / user) → fall through to a hard block
+			// (fail-safe): a warn must never silently allow.
+			if scanResult.Action == "warn" {
+				if agentReason, userReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, ev.ToolName); ok {
+					return constructWarnChallengeResponse(payload.HookEventName, agentReason, userReason), nil
+				}
+			}
 			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
 			// Surface the block reason on the trace summary so the dashboard
 			// shows why the call was denied. Always store the technical reason
 			// — the user_message override is for the agent-facing response only.
-			metadata, metaErr := s.getSessionMetadata(ctx, *payload.SessionID)
+			// SessionID may be nil (malformed payload); getSessionMetadata
+			// returns an error for an empty id and the ClickHouse write is
+			// skipped, so read it nil-safe instead of dereferencing.
+			metadata, metaErr := s.getSessionMetadata(ctx, conv.PtrValOr(payload.SessionID, ""))
 			if metaErr == nil {
 				s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
 			}

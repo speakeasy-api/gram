@@ -1305,7 +1305,7 @@ function SingleServerNextSteps({
         >
           <NextStepTile
             icon={<Plug className="h-4 w-4" />}
-            label="Connect via Claude, Cursor"
+            label="Connect via Claude, Cursor, Codex"
           />
         </a>
         <routes.mcp.details.Link

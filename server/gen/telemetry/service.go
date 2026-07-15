@@ -45,15 +45,9 @@ type Service interface {
 	// filters (e.g. group by department_name, then drill in by filtering
 	// department_name and grouping by role).
 	Query(context.Context, *QueryPayload) (res *QueryResult, err error)
-	// Org-scoped daily token usage split by risk involvement: tokens from sessions
-	// with at least one active risk finding in the window versus all session
-	// tokens. Powers the token-usage panel's risk breakdown on the costs page.
-	QueryRiskTokens(context.Context, *QueryRiskTokensPayload) (res *QueryRiskTokensResult, err error)
-	// Org-scoped daily usage details for the billing page's metrics table,
-	// computed in one pass: token type sums, session/tool-call/active-user counts,
-	// attribution slices (MCP tools, skills, unattributed users), and
-	// message-level stats (tokens in messages with active risk findings, tokens in
-	// tool-call messages).
+	// Org-scoped daily usage details for the billing page, computed in one pass:
+	// the tokens-under-management daily token-type split (observed agent traffic;
+	// cache reads excluded) and per-dimension breakdowns over the same population.
 	QueryTumDetails(context.Context, *QueryTumDetailsPayload) (res *TumDetailsResult, err error)
 	// Org-scoped list of individual chat sessions for a slice of usage, filtered
 	// by the same allowlisted dimensions as telemetry.query. Returns per-session
@@ -98,7 +92,7 @@ const ServiceName = "telemetry"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [21]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getProjectOverview", "query", "queryRiskTokens", "queryTumDetails", "listSessions", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "listToolUsageTraces", "getToolUsageFilterOptions", "listHooksTraces"}
+var MethodNames = [20]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getProjectOverview", "query", "queryTumDetails", "listSessions", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "listToolUsageTraces", "getToolUsageFilterOptions", "listHooksTraces"}
 
 // CaptureEventPayload is the payload type of the telemetry service
 // captureEvent method.
@@ -925,28 +919,6 @@ type QueryResult struct {
 	Timeseries []*QuerySeries
 }
 
-// QueryRiskTokensPayload is the payload type of the telemetry service
-// queryRiskTokens method.
-type QueryRiskTokensPayload struct {
-	SessionToken *string
-	// Start time in ISO 8601 format
-	From string
-	// End time in ISO 8601 format
-	To string
-	// Optional project to scope to; defaults to every project in the organization.
-	ProjectID *string
-}
-
-// QueryRiskTokensResult is the result type of the telemetry service
-// queryRiskTokens method.
-type QueryRiskTokensResult struct {
-	// Timeseries bucket width in seconds. Always 86400 — the source aggregate is
-	// bucketed daily.
-	IntervalSeconds int64
-	// Gap-filled daily buckets in ascending time order
-	Points []*RiskTokensPoint
-}
-
 // One row of the grouped table: measures aggregated over the full time range
 // for a single group value.
 type QueryRow struct {
@@ -982,17 +954,6 @@ type QueryTumDetailsPayload struct {
 	To string
 	// Optional project to scope to; defaults to every project in the organization.
 	ProjectID *string
-}
-
-// One UTC day of token usage split by risk involvement
-type RiskTokensPoint struct {
-	// Bucket start time in Unix nanoseconds (string for JS precision)
-	BucketTimeUnixNano string
-	// Tokens from sessions with at least one active risk finding created in the
-	// query window
-	RiskyTokens int64
-	// All session tokens in the bucket
-	TotalTokens int64
 }
 
 // Aggregated usage summary for a role
@@ -1671,21 +1632,23 @@ type TopUser struct {
 	ActivityCount int64
 }
 
-// Per-dimension token breakdown for the usage details table
+// Per-dimension billed token breakdown for the usage details table
 type TumDetailsBreakdown struct {
-	// The breakdown dimension key (matches telemetry.query group_by)
+	// The breakdown dimension key (model, hook_source, provider, account_type,
+	// email, division_name, department_name, role, project_id) — the public
+	// telemetry dimension identifiers, so the same keys work as telemetry.query
+	// filters. project_id rows carry project UUIDs; clients map them to names.
 	Key string
 	// Top values by tokens in descending order, with the remainder rolled into
 	// 'Other'
 	Rows []*TumDetailsBreakdownRow
 }
 
-// One value of a breakdown dimension with its token usage over the range
+// One value of a breakdown dimension with its billed token usage over the range
 type TumDetailsBreakdownRow struct {
-	// The dimension value; empty for rows without the attribute, 'Other' for the
-	// top-N remainder rollup
+	// The dimension value; empty for rows recorded before the dimension existed
 	Value string
-	// Tokens for this value over the range
+	// Billed tokens for this value over the range
 	TotalTokens int64
 	// Daily tokens aligned to the result's points buckets
 	Series []int64
@@ -1695,32 +1658,15 @@ type TumDetailsBreakdownRow struct {
 type TumDetailsPoint struct {
 	// Bucket start time in Unix nanoseconds (string for JS precision)
 	BucketTimeUnixNano string
-	// Input tokens
+	// Observed input tokens (cache reads excluded)
 	InputTokens int64
-	// Output tokens
+	// Observed output tokens
 	OutputTokens int64
-	// Cache read input tokens
-	CacheReadTokens int64
-	// Cache creation input tokens
-	CacheWriteTokens int64
-	// All tokens
+	// Observed cache-write tokens — prompt content entering the provider cache,
+	// counted once
+	CacheCreationTokens int64
+	// Tokens under management: input + output + cache writes
 	TotalTokens int64
-	// Distinct chat sessions
-	AgentSessions int64
-	// Completed tool calls
-	ToolCalls int64
-	// Distinct attributed users with usage
-	ActiveUsers int64
-	// Tokens attributed to MCP tool usage
-	McpToolTokens int64
-	// Tokens attributed to skill usage
-	SkillTokens int64
-	// Tokens without user attribution
-	UnattributedTokens int64
-	// Tokens in messages carrying at least one active risk finding
-	RiskyMessageTokens int64
-	// Tokens in tool-call messages
-	ToolMessageTokens int64
 }
 
 // TumDetailsResult is the result type of the telemetry service queryTumDetails
@@ -1733,40 +1679,21 @@ type TumDetailsResult struct {
 	Points []*TumDetailsPoint
 	// Whole-range totals
 	Totals *TumDetailsTotals
-	// Token usage per breakdown dimension, one entry per supported dimension
+	// Billed token usage per breakdown dimension
 	Breakdowns []*TumDetailsBreakdown
 }
 
-// Whole-range totals for the billing usage details. Distinct counts (sessions,
-// active users) are computed over the full range and cannot be derived by
-// summing the daily points.
+// Whole-range totals for the billing usage details
 type TumDetailsTotals struct {
-	// Input tokens
+	// Observed input tokens (cache reads excluded)
 	InputTokens int64
-	// Output tokens
+	// Observed output tokens
 	OutputTokens int64
-	// Cache read input tokens
-	CacheReadTokens int64
-	// Cache creation input tokens
-	CacheWriteTokens int64
-	// All tokens
+	// Observed cache-write tokens — prompt content entering the provider cache,
+	// counted once
+	CacheCreationTokens int64
+	// Tokens under management: input + output + cache writes
 	TotalTokens int64
-	// Distinct chat sessions
-	AgentSessions int64
-	// Completed tool calls
-	ToolCalls int64
-	// Distinct attributed users with usage
-	ActiveUsers int64
-	// Tokens attributed to MCP tool usage
-	McpToolTokens int64
-	// Tokens attributed to skill usage
-	SkillTokens int64
-	// Tokens without user attribution
-	UnattributedTokens int64
-	// Tokens in messages carrying at least one active risk finding
-	RiskyMessageTokens int64
-	// Tokens in tool-call messages
-	ToolMessageTokens int64
 }
 
 // A linked AI account for a user. The identity is (provider, email): the same

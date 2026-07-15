@@ -13,6 +13,7 @@ import { useSession } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import type { ChallengeBucket } from "@gram/client/models/components/challengebucket.js";
 import { useMembers } from "@gram/client/react-query/members.js";
+import { useListMcpServersForOrg } from "@gram/client/react-query/listMcpServersForOrg.js";
 import { useListToolsetsForOrg } from "@gram/client/react-query/listToolsetsForOrg.js";
 import { type Column } from "@/components/ui/table";
 import { KeyRound } from "lucide-react";
@@ -32,6 +33,7 @@ export function useChallengeRowColumns(
   const { organization } = useSession();
   const { data: membersData } = useMembers();
   const { data: toolsetsData } = useListToolsetsForOrg();
+  const { data: mcpServersData } = useListMcpServersForOrg();
   const projectMap = useMemo(() => {
     const m = new Map<string, { slug: string; name: string }>();
     for (const p of organization.projects) {
@@ -49,6 +51,19 @@ export function useChallengeRowColumns(
     }
     return m;
   }, [toolsetsData]);
+  // Resolves grants stored against mcp_servers row ids (remote/tunneled
+  // backends). Toolset-backed grants store the toolset id and resolve via
+  // toolsetMap instead.
+  const mcpServerMap = useMemo(() => {
+    const m = new Map<
+      string,
+      { slug?: string; name?: string; projectId: string }
+    >();
+    for (const s of mcpServersData?.mcpServers ?? []) {
+      m.set(s.id, { slug: s.slug, name: s.name, projectId: s.projectId });
+    }
+    return m;
+  }, [mcpServersData]);
   const memberMap = useMemo(() => {
     const m = new Map<string, { email: string; photoUrl?: string }>();
     for (const member of membersData?.members ?? []) {
@@ -154,6 +169,7 @@ export function useChallengeRowColumns(
               orgSlug={orgSlug ?? ""}
               projectMap={projectMap}
               toolsetMap={toolsetMap}
+              mcpServerMap={mcpServerMap}
             />
           </div>
         ),
@@ -227,6 +243,7 @@ export function useChallengeRowColumns(
     orgSlug,
     projectMap,
     toolsetMap,
+    mcpServerMap,
     memberMap,
     animatingOutIds,
     outcomeFilter,

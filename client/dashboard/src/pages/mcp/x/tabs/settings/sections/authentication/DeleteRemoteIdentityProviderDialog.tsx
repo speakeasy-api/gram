@@ -91,8 +91,11 @@ function DeleteRemoteIdentityProviderDialogBody({
         }
         cursor = page.result.nextCursor || undefined;
       } while (cursor);
+      // Detach, not delete: the client may back other servers' issuers.
       for (const id of clientIds) {
-        await client.remoteSessionClients.delete({ id });
+        await client.remoteSessionClients.detachUserSessionIssuer({
+          attachUserSessionIssuerForm: { id, userSessionIssuerId },
+        });
       }
       await Promise.all([
         invalidateAllRemoteSessionClients(queryClient, { refetchType: "all" }),

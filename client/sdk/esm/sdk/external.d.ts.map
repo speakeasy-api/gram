@@ -1,0 +1,1 @@
+{"version":3,"file":"external.d.ts","sourceRoot":"","sources":["../../src/sdk/external.ts"],"names":[],"mappings":"AAKA,OAAO,EAAE,SAAS,EAAE,cAAc,EAAE,MAAM,gBAAgB,CAAC;AAC3D,OAAO,EAAE,2BAA2B,EAAE,MAAM,8CAA8C,CAAC;AAG3F,qBAAa,QAAS,SAAQ,SAAS;IACrC;;;;;OAKG;IACG,oBAAoB,CACxB,OAAO,CAAC,EAAE,2BAA2B,GAAG,SAAS,EACjD,OAAO,CAAC,EAAE,cAAc,GACvB,OAAO,CAAC,IAAI,CAAC;CAOjB"}

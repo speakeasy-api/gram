@@ -5,15 +5,20 @@ import {
   ONBOARDING_CTA_VT_CLASS,
   useOnboardingCta,
 } from "@/hooks/useOnboardingCta";
+import { useSlugs } from "@/contexts/Sdk";
 import { cn } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
 import { ArrowRight, Wrench } from "lucide-react";
 
 export function OnboardingBanner(): JSX.Element | null {
   const orgRoutes = useOrgRoutes();
+  const { projectSlug } = useSlugs();
   const { eligible, dismissed, dismiss } = useOnboardingCta();
 
-  if (!eligible || dismissed) return null;
+  // Project-scoped routes (/:orgSlug/projects/:projectSlug/...) are too deep
+  // in a specific workflow for an org-wide setup nudge — only show this on
+  // org-level pages (home, org settings, etc).
+  if (!eligible || dismissed || projectSlug) return null;
 
   return (
     <div

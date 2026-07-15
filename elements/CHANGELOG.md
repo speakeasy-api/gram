@@ -1,5 +1,28 @@
 # @gram-ai/elements
 
+## 1.42.2
+
+### Patch Changes
+
+- b931eb5: TimeRangePicker: natural-language input that the AI parser normalizes to a preset (e.g. "last week" → 7d) now applies as the preset's concrete date range when that preset isn't offered via `availablePresets`, instead of silently doing nothing. Fixes typed date ranges on the billing page, which passes `availablePresets={[]}`.
+
+## 1.42.1
+
+### Patch Changes
+
+- 7c637c7: Refresh the OpenRouter model list: add Claude Fable 5 (marked Expensive) and the GPT-5.6 series (Sol/Terra/Luna), replace the playground picker's "(Expensive)" label suffixes with a badge, and remove deprecated models (Claude Sonnet 4, GPT-4.1, o3, o4-mini, Gemini 2.5 Pro/Flash, DeepSeek R1).
+- 4a98092: Address review feedback from the OpenRouter model refresh: pin explicit per-provider fallback models in ResolveModel so de-listed or unknown models never silently resolve to a premium model (previously anthropic/\* fell back alphabetically to Claude Fable 5), give elements an explicit DEFAULT_MODEL (Claude Sonnet 5) instead of MODELS[0], and remove Gemini 3.5 Flash from the prompt-policy judge picker (the judge disables reasoning, which that model rejects).
+
+## 1.42.0
+
+### Minor Changes
+
+- 608940e: Drop CommonJS support
+
+### Patch Changes
+
+- c7edd5a: Link entities mentioned in Project Assistant replies to their dashboard pages, styled in Moonshine blue with an external-link icon
+
 ## 1.41.0
 
 ### Minor Changes

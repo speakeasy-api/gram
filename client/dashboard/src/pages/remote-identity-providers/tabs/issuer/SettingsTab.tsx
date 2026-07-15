@@ -91,6 +91,9 @@ export function SettingsTab({
         issuer.tokenEndpointAuthMethodsSupported ?? [],
       clientIdMetadataDocumentSupported:
         issuer.clientIdMetadataDocumentSupported,
+      serviceDocumentation: issuer.serviceDocumentation ?? "",
+      opPolicyUri: issuer.opPolicyUri ?? "",
+      opTosUri: issuer.opTosUri ?? "",
     },
     // Seed the saved values into the fields but not a discovery snapshot, so the
     // Discover control is available against the existing issuer URL.
@@ -146,6 +149,15 @@ export function SettingsTab({
             : undefined,
           clientIdMetadataDocumentSupported: arraysFromDiscovery
             ? discoveredSnapshot.clientIdMetadataDocumentSupported
+            : undefined,
+          serviceDocumentation: arraysFromDiscovery
+            ? discoveredSnapshot.serviceDocumentation
+            : undefined,
+          opPolicyUri: arraysFromDiscovery
+            ? discoveredSnapshot.opPolicyUri
+            : undefined,
+          opTosUri: arraysFromDiscovery
+            ? discoveredSnapshot.opTosUri
             : undefined,
         },
       },

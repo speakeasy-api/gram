@@ -8,7 +8,7 @@ import {
 import { ruleIdToPresidioEntity } from "./rule-ids";
 
 /** Presidio-backed categories */
-const PRESIDIO_CATEGORIES: RuleCategory[] = [
+export const PRESIDIO_CATEGORIES: RuleCategory[] = [
   "financial",
   "pii",
   "government_ids",
@@ -256,6 +256,12 @@ export const ACTION_OPTIONS: {
     value: "flag",
     title: "Log for review",
     description: "Log findings for review without interrupting the session",
+  },
+  {
+    value: "warn",
+    title: "Warn & confirm",
+    description:
+      "Warn the user and require them to acknowledge before the action proceeds. Falls back to blocking where confirmation isn't possible.",
   },
   {
     value: "block",

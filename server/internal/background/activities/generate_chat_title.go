@@ -190,6 +190,8 @@ func (g *GenerateChatTitle) generateTitle(ctx context.Context, orgID, projectID 
 		Model:                     "",
 		Stream:                    false,
 		UsageSource:               billing.ModelUsageSourceGram,
+		KeyType:                   openrouter.KeyTypeInternal,
+		KeySlot:                   "",
 		UserID:                    "",
 		ExternalUserID:            "",
 		UserEmail:                 "",

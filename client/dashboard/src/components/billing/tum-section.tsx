@@ -1,17 +1,10 @@
 import { Page } from "@/components/page-layout";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useOrganization } from "@/contexts/Auth";
-import { isAttributionDim } from "@/pages/costs/taxonomy";
 import { Dimension } from "@gram/client/models/components/queryfilter.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import {
@@ -20,84 +13,113 @@ import {
 } from "@gram/client/react-query/getTokensUnderManagement.js";
 import { useListProjects } from "@gram/client/react-query/listProjects.js";
 import { useSetBillingMetadataMutation } from "@gram/client/react-query/setBillingMetadata.js";
-import { Stack } from "@/components/ui/stack";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Stack } from "@/components/ui/stack";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Info, RotateCcw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { BillingCyclePicker } from "./billing-cycle-picker";
 import {
+  type BilledDays,
   type BillingPeriod,
+  bucketDateKey,
   cycleKey,
   cyclesFromTum,
   formatCycleName,
   periodDisplayRange,
   periodFromCycle,
 } from "./billing-cycles";
-import { stackModeFor } from "./breakdown-options";
+import {
+  BREAKDOWN_TOTAL,
+  breakdownValueLabel,
+  stackModeFor,
+} from "./breakdown-options";
 import { BreakdownPicker } from "./breakdown-picker";
-import { TokenUsagePanel } from "./token-usage-panel";
+import { type GroupSeries, TokenUsagePanel } from "./token-usage-panel";
 import { TumDetailsTable } from "./tum-details-table";
-import { riskPointsQuery, tumBreakdownQuery } from "./tum-queries";
+import { tumDetailsQuery } from "./tum-queries";
 import { TumUsageCard } from "./tum-usage-card";
 
 // Org-wide token breakdown for one billing cycle: stacked daily tokens by a
-// selectable dimension, by token type, or by risk involvement — one unified
-// picker drives all three. Reads the same analytics aggregates as the costs
-// explorer (telemetry.query), scoped to the cycle. No data-availability
-// pruning of the dimension list: the availability probe
-// (telemetry.listAttributeKeys) is project-scoped and this page is org-level,
-// so it would filter against the wrong project — dimensions without data
-// simply chart as "(unset)".
+// selectable dimension or by token type — one unified picker drives both.
+// Everything renders from the billing details request shared with the
+// details table (the server scopes it to the observed agent traffic, cache
+// reads excluded), except the headline total, which prefers the billed
+// per-day series the usage endpoint returns — the exact numbers on the
+// usage card. No data-availability pruning of the dimension list:
+// dimensions without data simply chart as "(unset)".
 function TumTokenBreakdown({
   period,
-  projectId,
+  projectNames,
+  billedDays,
   onSelectRange,
 }: {
   period: BillingPeriod;
-  projectId: string | null;
+  // Project id → name, for labeling the Project breakdown's UUID values.
+  projectNames: Map<string, string>;
+  // The billed per-day series and the cycle windows it fully describes.
+  billedDays: BilledDays;
   // Bar-click drill-down: narrows the page's period to the clicked bucket.
   onSelectRange: (start: Date, end: Date) => void;
 }): JSX.Element {
   const client = useGramContext();
   const organization = useOrganization();
   // The picker's selection, plus the last-picked dimension so switching to
-  // token type or risk and back doesn't lose the grouping.
-  const [breakdown, setBreakdown] = useState<string>(Dimension.DivisionName);
-  const [dimension, setDimension] = useState<Dimension>(Dimension.DivisionName);
+  // token type and back doesn't lose the grouping. Opens on the total view —
+  // the billed series that matches the usage card exactly.
+  const [breakdown, setBreakdown] = useState<string>(BREAKDOWN_TOTAL);
+  const [dimension, setDimension] = useState<string>(Dimension.DivisionName);
   const stackBy = stackModeFor(breakdown);
 
-  const scope = { client, orgId: organization.id, period, projectId };
-  const { data, isFetching } = useQuery(tumBreakdownQuery(scope, dimension));
-  // Shared with the details table's risk rows (same key — one request).
-  const { data: riskData } = useQuery(riskPointsQuery(scope));
+  const scope = { client, orgId: organization.id, period };
+  // Shared with the details table (same key — one request).
+  const { data, isFetching } = useQuery(tumDetailsQuery(scope));
 
-  // Attribution cuts hide the "" (not-applicable) group, same as the costs
-  // page — but only in the grouped view. The total / token-type / risk
-  // stackings sum the whole series and must keep the unattributed slice, or
-  // they'd undercount whenever the last-picked dimension was an attribution
-  // cut.
-  const series = useMemo(() => {
-    const ts = data?.timeseries ?? [];
-    return stackBy === "group" && isAttributionDim(dimension)
-      ? ts.filter((s) => s.groupValue !== "")
-      : ts;
-  }, [data, dimension, stackBy]);
+  const points = useMemo(() => data?.points ?? [], [data]);
 
-  const riskPoints = riskData?.points ?? null;
+  // The selected dimension's rows. "" rows are real observed traffic that
+  // lacks the attribute — charted as "(unset)", same as the details table.
+  const groups = useMemo<GroupSeries[]>(() => {
+    const rows = data?.breakdowns.find((b) => b.key === dimension)?.rows ?? [];
+    return rows.map((r) => ({
+      label: breakdownValueLabel(dimension, r.value, projectNames),
+      series: r.series,
+    }));
+  }, [data, dimension, projectNames]);
+
+  // The billed series aligned to the points grid, used only when the billed
+  // data COVERS every charted day — coverage, not positivity: a sealed
+  // zero-token cycle is fully known (all zeros beat late-recomputed
+  // telemetry), while a day outside every covered cycle window (e.g. a
+  // synthesized active cycle without history) makes the whole view fall
+  // back to the details totals rather than charting misleading zeros.
+  const billedSeries = useMemo(() => {
+    if (points.length === 0) return null;
+    const series: number[] = [];
+    for (const p of points) {
+      const key = bucketDateKey(p.bucketTimeUnixNano);
+      // Bucket dates are UTC midnights, so the key parses back to the
+      // bucket's exact start instant.
+      const ms = Date.parse(key);
+      const coveredDay = billedDays.covered.some(
+        (r) => ms >= r.start && ms < r.end,
+      );
+      if (!coveredDay) return null;
+      series.push(billedDays.byDate.get(key) ?? 0);
+    }
+    return series;
+  }, [points, billedDays]);
 
   const breakdownPicker = (
     <BreakdownPicker
       value={breakdown}
-      showRisk={riskPoints != null}
       onChange={(value) => {
         setBreakdown(value);
-        // Only actual dimensions feed the query's group_by; the special modes
-        // (total / token type / risk) keep the last-picked dimension.
+        // Only actual dimensions pick a breakdown; the special modes
+        // (total / token type) keep the last-picked dimension.
         if (stackModeFor(value) === "group") {
-          setDimension(value as Dimension);
+          setDimension(value);
         }
       }}
     />
@@ -105,18 +127,16 @@ function TumTokenBreakdown({
 
   return (
     <TokenUsagePanel
-      series={series}
+      points={points}
+      groups={groups}
+      billedSeries={billedSeries}
       stackBy={stackBy}
       breakdownPicker={breakdownPicker}
-      riskPoints={riskPoints}
       loading={isFetching && !data}
       onSelectRange={onSelectRange}
     />
   );
 }
-
-// All-projects sentinel for the project filter (Radix Select rejects "").
-const ALL_PROJECTS = "__all__";
 
 // The range picker's calendar hands back local midnights for both ends. The
 // page's data is bucketed by UTC day (matching the billing-cycle boundaries),
@@ -147,12 +167,19 @@ function customRangeFromPicker(
 export const TumUsageSection = (): JSX.Element => {
   const { data: tum } = useGetTokensUnderManagement();
   const organization = useOrganization();
+  // Projects are fetched only to label the Project breakdown's UUID values.
   const { data: projectsData } = useListProjects(
     { organizationId: organization.id },
     undefined,
     { throwOnError: false },
   );
-  const projects = projectsData?.projects ?? [];
+  const projectNames = useMemo(
+    () =>
+      new Map(
+        (projectsData?.projects ?? []).map((p) => [p.id, p.name] as const),
+      ),
+    [projectsData],
+  );
 
   // The selected billing cycle scopes the usage bar and the breakdown chart.
   // Derived (not synced) so the current cycle is the default once TUM loads.
@@ -172,21 +199,54 @@ export const TumUsageSection = (): JSX.Element => {
     label?: string;
   } | null>(null);
 
-  // Optional project scope for the chart and details table. The usage card
-  // stays org-wide — the TUM contract is an organization-level number.
-  const [projectId, setProjectId] = useState<string | null>(null);
-
   // Bumped by the Reset button; remounting the breakdown clears its internal
   // view state too (breakdown pick, granularity, cumulative, hidden series).
   const [viewNonce, setViewNonce] = useState(0);
   const handleReset = (): void => {
     setSelectedKey(null);
     setCustomRange(null);
-    setProjectId(null);
     setViewNonce((n) => n + 1);
   };
 
   const monthlyLimit = tum?.monthlyTokenLimit ?? null;
+
+  // Billed tokens per UTC day across every known cycle, for the chart's
+  // headline total. The daily series is advisory — a finalized cycle serves
+  // its sealed snapshot total while the days recompute live and can drift
+  // (late telemetry) or expire (aggregate TTL) — so each cycle's days are
+  // scaled to sum to its billed total, the number on the usage card. Same
+  // normalization as the details table; cumulative rounding keeps the series
+  // integral without losing the exact sum.
+  //
+  // `covered` records the cycle windows the billed data fully describes —
+  // including zero-token cycles, where every day is a known zero (a sealed
+  // zero total beats whatever late telemetry recomputed). A cycle with a
+  // nonzero total but no daily shape (the synthesized active-cycle fallback)
+  // stays uncovered, and the chart falls back to the details totals there.
+  const billedDays = useMemo<BilledDays>(() => {
+    const byDate = new Map<string, number>();
+    const covered: { start: number; end: number }[] = [];
+    for (const c of cycles) {
+      const daysSum = c.days.reduce((sum, d) => sum + d.tokens, 0);
+      if (daysSum === 0) {
+        if (c.tokens === 0) {
+          covered.push({ start: c.start.getTime(), end: c.end.getTime() });
+        }
+        continue;
+      }
+      covered.push({ start: c.start.getTime(), end: c.end.getTime() });
+      const scale = c.tokens / daysSum;
+      let acc = 0;
+      let prevRounded = 0;
+      for (const d of c.days) {
+        acc += d.tokens * scale;
+        const rounded = Math.round(acc);
+        byDate.set(d.date, rounded - prevRounded);
+        prevRounded = rounded;
+      }
+    }
+    return { byDate, covered };
+  }, [cycles]);
 
   // The effective period. A custom range that happens to match a cycle's
   // exact boundaries IS that cycle (billed normalization applies).
@@ -238,8 +298,9 @@ export const TumUsageSection = (): JSX.Element => {
     <Page.Section>
       <Page.Section.Title>Billing</Page.Section.Title>
       <Page.Section.Description>
-        The volume of agent traffic the platform has processed, stored, and run
-        security analysis on each billing cycle, measured in tokens.
+        The volume of agent traffic the platform observes from your users'
+        sessions each billing cycle, measured in tokens. Cache reads are
+        excluded, as is inference the platform runs itself.
       </Page.Section.Description>
       <Page.Section.Body>
         {tum && period ? (
@@ -248,28 +309,10 @@ export const TumUsageSection = (): JSX.Element => {
               <Type variant="body" className="font-medium">
                 Tokens Under Management
               </Type>
-              <SimpleTooltip tooltip="Counts tokens from agent sessions the platform has stored chats or tool calls for during the selected billing cycle. Compared against your contracted monthly allowance.">
+              <SimpleTooltip tooltip="Counts the tokens observed in your users' agent sessions (input, output, and cache writes; cache reads excluded) during the selected billing cycle. Compared against your contracted monthly allowance.">
                 <Info className="text-muted-foreground h-4 w-4" />
               </SimpleTooltip>
               <div className="ml-auto flex items-center gap-2">
-                <Select
-                  value={projectId ?? ALL_PROJECTS}
-                  onValueChange={(value) =>
-                    setProjectId(value === ALL_PROJECTS ? null : value)
-                  }
-                >
-                  <SelectTrigger className="bg-background h-auto w-auto gap-1.5 py-1.5 text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={ALL_PROJECTS}>All projects</SelectItem>
-                    {projects.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
                 <BillingCyclePicker
                   cycles={cycles}
                   selected={customRange ? null : selectedCycle}
@@ -297,17 +340,19 @@ export const TumUsageSection = (): JSX.Element => {
                   onClearCustomRange={() => setCustomRange(null)}
                   className="bg-background py-1.5 text-sm"
                 />
-                <Button variant="secondary" size="sm" onClick={handleReset}>
-                  <Button.LeftIcon>
-                    <RotateCcw className="size-3.5" />
-                  </Button.LeftIcon>
-                  <Button.Text>Reset</Button.Text>
-                </Button>
+                <button
+                  type="button"
+                  onClick={handleReset}
+                  className="border-border hover:bg-muted text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 rounded-md border px-2.5 py-2 text-sm transition-colors"
+                >
+                  <RotateCcw className="size-3.5" />
+                  Reset
+                </button>
               </div>
             </Stack>
             {cardCycle && (
               <TumUsageCard
-                tokens={cardCycle.tokens}
+                cycle={cardCycle}
                 limit={monthlyLimit}
                 // On a custom range the card still shows the WHOLE containing
                 // cycle's billing position — larger than the range's totals
@@ -323,7 +368,8 @@ export const TumUsageSection = (): JSX.Element => {
               <TumTokenBreakdown
                 key={viewNonce}
                 period={period}
-                projectId={projectId}
+                projectNames={projectNames}
+                billedDays={billedDays}
                 onSelectRange={handleBarSelect}
               />
             </div>
@@ -331,7 +377,7 @@ export const TumUsageSection = (): JSX.Element => {
               <TumDetailsTable
                 key={viewNonce}
                 period={period}
-                projectId={projectId}
+                projectNames={projectNames}
                 limit={monthlyLimit}
               />
             </div>

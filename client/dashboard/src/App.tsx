@@ -1,6 +1,6 @@
 import "./App.css";
 
-import { NuqsAdapter } from "nuqs/adapters/react-router/v7";
+import { NuqsAdapter } from "nuqs/adapters/react-router/v8";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { FontTexture, WebGLCanvas } from "@/components/webgl";
@@ -35,13 +35,14 @@ import { usePageTitle } from "./hooks/use-page-title";
 import { PREFERRED_THEME_STORAGE_KEY } from "./lib/local-storage-keys";
 import CliCallback from "./pages/cli/CliCallback";
 import ShadowMCPRequestAccess from "./pages/shadow-mcp/RequestAccess";
+import RiskPolicyChallengeAcknowledge from "./pages/risk-policy-challenge/Acknowledge";
 import { BlockPage } from "./pages/blocks/BlockDetail";
 import SwitchOrg from "./pages/demo/SwitchOrg";
 import { AppRoute, useRoutes, useOrgRoutes } from "./routes";
 
 export default function App(): JSX.Element {
   // Initialize from storage so React/Moonshine match the theme the pre-paint
-  // inline script (in index.html) already applied to <html> — avoids a flash.
+  // script (loaded from index.html) already applied to <html> — avoids a flash.
   const [theme, setTheme] = useState<"light" | "dark">(() => {
     try {
       return localStorage.getItem(PREFERRED_THEME_STORAGE_KEY) === "dark"
@@ -304,6 +305,10 @@ const RouteProvider = () => {
         <Route
           path="/risk-policy-bypass/request"
           element={<ShadowMCPRequestAccess />}
+        />
+        <Route
+          path="/risk-policy-challenge/acknowledge"
+          element={<RiskPolicyChallengeAcknowledge />}
         />
         <Route path="/blocks/:id" element={<BlockPage />} />
         <Route path="/" element={<LoginCheck />}>

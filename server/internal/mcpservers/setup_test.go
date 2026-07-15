@@ -5,10 +5,8 @@ import (
 	"log"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -28,7 +26,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
-	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 var infra *testenv.Environment
@@ -81,7 +78,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 
 	auditLogger := audit.NewLogger()
 
-	svc := mcpservers.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger)
+	svc := mcpservers.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, false)
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -155,21 +152,4 @@ func seedTunneledMcpServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool
 	require.NoError(t, err)
 
 	return server.ID
-}
-
-// seedUserSessionIssuer inserts a user_session_issuers row through the
-// generated repo so we have a valid FK for the new
-// mcp_servers.user_session_issuer_id column in tests.
-func seedUserSessionIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID) uuid.UUID {
-	t.Helper()
-
-	issuer, err := usersessionsrepo.New(conn).CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{
-		ProjectID:          projectID,
-		Slug:               "issuer-" + uuid.NewString(),
-		AuthnChallengeMode: "chain",
-		SessionDuration:    pgtype.Interval{Microseconds: time.Hour.Microseconds(), Days: 0, Months: 0, Valid: true},
-	})
-	require.NoError(t, err)
-
-	return issuer.ID
 }

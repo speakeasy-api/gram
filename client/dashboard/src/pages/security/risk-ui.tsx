@@ -9,7 +9,13 @@ import {
 } from "react";
 import { useRiskUnmaskResultMutation } from "@gram/client/react-query/riskUnmaskResult.js";
 import { RULE_CATEGORY_META } from "./policy-data";
-import { getCategoryForFinding, getRuleTitleFallback } from "./risk-utils";
+import {
+  getCategoryForFinding,
+  getRuleTitleFallback,
+  SEVERITY_RATING_LABEL,
+  scoreToRating,
+  type SeverityRating,
+} from "./risk-utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { SimpleTooltip } from "@/components/ui/tooltip";
@@ -67,6 +73,70 @@ export function RuleLabel({
     <span className="font-mono text-xs" title={ruleId}>
       {label}
     </span>
+  );
+}
+
+// Severity badge for a finding or policy. The score is a policy attribute; a
+// finding resolves it from its owning policy. Variant maps to the qualitative
+// band so the color scales with risk. Renders nothing when the score is absent
+// (e.g. a finding whose policy hasn't loaded yet).
+// Moonshine's badge palette has no distinct "orange", so High and Critical both
+// map to destructive — the label text / numeric score still distinguishes them.
+const SEVERITY_BADGE_VARIANT: Record<
+  SeverityRating,
+  "success" | "warning" | "destructive"
+> = {
+  low: "success",
+  medium: "warning",
+  high: "destructive",
+  critical: "destructive",
+};
+
+export function SeverityBadge({
+  score,
+  className,
+}: {
+  score: number | undefined;
+  className?: string;
+}): JSX.Element | null {
+  if (score == null) return null;
+  const rating = scoreToRating(score);
+  return (
+    <SimpleTooltip
+      tooltip={`${SEVERITY_RATING_LABEL[rating]} severity · score ${score.toFixed(1)}`}
+    >
+      <Badge variant={SEVERITY_BADGE_VARIANT[rating]} className={className}>
+        <Badge.Text>{SEVERITY_RATING_LABEL[rating]}</Badge.Text>
+      </Badge>
+    </SimpleTooltip>
+  );
+}
+
+// Numeric severity, rendered as a color-coded pill. Used in list/table columns
+// where the raw score is more useful than the qualitative label — the number
+// carries the exact value while the band color (shared with SeverityBadge) makes
+// severity scannable at a glance.
+export function SeverityScore({
+  score,
+  className,
+}: {
+  score: number | undefined;
+  className?: string;
+}): JSX.Element {
+  if (score == null) {
+    return <span className="text-muted-foreground text-sm">-</span>;
+  }
+  // Rate on the rounded value we actually display, so a score sitting just below
+  // a band boundary (e.g. 3.96 → shown as "4.0") never renders the number in a
+  // color that disagrees with the band its displayed value falls in.
+  const displayed = Math.round(score * 10) / 10;
+  const rating = scoreToRating(displayed);
+  return (
+    <SimpleTooltip tooltip={`${SEVERITY_RATING_LABEL[rating]} severity`}>
+      <Badge variant={SEVERITY_BADGE_VARIANT[rating]} className={className}>
+        <Badge.Text className="tabular-nums">{displayed.toFixed(1)}</Badge.Text>
+      </Badge>
+    </SimpleTooltip>
   );
 }
 

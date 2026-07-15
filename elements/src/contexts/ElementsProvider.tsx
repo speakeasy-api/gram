@@ -8,7 +8,7 @@ import { useMCPTools } from "@/hooks/useMCPTools";
 import { useToolApproval } from "@/hooks/useToolApproval";
 import { getApiUrl } from "@/lib/api";
 import { initErrorTracking, trackError } from "@/lib/errorTracking";
-import { MODELS } from "@/lib/models";
+import { DEFAULT_MODEL } from "@/lib/models";
 import {
   clearFrontendToolApprovalConfig,
   getEnabledTools,
@@ -201,7 +201,7 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
   const toolApproval = useToolApproval();
 
   const [model, setModel] = useState<Model>(
-    config.model?.defaultModel ?? MODELS[0],
+    config.model?.defaultModel ?? DEFAULT_MODEL,
   );
   const [isExpanded, setIsExpanded] = useState(
     config.modal?.defaultExpanded ?? false,

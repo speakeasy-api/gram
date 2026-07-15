@@ -33,6 +33,9 @@ type Endpoints struct {
 	GetRiskRuleBreakdown           goa.Endpoint
 	GetRiskPolicyStatus            goa.Endpoint
 	CreateRiskPolicyBypassRequest  goa.Endpoint
+	AcknowledgeRiskPolicyChallenge goa.Endpoint
+	GetRiskPolicyChallenge         goa.Endpoint
+	DeclineRiskPolicyChallenge     goa.Endpoint
 	GetRiskBlock                   goa.Endpoint
 	SubmitRiskBlockFeedback        goa.Endpoint
 	ListRiskPolicyBypassRequests   goa.Endpoint
@@ -50,6 +53,7 @@ type Endpoints struct {
 	UpdateRiskExclusion            goa.Endpoint
 	DeleteRiskExclusion            goa.Endpoint
 	SuggestCustomDetectionRule     goa.Endpoint
+	SuggestExclusion               goa.Endpoint
 	TestDetectionRule              goa.Endpoint
 	EvaluatePromptGuardrail        goa.Endpoint
 	SaveRiskEvalReview             goa.Endpoint
@@ -79,6 +83,9 @@ func NewEndpoints(s Service) *Endpoints {
 		GetRiskRuleBreakdown:           NewGetRiskRuleBreakdownEndpoint(s, a.APIKeyAuth),
 		GetRiskPolicyStatus:            NewGetRiskPolicyStatusEndpoint(s, a.APIKeyAuth),
 		CreateRiskPolicyBypassRequest:  NewCreateRiskPolicyBypassRequestEndpoint(s, a.APIKeyAuth),
+		AcknowledgeRiskPolicyChallenge: NewAcknowledgeRiskPolicyChallengeEndpoint(s, a.APIKeyAuth),
+		GetRiskPolicyChallenge:         NewGetRiskPolicyChallengeEndpoint(s, a.APIKeyAuth),
+		DeclineRiskPolicyChallenge:     NewDeclineRiskPolicyChallengeEndpoint(s, a.APIKeyAuth),
 		GetRiskBlock:                   NewGetRiskBlockEndpoint(s, a.APIKeyAuth),
 		SubmitRiskBlockFeedback:        NewSubmitRiskBlockFeedbackEndpoint(s, a.APIKeyAuth),
 		ListRiskPolicyBypassRequests:   NewListRiskPolicyBypassRequestsEndpoint(s, a.APIKeyAuth),
@@ -96,6 +103,7 @@ func NewEndpoints(s Service) *Endpoints {
 		UpdateRiskExclusion:            NewUpdateRiskExclusionEndpoint(s, a.APIKeyAuth),
 		DeleteRiskExclusion:            NewDeleteRiskExclusionEndpoint(s, a.APIKeyAuth),
 		SuggestCustomDetectionRule:     NewSuggestCustomDetectionRuleEndpoint(s, a.APIKeyAuth),
+		SuggestExclusion:               NewSuggestExclusionEndpoint(s, a.APIKeyAuth),
 		TestDetectionRule:              NewTestDetectionRuleEndpoint(s, a.APIKeyAuth),
 		EvaluatePromptGuardrail:        NewEvaluatePromptGuardrailEndpoint(s, a.APIKeyAuth),
 		SaveRiskEvalReview:             NewSaveRiskEvalReviewEndpoint(s, a.APIKeyAuth),
@@ -123,6 +131,9 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetRiskRuleBreakdown = m(e.GetRiskRuleBreakdown)
 	e.GetRiskPolicyStatus = m(e.GetRiskPolicyStatus)
 	e.CreateRiskPolicyBypassRequest = m(e.CreateRiskPolicyBypassRequest)
+	e.AcknowledgeRiskPolicyChallenge = m(e.AcknowledgeRiskPolicyChallenge)
+	e.GetRiskPolicyChallenge = m(e.GetRiskPolicyChallenge)
+	e.DeclineRiskPolicyChallenge = m(e.DeclineRiskPolicyChallenge)
 	e.GetRiskBlock = m(e.GetRiskBlock)
 	e.SubmitRiskBlockFeedback = m(e.SubmitRiskBlockFeedback)
 	e.ListRiskPolicyBypassRequests = m(e.ListRiskPolicyBypassRequests)
@@ -140,6 +151,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.UpdateRiskExclusion = m(e.UpdateRiskExclusion)
 	e.DeleteRiskExclusion = m(e.DeleteRiskExclusion)
 	e.SuggestCustomDetectionRule = m(e.SuggestCustomDetectionRule)
+	e.SuggestExclusion = m(e.SuggestExclusion)
 	e.TestDetectionRule = m(e.TestDetectionRule)
 	e.EvaluatePromptGuardrail = m(e.EvaluatePromptGuardrail)
 	e.SaveRiskEvalReview = m(e.SaveRiskEvalReview)
@@ -1114,6 +1126,75 @@ func NewCreateRiskPolicyBypassRequestEndpoint(s Service, authAPIKeyFn security.A
 	}
 }
 
+// NewAcknowledgeRiskPolicyChallengeEndpoint returns an endpoint function that
+// calls the method "acknowledgeRiskPolicyChallenge" of service "risk".
+func NewAcknowledgeRiskPolicyChallengeEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*AcknowledgeRiskPolicyChallengePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.AcknowledgeRiskPolicyChallenge(ctx, p)
+	}
+}
+
+// NewGetRiskPolicyChallengeEndpoint returns an endpoint function that calls
+// the method "getRiskPolicyChallenge" of service "risk".
+func NewGetRiskPolicyChallengeEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetRiskPolicyChallengePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetRiskPolicyChallenge(ctx, p)
+	}
+}
+
+// NewDeclineRiskPolicyChallengeEndpoint returns an endpoint function that
+// calls the method "declineRiskPolicyChallenge" of service "risk".
+func NewDeclineRiskPolicyChallengeEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DeclineRiskPolicyChallengePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.DeclineRiskPolicyChallenge(ctx, p)
+	}
+}
+
 // NewGetRiskBlockEndpoint returns an endpoint function that calls the method
 // "getRiskBlock" of service "risk".
 func NewGetRiskBlockEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
@@ -2042,6 +2123,65 @@ func NewSuggestCustomDetectionRuleEndpoint(s Service, authAPIKeyFn security.Auth
 			return nil, err
 		}
 		return s.SuggestCustomDetectionRule(ctx, p)
+	}
+}
+
+// NewSuggestExclusionEndpoint returns an endpoint function that calls the
+// method "suggestExclusion" of service "risk".
+func NewSuggestExclusionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SuggestExclusionPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.SuggestExclusion(ctx, p)
 	}
 }
 

@@ -11,13 +11,61 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useRoutes } from "@/routes";
+import { useMarketplaceSettings } from "@gram/client/react-query/marketplaceSettings";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
 import { ExternalLink, Plus, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { HookSourceIcon } from "./HookSourceIcon";
 
-function ClaudeInstallContent() {
+function ClaudeInstallContent({
+  marketplaceUrl,
+  pluginName,
+}: {
+  marketplaceUrl?: string;
+  pluginName?: string;
+}) {
+  const { data: marketplaceSettings } = useMarketplaceSettings();
+  // Marketplace identifiers are a cross-surface contract: Claude Code
+  // registers the marketplace under the published marketplace.json `name`
+  // (effectiveName) and references plugins as `<plugin>@<name>`.
+  const marketplaceName = marketplaceSettings?.effectiveName ?? null;
+
+  const addCommand = marketplaceUrl
+    ? `claude plugin marketplace add ${marketplaceUrl}`
+    : null;
+  const installCommand =
+    pluginName && marketplaceName
+      ? `claude plugin install ${pluginName}@${marketplaceName}`
+      : null;
+
+  const requireMarketplaceJson =
+    marketplaceUrl && marketplaceName
+      ? JSON.stringify(
+          {
+            env: {
+              FORCE_AUTOUPDATE_PLUGINS: "1",
+            },
+            extraKnownMarketplaces: {
+              [marketplaceName]: {
+                autoUpdate: true,
+                source: { source: "git", url: marketplaceUrl },
+              },
+            },
+          },
+          null,
+          2,
+        )
+      : null;
+  const requirePluginJson =
+    pluginName && marketplaceName
+      ? JSON.stringify(
+          { plugins: { required: [`${pluginName}@${marketplaceName}`] } },
+          null,
+          2,
+        )
+      : null;
+
   return (
     <div className="space-y-6">
       <div>
@@ -25,16 +73,34 @@ function ClaudeInstallContent() {
           Test Yourself
         </Heading>
         <Type muted small className="mb-4">
-          Try hooks in your Claude Code instance:
+          Install your org&apos;s published hooks plugin in your own Claude Code
+          instance:
         </Type>
-        <div className="bg-muted/50 space-y-2 p-4 font-mono text-sm">
-          <div className="flex items-center justify-between">
-            <code>claude plugin marketplace add speakeasy-api/gram</code>
+        {addCommand && installCommand ? (
+          <div className="bg-muted/50 space-y-2 p-4 font-mono text-sm">
+            <div className="flex items-center justify-between gap-2">
+              <code className="break-all">{addCommand}</code>
+              <CopyButton
+                size="inline"
+                text={addCommand}
+                tooltip="Copy command"
+              />
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <code className="break-all">{installCommand}</code>
+              <CopyButton
+                size="inline"
+                text={installCommand}
+                tooltip="Copy command"
+              />
+            </div>
           </div>
-          <div className="flex items-center justify-between">
-            <code>claude plugin install gram-hooks@gram</code>
-          </div>
-        </div>
+        ) : (
+          <p className="text-muted-foreground text-sm italic">
+            Publish your plugins to GitHub first to get a marketplace install
+            URL.
+          </p>
+        )}
       </div>
 
       <div>
@@ -57,15 +123,25 @@ function ClaudeInstallContent() {
             >
               1. Require the marketplace
             </Type>
-            <div className="bg-muted/50 p-4 font-mono text-sm">
-              <code>
-                {`{
-  "pluginMarketplaces": {
-    "required": ["speakeasy-api/gram"]
-  }
-}`}
-              </code>
-            </div>
+            {requireMarketplaceJson ? (
+              <div className="bg-muted/50 p-4 font-mono text-sm">
+                <div className="flex items-start justify-between gap-2">
+                  <pre className="overflow-x-auto whitespace-pre-wrap">
+                    {requireMarketplaceJson}
+                  </pre>
+                  <CopyButton
+                    size="inline"
+                    text={requireMarketplaceJson}
+                    tooltip="Copy settings.json snippet"
+                  />
+                </div>
+              </div>
+            ) : (
+              <p className="text-muted-foreground text-sm italic">
+                Publish your plugins to GitHub first to get a marketplace
+                install URL.
+              </p>
+            )}
           </div>
 
           <div>
@@ -78,15 +154,25 @@ function ClaudeInstallContent() {
             >
               2. Require the plugin
             </Type>
-            <div className="bg-muted/50 p-4 font-mono text-sm">
-              <code>
-                {`{
-  "plugins": {
-    "required": ["gram-hooks@gram"]
-  }
-}`}
-              </code>
-            </div>
+            {requirePluginJson ? (
+              <div className="bg-muted/50 p-4 font-mono text-sm">
+                <div className="flex items-start justify-between gap-2">
+                  <pre className="overflow-x-auto whitespace-pre-wrap">
+                    {requirePluginJson}
+                  </pre>
+                  <CopyButton
+                    size="inline"
+                    text={requirePluginJson}
+                    tooltip="Copy settings.json snippet"
+                  />
+                </div>
+              </div>
+            ) : (
+              <p className="text-muted-foreground text-sm italic">
+                Publish your plugins to GitHub first to get the plugin
+                identifier.
+              </p>
+            )}
           </div>
 
           <Button variant="secondary" size="sm" asChild>
@@ -175,9 +261,9 @@ function CursorInstallContent() {
               Script Content:
             </span>
             <div className="bg-background/50 mt-1 overflow-x-auto p-3 font-mono text-xs break-all whitespace-pre-wrap">
-              {`#!/bin/bash\necho '{"env":{"GRAM_API_KEY":"`}
+              {`#!/bin/bash\necho '{"env":{"GRAM_HOOKS_API_KEY":"`}
               <span className="text-primary font-semibold">{`<YOUR_API_KEY>`}</span>
-              {`","GRAM_PROJECT_SLUG":"`}
+              {`","GRAM_HOOKS_PROJECT_SLUG":"`}
               <span className="text-primary font-semibold">{`<YOUR_PROJECT_SLUG>`}</span>
               {`"}}'`}
             </div>
@@ -229,19 +315,19 @@ function CursorInstallContent() {
 
 function CodexInstallContent({
   marketplaceUrl,
-  repoName,
+  pluginName,
 }: {
   marketplaceUrl?: string;
-  repoName?: string;
+  pluginName?: string;
 }) {
+  const { data: marketplaceSettings } = useMarketplaceSettings();
   const addCommand = marketplaceUrl
     ? `codex plugin marketplace add ${marketplaceUrl}`
     : null;
 
-  const marketplaceKey = repoName ?? null;
-  const pluginName = repoName
-    ? repoName.replace(/-gram$/, "-observability-codex")
-    : null;
+  // Codex registers the marketplace under the published marketplace.json
+  // `name` (effectiveName) and references plugins as `<plugin>@<name>`.
+  const marketplaceKey = marketplaceSettings?.effectiveName ?? null;
   const pluginEntry =
     pluginName && marketplaceKey
       ? `[plugins."${pluginName}@${marketplaceKey}"]\nenabled = true`
@@ -513,12 +599,17 @@ export function HooksSetupDialog({
         </div>
 
         <div className="min-h-0 overflow-y-auto">
-          {selected === "claude" && <ClaudeInstallContent />}
+          {selected === "claude" && (
+            <ClaudeInstallContent
+              marketplaceUrl={publishStatus?.marketplaceUrl}
+              pluginName={publishStatus?.claudeObservabilityPlugin}
+            />
+          )}
           {selected === "cursor" && <CursorInstallContent />}
           {selected === "codex" && (
             <CodexInstallContent
               marketplaceUrl={publishStatus?.marketplaceUrl}
-              repoName={publishStatus?.repoName ?? undefined}
+              pluginName={publishStatus?.codexObservabilityPlugin}
             />
           )}
         </div>

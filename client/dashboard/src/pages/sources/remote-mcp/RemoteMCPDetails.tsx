@@ -62,6 +62,7 @@ import { Navigate, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 import { useLinkMcpServerToRemote } from "./hooks";
 import { RemoveRemoteMcpDialogContent } from "./RemoveRemoteMcpDialog";
+import { HeadersSection } from "@/pages/mcp/x/tabs/settings/sections/HeadersSection";
 import { useVerifyRemoteMcpUrl } from "./useVerifyRemoteMcpUrl";
 import {
   VerifyRemoteMcpUrlAlert,
@@ -502,6 +503,10 @@ function SettingsTab({
         initialName={initialName}
       />
       <UrlSection remoteMcpServerId={remoteMcpServerId} initialUrl={url} />
+      <HeadersSection
+        remoteMcpServerId={remoteMcpServerId}
+        context={{ kind: "remote-mcp", linkedMcpServers }}
+      />
       <DangerZoneSection
         remoteMcpServerId={remoteMcpServerId}
         url={url}

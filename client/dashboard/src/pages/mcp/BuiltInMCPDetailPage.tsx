@@ -12,53 +12,19 @@ import { Stack } from "@/components/ui/stack";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ExternalLink } from "lucide-react";
-import { useState } from "react";
 import { toast } from "sonner";
+import { Navigate, useLocation, useNavigate, useParams } from "react-router";
+import { useRoutes } from "@/routes";
+import {
+  activeTabFromPath,
+  builtInTabHref,
+  type TabValue,
+} from "./BuiltInMCPDetailRouting";
+import { BUILT_IN_TOOLS } from "./builtInMcpTools";
 
-const BUILT_IN_TOOLS = [
-  {
-    name: "gram_list_tools",
-    description: "List all tools for a project",
-  },
-  {
-    name: "platform_search_logs",
-    description: "Search and inspect telemetry logs for the current project.",
-  },
-  {
-    name: "gram_list_global_variations",
-    description: "List globally defined tool variations.",
-  },
-  {
-    name: "gram_search_tool_calls",
-    description: "Search and list tool calls that match a search filter",
-  },
-  {
-    name: "gram_get_toolset",
-    description:
-      "Get detailed information about a toolset including full HTTP tool definitions",
-  },
-  {
-    name: "gram_get_observability_overview",
-    description:
-      "Get observability overview metrics including time series, tool breakdowns, and summary stats",
-  },
-  {
-    name: "gram_list_toolsets",
-    description: "List all toolsets for a project",
-  },
-  {
-    name: "gram_get_mcp_metadata",
-    description: "Fetch the metadata that powers the MCP install page.",
-  },
-  {
-    name: "gram_get_deployment_logs",
-    description: "Get logs for a deployment.",
-  },
-  {
-    name: "gram_list_chats",
-    description: "List all chats for a project",
-  },
-];
+// Kept in sync with the built-in tab subroutes (see routes.tsx) so the
+// breadcrumb hides the tab segment.
+const BUILT_IN_TAB_URLS = ["overview", "tools"];
 
 const TAB_TRIGGER_CLASS = cn(
   "relative h-11 rounded-none border-none bg-transparent! px-1 pt-3 pb-3 shadow-none!",
@@ -68,18 +34,32 @@ const TAB_TRIGGER_CLASS = cn(
 
 export function BuiltInMCPDetailPage(): JSX.Element {
   const { orgSlug } = useSlugs();
-  const [activeTab, setActiveTab] = useState("overview");
+  const { builtInSlug } = useParams<{ builtInSlug: string }>();
+  const location = useLocation();
+  const routes = useRoutes();
+  const navigate = useNavigate();
 
   if (!orgSlug) {
     throw new Error("No org slug found.");
   }
 
+  const idOrSlug = builtInSlug ?? "";
+  const activeTab = activeTabFromPath(location.pathname, idOrSlug);
   const mcpUrl = `${getServerURL()}/mcp/${orgSlug}-mcp-logs`;
+
+  if (!activeTab) {
+    return (
+      <Navigate to={builtInTabHref(routes, idOrSlug, "overview")} replace />
+    );
+  }
 
   return (
     <Page>
       <Page.Header>
-        <Page.Header.Breadcrumbs />
+        <Page.Header.Breadcrumbs
+          substitutions={{ [idOrSlug]: "MCP Logs" }}
+          skipSegments={BUILT_IN_TAB_URLS}
+        />
       </Page.Header>
       <Page.Body>
         <DetailLayout>
@@ -111,7 +91,9 @@ export function BuiltInMCPDetailPage(): JSX.Element {
 
           <Tabs
             value={activeTab}
-            onValueChange={setActiveTab}
+            onValueChange={(tab) => {
+              navigate(builtInTabHref(routes, idOrSlug, tab as TabValue));
+            }}
             className="flex w-full flex-1 flex-col"
           >
             <DetailLayout.Tabs>

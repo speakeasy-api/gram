@@ -26,6 +26,7 @@ import {
 } from "@/lib/sources";
 import { toastError } from "@/lib/toast-error";
 import { TUNNELED_MCP_FEATURE_FLAG } from "@/lib/tunneledMcp";
+import { tunnelGatewayURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { TunneledMcpConnection } from "@gram/client/models/components/tunneledmcpconnection.js";
@@ -937,7 +938,7 @@ export function TunneledMcpSetupTabs({
   const upstream = "http://localhost:3000/mcp";
   const clusterUpstream = "http://127.0.0.1:3000/mcp";
   const dockerUpstream = `http://hello-world-mcp-${slug}:3000/mcp`;
-  const gateway = "wss://tunnel.getgram.ai/connect";
+  const gateway = tunnelGatewayURL();
   const helloWorldPython = `from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP(

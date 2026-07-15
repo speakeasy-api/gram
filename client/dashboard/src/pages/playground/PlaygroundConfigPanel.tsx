@@ -1,11 +1,11 @@
 import { AnnotationBadges } from "@/components/tool-list/AnnotationBadges";
 import { MethodBadge } from "@/components/tool-list/MethodBadge";
+import { Button } from "@/components/ui/button";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -16,7 +16,9 @@ import {
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { SimpleTooltip } from "@/components/ui/tooltip";
+import { Type } from "@/components/ui/type";
 import { AVAILABLE_MODELS } from "@/lib/models";
+import { cn } from "@/lib/utils";
 import { Tool, getToolSourceLabel } from "@/lib/toolTypes";
 import {
   ChevronDownIcon,
@@ -29,7 +31,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { McpIcon } from "@/components/ui/mcp-icon";
-import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 interface ToolsetInfo {
   name: string;
@@ -47,8 +49,19 @@ interface ToolGroup {
   packageName?: string;
 }
 
+/** A read-only tool advertised by a remote MCP server (no Gram-side identity). */
+interface ReadOnlyTool {
+  name: string;
+  description?: string;
+}
+
 interface ToolsetSectionProps {
   tools?: Tool[];
+  /**
+   * Live tools from a remote-MCP-backed server, rendered read-only. When set,
+   * the grouped/editable Gram-tool list is replaced by this flat list.
+   */
+  remoteTools?: ReadOnlyTool[];
   selectedTools?: Set<string>;
   onToolToggle?: (toolId: string) => void;
   temperature?: number;
@@ -243,6 +256,7 @@ function groupTools(
 
 export function PlaygroundConfigPanel({
   tools = [],
+  remoteTools,
   selectedTools: _selectedTools = new Set(),
   onToolToggle: _onToolToggle,
   temperature,
@@ -294,7 +308,7 @@ export function PlaygroundConfigPanel({
     <div className="flex h-full flex-col overflow-y-auto border-r">
       {/* Toolset Selector - Always at top */}
       <div className="border-b px-4 py-3">
-        <Label className="text-muted-foreground mb-1.5 block font-mono text-xs tracking-[0.08em] uppercase">
+        <Label className="text-muted-foreground mb-1.5 block text-[11px] font-medium tracking-wider uppercase">
           MCP Server
         </Label>
         {toolsetSelector}
@@ -306,7 +320,7 @@ export function PlaygroundConfigPanel({
           <Collapsible open={authOpen} onOpenChange={setAuthOpen}>
             <CollapsibleTrigger className="hover:bg-muted/30 group flex w-full items-center px-4 py-2.5 transition-colors">
               <div className="flex items-center gap-1.5">
-                <span className="text-muted-foreground font-mono text-xs tracking-[0.08em] uppercase">
+                <span className="text-muted-foreground text-[11px] font-semibold tracking-wider uppercase">
                   Authentication
                 </span>
                 {authOpen ? (
@@ -323,12 +337,18 @@ export function PlaygroundConfigPanel({
         </div>
       )}
 
-      {/* Tools Section */}
-      <div className="border-b">
-        <Collapsible open={toolsOpen} onOpenChange={setToolsOpen}>
+      {/* Tools Section — fills remaining height and scrolls internally when open */}
+      <div
+        className={cn("border-b", toolsOpen && "flex min-h-0 flex-1 flex-col")}
+      >
+        <Collapsible
+          open={toolsOpen}
+          onOpenChange={setToolsOpen}
+          className="flex min-h-0 flex-1 flex-col"
+        >
           <CollapsibleTrigger className="hover:bg-muted/30 group flex w-full items-center justify-between px-4 py-2.5 transition-colors">
             <div className="flex items-center gap-1.5">
-              <span className="text-muted-foreground font-mono text-xs tracking-[0.08em] uppercase">
+              <span className="text-muted-foreground text-[11px] font-semibold tracking-wider uppercase">
                 Tools
               </span>
               {toolsOpen ? (
@@ -338,88 +358,30 @@ export function PlaygroundConfigPanel({
               )}
             </div>
 
-            <Button
-              size="sm"
-              variant="tertiary"
-              aria-label="Add tools"
-              className="h-6 px-2"
-              onClick={(e: React.MouseEvent) => {
-                e.stopPropagation();
-                onOpenToolsModal?.();
-              }}
-            >
-              <PlusIcon className="size-3.5" />
-            </Button>
-          </CollapsibleTrigger>
-          <CollapsibleContent className="py-1">
-            {toolGroups.length > 0 ? (
-              <div>
-                {toolGroups.map((group) => {
-                  const isExpanded = expandedGroups.has(group.title);
-                  return (
-                    <div key={group.title}>
-                      {/* Group Header */}
-                      <button
-                        onClick={() => toggleGroup(group.title)}
-                        className="bg-surface-secondary-default hover:bg-active group/item flex w-full items-center gap-2 px-3 py-2 text-left transition-colors"
-                      >
-                        <group.icon className="text-muted-foreground size-3.5 shrink-0" />
-                        <div className="min-w-0 truncate text-xs">
-                          {group.title}
-                        </div>
-                        {isExpanded ? (
-                          <ChevronDownIcon className="text-muted-foreground size-3.5 shrink-0" />
-                        ) : (
-                          <ChevronRightIcon className="text-muted-foreground size-3.5 shrink-0" />
-                        )}
-                        <div className="flex-1" />
-                        <div className="text-muted-foreground text-[11px] tabular-nums">
-                          {group.tools.length}
-                        </div>
-                      </button>
-
-                      {/* Expanded Tool List */}
-                      {isExpanded && (
-                        <div>
-                          {group.tools.map((tool) => {
-                            return (
-                              <div
-                                key={tool.toolUrn}
-                                className="group hover:bg-muted/30 flex w-full items-center gap-2 px-3 py-2 transition-colors"
-                              >
-                                <button
-                                  onClick={() => tool && onToolClick?.(tool)}
-                                  className="flex min-w-0 flex-1 items-center justify-between text-left"
-                                >
-                                  <p className="text-foreground truncate text-xs leading-5">
-                                    {tool.name}
-                                  </p>
-                                  <div className="ml-2 flex shrink-0 items-center gap-2">
-                                    <AnnotationBadges tool={tool} />
-                                    {tool.type === "http" &&
-                                      tool.httpMethod && (
-                                        <MethodBadge method={tool.httpMethod} />
-                                      )}
-                                    {tool.type === "function" && (
-                                      <SquareFunction className="text-muted-foreground size-3.5" />
-                                    )}
-                                    {tool.type === "prompt" && (
-                                      <PencilRuler className="text-muted-foreground size-3.5" />
-                                    )}
-                                  </div>
-                                </button>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <InlineEmptyState title="No tools added" className="py-6" />
+            {onOpenToolsModal && (
+              <Button
+                size="sm"
+                variant="tertiary"
+                className="h-6 px-2"
+                onClick={(e: React.MouseEvent) => {
+                  e.stopPropagation();
+                  onOpenToolsModal();
+                }}
+              >
+                <PlusIcon className="size-3.5" />
+              </Button>
             )}
+          </CollapsibleTrigger>
+          <CollapsibleContent className="flex min-h-0 flex-1 flex-col py-1">
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <ToolsBody
+                remoteTools={remoteTools}
+                toolGroups={toolGroups}
+                expandedGroups={expandedGroups}
+                onToggleGroup={toggleGroup}
+                onToolClick={onToolClick}
+              />
+            </div>
           </CollapsibleContent>
         </Collapsible>
       </div>
@@ -429,7 +391,7 @@ export function PlaygroundConfigPanel({
         <Collapsible open={configOpen} onOpenChange={setConfigOpen}>
           <CollapsibleTrigger className="hover:bg-muted/30 group flex w-full items-center px-4 py-2.5 transition-colors">
             <div className="flex items-center gap-1.5">
-              <span className="text-muted-foreground font-mono text-xs tracking-[0.08em] uppercase">
+              <span className="text-muted-foreground text-[11px] font-semibold tracking-wider uppercase">
                 Model Settings
               </span>
               {configOpen ? (
@@ -453,7 +415,14 @@ export function PlaygroundConfigPanel({
                   <SelectContent>
                     {AVAILABLE_MODELS.map((m) => (
                       <SelectItem key={m.value} value={m.value}>
-                        {m.label}
+                        <span className="flex items-center gap-2">
+                          {m.label}
+                          {m.expensive && (
+                            <Badge size="sm" variant="warning" background>
+                              <Badge.Text>Expensive</Badge.Text>
+                            </Badge>
+                          )}
+                        </span>
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -513,6 +482,150 @@ export function PlaygroundConfigPanel({
           </CollapsibleContent>
         </Collapsible>
       </div>
+    </div>
+  );
+}
+
+/** Picks the right tool list for the panel: remote (read-only), grouped, or empty. */
+function ToolsBody({
+  remoteTools,
+  toolGroups,
+  expandedGroups,
+  onToggleGroup,
+  onToolClick,
+}: {
+  remoteTools?: ReadOnlyTool[];
+  toolGroups: ToolGroup[];
+  expandedGroups: Set<string>;
+  onToggleGroup: (groupTitle: string) => void;
+  onToolClick?: (tool: Tool) => void;
+}): JSX.Element {
+  if (remoteTools !== undefined) {
+    return <ReadOnlyToolList tools={remoteTools} />;
+  }
+  if (toolGroups.length === 0) {
+    return (
+      <div className="px-4 py-6 text-center">
+        <Type variant="small" className="text-muted-foreground">
+          No tools added
+        </Type>
+      </div>
+    );
+  }
+  return (
+    <GroupedToolList
+      toolGroups={toolGroups}
+      expandedGroups={expandedGroups}
+      onToggleGroup={onToggleGroup}
+      onToolClick={onToolClick}
+    />
+  );
+}
+
+/** The grouped, editable Gram-tool list (toolset-backed servers). */
+function GroupedToolList({
+  toolGroups,
+  expandedGroups,
+  onToggleGroup,
+  onToolClick,
+}: {
+  toolGroups: ToolGroup[];
+  expandedGroups: Set<string>;
+  onToggleGroup: (groupTitle: string) => void;
+  onToolClick?: (tool: Tool) => void;
+}): JSX.Element {
+  return (
+    <div>
+      {toolGroups.map((group) => {
+        const isExpanded = expandedGroups.has(group.title);
+        return (
+          <div key={group.title}>
+            {/* Group Header */}
+            <button
+              onClick={() => onToggleGroup(group.title)}
+              className="bg-surface-secondary-default hover:bg-active group/item flex w-full items-center gap-2 px-3 py-2 text-left transition-colors"
+            >
+              <group.icon className="text-muted-foreground size-3.5 shrink-0" />
+              <div className="min-w-0 truncate text-xs">{group.title}</div>
+              {isExpanded ? (
+                <ChevronDownIcon className="text-muted-foreground size-3.5 shrink-0" />
+              ) : (
+                <ChevronRightIcon className="text-muted-foreground size-3.5 shrink-0" />
+              )}
+              <div className="flex-1" />
+              <div className="text-muted-foreground text-[11px] tabular-nums">
+                {group.tools.length}
+              </div>
+            </button>
+
+            {/* Expanded Tool List */}
+            {isExpanded && (
+              <div>
+                {group.tools.map((tool) => (
+                  <div
+                    key={tool.toolUrn}
+                    className="group hover:bg-muted/30 flex w-full items-center gap-2 px-3 py-2 transition-colors"
+                  >
+                    <button
+                      onClick={() => tool && onToolClick?.(tool)}
+                      className="flex min-w-0 flex-1 items-center justify-between text-left"
+                    >
+                      <p className="text-foreground truncate text-xs leading-5">
+                        {tool.name}
+                      </p>
+                      <div className="ml-2 flex shrink-0 items-center gap-2">
+                        <AnnotationBadges tool={tool} />
+                        {tool.type === "http" && tool.httpMethod && (
+                          <MethodBadge method={tool.httpMethod} />
+                        )}
+                        {tool.type === "function" && (
+                          <SquareFunction className="text-muted-foreground size-3.5" />
+                        )}
+                        {tool.type === "prompt" && (
+                          <PencilRuler className="text-muted-foreground size-3.5" />
+                        )}
+                      </div>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** A flat, read-only tool list for remote-MCP-backed servers. */
+function ReadOnlyToolList({ tools }: { tools: ReadOnlyTool[] }): JSX.Element {
+  if (tools.length === 0) {
+    return (
+      <div className="px-4 py-6 text-center">
+        <Type variant="small" className="text-muted-foreground">
+          No tools advertised
+        </Type>
+      </div>
+    );
+  }
+  return (
+    <div>
+      {tools.map((tool) => (
+        <div
+          key={tool.name}
+          className="flex w-full flex-col gap-0.5 px-4 py-2"
+          title={tool.description}
+        >
+          <p className="text-foreground truncate text-xs leading-5">
+            {tool.name}
+          </p>
+          {tool.description ? (
+            <p className="text-muted-foreground truncate text-[11px] leading-4">
+              {tool.description}
+            </p>
+          ) : null}
+        </div>
+      ))}
     </div>
   );
 }

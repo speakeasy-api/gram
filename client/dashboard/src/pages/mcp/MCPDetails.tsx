@@ -3,7 +3,6 @@ import { CodeBlock } from "@/components/code";
 import { MCPPublishingSection as SharedMCPPublishingSection } from "./MCPPublishingSection";
 import { DetailLayout } from "@/components/layouts/detail-layout";
 import { MCPToolFilteringSection } from "@/components/mcp-tool-filtering-section";
-import { InstallPageConfigForm } from "@/components/mcp_install_page/config_form";
 import {
   useMcpMetadataMetadataForm,
   type UseMcpMetadataMetadataFormResult,
@@ -516,7 +515,11 @@ function MCPDetailPageContent({
 
 const MCP_SERVER_NAME_MAX_LENGTH = 40;
 
-function RenameMCPServerButton({ toolset }: { toolset: Toolset }) {
+export function RenameMCPServerButton({
+  toolset,
+}: {
+  toolset: Toolset;
+}): React.JSX.Element {
   const queryClient = useQueryClient();
   const telemetry = useTelemetry();
   const updateToolsetMutation = useUpdateToolsetMutation();
@@ -686,7 +689,11 @@ const STATUS_OPTIONS: {
   },
 ];
 
-function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
+export function MCPStatusDropdown({
+  toolset,
+}: {
+  toolset: Toolset;
+}): React.JSX.Element {
   const { hasScope } = useRBAC();
   const canWrite = hasScope("mcp:write");
   const queryClient = useQueryClient();
@@ -938,7 +945,7 @@ function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
  * Overview Tab - Hosted URL and Installation instructions
  */
 function MCPOverviewTab({ toolset }: { toolset: Toolset }) {
-  const { url: mcpUrl, installPageUrl } = useMcpUrl(toolset);
+  const { url: mcpUrl } = useMcpUrl(toolset);
 
   const result = useGetMcpMetadata({ toolsetSlug: toolset.slug }, undefined, {
     retry: (_, err) => {
@@ -955,7 +962,6 @@ function MCPOverviewTab({ toolset }: { toolset: Toolset }) {
     result.data?.metadata,
   );
   const isLoading = result.isLoading || form.isLoading;
-
   return (
     <Stack className="mb-4">
       <PageSection
@@ -963,25 +969,6 @@ function MCPOverviewTab({ toolset }: { toolset: Toolset }) {
         description="The URL you or your users will use to access this MCP server."
       >
         <CodeBlock className="mb-2">{mcpUrl ?? ""}</CodeBlock>
-      </PageSection>
-
-      <PageSection
-        heading="Install Page"
-        description="Share this page with your users to give simple instructions for getting started with your MCP in their client like Cursor or Claude Desktop."
-      >
-        {!toolset.mcpIsPublic && (
-          <Type small italic destructive>
-            Your server is private. To share with external users, use the status
-            dropdown in the header to set it to Public.
-          </Type>
-        )}
-        <Stack className="mt-2" gap={1}>
-          <InstallPageConfigForm
-            installPageUrl={installPageUrl}
-            form={form}
-            isLoading={isLoading}
-          />
-        </Stack>
       </PageSection>
 
       <PageSection

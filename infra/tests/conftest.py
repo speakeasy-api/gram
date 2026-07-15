@@ -125,9 +125,13 @@ class FakeSubscriberClient:
         # The _PortalScheduler handed to subscribe(); Any because tests poke
         # library-side entry points (schedule/shutdown) on it directly.
         self.scheduler: Any = None
+        # Extra keyword arguments subscribe() received (flow_control, ...), so
+        # tests can assert on the plumbing the Subscriber configures.
+        self.subscribe_kwargs: dict[str, Any] | None = None
 
     def subscribe(self, subscription_path, callback, *, scheduler, **kwargs):
         self.scheduler = scheduler
+        self.subscribe_kwargs = kwargs
 
         def pump() -> None:
             for message in self._messages:

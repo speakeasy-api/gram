@@ -234,6 +234,55 @@ func (q *Queries) GetMCPServerBySlug(ctx context.Context, arg GetMCPServerBySlug
 	return i, err
 }
 
+const listMCPServersByOrganizationID = `-- name: ListMCPServersByOrganizationID :many
+SELECT m.id, m.project_id, m.name, m.slug, m.environment_id, m.user_session_issuer_id, m.remote_mcp_server_id, m.tunneled_mcp_server_id, m.toolset_id, m.tool_variations_group_id, m.visibility, m.created_at, m.updated_at, m.deleted_at, m.deleted
+FROM mcp_servers AS m
+JOIN projects AS p ON p.id = m.project_id
+WHERE p.organization_id = $1
+  AND m.deleted IS FALSE
+  AND p.deleted IS FALSE
+ORDER BY m.created_at DESC
+`
+
+// List every MCP server in an organization via each project's organization_id.
+// For organization-administrator flows that span projects (e.g. the RBAC
+// connection-policy picker), which carry no project scope.
+func (q *Queries) ListMCPServersByOrganizationID(ctx context.Context, organizationID string) ([]McpServer, error) {
+	rows, err := q.db.Query(ctx, listMCPServersByOrganizationID, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []McpServer
+	for rows.Next() {
+		var i McpServer
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Name,
+			&i.Slug,
+			&i.EnvironmentID,
+			&i.UserSessionIssuerID,
+			&i.RemoteMcpServerID,
+			&i.TunneledMcpServerID,
+			&i.ToolsetID,
+			&i.ToolVariationsGroupID,
+			&i.Visibility,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMCPServersByProjectID = `-- name: ListMCPServersByProjectID :many
 SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, tool_variations_group_id, visibility, created_at, updated_at, deleted_at, deleted
 FROM mcp_servers
@@ -293,13 +342,61 @@ func (q *Queries) ListMCPServersByProjectID(ctx context.Context, arg ListMCPServ
 	return items, nil
 }
 
+const listMCPServersForTelemetryByProjectID = `-- name: ListMCPServersForTelemetryByProjectID :many
+SELECT id, name, slug, remote_mcp_server_id, tunneled_mcp_server_id
+FROM mcp_servers
+WHERE project_id = $1
+ORDER BY deleted ASC, created_at DESC
+`
+
+type ListMCPServersForTelemetryByProjectIDRow struct {
+	ID                  uuid.UUID
+	Name                pgtype.Text
+	Slug                pgtype.Text
+	RemoteMcpServerID   uuid.NullUUID
+	TunneledMcpServerID uuid.NullUUID
+}
+
+// Includes soft-deleted servers so tool-usage telemetry can classify historical
+// rows whose backing MCP server has since been deleted (or recreated). The
+// backend source ids (remote_mcp_server_id / tunneled_mcp_server_id) recorded on
+// telemetry rows outlive the mcp_servers row, so matching against deleted rows
+// keeps a call's target_type stable instead of falling through to
+// shadow_mcp_server. Live servers are ordered first so a source id shared by a
+// live and a deleted server resolves to the live one.
+func (q *Queries) ListMCPServersForTelemetryByProjectID(ctx context.Context, projectID uuid.UUID) ([]ListMCPServersForTelemetryByProjectIDRow, error) {
+	rows, err := q.db.Query(ctx, listMCPServersForTelemetryByProjectID, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMCPServersForTelemetryByProjectIDRow
+	for rows.Next() {
+		var i ListMCPServersForTelemetryByProjectIDRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.RemoteMcpServerID,
+			&i.TunneledMcpServerID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateMCPServer = `-- name: UpdateMCPServer :one
 UPDATE mcp_servers
 SET
     name = $1,
     slug = $2,
     environment_id = $3,
-    user_session_issuer_id = $4,
+    user_session_issuer_id = COALESCE($4, user_session_issuer_id),
     remote_mcp_server_id = $5,
     tunneled_mcp_server_id = $6,
     toolset_id = $7,

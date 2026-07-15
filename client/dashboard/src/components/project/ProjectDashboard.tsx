@@ -13,7 +13,6 @@ import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useAuditLogs } from "@gram/client/react-query/auditLogs.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
-import { telemetryGetProjectOverview } from "@gram/client/funcs/telemetryGetProjectOverview";
 import { telemetrySearchUsers } from "@gram/client/funcs/telemetrySearchUsers";
 import type { SearchUsersFilter } from "@gram/client/models/components/searchusersfilter.js";
 import type { UserSummary } from "@gram/client/models/components/usersummary.js";
@@ -36,9 +35,10 @@ import {
   useDateRangeFilter,
 } from "@/components/observe/useDateRangeFilter";
 import { ActivityTimelineCard } from "./ActivityTimelineCard";
+import { buildProjectOverviewQuery } from "./projectOverviewQuery";
 
 export function ProjectDashboard(): JSX.Element {
-  const { projectSlug } = useSlugs();
+  const { orgSlug, projectSlug } = useSlugs();
   const routes = useRoutes();
   const orgRoutes = useOrgRoutes();
 
@@ -66,19 +66,21 @@ export function ProjectDashboard(): JSX.Element {
   const logsEnabled = featuresData?.logsEnabled === true;
 
   // The SDK's useGetProjectOverview omits the request body from its query
-  // key, so changing the date range here would otherwise return cached data.
-  // Mirror the observe-page pattern: call useQuery directly with a key that
-  // includes the from/to ISO strings.
+  // key; the shared builder keys by org/project/range instead and is also
+  // used by the org-home prefetch.
   const client = useGramContext();
   const { data: overview, isPending: isOverviewPending } = useQuery({
-    queryKey: ["project", "overview", from.toISOString(), to.toISOString()],
-    queryFn: () =>
-      unwrapAsync(
-        telemetryGetProjectOverview(client, {
-          getProjectMetricsSummaryPayload: { from, to },
-        }),
-      ),
-    enabled: logsEnabled,
+    ...buildProjectOverviewQuery(client, {
+      organization: orgSlug ?? "",
+      project: projectSlug ?? "",
+      range: customRange
+        ? {
+            from: customRange.from.toISOString(),
+            to: customRange.to.toISOString(),
+          }
+        : { preset: dateRange },
+    }),
+    enabled: logsEnabled && !!orgSlug && !!projectSlug,
     placeholderData: keepPreviousData,
   });
 

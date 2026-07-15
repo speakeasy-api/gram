@@ -22,49 +22,55 @@ const mocks = vi.hoisted(() => {
       .fn()
       .mockResolvedValue({ slug: "env-new", name: "Toolset OAuth" }),
     deleteEnvironment: vi.fn().mockResolvedValue(undefined),
-    updateOAuthProxy: vi.fn().mockResolvedValue(undefined),
     capture: vi.fn(),
     invalidateAllToolset: vi.fn(),
     invalidateAllGetMcpMetadata: vi.fn(),
     invalidateAllListEnvironments: vi.fn(),
-    invalidateAllRemoteSessionIssuers: vi.fn(),
-    invalidateAllRemoteSessionClients: vi.fn(),
-    invalidateAllUserSessionIssuers: vi.fn(),
     isFeatureEnabled: vi.fn(() => false),
   };
 });
 
-vi.mock("@gram/client/react-query", () => ({
-  useGramContext: () => ({}),
+vi.mock("@gram/client/react-query/toolset.js", () => ({
   invalidateAllToolset: mocks.invalidateAllToolset,
+}));
+
+vi.mock("@gram/client/react-query/getMcpMetadata.js", () => ({
   invalidateAllGetMcpMetadata: mocks.invalidateAllGetMcpMetadata,
+}));
+
+vi.mock("@gram/client/react-query/listEnvironments.js", () => ({
   invalidateAllListEnvironments: mocks.invalidateAllListEnvironments,
-  invalidateAllRemoteSessionIssuers: mocks.invalidateAllRemoteSessionIssuers,
-  invalidateAllRemoteSessionClients: mocks.invalidateAllRemoteSessionClients,
-  invalidateAllUserSessionIssuers: mocks.invalidateAllUserSessionIssuers,
-  buildAddExternalOAuthServerMutation: () => ({
-    mutationKey: [],
-    mutationFn: mocks.addExternalOAuth,
-  }),
-  buildAddOAuthProxyServerMutation: () => ({
-    mutationKey: [],
-    mutationFn: mocks.addOAuthProxy,
-  }),
-  buildCreateEnvironmentMutation: () => ({
-    mutationKey: [],
-    mutationFn: mocks.createEnvironment,
-  }),
-  buildDeleteEnvironmentMutation: () => ({
-    mutationKey: [],
-    mutationFn: mocks.deleteEnvironment,
-  }),
   buildListEnvironmentsQuery: () => ({
     queryKey: ["@gram/client", "environments", "list", {}],
     queryFn: () => Promise.resolve({ environments: [] }),
   }),
-  buildUpdateOAuthProxyServerMutation: () => ({
+}));
+
+vi.mock("@gram/client/react-query/addExternalOAuthServer.js", () => ({
+  buildAddExternalOAuthServerMutation: () => ({
     mutationKey: [],
-    mutationFn: mocks.updateOAuthProxy,
+    mutationFn: mocks.addExternalOAuth,
+  }),
+}));
+
+vi.mock("@gram/client/react-query/addOAuthProxyServer.js", () => ({
+  buildAddOAuthProxyServerMutation: () => ({
+    mutationKey: [],
+    mutationFn: mocks.addOAuthProxy,
+  }),
+}));
+
+vi.mock("@gram/client/react-query/createEnvironment.js", () => ({
+  buildCreateEnvironmentMutation: () => ({
+    mutationKey: [],
+    mutationFn: mocks.createEnvironment,
+  }),
+}));
+
+vi.mock("@gram/client/react-query/deleteEnvironment.js", () => ({
+  buildDeleteEnvironmentMutation: () => ({
+    mutationKey: [],
+    mutationFn: mocks.deleteEnvironment,
   }),
 }));
 

@@ -1,8 +1,8 @@
 import { Page } from "@/components/page-layout";
-import { UsageMeter } from "@/components/ui/progress";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { useCallback, useState } from "react";
 
 export const TopUpCTA = (): JSX.Element => {
@@ -40,34 +40,105 @@ export const TopUpCTA = (): JSX.Element => {
 export const UsageProgress = ({
   value,
   included,
+  overageIncrement,
   noMax,
 }: {
   value: number;
   included: number;
-  // Formerly drove per-block tick marks along the overage segment; the
-  // unified UsageMeter track doesn't render them, but the prop stays so
-  // existing callers (which pass a billing block size) don't need updates.
   overageIncrement: number;
   noMax?: boolean;
 }): JSX.Element => {
-  const effectiveIncluded = noMax ? Math.max(1, value * 1.5) : included;
-  const overage = Math.max(0, value - effectiveIncluded);
+  if (noMax) {
+    included = Math.max(1, value * 1.5);
+  }
+
+  const anyOverage = value > included;
+  const overageMax = anyOverage
+    ? Math.ceil((value - included + 1) / overageIncrement) * overageIncrement
+    : 0;
+  const totalMax = included + overageMax;
+
+  const includedWidth = (included / totalMax) * 100;
+  const overageWidth = (overageMax / totalMax) * 100;
+
+  const includedProgress = (
+    <div
+      className={cn(
+        "bg-muted relative h-4 overflow-hidden rounded-md dark:bg-neutral-800",
+        anyOverage && "rounded-r-none",
+      )}
+      style={{ width: `${includedWidth}%` }}
+    >
+      <div
+        className="bg-success-default h-full transition-all duration-300"
+        style={{
+          width: `${Math.min((value / included) * 100, 100)}%`,
+        }}
+      />
+    </div>
+  );
+
+  const overageProgress = anyOverage ? (
+    <div
+      className="bg-muted relative h-4 overflow-hidden rounded-r-md dark:bg-neutral-800"
+      style={{ width: `${overageWidth}%` }}
+    >
+      <div
+        className="bg-warning-default h-full transition-all duration-300"
+        style={{
+          width: `${Math.min(((value - included) / overageMax) * 100, 100)}%`,
+        }}
+      />
+    </div>
+  ) : null;
 
   return (
-    <UsageMeter
-      used={value}
-      included={effectiveIncluded}
-      overageUsed={overage}
-      labels={{
-        primary:
-          overage > 0
-            ? `Included: ${effectiveIncluded.toLocaleString()}`
-            : `${value.toLocaleString()} / ${
-                noMax ? "No limit" : effectiveIncluded.toLocaleString()
-              }`,
-        secondary:
-          overage > 0 ? `Extra: ${overage.toLocaleString()}` : undefined,
-      }}
-    />
+    <div className="relative">
+      <div className="flex w-full">
+        {includedProgress}
+        {overageProgress}
+      </div>
+      <div
+        className="text-muted-foreground absolute top-6 text-xs whitespace-nowrap"
+        style={{ right: `${101 - includedWidth}%` }}
+      >
+        {anyOverage
+          ? `Included: ${included.toLocaleString()}`
+          : `${value.toLocaleString()} / ${
+              noMax ? "No limit" : included.toLocaleString()
+            }`}
+      </div>
+
+      {anyOverage && (
+        <>
+          <div
+            className="absolute top-0 h-8 w-[2px] bg-neutral-600"
+            style={{ left: `${includedWidth}%` }}
+          />
+          <div
+            className="text-muted-foreground absolute top-6 text-xs whitespace-nowrap"
+            style={{ left: `${includedWidth + 1}%` }}
+          >
+            Extra: {(value - included).toLocaleString()}
+          </div>
+
+          {Array.from(
+            { length: Math.floor((value - included) / overageIncrement) },
+            (_, index) => {
+              const incrementPosition =
+                includedWidth +
+                (((index + 1) * overageIncrement) / totalMax) * 100;
+              return (
+                <div
+                  key={index}
+                  className="absolute top-0 h-5 w-[2px] bg-neutral-600"
+                  style={{ left: `${incrementPosition}%` }}
+                />
+              );
+            },
+          )}
+        </>
+      )}
+    </div>
   );
 };

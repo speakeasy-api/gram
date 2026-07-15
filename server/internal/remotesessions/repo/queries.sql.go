@@ -251,6 +251,9 @@ INSERT INTO remote_session_issuers (
     token_endpoint,
     registration_endpoint,
     jwks_uri,
+    service_documentation,
+    op_policy_uri,
+    op_tos_uri,
     scopes_supported,
     grant_types_supported,
     response_types_supported,
@@ -276,7 +279,10 @@ VALUES (
     $14,
     $15,
     $16,
-    $17
+    $17,
+    $18,
+    $19,
+    $20
 )
 RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, client_id_metadata_document_supported, oidc, passthrough, name, logo_asset_id, client_setup_documentation_url, created_at, updated_at, deleted_at, deleted
 `
@@ -292,6 +298,9 @@ type CreateRemoteSessionIssuerParams struct {
 	TokenEndpoint                     pgtype.Text
 	RegistrationEndpoint              pgtype.Text
 	JwksUri                           pgtype.Text
+	ServiceDocumentation              pgtype.Text
+	OpPolicyUri                       pgtype.Text
+	OpTosUri                          pgtype.Text
 	ScopesSupported                   []string
 	GrantTypesSupported               []string
 	ResponseTypesSupported            []string
@@ -318,6 +327,9 @@ func (q *Queries) CreateRemoteSessionIssuer(ctx context.Context, arg CreateRemot
 		arg.TokenEndpoint,
 		arg.RegistrationEndpoint,
 		arg.JwksUri,
+		arg.ServiceDocumentation,
+		arg.OpPolicyUri,
+		arg.OpTosUri,
 		arg.ScopesSupported,
 		arg.GrantTypesSupported,
 		arg.ResponseTypesSupported,
@@ -2707,15 +2719,27 @@ SET
         WHEN $8::text = '' THEN NULL
         ELSE COALESCE($8, jwks_uri)
     END,
-    scopes_supported = COALESCE($9::text[], scopes_supported),
-    grant_types_supported = COALESCE($10::text[], grant_types_supported),
-    response_types_supported = COALESCE($11::text[], response_types_supported),
-    token_endpoint_auth_methods_supported = COALESCE($12::text[], token_endpoint_auth_methods_supported),
-    client_id_metadata_document_supported = COALESCE($13, client_id_metadata_document_supported),
-    oidc = COALESCE($14, oidc),
-    passthrough = COALESCE($15, passthrough),
+    service_documentation = CASE
+        WHEN $9::text = '' THEN NULL
+        ELSE COALESCE($9, service_documentation)
+    END,
+    op_policy_uri = CASE
+        WHEN $10::text = '' THEN NULL
+        ELSE COALESCE($10, op_policy_uri)
+    END,
+    op_tos_uri = CASE
+        WHEN $11::text = '' THEN NULL
+        ELSE COALESCE($11, op_tos_uri)
+    END,
+    scopes_supported = COALESCE($12::text[], scopes_supported),
+    grant_types_supported = COALESCE($13::text[], grant_types_supported),
+    response_types_supported = COALESCE($14::text[], response_types_supported),
+    token_endpoint_auth_methods_supported = COALESCE($15::text[], token_endpoint_auth_methods_supported),
+    client_id_metadata_document_supported = COALESCE($16, client_id_metadata_document_supported),
+    oidc = COALESCE($17, oidc),
+    passthrough = COALESCE($18, passthrough),
     updated_at = clock_timestamp()
-WHERE id = $16 AND project_id IS NULL AND organization_id IS NULL AND deleted IS FALSE
+WHERE id = $19 AND project_id IS NULL AND organization_id IS NULL AND deleted IS FALSE
 RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, client_id_metadata_document_supported, oidc, passthrough, name, logo_asset_id, client_setup_documentation_url, created_at, updated_at, deleted_at, deleted
 `
 
@@ -2728,6 +2752,9 @@ type UpdateGlobalRemoteSessionIssuerParams struct {
 	TokenEndpoint                     pgtype.Text
 	RegistrationEndpoint              pgtype.Text
 	JwksUri                           pgtype.Text
+	ServiceDocumentation              pgtype.Text
+	OpPolicyUri                       pgtype.Text
+	OpTosUri                          pgtype.Text
 	ScopesSupported                   []string
 	GrantTypesSupported               []string
 	ResponseTypesSupported            []string
@@ -2750,6 +2777,9 @@ func (q *Queries) UpdateGlobalRemoteSessionIssuer(ctx context.Context, arg Updat
 		arg.TokenEndpoint,
 		arg.RegistrationEndpoint,
 		arg.JwksUri,
+		arg.ServiceDocumentation,
+		arg.OpPolicyUri,
+		arg.OpTosUri,
 		arg.ScopesSupported,
 		arg.GrantTypesSupported,
 		arg.ResponseTypesSupported,
@@ -2881,15 +2911,27 @@ SET
         WHEN $8::text = '' THEN NULL
         ELSE COALESCE($8, jwks_uri)
     END,
-    scopes_supported = COALESCE($9::text[], scopes_supported),
-    grant_types_supported = COALESCE($10::text[], grant_types_supported),
-    response_types_supported = COALESCE($11::text[], response_types_supported),
-    token_endpoint_auth_methods_supported = COALESCE($12::text[], token_endpoint_auth_methods_supported),
-    client_id_metadata_document_supported = COALESCE($13, client_id_metadata_document_supported),
-    oidc = COALESCE($14, oidc),
-    passthrough = COALESCE($15, passthrough),
+    service_documentation = CASE
+        WHEN $9::text = '' THEN NULL
+        ELSE COALESCE($9, service_documentation)
+    END,
+    op_policy_uri = CASE
+        WHEN $10::text = '' THEN NULL
+        ELSE COALESCE($10, op_policy_uri)
+    END,
+    op_tos_uri = CASE
+        WHEN $11::text = '' THEN NULL
+        ELSE COALESCE($11, op_tos_uri)
+    END,
+    scopes_supported = COALESCE($12::text[], scopes_supported),
+    grant_types_supported = COALESCE($13::text[], grant_types_supported),
+    response_types_supported = COALESCE($14::text[], response_types_supported),
+    token_endpoint_auth_methods_supported = COALESCE($15::text[], token_endpoint_auth_methods_supported),
+    client_id_metadata_document_supported = COALESCE($16, client_id_metadata_document_supported),
+    oidc = COALESCE($17, oidc),
+    passthrough = COALESCE($18, passthrough),
     updated_at = clock_timestamp()
-WHERE id = $16 AND organization_id = $17 AND deleted IS FALSE
+WHERE id = $19 AND organization_id = $20 AND deleted IS FALSE
 RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, client_id_metadata_document_supported, oidc, passthrough, name, logo_asset_id, client_setup_documentation_url, created_at, updated_at, deleted_at, deleted
 `
 
@@ -2902,6 +2944,9 @@ type UpdateOrganizationRemoteSessionIssuerParams struct {
 	TokenEndpoint                     pgtype.Text
 	RegistrationEndpoint              pgtype.Text
 	JwksUri                           pgtype.Text
+	ServiceDocumentation              pgtype.Text
+	OpPolicyUri                       pgtype.Text
+	OpTosUri                          pgtype.Text
 	ScopesSupported                   []string
 	GrantTypesSupported               []string
 	ResponseTypesSupported            []string
@@ -2925,6 +2970,9 @@ func (q *Queries) UpdateOrganizationRemoteSessionIssuer(ctx context.Context, arg
 		arg.TokenEndpoint,
 		arg.RegistrationEndpoint,
 		arg.JwksUri,
+		arg.ServiceDocumentation,
+		arg.OpPolicyUri,
+		arg.OpTosUri,
 		arg.ScopesSupported,
 		arg.GrantTypesSupported,
 		arg.ResponseTypesSupported,
@@ -3049,15 +3097,27 @@ SET
         WHEN $8::text = '' THEN NULL
         ELSE COALESCE($8, jwks_uri)
     END,
-    scopes_supported = COALESCE($9::text[], scopes_supported),
-    grant_types_supported = COALESCE($10::text[], grant_types_supported),
-    response_types_supported = COALESCE($11::text[], response_types_supported),
-    token_endpoint_auth_methods_supported = COALESCE($12::text[], token_endpoint_auth_methods_supported),
-    client_id_metadata_document_supported = COALESCE($13, client_id_metadata_document_supported),
-    oidc = COALESCE($14, oidc),
-    passthrough = COALESCE($15, passthrough),
+    service_documentation = CASE
+        WHEN $9::text = '' THEN NULL
+        ELSE COALESCE($9, service_documentation)
+    END,
+    op_policy_uri = CASE
+        WHEN $10::text = '' THEN NULL
+        ELSE COALESCE($10, op_policy_uri)
+    END,
+    op_tos_uri = CASE
+        WHEN $11::text = '' THEN NULL
+        ELSE COALESCE($11, op_tos_uri)
+    END,
+    scopes_supported = COALESCE($12::text[], scopes_supported),
+    grant_types_supported = COALESCE($13::text[], grant_types_supported),
+    response_types_supported = COALESCE($14::text[], response_types_supported),
+    token_endpoint_auth_methods_supported = COALESCE($15::text[], token_endpoint_auth_methods_supported),
+    client_id_metadata_document_supported = COALESCE($16, client_id_metadata_document_supported),
+    oidc = COALESCE($17, oidc),
+    passthrough = COALESCE($18, passthrough),
     updated_at = clock_timestamp()
-WHERE id = $16 AND project_id = $17 AND deleted IS FALSE
+WHERE id = $19 AND project_id = $20 AND deleted IS FALSE
 RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, client_id_metadata_document_supported, oidc, passthrough, name, logo_asset_id, client_setup_documentation_url, created_at, updated_at, deleted_at, deleted
 `
 
@@ -3070,6 +3130,9 @@ type UpdateRemoteSessionIssuerParams struct {
 	TokenEndpoint                     pgtype.Text
 	RegistrationEndpoint              pgtype.Text
 	JwksUri                           pgtype.Text
+	ServiceDocumentation              pgtype.Text
+	OpPolicyUri                       pgtype.Text
+	OpTosUri                          pgtype.Text
 	ScopesSupported                   []string
 	GrantTypesSupported               []string
 	ResponseTypesSupported            []string
@@ -3097,6 +3160,9 @@ func (q *Queries) UpdateRemoteSessionIssuer(ctx context.Context, arg UpdateRemot
 		arg.TokenEndpoint,
 		arg.RegistrationEndpoint,
 		arg.JwksUri,
+		arg.ServiceDocumentation,
+		arg.OpPolicyUri,
+		arg.OpTosUri,
 		arg.ScopesSupported,
 		arg.GrantTypesSupported,
 		arg.ResponseTypesSupported,

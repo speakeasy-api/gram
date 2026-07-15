@@ -34,7 +34,7 @@ export function RemoteIdentityProvidersField({
     providerControls = (
       <InlineEmptyState
         title="No remote identity providers"
-        description="Attach an identity provider so users can sign in to the upstream service and access their own data."
+        description="Attach a provider if the upstream service requires users to sign in to access their data."
         action={
           <RequireScope scope="mcp:write" level="component">
             <Button variant="secondary" onClick={onAdd}>
@@ -67,8 +67,8 @@ export function RemoteIdentityProvidersField({
       <FieldLabel>Remote Identity Providers</FieldLabel>
       {providerControls}
       <FieldDescription>
-        Upstream identity providers users authenticate against to access MCP
-        server functionality.
+        Upstream identity providers for services that require per-user
+        authorization.
       </FieldDescription>
     </Field>
   );

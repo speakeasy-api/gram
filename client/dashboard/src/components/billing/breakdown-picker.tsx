@@ -11,15 +11,10 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Check, ChevronDown } from "lucide-react";
 import { useState } from "react";
-import {
-  BREAKDOWN_GROUPS,
-  BREAKDOWN_RISK,
-  breakdownLabel,
-} from "./breakdown-options";
+import { BREAKDOWN_GROUPS, breakdownLabel } from "./breakdown-options";
 
 /**
  * Compact, searchable picker for the token-usage panel's breakdown: a small
@@ -28,13 +23,10 @@ import {
  */
 export function BreakdownPicker({
   value,
-  showRisk,
   onChange,
 }: {
   // The selected breakdown: a Dimension value or a special-mode sentinel.
   value: string;
-  // Whether the risk stacking is available for the current view.
-  showRisk: boolean;
   onChange: (value: string) => void;
 }): JSX.Element {
   const [open, setOpen] = useState(false);
@@ -42,18 +34,15 @@ export function BreakdownPicker({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button
-          variant="secondary"
-          size="xs"
+        <button
+          type="button"
           role="combobox"
           aria-expanded={open}
-          className="data-[state=open]:bg-btn-secondary-hover"
+          className="border-border hover:bg-muted data-[state=open]:bg-muted inline-flex items-center gap-1 rounded border bg-transparent px-2 py-0.5 text-xs transition-colors"
         >
-          <Button.Text>By {breakdownLabel(value).toLowerCase()}</Button.Text>
-          <Button.RightIcon>
-            <ChevronDown className="!size-3 opacity-50" />
-          </Button.RightIcon>
-        </Button>
+          By {breakdownLabel(value).toLowerCase()}
+          <ChevronDown className="!size-3 opacity-50" />
+        </button>
       </PopoverTrigger>
       <PopoverContent className="w-56 p-0" align="end">
         <Command>
@@ -61,9 +50,7 @@ export function BreakdownPicker({
           <CommandList>
             <CommandEmpty>No breakdowns found.</CommandEmpty>
             {BREAKDOWN_GROUPS.map((group) => {
-              const options = group.options.filter(
-                (o) => showRisk || o.value !== BREAKDOWN_RISK,
-              );
+              const options = group.options;
               if (options.length === 0) return null;
               return (
                 <CommandGroup

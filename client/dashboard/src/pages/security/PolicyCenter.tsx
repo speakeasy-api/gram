@@ -90,6 +90,7 @@ import {
   type PolicyMessageType,
 } from "./policy-data";
 import { cn } from "@/lib/utils";
+import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import { useDetectionRulesStore } from "./detection-rules-data";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useRoutes } from "@/routes";
@@ -107,6 +108,7 @@ import {
   getPolicyDeleteRuleListItems,
   getPolicyRuleGroupNamesForDeleteDialog,
 } from "./policy-delete-dialog";
+import { SeverityBadge } from "./risk-ui";
 
 /** One built-in detector as a toggleable card (Detect step). "Customize" opens
  *  a side-sheet to pick which rules in the category are active. */
@@ -592,6 +594,18 @@ function isPromptPolicy(policy: RiskPolicy): boolean {
   return policy.policyType === "prompt_based";
 }
 
+/** Compact relative date for the policy table's Created/Updated columns, with
+ *  the exact timestamp on hover. */
+function PolicyDateCell({ date }: { date: Date }): JSX.Element {
+  return (
+    <SimpleTooltip tooltip={dateTimeFormatters.full.format(date)}>
+      <span className="text-muted-foreground text-sm whitespace-nowrap">
+        <HumanizeDateTime date={date} includeTime={false} />
+      </span>
+    </SimpleTooltip>
+  );
+}
+
 export default function PolicyCenter(): JSX.Element {
   return (
     <RequireScope scope="org:admin" level="page">
@@ -768,6 +782,16 @@ function PolicyCenterContent() {
       ),
     },
     {
+      key: "severity",
+      header: "Severity",
+      width: "0.5fr",
+      render: (row) => (
+        <span className="inline-flex">
+          <SeverityBadge score={row.policy.score} />
+        </span>
+      ),
+    },
+    {
       key: "sources",
       header: nlEnabled ? "Categories / Prompt" : "Categories",
       width: "2fr",
@@ -845,6 +869,18 @@ function PolicyCenterContent() {
           {policyAudienceSummary(row)}
         </span>
       ),
+    },
+    {
+      key: "createdAt",
+      header: "Created",
+      width: "0.8fr",
+      render: (row) => <PolicyDateCell date={row.policy.createdAt} />,
+    },
+    {
+      key: "updatedAt",
+      header: "Updated",
+      width: "0.8fr",
+      render: (row) => <PolicyDateCell date={row.policy.updatedAt} />,
     },
     {
       key: "actions",
@@ -1619,6 +1655,7 @@ const ACTION_BADGE_CONFIG: Record<
   { label: string; variant: NonNullable<BadgeProps["variant"]> }
 > = {
   flag: { label: "Flag", variant: "neutral" },
+  warn: { label: "Warn", variant: "warning" },
   block: { label: "Block", variant: "destructive" },
 };
 
@@ -1673,14 +1710,16 @@ export function ActionPicker({
   setFormAction: (v: PolicyAction) => void;
   flagOnlySelected?: boolean;
 }): JSX.Element {
+  // Flag-only sources reject both block and warn (blocking-class); present them
+  // as flag. Mirrors validateSourceAction in server/internal/risk/impl.go.
   const actionValue =
-    flagOnlySelected && formAction === "block" ? "flag" : formAction;
+    flagOnlySelected && formAction !== "flag" ? "flag" : formAction;
 
   return (
     <RadioGroup
       value={actionValue}
       onValueChange={(v) => {
-        if (flagOnlySelected && v === "block") {
+        if (flagOnlySelected && v !== "flag") {
           return;
         }
         setFormAction(v as PolicyAction);
@@ -1688,7 +1727,7 @@ export function ActionPicker({
       className="space-y-2.5"
     >
       {ACTION_OPTIONS.map((opt) => {
-        const disabled = flagOnlySelected && opt.value === "block";
+        const disabled = flagOnlySelected && opt.value !== "flag";
         const selected = actionValue === opt.value;
 
         return (

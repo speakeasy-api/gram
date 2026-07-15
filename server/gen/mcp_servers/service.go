@@ -27,6 +27,8 @@ type Service interface {
 	// single backend; at most one filter may be supplied since the backends are
 	// mutually exclusive.
 	ListMcpServers(context.Context, *ListMcpServersPayload) (res *ListMcpServersResult, err error)
+	// List all MCP servers across the organization
+	ListMcpServersForOrg(context.Context, *ListMcpServersForOrgPayload) (res *ListMcpServersResult, err error)
 	// Update an MCP server. This is a full-record replace for the optional UUID
 	// references: fields omitted from the request become null on the stored
 	// record. name is an exception — omitting it leaves the existing display name
@@ -65,7 +67,7 @@ const ServiceName = "mcpServers"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [6]string{"createMcpServer", "getMcpServer", "listMcpServers", "updateMcpServer", "listToolFilters", "deleteMcpServer"}
+var MethodNames = [7]string{"createMcpServer", "getMcpServer", "listMcpServers", "listMcpServersForOrg", "updateMcpServer", "listToolFilters", "deleteMcpServer"}
 
 // CreateMcpServerPayload is the payload type of the mcpServers service
 // createMcpServer method.
@@ -77,10 +79,6 @@ type CreateMcpServerPayload struct {
 	Name string
 	// The ID of the environment to associate with the server
 	EnvironmentID *string
-	// The ID of the user session issuer that gates OAuth-based MCP client
-	// authentication. When set, MCP clients are required to authenticate against
-	// this issuer before connecting.
-	UserSessionIssuerID *string
 	// The ID of the remote MCP server to use as the backend
 	RemoteMcpServerID *string
 	// The ID of the tunneled MCP server to use as the backend
@@ -114,6 +112,12 @@ type GetMcpServerPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
+}
+
+// ListMcpServersForOrgPayload is the payload type of the mcpServers service
+// listMcpServersForOrg method.
+type ListMcpServersForOrgPayload struct {
+	SessionToken *string
 }
 
 // ListMcpServersPayload is the payload type of the mcpServers service
@@ -161,9 +165,6 @@ type UpdateMcpServerPayload struct {
 	Name *string
 	// The ID of the environment to associate with the server
 	EnvironmentID *string
-	// The ID of the user session issuer that gates OAuth-based MCP client
-	// authentication. Omit to disable issuer-gated OAuth.
-	UserSessionIssuerID *string
 	// The ID of the remote MCP server to use as the backend
 	RemoteMcpServerID *string
 	// The ID of the tunneled MCP server to use as the backend

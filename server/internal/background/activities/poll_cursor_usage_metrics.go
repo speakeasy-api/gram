@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	PollUsageMaxAttempts = 3
+	PollUsageMaxAttempts = 5
 )
 
 type PollCursorUsageMetrics struct {

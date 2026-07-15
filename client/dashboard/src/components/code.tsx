@@ -142,8 +142,11 @@ export function CodeBlock({
   // mono weight 300 at ~15px/1.6, a 4px language-accent rail on the left
   // instead of an all-around border, ~20px/24px padding. `surface="light"`
   // swaps to the paired fixed-light tokens for inline chips on lighter panels.
+  // shiki's raw <pre> carries the UA-stylesheet `white-space: pre`, which a
+  // rule on the element itself always beats an inherited value for — so the
+  // `[&>pre]:` utilities target the injected <pre> directly.
   const baseClasses = cn(
-    "font-mono font-light text-[15px] leading-[1.6] text-wrap overflow-x-auto border-l-4 break-all whitespace-pre-wrap truncate",
+    "font-mono font-light text-[15px] leading-[1.6] text-wrap overflow-x-auto border-l-4 break-all whitespace-pre-wrap [&>pre]:whitespace-pre-wrap [&>pre]:break-all truncate",
     surface === "light"
       ? "bg-surface-secondary-fixed-light text-default-fixed-dark"
       : "bg-surface-secondary-fixed-dark text-default-fixed-light",

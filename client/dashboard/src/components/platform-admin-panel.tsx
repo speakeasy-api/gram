@@ -22,6 +22,7 @@ import {
   Building2,
   FileSearch,
   FolderSync,
+  Key,
   KeyRound,
   Loader2,
   Mail,
@@ -324,6 +325,21 @@ function ProductFeaturesSection(): ReactElement {
         onToggle={handleToggle}
         error={
           pendingFeature === FeatureName.Webhooks
+            ? mutError?.message
+            : undefined
+        }
+      />
+
+      <FeatureToggle
+        label="Custom Model Provider Keys"
+        description="Allows projects in this organization to store OpenRouter API keys for model completions."
+        icon={Key}
+        featureName={FeatureName.CustomModelKeys}
+        enabled={features.customModelKeysEnabled}
+        isPending={isPending && pendingFeature === FeatureName.CustomModelKeys}
+        onToggle={handleToggle}
+        error={
+          pendingFeature === FeatureName.CustomModelKeys
             ? mutError?.message
             : undefined
         }

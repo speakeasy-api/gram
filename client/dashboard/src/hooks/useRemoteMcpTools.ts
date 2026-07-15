@@ -72,6 +72,13 @@ export interface UseRemoteMcpToolsOptions {
    * a spurious `needsAuth`.
    */
   enabled?: boolean;
+  /**
+   * By default non-401 failures throw to the nearest error boundary (callers
+   * like RemoteMcpToolsSection provide one). Pass `false` to keep every failure
+   * inline via `isError` instead — for callers with no boundary that render a
+   * retryable error state themselves.
+   */
+  throwOnError?: boolean;
 }
 
 /**
@@ -85,7 +92,7 @@ export function useRemoteMcpTools(
   mcpUrl: string | undefined,
   options?: UseRemoteMcpToolsOptions,
 ): UseRemoteMcpToolsResult {
-  const { headers, enabled = true } = options ?? {};
+  const { headers, enabled = true, throwOnError } = options ?? {};
 
   // Key on the header values so the query refetches once the JWT arrives or
   // rotates, without keying on object identity.
@@ -152,8 +159,10 @@ export function useRemoteMcpTools(
     // The dashboard QueryClient throws query errors to the nearest error
     // boundary by default. A 401 is an expected state here — it means the user
     // must connect upstream — so keep it inline (`needsAuth`) and only let
-    // genuinely unexpected failures escape to the boundary.
-    throwOnError: (error) => !isUnauthorizedError(error),
+    // genuinely unexpected failures escape to the boundary. Callers without a
+    // boundary pass `throwOnError: false` to keep every failure inline.
+    throwOnError:
+      throwOnError === false ? false : (error) => !isUnauthorizedError(error),
   });
 
   return {

@@ -63,9 +63,12 @@ describe("autoConfigureRemoteMcpAuth", () => {
       updateMcpServerForm: expect.objectContaining({
         id: "mcp-server-1",
         visibility: "private",
-        userSessionIssuerId: "server-usi",
       }),
     });
+    // The update payload must not carry the issuer.
+    expect(
+      client.mcpServers.update.mock.calls[0]?.[0]?.updateMcpServerForm,
+    ).not.toHaveProperty("userSessionIssuerId");
   });
 
   it("reuses a project issuer over an org issuer and stores resource scopes", async () => {
@@ -112,7 +115,6 @@ describe("autoConfigureRemoteMcpAuth", () => {
       updateMcpServerForm: expect.objectContaining({
         id: "mcp-server-1",
         visibility: "private",
-        userSessionIssuerId: "server-usi",
       }),
     });
   });
@@ -391,7 +393,6 @@ function remoteMcpServer(): RemoteMcpServer {
     projectId: "project-1",
     url: "https://remote.example.com/mcp",
     transportType: "streamable-http",
-    headers: [],
     createdAt: new Date(0),
     updatedAt: new Date(0),
   };

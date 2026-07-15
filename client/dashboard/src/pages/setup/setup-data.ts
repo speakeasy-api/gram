@@ -56,7 +56,8 @@ export const AGENT_PLATFORMS: AgentPlatform[] = [
     "OTEL_EXPORTER_OTLP_HEADERS": "Gram-Project=default,Gram-Key={{GRAM_API_KEY}}",
     "OTEL_EXPORTER_OTLP_PROTOCOL": "http/json",
     "OTEL_LOGS_EXPORTER": "otlp",
-    "OTEL_METRICS_EXPORTER": "otlp"
+    "OTEL_METRICS_EXPORTER": "otlp",
+    "FORCE_AUTOUPDATE_PLUGINS": "1"
   },
   "extraKnownMarketplaces": {
     "{{GRAM_MARKETPLACE_NAME}}": {

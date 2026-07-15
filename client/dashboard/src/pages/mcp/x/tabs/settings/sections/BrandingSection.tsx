@@ -62,7 +62,6 @@ export function BrandingSection({
             tunneledMcpServerId: mcpServer.tunneledMcpServerId ?? undefined,
             toolsetId: mcpServer.toolsetId ?? undefined,
             environmentId: mcpServer.environmentId ?? undefined,
-            userSessionIssuerId: mcpServer.userSessionIssuerId ?? undefined,
             toolVariationsGroupId: mcpServer.toolVariationsGroupId ?? undefined,
             visibility: mcpServer.visibility,
           },

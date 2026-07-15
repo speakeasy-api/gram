@@ -137,7 +137,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
 	oauthService := oauth.NewService(logger, tracerProvider, meterProvider, conn, serverURL, cacheAdapter, enc, env, sessionManager, nil, guardianPolicy)
 	devProvisioner := openrouter.NewDevelopment("test-openrouter-key")
-	chatClient := openrouter.NewUnifiedClient(logger, guardianPolicy, devProvisioner, nil, nil, nil, nil)
+	chatClient := openrouter.NewUnifiedClient(logger, guardianPolicy, devProvisioner, &openrouter.PlatformKeyResolver{Provisioner: devProvisioner}, nil, nil, nil, nil)
 	vectorToolStore := rag.NewToolsetVectorStore(logger, tracerProvider, conn, chatClient)
 	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
 	logsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
@@ -210,7 +210,7 @@ func seedAPIKey(t *testing.T, ctx context.Context, ti *testInstance, organizatio
 
 // seedRemoteMCPServer inserts a new remote_mcp_servers row and any configured
 // headers, encrypting secret values the same way the management API does.
-func seedRemoteMCPServer(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, url string, headers ...remotemcprepo.CreateHeaderParams) remotemcprepo.RemoteMcpServer {
+func seedRemoteMCPServer(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, url string, headers ...remotemcprepo.CreateServerHeaderParams) remotemcprepo.RemoteMcpServer {
 	t.Helper()
 
 	r := remotemcprepo.New(ti.conn)
@@ -223,6 +223,7 @@ func seedRemoteMCPServer(t *testing.T, ctx context.Context, ti *testInstance, pr
 	for _, h := range headers {
 		params := h
 		params.RemoteMcpServerID = server.ID
+		params.ProjectID = projectID
 
 		if params.IsSecret && params.Value.Valid && params.Value.String != "" {
 			encrypted, encErr := ti.enc.Encrypt([]byte(params.Value.String))
@@ -230,7 +231,7 @@ func seedRemoteMCPServer(t *testing.T, ctx context.Context, ti *testInstance, pr
 			params.Value = pgtype.Text{String: encrypted, Valid: true}
 		}
 
-		_, err := r.CreateHeader(ctx, params)
+		_, err := r.CreateServerHeader(ctx, params)
 		require.NoError(t, err)
 	}
 
@@ -248,21 +249,23 @@ func randomSlug() string {
 // remote-backed mcp_server: a remote_mcp_servers row + an mcp_servers row
 // pointing at it + an mcp_endpoints row exposing it via the returned slug.
 // visibility must be "public", "private", or "disabled".
-func seedRemoteMCPEndpoint(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, upstreamURL, visibility string, headers ...remotemcprepo.CreateHeaderParams) (slug string, mcpServer mcpserversrepo.McpServer, remoteServer remotemcprepo.RemoteMcpServer) {
+func seedRemoteMCPEndpoint(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, upstreamURL, visibility string, headers ...remotemcprepo.CreateServerHeaderParams) (slug string, mcpServer mcpserversrepo.McpServer, remoteServer remotemcprepo.RemoteMcpServer) {
 	t.Helper()
 
 	remoteServer = seedRemoteMCPServer(t, ctx, ti, projectID, upstreamURL, headers...)
 	mcpServerID, err := uuid.NewV7()
 	require.NoError(t, err)
+	issuerID := seedUserSessionIssuer(t, ctx, ti, projectID)
 	mcpServer, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ID:                mcpServerID,
-		ProjectID:         projectID,
-		Name:              conv.ToPGText("test mcp server"),
-		Slug:              conv.ToPGText("test-mcp-server-" + mcpServerID.String()[len(mcpServerID.String())-4:]),
-		EnvironmentID:     uuid.NullUUID{},
-		RemoteMcpServerID: uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
-		ToolsetID:         uuid.NullUUID{},
-		Visibility:        visibility,
+		ID:                  mcpServerID,
+		ProjectID:           projectID,
+		Name:                conv.ToPGText("test mcp server"),
+		Slug:                conv.ToPGText("test-mcp-server-" + mcpServerID.String()[len(mcpServerID.String())-4:]),
+		EnvironmentID:       uuid.NullUUID{},
+		RemoteMcpServerID:   uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
+		ToolsetID:           uuid.NullUUID{},
+		Visibility:          visibility,
+		UserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
 	})
 	require.NoError(t, err)
 

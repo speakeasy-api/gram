@@ -57,14 +57,7 @@ func isConversationEvent(eventName string) bool {
 // assuming claude-code — the title generator will replace it with a real
 // one once enough conversation is on file.
 func (s *Service) defaultChatTitleForSession(ctx context.Context, sessionID string) string {
-	if sessionID == "" {
-		return activities.DefaultClaudeAmbiguous
-	}
-	var variant string
-	if err := s.cache.Get(ctx, sessionAgentVariantCacheKey(sessionID), &variant); err != nil {
-		return activities.DefaultClaudeAmbiguous
-	}
-	switch variant {
+	switch s.sessionAgentVariant(ctx, sessionID) {
 	case agentVariantCowork:
 		return activities.DefaultCoworkChatTitle
 	case agentVariantClaudeCode:
@@ -72,6 +65,21 @@ func (s *Service) defaultChatTitleForSession(ctx context.Context, sessionID stri
 	default:
 		return activities.DefaultClaudeAmbiguous
 	}
+}
+
+// sessionAgentVariant returns the agent variant ("cowork" or "claude-code")
+// stamped into the cache by SessionStart, or "" when none is cached (no
+// SessionStart processed yet, or a cache miss). Callers should treat "" as an
+// ambiguous Claude session rather than assuming claude-code.
+func (s *Service) sessionAgentVariant(ctx context.Context, sessionID string) string {
+	if sessionID == "" {
+		return ""
+	}
+	var variant string
+	if err := s.cache.Get(ctx, sessionAgentVariantCacheKey(sessionID), &variant); err != nil {
+		return ""
+	}
+	return variant
 }
 
 // sessionIDToUUID converts a Claude Code session_id string to a UUID.
@@ -146,6 +154,29 @@ func constructBlockResponse(hookEventName, reason string) *gen.ClaudeHookResult 
 	return result
 }
 
+// constructWarnChallengeResponse builds a PreToolUse deny for a warn challenge,
+// splitting the model-facing reason (permissionDecisionReason — authoritative,
+// NO link) from the human-facing systemMessage (carries the acknowledgement
+// link). Keeping the link out of the model's reason stops the agent from
+// treating it as an injected instruction and dismissing the challenge. Only
+// PreToolUse carries permissionDecision; any other event falls back to a plain
+// block on the agent reason (fail-safe).
+func constructWarnChallengeResponse(hookEventName, agentReason, userReason string) *gen.ClaudeHookResult {
+	if hookEventName != "PreToolUse" {
+		return constructBlockResponse(hookEventName, agentReason)
+	}
+	result := makeHookResult(hookEventName)
+	deny := "deny"
+	if output, ok := result.HookSpecificOutput.(*HookSpecificOutput); ok {
+		output.PermissionDecision = &deny
+		output.PermissionDecisionReason = &agentReason
+	}
+	// systemMessage renders directly to the user's terminal — the link belongs
+	// here, addressed to the human, not in the model-facing reason.
+	result.SystemMessage = &userReason
+	return result
+}
+
 // handleUserPromptSubmit captures the user's prompt text as a chat message.
 // When a blocking risk policy matches, it returns 200 with a top-level
 // `decision: "block"` + `reason`, the shape Claude Code documents for
@@ -161,6 +192,13 @@ func (s *Service) handleUserPromptSubmit(ctx context.Context, ev *hookevents.Use
 	}
 	if s.riskScanner != nil && ev.Prompt != "" && ev.ConversationID != "" {
 		if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil {
+			// Warn (challenge) defers to the tool call: Claude Code can only show
+			// a native [y/n] confirmation at PreToolUse, not at prompt submit.
+			// Never hard-block a warn here — let the prompt through so the
+			// follow-on tool call carrying the match gets challenged instead.
+			if scanResult.Action == "warn" {
+				return makeHookResult(ev.RawEventType), nil
+			}
 			auditReason := fmt.Sprintf("Speakeasy blocked this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
 			// ClickHouse always gets the technical reason; the user_message

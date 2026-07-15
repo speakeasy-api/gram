@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/temporal"
 
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations"
 	"github.com/speakeasy-api/gram/server/internal/chat"
@@ -20,6 +21,29 @@ import (
 	anthropicapi "github.com/speakeasy-api/gram/server/internal/thirdparty/anthropic"
 	cursorapi "github.com/speakeasy-api/gram/server/internal/thirdparty/cursor"
 )
+
+// ErrTypeAIUsagePollFailed is the Temporal application error type emitted
+// when an AI integration poll fails. Its details payload carries the
+// provider, per-stage failures, and run progress so the Temporal UI shows
+// the whole failure story instead of a single opaque message.
+const ErrTypeAIUsagePollFailed = "AIUsagePollFailed"
+
+// aiUsagePollFailureDetails is the structured details payload attached to
+// ErrTypeAIUsagePollFailed application errors.
+type aiUsagePollFailureDetails struct {
+	ConfigID     string                      `json:"config_id"`
+	Provider     string                      `json:"provider,omitempty"`
+	Attempt      int32                       `json:"attempt"`
+	MaxAttempts  int32                       `json:"max_attempts"`
+	NonRetryable bool                        `json:"non_retryable"`
+	Stages       []stageFailureDetail        `json:"stages,omitempty"`
+	Progress     aiintegrations.SyncProgress `json:"progress,omitempty"`
+}
+
+type stageFailureDetail struct {
+	Stage string `json:"stage"`
+	Error string `json:"error"`
+}
 
 type PollAIData struct {
 	integrations       *aiintegrations.Store
@@ -54,7 +78,9 @@ func NewPollAIData(
 }
 
 // Do polls an AI integration provider and persists the provider-specific data.
-// It records provider-visible failure state only on the final Temporal retry.
+// It records provider-visible failure state on the final Temporal retry or as
+// soon as the failure is known to be non-retryable, and wraps every failure
+// in a typed Temporal application error carrying structured details.
 func (p *PollAIData) Do(ctx context.Context, configID string) (err error) {
 	id, err := uuid.Parse(configID)
 	if err != nil {
@@ -67,16 +93,27 @@ func (p *PollAIData) Do(ctx context.Context, configID string) (err error) {
 	// and the default interval applies.
 	var cfg aiintegrations.Config
 	defer func() {
-		if err == nil || activity.GetInfo(ctx).Attempt < PollUsageMaxAttempts {
+		if err == nil {
 			return
 		}
 
-		recordCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
-		defer cancel()
+		attempt := activity.GetInfo(ctx).Attempt
+		nonRetryable := pollAPIKeyRejected(err)
 
-		if recordErr := p.integrations.RecordUsagePollFailure(recordCtx, id, cfg.Provider, endTime, err); recordErr != nil {
-			err = errors.Join(err, fmt.Errorf("record usage poll failure: %w", recordErr))
+		// Temporal records failures, but that's not visible to the user. We
+		// record the failure on the last attempt — or immediately when
+		// retrying can't help, e.g. a rejected api key — so it's visible to
+		// the user in the dashboard.
+		if attempt >= PollUsageMaxAttempts || nonRetryable {
+			recordCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+			defer cancel()
+
+			if recordErr := p.integrations.RecordUsagePollFailure(recordCtx, id, cfg.Provider, endTime, err); recordErr != nil {
+				err = errors.Join(err, fmt.Errorf("record usage poll failure: %w", recordErr))
+			}
 		}
+
+		err = newPollFailureError(id, cfg.Provider, attempt, nonRetryable, err)
 	}()
 
 	cfg, err = p.integrations.GetUsagePollConfig(ctx, id)
@@ -114,4 +151,52 @@ func (p *PollAIData) Do(ctx context.Context, configID string) (err error) {
 		return oops.E(oops.CodeUnexpected, err, "record usage poll success")
 	}
 	return nil
+}
+
+// pollAPIKeyRejected reports whether the poll failed because the provider
+// rejected the configured api key. Those failures are permanent until the
+// user rotates the key, so retrying them is wasted work.
+func pollAPIKeyRejected(err error) bool {
+	var cursorErr *cursorapi.HTTPError
+	if errors.As(err, &cursorErr) {
+		return cursorErr.StatusCode == 401
+	}
+	var anthropicErr *anthropicapi.HTTPError
+	if errors.As(err, &anthropicErr) {
+		return anthropicErr.StatusCode == 401 || anthropicErr.StatusCode == 403
+	}
+	return false
+}
+
+// newPollFailureError wraps a poll failure in a typed Temporal application
+// error. The details payload surfaces the provider, attempt count, per-stage
+// failures, and run progress in the Temporal UI; the cause chain is kept
+// intact for errors.Is/errors.As callers.
+func newPollFailureError(configID uuid.UUID, provider string, attempt int32, nonRetryable bool, cause error) error {
+	details := aiUsagePollFailureDetails{
+		ConfigID:     configID.String(),
+		Provider:     provider,
+		Attempt:      attempt,
+		MaxAttempts:  PollUsageMaxAttempts,
+		NonRetryable: nonRetryable,
+		Stages:       nil,
+		Progress:     nil,
+	}
+
+	var syncErr *aiintegrations.SyncError
+	if errors.As(cause, &syncErr) {
+		details.Progress = syncErr.Progress
+		details.Stages = make([]stageFailureDetail, 0, len(syncErr.Stages))
+		for _, stage := range syncErr.Stages {
+			details.Stages = append(details.Stages, stageFailureDetail{Stage: stage.Stage, Error: stage.Err.Error()})
+		}
+	}
+
+	message := fmt.Sprintf("poll ai integration usage: provider=%s config=%s attempt=%d/%d: %s",
+		provider, configID, attempt, PollUsageMaxAttempts, cause)
+	return temporal.NewApplicationErrorWithOptions(message, ErrTypeAIUsagePollFailed, temporal.ApplicationErrorOptions{
+		NonRetryable: nonRetryable,
+		Cause:        cause,
+		Details:      []any{details},
+	})
 }

@@ -215,10 +215,9 @@ export async function autoConfigureRemoteMcpAuth({
       },
     });
 
-    const updatedMcpServer = await pointMcpServerAtUserSessionIssuer(
+    const updatedMcpServer = await setMcpServerVisibility(
       client,
       mcpServer,
-      userSessionIssuerId,
       "private",
     );
 
@@ -247,11 +246,10 @@ export async function autoConfigureRemoteMcpAuth({
 }
 
 // Full-record replace: updateMcpServer nulls omitted fields, so re-send the
-// server's existing references alongside the new issuer linkage.
-export async function pointMcpServerAtUserSessionIssuer(
+// server's existing references alongside the new visibility.
+async function setMcpServerVisibility(
   client: Gram,
   mcpServer: McpServer,
-  userSessionIssuerId: string,
   visibility: McpServerVisibility,
 ): Promise<McpServer> {
   return await client.mcpServers.update({
@@ -263,7 +261,6 @@ export async function pointMcpServerAtUserSessionIssuer(
       environmentId: mcpServer.environmentId ?? undefined,
       toolVariationsGroupId: mcpServer.toolVariationsGroupId ?? undefined,
       visibility,
-      userSessionIssuerId,
     },
   });
 }

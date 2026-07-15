@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/urls"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -43,6 +44,9 @@ type rfc8414Document struct {
 	TokenEndpoint                     string   `json:"token_endpoint"`
 	RegistrationEndpoint              string   `json:"registration_endpoint"`
 	JwksURI                           string   `json:"jwks_uri"`
+	ServiceDocumentation              string   `json:"service_documentation"`
+	OpPolicyURI                       string   `json:"op_policy_uri"`
+	OpTosURI                          string   `json:"op_tos_uri"`
 	ScopesSupported                   []string `json:"scopes_supported"`
 	GrantTypesSupported               []string `json:"grant_types_supported"`
 	ResponseTypesSupported            []string `json:"response_types_supported"`
@@ -74,9 +78,8 @@ func (s *Service) DiscoverRemoteSessionIssuer(ctx context.Context, payload *gen.
 		return nil, oops.E(oops.CodeBadRequest, nil, "issuer is required").LogError(ctx, logger)
 	}
 
-	parsed, err := url.Parse(issuerURL)
-	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid issuer url").LogError(ctx, logger)
+	if !urls.IsAbsoluteHTTP(issuerURL) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "invalid issuer url").LogError(ctx, logger)
 	}
 
 	doc, warnings, err := discoverIssuerMetadata(ctx, s.policy, issuerURL)
@@ -88,11 +91,17 @@ func (s *Service) DiscoverRemoteSessionIssuer(ctx context.Context, payload *gen.
 	}
 
 	draft := &types.RemoteSessionIssuerDraft{
-		Issuer:                            conv.Default(doc.Issuer, issuerURL),
-		AuthorizationEndpoint:             conv.PtrEmpty(doc.AuthorizationEndpoint),
-		TokenEndpoint:                     conv.PtrEmpty(doc.TokenEndpoint),
-		RegistrationEndpoint:              conv.PtrEmpty(doc.RegistrationEndpoint),
-		JwksURI:                           conv.PtrEmpty(doc.JwksURI),
+		Issuer:                conv.Default(doc.Issuer, issuerURL),
+		AuthorizationEndpoint: conv.PtrEmpty(doc.AuthorizationEndpoint),
+		TokenEndpoint:         conv.PtrEmpty(doc.TokenEndpoint),
+		RegistrationEndpoint:  conv.PtrEmpty(doc.RegistrationEndpoint),
+		JwksURI:               conv.PtrEmpty(doc.JwksURI),
+		// The issuer controls these and downstream surfaces render them as links,
+		// so a value that is not an absolute http(s) URL is discarded rather than
+		// carried into the draft the create form submits back.
+		ServiceDocumentation:              conv.PtrEmpty(conv.Ternary(urls.IsAbsoluteHTTP(doc.ServiceDocumentation), doc.ServiceDocumentation, "")),
+		OpPolicyURI:                       conv.PtrEmpty(conv.Ternary(urls.IsAbsoluteHTTP(doc.OpPolicyURI), doc.OpPolicyURI, "")),
+		OpTosURI:                          conv.PtrEmpty(conv.Ternary(urls.IsAbsoluteHTTP(doc.OpTosURI), doc.OpTosURI, "")),
 		ScopesSupported:                   doc.ScopesSupported,
 		GrantTypesSupported:               doc.GrantTypesSupported,
 		ResponseTypesSupported:            doc.ResponseTypesSupported,
@@ -132,6 +141,20 @@ func (s *Service) CreateRemoteSessionIssuer(ctx context.Context, payload *gen.Cr
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid logo asset id").LogError(ctx, logger)
 	}
 
+	// Discovery drops malformed documentation URLs, but a caller holding the write
+	// scope can POST them without ever calling discover, and they are persisted
+	// and later rendered as links. An empty value stays legal: the update queries
+	// read it as the explicit "clear to NULL" sentinel.
+	if v := conv.PtrValOr(payload.ServiceDocumentation, ""); v != "" && !urls.IsAbsoluteHTTP(v) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "service_documentation must be an absolute http(s) URL").LogError(ctx, logger)
+	}
+	if v := conv.PtrValOr(payload.OpPolicyURI, ""); v != "" && !urls.IsAbsoluteHTTP(v) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "op_policy_uri must be an absolute http(s) URL").LogError(ctx, logger)
+	}
+	if v := conv.PtrValOr(payload.OpTosURI, ""); v != "" && !urls.IsAbsoluteHTTP(v) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "op_tos_uri must be an absolute http(s) URL").LogError(ctx, logger)
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
@@ -151,6 +174,9 @@ func (s *Service) CreateRemoteSessionIssuer(ctx context.Context, payload *gen.Cr
 		TokenEndpoint:                     conv.PtrToPGText(payload.TokenEndpoint),
 		RegistrationEndpoint:              conv.PtrToPGText(payload.RegistrationEndpoint),
 		JwksUri:                           conv.PtrToPGText(payload.JwksURI),
+		ServiceDocumentation:              conv.PtrToPGTextEmpty(payload.ServiceDocumentation),
+		OpPolicyUri:                       conv.PtrToPGTextEmpty(payload.OpPolicyURI),
+		OpTosUri:                          conv.PtrToPGTextEmpty(payload.OpTosURI),
 		ScopesSupported:                   payload.ScopesSupported,
 		GrantTypesSupported:               payload.GrantTypesSupported,
 		ResponseTypesSupported:            payload.ResponseTypesSupported,
@@ -203,8 +229,8 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 	}
 
 	// slug and issuer are NOT NULL on the row. The SQL update treats an
-	// explicit empty string as "clear to NULL" for the four nullable
-	// endpoint columns, but applying that to slug/issuer would violate the
+	// explicit empty string as "clear to NULL" for the nullable endpoint and
+	// documentation columns, but applying that to slug/issuer would violate the
 	// constraint, so reject empty here with an actionable error before the
 	// query runs.
 	if payload.Slug != nil && *payload.Slug == "" {
@@ -221,6 +247,20 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 	logoAssetID, err := conv.PtrToNullUUID(payload.LogoAssetID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid logo asset id").LogError(ctx, logger)
+	}
+
+	// Discovery drops malformed documentation URLs, but a caller holding the write
+	// scope can POST them without ever calling discover, and they are persisted
+	// and later rendered as links. An empty value stays legal: the update queries
+	// read it as the explicit "clear to NULL" sentinel.
+	if v := conv.PtrValOr(payload.ServiceDocumentation, ""); v != "" && !urls.IsAbsoluteHTTP(v) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "service_documentation must be an absolute http(s) URL").LogError(ctx, logger)
+	}
+	if v := conv.PtrValOr(payload.OpPolicyURI, ""); v != "" && !urls.IsAbsoluteHTTP(v) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "op_policy_uri must be an absolute http(s) URL").LogError(ctx, logger)
+	}
+	if v := conv.PtrValOr(payload.OpTosURI, ""); v != "" && !urls.IsAbsoluteHTTP(v) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "op_tos_uri must be an absolute http(s) URL").LogError(ctx, logger)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -257,6 +297,9 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 		TokenEndpoint:                     conv.PtrToPGText(payload.TokenEndpoint),
 		RegistrationEndpoint:              conv.PtrToPGText(payload.RegistrationEndpoint),
 		JwksUri:                           conv.PtrToPGText(payload.JwksURI),
+		ServiceDocumentation:              conv.PtrToPGText(payload.ServiceDocumentation),
+		OpPolicyUri:                       conv.PtrToPGText(payload.OpPolicyURI),
+		OpTosUri:                          conv.PtrToPGText(payload.OpTosURI),
 		ScopesSupported:                   payload.ScopesSupported,
 		GrantTypesSupported:               payload.GrantTypesSupported,
 		ResponseTypesSupported:            payload.ResponseTypesSupported,

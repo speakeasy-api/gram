@@ -743,6 +743,75 @@ func TestServiceCoreReapStuckRuntimesLeavesIdleActiveRuntime(t *testing.T) {
 	require.Equal(t, eventStatusPending, event.Status)
 }
 
+func TestServiceCoreReapStuckRuntimesStopsLocalRowsWithMissingContainers(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "reap_missing_local_runtime")
+	require.NoError(t, err)
+
+	missingProjectID, missingAssistantID, missingThreadID := insertReapableProject(t, conn, "missing-local-runtime")
+	missingRuntimeID := insertActiveV2RuntimeRow(
+		t,
+		conn,
+		missingProjectID,
+		missingAssistantID,
+		missingThreadID,
+		runtimeBackendLocal,
+		runtimeStateActive,
+		`{"container_id":"missing","container_name":"gram-asst-missing","host_port":18081}`,
+	)
+
+	presentProjectID, presentAssistantID, presentThreadID := insertReapableProject(t, conn, "present-local-runtime")
+	presentRuntimeID := insertActiveV2RuntimeRow(
+		t,
+		conn,
+		presentProjectID,
+		presentAssistantID,
+		presentThreadID,
+		runtimeBackendLocal,
+		runtimeStateActive,
+		`{"container_id":"present","container_name":"gram-asst-present","host_port":18082}`,
+	)
+
+	engine := newFakeContainerEngine(testLocalImageRef, testLocalImageID, 18082)
+	backend := newTestLocalBackend(t, engine, nil)
+	presentRecord := assistantRuntimeRecord{
+		ID:                  presentRuntimeID,
+		AssistantThreadID:   uuid.Nil,
+		AssistantID:         presentAssistantID,
+		ProjectID:           presentProjectID,
+		Backend:             runtimeBackendLocal,
+		BackendMetadataJSON: []byte(`{"container_id":"present"}`),
+		State:               runtimeStateActive,
+		WarmUntil:           pgtype.Timestamptz{},
+	}
+	presentName := localContainerName(presentRecord)
+	engine.containers[presentName] = &fakeContainer{
+		id:      "present",
+		imageID: testLocalImageID,
+		running: false,
+		spec:    backend.containerSpec(presentRecord, presentName),
+		starts:  0,
+	}
+
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil)
+	result, err := core.ReapStuckRuntimes(t.Context())
+	require.NoError(t, err)
+	require.EqualValues(t, 1, result.StaleRuntimesStopped)
+	require.Contains(t, result.AffectedAssistantIDs, missingAssistantID)
+	require.NotContains(t, result.AffectedAssistantIDs, presentAssistantID)
+
+	missingRuntime, err := assistantsrepo.New(conn).GetAssistantRuntime(t.Context(), assistantsrepo.GetAssistantRuntimeParams{ID: missingRuntimeID, ProjectID: missingProjectID})
+	require.NoError(t, err)
+	require.Equal(t, runtimeStateStopped, missingRuntime.State)
+	require.True(t, missingRuntime.DeletedAt.Valid)
+
+	presentRuntime, err := assistantsrepo.New(conn).GetAssistantRuntime(t.Context(), assistantsrepo.GetAssistantRuntimeParams{ID: presentRuntimeID, ProjectID: presentProjectID})
+	require.NoError(t, err)
+	require.Equal(t, runtimeStateActive, presentRuntime.State)
+	require.False(t, presentRuntime.DeletedAt.Valid)
+}
+
 func insertAssistantFixture(t *testing.T, conn *pgxpool.Pool) (projectID, assistantID, chatID, threadID uuid.UUID) {
 	t.Helper()
 	ctx := t.Context()

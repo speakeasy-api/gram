@@ -14,6 +14,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/email"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/usage"
 	usagerepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
@@ -22,8 +25,10 @@ import (
 const (
 	// snapshotBillingCycles is how many trailing billing cycles (including the
 	// active one) are kept refreshed in Postgres. Matches the TUM endpoint's
-	// reporting window and is bounded by the 2-year retention of
-	// chat_token_summaries, so the first run backfills the full window.
+	// reporting window. The attribute_metrics_summaries retention (2 years)
+	// covers it, but coverage starts where the aggregate's data does — a
+	// first run seals cycles predating coverage at whatever (possibly zero)
+	// data exists.
 	snapshotBillingCycles = 12
 
 	// billingCycleFinalizeGrace is how long after a cycle closes its snapshot
@@ -41,13 +46,17 @@ type SnapshotBillingCycleUsage struct {
 	logger        *slog.Logger
 	db            *pgxpool.Pool
 	telemetryRepo *telemetryrepo.Queries
+	cache         cache.Cache
+	emails        *email.Service
 }
 
-func NewSnapshotBillingCycleUsage(logger *slog.Logger, db *pgxpool.Pool, chConn clickhouse.Conn) *SnapshotBillingCycleUsage {
+func NewSnapshotBillingCycleUsage(logger *slog.Logger, db *pgxpool.Pool, chConn clickhouse.Conn, cacheAdapter cache.Cache, emails *email.Service) *SnapshotBillingCycleUsage {
 	return &SnapshotBillingCycleUsage{
 		logger:        logger,
 		db:            db,
 		telemetryRepo: telemetryrepo.New(chConn),
+		cache:         cacheAdapter,
+		emails:        emails,
 	}
 }
 
@@ -112,9 +121,10 @@ func (s *SnapshotBillingCycleUsage) snapshotOrganization(ctx context.Context, qu
 		}
 
 		days, err := s.telemetryRepo.GetTokensUnderManagementByDay(ctx, telemetryrepo.GetTokensUnderManagementParams{
-			ProjectIDs:    ids,
-			StartUnixNano: cycle.Start.UnixNano(),
-			EndUnixNano:   cycle.End.UnixNano(),
+			ProjectIDs:          ids,
+			StartUnixNano:       cycle.Start.UnixNano(),
+			EndUnixNano:         cycle.End.UnixNano(),
+			ExcludedHookSources: billing.GramHostedHookSourceStrings(),
 		})
 		if err != nil {
 			return fmt.Errorf("compute tokens under management: %w", err)
@@ -138,6 +148,12 @@ func (s *SnapshotBillingCycleUsage) snapshotOrganization(ctx context.Context, qu
 			FinalizedAt:    finalizedAt,
 		}); err != nil {
 			return fmt.Errorf("upsert billing cycle usage: %w", err)
+		}
+
+		// Threshold alerts only ever concern the cycle in progress; closed
+		// cycles inside the grace window refresh silently.
+		if !now.Before(cycle.Start) && now.Before(cycle.End) {
+			s.maybeSendUsageAlert(ctx, queries, orgID, meta, cycle, tokens, now)
 		}
 	}
 

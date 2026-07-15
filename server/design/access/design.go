@@ -397,6 +397,200 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ShadowMCPAccessRules"}`)
 	})
 
+	Method("listShadowMCPInventory", func() {
+		Description("List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and policy-bypass state.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("project_id", String, func() {
+				Format(FormatUUID)
+			})
+			Attribute("limit", Int, func() {
+				Default(50)
+				Minimum(1)
+				Maximum(200)
+			})
+			Attribute("cursor", String, "Cursor for the next page of results.")
+			Required("project_id")
+			security.SessionPayload()
+		})
+
+		Result(ListShadowMCPInventoryResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listShadowMCPInventory")
+			Param("project_id")
+			Param("limit")
+			Param("cursor")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listShadowMCPInventory")
+		Meta("openapi:extension:x-speakeasy-name-override", "listShadowMCPInventory")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ShadowMCPInventory"}`)
+	})
+
+	Method("getShadowMCPInventoryServer", func() {
+		Description("Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("project_id", String, func() {
+				Format(FormatUUID)
+			})
+			Attribute("server_slug", String, "Shadow MCP server slug to inspect.")
+			Required("project_id", "server_slug")
+			security.SessionPayload()
+		})
+
+		Result(ShadowMCPInventoryServerModel)
+
+		HTTP(func() {
+			GET("/rpc/access.getShadowMCPInventoryServer")
+			Param("project_id")
+			Param("server_slug")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getShadowMCPInventoryServer")
+		Meta("openapi:extension:x-speakeasy-name-override", "getShadowMCPInventoryServer")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ShadowMCPInventoryServer"}`)
+	})
+
+	Method("updateShadowMCPInventoryServerName", func() {
+		Description("Update or clear the administrator-defined display name for one project-scoped Shadow MCP inventory server URL.")
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(UpdateShadowMCPInventoryServerNameForm)
+			security.SessionPayload()
+		})
+
+		HTTP(func() {
+			POST("/rpc/access.updateShadowMCPInventoryServerName")
+			security.SessionHeader()
+			Response(StatusNoContent)
+		})
+
+		Meta("openapi:operationId", "updateShadowMCPInventoryServerName")
+		Meta("openapi:extension:x-speakeasy-name-override", "updateShadowMCPInventoryServerName")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateShadowMCPInventoryServerName", "type": "mutation"}`)
+	})
+
+	Method("listShadowMCPInventoryUsers", func() {
+		Description("List users with observed telemetry usage for one project-scoped Shadow MCP server URL.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("project_id", String, func() {
+				Format(FormatUUID)
+			})
+			Attribute("server_url", String, "Shadow MCP server URL to expand.", func() {
+				Format(FormatURI)
+			})
+			Attribute("limit", Int, func() {
+				Default(50)
+				Minimum(1)
+				Maximum(200)
+			})
+			Attribute("cursor", String, "Cursor for the next page of results.")
+			Required("project_id", "server_url")
+			security.SessionPayload()
+		})
+
+		Result(ListShadowMCPInventoryUsersResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listShadowMCPInventoryUsers")
+			Param("project_id")
+			Param("server_url")
+			Param("limit")
+			Param("cursor")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listShadowMCPInventoryUsers")
+		Meta("openapi:extension:x-speakeasy-name-override", "listShadowMCPInventoryUsers")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ShadowMCPInventoryUsers"}`)
+	})
+
+	Method("upsertShadowMCPInventoryPolicyBypass", func() {
+		Description("Create or modify a Shadow MCP URL allow decision for selected blocking policies.")
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(ShadowMCPInventoryPolicyBypassForm)
+			security.SessionPayload()
+		})
+
+		Result(ShadowMCPInventoryURLStateModel)
+
+		HTTP(func() {
+			POST("/rpc/access.upsertShadowMCPInventoryPolicyBypass")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "upsertShadowMCPInventoryPolicyBypass")
+		Meta("openapi:extension:x-speakeasy-name-override", "upsertShadowMCPInventoryPolicyBypass")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpsertShadowMCPInventoryPolicyBypass", "type": "mutation"}`)
+	})
+
+	Method("deleteShadowMCPInventoryPolicyBypass", func() {
+		Description("Remove a Shadow MCP URL allow decision.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("project_id", String, func() {
+				Format(FormatUUID)
+			})
+			Attribute("server_url", String, func() {
+				Format(FormatURI)
+			})
+			Required("project_id", "server_url")
+			security.SessionPayload()
+		})
+
+		Result(ShadowMCPInventoryURLStateModel)
+
+		HTTP(func() {
+			DELETE("/rpc/access.deleteShadowMCPInventoryPolicyBypass")
+			Param("project_id")
+			Param("server_url")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "deleteShadowMCPInventoryPolicyBypass")
+		Meta("openapi:extension:x-speakeasy-name-override", "deleteShadowMCPInventoryPolicyBypass")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteShadowMCPInventoryPolicyBypass", "type": "mutation"}`)
+	})
+
+	Method("resolveShadowMCPInventoryRequest", func() {
+		Description("Review the latest pending Shadow MCP URL request and resolve all pending requests for that URL.")
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(ResolveShadowMCPInventoryRequestForm)
+			security.SessionPayload()
+		})
+
+		Result(ShadowMCPInventoryURLStateModel)
+
+		HTTP(func() {
+			POST("/rpc/access.resolveShadowMCPInventoryRequest")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "resolveShadowMCPInventoryRequest")
+		Meta("openapi:extension:x-speakeasy-name-override", "resolveShadowMCPInventoryRequest")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ResolveShadowMCPInventoryRequest", "type": "mutation"}`)
+	})
+
 	Method("createShadowMCPAccessRule", func() {
 		Description("Create a managed Shadow MCP access rule.")
 		Security(security.Session)
@@ -925,6 +1119,128 @@ var ListShadowMCPAccessRulesResult = Type("ListShadowMCPAccessRulesResult", func
 	Required("rules")
 	Attribute("rules", ArrayOf(ShadowMCPAccessRuleModel))
 	Attribute("next_cursor", String, "Cursor for the next page of results.")
+})
+
+var ShadowMCPInventoryRequestSummaryModel = Type("ShadowMCPInventoryRequestSummary", func() {
+	Required("id", "policy_id", "requester_user_id", "requester_email", "requested_at")
+
+	Attribute("id", String, func() {
+		Format(FormatUUID)
+	})
+	Attribute("policy_id", String, func() {
+		Format(FormatUUID)
+	})
+	Attribute("requester_user_id", String)
+	Attribute("requester_email", String)
+	Attribute("requested_at", String, func() {
+		Format(FormatDateTime)
+	})
+})
+
+var UpdateShadowMCPInventoryServerNameForm = Type("UpdateShadowMCPInventoryServerNameForm", func() {
+	Required("project_id", "server_url", "name")
+
+	Attribute("project_id", String, func() { Format(FormatUUID) })
+	Attribute("server_url", String, func() { Format(FormatURI) })
+	Attribute("name", String, func() { MaxLength(255) })
+})
+
+var ShadowMCPInventoryServerModel = Type("ShadowMCPInventoryServer", func() {
+	Required("canonical_server_url", "server_slug", "url_host", "first_seen", "last_seen", "observed_use_count", "user_count", "top_users", "access", "request_count", "allowed_policy_ids")
+
+	Attribute("canonical_server_url", String)
+	Attribute("server_slug", String)
+	Attribute("url_host", String)
+	Attribute("server_name", String)
+	Attribute("first_seen", String, func() {
+		Format(FormatDateTime)
+	})
+	Attribute("last_seen", String, func() {
+		Format(FormatDateTime)
+	})
+	Attribute("last_called", String, func() {
+		Format(FormatDateTime)
+	})
+	Attribute("observed_use_count", Int)
+	Attribute("user_count", Int)
+	Attribute("top_users", ArrayOf(String))
+	Attribute("access", String, func() {
+		Enum("none", "allowed", "blocked")
+	})
+	Attribute("request_count", Int)
+	Attribute("latest_request", ShadowMCPInventoryRequestSummaryModel)
+	Attribute("allowed_policy_ids", ArrayOf(String))
+})
+
+var ListShadowMCPInventoryResult = Type("ListShadowMCPInventoryResult", func() {
+	Required("servers")
+	Attribute("servers", ArrayOf(ShadowMCPInventoryServerModel))
+	Attribute("next_cursor", String, "Cursor for the next page of results.")
+})
+
+var ShadowMCPInventoryUserModel = Type("ShadowMCPInventoryUser", func() {
+	Required("user_key", "last_called", "observed_use_count")
+
+	Attribute("user_key", String)
+	Attribute("name", String)
+	Attribute("email", String)
+	Attribute("last_called", String, func() {
+		Format(FormatDateTime)
+	})
+	Attribute("observed_use_count", Int)
+})
+
+var ListShadowMCPInventoryUsersResult = Type("ListShadowMCPInventoryUsersResult", func() {
+	Required("users")
+	Attribute("users", ArrayOf(ShadowMCPInventoryUserModel))
+	Attribute("next_cursor", String, "Cursor for the next page of results.")
+})
+
+var ShadowMCPInventoryURLStateModel = Type("ShadowMCPInventoryURLState", func() {
+	Required("access", "request_count", "allowed_policy_ids")
+
+	Attribute("access", String)
+	Attribute("request_count", Int)
+	Attribute("latest_request", ShadowMCPInventoryRequestSummaryModel)
+	Attribute("allowed_policy_ids", ArrayOf(String))
+})
+
+var ShadowMCPInventoryPolicyBypassForm = Type("ShadowMCPInventoryPolicyBypassForm", func() {
+	Required("project_id", "server_url", "policy_ids")
+
+	Attribute("project_id", String, func() {
+		Format(FormatUUID)
+	})
+	Attribute("server_url", String, func() {
+		Format(FormatURI)
+	})
+	Attribute("policy_ids", ArrayOf(String), func() {
+		Elem(func() {
+			Format(FormatUUID)
+		})
+	})
+})
+
+var ShadowMCPInventoryRequestDecision = Type("ShadowMCPInventoryRequestDecision", String, func() {
+	Description("Decision used when resolving a Shadow MCP inventory request.")
+	Enum("allow", "deny")
+})
+
+var ResolveShadowMCPInventoryRequestForm = Type("ResolveShadowMCPInventoryRequestForm", func() {
+	Required("project_id", "server_url", "decision")
+
+	Attribute("project_id", String, func() {
+		Format(FormatUUID)
+	})
+	Attribute("server_url", String, func() {
+		Format(FormatURI)
+	})
+	Attribute("decision", ShadowMCPInventoryRequestDecision)
+	Attribute("policy_ids", ArrayOf(String), func() {
+		Elem(func() {
+			Format(FormatUUID)
+		})
+	})
 })
 
 var ShadowMCPApprovalDecisionResult = Type("ShadowMCPApprovalDecisionResult", func() {

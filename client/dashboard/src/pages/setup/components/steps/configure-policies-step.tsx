@@ -165,7 +165,7 @@ const MESSAGE_TYPES: PolicyMessageType[] = [
 // values are validated before entering local state — an unknown value would
 // otherwise crash `formatMessageTypes` (POLICY_MESSAGE_TYPE_META[t].label).
 function isPolicyAction(value: unknown): value is PolicyAction {
-  return value === "flag" || value === "block";
+  return value === "flag" || value === "block" || value === "warn";
 }
 
 function isPolicyMessageType(value: unknown): value is PolicyMessageType {
@@ -635,7 +635,7 @@ export function ConfigurePoliciesStep({
                       })
                     }
                     disabled={!activeConfig.enabled || isShadowMcp}
-                    className="grid grid-cols-2 gap-2"
+                    className="grid grid-cols-3 gap-2"
                   >
                     <ActionRadio
                       value="flag"
@@ -643,6 +643,13 @@ export function ConfigurePoliciesStep({
                       description="Record a finding, let the call through"
                       disabled={!activeConfig.enabled || isShadowMcp}
                       selected={activeConfig.action === "flag"}
+                    />
+                    <ActionRadio
+                      value="warn"
+                      label="Warn & confirm"
+                      description="Warn the user; they must acknowledge before it proceeds"
+                      disabled={!activeConfig.enabled || isShadowMcp}
+                      selected={activeConfig.action === "warn"}
                     />
                     <ActionRadio
                       value="block"
@@ -884,12 +891,14 @@ const ACTION_PILL_VARIANT: Record<
   "destructive" | "warning" | "neutral"
 > = {
   block: "destructive",
-  flag: "warning",
+  warn: "warning",
+  flag: "neutral",
   off: "neutral",
 };
 
 const ACTION_PILL_LABEL: Record<ActionPillKind, string> = {
   block: "Block",
+  warn: "Warn",
   flag: "Flag",
   off: "Off",
 };

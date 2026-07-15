@@ -269,6 +269,13 @@ export function AttachRemoteIdentityProviderSheet({
             // offer the CIMD client type. False when discovery did not run.
             clientIdMetadataDocumentSupported:
               discoveredSnapshot?.clientIdMetadataDocumentSupported ?? false,
+            // RFC 8414 documentation URLs are discovery-only — there are no form
+            // inputs for them. Undefined when discovery did not run or the issuer
+            // advertised nothing usable.
+            serviceDocumentation:
+              discoveredSnapshot?.serviceDocumentation || undefined,
+            opPolicyUri: discoveredSnapshot?.opPolicyUri || undefined,
+            opTosUri: discoveredSnapshot?.opTosUri || undefined,
           },
         });
         remoteIssuerId = created.id;
@@ -371,7 +378,7 @@ export function AttachRemoteIdentityProviderSheet({
       // is stored (and side effects like flipping a server private) is the
       // target's business.
       if (!userSessionIssuer) {
-        await target.linkUserSessionIssuer(issuerId);
+        await target.linkUserSessionIssuer?.(issuerId);
       }
 
       return { unsupportedDcrAuthMethod };
@@ -584,7 +591,7 @@ export function AttachRemoteIdentityProviderSheet({
           <Stack gap={4}>
             <SectionHeading
               title="Identity Provider"
-              description="The upstream OAuth authorization server Gram delegates to."
+              description="The upstream OAuth authorization server Speakeasy delegates to."
             />
             {hasSelectable && <ModeSwitch mode={mode} onChange={setMode} />}
 
@@ -700,7 +707,7 @@ export function AttachRemoteIdentityProviderSheet({
             <Stack gap={4} className="border-t pt-6">
               <SectionHeading
                 title="Session Client"
-                description="The OAuth client Gram registers and uses with this provider."
+                description="The OAuth client Speakeasy registers and uses with this provider."
               />
               {clientSectionBody}
             </Stack>

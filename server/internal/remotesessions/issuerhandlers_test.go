@@ -998,3 +998,223 @@ func TestDiscoverRemoteSessionIssuer_IncompleteDocReturnedAsLastResort(t *testin
 	require.NotEmpty(t, draft.DiscoveryWarnings)
 	require.Len(t, probedPaths, 5, "all candidates probed before falling back to the incomplete document")
 }
+
+func TestDiscoverRemoteSessionIssuer_IngestsDocumentationURLs(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	server := fakeIssuerServer(t, func(doc map[string]any) {
+		doc["service_documentation"] = "https://idp.example.com/docs"
+		doc["op_policy_uri"] = "https://idp.example.com/policy"
+		doc["op_tos_uri"] = "https://idp.example.com/tos"
+	})
+
+	draft, err := ti.service.DiscoverRemoteSessionIssuer(ctx, &gen.DiscoverRemoteSessionIssuerPayload{
+		Issuer:           server.URL,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, draft.ServiceDocumentation)
+	require.Equal(t, "https://idp.example.com/docs", *draft.ServiceDocumentation)
+	require.NotNil(t, draft.OpPolicyURI)
+	require.Equal(t, "https://idp.example.com/policy", *draft.OpPolicyURI)
+	require.NotNil(t, draft.OpTosURI)
+	require.Equal(t, "https://idp.example.com/tos", *draft.OpTosURI)
+}
+
+// An issuer that advertises no documentation metadata yields nil draft fields
+// rather than empty strings.
+func TestDiscoverRemoteSessionIssuer_AbsentDocumentationURLs(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	server := fakeIssuerServer(t, nil)
+
+	draft, err := ti.service.DiscoverRemoteSessionIssuer(ctx, &gen.DiscoverRemoteSessionIssuerPayload{
+		Issuer:           server.URL,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Nil(t, draft.ServiceDocumentation)
+	require.Nil(t, draft.OpPolicyURI)
+	require.Nil(t, draft.OpTosURI)
+}
+
+// An upstream issuer controls these values, and downstream surfaces render them
+// as links. Anything that is not an absolute http(s) URL is dropped at parse
+// time so it never reaches the create form.
+func TestDiscoverRemoteSessionIssuer_DropsNonHTTPDocumentationURLs(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	server := fakeIssuerServer(t, func(doc map[string]any) {
+		doc["service_documentation"] = "javascript:alert(1)"
+		doc["op_policy_uri"] = "/relative/policy"
+		doc["op_tos_uri"] = "mailto:legal@idp.example.com"
+	})
+
+	draft, err := ti.service.DiscoverRemoteSessionIssuer(ctx, &gen.DiscoverRemoteSessionIssuerPayload{
+		Issuer:           server.URL,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Nil(t, draft.ServiceDocumentation, "javascript: scheme dropped")
+	require.Nil(t, draft.OpPolicyURI, "relative URL dropped")
+	require.Nil(t, draft.OpTosURI, "mailto: scheme dropped")
+}
+
+func TestCreateRemoteSessionIssuer_PersistsDocumentationURLs(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	serviceDocumentation := "https://idp.example.com/docs"
+	opPolicyURI := "https://idp.example.com/policy"
+	opTosURI := "https://idp.example.com/tos"
+
+	payload := newIssuerPayload("idp-docs-create")
+	payload.ServiceDocumentation = &serviceDocumentation
+	payload.OpPolicyURI = &opPolicyURI
+	payload.OpTosURI = &opTosURI
+
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, created.ServiceDocumentation)
+	require.Equal(t, serviceDocumentation, *created.ServiceDocumentation)
+	require.NotNil(t, created.OpPolicyURI)
+	require.Equal(t, opPolicyURI, *created.OpPolicyURI)
+	require.NotNil(t, created.OpTosURI)
+	require.Equal(t, opTosURI, *created.OpTosURI)
+
+	// The values survive a round trip through the read path.
+	fetched, err := ti.service.GetRemoteSessionIssuer(ctx, &gen.GetRemoteSessionIssuerPayload{
+		ID:               &created.ID,
+		Slug:             nil,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, fetched.ServiceDocumentation)
+	require.Equal(t, serviceDocumentation, *fetched.ServiceDocumentation)
+}
+
+// An empty documentation URL on create is stored as NULL, not as an empty
+// string, so readers cannot tell the two apart.
+func TestCreateRemoteSessionIssuer_EmptyDocumentationURLStoredAsNull(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	empty := ""
+	payload := newIssuerPayload("idp-docs-empty")
+	payload.ServiceDocumentation = &empty
+
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, payload)
+	require.NoError(t, err)
+	require.Nil(t, created.ServiceDocumentation)
+}
+
+// Discovery drops malformed values, but a caller holding the write scope can
+// POST these fields without ever calling discover. The handler is the boundary
+// that caller cannot skip.
+func TestCreateRemoteSessionIssuer_RejectsNonHTTPDocumentationURL(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	hostile := "javascript:alert(document.cookie)"
+	payload := newIssuerPayload("idp-docs-hostile")
+	payload.ServiceDocumentation = &hostile
+
+	_, err := ti.service.CreateRemoteSessionIssuer(ctx, payload)
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+func TestCreateRemoteSessionIssuer_RejectsRelativeDocumentationURL(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	relative := "/docs"
+	payload := newIssuerPayload("idp-docs-relative")
+	payload.OpTosURI = &relative
+
+	_, err := ti.service.CreateRemoteSessionIssuer(ctx, payload)
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+func TestUpdateRemoteSessionIssuer_SetsDocumentationURL(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayload("idp-docs-update"))
+	require.NoError(t, err)
+	require.Nil(t, created.ServiceDocumentation)
+
+	serviceDocumentation := "https://idp.example.com/docs"
+	updated, err := ti.service.UpdateRemoteSessionIssuer(ctx, &gen.UpdateRemoteSessionIssuerPayload{
+		ID:                   created.ID,
+		ServiceDocumentation: &serviceDocumentation,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, updated.ServiceDocumentation)
+	require.Equal(t, serviceDocumentation, *updated.ServiceDocumentation)
+}
+
+// An omitted field keeps the stored value; only an explicit empty string clears
+// it. Re-discovery relies on this to drop a URL the issuer no longer advertises.
+func TestUpdateRemoteSessionIssuer_ClearsDocumentationURL(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	serviceDocumentation := "https://idp.example.com/docs"
+	opTosURI := "https://idp.example.com/tos"
+	payload := newIssuerPayload("idp-docs-clear")
+	payload.ServiceDocumentation = &serviceDocumentation
+	payload.OpTosURI = &opTosURI
+
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, created.ServiceDocumentation)
+
+	empty := ""
+	updated, err := ti.service.UpdateRemoteSessionIssuer(ctx, &gen.UpdateRemoteSessionIssuerPayload{
+		ID:                   created.ID,
+		ServiceDocumentation: &empty,
+	})
+	require.NoError(t, err)
+	require.Nil(t, updated.ServiceDocumentation, "explicit empty string clears the column")
+	require.NotNil(t, updated.OpTosURI, "an omitted field keeps its stored value")
+	require.Equal(t, opTosURI, *updated.OpTosURI)
+}
+
+func TestUpdateRemoteSessionIssuer_RejectsNonHTTPDocumentationURL(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayload("idp-docs-update-hostile"))
+	require.NoError(t, err)
+
+	hostile := "javascript:alert(1)"
+	_, err = ti.service.UpdateRemoteSessionIssuer(ctx, &gen.UpdateRemoteSessionIssuerPayload{
+		ID:          created.ID,
+		OpPolicyURI: &hostile,
+	})
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}

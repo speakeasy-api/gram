@@ -731,16 +731,10 @@ func (q *Queries) GetChatMessageStats(ctx context.Context, arg GetChatMessageSta
 }
 
 const getChatMetricsSummary = `-- name: GetChatMetricsSummary :one
-WITH chat_stats AS (
+WITH chat_stats AS MATERIALIZED (
   SELECT
     c.id as chat_id,
-    MIN(m.created_at) as first_message_at,
-    MAX(m.created_at) as last_message_at,
-    EXTRACT(EPOCH FROM (MAX(m.created_at) - MIN(m.created_at))) * 1000 as duration_ms,
-    COALESCE(
-      (SELECT resolution FROM chat_resolutions WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1),
-      ''
-    ) as resolution_status
+    EXTRACT(EPOCH FROM (MAX(m.created_at) - MIN(m.created_at))) * 1000 as duration_ms
   FROM chats c
   INNER JOIN chat_messages m ON m.chat_id = c.id
   WHERE c.project_id = $1
@@ -748,14 +742,24 @@ WITH chat_stats AS (
     AND m.created_at >= $2
     AND m.created_at <= $3
   GROUP BY c.id
+),
+latest_resolutions AS (
+  SELECT DISTINCT ON (cr.chat_id)
+    cr.chat_id,
+    cr.resolution
+  FROM chat_resolutions cr
+  INNER JOIN chat_stats cs ON cs.chat_id = cr.chat_id
+  WHERE cr.project_id = $1
+  ORDER BY cr.chat_id, cr.created_at DESC
 )
 SELECT
   COUNT(*)::bigint as total_chats,
-  COALESCE(SUM(CASE WHEN resolution_status = 'success' THEN 1 ELSE 0 END), 0)::bigint as resolved_chats,
-  COALESCE(SUM(CASE WHEN resolution_status = 'failure' THEN 1 ELSE 0 END), 0)::bigint as failed_chats,
-  COALESCE(AVG(duration_ms), 0)::double precision as avg_session_duration_ms,
-  COALESCE(AVG(CASE WHEN resolution_status != '' THEN duration_ms END), 0)::double precision as avg_resolution_time_ms
+  COALESCE(SUM(CASE WHEN COALESCE(latest_resolutions.resolution, '') = 'success' THEN 1 ELSE 0 END), 0)::bigint as resolved_chats,
+  COALESCE(SUM(CASE WHEN COALESCE(latest_resolutions.resolution, '') = 'failure' THEN 1 ELSE 0 END), 0)::bigint as failed_chats,
+  COALESCE(AVG(chat_stats.duration_ms), 0)::double precision as avg_session_duration_ms,
+  COALESCE(AVG(CASE WHEN COALESCE(latest_resolutions.resolution, '') != '' THEN chat_stats.duration_ms END), 0)::double precision as avg_resolution_time_ms
 FROM chat_stats
+LEFT JOIN latest_resolutions ON latest_resolutions.chat_id = chat_stats.chat_id
 `
 
 type GetChatMetricsSummaryParams struct {
@@ -772,6 +776,8 @@ type GetChatMetricsSummaryRow struct {
 	AvgResolutionTimeMs  float64
 }
 
+// Aggregate the requested chat window first so resolution selection does not
+// sort unrelated project history for empty or narrow windows.
 func (q *Queries) GetChatMetricsSummary(ctx context.Context, arg GetChatMetricsSummaryParams) (GetChatMetricsSummaryRow, error) {
 	row := q.db.QueryRow(ctx, getChatMetricsSummary, arg.ProjectID, arg.TimeStart, arg.TimeEnd)
 	var i GetChatMetricsSummaryRow
@@ -2053,50 +2059,6 @@ func (q *Queries) ListRiskWindowedMessages(ctx context.Context, arg ListRiskWind
 			return nil, err
 		}
 		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listRiskyChatIDs = `-- name: ListRiskyChatIDs :many
-SELECT DISTINCT cm.chat_id
-FROM risk_results rr
-JOIN chat_messages cm ON cm.id = rr.chat_message_id
-JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
-WHERE rr.project_id = ANY($1::uuid[])
-  AND rr.found IS TRUE
-  AND rr.excluded_at IS NULL
-  AND rr.false_positive_at IS NULL
-  AND rr.created_at >= $2
-  AND rr.created_at < $3
-`
-
-type ListRiskyChatIDsParams struct {
-	ProjectIds []uuid.UUID
-	FromTime   pgtype.Timestamptz
-	ToTime     pgtype.Timestamptz
-}
-
-// Distinct chats with at least one active risk finding created in the window,
-// for the token-by-risk breakdown (telemetry.queryRiskTokens). Mirrors the
-// risk_counts semantics used by ListChats: a finding counts only while found,
-// not excluded, not marked false-positive, and its policy is enabled and not
-// deleted.
-func (q *Queries) ListRiskyChatIDs(ctx context.Context, arg ListRiskyChatIDsParams) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, listRiskyChatIDs, arg.ProjectIds, arg.FromTime, arg.ToTime)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []uuid.UUID
-	for rows.Next() {
-		var chat_id uuid.UUID
-		if err := rows.Scan(&chat_id); err != nil {
-			return nil, err
-		}
-		items = append(items, chat_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

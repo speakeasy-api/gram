@@ -11,6 +11,7 @@ import { ShieldAlert } from "lucide-react";
 import { Stack } from "@/components/ui/stack";
 import { SettingsDangerZone } from "./SettingsDangerZone";
 import { RegistryCacheSection } from "./RegistryCacheSection";
+import { ModelProviderKeysSection } from "./ModelProviderKeysSection";
 
 export default function Settings(): JSX.Element {
   const isAdmin = useIsPlatformAdmin();
@@ -30,6 +31,7 @@ export default function Settings(): JSX.Element {
               subtitle="Manage your project configuration and perform administrative actions."
             />
             <SettingsLayout.Body>
+              <ModelProviderKeysSection />
               <SettingsDangerZone />
 
               {isAdmin && (

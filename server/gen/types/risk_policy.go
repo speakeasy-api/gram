@@ -53,7 +53,8 @@ type RiskPolicy struct {
 	ScopeExempt *string
 	// Whether the policy is active.
 	Enabled bool
-	// Policy action: flag (log only) or block (deny in real-time).
+	// Policy action: flag (log only), warn (challenge: warn the user and require
+	// acknowledgement to proceed), or block (deny in real-time).
 	Action string
 	// Policy audience type: everyone or targeted.
 	AudienceType string
@@ -72,6 +73,10 @@ type RiskPolicy struct {
 	// For prompt_based policies: per-policy LLM-judge model configuration. Null
 	// for standard policies.
 	ModelConfig *RiskPolicyModelConfig
+	// CVSS-style severity (0.1-10) the author assigns to findings this policy
+	// produces. Descriptive only; changing it does not re-scan messages. Defaults
+	// to 5.
+	Score float64
 	// Policy version, incremented on each update.
 	Version int64
 	// When the policy was created.

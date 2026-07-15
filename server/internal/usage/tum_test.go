@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -27,6 +28,18 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
+
+// attributeMetricsPostCutoff is a fixed instant several days after the
+// attribute_metrics_summaries MV ingestion cutoff (2026-07-14 00:00:00 UTC; see
+// server/clickhouse/schema.sql). Tests that drive rows through the MV and read
+// them back over an explicit window must timestamp every row at/after the
+// cutoff, or the MV drops it. The margin (not merely cutoff+1h) is deliberate:
+// day-granular tests seed buckets a day or more earlier than this instant, and
+// those earlier buckets must still clear the cutoff. Pinning to a fixed instant
+// keeps these tests independent of the wall clock. Tests that instead read the
+// *active billing cycle* (anchored to real now) cannot use this — they seed the
+// aggregate table directly at time.Now() via insertObservedClaudeAggregateRow.
+var attributeMetricsPostCutoff = time.Date(2026, time.July, 20, 1, 0, 0, 0, time.UTC)
 
 // newTUMTestService builds a usage service with the dependencies the TUM
 // endpoints need: Postgres (billing metadata, projects), ClickHouse
@@ -111,91 +124,146 @@ func insertTelemetryRow(t *testing.T, conn driver.Conn, projectID string, timest
 	require.NoError(t, err)
 }
 
-// insertTokenUsageRow inserts a token-usage (metrics) row, the kind produced
-// by OTEL forwarding. An empty chatID omits the conversation id attribute.
-func insertTokenUsageRow(t *testing.T, conn driver.Conn, projectID string, timestamp time.Time, chatID string, totalTokens int) {
+// insertObservedClaudeRow inserts the Claude Code api_request row the
+// provenance-first attribute_metrics_summaries MV admits — observed agent
+// traffic, the tokens-under-management population. The token-type split is
+// explicit so tests can pin the cache-read exclusion.
+func insertObservedClaudeRow(t *testing.T, conn driver.Conn, projectID string, timestamp time.Time, inputTokens, outputTokens, cacheReadTokens, cacheCreationTokens int) {
 	t.Helper()
 
-	attributes := map[string]any{
-		"gen_ai.usage.input_tokens":  totalTokens / 2,
-		"gen_ai.usage.output_tokens": totalTokens - totalTokens/2,
-		"gen_ai.usage.total_tokens":  totalTokens,
-		"gram.resource.urn":          "chat:completion",
-	}
-	if chatID != "" {
-		attributes["gen_ai.conversation.id"] = chatID
-	}
-
-	insertTelemetryRow(t, conn, projectID, timestamp, "chat:completion", attributes)
-}
-
-// insertToolCallRow inserts a tool-call row tied to a chat — non-metrics
-// evidence that Gram stored the session.
-func insertToolCallRow(t *testing.T, conn driver.Conn, projectID string, timestamp time.Time, chatID string) {
-	t.Helper()
-
-	insertTelemetryRow(t, conn, projectID, timestamp, "tools:http:petstore:listPets", map[string]any{
-		"gen_ai.conversation.id":    chatID,
-		"gram.tool.urn":             "tools:http:petstore:listPets",
-		"http.response.status_code": 200,
+	insertTelemetryRow(t, conn, projectID, timestamp, "claude-code:otel:logs", map[string]any{
+		"gen_ai.conversation.id": uuid.NewString(),
+		"prompt.id":              uuid.NewString(),
+		"event.name":             "api_request",
+		"input_tokens":           inputTokens,
+		"output_tokens":          outputTokens,
+		"cache_read_tokens":      cacheReadTokens,
+		"cache_creation_tokens":  cacheCreationTokens,
+		"model":                  "claude-4.6",
+		"gram.hook.source":       "claude-code",
 	})
 }
 
-// insertChatEventRow inserts a chat event row without token-usage attributes
-// — non-metrics evidence that Gram stored the session.
-func insertChatEventRow(t *testing.T, conn driver.Conn, projectID string, timestamp time.Time, chatID string) {
+// insertObservedAgentUsageRow inserts a Codex/Cursor usage-metrics row — the
+// other observed-traffic shape the aggregate admits. The tokens land as
+// input, so the TUM measure counts exactly totalTokens.
+func insertObservedAgentUsageRow(t *testing.T, conn driver.Conn, projectID string, timestamp time.Time, provider string, totalTokens int) {
 	t.Helper()
 
-	insertTelemetryRow(t, conn, projectID, timestamp, "chat:message", map[string]any{
-		"gen_ai.conversation.id": chatID,
+	insertTelemetryRow(t, conn, projectID, timestamp, provider+":usage:metrics", map[string]any{
+		"gen_ai.conversation.id":    uuid.NewString(),
+		"gen_ai.usage.input_tokens": totalTokens,
+		"gen_ai.usage.total_tokens": totalTokens,
+		"gen_ai.response.model":     provider + "-model",
+		"gram.hook.source":          provider,
 	})
 }
 
-func TestGetTokensUnderManagementQuery_FiltersUnstoredSessions(t *testing.T) {
+// insertRetainedGramAggregateRow seeds attribute_metrics_summaries directly
+// with a Gram-hosted completion row, the shape RETAINED from before the
+// provenance-first MV cutover stopped admitting Gram completions. The
+// tokens-under-management reads must exclude these at read time — that
+// exclusion is untestable through the MV (it no longer ingests such rows),
+// hence the direct aggregate-state insert.
+func insertRetainedGramAggregateRow(t *testing.T, conn driver.Conn, projectID string, timestamp time.Time, hookSource string, tokens int64) {
+	t.Helper()
+
+	err := conn.Exec(t.Context(), `
+		INSERT INTO attribute_metrics_summaries
+		SELECT
+			toUUID(?) AS gram_project_id,
+			toStartOfHour(fromUnixTimestamp64Nano(?)) AS time_bucket,
+			'' AS department_name, '' AS job_title, '' AS employee_type,
+			'' AS division_name, '' AS cost_center_name,
+			'' AS user_email, 'gram-model' AS model, ? AS hook_source,
+			[]::Array(String) AS roles, []::Array(String) AS groups,
+			uniqExactIfState(toString('retained-chat'), toUInt8(1)) AS total_chats,
+			sumIfState(toInt64(?), toUInt8(1)) AS total_input_tokens,
+			sumIfState(toInt64(0), toUInt8(1)) AS total_output_tokens,
+			sumIfState(toInt64(?), toUInt8(1)) AS total_tokens,
+			sumIfState(toInt64(0), toUInt8(1)) AS cache_read_input_tokens,
+			sumIfState(toInt64(0), toUInt8(1)) AS cache_creation_input_tokens,
+			sumIfState(toFloat64(0), toUInt8(1)) AS total_cost,
+			countIfState(toUInt8(0)) AS total_tool_calls,
+			uniqExactIfState(toString(''), toUInt8(0)) AS unique_tool_calls,
+			'' AS account_type, '' AS provider, '' AS billing_mode,
+			'' AS query_source, '' AS skill_name, '' AS agent_name,
+			'' AS mcp_server_name, '' AS mcp_tool_name,
+			toUInt8(0) AS generation, toUInt8(1) AS is_active
+	`, projectID, timestamp.UnixNano(), hookSource, tokens, tokens)
+	require.NoError(t, err)
+}
+
+// insertObservedClaudeAggregateRow seeds attribute_metrics_summaries directly
+// with an ADMITTED Claude session row (hook_source claude-code), the tokens
+// landing as input so the TUM measure counts exactly tokens. Unlike
+// insertObservedClaudeRow it bypasses the MV — and therefore the MV's
+// ingestion cutoff — so billing reads anchored to the real wall clock (the
+// active-cycle service/activity paths) see the tokens regardless of where the
+// cutoff sits relative to now. generation 0 / is_active 1 match a live MV row.
+func insertObservedClaudeAggregateRow(t *testing.T, conn driver.Conn, projectID string, timestamp time.Time, tokens int64) {
+	t.Helper()
+
+	err := conn.Exec(t.Context(), `
+		INSERT INTO attribute_metrics_summaries
+		SELECT
+			toUUID(?) AS gram_project_id,
+			toStartOfHour(fromUnixTimestamp64Nano(?)) AS time_bucket,
+			'' AS department_name, '' AS job_title, '' AS employee_type,
+			'' AS division_name, '' AS cost_center_name,
+			'' AS user_email, 'claude-4.6' AS model, 'claude-code' AS hook_source,
+			[]::Array(String) AS roles, []::Array(String) AS groups,
+			uniqExactIfState(toString('observed-chat'), toUInt8(1)) AS total_chats,
+			sumIfState(toInt64(?), toUInt8(1)) AS total_input_tokens,
+			sumIfState(toInt64(0), toUInt8(1)) AS total_output_tokens,
+			sumIfState(toInt64(?), toUInt8(1)) AS total_tokens,
+			sumIfState(toInt64(0), toUInt8(1)) AS cache_read_input_tokens,
+			sumIfState(toInt64(0), toUInt8(1)) AS cache_creation_input_tokens,
+			sumIfState(toFloat64(0), toUInt8(1)) AS total_cost,
+			countIfState(toUInt8(0)) AS total_tool_calls,
+			uniqExactIfState(toString(''), toUInt8(0)) AS unique_tool_calls,
+			'' AS account_type, '' AS provider, '' AS billing_mode,
+			'' AS query_source, '' AS skill_name, '' AS agent_name,
+			'' AS mcp_server_name, '' AS mcp_tool_name,
+			toUInt8(0) AS generation, toUInt8(1) AS is_active
+	`, projectID, timestamp.UnixNano(), tokens, tokens)
+	require.NoError(t, err)
+}
+
+func TestGetTokensUnderManagementQuery_ExcludesCacheReads(t *testing.T) {
 	t.Parallel()
 
 	_, _, chConn, projectID := newTUMTestService(t, "org-tum-query")
 
-	// The summary table buckets by UTC day, so the window is day-aligned and
-	// the out-of-window rows sit several days back.
-	now := time.Now().UTC()
+	// The read buckets by UTC day, so the window is day-aligned and the
+	// out-of-window rows sit several days back. Fixed at a post-cutoff instant
+	// so the MV admits the rows regardless of the wall clock.
+	now := attributeMetricsPostCutoff
 	dayStart := now.Truncate(24 * time.Hour)
 	windowStart := dayStart.Add(-2 * 24 * time.Hour)
 	windowEnd := dayStart.Add(24 * time.Hour)
 
-	storedToolChat := uuid.New().String()
-	storedChatEventChat := uuid.New().String()
-	forwardedOnlyChat := uuid.New().String()
+	// A Claude session whose turn re-read a huge cached prefix: input,
+	// output, and the cache WRITE count — the cache READ is excluded.
+	insertObservedClaudeRow(t, chConn, projectID.String(), now, 100, 50, 100000, 25)
 
-	// Stored session: token rows plus a tool-call row. Counted.
-	insertTokenUsageRow(t, chConn, projectID.String(), now, storedToolChat, 100)
-	insertTokenUsageRow(t, chConn, projectID.String(), now, storedToolChat, 200)
-	insertToolCallRow(t, chConn, projectID.String(), now, storedToolChat)
+	// A Codex usage row: observed traffic from the other admitted shape.
+	insertObservedAgentUsageRow(t, chConn, projectID.String(), now, "codex", 400)
 
-	// Stored session: token row plus a chat event row without usage. Counted.
-	insertTokenUsageRow(t, chConn, projectID.String(), now, storedChatEventChat, 1000)
-	insertChatEventRow(t, chConn, projectID.String(), now, storedChatEventChat)
-
-	// OTEL-forwarded-only session: token rows with no stored chat or tool
-	// call data. Excluded.
-	insertTokenUsageRow(t, chConn, projectID.String(), now, forwardedOnlyChat, 5000)
-
-	// Token row with no chat id at all. Excluded.
-	insertTokenUsageRow(t, chConn, projectID.String(), now, "", 777)
-
-	// Stored session rows outside the window. Excluded.
-	insertTokenUsageRow(t, chConn, projectID.String(), now.Add(-5*24*time.Hour), storedToolChat, 9000)
+	// Observed rows outside the window. Excluded.
+	insertObservedClaudeRow(t, chConn, projectID.String(), now.Add(-5*24*time.Hour), 9000, 0, 0, 0)
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		res, err := telemetryrepo.New(chConn).GetTokensUnderManagementByDay(t.Context(), telemetryrepo.GetTokensUnderManagementParams{
-			ProjectIDs:    []string{projectID.String()},
-			StartUnixNano: windowStart.UnixNano(),
-			EndUnixNano:   windowEnd.UnixNano(),
+			ProjectIDs:          []string{projectID.String()},
+			StartUnixNano:       windowStart.UnixNano(),
+			EndUnixNano:         windowEnd.UnixNano(),
+			ExcludedHookSources: nil,
 		})
 		if !assert.NoError(c, err) {
 			return
 		}
-		assert.Equal(c, int64(1300), sumTumBuckets(res), "should count only sessions with stored non-metrics data inside the window")
+		assert.Equal(c, int64(575), sumTumBuckets(res), "input + output + cache writes — never cache reads")
 		if !assert.Len(c, res, 1, "all in-window rows share one day bucket") {
 			return
 		}
@@ -216,24 +284,22 @@ func TestGetTokensUnderManagementQuery_DailyBreakdown(t *testing.T) {
 
 	_, _, chConn, projectID := newTUMTestService(t, "org-tum-daily")
 
-	now := time.Now().UTC()
+	// Post-cutoff instant so the MV admits these rows regardless of wall clock.
+	now := attributeMetricsPostCutoff
 	dayStart := now.Truncate(24 * time.Hour)
 	windowStart := dayStart.Add(-2 * 24 * time.Hour)
 	windowEnd := dayStart.Add(24 * time.Hour)
 
-	chatID := uuid.New().String()
-
-	// Evidence on one day qualifies the chat for the whole window; token rows
-	// land in their own day buckets.
-	insertToolCallRow(t, chConn, projectID.String(), now, chatID)
-	insertTokenUsageRow(t, chConn, projectID.String(), now, chatID, 300)
-	insertTokenUsageRow(t, chConn, projectID.String(), now.Add(-24*time.Hour), chatID, 200)
+	// Observed rows land in their own day buckets.
+	insertObservedClaudeRow(t, chConn, projectID.String(), now, 200, 100, 0, 0)
+	insertObservedClaudeRow(t, chConn, projectID.String(), now.Add(-24*time.Hour), 200, 0, 0, 0)
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		res, err := telemetryrepo.New(chConn).GetTokensUnderManagementByDay(t.Context(), telemetryrepo.GetTokensUnderManagementParams{
-			ProjectIDs:    []string{projectID.String()},
-			StartUnixNano: windowStart.UnixNano(),
-			EndUnixNano:   windowEnd.UnixNano(),
+			ProjectIDs:          []string{projectID.String()},
+			StartUnixNano:       windowStart.UnixNano(),
+			EndUnixNano:         windowEnd.UnixNano(),
+			ExcludedHookSources: nil,
 		})
 		if !assert.NoError(c, err) {
 			return
@@ -248,58 +314,16 @@ func TestGetTokensUnderManagementQuery_DailyBreakdown(t *testing.T) {
 	}, 10*time.Second, 200*time.Millisecond)
 }
 
-func TestGetTokensUnderManagementQuery_EvidenceOutsideWindowDoesNotCount(t *testing.T) {
-	t.Parallel()
-
-	_, _, chConn, projectID := newTUMTestService(t, "org-tum-stale-evidence")
-
-	now := time.Now().UTC()
-	dayStart := now.Truncate(24 * time.Hour)
-	windowStart := dayStart.Add(-2 * 24 * time.Hour)
-	windowEnd := dayStart.Add(24 * time.Hour)
-
-	chatID := uuid.New().String()
-
-	// Token usage inside the window, but the only stored evidence for the
-	// chat predates the window — the session does not count this cycle.
-	insertTokenUsageRow(t, chConn, projectID.String(), now, chatID, 4000)
-	insertToolCallRow(t, chConn, projectID.String(), now.Add(-5*24*time.Hour), chatID)
-
-	// Confirm the inserted rows have propagated using a wider window that
-	// includes the stale evidence, which qualifies the session and surfaces
-	// the in-window tokens. Once visible there, the narrow window below is a
-	// reliable negative.
-	widerStart := dayStart.Add(-7 * 24 * time.Hour)
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := telemetryrepo.New(chConn).GetTokensUnderManagementByDay(t.Context(), telemetryrepo.GetTokensUnderManagementParams{
-			ProjectIDs:    []string{projectID.String()},
-			StartUnixNano: widerStart.UnixNano(),
-			EndUnixNano:   windowEnd.UnixNano(),
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		assert.Equal(c, int64(4000), sumTumBuckets(res))
-	}, 10*time.Second, 200*time.Millisecond)
-
-	buckets, err := telemetryrepo.New(chConn).GetTokensUnderManagementByDay(t.Context(), telemetryrepo.GetTokensUnderManagementParams{
-		ProjectIDs:    []string{projectID.String()},
-		StartUnixNano: windowStart.UnixNano(),
-		EndUnixNano:   windowEnd.UnixNano(),
-	})
-	require.NoError(t, err)
-	require.Empty(t, buckets)
-}
-
 func TestGetTokensUnderManagementQuery_NoProjects(t *testing.T) {
 	t.Parallel()
 
 	_, _, chConn, _ := newTUMTestService(t, "org-tum-no-projects")
 
 	buckets, err := telemetryrepo.New(chConn).GetTokensUnderManagementByDay(t.Context(), telemetryrepo.GetTokensUnderManagementParams{
-		ProjectIDs:    nil,
-		StartUnixNano: time.Now().Add(-1 * time.Hour).UnixNano(),
-		EndUnixNano:   time.Now().UnixNano(),
+		ProjectIDs:          nil,
+		StartUnixNano:       time.Now().Add(-1 * time.Hour).UnixNano(),
+		EndUnixNano:         time.Now().UnixNano(),
+		ExcludedHookSources: nil,
 	})
 	require.NoError(t, err)
 	require.Empty(t, buckets)
@@ -333,20 +357,23 @@ func TestGetTokensUnderManagement_Unconfigured(t *testing.T) {
 	require.True(t, end.After(now), "cycle end should be in the future")
 }
 
-func TestGetTokensUnderManagement_CountsStoredSessions(t *testing.T) {
+func TestGetTokensUnderManagement_CountsObservedTraffic(t *testing.T) {
 	t.Parallel()
 
 	orgID := "org-tum-counts"
 	svc, _, chConn, projectID := newTUMTestService(t, orgID)
 
-	now := time.Now().UTC()
-	storedChat := uuid.New().String()
-	forwardedChat := uuid.New().String()
-
 	// Timestamps sit at "now" so they always land inside the active cycle.
-	insertTokenUsageRow(t, chConn, projectID.String(), now, storedChat, 450)
-	insertToolCallRow(t, chConn, projectID.String(), now, storedChat)
-	insertTokenUsageRow(t, chConn, projectID.String(), now, forwardedChat, 9000)
+	now := time.Now().UTC()
+
+	// Observed agent traffic: counted. Seeded directly (not through the MV) so
+	// it lands in the real-now active cycle this service read is scoped to,
+	// independent of the MV ingestion cutoff. The retained Gram-hosted rows (a
+	// playground completion and pre-tagging '' history) must be excluded by
+	// the service's exclusion list.
+	insertObservedClaudeAggregateRow(t, chConn, projectID.String(), now, 450)
+	insertRetainedGramAggregateRow(t, chConn, projectID.String(), now, "playground", 9000)
+	insertRetainedGramAggregateRow(t, chConn, projectID.String(), now, "", 7000)
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		res, err := svc.GetTokensUnderManagement(testAuthContext(orgID), &gen.GetTokensUnderManagementPayload{})
@@ -504,4 +531,55 @@ func TestGetTokensUnderManagement_AlertEmailAdminOnly(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result.AlertEmail)
 	require.Equal(t, email, *result.AlertEmail)
+}
+
+func TestGetTokensUnderManagementQuery_ExcludesGramHostedSources(t *testing.T) {
+	t.Parallel()
+
+	_, _, chConn, projectID := newTUMTestService(t, "org-tum-billed-sources")
+
+	// Post-cutoff instant so the MV admits the observed rows regardless of wall
+	// clock; the direct-seeded retained rows are unaffected by the cutoff.
+	now := attributeMetricsPostCutoff
+	dayStart := now.Truncate(24 * time.Hour)
+	windowStart := dayStart.Add(-2 * 24 * time.Hour)
+	windowEnd := dayStart.Add(24 * time.Hour)
+
+	// Observed agent traffic: counted.
+	insertObservedClaudeRow(t, chConn, projectID.String(), now, 100, 0, 0, 0)
+	insertObservedAgentUsageRow(t, chConn, projectID.String(), now, "cursor", 40)
+
+	// Gram-hosted completion rows retained from before the provenance-first
+	// cutover: a user-facing surface, the platform's scanning inference, and
+	// a pre-tagging '' row. All excluded — Gram-spent inference is never
+	// tokens under management.
+	insertRetainedGramAggregateRow(t, chConn, projectID.String(), now, "playground", 5000)
+	insertRetainedGramAggregateRow(t, chConn, projectID.String(), now, "risk-analysis", 300)
+	insertRetainedGramAggregateRow(t, chConn, projectID.String(), now, "", 60)
+
+	// Confirm everything materialized (an unscoped read sees all five rows),
+	// THEN assert the scoped read excludes exactly the Gram-hosted tokens —
+	// the exclusion cannot pass vacuously against a half-ingested view.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := telemetryrepo.New(chConn).GetTokensUnderManagementByDay(t.Context(), telemetryrepo.GetTokensUnderManagementParams{
+			ProjectIDs:          []string{projectID.String()},
+			StartUnixNano:       windowStart.UnixNano(),
+			EndUnixNano:         windowEnd.UnixNano(),
+			ExcludedHookSources: nil,
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		assert.Equal(c, int64(5500), sumTumBuckets(res))
+	}, 10*time.Second, 200*time.Millisecond)
+
+	buckets, err := telemetryrepo.New(chConn).GetTokensUnderManagementByDay(t.Context(), telemetryrepo.GetTokensUnderManagementParams{
+		ProjectIDs:          []string{projectID.String()},
+		StartUnixNano:       windowStart.UnixNano(),
+		EndUnixNano:         windowEnd.UnixNano(),
+		ExcludedHookSources: billing.GramHostedHookSourceStrings(),
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(140), sumTumBuckets(buckets),
+		"the billed sum counts only observed agent traffic — never Gram-hosted surfaces, scanning inference, or untagged Gram-era rows")
 }

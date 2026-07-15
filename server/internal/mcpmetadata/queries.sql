@@ -109,6 +109,12 @@ SELECT header_display_names
 FROM mcp_metadata
 WHERE toolset_id = @toolset_id;
 
+-- name: GetHeaderDisplayNamesByToolsetIDs :many
+SELECT toolset_id, header_display_names
+FROM mcp_metadata
+WHERE project_id = @project_id
+  AND toolset_id = ANY(@toolset_ids::uuid[]);
+
 -- name: GetHeaderDisplayNamesByMcpServerID :one
 SELECT header_display_names
 FROM mcp_metadata
