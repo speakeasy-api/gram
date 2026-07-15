@@ -16,7 +16,7 @@ import { useState } from "react";
 import { Navigate } from "react-router";
 import { toast } from "sonner";
 import { useCreateTunneledMcpSource } from "./hooks";
-import { TunneledMcpSetupTabs } from "./TunneledMCPDetails";
+import { TunneledMcpSetupTabs } from "./TunneledMcpSetupTabs";
 
 function validateDisplayName(value: string): string | null {
   if (!value.trim()) return "Display name is required";
