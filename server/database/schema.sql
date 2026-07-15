@@ -1620,6 +1620,12 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   -- same logical conversation view share a generation.
   generation INTEGER NOT NULL DEFAULT 0,
 
+  -- True when the message arrived as a replay from a device's offline spool
+  -- after control-plane downtime (X-Gram-Replayed on hooks.ingest), so
+  -- downtime backlog — and findings produced by retroactively scanning it —
+  -- stays distinguishable from live traffic.
+  replayed BOOLEAN NOT NULL DEFAULT false,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   -- Set when all active risk policies have analyzed this message.
