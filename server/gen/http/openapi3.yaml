@@ -46251,6 +46251,9 @@ components:
                 session_capture_enabled:
                     type: boolean
                     description: Whether Claude Code session capture is enabled
+                skills_enabled:
+                    type: boolean
+                    description: Whether the Skills page is enabled for the organization
                 sso_enabled:
                     type: boolean
                     description: Whether SSO setup is enabled for the organization
@@ -46271,6 +46274,7 @@ components:
                 - observability_mode_enabled
                 - hooks_browser_login_enabled
                 - custom_model_keys_enabled
+                - skills_enabled
         GetProjectForm:
             type: object
             properties:
@@ -48095,6 +48099,10 @@ components:
                         - environment:blocked_read
                         - environment:write
                         - environment:blocked_write
+                        - skill:read
+                        - skill:blocked_read
+                        - skill:write
+                        - skill:blocked_write
                         - risk_policy:evaluate
                         - risk_policy:bypass
                         - chat:read
@@ -48127,6 +48135,10 @@ components:
                             - environment:blocked_read
                             - environment:write
                             - environment:blocked_write
+                            - skill:read
+                            - skill:blocked_read
+                            - skill:write
+                            - skill:blocked_write
                             - risk_policy:evaluate
                             - risk_policy:bypass
                             - chat:read
@@ -52784,6 +52796,10 @@ components:
                         - environment:blocked_read
                         - environment:write
                         - environment:blocked_write
+                        - skill:read
+                        - skill:blocked_read
+                        - skill:write
+                        - skill:blocked_write
                         - risk_policy:evaluate
                         - risk_policy:bypass
                         - chat:read
@@ -52905,6 +52921,8 @@ components:
                         - mcp:blocked_connect
                         - environment:blocked_read
                         - environment:blocked_write
+                        - skill:blocked_read
+                        - skill:blocked_write
                         - risk_policy:bypass
                 resource_type:
                     type: string
@@ -52914,6 +52932,7 @@ components:
                         - project
                         - mcp
                         - environment
+                        - skill
                         - risk_policy
                         - chat
                 slug:
@@ -52939,6 +52958,10 @@ components:
                         - environment:blocked_read
                         - environment:write
                         - environment:blocked_write
+                        - skill:read
+                        - skill:blocked_read
+                        - skill:write
+                        - skill:blocked_write
                         - risk_policy:evaluate
                         - risk_policy:bypass
                         - chat:read
@@ -53375,6 +53398,7 @@ components:
                         - mcp
                         - org
                         - environment
+                        - skill
                         - risk_policy
                         - chat
                         - '*'
@@ -53866,6 +53890,7 @@ components:
                         - observability_mode
                         - hooks_browser_login
                         - custom_model_keys
+                        - skills
                     maxLength: 60
             required:
                 - feature_name

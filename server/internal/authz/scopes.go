@@ -35,6 +35,10 @@ const (
 	ScopeEnvironmentBlockedRead  Scope = "environment:blocked_read"
 	ScopeEnvironmentWrite        Scope = "environment:write"
 	ScopeEnvironmentBlockedWrite Scope = "environment:blocked_write"
+	ScopeSkillRead               Scope = "skill:read"
+	ScopeSkillBlockedRead        Scope = "skill:blocked_read"
+	ScopeSkillWrite              Scope = "skill:write"
+	ScopeSkillBlockedWrite       Scope = "skill:blocked_write"
 	ScopeRiskPolicyEvaluate      Scope = "risk_policy:evaluate"
 	ScopeRiskPolicyBypass        Scope = "risk_policy:bypass" //nolint:gosec // scope name, not a credential
 	ScopeChatRead                Scope = "chat:read"
@@ -62,6 +66,8 @@ var adminScopes = []Scope{
 	ScopeMCPConnect,
 	ScopeEnvironmentRead,
 	ScopeEnvironmentWrite,
+	ScopeSkillRead,
+	ScopeSkillWrite,
 	// chat:read is intentionally NOT a default for any system role: reading
 	// other members' session transcripts is sensitive, so it must be granted
 	// explicitly (via a custom role grant). Everyone reads their own sessions
@@ -92,6 +98,10 @@ var scopeVisibilityByScope = map[Scope]scopeVisibility{
 	ScopeEnvironmentBlockedRead:  scopeVisibilityInternal,
 	ScopeEnvironmentWrite:        scopeVisibilityUserVisible,
 	ScopeEnvironmentBlockedWrite: scopeVisibilityInternal,
+	ScopeSkillRead:               scopeVisibilityUserVisible,
+	ScopeSkillBlockedRead:        scopeVisibilityInternal,
+	ScopeSkillWrite:              scopeVisibilityUserVisible,
+	ScopeSkillBlockedWrite:       scopeVisibilityInternal,
 	ScopeRiskPolicyEvaluate:      scopeVisibilityUserVisible,
 	ScopeRiskPolicyBypass:        scopeVisibilityUserVisible,
 	ScopeChatRead:                scopeVisibilityUserVisible,
@@ -102,6 +112,7 @@ var memberScopes = []Scope{
 	ScopeProjectRead,
 	ScopeMCPRead,
 	ScopeMCPConnect,
+	ScopeSkillRead,
 	// environment:read is intentionally NOT a default for members: environment
 	// values include secrets, so viewing them must be granted explicitly via a
 	// custom role. Admins retain environment:read/write via adminScopes.
@@ -177,6 +188,10 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeEnvironmentBlockedRead:  nil,
 	ScopeEnvironmentWrite:        nil,
 	ScopeEnvironmentBlockedWrite: {ScopeEnvironmentBlockedRead},
+	ScopeSkillRead:               {ScopeSkillWrite},
+	ScopeSkillBlockedRead:        nil,
+	ScopeSkillWrite:              nil,
+	ScopeSkillBlockedWrite:       {ScopeSkillBlockedRead},
 	ScopeRiskPolicyEvaluate:      nil,
 	ScopeRiskPolicyBypass:        nil,
 	ScopeChatRead:                nil,
@@ -205,6 +220,10 @@ var scopeExclusions = map[Scope]Scope{
 	ScopeEnvironmentBlockedRead:  "",
 	ScopeEnvironmentWrite:        ScopeEnvironmentBlockedWrite,
 	ScopeEnvironmentBlockedWrite: "",
+	ScopeSkillRead:               ScopeSkillBlockedRead,
+	ScopeSkillBlockedRead:        "",
+	ScopeSkillWrite:              ScopeSkillBlockedWrite,
+	ScopeSkillBlockedWrite:       "",
 	ScopeRiskPolicyEvaluate:      ScopeRiskPolicyBypass,
 	ScopeRiskPolicyBypass:        "",
 	ScopeChatRead:                "",
