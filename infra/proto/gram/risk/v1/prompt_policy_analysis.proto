@@ -25,7 +25,7 @@ message PromptPolicyAnalysis {
   repeated ToolCall tool_calls = 15;
 
   message ToolCall {
-    string tool_name = 1;
+    string name = 1;
     string arguments = 2;
   }
 

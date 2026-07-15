@@ -2,6 +2,7 @@ package gram
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"runtime/debug"
@@ -297,8 +298,7 @@ func newStreamsCommand() *cli.Command {
 			)
 			judgeRateLimiter := openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))
 
-			_, psbroker, shutdown, err := newPubSubClient(ctx, c, logger)
-			shutdownFuncs = append(shutdownFuncs, shutdown)
+			_, psbroker, pubsubShutdown, err := newPubSubClient(ctx, c, logger)
 			if err != nil {
 				return fmt.Errorf("failed to create pubsub client: %w", err)
 			}
@@ -326,7 +326,11 @@ func newStreamsCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to create pubsub publisher for risk findings: %w", err)
 			}
-			shutdownFuncs = append(shutdownFuncs, findingsPub.Stop)
+			shutdownFuncs = append(shutdownFuncs, func(ctx context.Context) error {
+				stopErr := findingsPub.Stop(ctx)
+				closeErr := pubsubShutdown(ctx)
+				return errors.Join(stopErr, closeErr)
+			})
 
 			gitleaksHandler := gitleaks.NewHandler(logger, findingsPub)
 			promptInjectionScanner := promptinjection.NewScanner(logger, piopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, judgeRateLimiter).Classify)

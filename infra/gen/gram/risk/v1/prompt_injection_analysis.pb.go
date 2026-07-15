@@ -507,7 +507,7 @@ func (b0 PromptInjectionAnalysis_builder) Build() *PromptInjectionAnalysis {
 
 type PromptInjectionAnalysis_ToolCall struct {
 	state                  protoimpl.MessageState `protogen:"opaque.v1"`
-	xxx_hidden_ToolName    *string                `protobuf:"bytes,1,opt,name=tool_name,json=toolName"`
+	xxx_hidden_Name        *string                `protobuf:"bytes,1,opt,name=name"`
 	xxx_hidden_Arguments   *string                `protobuf:"bytes,2,opt,name=arguments"`
 	XXX_raceDetectHookData protoimpl.RaceDetectHookData
 	XXX_presence           [1]uint32
@@ -540,10 +540,10 @@ func (x *PromptInjectionAnalysis_ToolCall) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-func (x *PromptInjectionAnalysis_ToolCall) GetToolName() string {
+func (x *PromptInjectionAnalysis_ToolCall) GetName() string {
 	if x != nil {
-		if x.xxx_hidden_ToolName != nil {
-			return *x.xxx_hidden_ToolName
+		if x.xxx_hidden_Name != nil {
+			return *x.xxx_hidden_Name
 		}
 		return ""
 	}
@@ -560,8 +560,8 @@ func (x *PromptInjectionAnalysis_ToolCall) GetArguments() string {
 	return ""
 }
 
-func (x *PromptInjectionAnalysis_ToolCall) SetToolName(v string) {
-	x.xxx_hidden_ToolName = &v
+func (x *PromptInjectionAnalysis_ToolCall) SetName(v string) {
+	x.xxx_hidden_Name = &v
 	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 2)
 }
 
@@ -570,7 +570,7 @@ func (x *PromptInjectionAnalysis_ToolCall) SetArguments(v string) {
 	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 2)
 }
 
-func (x *PromptInjectionAnalysis_ToolCall) HasToolName() bool {
+func (x *PromptInjectionAnalysis_ToolCall) HasName() bool {
 	if x == nil {
 		return false
 	}
@@ -584,9 +584,9 @@ func (x *PromptInjectionAnalysis_ToolCall) HasArguments() bool {
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 1)
 }
 
-func (x *PromptInjectionAnalysis_ToolCall) ClearToolName() {
+func (x *PromptInjectionAnalysis_ToolCall) ClearName() {
 	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
-	x.xxx_hidden_ToolName = nil
+	x.xxx_hidden_Name = nil
 }
 
 func (x *PromptInjectionAnalysis_ToolCall) ClearArguments() {
@@ -597,7 +597,7 @@ func (x *PromptInjectionAnalysis_ToolCall) ClearArguments() {
 type PromptInjectionAnalysis_ToolCall_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
-	ToolName  *string
+	Name      *string
 	Arguments *string
 }
 
@@ -605,9 +605,9 @@ func (b0 PromptInjectionAnalysis_ToolCall_builder) Build() *PromptInjectionAnaly
 	m0 := &PromptInjectionAnalysis_ToolCall{}
 	b, x := &b0, m0
 	_, _ = b, x
-	if b.ToolName != nil {
+	if b.Name != nil {
 		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 2)
-		x.xxx_hidden_ToolName = b.ToolName
+		x.xxx_hidden_Name = b.Name
 	}
 	if b.Arguments != nil {
 		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 2)
@@ -620,7 +620,7 @@ var File_gram_risk_v1_prompt_injection_analysis_proto protoreflect.FileDescripto
 
 const file_gram_risk_v1_prompt_injection_analysis_proto_rawDesc = "" +
 	"\n" +
-	",gram/risk/v1/prompt_injection_analysis.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xe5\x04\n" +
+	",gram/risk/v1/prompt_injection_analysis.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xdc\x04\n" +
 	"\x17PromptInjectionAnalysis\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12&\n" +
@@ -641,9 +641,9 @@ const file_gram_risk_v1_prompt_injection_analysis_proto_rawDesc = "" +
 	"\x04body\x18\f \x01(\tR\x04body\x12\x1b\n" +
 	"\ttool_name\x18\r \x01(\tR\btoolName\x12M\n" +
 	"\n" +
-	"tool_calls\x18\x0e \x03(\v2..gram.risk.v1.PromptInjectionAnalysis.ToolCallR\ttoolCalls\x1aE\n" +
-	"\bToolCall\x12\x1b\n" +
-	"\ttool_name\x18\x01 \x01(\tR\btoolName\x12\x1c\n" +
+	"tool_calls\x18\x0e \x03(\v2..gram.risk.v1.PromptInjectionAnalysis.ToolCallR\ttoolCalls\x1a<\n" +
+	"\bToolCall\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n" +
 	"\targuments\x18\x02 \x01(\tR\targuments:\n" +
 	"\x8a\xb5\x18\x06\x12\x04\b\x80\xf5$B=Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1b\beditionsp\xe9\a"
 

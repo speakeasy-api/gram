@@ -10,12 +10,12 @@ DESCRIPTOR: _descriptor.FileDescriptor
 class PromptPolicyAnalysis(_message.Message):
     __slots__ = ("request_id", "chat_message_id", "project_id", "organization_id", "risk_policy_id", "risk_policy_version", "created_at", "content", "user_id", "prompt", "model_config", "message_type", "body", "tool_name", "tool_calls")
     class ToolCall(_message.Message):
-        __slots__ = ("tool_name", "arguments")
-        TOOL_NAME_FIELD_NUMBER: _ClassVar[int]
+        __slots__ = ("name", "arguments")
+        NAME_FIELD_NUMBER: _ClassVar[int]
         ARGUMENTS_FIELD_NUMBER: _ClassVar[int]
-        tool_name: str
+        name: str
         arguments: str
-        def __init__(self, tool_name: _Optional[str] = ..., arguments: _Optional[str] = ...) -> None: ...
+        def __init__(self, name: _Optional[str] = ..., arguments: _Optional[str] = ...) -> None: ...
     REQUEST_ID_FIELD_NUMBER: _ClassVar[int]
     CHAT_MESSAGE_ID_FIELD_NUMBER: _ClassVar[int]
     PROJECT_ID_FIELD_NUMBER: _ClassVar[int]

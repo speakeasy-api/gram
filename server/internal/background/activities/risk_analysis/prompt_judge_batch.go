@@ -85,8 +85,6 @@ func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchAr
 		return out
 	}
 
-	a.publishPromptPolicyScanRequests(ctx, args, policy, messages, indices)
-
 	if a.judge == nil || !policy.Prompt.Valid || strings.TrimSpace(policy.Prompt.String) == "" {
 		findings := promptpolicy.FindingsFromEvaluation(cfg, nil, nil, true)
 		for _, idx := range indices {
@@ -94,6 +92,8 @@ func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchAr
 		}
 		return out
 	}
+
+	a.publishPromptPolicyScanRequests(ctx, args, policy, messages, indices)
 
 	judgeFanout(
 		ctx, a.judge,
@@ -126,7 +126,7 @@ func (a *AnalyzeBatch) publishPromptPolicyScanRequests(ctx context.Context, args
 		toolCalls := make([]*riskv1.PromptPolicyAnalysis_ToolCall, 0, len(jm.ToolCalls))
 		for _, call := range jm.ToolCalls {
 			toolCalls = append(toolCalls, riskv1.PromptPolicyAnalysis_ToolCall_builder{
-				ToolName:  &call.ToolName,
+				Name:      &call.ToolName,
 				Arguments: &call.Arguments,
 			}.Build())
 		}

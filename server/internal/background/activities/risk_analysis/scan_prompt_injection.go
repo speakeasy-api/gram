@@ -44,7 +44,7 @@ func (a *AnalyzeBatch) publishPromptInjectionScanRequests(ctx context.Context, a
 		toolCalls := make([]*riskv1.PromptInjectionAnalysis_ToolCall, 0, len(jm.ToolCalls))
 		for _, call := range jm.ToolCalls {
 			toolCalls = append(toolCalls, riskv1.PromptInjectionAnalysis_ToolCall_builder{
-				ToolName:  &call.ToolName,
+				Name:      &call.ToolName,
 				Arguments: &call.Arguments,
 			}.Build())
 		}
