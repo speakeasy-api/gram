@@ -797,6 +797,10 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 			Source:           conv.ToPGTextEmpty(strings.TrimSpace(payload.Source.Adapter)),
 			ContentHash:      nil,
 			Generation:       0,
+			// Downtime backlog redelivered from a device's offline spool:
+			// carried onto the row so the offline risk scanner's findings
+			// (and any session view) can distinguish replayed traffic.
+			Replayed: conv.PtrValOr(payload.Replayed, false),
 		}
 	}
 
