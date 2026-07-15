@@ -21,6 +21,7 @@ const (
 	FeatureObservabilityMode     Feature = "observability_mode"
 	FeatureHooksBrowserLogin     Feature = "hooks_browser_login"
 	FeatureCustomModelKeys       Feature = "custom_model_keys"
+	FeatureSkills                Feature = "skills"
 )
 
 type FeatureCache struct {
