@@ -129,6 +129,7 @@ Activate a skill when your task falls within its scope.
 | `pr`                              | Creating a Pull Request for current changes                                     |
 | `spec`                            | Interviewing user in-depth to produce a detailed spec before building           |
 | `page-toolbar`                    | Dashboard list page search, filters, sort, or view controls                     |
+| `gram-playwright-cli`             | Browser automation, dashboard inspection, screenshots, and page interaction     |
 | `pr-demo-gif`                     | Recording a demo GIF of a user-visible frontend change for a PR comment         |
 
 # Plan Mode
