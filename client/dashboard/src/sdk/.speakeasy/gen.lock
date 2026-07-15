@@ -28,6 +28,10 @@ features:
     sdkHooks: 0.4.0
     uploadStreams: 0.1.1
 trackedFiles:
+    id: 9e975471aa65
+    pristine_git_object: 86d6a348005f41e309841cca068a3c309b9d1ef4
+    pristine_git_object: 9f408bfae0fc457c23380d8317f36f1be06ead9d
+    pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   FUNCTIONS.md: {}
   REACT_QUERY.md: {}
   src/core.ts: {}
@@ -343,6 +347,14 @@ trackedFiles:
   src/funcs/riskResultsListForAgent.ts: {}
   src/funcs/riskResultsUnmask.ts: {}
   src/funcs/riskRulesTest.ts: {}
+  src/funcs/spendRulesEventsList.ts: {}
+  src/funcs/spendRulesOverviewGet.ts: {}
+  src/funcs/spendRulesRulesCreate.ts: {}
+  src/funcs/spendRulesRulesDelete.ts: {}
+  src/funcs/spendRulesRulesGet.ts: {}
+  src/funcs/spendRulesRulesList.ts: {}
+  src/funcs/spendRulesRulesPreview.ts: {}
+  src/funcs/spendRulesRulesUpdate.ts: {}
   src/funcs/telemetryCaptureEvent.ts: {}
   src/funcs/telemetryGetEmployeeDataFlowGraph.ts: {}
   src/funcs/telemetryGetHooksSummary.ts: {}
@@ -535,6 +547,7 @@ trackedFiles:
   src/models/components/createshadowmcpapprovalrequestform.ts: {}
   src/models/components/createsignedchatattachmenturlform2.ts: {}
   src/models/components/createsignedchatattachmenturlresult.ts: {}
+  src/models/components/createspendrulerequestbody.ts: {}
   src/models/components/createtoolsetrequestbody.ts: {}
   src/models/components/createtriggerinstanceform.ts: {}
   src/models/components/createtunneledmcpserverform.ts: {}
@@ -556,7 +569,6 @@ trackedFiles:
   src/models/components/deploymentlogevent.ts: {}
   src/models/components/deploymentpackage.ts: {}
   src/models/components/deploymentsummary.ts:
-    pristine_git_object: 9f408bfae0fc457c23380d8317f36f1be06ead9d
   src/models/components/discoverprotectedresourcemetadatarequestbody.ts: {}
   src/models/components/discoverremotesessionissuerrequestbody.ts: {}
   src/models/components/employeedataflowedge.ts: {}
@@ -707,6 +719,8 @@ trackedFiles:
   src/models/components/listshadowmcpinventoryresult.ts: {}
   src/models/components/listshadowmcpinventoryusersresult.ts: {}
   src/models/components/listsourcesresult.ts: {}
+  src/models/components/listspendruleeventsresult.ts: {}
+  src/models/components/listspendrulesresult.ts: {}
   src/models/components/listsyncedusersresult.ts: {}
   src/models/components/listtoolfiltersresult.ts: {}
   src/models/components/listtoolsetsresult.ts: {}
@@ -793,6 +807,8 @@ trackedFiles:
   src/models/components/plugin.ts: {}
   src/models/components/pluginassignment.ts: {}
   src/models/components/pluginserver.ts: {}
+  src/models/components/previewspendrulerequestbody.ts: {}
+  src/models/components/previewspendruleresult.ts: {}
   src/models/components/project.ts: {}
   src/models/components/projectentry.ts: {}
   src/models/components/projectoverviewsummary.ts: {}
@@ -801,7 +817,6 @@ trackedFiles:
   src/models/components/promptguardrailmessageverdict.ts: {}
   src/models/components/prompttemplate.ts: {}
   src/models/components/prompttemplateentry.ts:
-    pristine_git_object: 86d6a348005f41e309841cca068a3c309b9d1ef4
   src/models/components/protectedresourcemetadata.ts: {}
   src/models/components/protectedresourcemetadatadiscovery.ts: {}
   src/models/components/protectedresourcemetadataunavailable.ts: {}
@@ -921,6 +936,12 @@ trackedFiles:
   src/models/components/skillsummary.ts: {}
   src/models/components/skilltimeseriespoint.ts: {}
   src/models/components/sourceenvironmentlink.ts: {}
+  src/models/components/spendrule.ts: {}
+  src/models/components/spendruleactorusage.ts: {}
+  src/models/components/spendruleevent.ts: {}
+  src/models/components/spendrulesoverviewresult.ts: {}
+  src/models/components/spendruletargetcondition.ts: {}
+  src/models/components/spendruleusage.ts: {}
   src/models/components/submitfeedbackrequestbody.ts: {}
   src/models/components/submitriskblockfeedbackrequestbody.ts: {}
   src/models/components/suggestcustomdetectionrulerequestbody.ts: {}
@@ -1010,6 +1031,7 @@ trackedFiles:
   src/models/components/updateserverheaderform.ts: {}
   src/models/components/updateshadowmcpaccessruleform.ts: {}
   src/models/components/updateshadowmcpinventoryservernameform.ts: {}
+  src/models/components/updatespendrulerequestbody.ts: {}
   src/models/components/updatetoolsetrequestbody.ts: {}
   src/models/components/updatetriggerinstanceform.ts: {}
   src/models/components/updatetunneledmcpserverform.ts: {}
@@ -1103,6 +1125,7 @@ trackedFiles:
   src/models/operations/createshadowmcpaccessrule.ts: {}
   src/models/operations/createshadowmcpapprovalrequest.ts: {}
   src/models/operations/createsignedchatattachmenturl.ts: {}
+  src/models/operations/createspendrule.ts: {}
   src/models/operations/createtemplate.ts: {}
   src/models/operations/createtoolset.ts: {}
   src/models/operations/createtopupcheckout.ts: {}
@@ -1144,6 +1167,7 @@ trackedFiles:
   src/models/operations/deleteshadowmcpaccessrule.ts: {}
   src/models/operations/deleteshadowmcpinventorypolicybypass.ts: {}
   src/models/operations/deletesourceenvironmentlink.ts: {}
+  src/models/operations/deletespendrule.ts: {}
   src/models/operations/deletetemplate.ts: {}
   src/models/operations/deletetoolset.ts: {}
   src/models/operations/deletetoolsetenvironmentlink.ts: {}
@@ -1223,6 +1247,8 @@ trackedFiles:
   src/models/operations/getrole.ts: {}
   src/models/operations/getshadowmcpinventoryserver.ts: {}
   src/models/operations/getsourceenvironment.ts: {}
+  src/models/operations/getspendrule.ts: {}
+  src/models/operations/getspendrulesoverview.ts: {}
   src/models/operations/gettemplate.ts: {}
   src/models/operations/gettokensundermanagement.ts: {}
   src/models/operations/gettoolset.ts: {}
@@ -1309,6 +1335,8 @@ trackedFiles:
   src/models/operations/listshadowmcpapprovalrequests.ts: {}
   src/models/operations/listshadowmcpinventory.ts: {}
   src/models/operations/listshadowmcpinventoryusers.ts: {}
+  src/models/operations/listspendruleevents.ts: {}
+  src/models/operations/listspendrules.ts: {}
   src/models/operations/listsyncedagentusers.ts: {}
   src/models/operations/listtemplates.ts: {}
   src/models/operations/listtools.ts: {}
@@ -1333,6 +1361,7 @@ trackedFiles:
   src/models/operations/mintusersession.ts: {}
   src/models/operations/moveorganizationremotesessionissuer.ts: {}
   src/models/operations/pausetriggerinstance.ts: {}
+  src/models/operations/previewspendrule.ts: {}
   src/models/operations/publish.ts: {}
   src/models/operations/publishplugins.ts: {}
   src/models/operations/query.ts: {}
@@ -1425,6 +1454,7 @@ trackedFiles:
   src/models/operations/updaterole.ts: {}
   src/models/operations/updateshadowmcpaccessrule.ts: {}
   src/models/operations/updateshadowmcpinventoryservername.ts: {}
+  src/models/operations/updatespendrule.ts: {}
   src/models/operations/updatetemplate.ts: {}
   src/models/operations/updatetoolset.ts: {}
   src/models/operations/updatetriggerinstance.ts: {}
@@ -1653,8 +1683,6 @@ trackedFiles:
   src/react-query/hooksServerNamesListServerNameOverrides.ts: {}
   src/react-query/hooksServerNamesUpsertServerNameOverride.ts: {}
   src/react-query/index.ts:
-    id: 9e975471aa65
-    pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/ingestHookEvent.ts: {}
   src/react-query/instance.core.ts: {}
   src/react-query/instance.ts: {}
@@ -1935,6 +1963,18 @@ trackedFiles:
   src/react-query/shadowMCPInventoryServer.ts: {}
   src/react-query/shadowMCPInventoryUsers.core.ts: {}
   src/react-query/shadowMCPInventoryUsers.ts: {}
+  src/react-query/spendRulesCreateRule.ts: {}
+  src/react-query/spendRulesDeleteRule.ts: {}
+  src/react-query/spendRulesGetRule.core.ts: {}
+  src/react-query/spendRulesGetRule.ts: {}
+  src/react-query/spendRulesListEvents.core.ts: {}
+  src/react-query/spendRulesListEvents.ts: {}
+  src/react-query/spendRulesListRules.core.ts: {}
+  src/react-query/spendRulesListRules.ts: {}
+  src/react-query/spendRulesOverview.core.ts: {}
+  src/react-query/spendRulesOverview.ts: {}
+  src/react-query/spendRulesPreviewRule.ts: {}
+  src/react-query/spendRulesUpdateRule.ts: {}
   src/react-query/switchScopes.ts: {}
   src/react-query/syncedAgentUsers.core.ts: {}
   src/react-query/syncedAgentUsers.ts: {}
@@ -2037,11 +2077,14 @@ trackedFiles:
   src/sdk/domains.ts: {}
   src/sdk/environments.ts: {}
   src/sdk/evals.ts: {}
+  src/sdk/events.ts: {}
   src/sdk/exclusions.ts: {}
   src/sdk/expr.ts: {}
   src/sdk/external.ts: {}
   src/sdk/externalcredentials.ts: {}
   src/sdk/features.ts: {}
+  src/sdk/gramoverview.ts: {}
+  src/sdk/gramrules.ts: {}
   src/sdk/hooks.ts: {}
   src/sdk/hooksservernames.ts: {}
   src/sdk/instances.ts: {}
@@ -2073,6 +2116,7 @@ trackedFiles:
   src/sdk/risk.ts: {}
   src/sdk/rules.ts: {}
   src/sdk/sdk.ts: {}
+  src/sdk/spendrules.ts: {}
   src/sdk/telemetry.ts: {}
   src/sdk/templates.ts: {}
   src/sdk/tools.ts: {}

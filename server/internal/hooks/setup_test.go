@@ -27,6 +27,7 @@ import (
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/spendrules"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -96,6 +97,7 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 	accessStore := accesscontrol.NewRedisStore(cacheAdapter, accesscontrol.AlphaTTL)
 	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, accessStore)
 	policyBypass := risk.NewPolicyBypassEvaluator(logger, conn)
+	spendGate := spendrules.NewGate(logger, cacheAdapter)
 	siteURL, err := url.Parse("https://app.example.test")
 	require.NoError(t, err)
 	serverURL, err := url.Parse("https://localhost:8080")
@@ -115,6 +117,7 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 		nil,
 		nil,
 		policyBypass,
+		spendGate,
 		shadowMCPClient,
 		chatWriter,
 		serverURL,

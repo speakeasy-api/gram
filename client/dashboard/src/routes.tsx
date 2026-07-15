@@ -41,6 +41,7 @@ import {
   InsightsRoot,
 } from "./pages/insights/Insights";
 import Costs from "./pages/costs/Costs";
+import Budgets from "./pages/budgets/Budgets";
 import FunctionsOnboarding from "./pages/onboarding/FunctionsOnboarding";
 import UploadOpenAPI from "./pages/onboarding/UploadOpenAPI";
 import CreateRemoteMcp from "./pages/sources/remote-mcp/CreateRemoteMcp";
@@ -499,6 +500,13 @@ const ROUTE_STRUCTURE = {
         component: Costs,
       },
     },
+  },
+  budgets: {
+    title: "Spend Control",
+    url: "budgets",
+    icon: "wallet",
+    stage: "preview",
+    component: Budgets,
   },
   logs: {
     title: "Tool Logs",

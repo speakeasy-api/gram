@@ -217,7 +217,22 @@ func validateCanonicalIngestPayload(payload *gen.IngestPayload) error {
 
 func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, actor canonicalActor, timestamp time.Time) (string, string) {
 	event := canonicalHookEvent(payload, authCtx, actor, timestamp)
-	switch strings.TrimSpace(payload.Event.Type) {
+	eventType := strings.TrimSpace(payload.Event.Type)
+
+	// Spend gate runs before any risk-policy evaluation. v1 enforcement
+	// surface is Claude only; other adapters pass through untouched.
+	if strings.TrimSpace(payload.Source.Adapter) == "claude" && (eventType == "prompt.submitted" || eventType == "tool.requested") {
+		if block := s.checkSpendGate(ctx, event); block != nil {
+			if eventType == "tool.requested" {
+				auditReason := spendBlockReason("tool call", block)
+				return auditReason, s.appendCanonicalBlockURL(ctx, authCtx, actor, payload, auditReason, canonicalToolName(payload), "", auditReason)
+			}
+			auditReason := spendBlockReason("prompt", block)
+			return auditReason, auditReason
+		}
+	}
+
+	switch eventType {
 	case "prompt.submitted":
 		ev := hookevents.NewUserPromptSubmit(event, hookevents.UserPromptSubmitParams{
 			Prompt: canonicalPromptText(payload),

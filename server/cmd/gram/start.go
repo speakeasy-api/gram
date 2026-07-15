@@ -103,6 +103,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	ppopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/spendrules"
+	spendcelenv "github.com/speakeasy-api/gram/server/internal/spendrules/celenv"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/templates"
@@ -1030,6 +1032,12 @@ func newStartCommand() *cli.Command {
 			}
 			policyBypass := risk.NewPolicyBypassEvaluator(logger, db)
 
+			spendCelEngine, err := spendcelenv.New()
+			if err != nil {
+				return fmt.Errorf("create spend rules cel engine: %w", err)
+			}
+			spendGate := spendrules.NewGate(logger, cache.NewRedisCacheAdapter(redisClient))
+
 			about.Attach(mux, about.NewService(logger, tracerProvider))
 			external.AttachWebhookHandler(mux, external.NewWebhookHandler(logger, tracerProvider, newWorkOSWebhooksClient(c), temporalEnv))
 			roleManager := access.NewRoleManager(logger, db, roleClient, auditLogger)
@@ -1059,6 +1067,7 @@ func newStartCommand() *cli.Command {
 				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
 				riskScanner,
 				policyBypass,
+				spendGate,
 				shadowMCPClient,
 				chatWriter,
 				serverURL,
@@ -1183,6 +1192,18 @@ func newStartCommand() *cli.Command {
 			)
 			chatWriter.AddObserver(riskService)
 			risk.Attach(mux, riskService)
+
+			spendrules.Attach(mux, spendrules.NewService(
+				logger,
+				tracerProvider,
+				db,
+				chDB,
+				sessionManager,
+				authzEngine,
+				auditLogger,
+				spendCelEngine,
+				&background.TemporalSpendRuleEvaluator{TemporalEnv: temporalEnv},
+			))
 
 			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantChatsTools(chatService)...)
 			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantUsersTools(organizationsService)...)
