@@ -120,7 +120,7 @@ function SSOConfigureButton() {
   };
 
   return (
-    <RequireScope scope="org:admin" level="component">
+    <RequireScope scope="org:manage_roles" level="component">
       <Button
         variant="secondary"
         size="sm"
@@ -169,7 +169,7 @@ function DirectorySyncConfigureButton() {
   };
 
   return (
-    <RequireScope scope="org:admin" level="component">
+    <RequireScope scope="org:manage_roles" level="component">
       <Button
         variant="secondary"
         size="sm"
@@ -284,7 +284,10 @@ export default function OrgIdentity(): JSX.Element {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <RequireScope scope={["org:read", "org:admin"]} level="page">
+        <RequireScope
+          scope={["org:read", "org:admin", "org:manage_roles"]}
+          level="page"
+        >
           <OrgIdentityInner />
         </RequireScope>
       </Page.Body>

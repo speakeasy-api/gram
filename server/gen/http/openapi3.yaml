@@ -48080,6 +48080,7 @@ components:
                         - org:blocked_read
                         - org:admin
                         - org:blocked_admin
+                        - org:manage_roles
                         - project:read
                         - project:blocked_read
                         - project:write
@@ -48111,6 +48112,7 @@ components:
                             - org:blocked_read
                             - org:admin
                             - org:blocked_admin
+                            - org:manage_roles
                             - project:read
                             - project:blocked_read
                             - project:write
@@ -52767,6 +52769,7 @@ components:
                         - org:blocked_read
                         - org:admin
                         - org:blocked_admin
+                        - org:manage_roles
                         - project:read
                         - project:blocked_read
                         - project:write
@@ -52921,6 +52924,7 @@ components:
                         - org:blocked_read
                         - org:admin
                         - org:blocked_admin
+                        - org:manage_roles
                         - project:read
                         - project:blocked_read
                         - project:write

@@ -22,6 +22,7 @@ export const Scope = {
   OrgBlockedRead: "org:blocked_read",
   OrgAdmin: "org:admin",
   OrgBlockedAdmin: "org:blocked_admin",
+  OrgManageRoles: "org:manage_roles",
   ProjectRead: "project:read",
   ProjectBlockedRead: "project:blocked_read",
   ProjectWrite: "project:write",

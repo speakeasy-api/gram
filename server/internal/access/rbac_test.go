@@ -89,7 +89,7 @@ func TestService_ListScopes_AllowsOrgReadGrant(t *testing.T) {
 
 	result, err := ti.service.ListScopes(ctx, &gen.ListScopesPayload{})
 	require.NoError(t, err)
-	require.Len(t, result.Scopes, 21)
+	require.Len(t, result.Scopes, 22)
 }
 
 func TestService_ListMembers_ForbiddenWithoutOrgReadGrant(t *testing.T) {
@@ -257,6 +257,57 @@ func TestService_UpdateMemberRole_AllowsOrgAdminGrant(t *testing.T) {
 	member, err := ti.service.UpdateMemberRoles(ctx, &gen.UpdateMemberRolesPayload{UserID: "local_user_1", RoleIds: []string{builderID}})
 	require.NoError(t, err)
 	require.Equal(t, []string{builderID}, member.RoleIds)
+}
+
+func TestService_ListRoles_AllowsManageRolesGrant(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgManageRoles, Selector: authz.NewSelector(authz.ScopeOrgManageRoles, authCtx.ActiveOrganizationID)})
+	seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockSystemRole("role_admin", "Admin", "admin"))
+
+	result, err := ti.service.ListRoles(ctx, &gen.ListRolesPayload{})
+	require.NoError(t, err)
+	require.Len(t, result.Roles, 1)
+}
+
+func TestService_CreateRole_AllowsManageRolesGrant(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgManageRoles, Selector: authz.NewSelector(authz.ScopeOrgManageRoles, testAccessAuthContext(t, ctx).ActiveOrganizationID)})
+
+	ti.roles.On("CreateRole", mock.Anything, mockidp.MockOrgID, thirdpartyworkos.CreateRoleOpts{
+		Name:        "Allowed",
+		Slug:        "org-allowed",
+		Description: "Allowed",
+	}).Return(&thirdpartyworkos.Role{
+		ID:          "role_allowed",
+		Name:        "Allowed",
+		Slug:        "org-allowed",
+		Description: "Allowed",
+		CreatedAt:   mockRoleTimestamp,
+		UpdatedAt:   mockRoleTimestamp,
+	}, nil).Once()
+
+	role, err := ti.service.CreateRole(ctx, &gen.CreateRolePayload{Name: "Allowed", Description: "Allowed"})
+	require.NoError(t, err)
+	require.NotEmpty(t, role.ID)
+}
+
+// org:read alone must NOT satisfy role mutations: managing roles requires the
+// dedicated org:manage_roles scope (or org:admin, which expands to it).
+func TestService_CreateRole_ForbiddenWithOnlyOrgReadGrant(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgRead, Selector: authz.NewSelector(authz.ScopeOrgRead, testAccessAuthContext(t, ctx).ActiveOrganizationID)})
+
+	_, err := ti.service.CreateRole(ctx, &gen.CreateRolePayload{Name: "Denied", Description: "Denied"})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
 func withRBACGrants(t *testing.T, ctx context.Context, grants ...authz.Grant) context.Context {

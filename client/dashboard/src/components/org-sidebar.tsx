@@ -206,7 +206,7 @@ export function OrgSidebar({
                 {isRbacEnabled && (
                   <ScopeGatedNavItem
                     item={orgRoutes.access}
-                    scope={["org:read", "org:admin"]}
+                    scope={["org:read", "org:admin", "org:manage_roles"]}
                   />
                 )}
               </CollapsibleNavGroup>
@@ -225,7 +225,7 @@ export function OrgSidebar({
                 )}
                 <ScopeGatedNavItem
                   item={orgRoutes.identity}
-                  scope={["org:read", "org:admin"]}
+                  scope={["org:read", "org:admin", "org:manage_roles"]}
                 />
                 <ScopeGatedNavItem
                   item={orgRoutes.remoteIdentityProviders}

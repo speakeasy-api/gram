@@ -1243,7 +1243,7 @@ func TestCalculateSubScopes(t *testing.T) {
 		scope string
 		want  []string
 	}{
-		{scope: string(ScopeOrgAdmin), want: []string{string(ScopeOrgRead)}},
+		{scope: string(ScopeOrgAdmin), want: []string{string(ScopeOrgManageRoles), string(ScopeOrgRead)}},
 		{scope: string(ScopeProjectWrite), want: []string{string(ScopeProjectRead)}},
 		{scope: string(ScopeMCPWrite), want: []string{string(ScopeMCPConnect), string(ScopeMCPRead)}},
 		{scope: string(ScopeMCPRead), want: []string{string(ScopeMCPConnect)}},

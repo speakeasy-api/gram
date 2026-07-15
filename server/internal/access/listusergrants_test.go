@@ -18,6 +18,7 @@ import (
 var expectedFullAccessScopes = []string{
 	string(authz.ScopeOrgRead),
 	string(authz.ScopeOrgAdmin),
+	string(authz.ScopeOrgManageRoles),
 	string(authz.ScopeProjectRead),
 	string(authz.ScopeProjectWrite),
 	string(authz.ScopeMCPRead),
