@@ -4151,3 +4151,129 @@ CREATE INDEX IF NOT EXISTS model_provider_keys_project_id_idx
 
 CREATE INDEX IF NOT EXISTS model_provider_keys_organization_id_idx
   ON model_provider_keys (organization_id);
+-- Org-scoped spend control rules. Each rule targets a set of actors via a CEL
+-- expression over org members' attributes (directory-synced attributes, group
+-- memberships, and org roles) and grants every matched actor a per-person USD
+-- budget for a UTC calendar window. A periodic evaluator compares each
+-- actor's spend against the limit and emits warning/breach events; rules with
+-- action = 'block' also open a circuit that denies the actor's Claude hook
+-- traffic until the window resets.
+CREATE TABLE IF NOT EXISTS spend_rules (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+
+  name TEXT NOT NULL,
+  -- URL-safe identifier derived from the name at creation time. Unique per
+  -- organization and immutable thereafter: the rule URN
+  -- ('spend_rule:<slug>:v<version>') embeds it, so renames must not change it
+  -- or historical events would detach from their rule.
+  slug TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  -- CEL boolean expression over actor attributes (see
+  -- internal/spendrules/celenv). A rule applies to an actor when this
+  -- evaluates true.
+  target_expr TEXT NOT NULL,
+  -- Per-person budget in USD for one window.
+  limit_usd DOUBLE PRECISION NOT NULL,
+  -- CEL boolean expression over the actor plus current-window usage. The
+  -- expression identifies budget breaches inside the target audience.
+  rule_expr TEXT NOT NULL DEFAULT 'spend_usd >= limit_usd',
+  -- UTC calendar window the budget covers. 'window' is a reserved keyword.
+  window_kind TEXT NOT NULL,
+  -- Percentage of the limit at which a warning event is emitted.
+  warn_at_pct INT NOT NULL DEFAULT 80,
+  action TEXT NOT NULL DEFAULT 'flag',
+  enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  -- Bumped on material config changes (target_expr, rule_expr, limit_usd,
+  -- window_kind, warn_at_pct, action). Historical configs live in
+  -- spend_rule_versions.
+  version BIGINT NOT NULL DEFAULT 1,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT spend_rules_pkey PRIMARY KEY (id),
+  CONSTRAINT spend_rules_slug_check CHECK (slug ~ '^[a-z0-9_-]{1,128}$'),
+  CONSTRAINT spend_rules_limit_usd_check CHECK (limit_usd > 0),
+  CONSTRAINT spend_rules_window_kind_check CHECK (window_kind IN ('daily', 'weekly', 'monthly')),
+  CONSTRAINT spend_rules_warn_at_pct_check CHECK (warn_at_pct BETWEEN 1 AND 100),
+  CONSTRAINT spend_rules_action_check CHECK (action IN ('flag', 'block')),
+  CONSTRAINT spend_rules_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS spend_rules_organization_id_idx
+ON spend_rules (organization_id)
+WHERE deleted IS FALSE;
+
+-- Slugs identify rules inside URNs, so two live rules in one org can never
+-- share one. Partial so a deleted rule frees its slug for reuse.
+CREATE UNIQUE INDEX IF NOT EXISTS spend_rules_organization_id_slug_key
+ON spend_rules (organization_id, slug)
+WHERE deleted IS FALSE;
+
+-- Immutable snapshot of a spend rule's config at each version. Written on
+-- create and on every material change so historical events (which carry a
+-- versioned rule URN) can always be interpreted against the config that
+-- produced them. Rows are never updated.
+CREATE TABLE IF NOT EXISTS spend_rule_versions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  spend_rule_id uuid NOT NULL,
+  version BIGINT NOT NULL,
+
+  target_expr TEXT NOT NULL,
+  rule_expr TEXT NOT NULL,
+  limit_usd DOUBLE PRECISION NOT NULL,
+  window_kind TEXT NOT NULL,
+  warn_at_pct INT NOT NULL,
+  action TEXT NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT spend_rule_versions_pkey PRIMARY KEY (id),
+  CONSTRAINT spend_rule_versions_spend_rule_id_version_key UNIQUE (spend_rule_id, version),
+  CONSTRAINT spend_rule_versions_window_kind_check CHECK (window_kind IN ('daily', 'weekly', 'monthly')),
+  CONSTRAINT spend_rule_versions_action_check CHECK (action IN ('flag', 'block')),
+  CONSTRAINT spend_rule_versions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT spend_rule_versions_spend_rule_id_fkey FOREIGN KEY (spend_rule_id) REFERENCES spend_rules (id) ON DELETE CASCADE
+);
+
+-- Warning/breach events emitted by the spend rule evaluator. One row per
+-- (rule version, actor, window, event type) — the unique index makes evaluator
+-- writes idempotent across its 5-minute cycles. rule_urn pins the exact rule
+-- version that produced the event. No soft delete: events are the audit trail
+-- shown in the dashboard events tab.
+CREATE TABLE IF NOT EXISTS spend_rule_events (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  spend_rule_id uuid NOT NULL,
+-- Versioned rule URN, e.g. 'spend_rule:eng-monthly-cap:v3'.
+  rule_urn TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+
+  -- Actor identity as known at evaluation time. user_id is NULL when the
+  -- directory user has not been linked to a Gram user.
+  user_id TEXT,
+  email TEXT NOT NULL,
+  display_name TEXT,
+
+  spend_usd DOUBLE PRECISION NOT NULL,
+  limit_usd DOUBLE PRECISION NOT NULL,
+  window_start timestamptz NOT NULL,
+  window_end timestamptz NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT spend_rule_events_pkey PRIMARY KEY (id),
+  CONSTRAINT spend_rule_events_event_type_check CHECK (event_type IN ('warning', 'breach')),
+  CONSTRAINT spend_rule_events_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT spend_rule_events_spend_rule_id_fkey FOREIGN KEY (spend_rule_id) REFERENCES spend_rules (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS spend_rule_events_dedupe_key
+ON spend_rule_events (spend_rule_id, rule_urn, event_type, email, window_start);
+
+CREATE INDEX IF NOT EXISTS spend_rule_events_organization_id_created_at_idx
+ON spend_rule_events (organization_id, created_at DESC);
