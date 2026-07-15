@@ -643,8 +643,9 @@ func hookTelemetryBaseAttrs(payload *gen.IngestPayload, authCtx *contextvalues.A
 	}
 	if conv.PtrValOr(payload.Replayed, false) {
 		// Downtime backlog redelivered from a device's offline spool: the
-		// row's timestamp is the original occurred_at, so without this
-		// marker replays would be indistinguishable from live traffic in
+		// row's timestamp is the original occurred_at when the envelope
+		// carried one (arrival time otherwise), so without this marker
+		// replays would be indistinguishable from live traffic in
 		// time-bucketed consumers.
 		attrs[attr.HookReplayedKey] = true
 	}

@@ -138,11 +138,11 @@ func TestClaimHookIdempotency_ReplayedClaimsLongWindow(t *testing.T) {
 	svc := *ti.service
 	svc.cache = rec
 
-	require.True(t, svc.claimHookIdempotency(context.Background(), uuid.NewString(), false))
-	require.True(t, svc.claimHookIdempotency(context.Background(), uuid.NewString(), true))
+	require.True(t, svc.claimHookIdempotency(t.Context(), uuid.NewString(), false))
+	require.True(t, svc.claimHookIdempotency(t.Context(), uuid.NewString(), true))
 
 	require.Len(t, rec.ttls, 2)
-	assert.Equal(t, hookIdempotencyTTL, rec.ttls[0], "a live delivery claims the retry-burst window")
-	assert.Equal(t, hookReplayIdempotencyTTL, rec.ttls[1], "a replayed delivery must claim the drain-cycle window")
-	assert.Greater(t, hookReplayIdempotencyTTL, hookIdempotencyTTL)
+	require.Equal(t, hookIdempotencyTTL, rec.ttls[0], "a live delivery claims the retry-burst window")
+	require.Equal(t, hookReplayIdempotencyTTL, rec.ttls[1], "a replayed delivery must claim the drain-cycle window")
+	require.Greater(t, hookReplayIdempotencyTTL, hookIdempotencyTTL)
 }

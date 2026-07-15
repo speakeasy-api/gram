@@ -339,7 +339,9 @@ const (
 	// HookReplayedKey is set (true) on telemetry rows for events redelivered
 	// from a device's offline spool after control-plane downtime, so
 	// dashboards can separate downtime backlog from live traffic. The row's
-	// timestamp is the event's original occurred_at, not its arrival time.
+	// timestamp is the event's original occurred_at when the envelope
+	// carried one; envelopes without it fall back to arrival time
+	// (canonicalEventTime), so a replayed row can also be now-stamped.
 	HookReplayedKey = attribute.Key("gram.hook.replayed")
 	// HookBlockReasonKey is set on hook telemetry entries when the Gram hook
 	// denied the tool call (e.g. shadow-MCP guard). Its presence (non-empty)

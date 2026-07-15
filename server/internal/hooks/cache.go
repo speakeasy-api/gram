@@ -66,4 +66,13 @@ const hookIdempotencyTTL = 10 * time.Minute
 // deliver the same entry minutes or hours apart — so the claim must outlive
 // a drain cycle, not a backoff loop. Only downtime backlog pays this
 // keyspace cost, which keeps the volume trivial next to live traffic.
+//
+// Scope, deliberately: this dedupes replay-vs-replay. It does NOT cover the
+// original-vs-replay case — a live delivery the server persisted but whose
+// response was lost claims only hookIdempotencyTTL, and a spool replay
+// arriving after those 10 minutes persists a second copy. Closing that gap
+// needs a durable (Postgres) dedupe backstop, since extending the live TTL
+// would hold a Redis key for every hook event fleet-wide; accepted and
+// tracked on DNO-498. A duplicate telemetry row is the cheaper failure next
+// to dropping downtime backlog.
 const hookReplayIdempotencyTTL = 48 * time.Hour
