@@ -60,6 +60,7 @@ import {
   useRotateTunneledMcpServerKey,
   type RotateTunneledMcpServerKeyData,
 } from "./hooks";
+import { HeadersSection } from "./HeadersSection";
 import { RemoveTunneledMcpDialogContent } from "./RemoveTunneledMcpDialog";
 
 const VALID_TABS = ["overview", "setup", "mcp-servers", "settings"] as const;
@@ -650,6 +651,7 @@ function SettingsTab({
     <div className="mx-auto w-full max-w-[1270px] space-y-8 px-8 py-8">
       <NameSection tunneledMcpServer={tunneledMcpServer} />
       <TunnelKeySection tunneledMcpServer={tunneledMcpServer} />
+      <HeadersSection tunneledMcpServerId={tunneledMcpServer.id} />
       <DangerZoneSection
         tunneledMcpServer={tunneledMcpServer}
         linkedMcpServers={linkedMcpServers}

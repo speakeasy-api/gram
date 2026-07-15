@@ -31,6 +31,16 @@ type Service interface {
 	RotateServerKey(context.Context, *RotateServerKeyPayload) (res *RotateTunneledMcpServerKeyResult, err error)
 	// Delete a tunneled MCP server source
 	DeleteServer(context.Context, *DeleteServerPayload) (err error)
+	// List the headers configured for a tunneled MCP server
+	ListServerHeaders(context.Context, *ListServerHeadersPayload) (res *ListTunneledMcpServerHeadersResult, err error)
+	// Get a tunneled MCP server header by ID
+	GetServerHeader(context.Context, *GetServerHeaderPayload) (res *types.TunneledMcpServerHeader, err error)
+	// Create a header on a tunneled MCP server
+	CreateServerHeader(context.Context, *CreateServerHeaderPayload) (res *types.TunneledMcpServerHeader, err error)
+	// Update a tunneled MCP server header
+	UpdateServerHeader(context.Context, *UpdateServerHeaderPayload) (res *types.TunneledMcpServerHeader, err error)
+	// Delete a tunneled MCP server header
+	DeleteServerHeader(context.Context, *DeleteServerHeaderPayload) (err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -53,7 +63,31 @@ const ServiceName = "tunneledMcp"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"createServer", "listServers", "getServer", "listServerConnections", "updateServer", "rotateServerKey", "deleteServer"}
+var MethodNames = [12]string{"createServer", "listServers", "getServer", "listServerConnections", "updateServer", "rotateServerKey", "deleteServer", "listServerHeaders", "getServerHeader", "createServerHeader", "updateServerHeader", "deleteServerHeader"}
+
+// CreateServerHeaderPayload is the payload type of the tunneledMcp service
+// createServerHeader method.
+type CreateServerHeaderPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// The ID of the tunneled MCP server to add the header to
+	TunneledMcpServerID string
+	// The header name
+	Name string
+	// Description of the header
+	Description *string
+	// Whether the header is required. Defaults to false.
+	IsRequired *bool
+	// Whether the header value is a secret. Defaults to false. Incompatible with
+	// value_from_request_header.
+	IsSecret *bool
+	// Static header value (mutually exclusive with value_from_request_header)
+	Value *string
+	// Name of the inbound request header to pass through (mutually exclusive with
+	// value)
+	ValueFromRequestHeader *string
+}
 
 // CreateServerPayload is the payload type of the tunneledMcp service
 // createServer method.
@@ -73,10 +107,30 @@ type CreateTunneledMcpServerResult struct {
 	TunnelKey string
 }
 
+// DeleteServerHeaderPayload is the payload type of the tunneledMcp service
+// deleteServerHeader method.
+type DeleteServerHeaderPayload struct {
+	// The ID of the header to delete
+	ID               string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
 // DeleteServerPayload is the payload type of the tunneledMcp service
 // deleteServer method.
 type DeleteServerPayload struct {
 	// The ID of the tunneled MCP server to delete
+	ID               string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// GetServerHeaderPayload is the payload type of the tunneledMcp service
+// getServerHeader method.
+type GetServerHeaderPayload struct {
+	// The ID of the header
 	ID               string
 	SessionToken     *string
 	ApikeyToken      *string
@@ -103,12 +157,28 @@ type ListServerConnectionsPayload struct {
 	ProjectSlugInput *string
 }
 
+// ListServerHeadersPayload is the payload type of the tunneledMcp service
+// listServerHeaders method.
+type ListServerHeadersPayload struct {
+	// The ID of the tunneled MCP server
+	TunneledMcpServerID string
+	SessionToken        *string
+	ApikeyToken         *string
+	ProjectSlugInput    *string
+}
+
 // ListServersPayload is the payload type of the tunneledMcp service
 // listServers method.
 type ListServersPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
+}
+
+// ListTunneledMcpServerHeadersResult is the result type of the tunneledMcp
+// service listServerHeaders method.
+type ListTunneledMcpServerHeadersResult struct {
+	Headers []*types.TunneledMcpServerHeader
 }
 
 // ListTunneledMcpServersResult is the result type of the tunneledMcp service
@@ -133,6 +203,31 @@ type RotateTunneledMcpServerKeyResult struct {
 	Server *types.TunneledMcpServer
 	// Plaintext tunnel key. Only returned after rotation.
 	TunnelKey string
+}
+
+// UpdateServerHeaderPayload is the payload type of the tunneledMcp service
+// updateServerHeader method.
+type UpdateServerHeaderPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// The ID of the header to update
+	ID string
+	// The header name
+	Name string
+	// Description of the header
+	Description *string
+	// Whether the header is required. Defaults to false.
+	IsRequired *bool
+	// Whether the header value is a secret. Defaults to false. Incompatible with
+	// value_from_request_header.
+	IsSecret *bool
+	// Static header value (mutually exclusive with value_from_request_header).
+	// Omit on an existing secret header to preserve its stored value.
+	Value *string
+	// Name of the inbound request header to pass through (mutually exclusive with
+	// value)
+	ValueFromRequestHeader *string
 }
 
 // UpdateServerPayload is the payload type of the tunneledMcp service

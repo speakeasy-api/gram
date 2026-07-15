@@ -338,7 +338,7 @@ func NewService(
 		userSessionSigner:  userSessionSigner,
 		remoteChallengeMgr: remoteChallengeMgr,
 		remoteProxyManager: remoteProxyManager,
-		tunnelManager:      newTunnelManager(tunnelRoutes, tunnelForwardToken, remoteProxyManager, tunnelGatewayCIDRs),
+		tunnelManager:      newTunnelManager(logger, db, enc, tunnelRoutes, tunnelForwardToken, remoteProxyManager, tunnelGatewayCIDRs),
 	}
 }
 
