@@ -3,7 +3,11 @@ import { describe, expect, it, vi } from "vitest";
 import type { AppRoute } from "@/routes";
 import { useProjectNavRoutes } from "./useProjectNavRoutes";
 
-const productFeatures = vi.hoisted(() => ({ skillsEnabled: false }));
+const testState = vi.hoisted(() => ({
+  productFeatureOptions: undefined as { staleTime?: number } | undefined,
+  projectId: "project_a",
+  skillsEnabled: false,
+}));
 
 function route(title: string, url: string): AppRoute {
   return {
@@ -54,10 +58,19 @@ vi.mock("@/contexts/Telemetry", () => ({
   }),
 }));
 
+vi.mock("@/contexts/Auth", () => ({
+  useProject: () => ({ id: testState.projectId }),
+}));
+
 vi.mock("@gram/client/react-query/productFeatures.js", () => ({
-  useProductFeatures: () => ({
-    data: { skillsEnabled: productFeatures.skillsEnabled },
-  }),
+  useProductFeatures: (
+    _request: unknown,
+    _security: unknown,
+    options: { staleTime?: number } | undefined,
+  ) => {
+    testState.productFeatureOptions = options;
+    return { data: { skillsEnabled: testState.skillsEnabled } };
+  },
 }));
 
 describe("useProjectNavRoutes", () => {
@@ -71,20 +84,23 @@ describe("useProjectNavRoutes", () => {
   });
 
   it("uses project read for Skills when the product feature is disabled", () => {
-    productFeatures.skillsEnabled = false;
+    testState.skillsEnabled = false;
 
     const { result } = renderHook(() => useProjectNavRoutes());
     const skills = result.current.find((entry) => entry.route === routes.clis);
 
     expect(skills?.scope).toEqual(["project:read"]);
+    expect(skills?.resourceId).toBeUndefined();
   });
 
   it("uses skill read for Skills when the product feature is enabled", () => {
-    productFeatures.skillsEnabled = true;
+    testState.skillsEnabled = true;
 
     const { result } = renderHook(() => useProjectNavRoutes());
     const skills = result.current.find((entry) => entry.route === routes.clis);
 
     expect(skills?.scope).toEqual(["skill:read"]);
+    expect(skills?.resourceId).toBe("project_a");
+    expect(testState.productFeatureOptions?.staleTime).toBe(30_000);
   });
 });

@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useProject } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
@@ -14,6 +15,8 @@ export interface ProjectNavRoute {
    * with the sidebar when scopes change there.
    */
   scope: Scope[];
+  /** Resource selected for this route's scope check, when applicable. */
+  resourceId?: string;
 }
 
 /**
@@ -31,8 +34,11 @@ export interface ProjectNavRoute {
  */
 export function useProjectNavRoutes(): ProjectNavRoute[] {
   const routes = useRoutes();
+  const { id: projectId } = useProject();
   const telemetry = useTelemetry();
-  const { data: productFeatures } = useProductFeatures();
+  const { data: productFeatures } = useProductFeatures(undefined, undefined, {
+    staleTime: 30_000,
+  });
 
   const isAssistantsEnabled = telemetry.isFeatureEnabled("assistants") ?? false;
   // Default true: opt-out via PostHog org-group targeting on `gram-deployments-page`.
@@ -68,6 +74,7 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       {
         route: routes.clis,
         scope: isSkillsEnabled ? ["skill:read"] : read,
+        ...(isSkillsEnabled ? { resourceId: projectId } : {}),
       },
       { route: routes.plugins, scope: readWrite },
       { route: routes.environments, scope: readWrite },
@@ -83,5 +90,11 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       { route: routes.detectionRules, scope: readWrite },
       { route: routes.settings, scope: ["project:write"] },
     ];
-  }, [routes, isAssistantsEnabled, isDeploymentsPageEnabled, isSkillsEnabled]);
+  }, [
+    routes,
+    projectId,
+    isAssistantsEnabled,
+    isDeploymentsPageEnabled,
+    isSkillsEnabled,
+  ]);
 }
