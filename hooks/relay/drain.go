@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/speakeasy-api/gram/hooks/sdk/models/components"
@@ -50,14 +51,18 @@ type DrainSummary struct {
 	Aborted bool
 }
 
-// RunDrain is the `speakeasy-hooks drain` entrypoint. Exit 0 when the spool
-// ended empty; 1 when entries remain or the run aborted, so a supervising
-// caller (the device agent's recovery trigger) logs the incomplete run.
+// RunDrain is the `speakeasy-hooks drain` entrypoint. Exit 1 only when the
+// control plane proved unreachable mid-run — the one outcome a retry fixes —
+// so a supervising caller (the device agent's recovery trigger) logs it as
+// incomplete. Skipped-only leftovers (no credential, newer entry schema)
+// exit 0: retrying can't deliver them until the machine's state changes, and
+// a permanent exit-1 would train operators to ignore the signal. The counts
+// on stdout carry the detail either way.
 func RunDrain(ctx context.Context, out io.Writer) int {
 	s := Drain(ctx)
 	fmt.Fprintf(out, "spool drain: replayed=%d dropped=%d expired=%d skipped=%d remaining=%d aborted=%t\n",
 		s.Replayed, s.Dropped, s.Expired, s.Skipped, s.Remaining, s.Aborted)
-	if s.Remaining > 0 || s.Aborted {
+	if s.Aborted {
 		return 1
 	}
 	return 0
@@ -104,12 +109,13 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 			}
 			continue
 		}
-		var entry spoolEntry
-		if err := json.Unmarshal(b, &entry); err != nil {
-			// A corrupt entry can never replay; keeping it would wedge the
-			// head of the spool forever.
-			_ = os.Remove(path)
-			s.Dropped++
+		entry, err := decodeSpoolEntry(b)
+		if err != nil {
+			// Unparseable to THIS binary is not corrupt: a newer binary may
+			// have written an event type this one's SDK enum rejects. Never
+			// delete what we couldn't read — leave it for a newer binary, or
+			// the age cap.
+			s.Skipped++
 			continue
 		}
 		if entry.V != spoolEntryVersion {
@@ -117,8 +123,9 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 			s.Skipped++
 			continue
 		}
-		c, ok := resolveDrainAuth(entry, auths)
-		if !ok {
+		key := drainAuthKey(entry)
+		a := resolveDrainAuth(entry, key, auths)
+		if !a.ok {
 			s.Skipped++
 			continue
 		}
@@ -127,12 +134,31 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 			cl = newReplayClient(entry.ServerURL)
 			clients[entry.ServerURL] = cl
 		}
-		res := cl.send(ctx, c, entry.Envelope, entry.IdempotencyKey)
+		res := cl.send(ctx, a.c, entry.Envelope, entry.IdempotencyKey)
+		if res.authRejected {
+			// A rejected credential is machine state, not event state — the
+			// backlog would deliver fine after a re-login or key rotation.
+			// Mirror the live path's one fallback (a rejected cached key
+			// retries through the config's shared org key), then skip the
+			// deployment's remaining entries. Never delete on auth rejection.
+			if a.c.Source == credCache && a.orgKey != "" {
+				org := creds{ServerURL: entry.ServerURL, APIKey: a.orgKey, Project: entry.ProjectSlug, Email: "", Org: entry.OrgID, Source: credOrg}
+				res = cl.send(ctx, org, entry.Envelope, entry.IdempotencyKey)
+				if !res.authRejected {
+					auths[key] = drainAuth{c: org, ok: true, orgKey: a.orgKey}
+				}
+			}
+			if res.authRejected {
+				auths[key] = drainAuth{c: creds{ServerURL: "", APIKey: "", Project: "", Email: "", Org: "", Source: credEnv}, ok: false, orgKey: ""}
+				s.Skipped++
+				continue
+			}
+		}
 		switch {
-		case res.statusCode >= 200 && res.statusCode < 300:
+		case res.accepted():
 			_ = os.Remove(path)
 			s.Replayed++
-		case unsent(res):
+		case res.unsent():
 			s.Aborted = true
 		default:
 			_ = os.Remove(path)
@@ -146,35 +172,80 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 	return s
 }
 
+// decodeSpoolEntry unmarshals an entry, restoring Envelope.Raw to the stored
+// bytes verbatim: the generated envelope decoder produces float64 maps for
+// Raw, which silently mutates integers above 2^53 (nanosecond timestamps,
+// snowflake ids) on re-marshal, while json.RawMessage — the same type
+// buildEnvelope put there — round-trips exactly.
+func decodeSpoolEntry(b []byte) (spoolEntry, error) {
+	var entry spoolEntry
+	if err := json.Unmarshal(b, &entry); err != nil {
+		return spoolEntry{}, err
+	}
+	var probe struct {
+		Envelope struct {
+			Raw json.RawMessage `json:"raw"`
+		} `json:"envelope"`
+	}
+	if err := json.Unmarshal(b, &probe); err == nil && len(probe.Envelope.Raw) > 0 && string(probe.Envelope.Raw) != "null" {
+		entry.Envelope.Raw = probe.Envelope.Raw
+	}
+	return entry, nil
+}
+
 type drainAuth struct {
 	c  creds
 	ok bool
+	// orgKey is the config file's shared key, kept aside for the
+	// auth-rejection fallback (mirroring deliver's org retry).
+	orgKey string
+}
+
+// drainAuthKey identifies one deployment for credential memoization. Every
+// field that influences resolveDrainAuth's outcome must appear here.
+func drainAuthKey(entry spoolEntry) string {
+	return entry.ConfigPath + "\x00" + entry.ServerURL + "\x00" + entry.OrgID + "\x00" + entry.ProjectSlug
 }
 
 // resolveDrainAuth resolves the credential for one entry's deployment,
 // memoized per identity. The entry's recorded identity is the routing truth;
 // the config file it points at (when still present and still describing the
-// same deployment) contributes only the shared org-key fallback — env keys
-// and the disk auth cache resolve exactly as a live send would.
-func resolveDrainAuth(entry spoolEntry, memo map[string]drainAuth) (creds, bool) {
-	key := entry.ConfigPath + "\x00" + entry.ServerURL + "\x00" + entry.OrgID + "\x00" + entry.ProjectSlug
+// same deployment) contributes only the shared org-key fallback. The disk
+// auth cache resolves exactly as a live send would; an env key is pinned to
+// the env-configured deployment when one is named, because the drain —
+// unlike a live send — batches entries recorded by other sessions and must
+// not post one deployment's key to another deployment's server.
+func resolveDrainAuth(entry spoolEntry, key string, memo map[string]drainAuth) drainAuth {
 	if a, ok := memo[key]; ok {
-		return a.c, a.ok
+		return a
 	}
-	a := drainAuth{c: creds{ServerURL: "", APIKey: "", Project: "", Email: "", Org: "", Source: credEnv}, ok: false}
+	a := drainAuth{c: creds{ServerURL: "", APIKey: "", Project: "", Email: "", Org: "", Source: credEnv}, ok: false, orgKey: ""}
 	if !insecureServerURL(entry.ServerURL) {
 		cfg := Config{ServerURL: entry.ServerURL, ProjectSlug: entry.ProjectSlug, OrgID: entry.OrgID, HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: entry.ConfigPath, ConfigError: ""}
 		if entry.ConfigPath != "" {
 			if fc, err := readFileConfig(entry.ConfigPath); err == nil &&
-				fc.ServerURL == entry.ServerURL &&
-				(entry.OrgID == "" || fc.Org == "" || fc.Org == entry.OrgID) {
+				sameDeployment(fc.ServerURL, fc.Org, entry.ServerURL, entry.OrgID) {
 				cfg.HooksAPIKey = fc.HooksAPIKey
 			}
 		}
+		a.orgKey = cfg.HooksAPIKey
 		a.c, a.ok = resolveAuth(cfg)
+		if a.ok && a.c.Source == credEnv {
+			if envURL := strings.TrimRight(strings.TrimSpace(os.Getenv("GRAM_HOOKS_SERVER_URL")), "/"); envURL != "" && envURL != entry.ServerURL {
+				// The env key belongs to the env-named deployment; resolve
+				// this entry from the cache or org key instead.
+				if cached, ok := readCachedAuth(cfg); ok {
+					a.c, a.ok = cached, true
+				} else if cfg.HooksAPIKey != "" {
+					a.c, a.ok = creds{ServerURL: cfg.ServerURL, APIKey: cfg.HooksAPIKey, Project: cfg.ProjectSlug, Email: "", Org: cfg.OrgID, Source: credOrg}, true
+				} else {
+					a.c, a.ok = creds{ServerURL: "", APIKey: "", Project: "", Email: "", Org: "", Source: credEnv}, false
+				}
+			}
+		}
 	}
 	memo[key] = a
-	return a.c, a.ok
+	return a
 }
 
 // listSpoolEntries returns the conforming entry filenames, oldest first.
@@ -212,11 +283,13 @@ var startDrainProcess = func() error {
 		return fmt.Errorf("resolve executable: %w", err)
 	}
 	cmd := exec.Command(exe, "drain")
+	// Detached on purpose, matching agenthooks' --async worker: a new
+	// session/process group so a provider that signals the hook's process
+	// group on timeout can't kill the drain mid-run.
+	cmd.SysProcAttr = drainSysProcAttr()
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("start drain: %w", err)
 	}
-	// Detached on purpose: the hook process exits immediately and the drain
-	// outlives it, same posture as agenthooks' --async worker.
 	return cmd.Process.Release()
 }
 
@@ -249,9 +322,9 @@ func (r *Relay) maybeSpawnDrain() {
 // via a detached drain.
 func (r *Relay) finishExchange(idemKey string, payload components.IngestRequestBody, res ingestResult) {
 	switch {
-	case unsent(res):
+	case res.unsent():
 		r.spoolUnsent(idemKey, payload)
-	case res.statusCode >= 200 && res.statusCode < 300:
+	case res.accepted():
 		r.maybeSpawnDrain()
 	}
 }

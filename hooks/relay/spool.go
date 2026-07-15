@@ -3,7 +3,6 @@ package relay
 import (
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -52,10 +51,13 @@ var (
 // spoolEntry is one unsent payload persisted for replay. It carries
 // everything a later drain invocation needs to deliver the envelope exactly
 // as the original send would have: the same Idempotency-Key (so a retry
-// after a partial original delivery dedupes server-side), the deployment
-// identity to route and re-resolve auth against, and the config path the
-// identity came from. The envelope itself already contains the event's
-// occurred_at, so replay preserves original timestamps.
+// across drain triggers dedupes server-side within the server's replay
+// claim window — a partially delivered *original* is deduped only within
+// the server's short live-claim window, the accepted gap until a durable
+// server-side backstop lands, tracked on DNO-498), the deployment identity
+// to route and re-resolve auth against, and the config path the identity
+// came from. The envelope itself already contains the event's occurred_at,
+// so replay preserves original timestamps.
 type spoolEntry struct {
 	V              int                          `json:"v"`
 	IdempotencyKey string                       `json:"idempotency_key"`
@@ -67,16 +69,12 @@ type spoolEntry struct {
 	Envelope       components.IngestRequestBody `json:"envelope"`
 }
 
-// unsent reports whether the control plane failed to store the event: the
-// server was unreachable (statusCode 0), failing (5xx), or shedding load
-// (429/408 — the request wasn't processed, and replaying later is exactly
-// what a rate-limiting server wants). Other 4xx don't spool: the server
-// answered and would reject the replay identically. Matches the device
-// agent's downtime classification (its ADR-0010).
-func unsent(res ingestResult) bool {
-	return res.statusCode == 0 || res.statusCode >= 500 ||
-		res.statusCode == http.StatusTooManyRequests || res.statusCode == http.StatusRequestTimeout
-}
+// maxSpoolEntryBytes caps one entry on disk. A single entry must never
+// approach spoolBytesCap: the trim would evict the whole backlog to make
+// room arithmetic can never make. An oversize entry first sheds the Raw
+// debug echo (the backend doesn't read it; the structured Data fields carry
+// the scannable content) and is dropped entirely only if still oversize.
+const maxSpoolEntryBytes = 8 << 20
 
 // spoolUnsent persists a payload whose delivery failed against a down
 // control plane. Best-effort by design: a spool failure only logs — the
@@ -103,6 +101,18 @@ func (r *Relay) spoolUnsent(idemKey string, payload components.IngestRequestBody
 		r.debugf("spool: marshal failed: %v", err)
 		return
 	}
+	if len(data) > maxSpoolEntryBytes {
+		entry.Envelope.Raw = nil
+		if data, err = json.Marshal(entry); err != nil {
+			r.debugf("spool: marshal failed: %v", err)
+			return
+		}
+		if len(data) > maxSpoolEntryBytes {
+			r.debugf("spool: entry exceeds %d bytes even without the raw echo; dropped", maxSpoolEntryBytes)
+			return
+		}
+		r.debugf("spool: raw echo stripped from oversize entry")
+	}
 	if dropped := trimSpool(dir, len(data), time.Now(), spoolEntryCap, spoolBytesCap); dropped > 0 {
 		r.debugf("spool: cap reached; dropped %d oldest entries", dropped)
 	}
@@ -121,19 +131,14 @@ func (r *Relay) spoolUnsent(idemKey string, payload components.IngestRequestBody
 }
 
 // spoolDirPath resolves the spool directory without creating it, or "" when
-// no state home exists. Mirrors codexToolStatePath's XDG_STATE_HOME
-// resolution. Readers (drain, the spawn check) use this so an install that
-// never spooled doesn't grow an empty directory.
+// no state home exists. Readers (drain, the spawn check) use this so an
+// install that never spooled doesn't grow an empty directory.
 func spoolDirPath() string {
-	stateHome := strings.TrimSpace(os.Getenv("XDG_STATE_HOME"))
-	if stateHome == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return ""
-		}
-		stateHome = filepath.Join(home, ".local", "state")
+	dir := hooksStateDir()
+	if dir == "" {
+		return ""
 	}
-	return filepath.Join(stateHome, "gram", "hooks", "spool")
+	return filepath.Join(dir, "spool")
 }
 
 // spoolDir resolves and creates the spool directory, or "" when state cannot
@@ -193,6 +198,15 @@ func trimSpool(dir string, incomingBytes int, now time.Time, entryCap, bytesCap 
 	var total int64
 	for _, de := range des {
 		if de.IsDir() {
+			continue
+		}
+		// A writer killed between write and rename leaves a .tmp orphan that
+		// no cap or expiry would ever see; sweep ones old enough that no
+		// live writer can still own them.
+		if before, ok := strings.CutSuffix(de.Name(), ".tmp"); ok {
+			if nanos, ok := spoolNanos(before); ok && nanos < now.Add(-time.Hour).UnixNano() {
+				_ = os.Remove(filepath.Join(dir, de.Name()))
+			}
 			continue
 		}
 		nanos, ok := spoolNanos(de.Name())

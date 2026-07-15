@@ -73,14 +73,29 @@ func (fs *fakeServer) last() components.IngestRequestBody {
 }
 
 // invoke runs the relay runner against a fixture exactly as a provider would.
+// spoolStateHome is the XDG_STATE_HOME a test installed via
+// setSpoolStateHome. invoke preserves exactly that value and overrides
+// anything else: an ambient XDG_STATE_HOME (CI sandboxes commonly export a
+// tmp-located one) would be shared across all tests, and a shared spool plus
+// a successful send would exec the TEST BINARY as a detached drain.
+var spoolStateHome string
+
+// setSpoolStateHome points the spool at a per-test directory and registers
+// it as the one value invoke will preserve. Tests that inspect or seed the
+// spool call this before invoke.
+func setSpoolStateHome(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", dir)
+	spoolStateHome = dir
+	t.Cleanup(func() { spoolStateHome = "" })
+	return dir
+}
+
 func invoke(t *testing.T, cfg Config, provider agenthooks.Provider, fixture string) agenthookstest.Result {
 	t.Helper()
 	t.Setenv("GRAM_DEVICE_AGENT_COMMANDS", "speakeasy-hooks-test-missing-device-agent")
-	// Hermetic state: the spool must never read or write the developer's
-	// real $XDG_STATE_HOME — a populated real spool plus a successful test
-	// send would otherwise spawn a detached drain of the TEST binary.
-	// Spool tests that need to inspect entries set their own value after.
-	if os.Getenv("XDG_STATE_HOME") == "" || !strings.HasPrefix(os.Getenv("XDG_STATE_HOME"), os.TempDir()) {
+	if v := os.Getenv("XDG_STATE_HOME"); v == "" || v != spoolStateHome {
 		t.Setenv("XDG_STATE_HOME", t.TempDir())
 	}
 	runner := NewRunner(cfg)

@@ -2,7 +2,6 @@ package relay
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"net/http"
 	"os"
@@ -20,6 +19,13 @@ import (
 // idempotency key.
 func seedSpoolEntry(t *testing.T, serverURL string, age time.Duration, sessionID string) string {
 	t.Helper()
+	return seedSpoolEntryWithConfig(t, serverURL, age, sessionID, "")
+}
+
+// seedSpoolEntryWithConfig is seedSpoolEntry with the entry's recorded
+// config path, for the auth-fallback paths.
+func seedSpoolEntryWithConfig(t *testing.T, serverURL string, age time.Duration, sessionID, configPath string) string {
+	t.Helper()
 	dir := filepath.Join(os.Getenv("XDG_STATE_HOME"), "gram", "hooks", "spool")
 	require.NoError(t, os.MkdirAll(dir, 0o700))
 	key := newIdempotencyToken()
@@ -29,7 +35,7 @@ func seedSpoolEntry(t *testing.T, serverURL string, age time.Duration, sessionID
 		ServerURL:      serverURL,
 		OrgID:          "",
 		ProjectSlug:    "default",
-		ConfigPath:     "",
+		ConfigPath:     configPath,
 		SpooledAt:      time.Now().Add(-age).UTC(),
 		Envelope: components.IngestRequestBody{
 			SchemaVersion: schemaVersion,
@@ -48,7 +54,7 @@ func seedSpoolEntry(t *testing.T, serverURL string, age time.Duration, sessionID
 
 func drainEnv(t *testing.T) {
 	t.Helper()
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	setSpoolStateHome(t)
 	t.Setenv("GRAM_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
 	t.Setenv("GRAM_HOOKS_API_KEY", "drain-key")
 }
@@ -149,24 +155,32 @@ func TestDrainSkipsNewerSchemaEntries(t *testing.T) {
 	require.Zero(t, fs.count())
 }
 
-// TestDrainDropsCorruptEntries: an unparseable file can never replay;
-// keeping it would wedge the head of the spool forever.
-func TestDrainDropsCorruptEntries(t *testing.T) {
+// TestDrainSkipsUnparseableEntries: an entry this binary can't decode is not
+// necessarily corrupt — a newer binary may have written an event type this
+// SDK enum rejects — so it is left in place for a newer binary or the age
+// cap, never deleted.
+func TestDrainSkipsUnparseableEntries(t *testing.T) {
 	drainEnv(t)
 	dir := filepath.Join(os.Getenv("XDG_STATE_HOME"), "gram", "hooks", "spool")
 	require.NoError(t, os.MkdirAll(dir, 0o700))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, spoolFileName(time.Now())), []byte("{corrupt"), 0o600))
 
+	// The same protection covers a valid entry whose event type this
+	// binary's strict SDK enum doesn't know yet.
+	future := spoolFileName(time.Now())
+	require.NoError(t, os.WriteFile(filepath.Join(dir, future), []byte(`{"v":1,"idempotency_key":"k","server_url":"https://gram.test","envelope":{"schema_version":"`+schemaVersion+`","source":{"adapter":"claude"},"event":{"type":"future.event"}}}`), 0o600))
+
 	s := Drain(t.Context())
-	require.Equal(t, 1, s.Dropped)
-	require.Empty(t, spoolFiles(t))
+	require.Equal(t, 2, s.Skipped)
+	require.Zero(t, s.Dropped, "unparseable entries must never be deleted")
+	require.Len(t, spoolFiles(t), 2)
 }
 
 // TestDrainSkipsWithoutCredentials: no env key, no cache, no config org key
 // → the entry stays for a run that can authenticate, and the exit code says
 // the run was incomplete.
 func TestDrainSkipsWithoutCredentials(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	setSpoolStateHome(t)
 	t.Setenv("GRAM_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	fs := newFakeServer(t, nil)
@@ -174,7 +188,7 @@ func TestDrainSkipsWithoutCredentials(t *testing.T) {
 
 	var out bytes.Buffer
 	code := RunDrain(t.Context(), &out)
-	require.Equal(t, 1, code, "an incomplete drain must exit non-zero for the supervising caller's log")
+	require.Equal(t, 0, code, "skipped-only leftovers exit 0 — a retry can't deliver them until machine state changes, and permanent exit-1 noise would train operators to ignore the signal")
 	require.Contains(t, out.String(), "skipped=1")
 	require.Len(t, spoolFiles(t), 1)
 	require.Zero(t, fs.count())
@@ -184,7 +198,7 @@ func TestDrainSkipsWithoutCredentials(t *testing.T) {
 // entry's recorded config path supplies the shared org key — the same
 // fallback a live send has.
 func TestDrainUsesConfigOrgKeyFallback(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	setSpoolStateHome(t)
 	t.Setenv("GRAM_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	fs := newFakeServer(t, nil)
@@ -192,29 +206,7 @@ func TestDrainUsesConfigOrgKeyFallback(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "speakeasy.json")
 	require.NoError(t, os.WriteFile(cfgPath, []byte(`{"server_url":"`+fs.URL+`","project":"default","hooks_api_key":"org-key-1"}`), 0o600))
 
-	dir := filepath.Join(os.Getenv("XDG_STATE_HOME"), "gram", "hooks", "spool")
-	require.NoError(t, os.MkdirAll(dir, 0o700))
-	sessionID := "sess-1"
-	entry := spoolEntry{
-		V:              spoolEntryVersion,
-		IdempotencyKey: newIdempotencyToken(),
-		ServerURL:      fs.URL,
-		OrgID:          "",
-		ProjectSlug:    "default",
-		ConfigPath:     cfgPath,
-		SpooledAt:      time.Now().UTC(),
-		Envelope: components.IngestRequestBody{
-			SchemaVersion: schemaVersion,
-			Source:        components.HookIngestSource{Adapter: "claude", AdapterVersion: nil, RawEventName: nil, Hostname: nil, UserEmail: nil},
-			Session:       &components.HookIngestSession{ID: &sessionID, TurnID: nil, Cwd: nil, Model: nil},
-			Event:         components.HookIngestEvent{Type: components.TypeToolRequested, OccurredAt: nil},
-			Data:          nil,
-			Raw:           nil,
-		},
-	}
-	b, err := json.Marshal(entry)
-	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(filepath.Join(dir, spoolFileName(time.Now())), b, 0o600))
+	seedSpoolEntryWithConfig(t, fs.URL, time.Hour, "sess-1", cfgPath)
 
 	s := Drain(t.Context())
 	require.Equal(t, 1, s.Replayed)
@@ -228,7 +220,7 @@ func TestDrainUsesConfigOrgKeyFallback(t *testing.T) {
 // next successful send spawns exactly one detached drain — debounced across
 // a burst.
 func TestMaybeSpawnDrainAfterRecovery(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	setSpoolStateHome(t)
 	spawns := 0
 	orig := startDrainProcess
 	startDrainProcess = func() error { spawns++; return nil }
@@ -254,7 +246,7 @@ func TestMaybeSpawnDrainAfterRecovery(t *testing.T) {
 // TestMaybeSpawnDrainSkipsEmptySpool: healthy sends on a machine with no
 // backlog never pay the spawn cost.
 func TestMaybeSpawnDrainSkipsEmptySpool(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	setSpoolStateHome(t)
 	spawns := 0
 	orig := startDrainProcess
 	startDrainProcess = func() error { spawns++; return nil }
@@ -269,11 +261,84 @@ func TestMaybeSpawnDrainSkipsEmptySpool(t *testing.T) {
 func TestRunDrainExitCodes(t *testing.T) {
 	drainEnv(t)
 	var out bytes.Buffer
-	require.Equal(t, 0, RunDrain(context.Background(), &out), "an empty spool is a clean run")
+	require.Equal(t, 0, RunDrain(t.Context(), &out), "an empty spool is a clean run")
 
 	fs := newFakeServer(t, nil)
 	seedSpoolEntry(t, fs.URL, time.Hour, "sess-1")
 	out.Reset()
-	require.Equal(t, 0, RunDrain(context.Background(), &out))
+	require.Equal(t, 0, RunDrain(t.Context(), &out))
 	require.Contains(t, out.String(), "replayed=1")
+}
+
+// TestDrainAuthRejectionPreservesBacklog pins the machine-state rule: a
+// rejected credential must never delete entries — the backlog would deliver
+// fine after a re-login — and the deployment's remaining entries are skipped
+// without further sends.
+func TestDrainAuthRejectionPreservesBacklog(t *testing.T) {
+	drainEnv(t)
+	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
+		return http.StatusUnauthorized, decision{Decision: "", Reason: "", Message: ""}
+	})
+	seedSpoolEntry(t, fs.URL, 2*time.Hour, "sess-1")
+	seedSpoolEntry(t, fs.URL, time.Hour, "sess-2")
+
+	s := Drain(t.Context())
+	require.Zero(t, s.Dropped, "auth rejection must never delete backlog")
+	require.Equal(t, 2, s.Skipped)
+	require.Len(t, spoolFiles(t), 2)
+	require.Equal(t, 1, fs.count(), "after one rejection the deployment's remaining entries skip without sends")
+}
+
+// TestDrainAuthenticatesFromDiskCache proves a drain with no env key at all
+// (the device agent's exec context) resolves the deployment's credential
+// from the disk auth cache, exactly as a live send would.
+func TestDrainAuthenticatesFromDiskCache(t *testing.T) {
+	setSpoolStateHome(t)
+	authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
+	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
+	fs := newFakeServer(t, nil)
+
+	// Cached credential for this deployment (format matches writeAuth).
+	require.NoError(t, os.WriteFile(authFile, []byte(
+		"server_url="+fs.URL+"\napi_key=cached-personal-key\nproject=default\nemail=\norg=\n"), 0o600))
+	seedSpoolEntry(t, fs.URL, time.Hour, "sess-1")
+
+	s := Drain(t.Context())
+	require.Equal(t, 1, s.Replayed)
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+	require.Equal(t, "cached-personal-key", fs.headers[0].Get("Gram-Key"))
+}
+
+// TestDrainEnvKeyPinnedToItsDeployment: the drain batches entries recorded
+// by other sessions, so an env key must not be posted to a different
+// deployment's server — the entry resolves from its config org key instead.
+func TestDrainEnvKeyPinnedToItsDeployment(t *testing.T) {
+	setSpoolStateHome(t)
+	t.Setenv("GRAM_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("GRAM_HOOKS_API_KEY", "env-key-for-dev")
+	t.Setenv("GRAM_HOOKS_SERVER_URL", "http://127.0.0.1:1")
+	fs := newFakeServer(t, nil)
+
+	cfgPath := filepath.Join(t.TempDir(), "speakeasy.json")
+	require.NoError(t, os.WriteFile(cfgPath, []byte(`{"server_url":"`+fs.URL+`","project":"default","hooks_api_key":"org-key-3"}`), 0o600))
+	seedSpoolEntryWithConfig(t, fs.URL, time.Hour, "sess-1", cfgPath)
+
+	s := Drain(t.Context())
+	require.Equal(t, 1, s.Replayed)
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+	require.Equal(t, "org-key-3", fs.headers[0].Get("Gram-Key"),
+		"an env key named for another deployment must not be sent to this entry's server")
+}
+
+// TestRunDrainAbortExitsNonZero: unreachable mid-run is the one retryable
+// outcome, and the exit code says so.
+func TestRunDrainAbortExitsNonZero(t *testing.T) {
+	drainEnv(t)
+	seedSpoolEntry(t, closedPortURL(t), time.Hour, "sess-1")
+	var out bytes.Buffer
+	require.Equal(t, 1, RunDrain(t.Context(), &out))
+	require.Contains(t, out.String(), "aborted=true")
 }

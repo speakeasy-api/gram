@@ -251,7 +251,7 @@ func (r *Relay) evaluate(ctx context.Context, typed any) verdict {
 		return verdict{block: true, message: msg, nudge: true}
 	}
 
-	if res.statusCode >= 200 && res.statusCode < 300 {
+	if res.accepted() {
 		switch {
 		case strings.EqualFold(res.decision.Decision, "allow"):
 			return verdict{block: false, message: "", nudge: false}

@@ -55,7 +55,7 @@ func closedPortURL(t *testing.T) string {
 // entry lands in the spool, carrying the deployment identity, a non-empty
 // idempotency key, and an envelope that round-trips with the event intact.
 func TestSpoolCapturesUnreachableSend(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	setSpoolStateHome(t)
 	cfg := authedConfig(t, closedPortURL(t))
 	cfg.OrgID = "org-1"
 	invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
@@ -75,33 +75,35 @@ func TestSpoolCapturesUnreachableSend(t *testing.T) {
 	require.Equal(t, "sess-claude-1", *entry.Envelope.Session.ID)
 }
 
-// TestSpoolSkipsWhenServerAnswers pins the other half of the predicate: a
-// server that answered — success or a definitive 4xx — must not spool, since
-// the event was either stored or would be rejected identically on replay.
-func TestSpoolSkipsWhenServerAnswers(t *testing.T) {
-	for name, status := range map[string]int{
-		"allow": http.StatusOK,
-		"4xx":   http.StatusBadRequest,
-	} {
-		t.Run(name, func(t *testing.T) {
-			t.Setenv("XDG_STATE_HOME", t.TempDir())
-			fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
-				return status, decision{Decision: "allow", Reason: "", Message: ""}
-			})
-			cfg := authedConfig(t, fs.URL)
-			invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+// assertNoSpoolForStatus pins the other half of the predicate: a server that
+// answered — success or a definitive 4xx — must not spool, since the event
+// was either stored or would be rejected identically on replay.
+func assertNoSpoolForStatus(t *testing.T, status int) {
+	t.Helper()
+	setSpoolStateHome(t)
+	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
+		return status, decision{Decision: "allow", Reason: "", Message: ""}
+	})
+	cfg := authedConfig(t, fs.URL)
+	invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 
-			require.NotZero(t, fs.count(), "precondition: the server must have been reached")
-			require.Empty(t, spoolFiles(t))
-		})
-	}
+	require.NotZero(t, fs.count(), "precondition: the server must have been reached")
+	require.Empty(t, spoolFiles(t))
+}
+
+func TestSpoolSkipsWhenServerAllows(t *testing.T) {
+	assertNoSpoolForStatus(t, http.StatusOK)
+}
+
+func TestSpoolSkipsWhenServerRejects4xx(t *testing.T) {
+	assertNoSpoolForStatus(t, http.StatusBadRequest)
 }
 
 // TestSpoolSkipsWithoutCredentials pins that the ratchet still runs first: a
 // never-authenticated machine sends nothing, so it must spool nothing — the
 // spool is a delivery buffer, not a credential bypass.
 func TestSpoolSkipsWithoutCredentials(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	setSpoolStateHome(t)
 	t.Setenv("GRAM_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
 	cfg := Config{ServerURL: closedPortURL(t), ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
 	invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
@@ -137,7 +139,7 @@ func TestUnsentPredicate(t *testing.T) {
 		http.StatusTooManyRequests: true, http.StatusRequestTimeout: true,
 		200: false, 400: false, 401: false, 403: false, 404: false,
 	} {
-		got := unsent(ingestResult{statusCode: status, decision: decision{Decision: "", Reason: "", Message: ""}, authRejected: false})
+		got := ingestResult{statusCode: status, decision: decision{Decision: "", Reason: "", Message: ""}, authRejected: false}.unsent()
 		require.Equal(t, want, got, "unsent(status=%d)", status)
 	}
 }
@@ -232,7 +234,7 @@ func TestTrimSpoolLeavesForeignFilesAlone(t *testing.T) {
 // sends append distinct files whose sorted order is delivery order, the
 // invariant the drain's oldest-first replay depends on.
 func TestSpoolEntriesAccumulateAcrossEvents(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	setSpoolStateHome(t)
 	cfg := authedConfig(t, closedPortURL(t))
 	invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 	invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
@@ -242,4 +244,59 @@ func TestSpoolEntriesAccumulateAcrossEvents(t *testing.T) {
 	first, second := readSpoolEntry(t, names[0]), readSpoolEntry(t, names[1])
 	require.NotEqual(t, first.IdempotencyKey, second.IdempotencyKey, "each event replays under its own key")
 	require.False(t, second.SpooledAt.Before(first.SpooledAt), fmt.Sprintf("sorted filenames must be chronological: %v then %v", first.SpooledAt, second.SpooledAt))
+}
+
+// TestSpoolOversizeEntryShedsRawNotBacklog pins the per-entry cap: a giant
+// event first drops its Raw debug echo, and must never evict the existing
+// backlog to make room arithmetic can't make.
+func TestSpoolOversizeEntryShedsRawNotBacklog(t *testing.T) {
+	dir := setSpoolStateHome(t)
+	spoolDir := filepath.Join(dir, "gram", "hooks", "spool")
+	require.NoError(t, os.MkdirAll(spoolDir, 0o700))
+	existing := writeSpoolFixture(t, spoolDir, time.Hour, 10)
+
+	big := make([]byte, maxSpoolEntryBytes+1024)
+	for i := range big {
+		big[i] = 'a'
+	}
+	payload := components.IngestRequestBody{
+		SchemaVersion: schemaVersion,
+		Source:        components.HookIngestSource{Adapter: "claude", AdapterVersion: nil, RawEventName: nil, Hostname: nil, UserEmail: nil},
+		Session:       nil,
+		Event:         components.HookIngestEvent{Type: components.TypeToolCompleted, OccurredAt: nil},
+		Data:          nil,
+		Raw:           json.RawMessage(`{"blob":"` + string(big) + `"}`),
+	}
+	NewRelay(Config{ServerURL: "https://gram.test", ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}).
+		spoolUnsent(newIdempotencyToken(), payload)
+
+	names := spoolFiles(t)
+	require.Len(t, names, 2, "the oversize entry must be stored (raw stripped) and the backlog preserved")
+	require.Contains(t, names, existing, "pre-existing backlog must survive an oversize write")
+	for _, name := range names {
+		if name == existing {
+			continue
+		}
+		entry := readSpoolEntry(t, name)
+		require.Nil(t, entry.Envelope.Raw, "the raw echo is shed to fit the per-entry cap")
+		require.Equal(t, components.TypeToolCompleted, entry.Envelope.Event.Type, "structured fields survive the shed")
+	}
+}
+
+// TestTrimSpoolSweepsStaleTmpOrphans: a writer killed between write and
+// rename leaves a .tmp invisible to the caps; old orphans are swept, fresh
+// ones (a live writer may own them) are left alone.
+func TestTrimSpoolSweepsStaleTmpOrphans(t *testing.T) {
+	dir := t.TempDir()
+	stale := spoolFileName(time.Now().Add(-2*time.Hour)) + ".tmp"
+	fresh := spoolFileName(time.Now()) + ".tmp"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, stale), []byte("x"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, fresh), []byte("x"), 0o600))
+
+	trimSpool(dir, 10, time.Now(), 100, 1<<20)
+
+	_, staleErr := os.Stat(filepath.Join(dir, stale))
+	require.True(t, os.IsNotExist(staleErr), "stale .tmp orphans must be swept")
+	_, freshErr := os.Stat(filepath.Join(dir, fresh))
+	require.NoError(t, freshErr, "fresh .tmp files may still belong to a live writer")
 }

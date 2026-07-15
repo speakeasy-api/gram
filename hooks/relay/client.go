@@ -45,6 +45,24 @@ type ingestResult struct {
 	authRejected bool
 }
 
+// accepted reports a definitive 2xx exchange — the server stored (or
+// deduped) the event. The one classification used by the live path, the
+// spool, and the drain; keep them agreeing by never inlining the range.
+func (r ingestResult) accepted() bool {
+	return r.statusCode >= 200 && r.statusCode < 300
+}
+
+// unsent reports whether the control plane failed to store the event: the
+// server was unreachable (statusCode 0), failing (5xx), or shedding load
+// (429/408 — the request wasn't processed, and replaying later is exactly
+// what a rate-limiting server wants). Other 4xx are the server answering —
+// a replay would fail identically. Matches the device agent's downtime
+// classification (its ADR-0010).
+func (r ingestResult) unsent() bool {
+	return r.statusCode == 0 || r.statusCode >= 500 ||
+		r.statusCode == http.StatusTooManyRequests || r.statusCode == http.StatusRequestTimeout
+}
+
 // client posts canonical hook events through the generated ingest SDK with
 // bounded retries and a reused idempotency token so redelivered requests are
 // stored exactly once.
