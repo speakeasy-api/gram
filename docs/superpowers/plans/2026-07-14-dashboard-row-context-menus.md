@@ -23,7 +23,7 @@
 - `Sources.tsx` grid cards — `SourceCard` already uses `CardContextMenu`.
 - `Triggers.tsx` — no per-row menu exists (row-click edit + a logs link); adding one would invent actions.
 - Team invites table — actions are two visible buttons (Resend/Revoke), not hidden options.
-- Session rows — already hand-wired.
+- User session rows (SessionRow/SessionTableRow) — already hand-wired before this work; distinct from the remote-identity SessionsTab in Task 3.
 
 ---
 

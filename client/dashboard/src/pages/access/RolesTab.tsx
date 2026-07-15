@@ -34,6 +34,21 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
 import { visiblePermissionCount } from "./roleDialogState";
 
+// Single source of truth for the per-role actions: the "⋯" dropdown and the
+// row's right-click context menu both render from this list. Edit always;
+// Delete only for non-system roles.
+function roleActions(
+  role: Role,
+  { onEdit, onDelete }: { onEdit: () => void; onDelete: () => void },
+): Action[] {
+  return [
+    { label: "Edit", onClick: onEdit },
+    ...(!role.isSystem
+      ? [{ label: "Delete", destructive: true, onClick: onDelete }]
+      : []),
+  ];
+}
+
 function RoleActionsMenu({
   role,
   onEdit,
@@ -44,6 +59,7 @@ function RoleActionsMenu({
   onDelete: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const actions = roleActions(role, { onEdit, onDelete });
 
   return (
     // Render-prop form: the dropdown content is portaled to <body>, so it
@@ -66,22 +82,16 @@ function RoleActionsMenu({
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem
-              onSelect={() => {
-                void setTimeout(onEdit, 0);
-              }}
-            >
-              Edit
-            </DropdownMenuItem>
-            {!role.isSystem && (
+            {actions.map((action) => (
               <DropdownMenuItem
+                key={action.label}
                 onSelect={() => {
-                  void setTimeout(onDelete, 0);
+                  void setTimeout(action.onClick, 0);
                 }}
               >
-                Delete
+                {action.label}
               </DropdownMenuItem>
-            )}
+            ))}
           </DropdownMenuContent>
         </DropdownMenu>
       )}
@@ -119,15 +129,10 @@ function RoleRow({
       photoUrl: m.photoUrl,
     }));
 
-  // Mirror the row-actions menu: Edit always, Delete only for non-system
-  // roles. Without org:admin the menu is empty and the row stays unwrapped.
+  // Mirror the row-actions menu via the shared builder. Without org:admin the
+  // menu is empty and the row stays unwrapped.
   const actions: Action[] = canManageRoles
-    ? [
-        { label: "Edit", onClick: onEdit },
-        ...(!role.isSystem
-          ? [{ label: "Delete", destructive: true as const, onClick: onDelete }]
-          : []),
-      ]
+    ? roleActions(role, { onEdit, onDelete })
     : [];
 
   return (

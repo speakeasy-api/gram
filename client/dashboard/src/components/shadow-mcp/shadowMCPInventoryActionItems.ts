@@ -4,9 +4,10 @@ import type { InventoryActionMode } from "./ShadowMCPInventoryActions";
 
 /**
  * The per-server action set, shared by the visible "⋯" dropdown and the row's
- * right-click context menu so the two stay in sync. Which entries appear is a
- * state machine over the server's request/allow-decision state. Each onClick
- * defers via setTimeout so the menu can close before a sheet opens.
+ * right-click context menu so the two stay in sync. The entries are additive
+ * over the server's state — a server with both a pending request and an
+ * existing allow rule offers Review Request AND Edit/Delete Rule. Each
+ * onClick defers via setTimeout so the menu can close before a sheet opens.
  */
 export function shadowMCPInventoryActions(
   server: ShadowMCPInventoryServer,
@@ -28,21 +29,31 @@ export function shadowMCPInventoryActions(
     window.setTimeout(() => onOpenAction(mode, server), 0);
   };
 
+  const actions: Action[] = [];
   if (hasRequest) {
-    return [
-      { label: "Review Request", disabled, onClick: openAction("review") },
-    ];
-  }
-  if (!hasAllowDecision) {
-    return [{ label: "Add Allow Rule", disabled, onClick: openAction("add") }];
-  }
-  return [
-    { label: "Edit Rule", disabled, onClick: openAction("edit") },
-    {
-      label: "Delete Rule",
-      destructive: true,
+    actions.push({
+      label: "Review Request",
       disabled,
-      onClick: openAction("delete"),
-    },
-  ];
+      onClick: openAction("review"),
+    });
+  }
+  if (!hasRequest && !hasAllowDecision) {
+    actions.push({
+      label: "Add Allow Rule",
+      disabled,
+      onClick: openAction("add"),
+    });
+  }
+  if (hasAllowDecision) {
+    actions.push(
+      { label: "Edit Rule", disabled, onClick: openAction("edit") },
+      {
+        label: "Delete Rule",
+        destructive: true,
+        disabled,
+        onClick: openAction("delete"),
+      },
+    );
+  }
+  return actions;
 }

@@ -7,6 +7,11 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { useRoutes } from "@/routes";
 import { useListDeploymentsSuspense } from "@gram/client/react-query/listDeployments.js";
 import {
+  mutationKeyRedeployDeployment,
+  type RedeployDeploymentMutationVariables,
+} from "@gram/client/react-query/redeployDeployment.js";
+import { useMutationState } from "@tanstack/react-query";
+import {
   Badge,
   Button,
   DropdownMenu,
@@ -67,6 +72,25 @@ function useDeploymentActions(
     },
   });
 
+  // A redeploy can be started from either the kebab dropdown or the row's
+  // context menu, which are separate hook instances. Observe pending
+  // redeploys for this deployment across all instances via the shared
+  // mutation key so both menus show the pending label and disable together.
+  const pendingDeploymentIds = useMutationState({
+    filters: {
+      mutationKey: mutationKeyRedeployDeployment(),
+      status: "pending",
+    },
+    select: (mutation) =>
+      (
+        mutation.state.variables as
+          | RedeployDeploymentMutationVariables
+          | undefined
+      )?.request.redeployRequestBody.deploymentId,
+  });
+  const isRedeploying =
+    redeployMutation.isPending || pendingDeploymentIds.includes(deployment.id);
+
   // Find the current deployment to check its status
   const isCompletedDeployment = deployment.status === "completed";
 
@@ -87,7 +111,6 @@ function useDeploymentActions(
     });
   };
 
-  const isRedeploying = redeployMutation.isPending;
   const actionText = latest ? "Retry Deployment" : "Rollback";
   const buttonText = isRedeploying
     ? latest
@@ -99,7 +122,7 @@ function useDeploymentActions(
     {
       icon: "refresh-cw",
       label: buttonText,
-      disabled: redeployMutation.isPending,
+      disabled: isRedeploying,
       onClick: handleRedeploy,
     },
   ];

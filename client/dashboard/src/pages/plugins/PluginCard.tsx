@@ -18,7 +18,7 @@ import {
   Icon,
 } from "@speakeasy-api/moonshine";
 import { ArrowRight, Puzzle, Server } from "lucide-react";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { DEFAULT_PLUGIN_DESCRIPTION } from "./default-plugin";
@@ -62,21 +62,24 @@ export function PluginCard({
     }
   };
 
-  // Right-click context menu mirroring the Install split-button dropdown plus
-  // the View button, so every card action is reachable from either menu.
-  const actions: Action[] = [
+  // Single source of truth for the Install split-button dropdown. The
+  // right-click context menu reuses these entries (plus View) so every card
+  // action is reachable from either menu without being defined twice.
+  const installActions: Action[] = [
     {
       label: "GitHub installation (preferred)",
       disabled: !installTarget,
+      description: installTarget ? undefined : "Requires marketplace setup",
       onClick: () => {
         // Defer until after the menu has fully closed to avoid a Radix
         // focus-trap/body-lock conflict between the closing menu and the
-        // opening sheet (same pattern as the dropdown item below).
+        // opening sheet (same pattern as MCPDetails.tsx).
         setTimeout(() => setIsInstallOpen(true), 0);
       },
     },
     {
       label: "Download as zip — Claude",
+      separatorBefore: true,
       onClick: () => {
         void handleDownload("claude");
       },
@@ -93,6 +96,10 @@ export function PluginCard({
         void handleDownload("codex");
       },
     },
+  ];
+
+  const actions: Action[] = [
+    ...installActions,
     {
       label: "View",
       onClick: () => {
@@ -189,47 +196,26 @@ export function PluginCard({
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem
-                      disabled={!installTarget}
-                      onClick={() => {
-                        // Defer until after the dropdown has fully closed to
-                        // avoid a Radix focus-trap/body-lock conflict between
-                        // the closing menu and the opening sheet (same pattern
-                        // as MCPDetails.tsx).
-                        setTimeout(() => setIsInstallOpen(true), 0);
-                      }}
-                    >
-                      <div className="flex flex-col">
-                        <span>GitHub installation (preferred)</span>
-                        {!installTarget && (
-                          <span className="text-muted-foreground text-xs">
-                            Requires marketplace setup
-                          </span>
-                        )}
-                      </div>
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={() => {
-                        void handleDownload("claude");
-                      }}
-                    >
-                      Download as zip — Claude
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => {
-                        void handleDownload("cursor");
-                      }}
-                    >
-                      Download as zip — Cursor
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => {
-                        void handleDownload("codex");
-                      }}
-                    >
-                      Download as zip — Codex
-                    </DropdownMenuItem>
+                    {installActions.map((action) => (
+                      <Fragment key={action.label}>
+                        {action.separatorBefore && <DropdownMenuSeparator />}
+                        <DropdownMenuItem
+                          disabled={action.disabled}
+                          onClick={action.onClick}
+                        >
+                          {action.description ? (
+                            <div className="flex flex-col">
+                              <span>{action.label}</span>
+                              <span className="text-muted-foreground text-xs">
+                                {action.description}
+                              </span>
+                            </div>
+                          ) : (
+                            action.label
+                          )}
+                        </DropdownMenuItem>
+                      </Fragment>
+                    ))}
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>

@@ -129,7 +129,8 @@ export function SourceTableRow({
     <TableRowContextMenu actions={actions}>
       <DotRow
         icon={iconContent}
-        onClick={() => routes.sources.source.goTo(sourceKind, asset.slug)}
+        href={routes.sources.source.href(sourceKind, asset.slug)}
+        ariaLabel={`View source ${displayName}`}
       >
         {/* Name */}
         <td className="px-3 py-3">
@@ -185,7 +186,7 @@ export function SourceTableRow({
         <td className="px-3 py-3">
           {actions.length > 0 && (
             <div
-              className="flex items-center justify-end"
+              className="relative z-20 flex items-center justify-end"
               onClick={(e) => e.stopPropagation()}
             >
               <MoreActions actions={actions} />

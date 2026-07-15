@@ -193,8 +193,9 @@ function MemberRowContextMenu({
   const model = getMemberMenuModel(member, deps);
   const hasManageRoles =
     model.showManageRoles && (model.scimManaged || model.accessMember != null);
+  const hasItemsAbove = hasManageRoles || model.showChallenges;
 
-  if (!hasManageRoles && !model.showChallenges && !model.canRemove) {
+  if (!hasItemsAbove && !model.canRemove) {
     return <>{children}</>;
   }
 
@@ -221,7 +222,7 @@ function MemberRowContextMenu({
         )}
         {model.canRemove && (
           <>
-            {model.showManageRoles && <ContextMenuSeparator />}
+            {hasItemsAbove && <ContextMenuSeparator />}
             <RequireScope scope="org:admin" level="component">
               <ContextMenuItem
                 variant="destructive"

@@ -209,6 +209,7 @@ function ExclusionActionsMenu({ actions }: { actions: Action[] }): JSX.Element {
         {actions.map((action) => (
           <DropdownMenuItem
             key={action.label}
+            disabled={action.disabled}
             className={
               action.destructive
                 ? "text-destructive focus:text-destructive cursor-pointer"
