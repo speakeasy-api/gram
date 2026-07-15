@@ -55,7 +55,7 @@ wait_for() {
         if ((remaining <= 0)); then
             echo "❌ Timed out after ${READINESS_TIMEOUT}s waiting for ${name} to be ready." >&2
             echo "Container status:" >&2
-            run_bounded 10 docker compose ps "$service" >&2 || true
+            run_bounded 10 docker compose ps -a "$service" >&2 || true
             echo "Recent ${service} logs:" >&2
             run_bounded 10 docker compose logs --tail=50 "$service" >&2 || true
             exit 1
