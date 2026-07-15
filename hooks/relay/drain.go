@@ -27,7 +27,7 @@ import (
 // Two things trigger a drain: any hook invocation whose send succeeds while
 // entries exist (maybeSpawnDrain — the control plane just proved reachable),
 // and the device agent exec'ing `speakeasy-hooks drain` the moment its
-// downtime detector sees recovery (device-agent ADR-0011). Both funnel into
+// downtime detector sees recovery (device-agent ADR-0012). Both funnel into
 // RunDrain and serialize on the drain lock.
 
 // DrainSummary reports one drain run's outcome.
