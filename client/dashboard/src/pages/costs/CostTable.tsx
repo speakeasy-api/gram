@@ -24,7 +24,7 @@ import {
   ESTIMATED_COST_TOOLTIP,
   isMeteredBilling,
 } from "@/components/estimated-cost-utils";
-import { isAttributionDim } from "./taxonomy";
+import { displayName, isAttributionDim } from "./taxonomy";
 
 function formatCost(value: number): string {
   return `$${value.toLocaleString(undefined, {
@@ -102,10 +102,6 @@ const GREEN = "#10b981";
 const RED = "#f43f5e";
 const GREY = "#94a3b8";
 
-function displayValue(groupValue: string): string {
-  return groupValue === "" ? "(unset)" : groupValue;
-}
-
 // "" is the "(unset)" bucket — a real slice (everyone missing this attribute),
 // so it stays drillable. Only "Other" — the synthetic top-N overflow rollup of
 // many distinct values — can't map back to a single filter, so it's inert.
@@ -159,10 +155,11 @@ function sortValue(
   row: QueryRow,
   key: SortKey,
   seriesByGroup: Map<string, number[]>,
+  groupBy: Dimension,
 ): number | string {
   switch (key) {
     case "name":
-      return displayValue(row.groupValue).toLowerCase();
+      return displayName(groupBy, row.groupValue).toLowerCase();
     case "cost":
     // Share is cost ÷ a constant total, so it sorts identically to cost.
     case "share":
@@ -255,8 +252,8 @@ export function CostTable({
     const main = rows.filter((r) => r.groupValue !== "Other");
     const other = rows.filter((r) => r.groupValue === "Other");
     main.sort((a, b) => {
-      const av = sortValue(a, sort.key, seriesByGroup);
-      const bv = sortValue(b, sort.key, seriesByGroup);
+      const av = sortValue(a, sort.key, seriesByGroup, groupBy);
+      const bv = sortValue(b, sort.key, seriesByGroup, groupBy);
       const cmp =
         typeof av === "string"
           ? av.localeCompare(bv as string)
@@ -264,7 +261,7 @@ export function CostTable({
       return sort.dir === "asc" ? cmp : -cmp;
     });
     return [...main, ...other];
-  }, [rows, sort, seriesByGroup]);
+  }, [rows, sort, seriesByGroup, groupBy]);
 
   if (isLoading) return <SkeletonTable />;
 
@@ -444,7 +441,7 @@ export function CostTable({
                   />
                 )}
                 <span className="truncate font-medium">
-                  {displayValue(row.groupValue)}
+                  {displayName(groupBy, row.groupValue)}
                 </span>
                 {drillable && (
                   <ChevronRight className="text-muted-foreground size-4 shrink-0" />

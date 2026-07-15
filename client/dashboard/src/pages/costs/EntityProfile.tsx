@@ -40,6 +40,7 @@ import { CostMeasureLabel } from "@/components/estimated-cost";
 import { CostTable } from "./CostTable";
 import {
   type Crumb,
+  displayName,
   isAttributionDim,
   LABELS,
   type Measures,
@@ -52,10 +53,6 @@ function formatCost(value: number): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
-}
-
-function displayValue(groupValue: string): string {
-  return groupValue === "" ? "(unset)" : groupValue;
 }
 
 // ── CSV export ──────────────────────────────────────────────────────────────
@@ -96,7 +93,7 @@ function buildCostCsv(
     const cost = r.measures.totalCost ?? 0;
     const chats = r.measures.totalChats ?? 0;
     return [
-      displayValue(r.groupValue),
+      displayName(groupBy, r.groupValue),
       cost.toFixed(2),
       total > 0 ? ((cost / total) * 100).toFixed(1) : "0.0",
       chats > 0 ? (cost / chats).toFixed(2) : "0.00",
@@ -130,21 +127,6 @@ function slugify(value: string): string {
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/(^-|-$)/g, "") || "all-costs"
   );
-}
-
-// Initials for the avatar: email local-part tokens (olivia.novak → ON) or the
-// first letters of the first two words (Engineering → EN, R&D → RD).
-// Title-case an email local part into a name; pass other values through.
-function prettyName(value: string, dim: Dimension): string {
-  if (dim === Dimension.Email && value.includes("@")) {
-    const local = value.split("@")[0] ?? value;
-    return local
-      .split(/[._-]+/)
-      .filter(Boolean)
-      .map((w) => w[0]!.toUpperCase() + w.slice(1))
-      .join(" ");
-  }
-  return displayValue(value);
 }
 
 // A unique, deterministic colour identity for an entity, derived from its name
@@ -343,7 +325,7 @@ export function EntityProfile({
   const groupLabel = LABELS[groupBy] ?? "Group";
 
   const title = entity
-    ? prettyName(entity.value, entity.dim)
+    ? displayName(entity.dim, entity.value)
     : (collection?.label ?? projectName ?? "All costs");
   const typeLabel = entity
     ? (LABELS[entity.dim] ?? "Group")

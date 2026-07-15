@@ -695,10 +695,13 @@ export function CostsExplorer(): JSX.Element {
     // entirely — an "(unset)" row is noise here (e.g. the $0 tool-row model
     // bucket). The full breakdown table still surfaces it for non-attribution
     // dims where "unset" is a real, drillable slice.
-    const toRows = (t: QueryRow[]) =>
+    const toRows = (t: QueryRow[], dim: Dimension) =>
       t
         .filter((r) => r.groupValue !== "")
-        .map((r) => ({ label: r.groupValue, cost: r.measures.totalCost ?? 0 }));
+        .map((r) => ({
+          label: displayName(dim, r.groupValue),
+          cost: r.measures.totalCost ?? 0,
+        }));
     const cardTitle = (dim: Dimension) =>
       dim === Dimension.Email
         ? "Top spenders"
@@ -719,7 +722,7 @@ export function CostsExplorer(): JSX.Element {
         title: "Top spenders",
         dim: Dimension.Email,
         drillable: drillableDim(Dimension.Email),
-        rows: toRows(userRows),
+        rows: toRows(userRows, Dimension.Email),
         loading: loadingSlice,
       });
     }
@@ -729,7 +732,7 @@ export function CostsExplorer(): JSX.Element {
         title: cardTitle(mixDimA),
         dim: mixDimA,
         drillable: drillableDim(mixDimA),
-        rows: toRows(mixDataA?.table ?? []),
+        rows: toRows(mixDataA?.table ?? [], mixDimA),
         loading: mixLoadingA,
       });
     }
@@ -739,7 +742,7 @@ export function CostsExplorer(): JSX.Element {
         title: cardTitle(mixDimB),
         dim: mixDimB,
         drillable: drillableDim(mixDimB),
-        rows: toRows(mixDataB?.table ?? []),
+        rows: toRows(mixDataB?.table ?? [], mixDimB),
         loading: mixLoadingB,
       });
     }
