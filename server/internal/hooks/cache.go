@@ -58,3 +58,12 @@ const sessionMCPListTTL = 12 * time.Hour
 // backoff attempts within seconds), so a few minutes is ample while keeping
 // the dedup keyspace small.
 const hookIdempotencyTTL = 10 * time.Minute
+
+// hookReplayIdempotencyTTL is the claim window for events redelivered from a
+// device's offline spool (X-Gram-Replayed). Replays can race each other far
+// outside a normal retry burst — the device agent's recovery trigger, the
+// hooks' opportunistic drain, and Windows' lock-free double drains can
+// deliver the same entry minutes or hours apart — so the claim must outlive
+// a drain cycle, not a backoff loop. Only downtime backlog pays this
+// keyspace cost, which keeps the volume trivial next to live traffic.
+const hookReplayIdempotencyTTL = 48 * time.Hour

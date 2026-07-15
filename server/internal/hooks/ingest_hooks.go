@@ -73,6 +73,8 @@ func (s *Service) Ingest(ctx context.Context, payload *gen.IngestPayload) (*gen.
 	sessionID := canonicalSessionID(payload)
 	timestamp := canonicalEventTime(payload)
 
+	replayed := conv.PtrValOr(payload.Replayed, false)
+
 	logger := s.logger.With(
 		attr.SlogHookSource(source),
 		attr.SlogHookEvent(eventType),
@@ -80,10 +82,11 @@ func (s *Service) Ingest(ctx context.Context, payload *gen.IngestPayload) (*gen.
 		attr.SlogGenAIConversationID(sessionID),
 		attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
 		attr.SlogProjectID(authCtx.ProjectID.String()),
+		attr.SlogHookReplayed(replayed),
 	)
 	logger.InfoContext(ctx, "unified hook received", attr.SlogEvent("hooks_ingest"))
 
-	if !s.claimHookIdempotency(ctx, conv.PtrValOr(payload.IdempotencyKey, "")) {
+	if !s.claimHookIdempotency(ctx, conv.PtrValOr(payload.IdempotencyKey, ""), replayed) {
 		ctx = withHookDuplicate(ctx)
 	}
 
@@ -637,6 +640,13 @@ func hookTelemetryBaseAttrs(payload *gen.IngestPayload, authCtx *contextvalues.A
 	}
 	if sessionID := canonicalSessionID(payload); sessionID != "" {
 		attrs[attr.GenAIConversationIDKey] = sessionID
+	}
+	if conv.PtrValOr(payload.Replayed, false) {
+		// Downtime backlog redelivered from a device's offline spool: the
+		// row's timestamp is the original occurred_at, so without this
+		// marker replays would be indistinguishable from live traffic in
+		// time-bucketed consumers.
+		attrs[attr.HookReplayedKey] = true
 	}
 	if hostname := strings.TrimSpace(conv.PtrValOr(payload.Source.Hostname, "")); hostname != "" {
 		attrs[attr.HookHostnameKey] = hostname

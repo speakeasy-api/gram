@@ -336,6 +336,11 @@ const (
 	HookServerNameOverrideIDKey = attribute.Key("gram.hook.server_name_override_id")
 	HookHasPluginAuthKey        = attribute.Key("gram.hook.has_plugin_auth")
 	HookHostnameKey             = attribute.Key("gram.hook.hostname")
+	// HookReplayedKey is set (true) on telemetry rows for events redelivered
+	// from a device's offline spool after control-plane downtime, so
+	// dashboards can separate downtime backlog from live traffic. The row's
+	// timestamp is the event's original occurred_at, not its arrival time.
+	HookReplayedKey = attribute.Key("gram.hook.replayed")
 	// HookBlockReasonKey is set on hook telemetry entries when the Gram hook
 	// denied the tool call (e.g. shadow-MCP guard). Its presence (non-empty)
 	// signals the trace should render as "blocked" in dashboards.
@@ -587,6 +592,9 @@ func SlogHookHasPluginAuth(v bool) slog.Attr      { return slog.Bool(string(Hook
 
 func HookHostname(v string) attribute.KeyValue { return HookHostnameKey.String(v) }
 func SlogHookHostname(v string) slog.Attr      { return slog.String(string(HookHostnameKey), v) }
+
+func HookReplayed(v bool) attribute.KeyValue { return HookReplayedKey.Bool(v) }
+func SlogHookReplayed(v bool) slog.Attr      { return slog.Bool(string(HookReplayedKey), v) }
 
 func ServerAddress(v string) attribute.KeyValue { return ServerAddressKey.String(v) }
 func SlogServerAddress(v string) slog.Attr      { return slog.String(string(ServerAddressKey), v) }
