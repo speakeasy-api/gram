@@ -169,7 +169,8 @@ mise run playwright video-chapter "Chapter Title" --description="Details" --dura
 mise run playwright video-stop
 
 # annotate each subsequent action (click, type, ...) with a callout naming the action and highlighting the target
-mise run playwright video-show-actions --duration=600 --position=top-right
+# --cursor accepts pointer (the default) or none
+mise run playwright video-show-actions --duration=600 --position=top-right --cursor=pointer
 mise run playwright video-hide-actions
 
 # launch the dashboard for UI review / design feedback — user annotates the page, you receive the annotated screenshot, snapshot, and notes
