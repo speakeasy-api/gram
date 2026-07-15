@@ -35,7 +35,6 @@ func TestUpsertEnvironmentEntry_ScopedByProject(t *testing.T) {
 
 	queries := repo.New(ti.conn)
 
-	// Upsert scoped to the owning project writes the entry.
 	entry, err := queries.UpsertEnvironmentEntry(ctx, repo.UpsertEnvironmentEntryParams{
 		EnvironmentID: environmentID,
 		ProjectID:     projectID,
@@ -46,7 +45,6 @@ func TestUpsertEnvironmentEntry_ScopedByProject(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "updated-value", entry.Value)
 
-	// Upsert scoped to a different project is a no-op returning no rows.
 	_, err = queries.UpsertEnvironmentEntry(ctx, repo.UpsertEnvironmentEntryParams{
 		EnvironmentID: environmentID,
 		ProjectID:     uuid.New(),

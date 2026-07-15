@@ -662,9 +662,6 @@ type UpsertEnvironmentEntryParams struct {
 	ProjectID     uuid.UUID
 }
 
-// The environment_id is sourced from environments under a project_id check so
-// the upsert is a no-op (returning no rows) when the environment does not
-// belong to the project.
 func (q *Queries) UpsertEnvironmentEntry(ctx context.Context, arg UpsertEnvironmentEntryParams) (EnvironmentEntry, error) {
 	row := q.db.QueryRow(ctx, upsertEnvironmentEntry,
 		arg.Name,

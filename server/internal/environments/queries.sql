@@ -129,9 +129,6 @@ WHERE ee.environment_id = @source_environment_id::uuid
   AND e.project_id = @project_id::uuid;
 
 -- name: UpsertEnvironmentEntry :one
--- The environment_id is sourced from environments under a project_id check so
--- the upsert is a no-op (returning no rows) when the environment does not
--- belong to the project.
 INSERT INTO environment_entries (environment_id, name, value, is_secret, updated_at)
 SELECT e.id, @name::text, @value::text, @is_secret::boolean, now()
 FROM environments e
