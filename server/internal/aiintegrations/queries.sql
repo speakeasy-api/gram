@@ -169,6 +169,12 @@ SET poll_watermark_at = @poll_watermark_at,
     updated_at = clock_timestamp()
 WHERE ai_integration_config_id = @ai_integration_config_id;
 
+-- name: AdvanceUsagePollCursor :exec
+UPDATE ai_integration_syncs
+SET last_cursor_id = @last_cursor_id,
+    updated_at = clock_timestamp()
+WHERE ai_integration_config_id = @ai_integration_config_id;
+
 -- name: RecordUsagePollFailure :exec
 UPDATE ai_integration_syncs
 SET next_poll_after = @next_poll_after,

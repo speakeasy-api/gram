@@ -27,6 +27,7 @@ func TestNewSyncErrorAccumulatesAllStageFailures(t *testing.T) {
 		MessagePagesFetched: 210,
 		MessagePagesWritten: 208,
 		CursorReached:       "activity_9",
+		CursorPersisted:     "activity_5",
 	},
 		SyncStageError{Stage: "discover_activities", Err: discoverErr},
 		SyncStageError{Stage: "import_chats", Err: nil},
@@ -45,6 +46,7 @@ func TestNewSyncErrorAccumulatesAllStageFailures(t *testing.T) {
 	require.Contains(t, msg, "activity_pages=4")
 	require.Contains(t, msg, "chats_imported=57")
 	require.Contains(t, msg, `cursor_reached="activity_9"`)
+	require.Contains(t, msg, `cursor_persisted="activity_5"`)
 
 	require.ErrorIs(t, err, discoverErr)
 	require.ErrorIs(t, err, writeErr)
@@ -104,6 +106,7 @@ func TestSyncErrorExposesTypedCausesThroughUnwrap(t *testing.T) {
 		MessagePagesFetched: 0,
 		MessagePagesWritten: 0,
 		CursorReached:       "",
+		CursorPersisted:     "",
 	},
 		SyncStageError{Stage: "discover_activities", Err: fmt.Errorf("list anthropic compliance activities: %w", httpErr)},
 	)
@@ -124,6 +127,7 @@ func TestComplianceSyncProgressMarshalsToJSON(t *testing.T) {
 		MessagePagesFetched: 4,
 		MessagePagesWritten: 5,
 		CursorReached:       "activity_1",
+		CursorPersisted:     "activity_0",
 	})
 	require.NoError(t, err)
 	require.JSONEq(t, `{
@@ -133,6 +137,7 @@ func TestComplianceSyncProgressMarshalsToJSON(t *testing.T) {
 		"chats_imported": 3,
 		"message_pages_fetched": 4,
 		"message_pages_written": 5,
-		"cursor_reached": "activity_1"
+		"cursor_reached": "activity_1",
+		"cursor_persisted": "activity_0"
 	}`, string(raw))
 }

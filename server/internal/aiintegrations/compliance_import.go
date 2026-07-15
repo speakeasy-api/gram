@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/speakeasy-api/gram/server/internal/aiintegrations/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
@@ -41,6 +42,21 @@ const (
 	anthropicComplianceMessagePageBufferSize = 2
 )
 
+// discoveredActivity is one importable chat activity from the feed.
+type discoveredActivity struct {
+	activity anthropicapi.Activity
+	// activitiesCursor is set on the final importable activity of an
+	// activities page: once that activity's messages are durably written,
+	// every activity up to the page's pagination token is fully imported
+	// and the token may be persisted as the global activities cursor.
+	activitiesCursor string
+	// cursorOnly marks a sentinel for a page with no importable activities.
+	// It carries just the page's pagination token; the import stage forwards
+	// it to the writer without fetching anything so the cursor still
+	// advances past fully-filtered pages.
+	cursorOnly bool
+}
+
 // messagePageBatch is one fetched page of chat messages ready to write.
 type messagePageBatch struct {
 	chatID uuid.UUID
@@ -48,6 +64,15 @@ type messagePageBatch struct {
 	// lastID is the page's pagination token; it advances the per-chat
 	// message cursor only after the page's rows are durably written.
 	lastID string
+	// activitiesCursor, when set, marks this batch as the last one produced
+	// by an activities page; the writer persists it as the global activities
+	// cursor once the batch is durably written, so a failed run resumes from
+	// the last completed activities page instead of the stored cursor from
+	// the previous successful sync.
+	activitiesCursor string
+	// cursorOnly marks a sentinel batch that carries just an activities
+	// cursor for a fully-filtered page; there is nothing to write.
+	cursorOnly bool
 }
 
 type ComplianceImportService struct {
@@ -71,7 +96,11 @@ func NewComplianceImportService(logger *slog.Logger, db *pgxpool.Pool, guardianP
 // SyncAnthropicCompliance imports new compliance activity and chat messages.
 // It returns the activities pagination cursor reached by this run; callers
 // must persist it on success so the next run resumes after the last imported
-// activity instead of re-discovering by time window.
+// activity instead of re-discovering by time window. The cursor is also
+// persisted incrementally during the run — after each activities page whose
+// chats are fully written — so retries of a failed or timed-out run resume
+// from the last completed page rather than repaying the whole discovery
+// cost.
 //
 // The sync is a three-stage pipeline: a producer goroutine streams chat
 // activities from the feed page by page, a fetch goroutine resolves each chat
@@ -93,7 +122,7 @@ func (s *ComplianceImportService) SyncAnthropicCompliance(ctx context.Context, c
 	client := anthropicapi.New(s.guardianPolicy, anthropicapi.WithAPIKey(cfg.APIKey))
 
 	g, gctx := errgroup.WithContext(ctx)
-	chatActivities := make(chan anthropicapi.Activity, anthropicComplianceActivityBufferSize)
+	chatActivities := make(chan discoveredActivity, anthropicComplianceActivityBufferSize)
 	messagePages := make(chan messagePageBatch, anthropicComplianceMessagePageBufferSize)
 
 	// Each stage writes only its own progress fields and error variable;
@@ -106,6 +135,7 @@ func (s *ComplianceImportService) SyncAnthropicCompliance(ctx context.Context, c
 		MessagePagesFetched: 0,
 		MessagePagesWritten: 0,
 		CursorReached:       "",
+		CursorPersisted:     "",
 	}
 	var nextCursor string
 	var discoverErr, importErr, writeErr error
@@ -142,9 +172,22 @@ func (s *ComplianceImportService) SyncAnthropicCompliance(ctx context.Context, c
 // rows, and pages each chat's messages into row batches for the writer
 // stage. It doesn't matter if a chat is imported more than once per run,
 // because chat inserts are idempotent.
-func (s *ComplianceImportService) importChatActivities(ctx context.Context, client *anthropicapi.Client, cfg Config, in <-chan anthropicapi.Activity, out chan<- messagePageBatch, progress *ComplianceSyncProgress) error {
+func (s *ComplianceImportService) importChatActivities(ctx context.Context, client *anthropicapi.Client, cfg Config, in <-chan discoveredActivity, out chan<- messagePageBatch, progress *ComplianceSyncProgress) error {
 	users := newConnectedUserResolver(s.db, cfg.OrganizationID)
-	for activity := range in {
+	for discovered := range in {
+		if discovered.cursorOnly {
+			// A fully-filtered page has no chats to import; forward its
+			// cursor straight to the writer so it still becomes durable
+			// after all previously discovered work is written.
+			select {
+			case <-ctx.Done():
+				return ctx.Err() //nolint:wrapcheck // Preserve context cancellation sentinel errors for callers.
+			case out <- messagePageBatch{chatID: uuid.Nil, rows: nil, lastID: "", activitiesCursor: discovered.activitiesCursor, cursorOnly: true}:
+			}
+			continue
+		}
+
+		activity := discovered.activity
 		s.heartbeat(ctx, "chat_import", progress.ChatsImported)
 		chatID, messagesCursor, err := s.upsertActivityChat(ctx, cfg, activity, users)
 		if err != nil {
@@ -156,7 +199,7 @@ func (s *ComplianceImportService) importChatActivities(ctx context.Context, clie
 		// chat is first seen via its created activity; it doesn't change
 		// on later claude_chat_updated activities.
 		enrichChat := activity.Type == anthropicComplianceActivityCreated
-		if err := s.fetchChatMessages(ctx, client, cfg, chatID, activity, messagesCursor, enrichChat, users, out, progress); err != nil {
+		if err := s.fetchChatMessages(ctx, client, cfg, chatID, activity, messagesCursor, enrichChat, discovered.activitiesCursor, users, out, progress); err != nil {
 			return err
 		}
 	}
@@ -166,24 +209,41 @@ func (s *ComplianceImportService) importChatActivities(ctx context.Context, clie
 // writeMessagePages persists fetched message pages. It must remain a single
 // goroutine: the per-chat message cursor may only advance after that page's
 // rows are durably written, and pages of one chat must be written in feed
-// order.
+// order. When a batch closes out an activities page, the global activities
+// cursor is advanced so retries resume from the last completed page.
 func (s *ComplianceImportService) writeMessagePages(ctx context.Context, cfg Config, in <-chan messagePageBatch, progress *ComplianceSyncProgress) error {
 	for batch := range in {
-		s.heartbeat(ctx, "message_write", progress.MessagePagesWritten+1)
+		if !batch.cursorOnly {
+			s.heartbeat(ctx, "message_write", progress.MessagePagesWritten+1)
 
-		if _, err := s.writer.WriteExternal(ctx, cfg.ProjectID, batch.rows); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "write anthropic compliance chat messages")
-		}
-
-		if batch.lastID != "" {
-			if err := chatrepo.New(s.db).UpdateAIIntegrationConfigChatCursor(ctx, chatrepo.UpdateAIIntegrationConfigChatCursorParams{
-				LastCursorID: conv.ToPGText(batch.lastID),
-				ChatID:       batch.chatID,
-			}); err != nil {
-				return oops.E(oops.CodeUnexpected, err, "record anthropic compliance chat cursor")
+			if _, err := s.writer.WriteExternal(ctx, cfg.ProjectID, batch.rows); err != nil {
+				return oops.E(oops.CodeUnexpected, err, "write anthropic compliance chat messages")
 			}
+
+			if batch.lastID != "" {
+				if err := chatrepo.New(s.db).UpdateAIIntegrationConfigChatCursor(ctx, chatrepo.UpdateAIIntegrationConfigChatCursorParams{
+					LastCursorID: conv.ToPGText(batch.lastID),
+					ChatID:       batch.chatID,
+				}); err != nil {
+					return oops.E(oops.CodeUnexpected, err, "record anthropic compliance chat cursor")
+				}
+			}
+			progress.MessagePagesWritten++
 		}
-		progress.MessagePagesWritten++
+
+		// Batches arrive in feed order, so once the last batch of an
+		// activities page is written, everything discovered up to that
+		// page's pagination token is durable and the token is a safe
+		// resume point.
+		if batch.activitiesCursor != "" {
+			if err := repo.New(s.db).AdvanceUsagePollCursor(ctx, repo.AdvanceUsagePollCursorParams{
+				LastCursorID:          conv.ToPGText(batch.activitiesCursor),
+				AiIntegrationConfigID: cfg.ID,
+			}); err != nil {
+				return oops.E(oops.CodeUnexpected, err, "advance anthropic compliance activities cursor")
+			}
+			progress.CursorPersisted = batch.activitiesCursor
+		}
 	}
 	return nil
 }
@@ -192,7 +252,11 @@ func (s *ComplianceImportService) writeMessagePages(ctx context.Context, cfg Con
 // persisted cursor and sends chat activities to out as they are discovered.
 // It returns the cursor reached by this run: the verbatim last_id pagination
 // token from the final page, not an id derived from imported rows.
-func (s *ComplianceImportService) streamChatActivities(ctx context.Context, client *anthropicapi.Client, cfg Config, out chan<- anthropicapi.Activity, progress *ComplianceSyncProgress) (string, error) {
+//
+// The final importable activity of each page carries the page's pagination
+// token so the writer stage can persist the global cursor once that
+// activity's messages are durably written.
+func (s *ComplianceImportService) streamChatActivities(ctx context.Context, client *anthropicapi.Client, cfg Config, out chan<- discoveredActivity, progress *ComplianceSyncProgress) (string, error) {
 	// First sync has no cursor yet; bound the initial backfill with a time
 	// window around the watermark. Every later sync resumes from the cursor.
 	createdAtGTE := time.Time{}
@@ -219,15 +283,38 @@ func (s *ComplianceImportService) streamChatActivities(ctx context.Context, clie
 		}
 		progress.ActivityPages++
 
+		importable := make([]anthropicapi.Activity, 0, len(page.Data))
 		for _, activity := range page.Data {
 			if activity.Actor.Type != "user_actor" || activity.ClaudeChatID == "" {
 				continue
 			}
+			importable = append(importable, activity)
+		}
+
+		for i, activity := range importable {
+			discovered := discoveredActivity{activity: activity, activitiesCursor: "", cursorOnly: false}
+			if i == len(importable)-1 && page.LastID != "" {
+				discovered.activitiesCursor = page.LastID
+			}
 			select {
 			case <-ctx.Done():
 				return nextCursor, ctx.Err() //nolint:wrapcheck // Preserve context cancellation sentinel errors for callers.
-			case out <- activity:
+			case out <- discovered:
 				progress.ChatActivities++
+			}
+		}
+
+		if len(importable) == 0 && page.LastID != "" {
+			// A page with no importable activities still advances the feed.
+			// Emit a cursor-only sentinel so the writer persists the page's
+			// token once all previously discovered work is durably written;
+			// otherwise retries would re-fetch fully-filtered pages forever
+			// on feeds dominated by non-user activities.
+			var none anthropicapi.Activity
+			select {
+			case <-ctx.Done():
+				return nextCursor, ctx.Err() //nolint:wrapcheck // Preserve context cancellation sentinel errors for callers.
+			case out <- discoveredActivity{activity: none, activitiesCursor: page.LastID, cursorOnly: true}:
 			}
 		}
 
@@ -293,7 +380,7 @@ func (s *ComplianceImportService) upsertActivityChat(ctx context.Context, cfg Co
 // When enrichChat is set, the first page's chat-level metadata (title,
 // owner, timestamps) is upserted onto the chat row; the metadata is
 // identical on every page, so once is enough.
-func (s *ComplianceImportService) fetchChatMessages(ctx context.Context, client *anthropicapi.Client, cfg Config, chatID uuid.UUID, activity anthropicapi.Activity, afterID string, enrichChat bool, users *connectedUserResolver, out chan<- messagePageBatch, progress *ComplianceSyncProgress) error {
+func (s *ComplianceImportService) fetchChatMessages(ctx context.Context, client *anthropicapi.Client, cfg Config, chatID uuid.UUID, activity anthropicapi.Activity, afterID string, enrichChat bool, activitiesCursor string, users *connectedUserResolver, out chan<- messagePageBatch, progress *ComplianceSyncProgress) error {
 	for pageNum := 1; ; pageNum++ {
 		s.heartbeat(ctx, "message_import", pageNum)
 		page, err := client.GetChatMessages(ctx, anthropicapi.GetChatMessagesParams{
@@ -318,13 +405,22 @@ func (s *ComplianceImportService) fetchChatMessages(ctx context.Context, client 
 			return err
 		}
 
+		batch := messagePageBatch{chatID: chatID, rows: rows, lastID: page.LastID, activitiesCursor: "", cursorOnly: false}
+		finalPage := !page.HasMore || page.LastID == ""
+		if finalPage {
+			// The chat's last message page closes out the activity; if the
+			// activity closes out an activities page, tell the writer the
+			// global cursor is safe to persist after this batch.
+			batch.activitiesCursor = activitiesCursor
+		}
+
 		select {
 		case <-ctx.Done():
 			return ctx.Err() //nolint:wrapcheck // Preserve context cancellation sentinel errors for callers.
-		case out <- messagePageBatch{chatID: chatID, rows: rows, lastID: page.LastID}:
+		case out <- batch:
 		}
 
-		if !page.HasMore || page.LastID == "" {
+		if finalPage {
 			break
 		}
 		afterID = page.LastID

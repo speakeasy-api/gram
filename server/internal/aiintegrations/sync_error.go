@@ -101,16 +101,18 @@ type ComplianceSyncProgress struct {
 	ChatsImported       int  `json:"chats_imported"`
 	MessagePagesFetched int  `json:"message_pages_fetched"`
 	MessagePagesWritten int  `json:"message_pages_written"`
-	// CursorReached is the activities pagination token the run got to. It is
-	// not persisted on failure, so the next run resumes from the stored
-	// cursor; the value shows how far discovery progressed regardless.
+	// CursorReached is the activities pagination token discovery got to; it
+	// shows how far the feed walk progressed regardless of durability.
 	CursorReached string `json:"cursor_reached,omitempty"`
+	// CursorPersisted is the last activities pagination token durably
+	// written to the sync state during the run; retries resume from it.
+	CursorPersisted string `json:"cursor_persisted,omitempty"`
 }
 
 func (p ComplianceSyncProgress) String() string {
 	return fmt.Sprintf(
-		"first_sync=%t activity_pages=%d chat_activities=%d chats_imported=%d message_pages_fetched=%d message_pages_written=%d cursor_reached=%q",
-		p.FirstSync, p.ActivityPages, p.ChatActivities, p.ChatsImported, p.MessagePagesFetched, p.MessagePagesWritten, p.CursorReached,
+		"first_sync=%t activity_pages=%d chat_activities=%d chats_imported=%d message_pages_fetched=%d message_pages_written=%d cursor_reached=%q cursor_persisted=%q",
+		p.FirstSync, p.ActivityPages, p.ChatActivities, p.ChatsImported, p.MessagePagesFetched, p.MessagePagesWritten, p.CursorReached, p.CursorPersisted,
 	)
 }
 
