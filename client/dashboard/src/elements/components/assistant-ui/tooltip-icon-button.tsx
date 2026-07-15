@@ -9,7 +9,7 @@ import {
   TooltipTrigger,
 } from "@/elements/components/ui/tooltip";
 import { Button } from "@/elements/components/ui/button";
-import { cn } from "@/elements/lib/utils";
+import { cn } from "@/lib/utils";
 
 type TooltipIconButtonProps = ComponentPropsWithRef<typeof Button> & {
   tooltip: string;

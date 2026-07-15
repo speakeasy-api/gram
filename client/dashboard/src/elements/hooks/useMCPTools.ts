@@ -1,4 +1,4 @@
-import { assert } from "@/elements/lib/utils";
+import { assert } from "@/lib/utils";
 import type { MCPServerEntry } from "@/elements/types";
 import { ToolsFilter } from "@/elements/types";
 import { createMCPClient } from "@ai-sdk/mcp";

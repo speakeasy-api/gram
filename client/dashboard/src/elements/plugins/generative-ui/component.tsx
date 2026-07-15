@@ -1,7 +1,7 @@
 "use client";
 
 import { GenerativeUI } from "@/elements/components/ui/generative-ui";
-import { cn } from "@/elements/lib/utils";
+import { cn } from "@/lib/utils";
 import { SyntaxHighlighterProps } from "@assistant-ui/react-markdown";
 import { FC, useEffect, useMemo, useState } from "react";
 import { MacOSWindowFrame } from "../components/MacOSWindowFrame";

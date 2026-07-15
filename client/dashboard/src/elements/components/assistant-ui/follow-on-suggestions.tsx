@@ -8,7 +8,7 @@ import { useDensity } from "@/elements/hooks/useDensity";
 import { useFollowOnSuggestions } from "@/elements/hooks/useFollowOnSuggestions";
 import { useRadius } from "@/elements/hooks/useRadius";
 import { EASE_OUT_QUINT } from "@/elements/lib/easing";
-import { cn } from "@/elements/lib/utils";
+import { cn } from "@/lib/utils";
 
 const suggestionVariants = {
   hidden: {

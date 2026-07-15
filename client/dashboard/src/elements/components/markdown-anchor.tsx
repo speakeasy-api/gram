@@ -1,7 +1,7 @@
 import { type ComponentPropsWithoutRef, memo } from "react";
 
 import { useMarkdownLink } from "@/elements/contexts/MarkdownLinkContext";
-import { cn } from "@/elements/lib/utils";
+import { cn } from "@/lib/utils";
 
 const ANCHOR_CLASS =
   "aui-md-a font-medium text-primary underline underline-offset-4";

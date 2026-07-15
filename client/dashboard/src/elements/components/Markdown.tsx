@@ -7,7 +7,7 @@ import remarkGfm from "remark-gfm";
 
 import { MarkdownLinkProvider } from "@/elements/contexts/MarkdownLinkContext";
 import { MarkdownAnchor } from "@/elements/components/markdown-anchor";
-import { cn } from "@/elements/lib/utils";
+import { cn } from "@/lib/utils";
 import type { LinkResolver, MarkdownLinkComponent } from "@/elements/types";
 
 export interface MarkdownProps {

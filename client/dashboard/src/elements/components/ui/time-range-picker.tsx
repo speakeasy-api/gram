@@ -5,7 +5,7 @@ import { generateObject, LanguageModel } from "ai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { z } from "zod";
 
-import { cn } from "@/elements/lib/utils";
+import { cn } from "@/lib/utils";
 import { trackError } from "@/elements/lib/errorTracking";
 import { Popover, PopoverContent, PopoverTrigger } from "./popover";
 import { Calendar } from "./calendar";

@@ -3,6 +3,12 @@
 @layer theme, base, components, utilities;
 @import "tailwindcss/theme.css" layer(theme);
 
+/* Utility classes that dashboard callers pass into shadow-rendered components
+   (e.g. <ChatHistory className="min-h-full">). The source("./") scan below
+   only sees elements sources, so caller-supplied classes must be safelisted
+   here or they won't exist in the ShadowRoot stylesheet. */
+@source inline("min-h-full h-full max-h-96 min-h-fit overflow-y-auto");
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
@@ -138,7 +144,11 @@
 
 @layer base {
   .gram-elements {
-    @tailwind utilities;
+    /* source("./") limits class detection to the elements sources. This file
+       compiles inside the dashboard project, so without it Tailwind scans the
+       whole dashboard and every dashboard-only utility ships (scoped under
+       .gram-elements) in the inlined ShadowRoot stylesheet. */
+    @tailwind utilities source("./");
 
     /* We can't use tailwind's preflight styles here because we need to scope them to .gram-elements so therefore we just include a version of them inline here */
     *,

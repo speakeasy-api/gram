@@ -14,7 +14,7 @@ import {
 import { Button } from "@/elements/components/ui/button";
 import { Skeleton } from "@/elements/components/ui/skeleton";
 import { useRadius } from "@/elements/hooks/useRadius";
-import { cn, initialsOf } from "@/elements/lib/utils";
+import { cn, initialsOf } from "@/lib/utils";
 import { useDensity } from "@/elements/hooks/useDensity";
 import { useThreadMeta } from "@/elements/contexts/ThreadMetaContext";
 

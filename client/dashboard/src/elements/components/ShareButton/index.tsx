@@ -10,7 +10,7 @@ import {
   TooltipTrigger,
 } from "@/elements/components/ui/tooltip";
 import { useThreadId } from "@/elements/hooks/useThreadId";
-import { cn } from "@/elements/lib/utils";
+import { cn } from "@/lib/utils";
 
 export interface ShareButtonProps {
   /**

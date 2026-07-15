@@ -30,7 +30,7 @@ import {
   type ReplayOptions,
 } from "@/elements/lib/cassette";
 import { DEFAULT_MODEL } from "@/elements/lib/models";
-import { cn } from "@/elements/lib/utils";
+import { cn } from "@/lib/utils";
 import { recommended } from "@/elements/plugins";
 import type { ElementsConfig } from "@/elements/types";
 import {

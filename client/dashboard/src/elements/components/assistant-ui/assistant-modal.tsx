@@ -22,7 +22,7 @@ import { ThreadList } from "@/elements/components/assistant-ui/thread-list";
 import { useThemeProps } from "@/elements/hooks/useThemeProps";
 import { useRadius } from "@/elements/hooks/useRadius";
 import { useDensity } from "@/elements/hooks/useDensity";
-import { assertNever, cn } from "@/elements/lib/utils";
+import { assertNever, cn } from "@/lib/utils";
 import { useElements } from "@/elements/hooks/useElements";
 import { useExpanded } from "@/elements/hooks/useExpanded";
 import { EASE_OUT_QUINT } from "@/elements/lib/easing";

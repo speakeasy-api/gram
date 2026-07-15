@@ -110,7 +110,7 @@ export {
   convertGramMessagesToExported,
 } from "@/elements/lib/messageConverter";
 
-export { sleep } from "@/elements/lib/utils";
+export { sleep } from "@/lib/utils";
 export type {
   GramChat,
   GramChatMessage,

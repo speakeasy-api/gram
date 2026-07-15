@@ -20,7 +20,7 @@ import {
 } from "@/elements/lib/tools";
 import { compactForModel } from "@/elements/lib/contextCompaction";
 import { describeStreamError } from "@/elements/lib/streamErrorMessage";
-import { cn } from "@/elements/lib/utils";
+import { cn } from "@/lib/utils";
 import { recommended } from "@/elements/plugins";
 import { ElementsConfig, Model } from "@/elements/types";
 import { Plugin } from "@/elements/types/plugins";

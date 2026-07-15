@@ -1014,7 +1014,7 @@ export interface ModalConfig extends ExpandableConfig {
    * @example
    * ```ts
    * import { MessageCircleIcon } from 'lucide-react'
-   * import { cn } from '@/elements/lib/utils'
+   * import { cn } from '@/lib/utils'
    *
    * const config: ElementsConfig = {
    *   modal: {

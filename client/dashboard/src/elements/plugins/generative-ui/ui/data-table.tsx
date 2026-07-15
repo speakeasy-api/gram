@@ -9,7 +9,7 @@ import {
   TableRow,
   TableCell,
 } from "./table";
-import { cn } from "@/elements/lib/utils";
+import { cn } from "@/lib/utils";
 
 export interface DataTableProps extends React.ComponentProps<"div"> {
   headers?: string[];

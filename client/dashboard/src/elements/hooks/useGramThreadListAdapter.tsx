@@ -14,7 +14,7 @@ import {
   convertGramMessagesToExported,
   convertGramMessagesToUIMessages,
 } from "@/elements/lib/messageConverter";
-import { sleep } from "@/elements/lib/utils";
+import { sleep } from "@/lib/utils";
 import { trackError } from "@/elements/lib/errorTracking";
 import {
   ThreadMetaContext,

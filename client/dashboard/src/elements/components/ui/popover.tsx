@@ -1,7 +1,7 @@
 import * as React from "react";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 
-import { cn } from "@/elements/lib/utils";
+import { cn } from "@/lib/utils";
 import { usePortalContainer } from "@/elements/hooks/usePortalContainer";
 
 function Popover({

@@ -8,7 +8,7 @@ import { ThreadList } from "@/elements/components/assistant-ui/thread-list";
 import { TooltipIconButton } from "@/elements/components/assistant-ui/tooltip-icon-button";
 import { useThemeProps } from "@/elements/hooks/useThemeProps";
 import { useElements } from "@/elements/hooks/useElements";
-import { cn } from "@/elements/lib/utils";
+import { cn } from "@/lib/utils";
 import { useExpanded } from "@/elements/hooks/useExpanded";
 import { LazyMotion, domMax } from "motion/react";
 import * as m from "motion/react-m";

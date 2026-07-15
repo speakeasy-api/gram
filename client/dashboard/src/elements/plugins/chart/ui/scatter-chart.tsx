@@ -1,6 +1,6 @@
 "use client";
 
-import { cn } from "@/elements/lib/utils";
+import { cn } from "@/lib/utils";
 import { FC } from "react";
 import {
   ScatterChart as RechartsScatterChart,

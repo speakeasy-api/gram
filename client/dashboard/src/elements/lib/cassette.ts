@@ -17,7 +17,7 @@ import {
   type UIMessageStreamWriter,
 } from "ai";
 import type { ThreadMessage } from "@assistant-ui/react";
-import { sleep } from "@/elements/lib/utils";
+import { sleep } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
 // Cassette types

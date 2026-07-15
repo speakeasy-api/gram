@@ -14,7 +14,7 @@ import {
   TriangleAlertIcon,
   XIcon,
 } from "lucide-react";
-import { cn } from "@/elements/lib/utils";
+import { cn } from "@/lib/utils";
 import { codeToHtml, BundledLanguage } from "shiki";
 import { Button } from "./button";
 import { Popover, PopoverAnchor, PopoverContent } from "./popover";

@@ -5,7 +5,7 @@ import {
   TooltipTrigger,
 } from "@/elements/components/ui/tooltip";
 import { EASE_OUT_QUINT } from "@/elements/lib/easing";
-import { cn } from "@/elements/lib/utils";
+import { cn } from "@/lib/utils";
 import { Heart, X } from "lucide-react";
 import { AnimatePresence } from "motion/react";
 import * as m from "motion/react-m";

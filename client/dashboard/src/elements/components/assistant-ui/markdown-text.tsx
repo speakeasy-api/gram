@@ -14,7 +14,7 @@ import remarkGfm from "remark-gfm";
 import { MarkdownAnchor } from "@/elements/components/markdown-anchor";
 import { TooltipIconButton } from "@/elements/components/assistant-ui/tooltip-icon-button";
 import { useMarkdownLink } from "@/elements/contexts/MarkdownLinkContext";
-import { cn } from "@/elements/lib/utils";
+import { cn } from "@/lib/utils";
 import { useElements } from "@/elements/hooks/useElements";
 import { useComponentsByLanguage } from "@/elements/hooks/usePluginComponents";
 import { useAssistantState } from "@assistant-ui/react";

@@ -1,5 +1,5 @@
 import * as React from "react";
-import { cn } from "@/elements/lib/utils";
+import { cn } from "@/lib/utils";
 
 export interface ListProps {
   items: string[];

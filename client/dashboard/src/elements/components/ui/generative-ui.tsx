@@ -1,7 +1,7 @@
 "use client";
 
 import { useDensity } from "@/elements/hooks/useDensity";
-import { cn } from "@/elements/lib/utils";
+import { cn } from "@/lib/utils";
 import {
   isJsonRenderTree,
   type JsonRenderNode,

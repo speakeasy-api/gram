@@ -3,7 +3,7 @@
 import { AlertCircle } from "lucide-react";
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { trackError } from "@/elements/lib/errorTracking";
-import { cn } from "@/elements/lib/utils";
+import { cn } from "@/lib/utils";
 import { Button } from "../ui/button";
 
 interface ErrorBoundaryProps {

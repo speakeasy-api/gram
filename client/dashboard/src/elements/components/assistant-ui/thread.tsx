@@ -87,7 +87,7 @@ import {
   type MentionableTool,
   toolSetToMentionableTools,
 } from "@/elements/lib/tool-mentions";
-import { cn, initialsOf } from "@/elements/lib/utils";
+import { cn, initialsOf } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import {
   Tooltip,

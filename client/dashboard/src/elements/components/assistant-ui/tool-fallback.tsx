@@ -1,4 +1,4 @@
-import { cn } from "@/elements/lib/utils";
+import { cn } from "@/lib/utils";
 import {
   useAssistantState,
   type ToolCallMessagePartComponent,

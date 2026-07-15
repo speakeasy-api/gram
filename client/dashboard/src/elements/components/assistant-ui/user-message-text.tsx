@@ -10,7 +10,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/elements/components/ui/collapsible";
-import { cn } from "@/elements/lib/utils";
+import { cn } from "@/lib/utils";
 
 import {
   splitContextBlocks,

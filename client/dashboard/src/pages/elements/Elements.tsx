@@ -1477,7 +1477,7 @@ export default function GramChat() {
               description="Learn about all configuration options"
             >
               <a
-                href="https://github.com/speakeasy-api/gram/blob/main/elements/docs/_media/ElementsConfig.md"
+                href="https://github.com/speakeasy-api/gram/blob/@gram-ai/elements@1.42.1/elements/docs/_media/ElementsConfig.md"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="bg-card hover:bg-muted/50 group flex items-center gap-3 rounded-lg border p-4 transition-colors"
