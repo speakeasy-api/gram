@@ -24,7 +24,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueries } from "@tanstack/react-query";
 import type { Selector } from "@gram/client/models/components/selector.js";
 import type { ActivePanel, AnnotationHint, ResourceType } from "./types";
-import { ANNOTATION_TO_DISPOSITION } from "./types";
+import {
+  ANNOTATION_TO_DISPOSITION,
+  isProjectSelectableResourceType,
+} from "./types";
 import { computePanelState, type CollectionGroup } from "./computePanelState";
 import {
   Tooltip,
@@ -154,6 +157,7 @@ export function GrantRuleDrawerContent({
   }, []);
 
   const isMcpConnect = scope === "mcp:connect";
+  const projectSelectable = isProjectSelectableResourceType(resourceType);
   const collectionGroups = useCollectionGroups(mcpServers, isMcpConnect);
 
   const panelState = computePanelState(
@@ -190,13 +194,16 @@ export function GrantRuleDrawerContent({
     const serverIds = new Set<string>();
     for (const s of allowSelectors) {
       if (s.projectId) projectIds.add(s.projectId);
-      if (s.resourceId && s.resourceId !== "*") serverIds.add(s.resourceId);
+      if (s.resourceId && s.resourceId !== "*") {
+        if (projectSelectable) projectIds.add(s.resourceId);
+        else serverIds.add(s.resourceId);
+      }
     }
     return {
       projectIds: projectIds.size > 0 ? projectIds : null,
       serverIds: serverIds.size > 0 ? serverIds : null,
     };
-  }, [allowSelectors]);
+  }, [allowSelectors, projectSelectable]);
 
   const projectList = useMemo(() => {
     const seen = new Set<string>();
@@ -233,7 +240,7 @@ export function GrantRuleDrawerContent({
     return projects;
   }, [organization.projects, mcpServers, allowFilter]);
 
-  const resourceKind = resourceType === "project" ? "project" : "mcp";
+  const resourceKind = projectSelectable ? resourceType : "mcp";
 
   const filteredProjectList = useMemo(
     () =>
@@ -383,9 +390,9 @@ export function GrantRuleDrawerContent({
     <div className="shrink-0 pb-1.5">
       {!isDenyProp && isPanelAllowed("all") && (
         <ScopeOption
-          label={resourceType === "project" ? "All projects" : "All servers"}
+          label={projectSelectable ? "All projects" : "All servers"}
           description={
-            resourceType === "project"
+            projectSelectable
               ? "Give access to every project in your org"
               : "Give access to all servers in every project in your org"
           }
@@ -403,13 +410,9 @@ export function GrantRuleDrawerContent({
       )}
       {isPanelAllowed("servers") && (
         <ScopeOption
-          label={
-            resourceType === "project"
-              ? "Specific projects"
-              : "Specific servers"
-          }
+          label={projectSelectable ? "Specific projects" : "Specific servers"}
           description={
-            resourceType === "project"
+            projectSelectable
               ? "Give access to specific projects in your org"
               : "Give access to specific servers across your org"
           }
@@ -443,7 +446,7 @@ export function GrantRuleDrawerContent({
         <input
           type="text"
           placeholder={
-            resourceType === "project" ? "Search projects…" : "Search servers…"
+            projectSelectable ? "Search projects…" : "Search servers…"
           }
           value={resourceSearch}
           onChange={(e) => setResourceSearch(e.target.value)}
@@ -465,7 +468,7 @@ export function GrantRuleDrawerContent({
         onWheel={handleResourceWheel}
         className="h-[250px] overflow-y-auto"
       >
-        {resourceType === "project" ? (
+        {projectSelectable ? (
           filteredProjectList.length === 0 ? (
             <div className="text-muted-foreground px-3 py-3 text-sm">
               {projectList.length === 0

@@ -230,6 +230,29 @@ func TestResourceKindForScope_environmentScopes(t *testing.T) {
 	require.Equal(t, ResourceKindEnvironment, ResourceKindForScope(ScopeEnvironmentBlockedWrite))
 }
 
+func TestResourceKindForScope_skillScopes(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, ResourceKindSkill, ResourceKindForScope(ScopeSkillRead))
+	require.Equal(t, ResourceKindSkill, ResourceKindForScope(ScopeSkillBlockedRead))
+	require.Equal(t, ResourceKindSkill, ResourceKindForScope(ScopeSkillWrite))
+	require.Equal(t, ResourceKindSkill, ResourceKindForScope(ScopeSkillBlockedWrite))
+}
+
+func TestValidateSelector_skillRequiresSkillResourceKind(t *testing.T) {
+	t.Parallel()
+
+	projectID := "0196cbd1-9328-74e7-b7bb-6e5357565573"
+	require.NoError(t, ValidateSelector(ScopeSkillRead, Selector{
+		SelectorKeyResourceKind: ResourceKindSkill,
+		SelectorKeyResourceID:   projectID,
+	}))
+	require.ErrorContains(t, ValidateSelector(ScopeSkillWrite, Selector{
+		SelectorKeyResourceKind: ResourceKindProject,
+		SelectorKeyResourceID:   projectID,
+	}), `requires resource_kind="skill"`)
+}
+
 func TestNewSelector_includesResourceKind(t *testing.T) {
 	t.Parallel()
 

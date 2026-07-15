@@ -44,7 +44,13 @@ const tabClass = (active: boolean) =>
       : "text-muted-foreground hover:text-foreground border-transparent"
   }`;
 
-type ResourceType = "org" | "project" | "environment" | "mcp" | "chat";
+type ResourceType =
+  | "org"
+  | "project"
+  | "environment"
+  | "skill"
+  | "mcp"
+  | "chat";
 
 const SCOPE_DEFS: {
   scope: string;
@@ -87,6 +93,18 @@ const SCOPE_DEFS: {
     label: "environment:write",
     resourceType: "environment",
     description: "Create, edit, clone & delete environments",
+  },
+  {
+    scope: "skill:read",
+    label: "skill:read",
+    resourceType: "skill",
+    description: "View skills within projects",
+  },
+  {
+    scope: "skill:write",
+    label: "skill:write",
+    resourceType: "skill",
+    description: "Create and modify skills within projects",
   },
   {
     scope: "mcp:read",
@@ -224,6 +242,7 @@ const GROUP_ORDER: { key: ResourceType; label: string }[] = [
   { key: "org", label: "Organization" },
   { key: "project", label: "Project" },
   { key: "environment", label: "Environments" },
+  { key: "skill", label: "Skills" },
   { key: "mcp", label: "MCP" },
   { key: "chat", label: "Agent Sessions" },
 ];
@@ -749,7 +768,10 @@ function PlatformAdminToolbarInner({ onHide }: { onHide: () => void }) {
                             scopeState.resources.length > 0;
                           let knownResources: { id: string; label: string }[] =
                             [];
-                          if (def.resourceType === "project") {
+                          if (
+                            def.resourceType === "project" ||
+                            def.resourceType === "skill"
+                          ) {
                             knownResources = projectResources;
                           } else if (def.resourceType === "mcp") {
                             knownResources = mcpResources;
