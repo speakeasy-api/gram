@@ -103,16 +103,25 @@ describe("ShadowMCPPolicyServerSelector", () => {
     expect(within(section).getByText("No servers selected")).toBeTruthy();
     expect(within(section).getByText("0 servers selected")).toBeTruthy();
     expect(
-      within(section).queryByTestId("applied-shadow-mcp-servers"),
+      within(section).queryByRole("list", {
+        name: "Selected Shadow MCP servers",
+      }),
     ).toBeNull();
   });
 
   it("renders a compact scrollable applied summary with only names and URLs", () => {
+    const longServerName =
+      "Server 0 with a deliberately long display name that must truncate";
+    const longServerURL =
+      "https://server-0.example.com/mcp/a/deliberately/long/path/that/must/truncate";
     const servers = Array.from({ length: 6 }, (_, index) =>
-      inventoryServer(`https://server-${index}.example.com/mcp`, {
-        access: index === 0 ? "allowed" : "none",
-        serverName: `Server ${index}`,
-      }),
+      inventoryServer(
+        index === 0 ? longServerURL : `https://server-${index}.example.com/mcp`,
+        {
+          access: index === 0 ? "allowed" : "none",
+          serverName: index === 0 ? longServerName : `Server ${index}`,
+        },
+      ),
     );
 
     render(
@@ -125,24 +134,37 @@ describe("ShadowMCPPolicyServerSelector", () => {
     const section = screen.getByRole("region", {
       name: "Allowed Shadow MCP servers",
     });
-    const list = within(section).getByTestId("applied-shadow-mcp-servers");
+    const list = within(section).getByRole("list", {
+      name: "Selected Shadow MCP servers",
+    });
 
-    expect(list.className).toContain("max-h-[198px]");
+    expect(list.getAttribute("tabindex")).toBe("0");
+    expect(list.className).toContain("max-h-[200px]");
     expect(list.className).toContain("overflow-y-auto");
-    const rows = within(list).getAllByTestId("applied-shadow-mcp-server");
+    expect(list.className).toContain("focus-visible:ring-ring");
+    expect(list.className).toContain("focus-visible:ring-2");
+    expect(list.className).toContain("focus-visible:outline-none");
+
+    const rows = within(list).getAllByRole("listitem");
     expect(rows).toHaveLength(6);
 
     const firstRow = rows[0];
     if (!firstRow) throw new Error("Expected an applied server row");
 
-    expect(within(firstRow).getByText("Server 0").getAttribute("title")).toBe(
-      "Server 0",
+    expect(firstRow.className).toContain("h-9");
+    expect(firstRow.className).toContain(
+      "grid-cols-[minmax(7rem,0.35fr)_minmax(0,1fr)]",
     );
-    expect(
-      within(firstRow)
-        .getByText("https://server-0.example.com/mcp")
-        .getAttribute("title"),
-    ).toBe("https://server-0.example.com/mcp");
+
+    const name = within(firstRow).getByText(longServerName);
+    expect(name.getAttribute("title")).toBe(longServerName);
+    expect(name.className).toContain("truncate");
+
+    const url = within(firstRow).getByText(longServerURL);
+    expect(url.getAttribute("title")).toBe(longServerURL);
+    expect(url.className).toContain("truncate");
+    expect(url.className).toContain("font-mono");
+    expect(url.className).toContain("text-muted-foreground");
     expect(within(section).queryByText("Allowed", { exact: true })).toBeNull();
   });
 

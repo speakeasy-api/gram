@@ -105,7 +105,7 @@ function AppliedServerRow({ server }: { server: ShadowMCPInventoryServer }) {
   const label = serverLabel(server);
 
   return (
-    <div
+    <li
       data-testid="applied-shadow-mcp-server"
       className="grid h-9 grid-cols-[minmax(7rem,0.35fr)_minmax(0,1fr)] items-center gap-3 px-3"
     >
@@ -120,7 +120,7 @@ function AppliedServerRow({ server }: { server: ShadowMCPInventoryServer }) {
       >
         {server.canonicalServerUrl}
       </Type>
-    </div>
+    </li>
   );
 }
 
@@ -138,14 +138,16 @@ function AppliedServerList({
   }
 
   return (
-    <div
+    <ul
+      aria-label="Selected Shadow MCP servers"
+      tabIndex={0}
       data-testid="applied-shadow-mcp-servers"
-      className="border-border divide-border max-h-[198px] divide-y overflow-y-auto rounded-md border"
+      className="border-border divide-border focus-visible:ring-ring max-h-[200px] divide-y overflow-y-auto rounded-md border focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
     >
       {servers.map((server) => (
         <AppliedServerRow key={server.canonicalServerUrl} server={server} />
       ))}
-    </div>
+    </ul>
   );
 }
 
