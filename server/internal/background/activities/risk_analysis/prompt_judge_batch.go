@@ -112,6 +112,11 @@ func (a *AnalyzeBatch) projectFlagEnabled(ctx context.Context, orgID string, pro
 }
 
 func (a *AnalyzeBatch) publishPromptPolicyScanRequests(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []batchMessage, indices []int) {
+	sampleRate := a.asyncShadowSampleRate(ctx, args.OrganizationID, args.ProjectID)
+	if sampleRate <= 0 {
+		return
+	}
+
 	requestID, err := uuid.NewV7()
 	if err != nil {
 		a.logger.WarnContext(ctx, "failed to generate prompt policy scan request id", attr.SlogError(err))
@@ -119,9 +124,13 @@ func (a *AnalyzeBatch) publishPromptPolicyScanRequests(ctx context.Context, args
 	}
 
 	createdAt := time.Now().UTC().Format(time.RFC3339)
-	publishResults := make([]gcp.PublishResult, len(indices))
-	for i, idx := range indices {
+	publishResults := make([]gcp.PublishResult, 0, len(indices))
+	for _, idx := range indices {
 		msg := messages[idx]
+		if !sampleAsyncShadow(msg.ID.String(), sampleRate) {
+			continue
+		}
+
 		jm := batchJudgeMessage(msg)
 		toolCalls := make([]*riskv1.PromptPolicyAnalysis_ToolCall, 0, len(jm.ToolCalls))
 		for _, call := range jm.ToolCalls {
@@ -131,7 +140,7 @@ func (a *AnalyzeBatch) publishPromptPolicyScanRequests(ctx context.Context, args
 			}.Build())
 		}
 
-		publishResults[i] = a.promptPolicyPub.Publish(ctx, riskv1.PromptPolicyAnalysis_builder{
+		publishResults = append(publishResults, a.promptPolicyPub.Publish(ctx, riskv1.PromptPolicyAnalysis_builder{
 			RequestId:         new(requestID.String()),
 			ChatMessageId:     new(msg.ID.String()),
 			ProjectId:         new(args.ProjectID.String()),
@@ -148,7 +157,7 @@ func (a *AnalyzeBatch) publishPromptPolicyScanRequests(ctx context.Context, args
 			Body:        &jm.Body,
 			ToolName:    &jm.ToolName,
 			ToolCalls:   toolCalls,
-		}.Build())
+		}.Build()))
 	}
 	drainPublishAcks(ctx, a.logger, "failed to publish prompt policy scan request", publishResults)
 }

@@ -96,6 +96,34 @@ func newPromptPolicyPub() *gcp.MockPublisher[*riskv1.PromptPolicyAnalysis] {
 	return pub
 }
 
+func capturingPromptInjectionPub(t *testing.T) (*gcp.MockPublisher[*riskv1.PromptInjectionAnalysis], *[]*riskv1.PromptInjectionAnalysis) {
+	t.Helper()
+	pub := gcp.NewMockPublisher[*riskv1.PromptInjectionAnalysis]()
+	var published []*riskv1.PromptInjectionAnalysis
+	pub.On("Publish", mock.Anything, mock.Anything).
+		Return(gcp.NewSuccessPublishResult()).
+		Run(func(args mock.Arguments) {
+			msg, ok := args.Get(1).(*riskv1.PromptInjectionAnalysis)
+			require.True(t, ok)
+			published = append(published, msg)
+		})
+	return pub, &published
+}
+
+func capturingPromptPolicyPub(t *testing.T) (*gcp.MockPublisher[*riskv1.PromptPolicyAnalysis], *[]*riskv1.PromptPolicyAnalysis) {
+	t.Helper()
+	pub := gcp.NewMockPublisher[*riskv1.PromptPolicyAnalysis]()
+	var published []*riskv1.PromptPolicyAnalysis
+	pub.On("Publish", mock.Anything, mock.Anything).
+		Return(gcp.NewSuccessPublishResult()).
+		Run(func(args mock.Arguments) {
+			msg, ok := args.Get(1).(*riskv1.PromptPolicyAnalysis)
+			require.True(t, ok)
+			published = append(published, msg)
+		})
+	return pub, &published
+}
+
 func newCustomRulesPub() *gcp.MockPublisher[*riskv1.CustomRulesAnalysis] {
 	pub := gcp.NewMockPublisher[*riskv1.CustomRulesAnalysis]()
 	pub.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult())
@@ -208,6 +236,158 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 		}
 	}
 	assert.True(t, sawDeadLetter, "expected a presidio dead-letter row with dead_letter_reason set")
+}
+
+func TestAnalyzeBatch_PromptInjectionShadowSamplingGate(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name          string
+		flagEnabled   bool
+		payload       []byte
+		wantPublished int
+	}{
+		{name: "flag off", flagEnabled: false, payload: []byte(`{"sample_rate":1}`), wantPublished: 0},
+		{name: "rate zero", flagEnabled: true, payload: []byte(`{"sample_rate":0}`), wantPublished: 0},
+		{name: "rate one", flagEnabled: true, payload: []byte(`{"sample_rate":1}`), wantPublished: 3},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			conn := cloneDB(t)
+			td := seedTestData(t, conn, true)
+			msgIDs := seedMessages(t, conn, td, 3)
+			flags := &feature.InMemory{}
+			if tc.flagEnabled {
+				flags.SetFlag(feature.FlagRiskAsyncScanShadow, td.orgID, true)
+			}
+			flags.SetFlagPayload(feature.FlagRiskAsyncScanShadow, td.orgID, tc.payload)
+			promptInjectionPub, published := capturingPromptInjectionPub(t)
+
+			ab := risk_analysis.NewAnalyzeBatch(
+				testenv.NewLogger(t),
+				testenv.NewTracerProvider(t),
+				testenv.NewMeterProvider(t),
+				conn,
+				&risk_analysis.StubPIIScanner{},
+				nil,
+				nil,
+				nil,
+				nil,
+				flags,
+				newPresidioPub(),
+				newGitleaksPub(),
+				promptInjectionPub,
+				newPromptPolicyPub(),
+				newCustomRulesPub(),
+				mustCustomRuleScanner(t, conn),
+				mustCELEngine(t),
+				nil,
+			)
+
+			var ts testsuite.WorkflowTestSuite
+			env := ts.NewTestActivityEnvironment()
+			env.RegisterActivity(ab.Do)
+
+			val, err := env.ExecuteActivity(ab.Do, risk_analysis.AnalyzeBatchArgs{
+				ProjectID:        td.projectID,
+				OrganizationID:   td.orgID,
+				RiskPolicyID:     td.policyID,
+				PolicyVersion:    td.policyVersion,
+				MessageIDs:       msgIDs,
+				Sources:          []string{risk_analysis.SourcePromptInjection},
+				PresidioEntities: nil,
+				CustomRuleIds:    nil,
+			})
+			require.NoError(t, err)
+			var result risk_analysis.AnalyzeBatchResult
+			require.NoError(t, val.Get(&result))
+			require.Len(t, *published, tc.wantPublished)
+		})
+	}
+}
+
+func TestAnalyzeBatch_PromptPolicyShadowSamplingGate(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name          string
+		flagEnabled   bool
+		payload       []byte
+		wantPublished int
+	}{
+		{name: "flag off", flagEnabled: false, payload: []byte(`{"sample_rate":1}`), wantPublished: 0},
+		{name: "rate one", flagEnabled: true, payload: []byte(`{"sample_rate":1}`), wantPublished: 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			conn := cloneDB(t)
+			td := seedTestData(t, conn, true)
+			policyID, err := uuid.NewV7()
+			require.NoError(t, err)
+			policy, err := riskrepo.New(conn).CreateRiskPolicy(t.Context(), riskrepo.CreateRiskPolicyParams{
+				ID:             policyID,
+				ProjectID:      td.projectID,
+				OrganizationID: td.orgID,
+				Name:           "prompt policy",
+				PolicyType:     "prompt_based",
+				Sources:        []string{},
+				Enabled:        true,
+				Action:         "flag",
+				AudienceType:   "everyone",
+				AutoName:       false,
+				Prompt:         pgtype.Text{String: "Block unsafe requests", Valid: true},
+			})
+			require.NoError(t, err)
+			msgIDs := seedMessages(t, conn, td, 2)
+			flags := &feature.InMemory{}
+			flags.SetFlag(feature.FlagPromptPolicies, td.orgID, true)
+			if tc.flagEnabled {
+				flags.SetFlag(feature.FlagRiskAsyncScanShadow, td.orgID, true)
+			}
+			flags.SetFlagPayload(feature.FlagRiskAsyncScanShadow, td.orgID, tc.payload)
+			promptPolicyPub, published := capturingPromptPolicyPub(t)
+
+			ab := risk_analysis.NewAnalyzeBatch(
+				testenv.NewLogger(t),
+				testenv.NewTracerProvider(t),
+				testenv.NewMeterProvider(t),
+				conn,
+				&risk_analysis.StubPIIScanner{},
+				nil,
+				nil,
+				nil,
+				(&recordingPromptJudge{}).Evaluate,
+				flags,
+				newPresidioPub(),
+				newGitleaksPub(),
+				newPromptInjectionPub(),
+				promptPolicyPub,
+				newCustomRulesPub(),
+				mustCustomRuleScanner(t, conn),
+				mustCELEngine(t),
+				nil,
+			)
+
+			var ts testsuite.WorkflowTestSuite
+			env := ts.NewTestActivityEnvironment()
+			env.RegisterActivity(ab.Do)
+
+			val, err := env.ExecuteActivity(ab.Do, risk_analysis.AnalyzeBatchArgs{
+				ProjectID:        td.projectID,
+				OrganizationID:   td.orgID,
+				RiskPolicyID:     policy.ID,
+				PolicyVersion:    policy.Version,
+				MessageIDs:       msgIDs,
+				Sources:          nil,
+				PresidioEntities: nil,
+				CustomRuleIds:    nil,
+			})
+			require.NoError(t, err)
+			var result risk_analysis.AnalyzeBatchResult
+			require.NoError(t, val.Get(&result))
+			require.Len(t, *published, tc.wantPublished)
+		})
+	}
 }
 
 func TestAnalyzeBatch_FilteredMessagesStillClearExistingResults(t *testing.T) {

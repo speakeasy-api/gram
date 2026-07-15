@@ -37,9 +37,18 @@ func (a *AnalyzeBatch) scanPromptInjection(ctx context.Context, args AnalyzeBatc
 }
 
 func (a *AnalyzeBatch) publishPromptInjectionScanRequests(ctx context.Context, args AnalyzeBatchArgs, requestID uuid.UUID, messages []batchMessage) {
+	sampleRate := a.asyncShadowSampleRate(ctx, args.OrganizationID, args.ProjectID)
+	if sampleRate <= 0 {
+		return
+	}
+
 	createdAt := time.Now().UTC().Format(time.RFC3339)
-	publishResults := make([]gcp.PublishResult, len(messages))
-	for i, msg := range messages {
+	publishResults := make([]gcp.PublishResult, 0, len(messages))
+	for _, msg := range messages {
+		if !sampleAsyncShadow(msg.ID.String(), sampleRate) {
+			continue
+		}
+
 		jm := batchJudgeMessage(msg)
 		toolCalls := make([]*riskv1.PromptInjectionAnalysis_ToolCall, 0, len(jm.ToolCalls))
 		for _, call := range jm.ToolCalls {
@@ -49,7 +58,7 @@ func (a *AnalyzeBatch) publishPromptInjectionScanRequests(ctx context.Context, a
 			}.Build())
 		}
 
-		publishResults[i] = a.promptInjectionPub.Publish(ctx, riskv1.PromptInjectionAnalysis_builder{
+		publishResults = append(publishResults, a.promptInjectionPub.Publish(ctx, riskv1.PromptInjectionAnalysis_builder{
 			RequestId:         new(requestID.String()),
 			ChatMessageId:     new(msg.ID.String()),
 			ProjectId:         new(args.ProjectID.String()),
@@ -65,7 +74,7 @@ func (a *AnalyzeBatch) publishPromptInjectionScanRequests(ctx context.Context, a
 			Body:        &jm.Body,
 			ToolName:    &jm.ToolName,
 			ToolCalls:   toolCalls,
-		}.Build())
+		}.Build()))
 	}
 	drainPublishAcks(ctx, a.logger, "failed to publish prompt injection scan request", publishResults)
 }
