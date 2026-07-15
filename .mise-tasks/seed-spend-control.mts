@@ -201,7 +201,9 @@ async function clickhouse(query: string): Promise<string> {
   const port = process.env.CLICKHOUSE_HTTP_PORT ?? "8123";
   const user = process.env.CLICKHOUSE_USERNAME ?? "gram";
   const password = process.env.CLICKHOUSE_PASSWORD ?? "gram";
-  const res = await fetch(`http://${host}:${port}/?mutations_sync=1`, {
+  const database = process.env.CLICKHOUSE_DATABASE ?? "default";
+  const params = new URLSearchParams({ database, mutations_sync: "1" });
+  const res = await fetch(`http://${host}:${port}/?${params}`, {
     method: "POST",
     headers: {
       Authorization: `Basic ${Buffer.from(`${user}:${password}`).toString("base64")}`,
