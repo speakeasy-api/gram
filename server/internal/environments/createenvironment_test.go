@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/environments"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -52,15 +53,17 @@ func TestEnvironmentsService_CreateEnvironment(t *testing.T) {
 		require.Len(t, env.Entries, 2)
 
 		// Secret values come back redacted; non-secret values come back in cleartext.
-		entriesByName := make(map[string]string, len(env.Entries))
+		entriesByName := make(map[string]*types.EnvironmentEntry, len(env.Entries))
 		for _, entry := range env.Entries {
 			require.NotEmpty(t, entry.Name)
 			require.NotEmpty(t, entry.CreatedAt)
 			require.NotEmpty(t, entry.UpdatedAt)
-			entriesByName[entry.Name] = entry.Value
+			entriesByName[entry.Name] = entry
 		}
-		require.Equal(t, "sec*****", entriesByName["API_KEY"])
-		require.Equal(t, "postgres://localhost:5432/testdb", entriesByName["DATABASE_URL"])
+		require.Equal(t, "sec*****", entriesByName["API_KEY"].Value)
+		require.True(t, entriesByName["API_KEY"].IsSecret)
+		require.Equal(t, "postgres://localhost:5432/testdb", entriesByName["DATABASE_URL"].Value)
+		require.False(t, entriesByName["DATABASE_URL"].IsSecret)
 
 		afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionEnvironmentCreate)
 		require.NoError(t, err)
@@ -138,6 +141,29 @@ func TestEnvironmentsService_CreateEnvironment_RequiresEntryValue(t *testing.T) 
 		Description:      nil,
 		Entries: []*gen.EnvironmentEntryInput{
 			{Name: "API_KEY", Value: nil, IsSecret: new(true)},
+		},
+	})
+	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+}
+
+func TestEnvironmentsService_CreateEnvironment_RejectsEmptyNonSecretValue(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestEnvironmentService(t)
+
+	// Empty values are tolerated for secret entries, but a non-secret entry
+	// cannot store empty plaintext.
+	_, err := ti.service.CreateEnvironment(ctx, &gen.CreateEnvironmentPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		OrganizationID:   "",
+		Name:             "empty-nonsecret-env",
+		Description:      nil,
+		Entries: []*gen.EnvironmentEntryInput{
+			{Name: "API_URL", Value: new(""), IsSecret: new(false)},
 		},
 	})
 	require.Error(t, err)
