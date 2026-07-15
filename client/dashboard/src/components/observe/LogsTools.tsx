@@ -46,6 +46,7 @@ import {
 } from "@/pages/logs/log-filter-types";
 import { parseFilters, serializeFilters } from "@/pages/logs/log-filter-url";
 import { TraceLogsList } from "@/pages/logs/TraceLogsList";
+import { formatPlatform } from "@/lib/formatPlatform";
 import { cn } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
 import { type DateRangePreset } from "@gram-ai/elements";
@@ -1052,7 +1053,7 @@ function LogsToolsTraceRow({
                 className="size-4 shrink-0"
               />
               <span className="text-foreground truncate text-xs font-medium">
-                {trace.hookSource}
+                {formatPlatform(trace.hookSource)}
               </span>
             </>
           ) : (

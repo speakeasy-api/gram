@@ -1,5 +1,6 @@
 import { Dimension } from "@gram/client/models/components/queryfilter.js";
 import { providerLabel } from "@/components/observe/account-display-utils";
+import { formatPlatform } from "@/lib/formatPlatform";
 
 // Shared cost-taxonomy config + helpers, used by both the CostsExplorer
 // controller and the EntityProfile view. Kept in a non-component module so the
@@ -359,6 +360,7 @@ export function datasetDefaultGroupBy(
 export function displayName(dim: Dimension, value: string): string {
   if (value === "") return "(unset)";
   if (dim === Dimension.Provider) return providerLabel(value);
+  if (dim === Dimension.HookSource) return formatPlatform(value);
   if (dim === Dimension.AccountType) {
     return value.charAt(0).toUpperCase() + value.slice(1);
   }

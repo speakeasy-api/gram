@@ -56,6 +56,7 @@ import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { handleError, toError } from "@/lib/errors";
+import { formatPlatform } from "@/lib/formatPlatform";
 import {
   ExclusionEditor,
   type ExclusionSheetState,
@@ -316,7 +317,7 @@ function SessionSummary({
               <MetaRow label="Source">
                 <span className="inline-flex items-center gap-1.5">
                   <HookSourceIcon source={chat.source} className="size-3.5" />
-                  {chat.source}
+                  {formatPlatform(chat.source)}
                 </span>
               </MetaRow>
             )}
@@ -384,7 +385,7 @@ function ChatDetailMetadataBadges({
           <Badge.Text>
             <span className="inline-flex items-center gap-1.5">
               <HookSourceIcon source={chat.source} className="size-3" />
-              {chat.source}
+              {formatPlatform(chat.source)}
             </span>
           </Badge.Text>
         </Badge>

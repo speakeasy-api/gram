@@ -2,6 +2,7 @@ import { AccountTypeIcon } from "@/components/account-type-icon";
 import { personalAccountEmail } from "@/components/observe/account-display-utils";
 import { Dialog } from "@/components/ui/dialog";
 import { SimpleTooltip } from "@/components/ui/tooltip";
+import { formatPlatform } from "@/lib/formatPlatform";
 import { cn } from "@/lib/utils";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { useSession } from "@/contexts/Auth";
@@ -263,7 +264,7 @@ export function ChatLogsTable({
                     {source && (
                       <span className="flex items-center gap-1.5">
                         <HookSourceIcon source={source} className="size-4" />
-                        {source}
+                        {formatPlatform(source)}
                       </span>
                     )}
                     <span className="flex items-center gap-1.5">
