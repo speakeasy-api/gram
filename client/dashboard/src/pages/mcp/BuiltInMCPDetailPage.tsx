@@ -92,7 +92,7 @@ export function BuiltInMCPDetailPage(): JSX.Element {
           <Tabs
             value={activeTab}
             onValueChange={(tab) => {
-              navigate(builtInTabHref(routes, idOrSlug, tab as TabValue));
+              void navigate(builtInTabHref(routes, idOrSlug, tab as TabValue));
             }}
             className="flex w-full flex-1 flex-col"
           >

@@ -1,5 +1,6 @@
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { Heading } from "@/components/ui/heading";
+import { useConfirm } from "@/components/ui/use-confirm";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
@@ -63,6 +64,7 @@ function ModelProviderKeysTable({
     { throwOnError: false },
   );
   const [draftValues, setDraftValues] = useState<Record<string, string>>({});
+  const { confirm: requestConfirm, dialog: confirmDialog } = useConfirm();
 
   const keysBySlot = useMemo(
     () => new Map((data?.keys ?? []).map((key) => [key.slot, key] as const)),
@@ -102,8 +104,12 @@ function ModelProviderKeysTable({
       },
     });
 
-  const handleRemove = (slot: ModelKeySlot, key: ModelProviderKey) => {
-    if (!window.confirm(`Remove the ${slot.name} provider key?`)) return;
+  const handleRemove = async (slot: ModelKeySlot, key: ModelProviderKey) => {
+    const confirmed = await requestConfirm({
+      title: `Remove the ${slot.name} provider key?`,
+      destructive: true,
+    });
+    if (!confirmed) return;
     deleteKey(
       { request: { id: key.id } },
       {
@@ -277,7 +283,7 @@ function ModelProviderKeysTable({
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   className="text-destructive focus:text-destructive cursor-pointer"
-                  onSelect={() => handleRemove(slot, key)}
+                  onSelect={() => void handleRemove(slot, key)}
                 >
                   Delete
                 </DropdownMenuItem>
@@ -337,6 +343,7 @@ function ModelProviderKeysTable({
       </div>
 
       {keyList}
+      {confirmDialog}
     </Stack>
   );
 }
