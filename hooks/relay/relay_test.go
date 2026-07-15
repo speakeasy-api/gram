@@ -302,16 +302,19 @@ func TestTelemetryEventIsFireAndForget(t *testing.T) {
 	require.NotEmpty(t, fs.last().Data.ToolCall.Output)
 }
 
-func TestNonBlockingSwallowsDeny(t *testing.T) {
+// TestLegacyNonblockingEnforcesDeny pins the observability-mode removal: a
+// plugin config still carrying the legacy nonblocking flag no longer swallows
+// explicit deny decisions — only the fail-open (outage) posture survives.
+func TestLegacyNonblockingEnforcesDeny(t *testing.T) {
 	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
-		return http.StatusOK, decision{Decision: "deny", Reason: "policy_denied", Message: "would block"}
+		return http.StatusOK, decision{Decision: "deny", Reason: "policy_denied", Message: "blocked by policy"}
 	})
 	cfg := authedConfig(t, fs.URL)
 	cfg.Nonblocking = true
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 
-	require.Equal(t, 0, res.ExitCode)
-	require.Equal(t, "{}", string(bytes.TrimSpace(res.Stdout)))
+	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`, "legacy nonblocking must not swallow explicit denies")
+	require.Contains(t, string(res.Stdout), "blocked by policy")
 }
 
 func TestRatchetNeverAuthedFailsOpen(t *testing.T) {
@@ -421,9 +424,25 @@ func TestServerErrorBlocksToolCall(t *testing.T) {
 	require.Contains(t, string(res.Stdout), "HTTP 400")
 }
 
-// TestServerErrorPassesWhenNonblocking mirrors TestServerErrorBlocksToolCall
-// under observability mode: transport failures must not block the agent.
-func TestServerErrorPassesWhenNonblocking(t *testing.T) {
+// TestLegacyNonblockingFailsOpenOnOutage pins the legacy flag's surviving
+// half: a plugin config still carrying nonblocking behaves as fail-open, so an
+// unreachable server lets the gating event through — while a definitive 4xx
+// (TestLegacyNonblockingKeepsClientErrorsClosed) still blocks.
+func TestLegacyNonblockingFailsOpenOnOutage(t *testing.T) {
+	fs := newFakeServer(t, nil)
+	cfg := authedConfig(t, fs.URL)
+	cfg.Nonblocking = true
+	fs.Close()
+
+	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+
+	require.Equal(t, 0, res.ExitCode)
+	require.Equal(t, "{}", string(bytes.TrimSpace(res.Stdout)))
+}
+
+// TestLegacyNonblockingKeepsClientErrorsClosed: the legacy flag maps to
+// fail-open, not never-block — a definitive 4xx still fails closed.
+func TestLegacyNonblockingKeepsClientErrorsClosed(t *testing.T) {
 	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
 		return http.StatusBadRequest, decision{Decision: "", Reason: "", Message: ""}
 	})
@@ -431,8 +450,8 @@ func TestServerErrorPassesWhenNonblocking(t *testing.T) {
 	cfg.Nonblocking = true
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 
-	require.Equal(t, 0, res.ExitCode)
-	require.Equal(t, "{}", string(bytes.TrimSpace(res.Stdout)))
+	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`)
+	require.Contains(t, string(res.Stdout), "HTTP 400")
 }
 
 // TestCachedAuthUsesConfigProject pins that the plugin's configured project
@@ -529,7 +548,6 @@ func TestWritePluginMatchesPublishedEventSets(t *testing.T) {
 				OrgID:        "org-1",
 				HooksAPIKey:  "shared-key",
 				BrowserLogin: false,
-				Nonblocking:  false,
 				BinaryPath:   "/tmp/speakeasy-hooks",
 			})
 			require.NoError(t, err)

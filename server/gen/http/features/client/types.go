@@ -38,9 +38,6 @@ type GetProductFeaturesResponseBody struct {
 	SsoEnabled *bool `form:"sso_enabled,omitempty" json:"sso_enabled,omitempty" xml:"sso_enabled,omitempty"`
 	// Whether SCIM/directory sync setup is enabled for the organization
 	ScimEnabled *bool `form:"scim_enabled,omitempty" json:"scim_enabled,omitempty" xml:"scim_enabled,omitempty"`
-	// Whether observability mode is enabled, making generated hook plugins fully
-	// non-blocking
-	ObservabilityModeEnabled *bool `form:"observability_mode_enabled,omitempty" json:"observability_mode_enabled,omitempty" xml:"observability_mode_enabled,omitempty"`
 	// Whether generated hook plugins may mint per-user keys via the interactive
 	// browser login
 	HooksBrowserLoginEnabled *bool `form:"hooks_browser_login_enabled,omitempty" json:"hooks_browser_login_enabled,omitempty" xml:"hooks_browser_login_enabled,omitempty"`
@@ -445,7 +442,6 @@ func NewGetProductFeaturesResultOK(body *GetProductFeaturesResponseBody) *featur
 		Webhooks:                     *body.Webhooks,
 		SsoEnabled:                   *body.SsoEnabled,
 		ScimEnabled:                  *body.ScimEnabled,
-		ObservabilityModeEnabled:     *body.ObservabilityModeEnabled,
 		HooksBrowserLoginEnabled:     *body.HooksBrowserLoginEnabled,
 		HooksFailOpenEnabled:         *body.HooksFailOpenEnabled,
 		CustomModelKeysEnabled:       *body.CustomModelKeysEnabled,
@@ -777,9 +773,6 @@ func ValidateGetProductFeaturesResponseBody(body *GetProductFeaturesResponseBody
 	}
 	if body.ScimEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("scim_enabled", "body"))
-	}
-	if body.ObservabilityModeEnabled == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("observability_mode_enabled", "body"))
 	}
 	if body.HooksBrowserLoginEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("hooks_browser_login_enabled", "body"))

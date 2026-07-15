@@ -40,9 +40,6 @@ type GetProductFeaturesResponseBody struct {
 	SsoEnabled bool `form:"sso_enabled" json:"sso_enabled" xml:"sso_enabled"`
 	// Whether SCIM/directory sync setup is enabled for the organization
 	ScimEnabled bool `form:"scim_enabled" json:"scim_enabled" xml:"scim_enabled"`
-	// Whether observability mode is enabled, making generated hook plugins fully
-	// non-blocking
-	ObservabilityModeEnabled bool `form:"observability_mode_enabled" json:"observability_mode_enabled" xml:"observability_mode_enabled"`
 	// Whether generated hook plugins may mint per-user keys via the interactive
 	// browser login
 	HooksBrowserLoginEnabled bool `form:"hooks_browser_login_enabled" json:"hooks_browser_login_enabled" xml:"hooks_browser_login_enabled"`
@@ -437,7 +434,6 @@ func NewGetProductFeaturesResponseBody(res *features.GetProductFeaturesResult) *
 		Webhooks:                     res.Webhooks,
 		SsoEnabled:                   res.SsoEnabled,
 		ScimEnabled:                  res.ScimEnabled,
-		ObservabilityModeEnabled:     res.ObservabilityModeEnabled,
 		HooksBrowserLoginEnabled:     res.HooksBrowserLoginEnabled,
 		HooksFailOpenEnabled:         res.HooksFailOpenEnabled,
 		CustomModelKeysEnabled:       res.CustomModelKeysEnabled,
@@ -769,8 +765,8 @@ func ValidateSetProductFeatureRequestBody(body *SetProductFeatureRequestBody) (e
 		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
 	}
 	if body.FeatureName != nil {
-		if !(*body.FeatureName == "logs" || *body.FeatureName == "tool_io_logs" || *body.FeatureName == "session_capture" || *body.FeatureName == "authz_challenge_logging" || *body.FeatureName == "webhooks" || *body.FeatureName == "sso" || *body.FeatureName == "scim" || *body.FeatureName == "observability_mode" || *body.FeatureName == "hooks_browser_login" || *body.FeatureName == "hooks_fail_open" || *body.FeatureName == "custom_model_keys") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.feature_name", *body.FeatureName, []any{"logs", "tool_io_logs", "session_capture", "authz_challenge_logging", "webhooks", "sso", "scim", "observability_mode", "hooks_browser_login", "hooks_fail_open", "custom_model_keys"}))
+		if !(*body.FeatureName == "logs" || *body.FeatureName == "tool_io_logs" || *body.FeatureName == "session_capture" || *body.FeatureName == "authz_challenge_logging" || *body.FeatureName == "webhooks" || *body.FeatureName == "sso" || *body.FeatureName == "scim" || *body.FeatureName == "hooks_browser_login" || *body.FeatureName == "hooks_fail_open" || *body.FeatureName == "custom_model_keys") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.feature_name", *body.FeatureName, []any{"logs", "tool_io_logs", "session_capture", "authz_challenge_logging", "webhooks", "sso", "scim", "hooks_browser_login", "hooks_fail_open", "custom_model_keys"}))
 		}
 	}
 	if body.FeatureName != nil {

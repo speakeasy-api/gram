@@ -113,9 +113,14 @@ func writeOrgSettings(cfg Config, failOpen bool) {
 }
 
 // failOpenAllowed reports whether an unobtainable verdict (server unreachable
-// or 5xx) may fail open: the GRAM_HOOKS_FAIL_OPEN escape hatch, or the org's
-// last server-confirmed setting. Absent both, gating events fail closed.
+// or 5xx) may fail open: the GRAM_HOOKS_FAIL_OPEN escape hatch, the legacy
+// nonblocking flag still baked into plugins published before observability
+// mode was removed, or the org's last server-confirmed setting. Absent all
+// three, gating events fail closed.
 func failOpenAllowed(cfg Config) bool {
+	if cfg.Nonblocking {
+		return true
+	}
 	if v := strings.TrimSpace(os.Getenv("GRAM_HOOKS_FAIL_OPEN")); v == "1" || strings.EqualFold(v, "true") {
 		return true
 	}

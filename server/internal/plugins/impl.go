@@ -1335,18 +1335,17 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 			// The observability plugin slugs are org-name-derived (see naming
 			// package); surface them so install UIs never re-derive the formula.
 			slugCfg := GenerateConfig{
-				OrgName:           s.resolveOrganizationName(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug),
-				OrgEmail:          "",
-				OrgID:             "",
-				ServerURL:         "",
-				APIKey:            "",
-				HooksAPIKey:       "",
-				ProjectSlug:       "",
-				IsDefaultProject:  false,
-				Version:           "",
-				MarketplaceName:   "",
-				ObservabilityMode: false,
-				BrowserLogin:      false,
+				OrgName:          s.resolveOrganizationName(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug),
+				OrgEmail:         "",
+				OrgID:            "",
+				ServerURL:        "",
+				APIKey:           "",
+				HooksAPIKey:      "",
+				ProjectSlug:      "",
+				IsDefaultProject: false,
+				Version:          "",
+				MarketplaceName:  "",
+				BrowserLogin:     false,
 			}
 			result.ClaudeObservabilityPlugin = conv.PtrEmpty(ClaudeObservabilitySlug(slugCfg))
 			result.CodexObservabilityPlugin = conv.PtrEmpty(CodexObservabilitySlug(slugCfg))
@@ -2548,11 +2547,10 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlu
 		// settings flip right after a publish) still mint distinct manifest
 		// versions; the 13-digit patch also sorts numerically above the
 		// 10-digit second epochs already in installed caches.
-		Version:           fmt.Sprintf("%d", time.Now().UnixMilli()),
-		MarketplaceName:   "",
-		IsDefaultProject:  s.isDefaultProject(ctx, projectID),
-		ObservabilityMode: false,
-		BrowserLogin:      false,
+		Version:          fmt.Sprintf("%d", time.Now().UnixMilli()),
+		MarketplaceName:  "",
+		IsDefaultProject: s.isDefaultProject(ctx, projectID),
+		BrowserLogin:     false,
 	}
 	orgName, err := s.repo.GetOrganizationName(ctx, orgID)
 	switch {
@@ -2574,22 +2572,6 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlu
 			attr.SlogError(err),
 		)
 	}
-	// observability_mode is the org-level non-blocking switch managed by the
-	// productfeatures service against organization_features. When on, the
-	// generated plugin emits async for every hook event. The read is an EXISTS
-	// check so it never returns pgx.ErrNoRows; any error leaves the flag off,
-	// keeping hooks blocking.
-	observabilityMode, err := s.repo.IsOrganizationFeatureEnabled(ctx, repo.IsOrganizationFeatureEnabledParams{
-		OrganizationID: orgID,
-		FeatureName:    string(productfeatures.FeatureObservabilityMode),
-	})
-	if err != nil {
-		s.logger.WarnContext(ctx, "failed to read observability mode flag, defaulting to blocking hooks",
-			attr.SlogOrganizationID(orgID),
-			attr.SlogError(err),
-		)
-	}
-	cfg.ObservabilityMode = observabilityMode
 	// hooks_browser_login is the org-level opt-in for the interactive browser
 	// token exchange. Off (or unreadable), the generated plugin never opens a
 	// browser: senders authenticate through env credentials, a previously

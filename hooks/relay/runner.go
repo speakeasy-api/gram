@@ -223,7 +223,7 @@ func (r *Relay) send(ctx context.Context, c creds, payload components.IngestRequ
 }
 
 // evaluate delivers a gating event and resolves the block decision under the
-// ratchet and observability mode.
+// ratchet and the org's fail-open posture.
 func (r *Relay) evaluate(ctx context.Context, typed any) verdict {
 	res, state := r.deliver(ctx, typed)
 	switch state {
@@ -232,18 +232,12 @@ func (r *Relay) evaluate(ctx context.Context, typed any) verdict {
 		// unknown deployment identity, only a reinstall can.
 		return verdict{block: false, message: "", nudge: r.cfg.ConfigError == ""}
 	case stateBroken:
-		if r.cfg.Nonblocking {
-			return verdict{block: false, message: "", nudge: false}
-		}
 		msg := res.decision.Message
 		if msg == "" {
 			msg = brokenAuthMessage
 		}
 		return verdict{block: true, message: msg, nudge: false}
 	case stateReauthNeeded:
-		if r.cfg.Nonblocking {
-			return verdict{block: false, message: "", nudge: false}
-		}
 		// Tool events fail closed on the rejection (or its memory); prompt
 		// handlers honor nudge and fail open instead.
 		msg := reauthNeededMessage
@@ -256,8 +250,6 @@ func (r *Relay) evaluate(ctx context.Context, typed any) verdict {
 	if res.statusCode >= 200 && res.statusCode < 300 {
 		switch {
 		case strings.EqualFold(res.decision.Decision, "allow"):
-			return verdict{block: false, message: "", nudge: false}
-		case r.cfg.Nonblocking:
 			return verdict{block: false, message: "", nudge: false}
 		case res.decision.denied():
 			return verdict{block: true, message: res.decision.Message, nudge: false}
@@ -272,10 +264,8 @@ func (r *Relay) evaluate(ctx context.Context, typed any) verdict {
 		}
 	}
 	// Non-2xx or unreachable: the server could not confirm the action is
-	// allowed, so block unless observability mode says otherwise.
-	if r.cfg.Nonblocking {
-		return verdict{block: false, message: "", nudge: false}
-	}
+	// allowed, so block unless the org chose to fail open.
+	//
 	// The org's fail-open choice covers only the no-verdict-obtainable cases:
 	// the server was never definitively reached (statusCode 0, which includes
 	// an unparseable 2xx — a mangled response is operationally the same as an

@@ -38,8 +38,10 @@ type Config struct {
 	// key through the dashboard. Published plugins default this off and use the
 	// shared org key unless the organization opts in.
 	BrowserLogin bool
-	// Nonblocking swallows server deny decisions and turns transport failures
-	// into allow. It mirrors the plugin's observability mode.
+	// Nonblocking is the legacy observability-mode flag still baked into
+	// plugins published before the feature was removed. It is honored only as
+	// the fail-open posture (unreachable/5xx allow); explicit deny decisions
+	// and credential failures enforce regardless. New plugins never set it.
 	Nonblocking bool
 	// DebugLog, when set, appends one diagnostic line per event. It travels as a
 	// command flag so it survives providers that scrub the hook environment.

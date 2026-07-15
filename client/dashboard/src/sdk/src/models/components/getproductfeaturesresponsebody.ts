@@ -30,10 +30,6 @@ export type GetProductFeaturesResponseBody = {
    */
   logsEnabled: boolean;
   /**
-   * Whether observability mode is enabled, making generated hook plugins fully non-blocking
-   */
-  observabilityModeEnabled: boolean;
-  /**
    * Whether SCIM/directory sync setup is enabled for the organization
    */
   scimEnabled: boolean;
@@ -66,7 +62,6 @@ export const GetProductFeaturesResponseBody$inboundSchema: z.ZodMiniType<
     hooks_browser_login_enabled: z.boolean(),
     hooks_fail_open_enabled: z.boolean(),
     logs_enabled: z.boolean(),
-    observability_mode_enabled: z.boolean(),
     scim_enabled: z.boolean(),
     session_capture_enabled: z.boolean(),
     sso_enabled: z.boolean(),
@@ -80,7 +75,6 @@ export const GetProductFeaturesResponseBody$inboundSchema: z.ZodMiniType<
       "hooks_browser_login_enabled": "hooksBrowserLoginEnabled",
       "hooks_fail_open_enabled": "hooksFailOpenEnabled",
       "logs_enabled": "logsEnabled",
-      "observability_mode_enabled": "observabilityModeEnabled",
       "scim_enabled": "scimEnabled",
       "session_capture_enabled": "sessionCaptureEnabled",
       "sso_enabled": "ssoEnabled",

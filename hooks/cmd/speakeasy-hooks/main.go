@@ -62,7 +62,6 @@ func runInstall(args []string) int {
 	project := fs.String("project", "default", "project slug")
 	org := fs.String("org", "", "organization id hint")
 	browserLogin := fs.Bool("browser-login", false, "enable per-user browser sign-in")
-	nonblocking := fs.Bool("nonblocking", false, "record events without enforcing deny decisions")
 	binary := fs.String("binary", "", "path to the speakeasy-hooks binary (defaults to this executable)")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -85,7 +84,6 @@ func runInstall(args []string) int {
 		OrgID:        *org,
 		HooksAPIKey:  os.Getenv("GRAM_HOOKS_ORG_KEY"),
 		BrowserLogin: *browserLogin,
-		Nonblocking:  *nonblocking,
 		BinaryPath:   binaryPath,
 	}); err != nil {
 		fmt.Fprintf(os.Stderr, "speakeasy-hooks install: %v\n", err)

@@ -46161,9 +46161,6 @@ components:
                 logs_enabled:
                     type: boolean
                     description: Whether logging is enabled
-                observability_mode_enabled:
-                    type: boolean
-                    description: Whether observability mode is enabled, making generated hook plugins fully non-blocking
                 scim_enabled:
                     type: boolean
                     description: Whether SCIM/directory sync setup is enabled for the organization
@@ -46187,7 +46184,6 @@ components:
                 - webhooks
                 - sso_enabled
                 - scim_enabled
-                - observability_mode_enabled
                 - hooks_browser_login_enabled
                 - hooks_fail_open_enabled
                 - custom_model_keys_enabled
@@ -53779,7 +53775,6 @@ components:
                         - webhooks
                         - sso
                         - scim
-                        - observability_mode
                         - hooks_browser_login
                         - hooks_fail_open
                         - custom_model_keys

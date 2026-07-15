@@ -81,12 +81,6 @@ type GenerateConfig struct {
 	// (e.g. `<plugin>@<marketplace>`) and the `name` field in the generated
 	// marketplace.json. Empty falls back to DefaultMarketplaceName.
 	MarketplaceName string
-	// ObservabilityMode makes the generated hook plugin fully non-blocking when
-	// set: every Claude hook event is emitted async so the plugin can only
-	// observe and report, never deny or delay a tool call. It is the low-risk
-	// path for POC rollouts in orgs that cannot tolerate hook errors or brief
-	// server unavailability disrupting the user.
-	ObservabilityMode bool
 	// BrowserLogin lets the generated plugin mint per-user hooks keys via the
 	// interactive dashboard browser flow (localhost callback token exchange).
 	// Off by default: senders then authenticate only through explicit
@@ -98,7 +92,7 @@ type GenerateConfig struct {
 
 // PublishedHooksFiles renders the complete hooks (observability) subtree the
 // publish path rolls out — the Claude, Cursor, and Codex plugins with their
-// manifests — under a pinned configuration, across every hook-mode and
+// manifests — under a pinned configuration, across every
 // browser-login combination a publish can emit. CI compares
 // this output between a PR's merge base and head to decide whether a
 // hooksGeneratorVersion bump is required, so it must cover everything a
@@ -107,31 +101,26 @@ type GenerateConfig struct {
 // fields are fixed sentinels so only generator changes register, never data.
 func PublishedHooksFiles() (map[string][]byte, error) {
 	cfg := GenerateConfig{
-		OrgName:           "Hooks Check",
-		OrgEmail:          "hooks-check@example.com",
-		OrgID:             "org-hooks-check",
-		ServerURL:         "https://app.getgram.ai",
-		APIKey:            fingerprintAPIKeySentinel,
-		HooksAPIKey:       fingerprintHooksKeySentinel,
-		ProjectSlug:       "hooks-check",
-		IsDefaultProject:  true,
-		Version:           "",
-		MarketplaceName:   "",
-		ObservabilityMode: false,
-		BrowserLogin:      false,
+		OrgName:          "Hooks Check",
+		OrgEmail:         "hooks-check@example.com",
+		OrgID:            "org-hooks-check",
+		ServerURL:        "https://app.getgram.ai",
+		APIKey:           fingerprintAPIKeySentinel,
+		HooksAPIKey:      fingerprintHooksKeySentinel,
+		ProjectSlug:      "hooks-check",
+		IsDefaultProject: true,
+		Version:          "",
+		MarketplaceName:  "",
+		BrowserLogin:     false,
 	}
 	out := make(map[string][]byte)
 	for _, mode := range []struct {
-		prefix        string
-		observability bool
-		browserLogin  bool
+		prefix       string
+		browserLogin bool
 	}{
-		{"default", false, false},
-		{"observability-mode", true, false},
-		{"browser-login", false, true},
-		{"observability-mode-browser-login", true, true},
+		{"default", false},
+		{"browser-login", true},
 	} {
-		cfg.ObservabilityMode = mode.observability
 		cfg.BrowserLogin = mode.browserLogin
 		files, err := generateHooksFiles(cfg)
 		if err != nil {
@@ -157,17 +146,16 @@ func PublishedHooksFiles() (map[string][]byte, error) {
 // directories on demand.
 func DogfoodPluginFiles() (map[string][]byte, error) {
 	cfg := GenerateConfig{
-		OrgName:           "",
-		OrgEmail:          "",
-		OrgID:             "",
-		ServerURL:         "https://app.getgram.ai",
-		APIKey:            "",
-		HooksAPIKey:       "",
-		ProjectSlug:       "",
-		IsDefaultProject:  true,
-		Version:           "",
-		MarketplaceName:   "",
-		ObservabilityMode: false,
+		OrgName:          "",
+		OrgEmail:         "",
+		OrgID:            "",
+		ServerURL:        "https://app.getgram.ai",
+		APIKey:           "",
+		HooksAPIKey:      "",
+		ProjectSlug:      "",
+		IsDefaultProject: true,
+		Version:          "",
+		MarketplaceName:  "",
 		// The dogfood harness is how the browser flow itself gets exercised
 		// locally, so it stays on here regardless of the publish default.
 		BrowserLogin: true,
@@ -241,7 +229,7 @@ func hooksManifestVersion(cfg GenerateConfig) string {
 // publish time (persisted as plugin_github_connections.published_hooks_config)
 // so a later publish can tell whether the observability (hooks) subtree must be
 // regenerated. hooksGeneratorVersion alone can't catch these: a marketplace
-// rename or an observability-mode toggle changes the generated hook commands
+// rename or a browser-login toggle changes the generated hook commands
 // while leaving the version untouched, so without this snapshot the publish path
 // carries a stale hooks subtree. It deliberately excludes per-publish secrets
 // (HooksAPIKey, APIKey) and the manifest version (tracked separately via
@@ -252,14 +240,13 @@ func hooksManifestVersion(cfg GenerateConfig) string {
 // directly (plugin metadata, Codex slug, hook-script Gram-Project header) and
 // ServerURL/OrgID are baked into the hook scripts.
 type HooksConfig struct {
-	MarketplaceName   string `json:"marketplace_name"`
-	OrgName           string `json:"org_name"`
-	OrgEmail          string `json:"org_email"`
-	ProjectSlug       string `json:"project_slug"`
-	ServerURL         string `json:"server_url"`
-	OrgID             string `json:"org_id"`
-	ObservabilityMode bool   `json:"observability_mode"`
-	BrowserLogin      bool   `json:"browser_login"`
+	MarketplaceName string `json:"marketplace_name"`
+	OrgName         string `json:"org_name"`
+	OrgEmail        string `json:"org_email"`
+	ProjectSlug     string `json:"project_slug"`
+	ServerURL       string `json:"server_url"`
+	OrgID           string `json:"org_id"`
+	BrowserLogin    bool   `json:"browser_login"`
 }
 
 // hooksConfigSnapshot extracts the hook-output-affecting config from cfg. The
@@ -267,14 +254,13 @@ type HooksConfig struct {
 // exactly what was baked into the generated hooks.
 func hooksConfigSnapshot(cfg GenerateConfig) HooksConfig {
 	return HooksConfig{
-		MarketplaceName:   resolveMarketplaceName(cfg),
-		OrgName:           cfg.OrgName,
-		OrgEmail:          cfg.OrgEmail,
-		ProjectSlug:       cfg.ProjectSlug,
-		ServerURL:         cfg.ServerURL,
-		OrgID:             cfg.OrgID,
-		ObservabilityMode: cfg.ObservabilityMode,
-		BrowserLogin:      cfg.BrowserLogin,
+		MarketplaceName: resolveMarketplaceName(cfg),
+		OrgName:         cfg.OrgName,
+		OrgEmail:        cfg.OrgEmail,
+		ProjectSlug:     cfg.ProjectSlug,
+		ServerURL:       cfg.ServerURL,
+		OrgID:           cfg.OrgID,
+		BrowserLogin:    cfg.BrowserLogin,
 	}
 }
 
@@ -325,12 +311,12 @@ const mcpGeneratorVersion = "9"
 // hooksManifestVersion) rather than folded into a content hash, so bumping it is
 // the only thing that publishes a new hooks plugin to connected repos — an
 // MCP-only publish leaves the existing hooks subtree untouched. Bump it for ANY
-// change to hooks generation, including behaviour a fingerprint couldn't observe
-// (e.g. the observability_mode toggle's effect on emitted hooks).
+// change to hooks generation, including behaviour a fingerprint couldn't
+// observe.
 //
 // The Plugin Generate Check CI workflow requires the relevant one of these two
 // constants to change whenever generate.go does.
-const hooksGeneratorVersion = "14"
+const hooksGeneratorVersion = "15"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -418,16 +404,7 @@ func hashFiles(salt string, files map[string][]byte) string {
 // (including ConfigChange, which has no allow/deny decision to honor)
 // return true for fire-and-forget telemetry so Claude is not held up while
 // the MCP inventory is re-synced mid-session.
-//
-// When observabilityMode is set, every event is forced async so the plugin
-// can only observe and report — no hook can deny or delay a tool call. This
-// is the low-risk path for POC rollouts in orgs that cannot tolerate hook
-// errors or brief server unavailability disrupting the user.
-func claudeHookAsyncFlag(event string, observabilityMode bool) *bool {
-	if observabilityMode {
-		t := true
-		return &t
-	}
+func claudeHookAsyncFlag(event string) *bool {
 	switch event {
 	case "UserPromptSubmit", "PreToolUse", "Stop":
 		f := false
@@ -1005,7 +982,7 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 	// server-side inventory cache.
 	hookEvents := make(map[string][]claudeHookMatcher, len(ClaudeObservabilityHookEvents))
 	for _, event := range ClaudeObservabilityHookEvents {
-		hooks := []claudeHookCommand{{Type: "command", Command: `bash "$CLAUDE_PLUGIN_ROOT/hooks/hook.sh"`, Async: claudeHookAsyncFlag(event, cfg.ObservabilityMode), Timeout: nil}}
+		hooks := []claudeHookCommand{{Type: "command", Command: `bash "$CLAUDE_PLUGIN_ROOT/hooks/hook.sh"`, Async: claudeHookAsyncFlag(event), Timeout: nil}}
 		if event == "SessionStart" {
 			f := false
 			// Claude's default 60s hook timeout is too short for the
@@ -1071,13 +1048,8 @@ func generateCursorObservabilityPluginInDir(files map[string][]byte, subdir, nam
 	// events must not silently allow when the sender exits 2 (established
 	// machine with broken auth, unreachable server). The never-authenticated
 	// ratchet is unaffected — that path exits 0 with a pass-through body.
-	// ObservabilityMode is documented as fully non-blocking, so no entry
-	// (preflight included) may fail closed there.
-	var hookFailClosed *bool
-	if !cfg.ObservabilityMode {
-		enforced := true
-		hookFailClosed = &enforced
-	}
+	enforced := true
+	hookFailClosed := &enforced
 	hookEvents := make(map[string][]cursorHookCommand, len(CursorObservabilityHookEvents)+1)
 	hookEvents["sessionStart"] = []cursorHookCommand{
 		{
@@ -1605,18 +1577,13 @@ func orgHintAssignment(cfg GenerateConfig) string {
 }
 
 func renderAuthPreflightScript(cfg GenerateConfig) []byte {
-	// In observability mode nothing may block or stall session start: auth
-	// failures exit 0, and the interactive browser login (which can wait
-	// minutes for the redirect) never runs — the in-session nudge and
-	// hooks/login.sh remain the interactive paths. With browser login
-	// disabled the preflight is likewise never interactive: credentials come
-	// only from env, cache, or the baked org key.
+	// With browser login disabled the preflight is never interactive:
+	// credentials come only from env, cache, or the baked org key — the
+	// interactive browser login (which can wait minutes for the redirect)
+	// only runs when the org opted in.
 	failureExit := "2"
-	if cfg.ObservabilityMode {
-		failureExit = "0"
-	}
 	interactive := "0"
-	if cfg.BrowserLogin && !cfg.ObservabilityMode {
+	if cfg.BrowserLogin {
 		interactive = "1"
 	}
 	return fmt.Appendf(nil, `#!/usr/bin/env bash
@@ -1644,7 +1611,7 @@ export GRAM_HOOKS_INTERACTIVE=%s
 # Never-authenticated machines fail open (prepare_auth returns 3 after
 # warning); once credentials have been established, a broken auth state
 # exits with the configured failure code from inside prepare_auth (2 blocks
-# the session start; observability mode passes 0 so nothing ever blocks).
+# the session start).
 # With the baked org-wide key present, auth resolves without a browser and
 # session start never stalls on login.
 gram_hooks_prepare_auth "$server_url" "$project_slug" %s || true
@@ -2659,12 +2626,6 @@ gram_http_post() {
 // still exiting with code 2 on 4xx/5xx to signal a block to Claude.
 func renderHookScript(cfg GenerateConfig, platform string) []byte {
 	projectSlug := cfg.ProjectSlug
-	// In observability mode the plugin must never block: server deny decisions
-	// are swallowed and transport failures exit 0 instead of 2.
-	nonblocking := ""
-	if cfg.ObservabilityMode {
-		nonblocking = "1"
-	}
 	cursorMCPEnrichment := ""
 	if platform == "cursor" {
 		cursorMCPEnrichment = renderCursorMCPEnrichmentSnippet()
@@ -2697,13 +2658,7 @@ server_url="${GRAM_HOOKS_SERVER_URL:-%s}"
 project_slug="${GRAM_HOOKS_PROJECT_SLUG:-%s}"
 %s
 gram_hooks_org_key="${GRAM_HOOKS_ORG_KEY:-%s}"
-gram_hooks_nonblocking="%s"
-# In observability mode auth-state failures must not block either: prepare_auth
-# exits with this value on an established machine whose credentials broke.
 gram_hooks_failure_exit=2
-if [ -n "$gram_hooks_nonblocking" ]; then
-  gram_hooks_failure_exit=0
-fi
 provider_payload=$(cat)
 
 %s
@@ -2736,7 +2691,7 @@ body="$GRAM_HTTP_BODY"
 if [ "$http_code" -ge 200 ] 2>/dev/null && [ "$http_code" -lt 300 ] 2>/dev/null; then
   decision="$(gram_hooks_json_string_value "$body" "decision")"
   reason="$(gram_hooks_decision_message "$body")"
-  if [ "$decision" = "deny" ] && [ -z "$gram_hooks_nonblocking" ]; then
+  if [ "$decision" = "deny" ]; then
     echo "${reason:-Speakeasy blocked this Codex hook}" >&2
     exit 2
   fi
@@ -2745,11 +2700,8 @@ fi
 
 reason="$(gram_hooks_json_string_value "$body" "message")"
 echo "${reason:-Speakeasy hook returned HTTP ${http_code}}" >&2
-if [ -n "$gram_hooks_nonblocking" ]; then
-  exit 0
-fi
 exit 2
-`, cfg.ServerURL, projectSlug, orgHintAssignment(cfg), cfg.HooksAPIKey, nonblocking, renderHookRuntimeSourceSnippet(), renderHookPayloadNormalizationSnippet("codex"))
+`, cfg.ServerURL, projectSlug, orgHintAssignment(cfg), cfg.HooksAPIKey, renderHookRuntimeSourceSnippet(), renderHookPayloadNormalizationSnippet("codex"))
 	}
 
 	return fmt.Appendf(nil, `#!/usr/bin/env bash
@@ -2768,13 +2720,7 @@ server_url="${GRAM_HOOKS_SERVER_URL:-%s}"
 project_slug="${GRAM_HOOKS_PROJECT_SLUG:-%s}"
 %s
 gram_hooks_org_key="${GRAM_HOOKS_ORG_KEY:-%s}"
-gram_hooks_nonblocking="%s"
-# In observability mode auth-state failures must not block either: prepare_auth
-# exits with this value on an established machine whose credentials broke.
 gram_hooks_failure_exit=2
-if [ -n "$gram_hooks_nonblocking" ]; then
-  gram_hooks_failure_exit=0
-fi
 
 %s
 
@@ -2824,28 +2770,26 @@ if [ "%s" = "cursor" ] && [ "$native_event" != "beforeSubmitPrompt" ]; then
   # event instead of letting the turn keep executing. A failed backfill also
   # blocks: it was the turn's only prompt-policy check, so proceeding would
   # skip prompt blocking exactly on the recovery path.
-  if [ -z "$gram_hooks_nonblocking" ]; then
-    case "$native_event" in
-      preToolUse | beforeMCPExecution)
-        # A deny stashed by a backfill on an earlier non-decision event is
-        # consumed here; the take always runs so a deny already relayed
-        # in-process does not leave a stale stash behind.
-        pending_deny="$(gram_hooks_cursor_take_pending_prompt_deny "$provider_payload" "$server_url" "$project_slug")" || pending_deny=""
-        if [ "${GRAM_HOOKS_BACKFILL_DECISION:-}" != "deny" ] && [ -n "$pending_deny" ]; then
-          GRAM_HOOKS_BACKFILL_DECISION="deny"
-          GRAM_HOOKS_BACKFILL_BODY="$pending_deny"
-        fi
-        if [ "${GRAM_HOOKS_BACKFILL_DECISION:-}" = "deny" ]; then
-          gram_hooks_provider_response "cursor" "$native_event" "$GRAM_HOOKS_BACKFILL_BODY"
-          exit 0
-        fi
-        if [ "${GRAM_HOOKS_BACKFILL_STATUS:-}" = "failed" ]; then
-          gram_hooks_provider_response "cursor" "$native_event" '{"decision":"deny","message":"Speakeasy could not verify this turn'"'"'s prompt against policy, so the tool call was blocked. Retry in a moment."}'
-          exit 0
-        fi
-        ;;
-    esac
-  fi
+  case "$native_event" in
+    preToolUse | beforeMCPExecution)
+      # A deny stashed by a backfill on an earlier non-decision event is
+      # consumed here; the take always runs so a deny already relayed
+      # in-process does not leave a stale stash behind.
+      pending_deny="$(gram_hooks_cursor_take_pending_prompt_deny "$provider_payload" "$server_url" "$project_slug")" || pending_deny=""
+      if [ "${GRAM_HOOKS_BACKFILL_DECISION:-}" != "deny" ] && [ -n "$pending_deny" ]; then
+        GRAM_HOOKS_BACKFILL_DECISION="deny"
+        GRAM_HOOKS_BACKFILL_BODY="$pending_deny"
+      fi
+      if [ "${GRAM_HOOKS_BACKFILL_DECISION:-}" = "deny" ]; then
+        gram_hooks_provider_response "cursor" "$native_event" "$GRAM_HOOKS_BACKFILL_BODY"
+        exit 0
+      fi
+      if [ "${GRAM_HOOKS_BACKFILL_STATUS:-}" = "failed" ]; then
+        gram_hooks_provider_response "cursor" "$native_event" '{"decision":"deny","message":"Speakeasy could not verify this turn'"'"'s prompt against policy, so the tool call was blocked. Retry in a moment."}'
+        exit 0
+      fi
+      ;;
+  esac
 fi
 if [ "%s" = "cursor" ]; then
   # Cursor also fires the generic pre/post/failure hooks around MCP calls;
@@ -2896,9 +2840,6 @@ if [ "$http_code" -ge 200 ] 2>/dev/null && [ "$http_code" -lt 300 ] 2>/dev/null;
   if [ "%s" = "cursor" ] && [ "$native_event" = "beforeSubmitPrompt" ]; then
     gram_hooks_cursor_mark_prompt_submitted "$provider_payload" "$server_url" "$project_slug"
   fi
-  if [ -n "$gram_hooks_nonblocking" ]; then
-    body='{}'
-  fi
   gram_hooks_provider_response "%s" "$native_event" "$body"
   exit 0
 fi
@@ -2914,12 +2855,8 @@ if { [ "$http_code" = "401" ] || [ "$http_code" = "403" ]; } &&
   fi
 fi
 echo "${reason:-Speakeasy hook returned HTTP ${http_code}}" >&2
-if [ -n "$gram_hooks_nonblocking" ]; then
-  gram_hooks_provider_response "%s" "$native_event" '{}'
-  exit 0
-fi
 exit 2
-`, cfg.ServerURL, projectSlug, orgHintAssignment(cfg), cfg.HooksAPIKey, nonblocking, renderHookRuntimeSourceSnippet()+cursorMCPEnrichment+claudeMCPEnrichment, renderHookPayloadNormalizationSnippet(platform), platform, platform, platform, platform, platform, platform, platform, platform, platform)
+`, cfg.ServerURL, projectSlug, orgHintAssignment(cfg), cfg.HooksAPIKey, renderHookRuntimeSourceSnippet()+cursorMCPEnrichment+claudeMCPEnrichment, renderHookPayloadNormalizationSnippet(platform), platform, platform, platform, platform, platform, platform, platform, platform)
 }
 
 func renderClaudeMCPEnrichmentSnippet() string {

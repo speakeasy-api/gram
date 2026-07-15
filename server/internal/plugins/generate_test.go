@@ -2571,58 +2571,6 @@ printf '{}\n200'
 	}
 }
 
-// TestRenderAuthPreflightScriptObservabilityModeFailsOpen verifies the
-// observability-mode preflight neither blocks nor stalls session start: a
-// fresh machine exits 0 without opening a browser (no interactive login
-// wait), and an established machine with broken credentials also exits 0.
-func TestRenderAuthPreflightScriptObservabilityModeFailsOpen(t *testing.T) {
-	t.Parallel()
-	cfg := GenerateConfig{
-		ServerURL:         "https://app.getgram.ai",
-		HooksAPIKey:       "gram_local_secret_xyz",
-		ProjectSlug:       "acme-prod",
-		ObservabilityMode: true,
-	}
-	dir := t.TempDir()
-	preflightPath := filepath.Join(dir, "auth_preflight.sh")
-	urlFile := filepath.Join(dir, "auth-url")
-	require.NoError(t, os.WriteFile(preflightPath, renderAuthPreflightScript(cfg), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.sh"), renderSharedAuthScript(), 0o755))
-	opener := []byte("#!/usr/bin/env bash\nprintf '%s' \"$1\" > \"$GRAM_TEST_URL_FILE\"\n")
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "open"), opener, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "xdg-open"), opener, 0o755))
-
-	authFile := filepath.Join(dir, "auth.env")
-	env := hookAuthTestEnv(dir,
-		"GRAM_HOOKS_AUTH_FILE="+authFile,
-		"GRAM_TEST_URL_FILE="+urlFile,
-		"DISPLAY=:0",
-	)
-	for i, kv := range env {
-		if strings.HasPrefix(kv, "PATH=") {
-			env[i] = "PATH=" + dir + string(os.PathListSeparator) + os.Getenv("PATH")
-		}
-	}
-
-	fresh := exec.Command("bash", preflightPath)
-	fresh.Env = env
-	var freshErr bytes.Buffer
-	fresh.Stderr = &freshErr
-	require.NoError(t, fresh.Run(),
-		"observability mode must not block session start on a fresh machine: %s", freshErr.String())
-	require.NoFileExists(t, urlFile,
-		"observability mode must not stall session start on an interactive browser login")
-
-	require.NoError(t, os.WriteFile(authFile+".established", nil, 0o600))
-	broken := exec.Command("bash", preflightPath)
-	broken.Env = env
-	var brokenErr bytes.Buffer
-	broken.Stderr = &brokenErr
-	require.NoError(t, broken.Run(),
-		"observability mode must not block session start on broken established auth: %s", brokenErr.String())
-	require.NoFileExists(t, urlFile)
-}
-
 // TestRenderAuthPreflightScriptBrowserLoginDisabled verifies the publish
 // default (browser login off): even on a machine fully capable of a browser
 // flow (display, opener, no CI markers), a fresh session start exits 0
@@ -3157,136 +3105,6 @@ esac
 
 	posts := strings.Count(string(requireFileBytes(t, capturePath)), "\n---GRAM---\n")
 	require.Equal(t, 1, posts, "only the backfilled prompt must be posted; the denied turn's tool event must not proceed")
-}
-
-// TestRenderHookScriptCursorObservabilityModeSwallowsDeny verifies the
-// observability-mode contract end to end for Cursor: server deny decisions are
-// not relayed (Cursor honors a deny body regardless of failClosed) and
-// transport failures exit 0 instead of 2.
-func TestRenderHookScriptCursorObservabilityModeSwallowsDeny(t *testing.T) {
-	t.Parallel()
-	cfg := GenerateConfig{
-		ServerURL:         "https://app.getgram.ai",
-		HooksAPIKey:       "gram_local_secret_xyz",
-		ProjectSlug:       "acme-prod",
-		ObservabilityMode: true,
-	}
-	dir := t.TempDir()
-	binDir := filepath.Join(dir, "bin")
-	require.NoError(t, os.MkdirAll(binDir, 0o755))
-	hookPath := filepath.Join(dir, "hook.sh")
-	require.NoError(t, os.WriteFile(hookPath, renderHookScript(cfg, "cursor"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "http.sh"), renderSharedHTTPScript(), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.sh"), renderSharedAuthScript(), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(binDir, "curl"), []byte(`#!/usr/bin/env bash
-cat >/dev/null
-printf '%s\n%s' "$GRAM_FAKE_BODY" "$GRAM_FAKE_CODE"
-`), 0o755))
-
-	env := hookAuthTestEnv(dir,
-		"GRAM_HOOKS_AUTH_FILE="+filepath.Join(dir, "auth.env"),
-		"GRAM_HOOKS_API_KEY=gram_test_hooks_key",
-		"GRAM_HOOKS_PROJECT_SLUG=acme-prod",
-	)
-	for i, kv := range env {
-		if strings.HasPrefix(kv, "PATH=") {
-			env[i] = "PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH")
-		}
-	}
-	payload := `{"hook_event_name":"preToolUse","session_id":"sess-obs","tool_name":"shell","tool_input":{"command":"ls"}}`
-
-	denied := exec.Command("bash", hookPath)
-	denied.Stdin = strings.NewReader(payload)
-	denied.Env = append(append([]string{}, env...), "GRAM_FAKE_BODY={\"decision\":\"deny\",\"message\":\"blocked\"}", "GRAM_FAKE_CODE=200")
-	var deniedOut, deniedErr bytes.Buffer
-	denied.Stdout = &deniedOut
-	denied.Stderr = &deniedErr
-	require.NoError(t, denied.Run(), "observability mode must not block on a deny decision: %s", deniedErr.String())
-	require.NotContains(t, deniedOut.String(), "deny")
-	require.Equal(t, "{}", strings.TrimSpace(deniedOut.String()))
-
-	failed := exec.Command("bash", hookPath)
-	failed.Stdin = strings.NewReader(payload)
-	failed.Env = append(append([]string{}, env...), "GRAM_FAKE_BODY={}", "GRAM_FAKE_CODE=500")
-	var failedOut, failedErr bytes.Buffer
-	failed.Stdout = &failedOut
-	failed.Stderr = &failedErr
-	require.NoError(t, failed.Run(), "observability mode must not block on a transport failure: %s", failedErr.String())
-	require.Equal(t, "{}", strings.TrimSpace(failedOut.String()))
-
-	// Established-but-broken auth (marker without cache, no env credentials)
-	// exits closed with 2 outside observability mode; here it must not block.
-	brokenAuthFile := filepath.Join(dir, "broken-auth.env")
-	require.NoError(t, os.WriteFile(brokenAuthFile+".established", nil, 0o600))
-	broken := exec.Command("bash", hookPath)
-	broken.Stdin = strings.NewReader(payload)
-	broken.Env = hookAuthTestEnv(dir, "GRAM_HOOKS_AUTH_FILE="+brokenAuthFile)
-	var brokenErr bytes.Buffer
-	broken.Stderr = &brokenErr
-	require.NoError(t, broken.Run(), "observability mode must not block on broken established auth: %s", brokenErr.String())
-}
-
-// TestRenderHookScriptCodexObservabilityModeNeverBlocks verifies the same
-// contract for Codex, where exit 2 is the only blocking signal: neither a
-// server deny nor a transport failure may exit non-zero in observability mode.
-func TestRenderHookScriptCodexObservabilityModeNeverBlocks(t *testing.T) {
-	t.Parallel()
-	cfg := GenerateConfig{
-		ServerURL:         "https://app.getgram.ai",
-		HooksAPIKey:       "gram_local_secret_xyz",
-		ProjectSlug:       "acme-prod",
-		ObservabilityMode: true,
-	}
-	dir := t.TempDir()
-	binDir := filepath.Join(dir, "bin")
-	require.NoError(t, os.MkdirAll(binDir, 0o755))
-	hookPath := filepath.Join(dir, "hook.sh")
-	require.NoError(t, os.WriteFile(hookPath, renderHookScript(cfg, "codex"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "http.sh"), renderSharedHTTPScript(), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.sh"), renderSharedAuthScript(), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(binDir, "curl"), []byte(`#!/usr/bin/env bash
-cat >/dev/null
-printf '%s\n%s' "$GRAM_FAKE_BODY" "$GRAM_FAKE_CODE"
-`), 0o755))
-
-	env := hookAuthTestEnv(dir,
-		"GRAM_HOOKS_AUTH_FILE="+filepath.Join(dir, "auth.env"),
-		"GRAM_HOOKS_API_KEY=gram_test_hooks_key",
-		"GRAM_HOOKS_PROJECT_SLUG=acme-prod",
-	)
-	for i, kv := range env {
-		if strings.HasPrefix(kv, "PATH=") {
-			env[i] = "PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH")
-		}
-	}
-	payload := `{"hook_event_name":"PreToolUse","session_id":"sess-obs-codex","tool_name":"shell","tool_input":{"command":"ls"}}`
-
-	denied := exec.Command("bash", hookPath)
-	denied.Stdin = strings.NewReader(payload)
-	denied.Env = append(append([]string{}, env...), "GRAM_FAKE_BODY={\"decision\":\"deny\",\"message\":\"blocked\"}", "GRAM_FAKE_CODE=200")
-	var deniedOut, deniedErr bytes.Buffer
-	denied.Stdout = &deniedOut
-	denied.Stderr = &deniedErr
-	require.NoError(t, denied.Run(), "observability mode must not block on a deny decision: %s", deniedErr.String())
-	require.Empty(t, deniedOut.String(), "codex allow must be empty stdout")
-
-	failed := exec.Command("bash", hookPath)
-	failed.Stdin = strings.NewReader(payload)
-	failed.Env = append(append([]string{}, env...), "GRAM_FAKE_BODY={}", "GRAM_FAKE_CODE=500")
-	var failedErr bytes.Buffer
-	failed.Stderr = &failedErr
-	require.NoError(t, failed.Run(), "observability mode must not block on a transport failure: %s", failedErr.String())
-
-	// Established-but-broken auth (marker without cache, no env credentials)
-	// exits closed with 2 outside observability mode; here it must not block.
-	brokenAuthFile := filepath.Join(dir, "broken-auth.env")
-	require.NoError(t, os.WriteFile(brokenAuthFile+".established", nil, 0o600))
-	broken := exec.Command("bash", hookPath)
-	broken.Stdin = strings.NewReader(payload)
-	broken.Env = hookAuthTestEnv(dir, "GRAM_HOOKS_AUTH_FILE="+brokenAuthFile)
-	var brokenErr bytes.Buffer
-	broken.Stderr = &brokenErr
-	require.NoError(t, broken.Run(), "observability mode must not block on broken established auth: %s", brokenErr.String())
 }
 
 // TestRenderHookScriptCursorThoughtMapsToAssistantThought verifies Cursor
@@ -4510,37 +4328,6 @@ func TestGenerateClaudeObservabilityBlockingEventsDefaultToSync(t *testing.T) {
 	}
 }
 
-// With observability mode on, telemetry hooks are emitted async so the plugin
-// can only observe and report. The SessionStart auth preflight remains blocking
-// so fresh installs fail closed until explicit or cached hook credentials exist.
-func TestGenerateClaudeObservabilityModeForcesAsyncForAllEvents(t *testing.T) {
-	t.Parallel()
-	cfg := GenerateConfig{
-		OrgName:           "Acme",
-		ServerURL:         "https://app.getgram.ai",
-		HooksAPIKey:       "gram_local_secret_xyz",
-		ProjectSlug:       "acme-prod",
-		ObservabilityMode: true,
-	}
-	files, err := GeneratePluginPackages(nil, cfg)
-	require.NoError(t, err)
-
-	var parsed claudeHooksConfig
-	require.NoError(t, json.Unmarshal(files[ClaudeObservabilitySlug(cfg)+"/hooks/hooks.json"], &parsed))
-
-	require.NotEmpty(t, parsed.Hooks)
-	for event, matchers := range parsed.Hooks {
-		for _, hook := range matchers[0].Hooks {
-			require.NotNil(t, hook.Async, "event %q must carry an async flag", event)
-			if strings.Contains(hook.Command, "hooks/auth_preflight.sh") {
-				require.False(t, *hook.Async, "SessionStart auth preflight must remain blocking")
-				continue
-			}
-			require.True(t, *hook.Async, "event %q must be async in observability mode", event)
-		}
-	}
-}
-
 func TestGenerateCursorObservabilityPluginRegistersBlockingSessionStartAuth(t *testing.T) {
 	t.Parallel()
 	cfg := GenerateConfig{
@@ -4585,32 +4372,6 @@ func TestGenerateCursorObservabilityPluginRegistersBlockingSessionStartAuth(t *t
 			require.True(t, *parsed.Hooks[event][0].FailClosed, "blocking event %q must fail closed", event)
 		} else {
 			require.Nil(t, parsed.Hooks[event][0].FailClosed, "observational event %q must not fail closed", event)
-		}
-	}
-}
-
-// TestGenerateCursorObservabilityModeNeverFailsClosed verifies that
-// ObservabilityMode — documented as fully non-blocking — disables failClosed
-// on every cursor hook entry, preflight included.
-func TestGenerateCursorObservabilityModeNeverFailsClosed(t *testing.T) {
-	t.Parallel()
-	cfg := GenerateConfig{
-		OrgName:           "Acme",
-		ServerURL:         "https://app.getgram.ai",
-		HooksAPIKey:       "gram_local_secret_xyz",
-		ProjectSlug:       "acme-prod",
-		ObservabilityMode: true,
-	}
-	files, err := GeneratePluginPackages(nil, cfg)
-	require.NoError(t, err)
-
-	slug := "cursor-plugins/" + CursorObservabilitySlug(cfg)
-	var parsed cursorHooksConfig
-	require.NoError(t, json.Unmarshal(files[slug+"/hooks/hooks.json"], &parsed))
-
-	for event, commands := range parsed.Hooks {
-		for i, command := range commands {
-			require.Nil(t, command.FailClosed, "observability mode must not fail closed: event %q entry %d", event, i)
 		}
 	}
 }
