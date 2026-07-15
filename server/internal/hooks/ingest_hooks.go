@@ -128,8 +128,13 @@ func (s *Service) withOrgSettings(ctx context.Context, orgID string, res *gen.In
 	}
 	// Detach from request cancellation: the feature client answers a canceled
 	// lookup with (false, nil), which would read as a definitive fail-closed
-	// posture rather than an omitted one.
-	failOpen, err := s.productFeatures.IsFeatureEnabled(context.WithoutCancel(ctx), orgID, productfeatures.FeatureHooksFailOpen)
+	// posture rather than an omitted one. Re-bound the detached context — this
+	// runs on the blocking verdict path, and a best-effort lookup must not be
+	// able to hold an already-computed verdict hostage to a slow feature store
+	// (a deadline-less pool acquire can wait unboundedly under saturation).
+	lookupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
+	defer cancel()
+	failOpen, err := s.productFeatures.IsFeatureEnabled(lookupCtx, orgID, productfeatures.FeatureHooksFailOpen)
 	if err != nil {
 		s.logger.WarnContext(ctx, "failed to resolve hooks fail-open setting for ingest effects",
 			attr.SlogError(err),

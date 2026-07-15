@@ -106,7 +106,7 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 			FeatureName:    payload.FeatureName,
 		})
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to enable organization feature flag %q", payload.FeatureName).LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
+			return oops.E(oops.CodeUnexpected, err, "enable organization feature flag %q", payload.FeatureName).LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
 		}
 		changed = inserted > 0
 	} else {
@@ -119,7 +119,7 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 			// Already disabled — a no-op, mirroring how enabling an enabled
 			// feature is a no-op.
 		case err != nil:
-			return oops.E(oops.CodeUnexpected, err, "failed to disable organization feature flag %q", payload.FeatureName).LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
+			return oops.E(oops.CodeUnexpected, err, "disable organization feature flag %q", payload.FeatureName).LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
 		default:
 			changed = true
 		}

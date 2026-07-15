@@ -2,9 +2,7 @@ package relay
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 )
@@ -90,10 +88,6 @@ func writeOrgSettings(cfg Config, failOpen bool) {
 		return
 	}
 
-	path := orgSettingsPath()
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return
-	}
 	body, err := json.Marshal(orgSettings{
 		ServerURL: cfg.ServerURL,
 		Org:       cfg.OrgID,
@@ -103,13 +97,7 @@ func writeOrgSettings(cfg Config, failOpen bool) {
 	if err != nil {
 		return
 	}
-	tmp := fmt.Sprintf("%s.tmp.%d", path, os.Getpid())
-	if err := os.WriteFile(tmp, body, 0o600); err != nil {
-		return
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		_ = os.Remove(tmp)
-	}
+	_ = atomicWriteCacheFile(orgSettingsPath(), body)
 }
 
 // failOpenAllowed reports whether an unobtainable verdict (server unreachable
