@@ -3,7 +3,6 @@ package hooks
 import (
 	"context"
 	"errors"
-	"sync"
 	"testing"
 	"time"
 
@@ -25,8 +24,6 @@ import (
 type recordingRiskScanner struct {
 	scans int
 }
-
-var spendGateSeedMu sync.Mutex
 
 func (s *recordingRiskScanner) ScanForEnforcement(_ context.Context, _ string, _ uuid.UUID, _ string, _ string, _ string, _ string) (*risk.ScanResult, error) {
 	s.scans++
@@ -53,11 +50,9 @@ func (s *recordingRiskScanner) RecordPolicyChallenge(_ context.Context, _ string
 func seedSpendBlock(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, emails ...string) {
 	t.Helper()
 	ruleURN := "spend_rule:33333333-3333-3333-3333-333333333333:v2"
-	spendGateSeedMu.Lock()
-	defer spendGateSeedMu.Unlock()
 
 	state := spendrules.NewGateState(organizationID, nil)
-	err := ti.service.cache.Get(ctx, "spend_gate:"+organizationID, &state)
+	err := ti.spendGateCache.Get(ctx, "spend_gate:"+organizationID, &state)
 	if err != nil && !errors.Is(err, redisCache.ErrCacheMiss) {
 		require.NoError(t, err)
 	}
@@ -103,7 +98,7 @@ func seedSpendBlock(t *testing.T, ctx context.Context, ti *testInstance, organiz
 			MonthlyCost: 100,
 		})
 	}
-	require.NoError(t, spendrules.WriteGateState(ctx, ti.service.cache, organizationID, state))
+	require.NoError(t, spendrules.WriteGateState(ctx, ti.spendGateCache, organizationID, state))
 }
 
 func TestClaude_UserPromptSubmit_SpendGateBlocksBeforeRiskScan(t *testing.T) {
