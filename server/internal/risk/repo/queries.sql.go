@@ -2339,7 +2339,7 @@ func (q *Queries) ListRiskPolicyEvalReviews(ctx context.Context, arg ListRiskPol
 }
 
 const listRiskResultsByChatFound = `-- name: ListRiskResultsByChatFound :many
-SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.spans, rr.dead_letter_reason, rr.excluded_at, rr.excluded_exclusion_id, rr.false_positive_at, rr.false_positive_reason, rr.created_at, cm.chat_id, cm.created_at AS message_created_at, c.title AS chat_title, c.external_user_id AS chat_user_id, COALESCE(blk.block_id, '00000000-0000-0000-0000-000000000000'::uuid) AS block_id
+SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.spans, rr.dead_letter_reason, rr.excluded_at, rr.excluded_exclusion_id, rr.false_positive_at, rr.false_positive_reason, rr.created_at, cm.chat_id, cm.created_at AS message_created_at, cm.replayed, c.title AS chat_title, c.external_user_id AS chat_user_id, COALESCE(blk.block_id, '00000000-0000-0000-0000-000000000000'::uuid) AS block_id
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
@@ -2395,6 +2395,7 @@ type ListRiskResultsByChatFoundRow struct {
 	CreatedAt           pgtype.Timestamptz
 	ChatID              uuid.UUID
 	MessageCreatedAt    pgtype.Timestamptz
+	Replayed            bool
 	ChatTitle           pgtype.Text
 	ChatUserID          pgtype.Text
 	BlockID             uuid.UUID
@@ -2440,6 +2441,7 @@ func (q *Queries) ListRiskResultsByChatFound(ctx context.Context, arg ListRiskRe
 			&i.CreatedAt,
 			&i.ChatID,
 			&i.MessageCreatedAt,
+			&i.Replayed,
 			&i.ChatTitle,
 			&i.ChatUserID,
 			&i.BlockID,
@@ -2582,14 +2584,14 @@ SELECT
     sub.rule_id, sub.description, sub.match, sub.start_pos, sub.end_pos,
     sub.confidence, sub.tags, sub.spans, sub.dead_letter_reason, sub.created_at,
     sub.chat_id, sub.message_created_at, sub.chat_title, sub.chat_user_id,
-    sub.block_id
+    sub.block_id, sub.replayed
 FROM (
   SELECT
       rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id,
       rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found,
       rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos,
       rr.confidence, rr.tags, rr.spans, rr.dead_letter_reason, rr.created_at,
-      cm.chat_id, cm.created_at AS message_created_at,
+      cm.chat_id, cm.created_at AS message_created_at, cm.replayed,
       c.title AS chat_title, c.external_user_id AS chat_user_id,
       COALESCE(blk.block_id, '00000000-0000-0000-0000-000000000000'::uuid) AS block_id,
       CASE
@@ -2724,6 +2726,7 @@ type ListRiskResultsByProjectFoundRow struct {
 	ChatTitle         pgtype.Text
 	ChatUserID        pgtype.Text
 	BlockID           uuid.UUID
+	Replayed          bool
 }
 
 // Sort by the underlying chat message's created_at (the event time), NOT
@@ -2796,6 +2799,7 @@ func (q *Queries) ListRiskResultsByProjectFound(ctx context.Context, arg ListRis
 			&i.ChatTitle,
 			&i.ChatUserID,
 			&i.BlockID,
+			&i.Replayed,
 		); err != nil {
 			return nil, err
 		}

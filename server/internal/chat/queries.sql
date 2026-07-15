@@ -175,6 +175,7 @@ INSERT INTO chat_messages (
   , source
   , content_hash
   , generation
+  , replayed
 )
 VALUES (
     @chat_id
@@ -200,6 +201,7 @@ VALUES (
   , @source
   , @content_hash
   , @generation
+  , @replayed
 );
 
 -- name: CreateExternalChatMessage :execrows

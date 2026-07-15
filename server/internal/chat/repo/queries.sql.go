@@ -347,6 +347,7 @@ type CreateChatMessageParams struct {
 	Source           pgtype.Text
 	ContentHash      []byte
 	Generation       int32
+	Replayed         bool
 }
 
 const createChatMessageWithToolCalls = `-- name: CreateChatMessageWithToolCalls :exec

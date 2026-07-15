@@ -52476,6 +52476,9 @@ components:
                     type: integer
                     description: Policy version when this result was produced.
                     format: int64
+                replayed:
+                    type: boolean
+                    description: True when the scanned message arrived as a replay from a device's offline spool after control-plane downtime — the finding was produced retroactively rather than from live traffic.
                 rule_id:
                     type: string
                     description: The matched rule identifier.
@@ -52506,6 +52509,7 @@ components:
                 - chat_message_id
                 - source
                 - created_at
+                - replayed
         RiskResultRedacted:
             type: object
             properties:
