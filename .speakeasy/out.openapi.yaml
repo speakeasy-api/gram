@@ -44479,6 +44479,9 @@ components:
           type: string
           description: The creation date of the environment entry
           format: date-time
+        is_secret:
+          type: boolean
+          description: Whether the value is a secret. Secret values are redacted in reads; non-secret values are returned in cleartext.
         name:
           type: string
           description: The name of the environment variable
@@ -44488,26 +44491,29 @@ components:
           format: date-time
         value:
           type: string
-          description: Redacted values of the environment variable
+          description: The value of the environment variable. Cleartext when is_secret is false, redacted otherwise.
       description: A single environment entry
       required:
         - name
         - value
+        - is_secret
         - created_at
         - updated_at
     EnvironmentEntryInput:
       type: object
       properties:
+        is_secret:
+          type: boolean
+          description: Whether the value is a secret. Secret values are encrypted at rest and redacted in reads; non-secret values are readable after save. When omitted, new entries default to secret and existing entries keep their current secrecy.
         name:
           type: string
           description: The name of the environment variable
         value:
           type: string
-          description: The value of the environment variable
+          description: The value of the environment variable. Omit on an existing secret entry to preserve its stored value. Required when creating an entry or when changing is_secret from true to false.
       description: A single environment entry
       required:
         - name
-        - value
     Error:
       type: object
       properties:

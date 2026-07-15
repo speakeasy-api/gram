@@ -2311,16 +2311,27 @@ type GetToolsetEnvironmentGatewayErrorResponseBody struct {
 type EnvironmentEntryInputRequestBody struct {
 	// The name of the environment variable
 	Name string `form:"name" json:"name" xml:"name"`
-	// The value of the environment variable
-	Value string `form:"value" json:"value" xml:"value"`
+	// The value of the environment variable. Omit on an existing secret entry to
+	// preserve its stored value. Required when creating an entry or when changing
+	// is_secret from true to false.
+	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
+	// Whether the value is a secret. Secret values are encrypted at rest and
+	// redacted in reads; non-secret values are readable after save. When omitted,
+	// new entries default to secret and existing entries keep their current
+	// secrecy.
+	IsSecret *bool `form:"is_secret,omitempty" json:"is_secret,omitempty" xml:"is_secret,omitempty"`
 }
 
 // EnvironmentEntryResponseBody is used to define fields on response body types.
 type EnvironmentEntryResponseBody struct {
 	// The name of the environment variable
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// Redacted values of the environment variable
+	// The value of the environment variable. Cleartext when is_secret is false,
+	// redacted otherwise.
 	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
+	// Whether the value is a secret. Secret values are redacted in reads;
+	// non-secret values are returned in cleartext.
+	IsSecret *bool `form:"is_secret,omitempty" json:"is_secret,omitempty" xml:"is_secret,omitempty"`
 	// The creation date of the environment entry
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the environment entry was last updated
@@ -7236,6 +7247,9 @@ func ValidateEnvironmentEntryResponseBody(body *EnvironmentEntryResponseBody) (e
 	}
 	if body.Value == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("value", "body"))
+	}
+	if body.IsSecret == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("is_secret", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
