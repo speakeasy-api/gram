@@ -42,6 +42,9 @@ func NewUsagePollService(telemetryLogger *telemetry.Logger, guardianPolicy *guar
 	}
 }
 
+// SyncCursorUsage imports usage events for the window between the stored
+// watermark and endTime. On failure the returned error is a SyncError that
+// accumulates every stage's failure alongside the progress the run made.
 func (s *UsagePollService) SyncCursorUsage(ctx context.Context, cfg Config, endTime time.Time) error {
 	if cfg.Provider != ProviderCursor {
 		return oops.E(oops.CodeInvalid, nil, "unsupported ai integration provider for usage polling: %s", cfg.Provider)
@@ -49,51 +52,27 @@ func (s *UsagePollService) SyncCursorUsage(ctx context.Context, cfg Config, endT
 
 	g, gctx := errgroup.WithContext(ctx)
 	rawEvents := make(chan cursorapi.UsageEvent, cursorUsageEventsBufferSize)
-	fetchErr := make(chan error, 1)
+	fetchDone := make(chan error, 1)
 	apiClient := cursorapi.New(s.guardianPolicy, cursorapi.WithAPIKey(cfg.APIKey))
 
 	// Cursor includes both time bounds, so advance past our stored inclusive watermark.
 	startTime := cfg.PollWatermarkAt.Add(time.Millisecond)
-	g.Go(func() (err error) {
+
+	// Each stage writes only its own progress fields and error variable;
+	// everything is read after g.Wait, which establishes the happens-before.
+	progress := &CursorUsageSyncProgress{
+		WindowStart: startTime,
+		WindowEnd:   endTime,
+		UsagePages:  0,
+		UsageEvents: 0,
+	}
+	var fetchErr, writeErr error
+
+	g.Go(func() error {
 		defer close(rawEvents)
-		defer func() {
-			fetchErr <- err
-			close(fetchErr)
-		}()
-
-		for pageNum := 1; ; {
-			s.heartbeat(gctx, pageNum)
-
-			page, err := apiClient.FetchUsageEventsPage(gctx, cursorapi.FetchUsageEventsPageParams{
-				Start: startTime,
-				End:   endTime,
-				Page:  pageNum,
-			})
-			if err != nil {
-				var rateLimitErr *cursorapi.RateLimitError
-				if errors.As(err, &rateLimitErr) {
-					sleepFor := calculateCursorRateLimitSleep(rateLimitErr.RetryAfter)
-					if err := s.sleep(gctx, sleepFor, pageNum); err != nil {
-						return oops.E(oops.CodeUnexpected, err, "sleep after cursor rate limit")
-					}
-					continue
-				}
-				return oops.E(oops.CodeUnexpected, err, "fetch cursor usage events page")
-			}
-
-			for _, event := range page.Events {
-				select {
-				case <-gctx.Done():
-					return gctx.Err()
-				case rawEvents <- event:
-				}
-			}
-
-			if !page.HasNextPage {
-				return nil
-			}
-			pageNum++
-		}
+		fetchErr = s.fetchCursorUsageEvents(gctx, apiClient, startTime, endTime, rawEvents, progress)
+		fetchDone <- fetchErr
+		return fetchErr
 	})
 
 	g.Go(func() error {
@@ -102,20 +81,66 @@ func (s *UsagePollService) SyncCursorUsage(ctx context.Context, cfg Config, endT
 			logParams = append(logParams, s.buildCursorUsageEvent(cfg, event))
 		}
 
-		if err := <-fetchErr; err != nil {
-			return err
+		// Skip the write when fetching failed: the fetch stage reports its
+		// own failure and the whole window is re-polled on retry anyway.
+		if err := <-fetchDone; err != nil {
+			return nil
 		}
 
 		if err := s.writeCursorUsageTelemetry(gctx, logParams); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to write to clickhouse")
+			writeErr = oops.E(oops.CodeUnexpected, err, "failed to write to clickhouse")
+			return writeErr
 		}
 		return nil
 	})
 
 	if err := g.Wait(); err != nil {
-		return err //nolint:wrapcheck // Preserve the original goroutine error for callers.
+		return newSyncError("sync cursor usage", *progress,
+			SyncStageError{Stage: "fetch_usage_events", Err: fetchErr},
+			SyncStageError{Stage: "write_telemetry", Err: writeErr},
+		)
 	}
 	return nil
+}
+
+// fetchCursorUsageEvents pages through the usage events API for the window
+// and streams events to out, pausing on rate limits.
+func (s *UsagePollService) fetchCursorUsageEvents(ctx context.Context, apiClient *cursorapi.Client, startTime, endTime time.Time, out chan<- cursorapi.UsageEvent, progress *CursorUsageSyncProgress) error {
+	for pageNum := 1; ; {
+		s.heartbeat(ctx, pageNum)
+
+		page, err := apiClient.FetchUsageEventsPage(ctx, cursorapi.FetchUsageEventsPageParams{
+			Start: startTime,
+			End:   endTime,
+			Page:  pageNum,
+		})
+		if err != nil {
+			var rateLimitErr *cursorapi.RateLimitError
+			if errors.As(err, &rateLimitErr) {
+				sleepFor := calculateCursorRateLimitSleep(rateLimitErr.RetryAfter)
+				if err := s.sleep(ctx, sleepFor, pageNum); err != nil {
+					return oops.E(oops.CodeUnexpected, err, "sleep after cursor rate limit")
+				}
+				continue
+			}
+			return oops.E(oops.CodeUnexpected, err, "fetch cursor usage events page")
+		}
+		progress.UsagePages++
+
+		for _, event := range page.Events {
+			select {
+			case <-ctx.Done():
+				return ctx.Err() //nolint:wrapcheck // Preserve context cancellation sentinel errors for callers.
+			case out <- event:
+				progress.UsageEvents++
+			}
+		}
+
+		if !page.HasNextPage {
+			return nil
+		}
+		pageNum++
+	}
 }
 
 func (s *UsagePollService) buildCursorUsageEvent(cfg Config, event cursorapi.UsageEvent) telemetry.LogParams {

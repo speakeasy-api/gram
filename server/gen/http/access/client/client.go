@@ -81,6 +81,10 @@ type Client struct {
 	// the getShadowMCPInventoryServer endpoint.
 	GetShadowMCPInventoryServerDoer goahttp.Doer
 
+	// UpdateShadowMCPInventoryServerName Doer is the HTTP client used to make
+	// requests to the updateShadowMCPInventoryServerName endpoint.
+	UpdateShadowMCPInventoryServerNameDoer goahttp.Doer
+
 	// ListShadowMCPInventoryUsers Doer is the HTTP client used to make requests to
 	// the listShadowMCPInventoryUsers endpoint.
 	ListShadowMCPInventoryUsersDoer goahttp.Doer
@@ -169,6 +173,7 @@ func NewClient(
 		ListShadowMCPAccessRulesDoer:             doer,
 		ListShadowMCPInventoryDoer:               doer,
 		GetShadowMCPInventoryServerDoer:          doer,
+		UpdateShadowMCPInventoryServerNameDoer:   doer,
 		ListShadowMCPInventoryUsersDoer:          doer,
 		UpsertShadowMCPInventoryPolicyBypassDoer: doer,
 		DeleteShadowMCPInventoryPolicyBypassDoer: doer,
@@ -569,6 +574,30 @@ func (c *Client) GetShadowMCPInventoryServer() goa.Endpoint {
 		resp, err := c.GetShadowMCPInventoryServerDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("access", "getShadowMCPInventoryServer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UpdateShadowMCPInventoryServerName returns an endpoint that makes HTTP
+// requests to the access service updateShadowMCPInventoryServerName server.
+func (c *Client) UpdateShadowMCPInventoryServerName() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpdateShadowMCPInventoryServerNameRequest(c.encoder)
+		decodeResponse = DecodeUpdateShadowMCPInventoryServerNameResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpdateShadowMCPInventoryServerNameRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpdateShadowMCPInventoryServerNameDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "updateShadowMCPInventoryServerName", err)
 		}
 		return decodeResponse(resp)
 	}

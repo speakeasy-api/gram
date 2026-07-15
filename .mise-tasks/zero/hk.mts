@@ -3,6 +3,7 @@
 //MISE description="Install hk git pre-commit hooks"
 //MISE hide=true
 //MISE dir="{{ config_root }}"
+//USAGE flag "--yes" default="false" help="Install hooks without prompting (non-interactive)."
 
 import { existsSync, mkdirSync, writeFileSync, chmodSync } from "node:fs";
 import { join } from "node:path";
@@ -18,9 +19,12 @@ async function run() {
     return;
   }
 
-  const yes = await confirm({
-    message: "Do you want to install git pre-commit hooks?",
-  });
+  const yes =
+    process.env["usage_yes"] === "true"
+      ? true
+      : await confirm({
+          message: "Do you want to install git pre-commit hooks?",
+        });
 
   if (isCancel(yes) || !yes) {
     mkdirSync(hooksDir, { recursive: true });

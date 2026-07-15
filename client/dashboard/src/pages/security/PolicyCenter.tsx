@@ -85,6 +85,7 @@ import {
   type PolicyMessageType,
 } from "./policy-data";
 import { cn } from "@/lib/utils";
+import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import { useDetectionRulesStore } from "./detection-rules-data";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useRoutes } from "@/routes";
@@ -588,6 +589,18 @@ function isPromptPolicy(policy: RiskPolicy): boolean {
   return policy.policyType === "prompt_based";
 }
 
+/** Compact relative date for the policy table's Created/Updated columns, with
+ *  the exact timestamp on hover. */
+function PolicyDateCell({ date }: { date: Date }): JSX.Element {
+  return (
+    <SimpleTooltip tooltip={dateTimeFormatters.full.format(date)}>
+      <span className="text-muted-foreground text-sm whitespace-nowrap">
+        <HumanizeDateTime date={date} includeTime={false} />
+      </span>
+    </SimpleTooltip>
+  );
+}
+
 export default function PolicyCenter(): JSX.Element {
   return (
     <RequireScope scope="org:admin" level="page">
@@ -856,6 +869,18 @@ function PolicyCenterContent() {
           {policyAudienceSummary(row)}
         </span>
       ),
+    },
+    {
+      key: "createdAt",
+      header: "Created",
+      width: "0.8fr",
+      render: (row) => <PolicyDateCell date={row.policy.createdAt} />,
+    },
+    {
+      key: "updatedAt",
+      header: "Updated",
+      width: "0.8fr",
+      render: (row) => <PolicyDateCell date={row.policy.updatedAt} />,
     },
     {
       key: "actions",

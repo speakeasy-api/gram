@@ -1404,6 +1404,8 @@ func DecodeListRiskResultsRequest(mux goahttp.Muxer, decoder func(*http.Request)
 			ruleID           *string
 			userID           *string
 			uniqueMatch      *bool
+			nonAssistant     *bool
+			assistantID      *string
 			from             *string
 			to               *string
 			cursor           *string
@@ -1449,6 +1451,23 @@ func DecodeListRiskResultsRequest(mux goahttp.Muxer, decoder func(*http.Request)
 				}
 				uniqueMatch = &v
 			}
+		}
+		{
+			nonAssistantRaw := qp.Get("non_assistant")
+			if nonAssistantRaw != "" {
+				v, err2 := strconv.ParseBool(nonAssistantRaw)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("non_assistant", nonAssistantRaw, "boolean"))
+				}
+				nonAssistant = &v
+			}
+		}
+		assistantIDRaw := qp.Get("assistant_id")
+		if assistantIDRaw != "" {
+			assistantID = &assistantIDRaw
+		}
+		if assistantID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("assistant_id", *assistantID, goa.FormatUUID))
 		}
 		fromRaw := qp.Get("from")
 		if fromRaw != "" {
@@ -1504,7 +1523,7 @@ func DecodeListRiskResultsRequest(mux goahttp.Muxer, decoder func(*http.Request)
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListRiskResultsPayload(policyID, chatID, category, ruleID, userID, uniqueMatch, from, to, cursor, limit, apikeyToken, sessionToken, projectSlugInput)
+		payload = NewListRiskResultsPayload(policyID, chatID, category, ruleID, userID, uniqueMatch, nonAssistant, assistantID, from, to, cursor, limit, apikeyToken, sessionToken, projectSlugInput)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -1711,6 +1730,8 @@ func DecodeListRiskResultsForAgentRequest(mux goahttp.Muxer, decoder func(*http.
 			ruleID           *string
 			userID           *string
 			uniqueMatch      *bool
+			nonAssistant     *bool
+			assistantID      *string
 			from             *string
 			to               *string
 			cursor           *string
@@ -1756,6 +1777,23 @@ func DecodeListRiskResultsForAgentRequest(mux goahttp.Muxer, decoder func(*http.
 				}
 				uniqueMatch = &v
 			}
+		}
+		{
+			nonAssistantRaw := qp.Get("non_assistant")
+			if nonAssistantRaw != "" {
+				v, err2 := strconv.ParseBool(nonAssistantRaw)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("non_assistant", nonAssistantRaw, "boolean"))
+				}
+				nonAssistant = &v
+			}
+		}
+		assistantIDRaw := qp.Get("assistant_id")
+		if assistantIDRaw != "" {
+			assistantID = &assistantIDRaw
+		}
+		if assistantID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("assistant_id", *assistantID, goa.FormatUUID))
 		}
 		fromRaw := qp.Get("from")
 		if fromRaw != "" {
@@ -1811,7 +1849,7 @@ func DecodeListRiskResultsForAgentRequest(mux goahttp.Muxer, decoder func(*http.
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListRiskResultsForAgentPayload(policyID, chatID, category, ruleID, userID, uniqueMatch, from, to, cursor, limit, apikeyToken, sessionToken, projectSlugInput)
+		payload = NewListRiskResultsForAgentPayload(policyID, chatID, category, ruleID, userID, uniqueMatch, nonAssistant, assistantID, from, to, cursor, limit, apikeyToken, sessionToken, projectSlugInput)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

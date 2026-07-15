@@ -1,5 +1,24 @@
 # dashboard
 
+## 0.89.0
+
+### Minor Changes
+
+- e50ecd5: The Roles & Permissions "Specific Servers" picker for `mcp:connect` now lists remote and tunneled MCP servers alongside toolset-backed ones, storing the id each backend's enforcement actually checks (mcp_servers id for remote/tunneled, toolset id otherwise). The challenge view resolves mcp_servers ids to server names, and the "Specific tools" panel explains that remote/tunneled servers resolve tools dynamically and cannot be tool-permissioned.
+- 24f54bb: Allow organization admins to rename Shadow MCP inventory servers without changing their canonical URL identity.
+- 8e3b7f2: Add a project-scoped API and dashboard detail page for individual Shadow MCP servers.
+- a1def6a: Allow projects to disable and re-enable custom model provider keys without deleting or re-entering them.
+
+### Patch Changes
+
+- b92d93d: Improve model provider key table alignment and make disabled keys easier to identify.
+- 079ec92: Replace the remaining user-visible "Gram" product mentions in dashboard UI copy with "Speakeasy" (auth descriptions, onboarding steps, insights tooltips, detection rule description, tunneled MCP setup). Add an accessible `aria-label` to the brand logo so screen readers announce it.
+- 16c8fa3: Improve model provider key editing and row actions.
+- 703a22b: feat(risk): add an assistant filter to risk events. The Risk Events page gains an "Assistant" select listing the project's assistants plus a "No assistant" option, so findings from chats not linked to an assistant (the ones most likely missing user attribution) can be surfaced on their own — or scoped to a single assistant. API: `assistant_id` and `non_assistant` params on `listRiskResults`/`listRiskResultsForAgent`.
+- c06dab9: The risk policies table now shows Created and Updated columns with compact relative dates; hovering either reveals the exact timestamp.
+- Updated dependencies [b931eb5]
+  - @gram-ai/elements@1.42.2
+
 ## 0.88.0
 
 ### Minor Changes

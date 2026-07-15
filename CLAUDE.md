@@ -137,3 +137,14 @@ Activate a skill when your task falls within its scope.
 - Make the plan extremely concise. Sacrifice grammar for the sake of concision.
 - Identify any of the skills above that are relevant to the task so you can activate when implementing.
 - At the end of each plan, give me a list of unresolved questions to answer, if any.
+
+## Cursor Cloud specific instructions
+
+Full environment setup is handled by `./zero --agent` (idempotent — re-run any time to reconcile): it installs tools/deps, generates keys/TLS + the dev-idp RSA key, starts the Docker infra, and runs the Postgres + ClickHouse migrations. Run it per session after starting the Docker daemon. It is deliberately NOT the startup update script — that stays minimal (`mise install` / `mise run install`), because starting infra and running migrations are too heavy and failure-prone for pod boot. Non-obvious caveats:
+
+- **Docker daemon must be running first.** There is no systemd auto-start, so run `sudo service docker start` before `./zero --agent`. Docker is configured with the `fuse-overlayfs` storage driver and `iptables-legacy`.
+- **`mise` provides all tooling** (`~/.local/bin/mise`). Resolution is automatic inside `mise run` / `mise exec` and mise tasks (including `.mts` Node scripts) — no PATH hacks needed. For bare tool calls, shims are on `PATH` via `mise activate` in `~/.bashrc` (interactive) and via `~/.bash_env` referenced by `BASH_ENV` (non-interactive _script_ shells). Bash does NOT source `BASH_ENV` for `bash -c`, so in that context prefer `mise exec` / `mise run` (or `export PATH="$HOME/.local/bin:$PATH"`).
+- **App services are not started by `./zero --agent`** (agent mode never execs the start task). Start them yourself (each long-running, e.g. in tmux): `mise run start:dev-idp` (auth, :35291), `mise run start:server --dev-single-process` (API :8080 + Temporal worker), `mise run start:dashboard` (Vite https://localhost:5173). `madprocs` runs the full set as a TUI.
+- **Login is credential-less** (`GRAM_IDP_MODE=mock-workos`): click "Login", no username/password.
+- **URLs / health.** Dashboard `https://localhost:5173`; server API `https://localhost:8080` (`/healthz`; control port `8081` has `/healthz` + `/livez`). Local mkcert TLS.
+- **Seed sample data:** `mise seed` (needs the server + dev-idp running).

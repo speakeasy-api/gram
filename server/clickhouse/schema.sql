@@ -268,6 +268,7 @@ CREATE TABLE IF NOT EXISTS shadow_mcp_inventory_urls (
     canonical_server_url String,
     url_host String,
     server_name String,
+    server_name_override String DEFAULT '',
     first_seen DateTime64(9, 'UTC'),
     last_seen DateTime64(9, 'UTC'),
     updated_at DateTime64(9, 'UTC')
