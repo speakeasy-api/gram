@@ -142,6 +142,16 @@ func (f *ProxyManager) BuildTarget(
 ) *proxy.Proxy {
 	backendID := identity.SourceID()
 
+	// Figma's hosted MCP server only supports the clients in its catalog, and
+	// proxied traffic reaches Figma with Gram's transport rather than the
+	// client's — enforce their client policy on our side of the proxy.
+	var userRequestInterceptors []proxy.UserRequestInterceptor
+	if isFigmaUpstream(upstreamURL) {
+		userRequestInterceptors = append(userRequestInterceptors,
+			NewUserAgentAllowlistInterceptor(figmaAllowedUserAgents, figmaMCPCatalogURL, logger),
+		)
+	}
+
 	// Per-request instance: the interceptor holds a single nilable start
 	// timestamp set by the request side and consumed by the response side.
 	// A fresh instance per Build makes that field's lifetime match the
@@ -218,7 +228,7 @@ func (f *ProxyManager) BuildTarget(
 		AuthorizationOverride:   upstreamAuth,
 		UpstreamResponseRetryer: nil,
 		WWWAuthenticate:         wwwAuthenticate,
-		UserRequestInterceptors: nil,
+		UserRequestInterceptors: userRequestInterceptors,
 		InitializeRequestInterceptors: []proxy.InitializeRequestInterceptor{
 			NewInitializePostHogEventInterceptor(f.posthog, identity, logger),
 		},
