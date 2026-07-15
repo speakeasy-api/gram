@@ -1,6 +1,7 @@
 package judgemessage
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"unicode/utf8"
@@ -40,6 +41,19 @@ type ToolCallPayload struct {
 	Tool               *ToolPayload `json:"tool,omitempty"`
 	Arguments          string       `json:"arguments"`
 	ArgumentsTruncated bool         `json:"arguments_truncated,omitempty"`
+}
+
+// Render returns the judge-visible payload as a compact JSON string. It is what
+// gets stored as a finding's Match for llm_judge / prompt_injection detections,
+// which have no literal offending substring — the "match" is the entire event
+// the judge saw. Best-effort: falls back to the raw body if marshaling fails.
+// RenderPayload already truncates body/args, so the result stays bounded.
+func Render(m Message) string {
+	b, err := json.Marshal(RenderPayload(m))
+	if err != nil {
+		return m.Body
+	}
+	return string(b)
 }
 
 // RenderPayload maps a judge message onto the JSON payload both prompt judges read.

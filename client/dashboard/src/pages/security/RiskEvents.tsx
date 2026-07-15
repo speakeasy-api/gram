@@ -22,6 +22,7 @@ import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import {
   CategoryLabel,
+  EventMatchDialog,
   MaskedMatch,
   RevealAllProvider,
   RevealAllToggle,
@@ -491,6 +492,15 @@ function RiskEventsRow({
   onSelectChat: (chatId: string | null) => void;
 }) {
   const isShadowMCP = result.source === "shadow_mcp";
+  const isEventSource =
+    result.source === "llm_judge" || result.source === "prompt_injection";
+
+  // A row click opens the chat only when the gesture both starts and ends inside
+  // the row. This rejects the stray click Radix's outside-dismiss sends here:
+  // closing the View-event dialog by clicking its overlay fires pointerdown on
+  // the (portaled) overlay, which unmounts, so the trailing click lands on a row
+  // cell and would otherwise open the chat.
+  const pointerDownInsideRef = useRef(false);
 
   const handleShare = useCallback(
     async (e: React.MouseEvent) => {
@@ -517,7 +527,23 @@ function RiskEventsRow({
         "hover:bg-muted/30 w-full items-center border-b px-5 py-3 text-left text-sm transition-colors",
         !result.chatId && "cursor-default",
       )}
-      onClick={() => {
+      onPointerDown={(e) => {
+        pointerDownInsideRef.current = e.currentTarget.contains(
+          e.target as Node,
+        );
+      }}
+      onClick={(e) => {
+        const startedInside = pointerDownInsideRef.current;
+        pointerDownInsideRef.current = false;
+        // Ignore the trailing click from an outside-dismiss (pointerdown never
+        // landed on the row).
+        if (!startedInside) return;
+        // The row wraps its own interactive controls (match reveal, the
+        // View-event dialog trigger, copy-link); a click on one of those must
+        // not also open the chat. stopPropagation on those children doesn't
+        // reliably stop this handler under React's event delegation, so guard on
+        // the real target too.
+        if ((e.target as HTMLElement).closest("button, a")) return;
         if (result.chatId) {
           onSelectChat(result.chatId);
         }
@@ -549,6 +575,11 @@ function RiskEventsRow({
           <span className="font-mono text-xs" title={result.matchRedacted}>
             {result.matchRedacted}
           </span>
+        ) : isEventSource ? (
+          <EventMatchDialog
+            resultId={result.id}
+            matchRedacted={result.matchRedacted}
+          />
         ) : (
           <MaskedMatch
             resultId={result.id}

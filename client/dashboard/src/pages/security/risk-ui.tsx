@@ -8,6 +8,8 @@ import {
   type ReactNode,
 } from "react";
 import { useRiskUnmaskResultMutation } from "@gram/client/react-query/riskUnmaskResult.js";
+import { CodeBlock } from "@/components/code";
+import { Dialog } from "@/components/ui/dialog";
 import { RULE_CATEGORY_META } from "./policy-data";
 import {
   getCategoryForFinding,
@@ -300,5 +302,85 @@ export function MaskedMatch({
         <Eye className="h-3 w-3" />
       </button>
     </span>
+  );
+}
+
+function prettyJSON(s: string): string {
+  try {
+    return JSON.stringify(JSON.parse(s), null, 2);
+  } catch {
+    return s;
+  }
+}
+
+// EventMatchDialog is the reveal surface for llm_judge / prompt_injection
+// findings, whose "match" is the entire flagged event (a JSON payload with
+// tool calls), not a one-line substring. It reuses the same audited, chat:read
+// -gated reveal as MaskedMatch, but presents the payload in a scrollable Dialog
+// instead of the cramped inline cell.
+export function EventMatchDialog({
+  resultId,
+  matchRedacted,
+}: {
+  resultId: string | undefined;
+  matchRedacted: string | undefined;
+}): JSX.Element {
+  const { hasScope } = useRBAC();
+  const canReveal = hasScope(REVEAL_SCOPE);
+  const [open, setOpen] = useState(false);
+  const { value, isLoading, reveal } = useUnmaskedMatch(resultId ?? "");
+
+  if (!resultId || !matchRedacted) return <span>-</span>;
+
+  // Without chat:read the value can never be revealed — render a static,
+  // non-interactive placeholder rather than an inert trigger.
+  if (!canReveal) {
+    return (
+      <SimpleTooltip tooltip={REVEAL_DENIED_REASON}>
+        <span className="text-muted-foreground inline-flex items-center gap-1 text-xs">
+          <Lock className="h-3 w-3" />
+          <span>Hidden</span>
+        </span>
+      </SimpleTooltip>
+    );
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (next) reveal();
+      }}
+    >
+      <Dialog.Trigger asChild>
+        <button
+          type="button"
+          className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Eye className="h-3 w-3" />
+          <span>View event</span>
+        </button>
+      </Dialog.Trigger>
+      <Dialog.Content className="sm:max-w-2xl">
+        <Dialog.Header>
+          <Dialog.Title>Flagged event</Dialog.Title>
+          <Dialog.Description>
+            The full event content that was flagged for this finding.
+          </Dialog.Description>
+        </Dialog.Header>
+        {value === null ? (
+          <div className="text-muted-foreground flex items-center gap-2 py-8 text-sm">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span>{isLoading ? "Revealing…" : "No event content."}</span>
+          </div>
+        ) : (
+          <div className="max-h-[60vh] overflow-y-auto">
+            <CodeBlock language="json">{prettyJSON(value)}</CodeBlock>
+          </div>
+        )}
+      </Dialog.Content>
+    </Dialog>
   );
 }
