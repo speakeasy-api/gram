@@ -202,7 +202,8 @@ function normalizeClientInfo(value: unknown): MCPClientInfo | undefined {
   if (typeof name !== "string" || name === "") {
     return undefined;
   }
-  const version = typeof record["version"] === "string" ? record["version"] : "";
+  const version =
+    typeof record["version"] === "string" ? record["version"] : "";
   return { name, version };
 }
 

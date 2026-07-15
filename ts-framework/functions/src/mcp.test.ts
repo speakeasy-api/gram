@@ -325,7 +325,10 @@ describe("fromGram", () => {
         },
       });
 
-      expect(parseClientInfo(result)).toEqual({ name: "vega", version: "2.1.0" });
+      expect(parseClientInfo(result)).toEqual({
+        name: "vega",
+        version: "2.1.0",
+      });
     });
 
     test("ignores a malformed _meta clientInfo and falls back to the handshake", async () => {
