@@ -30,8 +30,8 @@ func TestEnvironmentsService_CloneEnvironment(t *testing.T) {
 			Name:             "clone-source-empty",
 			Description:      nil,
 			Entries: []*gen.EnvironmentEntryInput{
-				{Name: "API_KEY", Value: "super-secret-value"},
-				{Name: "DATABASE_URL", Value: "postgres://example/db"},
+				{Name: "API_KEY", Value: new("super-secret-value"), IsSecret: new(true)},
+				{Name: "DATABASE_URL", Value: new("postgres://example/db"), IsSecret: new(true)},
 			},
 		})
 		require.NoError(t, err)
@@ -85,8 +85,8 @@ func TestEnvironmentsService_CloneEnvironment(t *testing.T) {
 			Name:             "clone-source-with-values",
 			Description:      nil,
 			Entries: []*gen.EnvironmentEntryInput{
-				{Name: "API_KEY", Value: "super-secret-value"},
-				{Name: "SHORT", Value: "ab"},
+				{Name: "API_KEY", Value: new("super-secret-value"), IsSecret: new(true)},
+				{Name: "SHORT", Value: new("ab"), IsSecret: new(true)},
 			},
 		})
 		require.NoError(t, err)
@@ -182,7 +182,7 @@ func TestEnvironmentsService_CloneEnvironment_AuditLog(t *testing.T) {
 		Name:             "audit-clone-source",
 		Description:      nil,
 		Entries: []*gen.EnvironmentEntryInput{
-			{Name: "API_KEY", Value: "abc"},
+			{Name: "API_KEY", Value: new("abc"), IsSecret: new(true)},
 		},
 	})
 	require.NoError(t, err)

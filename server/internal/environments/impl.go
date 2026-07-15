@@ -136,15 +136,33 @@ func (s *Service) CreateEnvironment(ctx context.Context, payload *gen.CreateEnvi
 
 	names := make([]string, len(payload.Entries))
 	values := make([]string, len(payload.Entries))
+	isSecrets := make([]bool, len(payload.Entries))
 	for i, entry := range payload.Entries {
+		// Omitted flags default to secret: callers that predate is_secret
+		// (older dashboards, CLI, SDK users) always created secret entries,
+		// and defaulting to readable would silently downgrade their values.
+		isSecret := conv.PtrValOr(entry.IsSecret, true)
+		switch {
+		case entry.Value == nil:
+			return nil, oops.E(oops.CodeBadRequest, nil, "environment entry %q requires a value", entry.Name)
+		case *entry.Value == "" && !isSecret:
+			// Empty values are tolerated for secret entries (the dashboard's
+			// "fill for MCP server" flow seeds empty placeholders), but a
+			// non-secret empty value cannot be stored: the value column
+			// rejects empty plaintext.
+			return nil, oops.E(oops.CodeBadRequest, nil, "environment entry %q requires a non-empty value when it is not secret", entry.Name)
+		}
+
 		names[i] = entry.Name
-		values[i] = entry.Value
+		values[i] = *entry.Value
+		isSecrets[i] = isSecret
 	}
 
 	rows, err := entriesRepo.CreateEnvironmentEntries(ctx, repo.CreateEnvironmentEntriesParams{
 		EnvironmentID: environment.ID,
 		Names:         names,
 		Values:        values,
+		IsSecrets:     isSecrets,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to create environment entries").LogError(ctx, logger)
@@ -243,6 +261,26 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 	er := s.repo.WithTx(dbtx)
 	entriesRepo := NewEnvironmentEntries(logger, dbtx, s.entries.enc, s.entries.mcpMetadataRepo)
 
+	// Unredacted entries back the secrecy-flip rules below: flipping a
+	// non-secret entry to secret without a new value encrypts the stored
+	// plaintext in place, and omitting the value on an unchanged entry
+	// preserves the stored value by rewriting it. Both derive a write from what
+	// is stored, so the rows stay locked until this transaction ends. An update
+	// that touches no entries decrypts nothing. The lock lands before the audit
+	// snapshot below so the snapshot cannot predate the values the update
+	// derives from.
+	existingByName := map[string]repo.EnvironmentEntry{}
+	if len(payload.EntriesToUpdate) > 0 {
+		rawEntries, err := entriesRepo.ListEnvironmentEntriesForUpdate(ctx, *authCtx.ProjectID, environment.ID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to load environment entries").LogError(ctx, logger)
+		}
+		existingByName = make(map[string]repo.EnvironmentEntry, len(rawEntries))
+		for _, entry := range rawEntries {
+			existingByName[entry.Name] = entry
+		}
+	}
+
 	beforeEntries, err := entriesRepo.ListEnvironmentEntries(ctx, *authCtx.ProjectID, environment.ID, true)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to list environment entries").LogError(ctx, logger)
@@ -274,10 +312,46 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 	}
 
 	for _, updatedEntry := range payload.EntriesToUpdate {
+		existing, exists := existingByName[updatedEntry.Name]
+		hasValue := updatedEntry.Value != nil
+
+		// An omitted flag means "no opinion": existing entries keep their
+		// current secrecy and new entries default to secret, so callers that
+		// predate is_secret behave exactly as before. The flip rules below
+		// only apply to explicit flags.
+		isSecret := true
+		if exists {
+			isSecret = existing.IsSecret
+		}
+		if updatedEntry.IsSecret != nil {
+			isSecret = *updatedEntry.IsSecret
+		}
+
+		// The value written to storage. When the caller omits the value, the
+		// existing decrypted value stands in — except on a secret-to-non-secret
+		// flip, which must supply a fresh value so that environment write
+		// access never doubles as secret read access. An explicit empty value
+		// is tolerated for secret entries only (legacy placeholder behavior);
+		// the value column rejects empty plaintext.
+		value := ""
+		switch {
+		case hasValue && *updatedEntry.Value == "" && !isSecret:
+			return nil, oops.E(oops.CodeBadRequest, nil, "environment entry %q requires a non-empty value when it is not secret", updatedEntry.Name)
+		case hasValue:
+			value = *updatedEntry.Value
+		case !exists:
+			return nil, oops.E(oops.CodeBadRequest, nil, "environment entry %q requires a value", updatedEntry.Name)
+		case existing.IsSecret && !isSecret:
+			return nil, oops.E(oops.CodeBadRequest, nil, "environment entry %q requires a new value when changing it from secret to non-secret", updatedEntry.Name)
+		default:
+			value = existing.Value
+		}
+
 		if err := entriesRepo.UpdateEnvironmentEntry(ctx, repo.UpsertEnvironmentEntryParams{
 			EnvironmentID: environment.ID,
 			Name:          updatedEntry.Name,
-			Value:         updatedEntry.Value, // This is the actual environment value to update too, do not redact it
+			Value:         value, // This is the actual environment value to update too, do not redact it
+			IsSecret:      isSecret,
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to update environment entry").LogError(ctx, logger)
 		}
@@ -523,6 +597,7 @@ func buildEnvironmentEntries(entries []repo.EnvironmentEntry) []*types.Environme
 		genEntries[i] = &types.EnvironmentEntry{
 			Name:      entry.Name,
 			Value:     entry.Value,
+			IsSecret:  entry.IsSecret,
 			CreatedAt: entry.CreatedAt.Time.Format(time.RFC3339),
 			UpdatedAt: entry.UpdatedAt.Time.Format(time.RFC3339),
 		}

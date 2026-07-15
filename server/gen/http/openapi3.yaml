@@ -44848,6 +44848,9 @@ components:
                     type: string
                     description: The creation date of the environment entry
                     format: date-time
+                is_secret:
+                    type: boolean
+                    description: Whether the value is a secret. Secret values are redacted in reads; non-secret values are returned in cleartext.
                 name:
                     type: string
                     description: The name of the environment variable
@@ -44857,26 +44860,29 @@ components:
                     format: date-time
                 value:
                     type: string
-                    description: Redacted values of the environment variable
+                    description: The value of the environment variable. Cleartext when is_secret is false, redacted otherwise.
             description: A single environment entry
             required:
                 - name
                 - value
+                - is_secret
                 - created_at
                 - updated_at
         EnvironmentEntryInput:
             type: object
             properties:
+                is_secret:
+                    type: boolean
+                    description: Whether the value is a secret. Secret values are encrypted at rest and redacted in reads; non-secret values are readable after save. When omitted, new entries default to secret and existing entries keep their current secrecy.
                 name:
                     type: string
                     description: The name of the environment variable
                 value:
                     type: string
-                    description: The value of the environment variable
+                    description: The value of the environment variable. Omit on an existing secret entry to preserve its stored value. Required when creating an entry or when changing is_secret from true to false.
             description: A single environment entry
             required:
                 - name
-                - value
         Error:
             type: object
             properties:
@@ -46239,18 +46245,21 @@ components:
                 hooks_browser_login_enabled:
                     type: boolean
                     description: Whether generated hook plugins may mint per-user keys via the interactive browser login
+                hooks_fail_open_enabled:
+                    type: boolean
+                    description: Whether hooks fail open when the Speakeasy control plane is unreachable or erroring — blocking policies are not enforced for the duration of the outage
                 logs_enabled:
                     type: boolean
                     description: Whether logging is enabled
-                observability_mode_enabled:
-                    type: boolean
-                    description: Whether observability mode is enabled, making generated hook plugins fully non-blocking
                 scim_enabled:
                     type: boolean
                     description: Whether SCIM/directory sync setup is enabled for the organization
                 session_capture_enabled:
                     type: boolean
                     description: Whether Claude Code session capture is enabled
+                skills_enabled:
+                    type: boolean
+                    description: Whether the Skills page is enabled for the organization
                 sso_enabled:
                     type: boolean
                     description: Whether SSO setup is enabled for the organization
@@ -46268,9 +46277,10 @@ components:
                 - webhooks
                 - sso_enabled
                 - scim_enabled
-                - observability_mode_enabled
                 - hooks_browser_login_enabled
+                - hooks_fail_open_enabled
                 - custom_model_keys_enabled
+                - skills_enabled
         GetProjectForm:
             type: object
             properties:
@@ -53879,9 +53889,10 @@ components:
                         - webhooks
                         - sso
                         - scim
-                        - observability_mode
                         - hooks_browser_login
+                        - hooks_fail_open
                         - custom_model_keys
+                        - skills
                     maxLength: 60
             required:
                 - feature_name

@@ -2,16 +2,29 @@ import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Badge } from "@/components/ui/badge";
 import { Type } from "@/components/ui/type";
+import { useProject } from "@/contexts/Auth";
+import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { Icon } from "@speakeasy-api/moonshine";
 
 export default function CLIs(): JSX.Element {
+  const { id: projectId } = useProject();
+  const { data: features } = useProductFeatures(undefined, undefined, {
+    staleTime: 30_000,
+    throwOnError: false,
+  });
+  const skillsEnabled = features?.skillsEnabled === true;
+
   return (
     <Page>
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <RequireScope scope="project:read" level="page">
+        <RequireScope
+          scope={skillsEnabled ? "skill:read" : "project:read"}
+          resourceId={skillsEnabled ? projectId : undefined}
+          level="page"
+        >
           <Page.Section>
             <Page.Section.Title>Skills</Page.Section.Title>
             <Page.Section.Description>
@@ -19,28 +32,33 @@ export default function CLIs(): JSX.Element {
               discovery and improve performance.
             </Page.Section.Description>
             <Page.Section.Body>
-              <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
-                <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
-                  <Icon
-                    name="terminal"
-                    className="text-muted-foreground h-6 w-6"
-                  />
-                </div>
-                <Type variant="subheading" className="mb-1">
-                  No skills yet
-                </Type>
-                <Type small muted className="max-w-md text-center">
-                  Build and distribute skills to your team. Track usage, enable
-                  discovery and improve performance.
-                </Type>
-                <Badge variant="secondary" className="mt-3">
-                  Coming Soon
-                </Badge>
-              </div>
+              <SkillsEmptyState comingSoon={!skillsEnabled} />
             </Page.Section.Body>
           </Page.Section>
         </RequireScope>
       </Page.Body>
     </Page>
+  );
+}
+
+function SkillsEmptyState({ comingSoon = false }: { comingSoon?: boolean }) {
+  return (
+    <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
+      <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
+        <Icon name="terminal" className="text-muted-foreground h-6 w-6" />
+      </div>
+      <Type variant="subheading" className="mb-1">
+        No skills yet
+      </Type>
+      <Type small muted className="max-w-md text-center">
+        Build and distribute skills to your team. Track usage, enable discovery
+        and improve performance.
+      </Type>
+      {comingSoon && (
+        <Badge variant="secondary" className="mt-3">
+          Coming Soon
+        </Badge>
+      )}
+    </div>
   );
 }

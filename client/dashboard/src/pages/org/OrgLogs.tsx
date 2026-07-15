@@ -6,7 +6,7 @@ import { Type } from "@/components/ui/type";
 import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
 import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet";
 import { Stack } from "@speakeasy-api/moonshine";
-import { Eye, FileText, LogIn, Monitor, ShieldCheck } from "lucide-react";
+import { Eye, FileText, LogIn, Monitor, Unplug } from "lucide-react";
 import { useState } from "react";
 import { AIIntegrationsSection } from "./AIIntegrationsSection";
 import { OtelForwardingSection } from "./OtelForwardingSection";
@@ -38,10 +38,10 @@ function OrgLogsInner() {
   const [sessionCaptureEnabled, setSessionCaptureEnabled] = useState<
     boolean | null
   >(null);
-  const [observabilityModeEnabled, setObservabilityModeEnabled] = useState<
+  const [hooksBrowserLoginEnabled, setHooksBrowserLoginEnabled] = useState<
     boolean | null
   >(null);
-  const [hooksBrowserLoginEnabled, setHooksBrowserLoginEnabled] = useState<
+  const [hooksFailOpenEnabled, setHooksFailOpenEnabled] = useState<
     boolean | null
   >(null);
 
@@ -51,10 +51,10 @@ function OrgLogsInner() {
     toolIoLogsEnabled ?? featuresData?.toolIoLogsEnabled ?? false;
   const effectiveSessionCaptureEnabled =
     sessionCaptureEnabled ?? featuresData?.sessionCaptureEnabled ?? false;
-  const effectiveObservabilityModeEnabled =
-    observabilityModeEnabled ?? featuresData?.observabilityModeEnabled ?? false;
   const effectiveHooksBrowserLoginEnabled =
     hooksBrowserLoginEnabled ?? featuresData?.hooksBrowserLoginEnabled ?? false;
+  const effectiveHooksFailOpenEnabled =
+    hooksFailOpenEnabled ?? featuresData?.hooksFailOpenEnabled ?? false;
 
   const { mutate: setLogsFeature, status: logsMutationStatus } =
     useFeaturesSetMutation({
@@ -67,17 +67,15 @@ function OrgLogsInner() {
           setToolIoLogsEnabled(enabled);
         } else if (featureName === FeatureName.SessionCapture) {
           setSessionCaptureEnabled(enabled);
-        } else if (featureName === FeatureName.ObservabilityMode) {
-          setObservabilityModeEnabled(enabled);
         } else if (featureName === FeatureName.HooksBrowserLogin) {
           setHooksBrowserLoginEnabled(enabled);
+        } else if (featureName === FeatureName.HooksFailOpen) {
+          setHooksFailOpenEnabled(enabled);
         }
       },
       onError: (error) => {
-        // Surfaces, among others, the phased-rollout block when an org toggles
-        // observability mode before it's approved for the latest hooks version.
-        // On error the optimistic state above never runs, so the switch reverts
-        // to the server value.
+        // On error the optimistic state above never runs, so the switch
+        // reverts to the server value.
         handleAPIError(error, "Failed to update setting");
       },
     });
@@ -128,22 +126,22 @@ function OrgLogsInner() {
     });
   };
 
-  const handleSetObservabilityMode = (enabled: boolean) => {
+  const handleSetHooksBrowserLogin = (enabled: boolean) => {
     setLogsFeature({
       request: {
         setProductFeatureRequestBody: {
-          featureName: FeatureName.ObservabilityMode,
+          featureName: FeatureName.HooksBrowserLogin,
           enabled,
         },
       },
     });
   };
 
-  const handleSetHooksBrowserLogin = (enabled: boolean) => {
+  const handleSetHooksFailOpen = (enabled: boolean) => {
     setLogsFeature({
       request: {
         setProductFeatureRequestBody: {
-          featureName: FeatureName.HooksBrowserLogin,
+          featureName: FeatureName.HooksFailOpen,
           enabled,
         },
       },
@@ -255,26 +253,28 @@ function OrgLogsInner() {
           <Stack direction="horizontal" justify="space-between" align="center">
             <Stack gap={1}>
               <Stack direction="horizontal" align="center" gap={2}>
-                <ShieldCheck className="text-muted-foreground h-4 w-4" />
+                <Unplug className="text-muted-foreground h-4 w-4" />
                 <Type variant="body" className="font-medium">
-                  Observability Mode
+                  Fail Open During Outages
                 </Type>
               </Stack>
               <Type
                 variant="body"
-                className="text-muted-foreground ml-6 text-sm"
+                className="text-muted-foreground mr-8 ml-6 max-w-4xl text-sm"
               >
-                Make generated hook plugins fully non-blocking. Hooks only
-                observe and report, and can never deny or delay a tool call.
+                Let tool calls proceed while Speakeasy is unreachable, instead
+                of blocking them (the default). Blocking policies go unenforced
+                during the outage; events are still recorded and scanned after
+                recovery. Invalid credentials always block.
               </Type>
             </Stack>
             {!featuresLoading && (
               <RequireScope scope="org:admin" level="component">
                 <Switch
-                  checked={effectiveObservabilityModeEnabled}
-                  onCheckedChange={handleSetObservabilityMode}
+                  checked={effectiveHooksFailOpenEnabled}
+                  onCheckedChange={handleSetHooksFailOpen}
                   disabled={isMutatingLogs}
-                  aria-label="Enable observability mode"
+                  aria-label="Fail open during outages"
                 />
               </RequireScope>
             )}

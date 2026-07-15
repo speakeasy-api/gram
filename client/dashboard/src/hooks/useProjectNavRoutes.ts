@@ -1,6 +1,8 @@
 import { useMemo } from "react";
+import { useProject } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
+import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { AppRoute, useRoutes } from "@/routes";
 
 /** A project nav page plus the scopes that grant access to it. */
@@ -13,6 +15,8 @@ export interface ProjectNavRoute {
    * with the sidebar when scopes change there.
    */
   scope: Scope[];
+  /** Resource selected for this route's scope check, when applicable. */
+  resourceId?: string;
 }
 
 /**
@@ -30,12 +34,18 @@ export interface ProjectNavRoute {
  */
 export function useProjectNavRoutes(): ProjectNavRoute[] {
   const routes = useRoutes();
+  const { id: projectId } = useProject();
   const telemetry = useTelemetry();
+  const { data: productFeatures } = useProductFeatures(undefined, undefined, {
+    staleTime: 30_000,
+    throwOnError: false,
+  });
 
   const isAssistantsEnabled = telemetry.isFeatureEnabled("assistants") ?? false;
   // Default true: opt-out via PostHog org-group targeting on `gram-deployments-page`.
   const isDeploymentsPageEnabled =
     telemetry.isFeatureEnabled("gram-deployments-page") ?? true;
+  const isSkillsEnabled = productFeatures?.skillsEnabled === true;
 
   return useMemo<ProjectNavRoute[]>(() => {
     const read: Scope[] = ["project:read"];
@@ -62,7 +72,11 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       ...(isAssistantsEnabled
         ? [{ route: routes.assistants, scope: read }]
         : []),
-      { route: routes.clis, scope: read },
+      {
+        route: routes.clis,
+        scope: isSkillsEnabled ? ["skill:read"] : read,
+        ...(isSkillsEnabled ? { resourceId: projectId } : {}),
+      },
       { route: routes.plugins, scope: readWrite },
       { route: routes.environments, scope: readWrite },
       { route: routes.employees, scope: observe },
@@ -77,5 +91,11 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       { route: routes.detectionRules, scope: readWrite },
       { route: routes.settings, scope: ["project:write"] },
     ];
-  }, [routes, isAssistantsEnabled, isDeploymentsPageEnabled]);
+  }, [
+    routes,
+    projectId,
+    isAssistantsEnabled,
+    isDeploymentsPageEnabled,
+    isSkillsEnabled,
+  ]);
 }

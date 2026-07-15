@@ -255,6 +255,18 @@ describe("hasScopeInGrants", () => {
     expect(hasScopeInGrants(grants, "skill:read")).toBe(true);
   });
 
+  it("limits a project-selected skill grant to that project", () => {
+    const grants = [
+      {
+        scope: "skill:read",
+        selectors: [{ resourceKind: "skill", resourceId: "project_a" }],
+      },
+    ];
+
+    expect(hasScopeInGrants(grants, "skill:read", "project_a")).toBe(true);
+    expect(hasScopeInGrants(grants, "skill:read", "project_b")).toBe(false);
+  });
+
   it("does not let a specific exclusion erase unscoped access", () => {
     const grants = [
       skillWildcard,
