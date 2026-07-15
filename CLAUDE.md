@@ -15,13 +15,12 @@ If you've just cloned this repository, then consider running `./zero --agent` to
   - `mise.local.toml`: Local environment variable overrides for development. This file is ignored by git and should not be committed.
   - `.mise-tasks/**/*.{mts,sh}`: Useful tasks for working with the project
   - `go.mod`: Go module definition for the entire project
-  - `mprocs.yaml`: Process manager config for `madprocs` — runs all local services (mock-idp, server, worker, dashboard, elements) in a single terminal with a tabbed UI. Run `madprocs` to start the TUI, or use `madprocs status|logs|start|stop|restart <proc>` from the CLI. Use `/madprocs` slash command for agent-assisted process control.
+  - `mprocs.yaml`: Process manager config for `madprocs` — runs all local services (mock-idp, server, worker, dashboard) in a single terminal with a tabbed UI. Run `madprocs` to start the TUI, or use `madprocs status|logs|start|stop|restart <proc>` from the CLI. Use `/madprocs` slash command for agent-assisted process control.
   - `server/`: Main backend service codebase
   - `cli/`: Command-line interface for Gram that users use to interact with the Gram service
   - `functions/`: Serverless function runner powering the Gram Functions feature
   - `ts-framework/functions/`: TypeScript SDK for function authors (`Gram.tool()` API, manifest generation, MCP passthrough)
-  - `client/`: Frontend React application for Gram
-  - `elements/`: Frontend React application for Gram Elements, a chat interface that integrates with Gram MCP servers.
+  - `client/`: Frontend React application for Gram. Gram Elements — a chat interface that integrates with Gram MCP servers — lives inside it at `client/dashboard/src/elements/`.
 
 </structure>
 
@@ -111,7 +110,7 @@ Activate a skill when your task falls within its scope.
 | `golang`                          | Writing or editing Go code                                                      |
 | `postgresql`                      | Creating migrations, writing SQLc queries, or changing the database schema      |
 | `clickhouse`                      | Working with ClickHouse queries, schema, or migrations in the `server/` package |
-| `frontend`                        | Working on the React frontends in `client/` or `elements/`                      |
+| `frontend`                        | Working on the React frontend in `client/`                                      |
 | `vercel-react-best-practices`     | Optimizing React performance, reviewing components for best practices           |
 | `gram-functions`                  | Understanding or modifying the Gram Functions serverless execution feature      |
 | `gram-management-api`             | Designing or modifying management API endpoints (Goa design, impl)              |

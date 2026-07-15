@@ -48,7 +48,7 @@ import { parseFilters, serializeFilters } from "@/pages/logs/log-filter-url";
 import { TraceLogsList } from "@/pages/logs/TraceLogsList";
 import { cn } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
-import { type DateRangePreset } from "@gram-ai/elements";
+import { type DateRangePreset } from "@/elements";
 import { telemetryGetToolUsageFilterOptions } from "@gram/client/funcs/telemetryGetToolUsageFilterOptions";
 import { telemetryListToolUsageTraces } from "@gram/client/funcs/telemetryListToolUsageTraces";
 import type { LogFilter } from "@gram/client/models/components/logfilter.js";

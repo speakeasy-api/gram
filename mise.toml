@@ -186,8 +186,8 @@ GRAM_ENABLE_OTEL_METRICS = 1
 JAEGER_WEB_PORT = "16686"
 PROMETHEUS_PORT = "9099"
 GRAM_LOG_PRETTY = 1
-## This config is used by the Elements SDK and CLI to point to the correct Gram
-## API server
+## Default Gram API URL baked into the dashboard's inlined Elements code and
+## used by the CLI to point to the correct Gram API server
 GRAM_API_URL = "{{env.GRAM_SERVER_URL}}"
 VITE_DEV_HOSTNAMES = "localhost"
 TEMPORAL_WEB_PORT = "8233"
@@ -242,14 +242,6 @@ GRAM_ASSISTANT_RUNTIME_OCI_IMAGE = "gram-assistant-runtime"
 ##################
 PULSE_REGISTRY_TENANT = "unset"
 PULSE_REGISTRY_KEY = "unset"
-
-##############
-## Elements ##
-##############
-## Used for local development only
-## Storybook runs internally on 6007, but the protocol sniffing proxy serves on 6006
-ELEMENTS_STORYBOOK_PORT = "6007"
-VITE_GRAM_ELEMENTS_STORYBOOK_URL = "https://localhost:{{env.ELEMENTS_STORYBOOK_PORT}}"
 
 ##########
 ## Risk ##
