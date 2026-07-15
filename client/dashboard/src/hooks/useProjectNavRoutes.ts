@@ -38,6 +38,7 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
   const telemetry = useTelemetry();
   const { data: productFeatures } = useProductFeatures(undefined, undefined, {
     staleTime: 30_000,
+    throwOnError: false,
   });
 
   const isAssistantsEnabled = telemetry.isFeatureEnabled("assistants") ?? false;

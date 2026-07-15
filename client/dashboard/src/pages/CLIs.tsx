@@ -10,6 +10,7 @@ export default function CLIs(): JSX.Element {
   const { id: projectId } = useProject();
   const { data: features } = useProductFeatures(undefined, undefined, {
     staleTime: 30_000,
+    throwOnError: false,
   });
   const skillsEnabled = features?.skillsEnabled === true;
 
