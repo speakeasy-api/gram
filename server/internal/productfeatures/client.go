@@ -119,6 +119,57 @@ func (c *Client) UpdateFeatureCache(ctx context.Context, organizationID string, 
 	}
 }
 
+// EnableSkillsTx provisions the built-in Skills grants when RBAC is already
+// active, then enables the org-level Skills feature in the caller's transaction.
+// When RBAC is off, EnableRBACTx will seed the complete system-role defaults
+// later. Existing grants and exclusions are preserved.
+func EnableSkillsTx(ctx context.Context, dbtx repo.DBTX, organizationID string) error {
+	q := repo.New(dbtx)
+	rbacEnabled, err := q.IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{
+		OrganizationID: organizationID,
+		FeatureName:    string(FeatureRBAC),
+	})
+	if err != nil {
+		return fmt.Errorf("check RBAC feature flag: %w", err)
+	}
+
+	if rbacEnabled {
+		if _, err := authz.PatchRoleGrantsTx(ctx, dbtx, organizationID, authz.SystemRoleMember, "", []*authz.RoleGrant{
+			{
+				Scope:     string(authz.ScopeSkillRead),
+				Effect:    authz.PolicyEffectAllow,
+				Selectors: nil,
+			},
+		}, nil); err != nil {
+			return fmt.Errorf("provision member Skills grants: %w", err)
+		}
+
+		if _, err := authz.PatchRoleGrantsTx(ctx, dbtx, organizationID, authz.SystemRoleAdmin, "", []*authz.RoleGrant{
+			{
+				Scope:     string(authz.ScopeSkillRead),
+				Effect:    authz.PolicyEffectAllow,
+				Selectors: nil,
+			},
+			{
+				Scope:     string(authz.ScopeSkillWrite),
+				Effect:    authz.PolicyEffectAllow,
+				Selectors: nil,
+			},
+		}, nil); err != nil {
+			return fmt.Errorf("provision admin Skills grants: %w", err)
+		}
+	}
+
+	if err := q.EnableFeature(ctx, repo.EnableFeatureParams{
+		OrganizationID: organizationID,
+		FeatureName:    string(FeatureSkills),
+	}); err != nil {
+		return fmt.Errorf("enable Skills feature flag: %w", err)
+	}
+
+	return nil
+}
+
 // EnableRBACTx seeds the built-in system-role grants and turns on the org-level
 // RBAC feature flag within the caller's transaction. It is the single source of
 // truth for "enable RBAC for an org" and is idempotent: an already-enabled org

@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import type { AppRoute } from "@/routes";
 import { useProjectNavRoutes } from "./useProjectNavRoutes";
 
+const productFeatures = vi.hoisted(() => ({ skillsEnabled: false }));
+
 function route(title: string, url: string): AppRoute {
   return {
     Icon: () => null,
@@ -52,6 +54,12 @@ vi.mock("@/contexts/Telemetry", () => ({
   }),
 }));
 
+vi.mock("@gram/client/react-query/productFeatures.js", () => ({
+  useProductFeatures: () => ({
+    data: { skillsEnabled: productFeatures.skillsEnabled },
+  }),
+}));
+
 describe("useProjectNavRoutes", () => {
   it("uses Shadow MCP as the sidebar destination while leaving Approval Requests out of nav", () => {
     const { result } = renderHook(() => useProjectNavRoutes());
@@ -60,5 +68,23 @@ describe("useProjectNavRoutes", () => {
 
     expect(navTitles).toContain("Shadow MCP");
     expect(navTitles).not.toContain("Approval Requests");
+  });
+
+  it("uses project read for Skills when the product feature is disabled", () => {
+    productFeatures.skillsEnabled = false;
+
+    const { result } = renderHook(() => useProjectNavRoutes());
+    const skills = result.current.find((entry) => entry.route === routes.clis);
+
+    expect(skills?.scope).toEqual(["project:read"]);
+  });
+
+  it("uses skill read for Skills when the product feature is enabled", () => {
+    productFeatures.skillsEnabled = true;
+
+    const { result } = renderHook(() => useProjectNavRoutes());
+    const skills = result.current.find((entry) => entry.route === routes.clis);
+
+    expect(skills?.scope).toEqual(["skill:read"]);
   });
 });

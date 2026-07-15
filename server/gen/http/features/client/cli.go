@@ -41,8 +41,8 @@ func BuildSetProductFeaturePayload(featuresSetProductFeatureBody string, feature
 		if err != nil {
 			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"enabled\": false,\n      \"feature_name\": \"aaa\"\n   }'")
 		}
-		if !(body.FeatureName == "logs" || body.FeatureName == "tool_io_logs" || body.FeatureName == "session_capture" || body.FeatureName == "authz_challenge_logging" || body.FeatureName == "webhooks" || body.FeatureName == "sso" || body.FeatureName == "scim" || body.FeatureName == "observability_mode" || body.FeatureName == "hooks_browser_login" || body.FeatureName == "custom_model_keys") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.feature_name", body.FeatureName, []any{"logs", "tool_io_logs", "session_capture", "authz_challenge_logging", "webhooks", "sso", "scim", "observability_mode", "hooks_browser_login", "custom_model_keys"}))
+		if !(body.FeatureName == "logs" || body.FeatureName == "tool_io_logs" || body.FeatureName == "session_capture" || body.FeatureName == "authz_challenge_logging" || body.FeatureName == "webhooks" || body.FeatureName == "sso" || body.FeatureName == "scim" || body.FeatureName == "observability_mode" || body.FeatureName == "hooks_browser_login" || body.FeatureName == "custom_model_keys" || body.FeatureName == "skills") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.feature_name", body.FeatureName, []any{"logs", "tool_io_logs", "session_capture", "authz_challenge_logging", "webhooks", "sso", "scim", "observability_mode", "hooks_browser_login", "custom_model_keys", "skills"}))
 		}
 		if utf8.RuneCountInString(body.FeatureName) > 60 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.feature_name", body.FeatureName, utf8.RuneCountInString(body.FeatureName), 60, false))
