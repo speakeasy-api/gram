@@ -13,6 +13,7 @@ import { invalidateAllRbacStatus } from "@gram/client/react-query/rbacStatus.js"
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowRightLeft,
+  BookOpen,
   Building2,
   FileSearch,
   FolderSync,
@@ -283,6 +284,19 @@ function ProductFeaturesSection(): ReactElement {
       >
         <RBACManagementSection />
       </Section>
+
+      <FeatureToggle
+        label="Skills"
+        description="Enables the Skills page and provisions default Skills grants when RBAC is active."
+        icon={BookOpen}
+        featureName={FeatureName.Skills}
+        enabled={features.skillsEnabled}
+        isPending={isPending && pendingFeature === FeatureName.Skills}
+        onToggle={handleToggle}
+        error={
+          pendingFeature === FeatureName.Skills ? mutError?.message : undefined
+        }
+      />
 
       <FeatureToggle
         label="Authz Challenge Logging"

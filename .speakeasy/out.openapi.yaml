@@ -45883,6 +45883,9 @@ components:
         session_capture_enabled:
           type: boolean
           description: Whether Claude Code session capture is enabled
+        skills_enabled:
+          type: boolean
+          description: Whether the Skills page is enabled for the organization
         sso_enabled:
           type: boolean
           description: Whether SSO setup is enabled for the organization
@@ -45903,6 +45906,7 @@ components:
         - observability_mode_enabled
         - hooks_browser_login_enabled
         - custom_model_keys_enabled
+        - skills_enabled
     GetProjectForm:
       type: object
       properties:
@@ -53514,6 +53518,7 @@ components:
             - observability_mode
             - hooks_browser_login
             - custom_model_keys
+            - skills
           maxLength: 60
       required:
         - feature_name

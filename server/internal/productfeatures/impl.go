@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 )
@@ -125,7 +126,18 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 
 	var err error
 
-	if payload.Enabled {
+	if payload.Enabled && payload.FeatureName == string(FeatureSkills) {
+		tx, txErr := s.db.Begin(ctx)
+		if txErr != nil {
+			err = fmt.Errorf("begin enable Skills transaction: %w", txErr)
+		} else {
+			defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+			err = EnableSkillsTx(ctx, tx, orgID)
+			if err == nil {
+				err = tx.Commit(ctx)
+			}
+		}
+	} else if payload.Enabled {
 		err = s.repo.EnableFeature(ctx, repo.EnableFeatureParams{
 			OrganizationID: orgID,
 			FeatureName:    payload.FeatureName,
@@ -240,6 +252,7 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 		ObservabilityModeEnabled:     isEnabled(FeatureObservabilityMode),
 		HooksBrowserLoginEnabled:     isEnabled(FeatureHooksBrowserLogin),
 		CustomModelKeysEnabled:       isEnabled(FeatureCustomModelKeys),
+		SkillsEnabled:                isEnabled(FeatureSkills),
 	}, nil
 }
 
