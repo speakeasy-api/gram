@@ -210,7 +210,7 @@ function TunneledMCPDetailsContent(): JSX.Element {
             value="setup"
             className="mt-0 min-h-0 flex-1 overflow-y-auto"
           >
-            <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
+            <div className="mx-auto w-full max-w-[1500px] px-8 py-8">
               <TunneledMcpSetupTabs
                 serverName={tunneledMcpServer?.name}
                 keyPrefix={tunneledMcpServer?.keyPrefix}

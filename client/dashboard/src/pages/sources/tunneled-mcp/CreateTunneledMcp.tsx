@@ -89,7 +89,7 @@ function CreateTunneledMcpForm() {
 
   if (created) {
     return (
-      <div className="max-w-4xl">
+      <div className="max-w-6xl">
         <Stack gap={3} className="mb-8">
           <Stack direction="horizontal" gap={3} align="center">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-cyan-500/10 dark:bg-cyan-500/20">
