@@ -605,6 +605,20 @@ name: "My_Skill"
 	}
 }
 
+func TestParseSkillManifestUnicodeTrailingWhitespaceEquivalence(t *testing.T) {
+	t.Parallel()
+
+	content := "---\nname: unicode-whitespace\ndescription: Canonical summary.\n---\n\n# Body\n"
+	withTrailingWhitespace := strings.ReplaceAll(content, "\n", "\u00a0\u2003\n")
+
+	manifest, err := parseSkillManifest(content)
+	require.NoError(t, err)
+	withUnicodeWhitespace, err := parseSkillManifest(withTrailingWhitespace)
+	require.NoError(t, err)
+	require.Equal(t, manifest.canonicalContent, withUnicodeWhitespace.canonicalContent)
+	require.Equal(t, manifest.CanonicalSHA256, withUnicodeWhitespace.CanonicalSHA256)
+}
+
 func TestParseSkillManifestSemanticDifferencesChangeHash(t *testing.T) {
 	t.Parallel()
 

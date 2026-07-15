@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"golang.org/x/text/unicode/norm"
@@ -70,7 +71,7 @@ func parseSkillManifest(content string) (parsedSkillManifest, error) {
 	normalized = norm.NFC.String(normalized)
 	lines := strings.Split(normalized, "\n")
 	for i := range lines {
-		lines[i] = strings.TrimRight(lines[i], " \t")
+		lines[i] = strings.TrimRightFunc(lines[i], unicode.IsSpace)
 	}
 	if len(lines) == 0 || lines[0] != "---" {
 		return parsedSkillManifest{}, errors.New("parse skill manifest: missing opening frontmatter delimiter")

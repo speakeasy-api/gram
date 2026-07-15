@@ -176,6 +176,7 @@ func TestSkillsCanonicalDuplicatesPreserveOriginalVersionAndParent(t *testing.T)
 	variants := []string{
 		base,
 		strings.ReplaceAll(base, "\n", " \t\n"),
+		strings.ReplaceAll(base, "\n", "\u00a0\u2003\n"),
 		"\ufeff" + strings.ReplaceAll(base, "\n", "\r\n"),
 		"---\nmetadata: {owner: \"team\"}\ndescription: 'Canonical summary.'\nname: canonical-skill\n---\n\n# Body\n",
 	}

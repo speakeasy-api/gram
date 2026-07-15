@@ -28,7 +28,12 @@ func TestSkillsAuditAndOutboxAreAtomicAndSnapshotsAreContentFree(t *testing.T) {
 	outboxBefore, err := testrepo.New(ti.conn).CountOutboxEntriesByEventType(ctx, string(events.SkillV1.EventType()))
 	require.NoError(t, err)
 
-	firstContent := skillManifest("audited-skill", "Sensitive first summary.", "first")
+	const firstSummary = "Sensitive first summary."
+	const secondSummary = "Sensitive second summary."
+	const firstBody = "sensitive-first-body-marker"
+	const secondBody = "sensitive-second-body-marker"
+
+	firstContent := skillManifest("audited-skill", firstSummary, firstBody)
 	first, err := ti.service.Create(ctx, &gen.CreatePayload{Content: firstContent, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
 	createAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionSkillCreate)
@@ -44,7 +49,7 @@ func TestSkillsAuditAndOutboxAreAtomicAndSnapshotsAreContentFree(t *testing.T) {
 	require.Equal(t, first.Version.ID, duplicate.Version.ID)
 	requireAuditAndOutboxCounts(t, ctx, ti, createAfter, addBefore, archiveBefore, outboxAfterCreate)
 
-	secondContent := skillManifest("audited-skill", "Sensitive second summary.", "second")
+	secondContent := skillManifest("audited-skill", secondSummary, secondBody)
 	second, err := ti.service.AddVersion(ctx, &gen.AddVersionPayload{ID: first.Skill.ID, Content: secondContent, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
 	addAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionSkillAddVersion)
@@ -107,6 +112,11 @@ func TestSkillsAuditAndOutboxAreAtomicAndSnapshotsAreContentFree(t *testing.T) {
 	require.NotContains(t, addAfterSnapshot, "Summary")
 	require.NotContains(t, archiveBeforeSnapshot, "Summary")
 	require.NotContains(t, archiveAfterSnapshot, "Summary")
+	for _, snapshot := range [][]byte{addRecord.BeforeSnapshot, addRecord.AfterSnapshot, archiveRecord.BeforeSnapshot, archiveRecord.AfterSnapshot} {
+		for _, sensitiveValue := range []string{firstSummary, secondSummary, firstBody, secondBody} {
+			require.NotContains(t, string(snapshot), sensitiveValue)
+		}
+	}
 }
 
 func requireAuditAndOutboxCounts(t *testing.T, ctx context.Context, ti *testInstance, create, addVersion, archive, outbox int64) {
