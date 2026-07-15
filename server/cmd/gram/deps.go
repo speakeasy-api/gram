@@ -1018,6 +1018,18 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 	}
 	pubs = append(pubs, labelledStop{label: "gitleaksAnalysis", pub: gitleaksAnalysis})
 
+	promptInjectionAnalysis, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.PromptInjectionAnalysis{})
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for prompt injection analysis: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "promptInjectionAnalysis", pub: promptInjectionAnalysis})
+
+	promptPolicyAnalysis, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.PromptPolicyAnalysis{})
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for prompt policy analysis: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "promptPolicyAnalysis", pub: promptPolicyAnalysis})
+
 	customRulesAnalysis, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.CustomRulesAnalysis{})
 	if err != nil {
 		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for custom rules analysis: %w", err)
@@ -1035,9 +1047,11 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 	}
 
 	return &background.Publishers{
-		PresidioAnalysis:    presidioAnalysis,
-		GitleaksAnalysis:    gitleaksAnalysis,
-		CustomRulesAnalysis: customRulesAnalysis,
+		PresidioAnalysis:        presidioAnalysis,
+		GitleaksAnalysis:        gitleaksAnalysis,
+		PromptInjectionAnalysis: promptInjectionAnalysis,
+		PromptPolicyAnalysis:    promptPolicyAnalysis,
+		CustomRulesAnalysis:     customRulesAnalysis,
 	}, shutdown, nil
 }
 
