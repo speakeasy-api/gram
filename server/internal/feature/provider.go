@@ -13,6 +13,11 @@ type Provider interface {
 	// OrgProjectGroups to build the org/project groups the dashboard registers.
 	IsFlagEnabled(ctx context.Context, flag Flag, distinctID string, groups map[string]string) (bool, error)
 
+	// IsFlagEnabledLocal evaluates a flag using only locally cached flag
+	// definitions. Providers must fail closed without falling back to remote
+	// evaluation when the local result is unavailable or inconclusive.
+	IsFlagEnabledLocal(ctx context.Context, flag Flag, distinctID string, groups map[string]string) (bool, error)
+
 	// FlagPayload returns the raw JSON payload PostHog attaches to the flag
 	// release that matches distinctID, or (nil, nil) when the flag is off, has
 	// no payload, or the provider is disabled. groups is used for group-targeted
@@ -37,6 +42,10 @@ func (imp *InMemory) IsFlagEnabled(ctx context.Context, flag Flag, distinctID st
 	}
 
 	return enabled, nil
+}
+
+func (imp *InMemory) IsFlagEnabledLocal(ctx context.Context, flag Flag, distinctID string, groups map[string]string) (bool, error) {
+	return imp.IsFlagEnabled(ctx, flag, distinctID, groups)
 }
 
 func (imp *InMemory) SetFlag(flag Flag, distinctID string, enabled bool) {

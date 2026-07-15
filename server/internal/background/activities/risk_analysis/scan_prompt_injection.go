@@ -37,15 +37,10 @@ func (a *AnalyzeBatch) scanPromptInjection(ctx context.Context, args AnalyzeBatc
 }
 
 func (a *AnalyzeBatch) publishPromptInjectionScanRequests(ctx context.Context, args AnalyzeBatchArgs, requestID uuid.UUID, messages []batchMessage) {
-	sampleRate := a.asyncShadowSampleRate(ctx, args.OrganizationID, args.ProjectID)
-	if sampleRate <= 0 {
-		return
-	}
-
 	createdAt := time.Now().UTC().Format(time.RFC3339)
 	publishResults := make([]gcp.PublishResult, 0, len(messages))
 	for _, msg := range messages {
-		if !sampleAsyncShadow(msg.ID.String(), sampleRate) {
+		if !a.asyncShadowEnabled(ctx, msg.ID.String()) {
 			continue
 		}
 

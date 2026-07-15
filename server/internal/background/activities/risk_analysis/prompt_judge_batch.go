@@ -112,11 +112,6 @@ func (a *AnalyzeBatch) projectFlagEnabled(ctx context.Context, orgID string, pro
 }
 
 func (a *AnalyzeBatch) publishPromptPolicyScanRequests(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []batchMessage, indices []int) {
-	sampleRate := a.asyncShadowSampleRate(ctx, args.OrganizationID, args.ProjectID)
-	if sampleRate <= 0 {
-		return
-	}
-
 	requestID, err := uuid.NewV7()
 	if err != nil {
 		a.logger.WarnContext(ctx, "failed to generate prompt policy scan request id", attr.SlogError(err))
@@ -127,7 +122,7 @@ func (a *AnalyzeBatch) publishPromptPolicyScanRequests(ctx context.Context, args
 	publishResults := make([]gcp.PublishResult, 0, len(indices))
 	for _, idx := range indices {
 		msg := messages[idx]
-		if !sampleAsyncShadow(msg.ID.String(), sampleRate) {
+		if !a.asyncShadowEnabled(ctx, msg.ID.String()) {
 			continue
 		}
 

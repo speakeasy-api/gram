@@ -243,13 +243,12 @@ func TestAnalyzeBatch_PromptInjectionShadowSamplingGate(t *testing.T) {
 
 	for _, tc := range []struct {
 		name          string
-		flagEnabled   bool
-		payload       []byte
+		enabled       []int
 		wantPublished int
 	}{
-		{name: "flag off", flagEnabled: false, payload: []byte(`{"sample_rate":1}`), wantPublished: 0},
-		{name: "rate zero", flagEnabled: true, payload: []byte(`{"sample_rate":0}`), wantPublished: 0},
-		{name: "rate one", flagEnabled: true, payload: []byte(`{"sample_rate":1}`), wantPublished: 3},
+		{name: "flag off", enabled: nil, wantPublished: 0},
+		{name: "all enabled", enabled: []int{0, 1, 2}, wantPublished: 3},
+		{name: "subset enabled", enabled: []int{0, 2}, wantPublished: 2},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -257,10 +256,9 @@ func TestAnalyzeBatch_PromptInjectionShadowSamplingGate(t *testing.T) {
 			td := seedTestData(t, conn, true)
 			msgIDs := seedMessages(t, conn, td, 3)
 			flags := &feature.InMemory{}
-			if tc.flagEnabled {
-				flags.SetFlag(feature.FlagRiskAsyncScanShadow, td.orgID, true)
+			for _, idx := range tc.enabled {
+				flags.SetFlag(feature.FlagRiskAsyncScanShadow, msgIDs[idx].String(), true)
 			}
-			flags.SetFlagPayload(feature.FlagRiskAsyncScanShadow, td.orgID, tc.payload)
 			promptInjectionPub, published := capturingPromptInjectionPub(t)
 
 			ab := risk_analysis.NewAnalyzeBatch(
@@ -311,12 +309,12 @@ func TestAnalyzeBatch_PromptPolicyShadowSamplingGate(t *testing.T) {
 
 	for _, tc := range []struct {
 		name          string
-		flagEnabled   bool
-		payload       []byte
+		enabled       []int
 		wantPublished int
 	}{
-		{name: "flag off", flagEnabled: false, payload: []byte(`{"sample_rate":1}`), wantPublished: 0},
-		{name: "rate one", flagEnabled: true, payload: []byte(`{"sample_rate":1}`), wantPublished: 2},
+		{name: "flag off", enabled: nil, wantPublished: 0},
+		{name: "all enabled", enabled: []int{0, 1}, wantPublished: 2},
+		{name: "subset enabled", enabled: []int{1}, wantPublished: 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -341,10 +339,9 @@ func TestAnalyzeBatch_PromptPolicyShadowSamplingGate(t *testing.T) {
 			msgIDs := seedMessages(t, conn, td, 2)
 			flags := &feature.InMemory{}
 			flags.SetFlag(feature.FlagPromptPolicies, td.orgID, true)
-			if tc.flagEnabled {
-				flags.SetFlag(feature.FlagRiskAsyncScanShadow, td.orgID, true)
+			for _, idx := range tc.enabled {
+				flags.SetFlag(feature.FlagRiskAsyncScanShadow, msgIDs[idx].String(), true)
 			}
-			flags.SetFlagPayload(feature.FlagRiskAsyncScanShadow, td.orgID, tc.payload)
 			promptPolicyPub, published := capturingPromptPolicyPub(t)
 
 			ab := risk_analysis.NewAnalyzeBatch(
