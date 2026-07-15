@@ -15,6 +15,8 @@ import {
 } from "@gram/client/react-query/getMcpServer.js";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
+import { useGetTunneledMcpServer } from "@gram/client/react-query/getTunneledMcpServer.js";
+import { getTunneledMcpServerArgs } from "@/lib/sources";
 import { invalidateAllPlugins } from "@gram/client/react-query/plugins";
 import { invalidateAllPublishStatus } from "@gram/client/react-query/publishStatus";
 import { useUpdateMcpServerMutation } from "@gram/client/react-query/updateMcpServer.js";
@@ -186,16 +188,18 @@ export default function MCPServerDetails(): JSX.Element {
   );
 }
 
-// The dropdown only offers the two states that gate whether the server
-// serves traffic. Any other stored visibility values render their label via
-// currentLabel below.
-const VISIBILITY_OPTIONS: {
+type VisibilityOption = {
   value: McpServerVisibility;
   label: string;
   description: string;
   dotClass: string;
   hoverDotClass: string;
-}[] = [
+};
+
+// The dropdown only offers the states that gate whether the server serves
+// traffic. Any other stored visibility values render their label via
+// currentLabel below.
+const VISIBILITY_OPTIONS: VisibilityOption[] = [
   {
     value: "disabled",
     label: "Disabled",
@@ -211,6 +215,18 @@ const VISIBILITY_OPTIONS: {
     hoverDotClass: "group-hover:bg-blue-400",
   },
 ];
+
+// Public visibility is only offered for tunneled-backed servers, and only
+// once the tunnel source owner has consented (double opt-in). Other backend
+// types manage public visibility through their own flows.
+const PUBLIC_VISIBILITY_OPTION: VisibilityOption = {
+  value: "public",
+  label: "Public",
+  description:
+    "Anyone can connect anonymously — no login. Every tool is exposed to the public internet.",
+  dotClass: "bg-green-400",
+  hoverDotClass: "group-hover:bg-green-400",
+};
 
 export function MCPServerStatusDropdown({
   server,
@@ -277,6 +293,24 @@ export function MCPServerStatusDropdown({
         ? "Public"
         : "Private";
 
+  // Tunneled-backed servers may go public once the source consents; other
+  // backends only ever offer disabled/private here.
+  const isTunneled = Boolean(server.tunneledMcpServerId);
+  const { data: tunneledSource } = useGetTunneledMcpServer(
+    getTunneledMcpServerArgs(server.tunneledMcpServerId ?? ""),
+    undefined,
+    { enabled: isTunneled },
+  );
+  const sourceAllowsPublic = tunneledSource?.allowPublic ?? false;
+
+  const options = isTunneled
+    ? [...VISIBILITY_OPTIONS, PUBLIC_VISIBILITY_OPTION]
+    : VISIBILITY_OPTIONS;
+
+  const currentDotClass =
+    options.find((option) => option.value === server.visibility)?.dotClass ??
+    "bg-green-400";
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild disabled={!canWrite || update.isPending}>
@@ -286,55 +320,62 @@ export function MCPServerStatusDropdown({
           className="text-foreground hover:bg-muted trans border-border flex w-fit items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
         >
           <span
-            className={cn(
-              "h-2 w-2 shrink-0 rounded-full",
-              VISIBILITY_OPTIONS.find(
-                (option) => option.value === server.visibility,
-              )?.dotClass ?? "bg-green-400",
-            )}
+            className={cn("h-2 w-2 shrink-0 rounded-full", currentDotClass)}
           />
           {currentLabel}
           <ChevronDown className="text-muted-foreground h-3 w-3" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-[320px] p-1">
-        {VISIBILITY_OPTIONS.map((option) => (
-          <DropdownMenuItem
-            key={option.value}
-            onSelect={() => handleSelect(option.value)}
-            className="group flex cursor-pointer items-start gap-2.5 rounded-md p-2"
-          >
-            {option.value === server.visibility ? (
-              <span
-                className={cn(
-                  "mt-1 flex size-3.5 shrink-0 items-center justify-center rounded-full",
-                  option.dotClass,
-                )}
-              >
-                <Check
-                  className="text-background h-2.5 w-2.5"
-                  strokeWidth={4}
+        {options.map((option) => {
+          // Public is gated on the source's consent; render it disabled with
+          // a hint rather than hiding it, so owners know the toggle exists.
+          const publicBlocked =
+            option.value === "public" && !sourceAllowsPublic;
+          return (
+            <DropdownMenuItem
+              key={option.value}
+              disabled={publicBlocked}
+              onSelect={() => {
+                if (publicBlocked) return;
+                handleSelect(option.value);
+              }}
+              className="group flex cursor-pointer items-start gap-2.5 rounded-md p-2 data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60"
+            >
+              {option.value === server.visibility ? (
+                <span
+                  className={cn(
+                    "mt-1 flex size-3.5 shrink-0 items-center justify-center rounded-full",
+                    option.dotClass,
+                  )}
+                >
+                  <Check
+                    className="text-background h-2.5 w-2.5"
+                    strokeWidth={4}
+                  />
+                </span>
+              ) : (
+                <span
+                  className={cn(
+                    "mt-1 size-3.5 shrink-0 rounded-full transition-colors",
+                    "bg-muted",
+                    option.hoverDotClass,
+                  )}
                 />
-              </span>
-            ) : (
-              <span
-                className={cn(
-                  "mt-1 size-3.5 shrink-0 rounded-full transition-colors",
-                  "bg-muted",
-                  option.hoverDotClass,
-                )}
-              />
-            )}
-            <div className="flex-1">
-              <span className="block font-mono text-xs font-semibold tracking-wide uppercase">
-                {option.label}
-              </span>
-              <span className="text-muted-foreground text-xs">
-                {option.description}
-              </span>
-            </div>
-          </DropdownMenuItem>
-        ))}
+              )}
+              <div className="flex-1">
+                <span className="block font-mono text-xs font-semibold tracking-wide uppercase">
+                  {option.label}
+                </span>
+                <span className="text-muted-foreground text-xs">
+                  {publicBlocked
+                    ? "Enable public access on the tunnel source first to allow anonymous serving."
+                    : option.description}
+                </span>
+              </div>
+            </DropdownMenuItem>
+          );
+        })}
       </DropdownMenuContent>
     </DropdownMenu>
   );

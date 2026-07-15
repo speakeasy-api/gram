@@ -259,3 +259,32 @@ func TestCreateMcpServer_RBACForbidden(t *testing.T) {
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
+
+// TestCreateMcpServer_TunneledMcpPublicAllowedWithConsent: the double opt-in —
+// once the tunnel source owner sets allow_public, a fronting mcp_server may
+// take public visibility.
+func TestCreateMcpServer_TunneledMcpPublicAllowedWithConsent(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	tunneledServerID := seedTunneledMcpServer(t, ctx, ti.conn, *authCtx.ProjectID)
+	enableTunneledPublicConsent(t, ctx, ti.conn, *authCtx.ProjectID, tunneledServerID)
+
+	tunneledServerIDStr := tunneledServerID.String()
+	result, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		Name:                "public tunneled mcp server with consent",
+		EnvironmentID:       nil,
+		TunneledMcpServerID: &tunneledServerIDStr,
+		ToolsetID:           nil,
+		Visibility:          types.McpServerVisibility("public"),
+	})
+	require.NoError(t, err)
+	require.Equal(t, types.McpServerVisibility("public"), result.Visibility)
+}

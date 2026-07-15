@@ -56421,6 +56421,9 @@ components:
                 agent_version:
                     type: string
                     description: Most recent agent version reported by the tunnel
+                allow_public:
+                    type: boolean
+                    description: Whether the owner has consented to serving this source through a public, anonymous MCP endpoint
                 connection_status:
                     type: string
                     description: Derived live connection status for a tunneled MCP server source
@@ -56469,6 +56472,7 @@ components:
                 - key_prefix
                 - status
                 - connection_status
+                - allow_public
                 - active_connection_count
                 - active_consumer_session_count
                 - created_at
@@ -57525,6 +57529,9 @@ components:
         UpdateTunneledMcpServerForm:
             type: object
             properties:
+                allow_public:
+                    type: boolean
+                    description: Consent to serve this source through a public, anonymous MCP endpoint. Disabling revokes all live anonymous sessions. Omit to leave unchanged.
                 id:
                     type: string
                     description: The ID of the tunneled MCP server to update

@@ -273,6 +273,11 @@ func newStartCommand() *cli.Command {
 			Usage:   "CIDR blocks the tunnel gateway advertise addresses live in (cluster pod range). Allowlisted past the guardian egress policy for tunnel forwards only; unset means tunnels to private addresses fail closed",
 			EnvVars: []string{"GRAM_TUNNEL_GATEWAY_CIDR_BLOCKS"},
 		},
+		&cli.IntFlag{
+			Name:    "public-tunnels-live-session-cap",
+			Usage:   "Maximum concurrently tracked anonymous MCP sessions per tunnel (0 uses the built-in default)",
+			EnvVars: []string{"GRAM_PUBLIC_TUNNELS_LIVE_SESSION_CAP"},
+		},
 		&cli.StringFlag{
 			Name:    "openrouter-provisioning-key",
 			Usage:   "Provisioning key for OpenRouter to create new API keys for orgs - https://openrouter.ai/settings/provisioning-keys",
@@ -857,6 +862,14 @@ func newStartCommand() *cli.Command {
 				route.NewRedis(redisClient),
 				c.String("tunnel-forward-token"),
 				tunnelGatewayCIDRs,
+				redisClient,
+				mcp.TunnelPublicConfig{
+					SessionTTL:         0,
+					LiveSessionCap:     c.Int("public-tunnels-live-session-cap"),
+					InitializeRate:     ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
+					RequestRate:        ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
+					MaxRequestLifetime: 0,
+				},
 			)
 
 			chatClient := chat.NewAgenticChatClient(
@@ -1129,7 +1142,7 @@ func newStartCommand() *cli.Command {
 			usersessions.Attach(mux, usersessions.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, authzEngine, auditLogger, usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), serverURL.String(), remoteSessionsService))
 			remotesessions.Attach(mux, remoteSessionsService)
 			remotemcp.Attach(mux, remotemcp.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, guardianPolicy, auditLogger))
-			tunneledmcp.Attach(mux, tunneledmcp.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, route.NewRedis(redisClient)))
+			tunneledmcp.Attach(mux, tunneledmcp.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, route.NewRedis(redisClient), redisClient))
 			xmcp.Attach(mux, xmcp.NewService(logger, db, encryptionClient, mcpService), mcpMetadataService)
 			triggers.Attach(mux, triggers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, triggerApp, auditLogger))
 			tools.Attach(mux, tools.NewService(logger, tracerProvider, db, sessionManager, authzEngine, platformFeatureChecker, assistantPlatformExtras))

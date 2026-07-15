@@ -371,7 +371,8 @@ func (g *Gateway) handleForward(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	consumerSession := strings.TrimSpace(r.Header.Get(wire.HeaderTunnelConsumerSession))
-	entry, failure := g.reg.beginForward(tunnelID, consumerSession, time.Now().UTC(), g.cfg.MaxStreamsPerTunnel)
+	exactSession := strings.TrimSpace(r.Header.Get(wire.HeaderTunnelAgentSession))
+	entry, failure := g.reg.beginForward(tunnelID, consumerSession, exactSession, time.Now().UTC(), g.cfg.MaxStreamsPerTunnel)
 	switch failure {
 	case forwardReserved:
 	case forwardBusy:
@@ -389,6 +390,12 @@ func (g *Gateway) handleForward(w http.ResponseWriter, r *http.Request) {
 	}
 	r.Header.Del(wire.HeaderTunnelID)
 	r.Header.Del(wire.HeaderTunnelConsumerSession)
+	r.Header.Del(wire.HeaderTunnelAgentSession)
+	// Report the agent session that actually serves this forward so
+	// gram-server can pin session-bearing MCP traffic to it later. Set
+	// before ServeHTTP: the reverse proxy adds upstream headers to the
+	// existing header map without clearing it.
+	w.Header().Set(wire.HeaderTunnelAgentSession, entry.id)
 	// Publish the begin-forward snapshot asynchronously: mid-flight counter
 	// freshness matters (dashboards show active substreams during long-lived
 	// streams), but the forward's latency path must not block on Redis. At

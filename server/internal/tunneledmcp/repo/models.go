@@ -23,6 +23,8 @@ type TunneledMcpServer struct {
 	KeyPrefix string
 	// Durable lifecycle state for the source: created, active, or revoked. Live connection state is derived from Redis.
 	Status string
+	// Owner consent for anonymous public MCP serving of this source. Double opt-in with mcp_servers.visibility=public, enforced in application code.
+	AllowPublic bool
 	// Last persisted tunnel agent version reported for this source. Per-connection agent versions are stored in Redis.
 	AgentVersion pgtype.Text
 	// Most recent persisted heartbeat time for the source, used when Redis liveness data is absent or expired.

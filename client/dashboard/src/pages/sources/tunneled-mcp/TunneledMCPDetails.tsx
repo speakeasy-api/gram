@@ -1,6 +1,7 @@
 import { DetailHero } from "@/components/detail-hero";
 import { MCPServerCard } from "@/components/mcp/MCPServerCard";
 import { Page } from "@/components/page-layout";
+import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { RequireScope } from "@/components/require-scope";
 import {
   SourceInfoRow,
@@ -644,9 +645,18 @@ function SettingsTab({
   tunneledMcpServer: TunneledMcpServer;
   linkedMcpServers: McpServer[];
 }) {
+  // One mutation shared across the sections that write the same record. Its
+  // pending state serializes name and public-access edits so a concurrent
+  // update can't submit a stale display name and clobber the other change.
+  const update = useUpdateTunneledMcpServerMutation();
+
   return (
     <div className="mx-auto w-full max-w-[1270px] space-y-8 px-8 py-8">
-      <NameSection tunneledMcpServer={tunneledMcpServer} />
+      <NameSection tunneledMcpServer={tunneledMcpServer} update={update} />
+      <PublicAccessSection
+        tunneledMcpServer={tunneledMcpServer}
+        update={update}
+      />
       <TunnelKeySection tunneledMcpServer={tunneledMcpServer} />
       <DangerZoneSection
         tunneledMcpServer={tunneledMcpServer}
@@ -656,10 +666,200 @@ function SettingsTab({
   );
 }
 
-function NameSection({
+type UpdateTunneledMcpMutation = ReturnType<
+  typeof useUpdateTunneledMcpServerMutation
+>;
+
+const PUBLIC_ACCESS_CONFIRM_PHRASE = "ALLOW PUBLIC ACCESS";
+
+function PublicAccessSection({
   tunneledMcpServer,
+  update,
 }: {
   tunneledMcpServer: TunneledMcpServer;
+  update: UpdateTunneledMcpMutation;
+}) {
+  const queryClient = useQueryClient();
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmPhrase, setConfirmPhrase] = useState("");
+
+  const allowPublic = tunneledMcpServer.allowPublic;
+
+  // Rethrows on failure so callers can keep a confirmation dialog open; a
+  // toast still surfaces the error. The shared mutation (see SettingsTab)
+  // serializes this with the display-name edit so neither submits a stale
+  // name over the other.
+  const applyAllowPublic = async (next: boolean) => {
+    try {
+      await update.mutateAsync({
+        request: {
+          updateTunneledMcpServerForm: {
+            id: tunneledMcpServer.id,
+            name: tunneledMcpServer.name,
+            allowPublic: next,
+          },
+        },
+      });
+      await Promise.all([
+        invalidateAllGetTunneledMcpServer(queryClient, { refetchType: "all" }),
+        invalidateAllTunneledMcpServers(queryClient, { refetchType: "all" }),
+      ]);
+      toast.success(
+        next
+          ? "Public anonymous access enabled"
+          : "Public anonymous access disabled",
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to update public access";
+      toast.error(message);
+      throw error instanceof Error ? error : new Error(message);
+    }
+  };
+
+  const handleConfirmEnable = async () => {
+    try {
+      await applyAllowPublic(true);
+    } catch {
+      // Keep the dialog open on failure so the user can retry; the error
+      // Alert inside it and the toast already surface the reason.
+      return;
+    }
+    setConfirmOpen(false);
+    setConfirmPhrase("");
+  };
+
+  const closeConfirm = (open: boolean) => {
+    setConfirmOpen(open);
+    if (!open) setConfirmPhrase("");
+  };
+
+  return (
+    <div className="rounded-lg border p-6">
+      <div className="mb-1 flex items-center gap-2">
+        <Type variant="subheading">Public Access</Type>
+        <ReleaseStageBadge stage="preview" />
+      </div>
+      <Type muted small className="mb-4 max-w-3xl">
+        When enabled, MCP servers fronting this source can be published with{" "}
+        <span className="font-medium">public</span> visibility, serving fully
+        anonymous callers with no login. Anyone who can reach the endpoint URL
+        can call every tool this source exposes. Leave this off unless the
+        upstream MCP server is safe to expose to the public internet.
+      </Type>
+
+      {allowPublic ? (
+        <Stack gap={3}>
+          <Alert variant="warning" dismissible={false}>
+            Public anonymous access is enabled. MCP servers fronting this source
+            may serve unauthenticated callers.
+          </Alert>
+          <RequireScope scope="mcp:write" level="component">
+            <Button
+              variant="secondary"
+              disabled={update.isPending}
+              onClick={() => void applyAllowPublic(false)}
+            >
+              {update.isPending ? (
+                <>
+                  <Button.LeftIcon>
+                    <Loader2 className="size-4 animate-spin" />
+                  </Button.LeftIcon>
+                  <Button.Text>Disabling</Button.Text>
+                </>
+              ) : (
+                <Button.Text>Disable public access</Button.Text>
+              )}
+            </Button>
+          </RequireScope>
+        </Stack>
+      ) : (
+        <RequireScope scope="mcp:write" level="component">
+          <Button
+            variant="secondary"
+            disabled={update.isPending}
+            onClick={() => setConfirmOpen(true)}
+          >
+            <Button.Text>Enable public access</Button.Text>
+          </Button>
+        </RequireScope>
+      )}
+
+      <Dialog open={confirmOpen} onOpenChange={closeConfirm}>
+        <Dialog.Content className="max-w-xl!">
+          <Dialog.Header>
+            <Dialog.Title>Enable public anonymous access?</Dialog.Title>
+            <Dialog.Description>
+              This lets anyone on the internet call this source's tools with no
+              authentication once an MCP server fronting it is set to public
+              visibility.
+            </Dialog.Description>
+          </Dialog.Header>
+          <Alert variant="warning" dismissible={false}>
+            Only enable this for MCP servers that are safe to expose publicly.
+            Every tool, resource, and prompt becomes reachable without a login.
+          </Alert>
+          <Stack gap={2}>
+            <Type small muted>
+              Type{" "}
+              <span className="font-mono font-medium">
+                {PUBLIC_ACCESS_CONFIRM_PHRASE}
+              </span>{" "}
+              to confirm.
+            </Type>
+            <Input
+              value={confirmPhrase}
+              onChange={(value) => setConfirmPhrase(value)}
+              placeholder={PUBLIC_ACCESS_CONFIRM_PHRASE}
+            />
+            {update.isError && (
+              <Alert variant="error" dismissible={false}>
+                {update.error.message}
+              </Alert>
+            )}
+          </Stack>
+          <Dialog.Footer>
+            <Button
+              variant="secondary"
+              onClick={() => closeConfirm(false)}
+              disabled={update.isPending}
+            >
+              <Button.Text>Cancel</Button.Text>
+            </Button>
+            <Button
+              variant="destructive-primary"
+              disabled={
+                confirmPhrase.trim() !== PUBLIC_ACCESS_CONFIRM_PHRASE ||
+                update.isPending
+              }
+              onClick={() => void handleConfirmEnable()}
+            >
+              {update.isPending ? (
+                <>
+                  <Button.LeftIcon>
+                    <Loader2 className="size-4 animate-spin" />
+                  </Button.LeftIcon>
+                  <Button.Text>Enabling</Button.Text>
+                </>
+              ) : (
+                <Button.Text>Enable public access</Button.Text>
+              )}
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
+    </div>
+  );
+}
+
+function NameSection({
+  tunneledMcpServer,
+  update,
+}: {
+  tunneledMcpServer: TunneledMcpServer;
+  update: UpdateTunneledMcpMutation;
 }) {
   const [draft, setDraft] = useState(tunneledMcpServer.name);
 
@@ -668,7 +868,6 @@ function NameSection({
   }, [tunneledMcpServer.name]);
 
   const queryClient = useQueryClient();
-  const update = useUpdateTunneledMcpServerMutation();
 
   const dirty = draft.trim() !== tunneledMcpServer.name.trim();
   const saveDisabled = !dirty || draft.trim() === "" || update.isPending;

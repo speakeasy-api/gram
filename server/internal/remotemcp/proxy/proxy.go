@@ -225,6 +225,16 @@ type Proxy struct {
 	// It is used by tunneled MCP to fail over stale gateway owners.
 	UpstreamResponseRetryer UpstreamResponseRetryer
 
+	// UpstreamResponseInterceptor, when set, runs once against the final
+	// upstream response — after any retry, before any header or body byte is
+	// relayed to the user. It may mutate resp.Header (headers are copied to
+	// the client afterwards). A non-nil error aborts the relay entirely; no
+	// status or headers have been written yet, so the caller's error path
+	// owns the client response. Used by anonymous tunneled MCP to translate
+	// the backend session header and fail closed when its session state
+	// cannot be recorded.
+	UpstreamResponseInterceptor func(ctx context.Context, resp *http.Response) error
+
 	// WWWAuthenticate is the challenge relayed to the client when the
 	// upstream rejects a request (401/403), replacing the upstream's own
 	// WWW-Authenticate — the upstream challenge names the upstream's
@@ -337,6 +347,12 @@ func (p *Proxy) Delete(w http.ResponseWriter, r *http.Request) (err error) {
 	upstreamStatus = upstreamResp.StatusCode
 	span.SetAttributes(attr.RemoteMCPProxyRemoteStatusCode(upstreamStatus))
 
+	if p.UpstreamResponseInterceptor != nil {
+		if err := p.UpstreamResponseInterceptor(ctx, upstreamResp); err != nil {
+			return fmt.Errorf("upstream response interceptor: %w", err)
+		}
+	}
+
 	n, err := writeResponse(w, upstreamResp, upstreamResp.Body, p.WWWAuthenticate)
 	responseBytes = n
 	if err != nil {
@@ -386,6 +402,12 @@ func (p *Proxy) Get(w http.ResponseWriter, r *http.Request) (err error) {
 
 	upstreamStatus = upstreamResp.StatusCode
 	span.SetAttributes(attr.RemoteMCPProxyRemoteStatusCode(upstreamStatus))
+
+	if p.UpstreamResponseInterceptor != nil {
+		if err := p.UpstreamResponseInterceptor(ctx, upstreamResp); err != nil {
+			return fmt.Errorf("upstream response interceptor: %w", err)
+		}
+	}
 
 	// Per MCP spec § Listening for Messages from the Server, upstream MUST
 	// return either Content-Type: text/event-stream or HTTP 405. Route SSE
@@ -541,6 +563,12 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 
 	upstreamStatus = upstreamResp.StatusCode
 	span.SetAttributes(attr.RemoteMCPProxyRemoteStatusCode(upstreamStatus))
+
+	if p.UpstreamResponseInterceptor != nil {
+		if err := p.UpstreamResponseInterceptor(ctx, upstreamResp); err != nil {
+			return fmt.Errorf("upstream response interceptor: %w", err)
+		}
+	}
 
 	// When upstream returns Content-Type: text/event-stream (per MCP spec
 	// § Sending Messages to the Server, step 5), dispatch through the

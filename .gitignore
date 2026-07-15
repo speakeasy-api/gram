@@ -93,3 +93,5 @@ __pycache__/
 .uv-cache
 
 .playwright-mcp
+# Local kubernetes manifests (developer scratch)
+.local-k8s/

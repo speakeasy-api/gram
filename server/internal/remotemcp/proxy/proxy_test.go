@@ -71,6 +71,7 @@ func newProxyForTest(t *testing.T, upstreamURL string) *proxy.Proxy {
 		Headers:                           nil,
 		AuthorizationOverride:             "",
 		UpstreamResponseRetryer:           nil,
+		UpstreamResponseInterceptor:       nil,
 		UserRequestInterceptors:           nil,
 		InitializeRequestInterceptors:     nil,
 		RemoteMessageInterceptors:         nil,
@@ -2556,4 +2557,66 @@ func TestProxy_Post_ToolsListResponse_SetTools_RewritesRelayedEvent_SSEPath(t *t
 	// runtime sees the same event type and id as the upstream sent.
 	require.Contains(t, out, "event: response\n", "event: field must be preserved on mutation re-emit")
 	require.Contains(t, out, "id: terminal-7\n", "id: field must be preserved on mutation re-emit")
+}
+
+// TestProxy_Post_UpstreamResponseInterceptorRuns: the interceptor sees the
+// upstream response and its header mutations reach the client.
+func TestProxy_Post_UpstreamResponseInterceptorRuns(t *testing.T) {
+	t.Parallel()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Mcp-Session-Id", "backend-sid")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{}}`))
+	}))
+	t.Cleanup(upstream.Close)
+
+	p := newProxyForTest(t, upstream.URL)
+	var sawStatus int
+	p.UpstreamResponseInterceptor = func(_ context.Context, resp *http.Response) error {
+		sawStatus = resp.StatusCode
+		resp.Header.Set("Mcp-Session-Id", "gram-sid")
+		return nil
+	}
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, req))
+
+	require.Equal(t, http.StatusOK, sawStatus)
+	require.Equal(t, "gram-sid", rr.Header().Get("Mcp-Session-Id"), "interceptor header mutation must reach the client")
+}
+
+// TestProxy_Post_UpstreamResponseInterceptorErrorAbortsBeforeFlush: a
+// non-nil interceptor error aborts the relay with nothing written to the
+// client — the fail-closed contract the anonymous tunnel session adapter
+// relies on.
+func TestProxy_Post_UpstreamResponseInterceptorErrorAbortsBeforeFlush(t *testing.T) {
+	t.Parallel()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{}}`))
+	}))
+	t.Cleanup(upstream.Close)
+
+	p := newProxyForTest(t, upstream.URL)
+	p.UpstreamResponseInterceptor = func(_ context.Context, _ *http.Response) error {
+		return oops.E(oops.CodeGatewayError, nil, "record session failed")
+	}
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+
+	rr := httptest.NewRecorder()
+	err := p.Post(rr, req)
+	require.Error(t, err)
+	require.Equal(t, http.StatusOK, rr.Code, "recorder default; nothing was written via WriteHeader")
+	require.Empty(t, rr.Body.String(), "no body may reach the client when the interceptor fails closed")
 }

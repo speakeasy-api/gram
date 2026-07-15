@@ -145,6 +145,9 @@ type UpdateServerPayload struct {
 	ID string
 	// Human-readable display name for the tunneled MCP server
 	Name string
+	// Consent to serve this source through a public, anonymous MCP endpoint.
+	// Disabling revokes all live anonymous sessions. Omit to leave unchanged.
+	AllowPublic *bool
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

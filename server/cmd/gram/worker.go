@@ -710,6 +710,15 @@ func newWorkerCommand() *cli.Command {
 				route.NewRouteTable(),
 				"",
 				nil,
+				// Public tunnel serving is HTTP-only; nil disables it here.
+				nil,
+				mcp.TunnelPublicConfig{
+					SessionTTL:         0,
+					LiveSessionCap:     0,
+					InitializeRate:     ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
+					RequestRate:        ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
+					MaxRequestLifetime: 0,
+				},
 			)
 
 			chatClient := chat.NewAgenticChatClient(

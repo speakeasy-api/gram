@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
@@ -13,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -27,6 +29,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelsessions"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -43,6 +47,10 @@ type Service struct {
 	authz         *authz.Engine
 	audit         *audit.Logger
 	tunnelManager *tunnelManager
+	// redisClient revokes live anonymous MCP sessions when public consent is
+	// withdrawn. Nil disables that best-effort cleanup (the serve path's
+	// consent guard still rejects per-request).
+	redisClient *redis.Client
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -56,6 +64,7 @@ func NewService(
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
 	runtime route.RuntimeStore,
+	redisClient *redis.Client,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("tunneledmcp"))
 
@@ -67,6 +76,7 @@ func NewService(
 		authz:         authzEngine,
 		audit:         auditLogger,
 		tunnelManager: newTunnelManager(runtime),
+		redisClient:   redisClient,
 	}
 }
 
@@ -274,7 +284,9 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
-	existing, err := txRepo.GetServerByID(ctx, repo.GetServerByIDParams{
+	// Row-lock so a concurrent update cannot race the allow_public
+	// before->after transition that drives session revocation.
+	existing, err := txRepo.GetServerByIDForUpdate(ctx, repo.GetServerByIDForUpdateParams{
 		ID:        serverID,
 		ProjectID: *authCtx.ProjectID,
 	})
@@ -288,9 +300,10 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 	beforeView := s.tunnelManager.serverView(ctx, s.logger, existing)
 
 	updated, err := txRepo.UpdateServer(ctx, repo.UpdateServerParams{
-		ID:        serverID,
-		ProjectID: *authCtx.ProjectID,
-		Name:      name,
+		ID:          serverID,
+		ProjectID:   *authCtx.ProjectID,
+		Name:        name,
+		AllowPublic: conv.PtrToPGBool(payload.AllowPublic),
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -319,7 +332,28 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
+	// Withdrawing public consent revokes every live anonymous session so a
+	// later re-enable cannot resurrect them.
+	if existing.AllowPublic && !updated.AllowPublic {
+		s.revokeAnonymousSessions(ctx, logger, serverID)
+	}
+
 	return afterView, nil
+}
+
+// revokeAnonymousSessions drops all live anonymous MCP session state for a
+// tunnel. Best-effort — the serve path re-checks consent on every request —
+// but without it, re-enabling within the session TTL would resurrect old
+// sessions. Detached from request cancellation, mirroring deleteRuntimeState.
+func (s *Service) revokeAnonymousSessions(ctx context.Context, logger *slog.Logger, serverID uuid.UUID) {
+	if s.redisClient == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	if err := tunnelsessions.Purge(ctx, s.redisClient, serverID.String()); err != nil {
+		logger.ErrorContext(ctx, "purge anonymous tunnel sessions", attr.SlogError(err), attr.SlogTunneledMCPServerID(serverID.String()))
+	}
 }
 
 func (s *Service) RotateServerKey(ctx context.Context, payload *gen.RotateServerKeyPayload) (*gen.RotateTunneledMcpServerKeyResult, error) {
@@ -392,6 +426,7 @@ func (s *Service) RotateServerKey(ctx context.Context, payload *gen.RotateServer
 	}
 
 	s.tunnelManager.deleteRuntimeState(ctx, logger, serverID)
+	s.revokeAnonymousSessions(ctx, logger, serverID)
 
 	return &gen.RotateTunneledMcpServerKeyResult{
 		Server:    afterView,
@@ -449,6 +484,7 @@ func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPay
 	}
 
 	s.tunnelManager.deleteRuntimeState(ctx, logger, serverID)
+	s.revokeAnonymousSessions(ctx, logger, serverID)
 
 	return nil
 }

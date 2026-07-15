@@ -110,11 +110,16 @@ func (s *Service) serveResolvedMCPEndpoint(
 
 	issuerGated := mcpServer.UserSessionIssuerID.Valid
 
-	// Public tunneled servers are invalid. Fail closed before the issuer gate so
-	// callers are not challenged for a server that cannot serve.
-	// serveTunneledBackend re-checks this invariant as defense-in-depth.
-	if mcpServer.TunneledMcpServerID.Valid && mcpServer.Visibility == mcpservers.VisibilityPublic {
-		return oops.E(oops.CodeForbidden, nil, "tunneled MCP servers cannot be served publicly").LogError(ctx, logger)
+	// Public tunneled servers serve anonymously: no OAuth handshake, so the
+	// issuer gate is skipped even though the issuer column is populated.
+	// Gate on consent + rollout flags before dispatch so ungated callers are
+	// never challenged for a server that will not serve them;
+	// serveTunneledPublicBackend re-checks as defense-in-depth.
+	if isTunneledPublic(mcpServer) {
+		if err := s.requireTunneledPublicConsent(ctx, logger, mcpEndpoint, mcpServer); err != nil {
+			return err
+		}
+		issuerGated = false
 	}
 
 	// Issuer-gated mcp_servers run the JWT-validation branch here, before
@@ -260,7 +265,11 @@ func (s *Service) LoadResolvedMcpEndpointBySlug(ctx context.Context, logger *slo
 	var shareErr *oops.ShareableError
 	switch {
 	case err == nil:
-		if !mcpServer.UserSessionIssuerID.Valid {
+		// Public tunneled servers serve anonymously and expose no OAuth
+		// surface: every issuer-gated handler resolving through here
+		// (authorize, token, register, revoke, consent) must 404 even
+		// though the issuer column is populated.
+		if !mcpServer.UserSessionIssuerID.Valid || isTunneledPublic(mcpServer) {
 			return nil, oops.E(oops.CodeNotFound, nil, "not found")
 		}
 		return s.BuildResolvedMcpEndpointForServer(ctx, logger, mcpEndpoint, mcpServer, mcpRouteBase)
@@ -425,13 +434,11 @@ func (s *Service) serveTunneledBackend(
 	ctx := r.Context()
 	logger = logger.With(attr.SlogTunneledMCPServerID(mcpServer.TunneledMcpServerID.UUID.String()))
 
-	// Fail closed: tunneled servers front customer-private networks and must
-	// never serve unauthenticated. CreateMCPServer/UpdateMCPServer already
-	// reject public visibility for tunneled backends; this guards the serve
-	// path against any other write reaching the row (manual SQL, future
-	// endpoints) so a flipped flag cannot expose the tunnel.
+	// Public visibility dispatches to the anonymous serving path, which
+	// fail-closed re-checks the owner's allow_public consent before
+	// forwarding anything into the tunnel.
 	if mcpServer.Visibility == mcpservers.VisibilityPublic {
-		return oops.E(oops.CodeForbidden, nil, "tunneled MCP servers cannot be served publicly").LogError(ctx, logger)
+		return s.serveTunneledPublicBackend(w, r, logger, endpoint, mcpServer)
 	}
 
 	var err error
@@ -467,8 +474,9 @@ func (s *Service) prepareProxyBackendContext(
 	// is stamped from it. Re-running the legacy identity-auth chain here
 	// would only know how to validate API keys / OAuth tokens / chat
 	// sessions, and would reject a perfectly valid user-session JWT. Skip
-	// it and trust the gate.
-	issuerGated := mcpServer.UserSessionIssuerID.Valid
+	// it and trust the gate. Public tunneled servers skip the gate entirely
+	// (anonymous serving) and take the public identity-probe branch below.
+	issuerGated := mcpServer.UserSessionIssuerID.Valid && !isTunneledPublic(mcpServer)
 	switch mcpServer.Visibility {
 	case mcpservers.VisibilityPrivate:
 		// Private mcp_servers require identity auth, that the caller's

@@ -169,7 +169,7 @@ func BuildUpdateServerPayload(tunneledMcpUpdateServerBody string, tunneledMcpUpd
 	{
 		err = json.Unmarshal([]byte(tunneledMcpUpdateServerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"allow_public\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if err != nil {
@@ -195,8 +195,9 @@ func BuildUpdateServerPayload(tunneledMcpUpdateServerBody string, tunneledMcpUpd
 		}
 	}
 	v := &tunneledmcp.UpdateServerPayload{
-		ID:   body.ID,
-		Name: body.Name,
+		ID:          body.ID,
+		Name:        body.Name,
+		AllowPublic: body.AllowPublic,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
