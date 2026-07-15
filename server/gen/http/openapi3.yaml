@@ -1837,6 +1837,102 @@ paths:
             x-speakeasy-name-override: getRole
             x-speakeasy-react-hook:
                 name: Role
+    /rpc/access.getShadowMCPInventoryServer:
+        get:
+            description: Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state.
+            operationId: getShadowMCPInventoryServer
+            parameters:
+                - allowEmptyValue: true
+                  in: query
+                  name: project_id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Shadow MCP server slug to inspect.
+                  in: query
+                  name: server_slug
+                  required: true
+                  schema:
+                    description: Shadow MCP server slug to inspect.
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ShadowMCPInventoryServer'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: getShadowMCPInventoryServer access
+            tags:
+                - access
+            x-speakeasy-name-override: getShadowMCPInventoryServer
+            x-speakeasy-react-hook:
+                name: ShadowMCPInventoryServer
     /rpc/access.listChallengeBuckets:
         get:
             description: List authz challenges grouped into time-based burst buckets. Consecutive challenges with the same dimensions within a 10-minute window are collapsed into a single bucket.
@@ -17194,6 +17290,110 @@ paths:
             x-speakeasy-name-override: listKeys
             x-speakeasy-react-hook:
                 name: ModelProviderKeys
+    /rpc/modelKeys.setKeyEnabled:
+        post:
+            description: Enable or disable a model provider key without replacing its key material.
+            operationId: setModelProviderKeyEnabled
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetKeyEnabledRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ModelProviderKey'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: setKeyEnabled modelKeys
+            tags:
+                - modelKeys
+            x-speakeasy-name-override: setKeyEnabled
+            x-speakeasy-react-hook:
+                name: SetModelProviderKeyEnabled
     /rpc/modelKeys.upsertKey:
         post:
             description: Create or replace the model provider key for a slot. The key is validated with the provider, then stored encrypted.
@@ -29684,6 +29884,21 @@ paths:
                     description: If true, collapse results to one row per (policy_id, rule_id, match), keeping the most recent occurrence. Useful when the same secret is detected many times within a single message body.
                     type: boolean
                 - allowEmptyValue: true
+                  description: If true, only return findings from chats that are not linked to an assistant. Useful for surfacing events that are missing user attribution.
+                  in: query
+                  name: non_assistant
+                  schema:
+                    description: If true, only return findings from chats that are not linked to an assistant. Useful for surfacing events that are missing user attribution.
+                    type: boolean
+                - allowEmptyValue: true
+                  description: Optional assistant ID; only return findings from chats linked to this assistant.
+                  in: query
+                  name: assistant_id
+                  schema:
+                    description: Optional assistant ID; only return findings from chats linked to this assistant.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
                   description: Filter results to messages created at or after this timestamp (ISO 8601).
                   in: query
                   name: from
@@ -29975,6 +30190,21 @@ paths:
                   schema:
                     description: If true, collapse results to one row per (policy_id, rule_id, match), keeping the most recent occurrence. Useful when the same secret is detected many times within a single message body.
                     type: boolean
+                - allowEmptyValue: true
+                  description: If true, only return findings from chats that are not linked to an assistant. Useful for surfacing events that are missing user attribution.
+                  in: query
+                  name: non_assistant
+                  schema:
+                    description: If true, only return findings from chats that are not linked to an assistant. Useful for surfacing events that are missing user attribution.
+                    type: boolean
+                - allowEmptyValue: true
+                  description: Optional assistant ID; only return findings from chats linked to this assistant.
+                  in: query
+                  name: assistant_id
+                  schema:
+                    description: Optional assistant ID; only return findings from chats linked to this assistant.
+                    format: uuid
+                    type: string
                 - allowEmptyValue: true
                   description: Filter results to messages created at or after this timestamp (ISO 8601).
                   in: query
@@ -46374,6 +46604,11 @@ components:
                     items:
                         $ref: '#/components/schemas/HookMCPAttributionEntry'
                     description: Transcript-derived per-request MCP attribution (Claude Stop/SubagentStop).
+                mcp_inventory:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/HookMCPData'
+                    description: Configured MCP server snapshot captured at session start or configuration change. Transport credentials must be redacted by the sender.
                 message:
                     $ref: '#/components/schemas/HookMessageData'
                 notification:
@@ -53425,6 +53660,19 @@ components:
                     minimum: 0
             required:
                 - billing_cycle_anchor_day
+        SetKeyEnabledRequestBody:
+            type: object
+            properties:
+                enabled:
+                    type: boolean
+                    description: Whether the key participates in key resolution.
+                id:
+                    type: string
+                    description: The ID of the key to update.
+                    format: uuid
+            required:
+                - id
+                - enabled
         SetMcpMetadataRequestBody:
             type: object
             properties:
@@ -53900,6 +54148,8 @@ components:
                     format: int64
                 server_name:
                     type: string
+                server_slug:
+                    type: string
                 top_users:
                     type: array
                     items:
@@ -53911,6 +54161,7 @@ components:
                     format: int64
             required:
                 - canonical_server_url
+                - server_slug
                 - url_host
                 - first_seen
                 - last_seen

@@ -91,6 +91,15 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
+func modelProviderKeySnapshot(row repo.ModelProviderKey) *audit.ModelProviderKeySnapshot {
+	return &audit.ModelProviderKeySnapshot{
+		ProjectID: row.ProjectID,
+		Slot:      row.Slot,
+		Provider:  row.Provider,
+		Enabled:   row.Enabled,
+	}
+}
+
 func (s *Service) ListKeys(ctx context.Context, _ *gen.ListKeysPayload) (*gen.ListKeysResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -171,12 +180,7 @@ func (s *Service) UpsertKey(ctx context.Context, payload *gen.UpsertKeyPayload) 
 
 	var snapshotBefore *audit.ModelProviderKeySnapshot
 	if len(replaced) > 0 {
-		snapshotBefore = &audit.ModelProviderKeySnapshot{
-			ProjectID: replaced[0].ProjectID,
-			Slot:      replaced[0].Slot,
-			Provider:  replaced[0].Provider,
-			Enabled:   replaced[0].Enabled,
-		}
+		snapshotBefore = modelProviderKeySnapshot(replaced[0])
 	}
 
 	row, err := queries.InsertKey(ctx, repo.InsertKeyParams{
@@ -204,12 +208,86 @@ func (s *Service) UpsertKey(ctx context.Context, payload *gen.UpsertKeyPayload) 
 		KeyURN:           urn.NewModelProviderKey(row.ID),
 		Slot:             row.Slot,
 		SnapshotBefore:   snapshotBefore,
-		SnapshotAfter: &audit.ModelProviderKeySnapshot{
-			ProjectID: row.ProjectID,
-			Slot:      row.Slot,
-			Provider:  row.Provider,
-			Enabled:   row.Enabled,
-		},
+		SnapshotAfter:    modelProviderKeySnapshot(row),
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log model provider key upsert").LogError(ctx, logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit model provider key transaction").LogError(ctx, logger)
+	}
+
+	return mv.BuildModelProviderKeyView(row), nil
+}
+
+func (s *Service) SetKeyEnabled(ctx context.Context, payload *gen.SetKeyEnabledPayload) (*types.ModelProviderKey, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
+
+	keyID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid key id").LogError(ctx, logger)
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin model provider key transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	queries := repo.New(dbtx)
+	existing, err := queries.GetKeyByIDForUpdate(ctx, repo.GetKeyByIDForUpdateParams{
+		ID:        keyID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, err, "model provider key not found")
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "get model provider key").LogError(ctx, logger)
+	}
+
+	if payload.Enabled {
+		enabled, err := s.features.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureCustomModelKeys)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "check custom model keys feature").LogError(ctx, logger)
+		}
+		if !enabled {
+			return nil, oops.E(oops.CodeForbidden, nil, "custom model keys are not enabled for this organization")
+		}
+	}
+
+	if existing.Enabled == payload.Enabled {
+		return mv.BuildModelProviderKeyView(existing), nil
+	}
+
+	row, err := queries.SetKeyEnabled(ctx, repo.SetKeyEnabledParams{
+		Enabled:   payload.Enabled,
+		ID:        keyID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "set model provider key enabled state").LogError(ctx, logger)
+	}
+
+	if err := s.audit.LogModelProviderKeyUpsert(ctx, dbtx, audit.LogModelProviderKeyUpsertEvent{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ProjectID:        *authCtx.ProjectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+		KeyURN:           urn.NewModelProviderKey(row.ID),
+		Slot:             row.Slot,
+		SnapshotBefore:   modelProviderKeySnapshot(existing),
+		SnapshotAfter:    modelProviderKeySnapshot(row),
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log model provider key upsert").LogError(ctx, logger)
 	}

@@ -952,6 +952,22 @@ type McpServer struct {
 	Deleted               bool
 }
 
+type McpServerToolMetadatum struct {
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	McpServerID     uuid.UUID
+	ToolName        string
+	Title           pgtype.Text
+	ReadOnlyHint    pgtype.Bool
+	DestructiveHint pgtype.Bool
+	IdempotentHint  pgtype.Bool
+	OpenWorldHint   pgtype.Bool
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
+}
+
 type ModelProviderKey struct {
 	ID              uuid.UUID
 	OrganizationID  string

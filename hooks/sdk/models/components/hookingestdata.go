@@ -12,6 +12,8 @@ type HookIngestData struct {
 	Mcp *HookMCPData `json:"mcp,omitzero"`
 	// Transcript-derived per-request MCP attribution (Claude Stop/SubagentStop).
 	McpAttribution []HookMCPAttributionEntry `json:"mcp_attribution,omitzero"`
+	// Configured MCP server snapshot captured at session start or configuration change. Transport credentials must be redacted by the sender.
+	McpInventory []HookMCPData `json:"mcp_inventory,omitzero"`
 	// Assistant/user message payload.
 	Message *HookMessageData `json:"message,omitzero"`
 	// Local agent notification payload.
@@ -49,6 +51,13 @@ func (h *HookIngestData) GetMcpAttribution() []HookMCPAttributionEntry {
 		return nil
 	}
 	return h.McpAttribution
+}
+
+func (h *HookIngestData) GetMcpInventory() []HookMCPData {
+	if h == nil {
+		return nil
+	}
+	return h.McpInventory
 }
 
 func (h *HookIngestData) GetMessage() *HookMessageData {

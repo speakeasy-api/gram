@@ -92,6 +92,50 @@ func BuildUpsertKeyPayload(modelKeysUpsertKeyBody string, modelKeysUpsertKeySess
 	return v, nil
 }
 
+// BuildSetKeyEnabledPayload builds the payload for the modelKeys setKeyEnabled
+// endpoint from CLI flags.
+func BuildSetKeyEnabledPayload(modelKeysSetKeyEnabledBody string, modelKeysSetKeyEnabledSessionToken string, modelKeysSetKeyEnabledApikeyToken string, modelKeysSetKeyEnabledProjectSlugInput string) (*modelkeys.SetKeyEnabledPayload, error) {
+	var err error
+	var body SetKeyEnabledRequestBody
+	{
+		err = json.Unmarshal([]byte(modelKeysSetKeyEnabledBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if modelKeysSetKeyEnabledSessionToken != "" {
+			sessionToken = &modelKeysSetKeyEnabledSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if modelKeysSetKeyEnabledApikeyToken != "" {
+			apikeyToken = &modelKeysSetKeyEnabledApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if modelKeysSetKeyEnabledProjectSlugInput != "" {
+			projectSlugInput = &modelKeysSetKeyEnabledProjectSlugInput
+		}
+	}
+	v := &modelkeys.SetKeyEnabledPayload{
+		ID:      body.ID,
+		Enabled: body.Enabled,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildDeleteKeyPayload builds the payload for the modelKeys deleteKey
 // endpoint from CLI flags.
 func BuildDeleteKeyPayload(modelKeysDeleteKeyID string, modelKeysDeleteKeySessionToken string, modelKeysDeleteKeyApikeyToken string, modelKeysDeleteKeyProjectSlugInput string) (*modelkeys.DeleteKeyPayload, error) {

@@ -28,6 +28,15 @@ type UpsertKeyRequestBody struct {
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 }
 
+// SetKeyEnabledRequestBody is the type of the "modelKeys" service
+// "setKeyEnabled" endpoint HTTP request body.
+type SetKeyEnabledRequestBody struct {
+	// The ID of the key to update.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Whether the key participates in key resolution.
+	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
+}
+
 // ListKeysResponseBody is the type of the "modelKeys" service "listKeys"
 // endpoint HTTP response body.
 type ListKeysResponseBody struct {
@@ -38,6 +47,27 @@ type ListKeysResponseBody struct {
 // UpsertKeyResponseBody is the type of the "modelKeys" service "upsertKey"
 // endpoint HTTP response body.
 type UpsertKeyResponseBody struct {
+	// The ID of the key
+	ID string `form:"id" json:"id" xml:"id"`
+	// The project the key belongs to
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The responsibility slot the key applies to. The 'default' slot covers every
+	// slot without a dedicated override.
+	Slot string `form:"slot" json:"slot" xml:"slot"`
+	// The model provider the key authenticates with. Supported values include
+	// openrouter.
+	Provider string `form:"provider" json:"provider" xml:"provider"`
+	// Whether the key participates in key resolution.
+	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
+	// ISO 8601 timestamp when the key was created.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// ISO 8601 timestamp of the most recent change.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// SetKeyEnabledResponseBody is the type of the "modelKeys" service
+// "setKeyEnabled" endpoint HTTP response body.
+type SetKeyEnabledResponseBody struct {
 	// The ID of the key
 	ID string `form:"id" json:"id" xml:"id"`
 	// The project the key belongs to
@@ -418,6 +448,188 @@ type UpsertKeyGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// SetKeyEnabledUnauthorizedResponseBody is the type of the "modelKeys" service
+// "setKeyEnabled" endpoint HTTP response body for the "unauthorized" error.
+type SetKeyEnabledUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetKeyEnabledForbiddenResponseBody is the type of the "modelKeys" service
+// "setKeyEnabled" endpoint HTTP response body for the "forbidden" error.
+type SetKeyEnabledForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetKeyEnabledBadRequestResponseBody is the type of the "modelKeys" service
+// "setKeyEnabled" endpoint HTTP response body for the "bad_request" error.
+type SetKeyEnabledBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetKeyEnabledNotFoundResponseBody is the type of the "modelKeys" service
+// "setKeyEnabled" endpoint HTTP response body for the "not_found" error.
+type SetKeyEnabledNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetKeyEnabledConflictResponseBody is the type of the "modelKeys" service
+// "setKeyEnabled" endpoint HTTP response body for the "conflict" error.
+type SetKeyEnabledConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetKeyEnabledUnsupportedMediaResponseBody is the type of the "modelKeys"
+// service "setKeyEnabled" endpoint HTTP response body for the
+// "unsupported_media" error.
+type SetKeyEnabledUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetKeyEnabledInvalidResponseBody is the type of the "modelKeys" service
+// "setKeyEnabled" endpoint HTTP response body for the "invalid" error.
+type SetKeyEnabledInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetKeyEnabledInvariantViolationResponseBody is the type of the "modelKeys"
+// service "setKeyEnabled" endpoint HTTP response body for the
+// "invariant_violation" error.
+type SetKeyEnabledInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetKeyEnabledUnexpectedResponseBody is the type of the "modelKeys" service
+// "setKeyEnabled" endpoint HTTP response body for the "unexpected" error.
+type SetKeyEnabledUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetKeyEnabledGatewayErrorResponseBody is the type of the "modelKeys" service
+// "setKeyEnabled" endpoint HTTP response body for the "gateway_error" error.
+type SetKeyEnabledGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // DeleteKeyUnauthorizedResponseBody is the type of the "modelKeys" service
 // "deleteKey" endpoint HTTP response body for the "unauthorized" error.
 type DeleteKeyUnauthorizedResponseBody struct {
@@ -642,6 +854,21 @@ func NewListKeysResponseBody(res *modelkeys.ListKeysResult) *ListKeysResponseBod
 // the "upsertKey" endpoint of the "modelKeys" service.
 func NewUpsertKeyResponseBody(res *types.ModelProviderKey) *UpsertKeyResponseBody {
 	body := &UpsertKeyResponseBody{
+		ID:        res.ID,
+		ProjectID: res.ProjectID,
+		Slot:      res.Slot,
+		Provider:  res.Provider,
+		Enabled:   res.Enabled,
+		CreatedAt: res.CreatedAt,
+		UpdatedAt: res.UpdatedAt,
+	}
+	return body
+}
+
+// NewSetKeyEnabledResponseBody builds the HTTP response body from the result
+// of the "setKeyEnabled" endpoint of the "modelKeys" service.
+func NewSetKeyEnabledResponseBody(res *types.ModelProviderKey) *SetKeyEnabledResponseBody {
+	body := &SetKeyEnabledResponseBody{
 		ID:        res.ID,
 		ProjectID: res.ProjectID,
 		Slot:      res.Slot,
@@ -933,6 +1160,146 @@ func NewUpsertKeyGatewayErrorResponseBody(res *goa.ServiceError) *UpsertKeyGatew
 	return body
 }
 
+// NewSetKeyEnabledUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "setKeyEnabled" endpoint of the "modelKeys" service.
+func NewSetKeyEnabledUnauthorizedResponseBody(res *goa.ServiceError) *SetKeyEnabledUnauthorizedResponseBody {
+	body := &SetKeyEnabledUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetKeyEnabledForbiddenResponseBody builds the HTTP response body from the
+// result of the "setKeyEnabled" endpoint of the "modelKeys" service.
+func NewSetKeyEnabledForbiddenResponseBody(res *goa.ServiceError) *SetKeyEnabledForbiddenResponseBody {
+	body := &SetKeyEnabledForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetKeyEnabledBadRequestResponseBody builds the HTTP response body from
+// the result of the "setKeyEnabled" endpoint of the "modelKeys" service.
+func NewSetKeyEnabledBadRequestResponseBody(res *goa.ServiceError) *SetKeyEnabledBadRequestResponseBody {
+	body := &SetKeyEnabledBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetKeyEnabledNotFoundResponseBody builds the HTTP response body from the
+// result of the "setKeyEnabled" endpoint of the "modelKeys" service.
+func NewSetKeyEnabledNotFoundResponseBody(res *goa.ServiceError) *SetKeyEnabledNotFoundResponseBody {
+	body := &SetKeyEnabledNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetKeyEnabledConflictResponseBody builds the HTTP response body from the
+// result of the "setKeyEnabled" endpoint of the "modelKeys" service.
+func NewSetKeyEnabledConflictResponseBody(res *goa.ServiceError) *SetKeyEnabledConflictResponseBody {
+	body := &SetKeyEnabledConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetKeyEnabledUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "setKeyEnabled" endpoint of the "modelKeys" service.
+func NewSetKeyEnabledUnsupportedMediaResponseBody(res *goa.ServiceError) *SetKeyEnabledUnsupportedMediaResponseBody {
+	body := &SetKeyEnabledUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetKeyEnabledInvalidResponseBody builds the HTTP response body from the
+// result of the "setKeyEnabled" endpoint of the "modelKeys" service.
+func NewSetKeyEnabledInvalidResponseBody(res *goa.ServiceError) *SetKeyEnabledInvalidResponseBody {
+	body := &SetKeyEnabledInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetKeyEnabledInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "setKeyEnabled" endpoint of the "modelKeys" service.
+func NewSetKeyEnabledInvariantViolationResponseBody(res *goa.ServiceError) *SetKeyEnabledInvariantViolationResponseBody {
+	body := &SetKeyEnabledInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetKeyEnabledUnexpectedResponseBody builds the HTTP response body from
+// the result of the "setKeyEnabled" endpoint of the "modelKeys" service.
+func NewSetKeyEnabledUnexpectedResponseBody(res *goa.ServiceError) *SetKeyEnabledUnexpectedResponseBody {
+	body := &SetKeyEnabledUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetKeyEnabledGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "setKeyEnabled" endpoint of the "modelKeys" service.
+func NewSetKeyEnabledGatewayErrorResponseBody(res *goa.ServiceError) *SetKeyEnabledGatewayErrorResponseBody {
+	body := &SetKeyEnabledGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewDeleteKeyUnauthorizedResponseBody builds the HTTP response body from the
 // result of the "deleteKey" endpoint of the "modelKeys" service.
 func NewDeleteKeyUnauthorizedResponseBody(res *goa.ServiceError) *DeleteKeyUnauthorizedResponseBody {
@@ -1103,6 +1470,20 @@ func NewUpsertKeyPayload(body *UpsertKeyRequestBody, sessionToken *string, apike
 	return v
 }
 
+// NewSetKeyEnabledPayload builds a modelKeys service setKeyEnabled endpoint
+// payload.
+func NewSetKeyEnabledPayload(body *SetKeyEnabledRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *modelkeys.SetKeyEnabledPayload {
+	v := &modelkeys.SetKeyEnabledPayload{
+		ID:      *body.ID,
+		Enabled: *body.Enabled,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewDeleteKeyPayload builds a modelKeys service deleteKey endpoint payload.
 func NewDeleteKeyPayload(id string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *modelkeys.DeleteKeyPayload {
 	v := &modelkeys.DeleteKeyPayload{}
@@ -1125,6 +1506,21 @@ func ValidateUpsertKeyRequestBody(body *UpsertKeyRequestBody) (err error) {
 	}
 	if body.APIKey == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("api_key", "body"))
+	}
+	return
+}
+
+// ValidateSetKeyEnabledRequestBody runs the validations defined on
+// SetKeyEnabledRequestBody
+func ValidateSetKeyEnabledRequestBody(body *SetKeyEnabledRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Enabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
 	return
 }

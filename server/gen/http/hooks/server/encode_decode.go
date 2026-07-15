@@ -1429,6 +1429,16 @@ func unmarshalHookIngestDataRequestBodyToHooksHookIngestData(v *HookIngestDataRe
 	if v.Mcp != nil {
 		res.Mcp = unmarshalHookMCPDataRequestBodyToHooksHookMCPData(v.Mcp)
 	}
+	if v.McpInventory != nil {
+		res.McpInventory = make([]*hooks.HookMCPData, len(v.McpInventory))
+		for i, val := range v.McpInventory {
+			if val == nil {
+				res.McpInventory[i] = nil
+				continue
+			}
+			res.McpInventory[i] = unmarshalHookMCPDataRequestBodyToHooksHookMCPData(val)
+		}
+	}
 	if v.Usage != nil {
 		res.Usage = unmarshalHookUsageDataRequestBodyToHooksHookUsageData(v.Usage)
 	}

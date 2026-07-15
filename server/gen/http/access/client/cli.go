@@ -669,6 +669,36 @@ func BuildListShadowMCPInventoryPayload(accessListShadowMCPInventoryProjectID st
 	return v, nil
 }
 
+// BuildGetShadowMCPInventoryServerPayload builds the payload for the access
+// getShadowMCPInventoryServer endpoint from CLI flags.
+func BuildGetShadowMCPInventoryServerPayload(accessGetShadowMCPInventoryServerProjectID string, accessGetShadowMCPInventoryServerServerSlug string, accessGetShadowMCPInventoryServerSessionToken string) (*access.GetShadowMCPInventoryServerPayload, error) {
+	var err error
+	var projectID string
+	{
+		projectID = accessGetShadowMCPInventoryServerProjectID
+		err = goa.MergeErrors(err, goa.ValidateFormat("project_id", projectID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var serverSlug string
+	{
+		serverSlug = accessGetShadowMCPInventoryServerServerSlug
+	}
+	var sessionToken *string
+	{
+		if accessGetShadowMCPInventoryServerSessionToken != "" {
+			sessionToken = &accessGetShadowMCPInventoryServerSessionToken
+		}
+	}
+	v := &access.GetShadowMCPInventoryServerPayload{}
+	v.ProjectID = projectID
+	v.ServerSlug = serverSlug
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildListShadowMCPInventoryUsersPayload builds the payload for the access
 // listShadowMCPInventoryUsers endpoint from CLI flags.
 func BuildListShadowMCPInventoryUsersPayload(accessListShadowMCPInventoryUsersProjectID string, accessListShadowMCPInventoryUsersServerURL string, accessListShadowMCPInventoryUsersLimit string, accessListShadowMCPInventoryUsersCursor string, accessListShadowMCPInventoryUsersSessionToken string) (*access.ListShadowMCPInventoryUsersPayload, error) {

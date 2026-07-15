@@ -16,7 +16,11 @@ export const GramLogo = ({
     icon: GramIcon,
   };
   return (
-    <div className={cn("flex items-center dark:invert", className)}>
+    <div
+      role="img"
+      aria-label="Speakeasy"
+      className={cn("flex items-center dark:invert", className)}
+    >
       {variantsMap[variant]()}
     </div>
   );

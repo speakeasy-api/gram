@@ -1,4 +1,4 @@
-h1:POEfxMYXnr1AShw986O3XDScx6ZQHtKCdPVDU3B4s4g=
+h1:zoSbTJvxkqmkEu7W1XZ7OeUQnf2fz6xfDtx7DOC4ok0=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -262,3 +262,5 @@ h1:POEfxMYXnr1AShw986O3XDScx6ZQHtKCdPVDU3B4s4g=
 20260713113216_mcp_server_requires_user_session_issuer.sql h1:zurTJ5thZI6HfBkNBqo+kpDekeok7fuQx2wbfrQ1WTY=
 20260713200058_model-provider-keys.sql h1:+Ke7rD4wY8spaHYGs5bXmar7aepllAALdaiVUsmXf7A=
 20260713202859_environment-entries-add-is-secret.sql h1:6lQFy0k5gSthCic6INJDuaD/40n4jg54Swrjo9q/38M=
+20260714022021_mcp-server-tool-metadata.sql h1:1sKmFfyHXtx8MK988nYVkuKhlwoTi7/phABFHhl3WPw=
+20260714202057_chat-messages-listing-probe-indexes.sql h1:raNxlqK5jljXe4Z+JVp5dyx4R/uR9WmziXphoRoTG6w=

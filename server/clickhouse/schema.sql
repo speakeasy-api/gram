@@ -57,10 +57,10 @@ CREATE TABLE IF NOT EXISTS telemetry_logs (
     remote_mcp_server_id String MATERIALIZED toString(attributes.gram.remote_mcp_server.id) COMMENT 'Remote MCP server ID (materialized from attributes.gram.remote_mcp_server.id).',
     mcp_server_id String MATERIALIZED toString(attributes.gram.mcp_server.id) COMMENT 'MCP server ID (materialized from attributes.gram.mcp_server.id).',
     skill_name String MATERIALIZED if(toString(attributes.gram.tool.name) = 'Skill', JSONExtractString(toString(attributes.gen_ai.tool.call.arguments), 'skill'), '') COMMENT 'Skill name extracted from tool arguments when tool_name is Skill (materialized).',
-    provider String MATERIALIZED toString(attributes.gram.provider) COMMENT 'AI provider for the session account (e.g. anthropic, openai); set by ingest (materialized from attributes.gram.provider).',
-    external_org_id String MATERIALIZED toString(attributes.gram.external_org_id) COMMENT 'Provider organization id for the account the user was logged into on-device (e.g. Claude organization.id). Distinct from the Gram org. Personal-account tracking discriminator; normalized by ingest (materialized from attributes.gram.external_org_id).',
-    account_type String MATERIALIZED toString(attributes.gram.account_type) COMMENT 'team (company/enterprise account) or personal (individual account); set by ingest. Empty until classified (materialized from attributes.gram.account_type).',
-    billing_mode String MATERIALIZED toString(attributes.gram.billing_mode) COMMENT 'How the account is billed: metered (pay-per-token; cost is real spend) | flat_rate (subscription seat; cost is an estimate) | unknown | empty. Resolved by ingest from admin-declared config (materialized from attributes.gram.billing_mode).'
+    provider String MATERIALIZED toString(attributes.gram.provider) COMMENT 'AI provider for the session account (e.g. anthropic, openai). Set by ingest (materialized from attributes.gram.provider).',
+    external_org_id String MATERIALIZED toString(attributes.gram.external_org_id) COMMENT 'Provider organization id for the account the user was logged into on-device (e.g. Claude organization.id). Distinct from the Gram org. Personal-account tracking discriminator. Normalized by ingest (materialized from attributes.gram.external_org_id).',
+    account_type String MATERIALIZED toString(attributes.gram.account_type) COMMENT 'team (company/enterprise account) or personal (individual account). Set by ingest. Empty until classified (materialized from attributes.gram.account_type).',
+    billing_mode String MATERIALIZED toString(attributes.gram.billing_mode) COMMENT 'How the account is billed: metered (pay-per-token, cost is real spend) | flat_rate (subscription seat, cost is an estimate) | unknown | empty. Resolved by ingest from admin-declared config (materialized from attributes.gram.billing_mode).'
 ) ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(fromUnixTimestamp64Nano(time_unix_nano))
 ORDER BY (gram_project_id, time_unix_nano, id)
@@ -275,6 +275,10 @@ CREATE TABLE IF NOT EXISTS shadow_mcp_inventory_urls (
 ORDER BY (gram_project_id, canonical_server_url)
 SETTINGS index_granularity = 8192
 COMMENT 'Project-scoped Shadow MCP inventory URLs and display metadata';
+
+CREATE INDEX IF NOT EXISTS idx_shadow_mcp_inventory_urls_slug_hash
+ON shadow_mcp_inventory_urls (substring(lower(hex(SHA256(canonical_server_url))), 1, 8))
+TYPE bloom_filter(0.01) GRANULARITY 1;
 
 CREATE TABLE IF NOT EXISTS metrics_summaries (
     -- Key columns
@@ -737,57 +741,6 @@ SELECT
 FROM telemetry_logs
 WHERE chat_id != ''
 GROUP BY gram_project_id, chat_id, time_bucket, hook_source;
-
--- tum_breakdown_summaries is the DIMENSIONED billing aggregate: the same
--- gen_ai completion rows chat_token_summaries (the billing record) sums,
--- broken down by consuming surface and user identity so the billing page's
--- breakdowns can report the billed population exactly. Reads apply the same
--- read-time stored-session qualification (via chat_token_summaries) and
--- registry-driven source scoping (billing.ModelUsageSources). Identity
--- dimensions are stamped on completion rows at emit time by the telemetry
--- logger's directory snapshot. attribute_metrics_summaries is provenance-
--- first (agent-fleet surfaces only) and no longer carries these rows.
-CREATE TABLE IF NOT EXISTS tum_breakdown_summaries (
-    -- Key columns
-    gram_project_id UUID,
-    chat_id String,
-    time_bucket DateTime('UTC'),
-    hook_source String,
-    model String,
-    user_email String,
-    division_name String,
-    roles Array(String),
-
-    -- Billed token split for the slice (input + output = total for
-    -- completion rows; they carry no cache attributes).
-    input_tokens SimpleAggregateFunction(sum, Int64),
-    output_tokens SimpleAggregateFunction(sum, Int64),
-    total_tokens SimpleAggregateFunction(sum, Int64)
-) ENGINE = AggregatingMergeTree
-ORDER BY (gram_project_id, time_bucket, chat_id, hook_source, model, user_email, division_name, roles)
-TTL time_bucket + INTERVAL 730 DAY
-SETTINGS index_granularity = 8192
-COMMENT 'Per-chat daily billed token usage broken down by consuming surface and user identity, retained beyond the raw telemetry TTL to power the billing page breakdowns across historical billing cycles';
-
-CREATE MATERIALIZED VIEW IF NOT EXISTS tum_breakdown_summaries_mv TO tum_breakdown_summaries AS
-SELECT
-    gram_project_id,
-    chat_id,
-    -- Force UTC so the daily billing bucket boundary never shifts with the
-    -- server timezone (fromUnixTimestamp64Nano defaults to the server tz).
-    toStartOfDay(fromUnixTimestamp64Nano(time_unix_nano, 'UTC')) AS time_bucket,
-    hook_source,
-    toString(attributes.gen_ai.response.model) AS model,
-    user_email,
-    toString(attributes.user.attributes.division_name) AS division_name,
-    arraySort(JSONExtract(ifNull(toJSONString(attributes.user.roles), '[]'), 'Array(String)')) AS roles,
-    sum(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens))) AS input_tokens,
-    sum(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens))) AS output_tokens,
-    sum(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens))) AS total_tokens
-FROM telemetry_logs
-WHERE chat_id != ''
-  AND toString(attributes.gen_ai.usage.total_tokens) != ''
-GROUP BY gram_project_id, chat_id, time_bucket, hook_source, model, user_email, division_name, roles;
 
 CREATE TABLE IF NOT EXISTS attribute_keys (
     gram_project_id UUID,

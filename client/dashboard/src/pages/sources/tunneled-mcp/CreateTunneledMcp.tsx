@@ -161,7 +161,7 @@ function CreateTunneledMcpForm() {
         </Stack>
         <Type muted>
           Register an MCP server that runs in your private network and connects
-          outbound to Gram through a tunnel.
+          outbound to Speakeasy through a tunnel.
         </Type>
       </Stack>
 

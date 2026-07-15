@@ -1495,6 +1495,16 @@ func marshalHooksHookIngestDataToHookIngestDataRequestBody(v *hooks.HookIngestDa
 	if v.Mcp != nil {
 		res.Mcp = marshalHooksHookMCPDataToHookMCPDataRequestBody(v.Mcp)
 	}
+	if v.McpInventory != nil {
+		res.McpInventory = make([]*HookMCPDataRequestBody, len(v.McpInventory))
+		for i, val := range v.McpInventory {
+			if val == nil {
+				res.McpInventory[i] = nil
+				continue
+			}
+			res.McpInventory[i] = marshalHooksHookMCPDataToHookMCPDataRequestBody(val)
+		}
+	}
 	if v.Usage != nil {
 		res.Usage = marshalHooksHookUsageDataToHookUsageDataRequestBody(v.Usage)
 	}
@@ -1711,6 +1721,16 @@ func marshalHookIngestDataRequestBodyToHooksHookIngestData(v *HookIngestDataRequ
 	}
 	if v.Mcp != nil {
 		res.Mcp = marshalHookMCPDataRequestBodyToHooksHookMCPData(v.Mcp)
+	}
+	if v.McpInventory != nil {
+		res.McpInventory = make([]*hooks.HookMCPData, len(v.McpInventory))
+		for i, val := range v.McpInventory {
+			if val == nil {
+				res.McpInventory[i] = nil
+				continue
+			}
+			res.McpInventory[i] = marshalHookMCPDataRequestBodyToHooksHookMCPData(val)
+		}
 	}
 	if v.Usage != nil {
 		res.Usage = marshalHookUsageDataRequestBodyToHooksHookUsageData(v.Usage)

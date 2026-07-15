@@ -43,6 +43,7 @@ trackedFiles:
   src/funcs/accessEnableRBAC.ts: {}
   src/funcs/accessGetRBACStatus.ts: {}
   src/funcs/accessGetRole.ts: {}
+  src/funcs/accessGetShadowMCPInventoryServer.ts: {}
   src/funcs/accessListChallengeBuckets.ts: {}
   src/funcs/accessListChallenges.ts: {}
   src/funcs/accessListGrants.ts: {}
@@ -200,6 +201,7 @@ trackedFiles:
   src/funcs/mcpServersUpdate.ts: {}
   src/funcs/modelKeysDeleteKey.ts: {}
   src/funcs/modelKeysListKeys.ts: {}
+  src/funcs/modelKeysSetKeyEnabled.ts: {}
   src/funcs/modelKeysUpsertKey.ts: {}
   src/funcs/organizationRemoteSessionClientsCreate.ts: {}
   src/funcs/organizationRemoteSessionClientsCreateCimd.ts: {}
@@ -894,6 +896,7 @@ trackedFiles:
   src/models/components/serviceinfo.ts: {}
   src/models/components/sessionsummary.ts: {}
   src/models/components/setbillingmetadatarequestbody.ts: {}
+  src/models/components/setkeyenabledrequestbody.ts: {}
   src/models/components/setmcpmetadatarequestbody.ts: {}
   src/models/components/setorganizationwhitelistrequestbody.ts: {}
   src/models/components/setpinnedrequestbody.ts: {}
@@ -1216,6 +1219,7 @@ trackedFiles:
   src/models/operations/getriskrulebreakdown.ts: {}
   src/models/operations/getriskuserbreakdown.ts: {}
   src/models/operations/getrole.ts: {}
+  src/models/operations/getshadowmcpinventoryserver.ts: {}
   src/models/operations/getsourceenvironment.ts: {}
   src/models/operations/gettemplate.ts: {}
   src/models/operations/gettokensundermanagement.ts: {}
@@ -1373,6 +1377,7 @@ trackedFiles:
   src/models/operations/setbillingmetadata.ts: {}
   src/models/operations/setchatpinned.ts: {}
   src/models/operations/setmcpmetadata.ts: {}
+  src/models/operations/setmodelproviderkeyenabled.ts: {}
   src/models/operations/setorganizationwhitelist.ts: {}
   src/models/operations/setpluginassignments.ts: {}
   src/models/operations/setproductfeature.ts: {}
@@ -1910,6 +1915,7 @@ trackedFiles:
   src/react-query/sessionInfo.core.ts: {}
   src/react-query/sessionInfo.ts: {}
   src/react-query/setBillingMetadata.ts: {}
+  src/react-query/setModelProviderKeyEnabled.ts: {}
   src/react-query/setPluginAssignments.ts: {}
   src/react-query/setProjectLogo.ts: {}
   src/react-query/setSourceEnvironmentLink.ts: {}
@@ -1922,6 +1928,8 @@ trackedFiles:
   src/react-query/shadowMCPApprovalRequests.ts: {}
   src/react-query/shadowMCPInventory.core.ts: {}
   src/react-query/shadowMCPInventory.ts: {}
+  src/react-query/shadowMCPInventoryServer.core.ts: {}
+  src/react-query/shadowMCPInventoryServer.ts: {}
   src/react-query/shadowMCPInventoryUsers.core.ts: {}
   src/react-query/shadowMCPInventoryUsers.ts: {}
   src/react-query/switchScopes.ts: {}
@@ -3968,6 +3976,20 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  getShadowMCPInventoryServer:
+    speakeasy-default-get-shadow-MCP-inventory-server:
+      parameters:
+        query:
+          project_id: "ff0a7551-9d09-4ebc-8f6f-4995812c0622"
+          server_url: "https://merry-middle.net"
+          server_slug: "<value>"
+      responses:
+        "200":
+          application/json: {"access": "allowed", "allowed_policy_ids": ["<value 1>", "<value 2>"], "canonical_server_url": "https://other-charlatan.com/", "first_seen": "2025-09-26T22:52:04.530Z", "last_seen": "2025-02-17T16:24:42.959Z", "observed_use_count": 376759, "request_count": 602872, "server_slug": "<value>", "top_users": ["<value 1>", "<value 2>", "<value 3>"], "url_host": "<value>", "user_count": 500085}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   getSlackApp:
     speakeasy-default-get-slack-app:
       parameters:
@@ -5675,6 +5697,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  setModelProviderKeyEnabled:
+    speakeasy-default-set-model-provider-key-enabled:
+      requestBody:
+        application/json: {"enabled": false, "id": "fa5a0eaf-918c-404e-a467-0e84f9541d83"}
+      responses:
+        "200":
+          application/json: {"created_at": "2024-07-11T15:53:42.054Z", "enabled": false, "id": "be367248-2e7d-45f1-a8a3-d1f30a4c3064", "project_id": "7dfb608e-ab2c-45fc-a559-5f6ecd7aac44", "provider": "<value>", "slot": "<value>", "updated_at": "2024-03-26T13:11:05.637Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   setOrganizationWhitelist:
     speakeasy-default-set-organization-whitelist:
       requestBody:

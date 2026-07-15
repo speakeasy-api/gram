@@ -316,6 +316,16 @@ type ListShadowMCPInventoryURLsParams struct {
 	Cursor        string
 }
 
+type GetShadowMCPInventoryURLParams struct {
+	GramProjectID      string
+	CanonicalServerURL string
+}
+
+type ListShadowMCPInventoryURLsBySlugHashParams struct {
+	GramProjectID string
+	SlugHash      string
+}
+
 type ShadowMCPInventoryURLRow struct {
 	CanonicalServerURL string    `ch:"canonical_server_url"`
 	URLHost            string    `ch:"url_host"`
@@ -598,6 +608,51 @@ func (q *Queries) UpsertShadowMCPInventoryURLs(ctx context.Context, args []Upser
 	}
 
 	return nil
+}
+
+func (q *Queries) GetShadowMCPInventoryURL(ctx context.Context, arg GetShadowMCPInventoryURLParams) (*ShadowMCPInventoryURLRow, error) {
+	return q.getShadowMCPInventoryURL(ctx, arg.GramProjectID, arg.CanonicalServerURL)
+}
+
+func (q *Queries) ListShadowMCPInventoryURLsBySlugHash(ctx context.Context, arg ListShadowMCPInventoryURLsBySlugHashParams) ([]ShadowMCPInventoryURLRow, error) {
+	const slugHashExpression = "substring(lower(hex(SHA256(canonical_server_url))), 1, 8)"
+
+	sb := sq.Select(
+		"canonical_server_url",
+		"max(url_host) AS url_host",
+		"argMaxIf(server_name, updated_at, server_name != '') AS server_name",
+		"min(first_seen) AS first_seen",
+		"max(last_seen) AS last_seen",
+	).
+		From("shadow_mcp_inventory_urls").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		Where(slugHashExpression+" = ?", arg.SlugHash).
+		GroupBy("gram_project_id", "canonical_server_url")
+
+	query, queryArgs, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building shadow mcp inventory slug hash lookup query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, queryArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("querying shadow mcp inventory slug hash lookup: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	result := make([]ShadowMCPInventoryURLRow, 0)
+	for rows.Next() {
+		var row ShadowMCPInventoryURLRow
+		if err := rows.ScanStruct(&row); err != nil {
+			return nil, fmt.Errorf("scanning shadow mcp inventory slug hash lookup row: %w", err)
+		}
+		result = append(result, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating shadow mcp inventory slug hash lookup rows: %w", err)
+	}
+
+	return result, nil
 }
 
 func (q *Queries) getShadowMCPInventoryURL(ctx context.Context, projectID string, canonicalURL string) (*ShadowMCPInventoryURLRow, error) {

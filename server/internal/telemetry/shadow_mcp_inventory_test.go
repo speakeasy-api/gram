@@ -68,6 +68,71 @@ func TestShadowMCPInventoryURLs_UpsertAndList(t *testing.T) {
 	require.Equal(t, lastSeen, rows[0].LastSeen)
 }
 
+func TestShadowMCPInventoryURLs_ListBySlugHash(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	projectID := uuid.NewString()
+	otherProjectID := uuid.NewString()
+	seenAt := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
+
+	require.NoError(t, ti.chClient.UpsertShadowMCPInventoryURLs(ctx, []telemetryRepo.UpsertShadowMCPInventoryURLParams{
+		{
+			GramProjectID:      projectID,
+			CanonicalServerURL: "https://detail.example.com/mcp",
+			URLHost:            "detail.example.com",
+			ServerName:         "Detail MCP",
+			SeenAt:             seenAt,
+		},
+		{
+			GramProjectID:      projectID,
+			CanonicalServerURL: "https://other.example.com/mcp",
+			URLHost:            "other.example.com",
+			ServerName:         "Other MCP",
+			SeenAt:             seenAt,
+		},
+		{
+			GramProjectID:      otherProjectID,
+			CanonicalServerURL: "https://detail.example.com/mcp",
+			URLHost:            "detail.example.com",
+			ServerName:         "Other Project",
+			SeenAt:             seenAt,
+		},
+	}))
+
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	rows, err := ti.chClient.ListShadowMCPInventoryURLsBySlugHash(ctx, telemetryRepo.ListShadowMCPInventoryURLsBySlugHashParams{
+		GramProjectID: projectID,
+		SlugHash:      "30d7c46c",
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, "https://detail.example.com/mcp", rows[0].CanonicalServerURL)
+	require.Equal(t, "Detail MCP", rows[0].ServerName)
+
+	explainRows, err := ti.chConn.Query(ctx, `
+		EXPLAIN indexes = 1
+		SELECT canonical_server_url
+		FROM shadow_mcp_inventory_urls
+		WHERE gram_project_id = ?
+		  AND substring(lower(hex(SHA256(canonical_server_url))), 1, 8) = ?
+	`, projectID, "30d7c46c")
+	require.NoError(t, err)
+
+	var explainPlan strings.Builder
+	for explainRows.Next() {
+		var line string
+		require.NoError(t, explainRows.Scan(&line))
+		explainPlan.WriteString(line)
+		explainPlan.WriteByte('\n')
+	}
+	require.NoError(t, explainRows.Err())
+	require.NoError(t, explainRows.Close())
+	require.Contains(t, explainPlan.String(), "PrimaryKey")
+	require.Contains(t, explainPlan.String(), "idx_shadow_mcp_inventory_urls_slug_hash")
+}
+
 func TestShadowMCPInventoryURLs_PaginatesLastSeen(t *testing.T) {
 	t.Parallel()
 

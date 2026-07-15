@@ -16,9 +16,10 @@ import (
 
 // Endpoints wraps the "modelKeys" service endpoints.
 type Endpoints struct {
-	ListKeys  goa.Endpoint
-	UpsertKey goa.Endpoint
-	DeleteKey goa.Endpoint
+	ListKeys      goa.Endpoint
+	UpsertKey     goa.Endpoint
+	SetKeyEnabled goa.Endpoint
+	DeleteKey     goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "modelKeys" service with endpoints.
@@ -26,9 +27,10 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		ListKeys:  NewListKeysEndpoint(s, a.APIKeyAuth),
-		UpsertKey: NewUpsertKeyEndpoint(s, a.APIKeyAuth),
-		DeleteKey: NewDeleteKeyEndpoint(s, a.APIKeyAuth),
+		ListKeys:      NewListKeysEndpoint(s, a.APIKeyAuth),
+		UpsertKey:     NewUpsertKeyEndpoint(s, a.APIKeyAuth),
+		SetKeyEnabled: NewSetKeyEnabledEndpoint(s, a.APIKeyAuth),
+		DeleteKey:     NewDeleteKeyEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -36,6 +38,7 @@ func NewEndpoints(s Service) *Endpoints {
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListKeys = m(e.ListKeys)
 	e.UpsertKey = m(e.UpsertKey)
+	e.SetKeyEnabled = m(e.SetKeyEnabled)
 	e.DeleteKey = m(e.DeleteKey)
 }
 
@@ -154,6 +157,65 @@ func NewUpsertKeyEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.E
 			return nil, err
 		}
 		return s.UpsertKey(ctx, p)
+	}
+}
+
+// NewSetKeyEnabledEndpoint returns an endpoint function that calls the method
+// "setKeyEnabled" of service "modelKeys".
+func NewSetKeyEnabledEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetKeyEnabledPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.SetKeyEnabled(ctx, p)
 	}
 }
 

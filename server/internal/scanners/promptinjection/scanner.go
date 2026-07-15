@@ -62,62 +62,48 @@ func NewScanner(logger *slog.Logger, classifier Classifier) *Scanner {
 	return &Scanner{classifier: classifier, logger: logger}
 }
 
-func (s *Scanner) l1Active(l1Enabled bool) bool {
-	return l1Enabled
-}
-
-func (s *Scanner) Scan(ctx context.Context, text, orgID, projectID, userID string, msg judgemessage.Message, l1Enabled bool) ([]scanners.Finding, error) {
+func (s *Scanner) Scan(ctx context.Context, text, orgID, projectID, userID string, msg judgemessage.Message) ([]scanners.Finding, error) {
 	if text == "" && !msg.HasContent() {
 		return nil, nil
 	}
 
-	findings := runHeuristics(text)
-
-	if !s.l1Active(l1Enabled) {
-		return findings, nil
-	}
-
 	results, err := s.classifier(ctx, Request{Messages: []judgemessage.Message{msg}, OrgID: orgID, ProjectID: projectID, UserIDs: []string{userID}})
 	if err != nil {
-		s.logger.WarnContext(ctx, "pi L1 scan failed; returning L0 findings only",
+		s.logger.WarnContext(ctx, "pi judge scan failed; dropping prompt injection findings",
 			attr.SlogError(err),
 			attr.SlogOrganizationID(orgID),
 		)
-		return findings, nil
+		return nil, nil
 	}
 	if len(results) != 1 {
-		return findings, nil
+		return nil, nil
 	}
 
 	if f := s.findingFromResult(text, results[0]); f != nil {
-		findings = append(findings, *f)
+		return []scanners.Finding{*f}, nil
 	}
-	return findings, nil
+	return nil, nil
 }
 
-func (s *Scanner) ScanBatch(ctx context.Context, texts []string, orgID, projectID string, userIDs []string, msgs []judgemessage.Message, l1Enabled bool) ([][]scanners.Finding, error) {
+func (s *Scanner) ScanBatch(ctx context.Context, texts []string, orgID, projectID string, userIDs []string, msgs []judgemessage.Message) ([][]scanners.Finding, error) {
 	out := make([][]scanners.Finding, len(texts))
-	for i, t := range texts {
-		if t == "" {
-			continue
-		}
-		out[i] = runHeuristics(t)
-	}
-
-	if !s.l1Active(l1Enabled) {
+	if len(msgs) != len(texts) {
+		s.logger.WarnContext(ctx, "pi judge batch scan has mismatched message count",
+			attr.SlogError(errors.New("len(msgs) != len(texts)")),
+		)
 		return out, nil
 	}
 
 	results, err := s.classifier(ctx, Request{Messages: msgs, OrgID: orgID, ProjectID: projectID, UserIDs: userIDs})
 	if err != nil {
-		s.logger.WarnContext(ctx, "pi L1 batch scan failed; returning L0 findings only",
+		s.logger.WarnContext(ctx, "pi judge batch scan failed; dropping prompt injection findings",
 			attr.SlogError(err),
 			attr.SlogOrganizationID(orgID),
 		)
 		return out, nil
 	}
 	if len(results) != len(texts) {
-		s.logger.WarnContext(ctx, "pi engine returned mismatched batch size, dropping L1 findings",
+		s.logger.WarnContext(ctx, "pi judge returned mismatched batch size, dropping prompt injection findings",
 			attr.SlogError(errors.New("len(results) != len(texts)")),
 		)
 		return out, nil
@@ -157,11 +143,4 @@ func (s *Scanner) findingFromResult(text string, r Result) *scanners.Finding {
 		Field:               "",
 		Path:                "",
 	}
-}
-
-func Detect(_ context.Context, text string) ([]scanners.Finding, error) {
-	if text == "" {
-		return nil, nil
-	}
-	return runHeuristics(text), nil
 }

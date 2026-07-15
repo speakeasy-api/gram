@@ -58,7 +58,10 @@ migrations:
   - "go.mod"
   - "go.sum"
   - "server/migrations/**"
+  - "server/database/schema.sql"
   - "server/clickhouse/migrations/**"
+  - "server/clickhouse/local/golang_migrate/**"
+  - "server/clickhouse/schema.sql"
 
 database-changes:
   - "server/migrations/**"

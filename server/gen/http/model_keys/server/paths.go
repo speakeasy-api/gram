@@ -17,6 +17,11 @@ func UpsertKeyModelKeysPath() string {
 	return "/rpc/modelKeys.upsertKey"
 }
 
+// SetKeyEnabledModelKeysPath returns the URL path to the modelKeys service setKeyEnabled HTTP endpoint.
+func SetKeyEnabledModelKeysPath() string {
+	return "/rpc/modelKeys.setKeyEnabled"
+}
+
 // DeleteKeyModelKeysPath returns the URL path to the modelKeys service deleteKey HTTP endpoint.
 func DeleteKeyModelKeysPath() string {
 	return "/rpc/modelKeys.deleteKey"

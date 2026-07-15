@@ -173,7 +173,7 @@ type Scanner struct {
 	gitleaks          *gitleaks.Scanner           // warm at startup, reused across scans
 	customRuleScanner *customruleanalyzer.Scanner // required; evaluates custom CEL detection rules
 	piiScanner        ra.PIIScanner               // nil if Presidio is unavailable
-	piScanner         *promptinjection.Scanner    // never nil; stub-classifier when L1 disabled
+	piScanner         *promptinjection.Scanner    // never nil
 	promptPolicy      *promptpolicy.Scanner       // nil-safe; owns prompt policy finding decisions
 	flags             feature.Provider            // nil disables prompt_based enforcement
 	metrics           *scannerMetrics
@@ -181,8 +181,8 @@ type Scanner struct {
 }
 
 // NewScanner creates a RiskScanner. piiScanner may be nil if Presidio
-// is not available in the server process. piScanner must be non-nil; pass a
-// scanner built with a nil engine to run L0 heuristics only.
+// is not available in the server process. piScanner must be non-nil; a nil
+// classifier fails open through NoopClassifier.
 // Primes the gitleaks detector to avoid per-scan rule compilation on the
 // real-time hook path; returns an error if the detector cannot be built
 // (init relies on viper global state and should never realistically fail,
@@ -295,18 +295,6 @@ func (s *Scanner) ScanForEnforcement(
 		promptPoliciesOn = s.projectFlagEnabled(ctx, policies[0].OrganizationID, projectID, feature.FlagPromptPolicies)
 	}
 
-	// Same once-per-scan resolution for the L1 prompt-injection engine: gate on
-	// a standard policy whose prompt_injection source applies to this message,
-	// so the slug/flag lookup is skipped for scans that can never run L1.
-	piEngineOn := false
-	if slices.ContainsFunc(policies, func(p repo.RiskPolicy) bool {
-		return p.PolicyType != ra.PolicyTypePromptBased &&
-			slices.Contains(p.Sources, ra.SourcePromptInjection) &&
-			(len(p.MessageTypes) == 0 || slices.Contains(p.MessageTypes, messageType))
-	}) {
-		piEngineOn = s.projectFlagEnabled(ctx, policies[0].OrganizationID, projectID, feature.FlagPromptInjectionUseClassifier)
-	}
-
 	// Fan out across policies. The first goroutine that finds a match returns
 	// errMatchFound, which causes errgroup to cancel its context - sibling
 	// goroutines stop their in-flight Presidio HTTP calls early instead of
@@ -332,7 +320,7 @@ func (s *Scanner) ScanForEnforcement(
 		}
 
 		g.Go(func() error {
-			result, scanErr := s.scanPolicy(gctx, p, userID, text, messageType, toolName, promptPoliciesOn, piEngineOn)
+			result, scanErr := s.scanPolicy(gctx, p, userID, text, messageType, toolName, promptPoliciesOn)
 			if scanErr != nil {
 				if errors.Is(scanErr, context.Canceled) {
 					return nil
@@ -459,7 +447,7 @@ func (s *Scanner) recordScan(ctx context.Context, projectID string, outcome o11y
 // text per call - its internal worker pool only fans out when n > 1, so
 // per-policy parallelism over sources buys roughly nothing. The
 // across-policies fan-out in ScanForEnforcement is the real win.
-func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID string, text string, messageType message.Type, toolName string, promptPoliciesOn bool, piEngineOn bool) (result *ScanResult, retErr error) {
+func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID string, text string, messageType message.Type, toolName string, promptPoliciesOn bool) (result *ScanResult, retErr error) {
 	// Per-policy child span so an individual gitleaks/presidio/judge span
 	// attributes to the policy that spawned it (the g.Go fan-out threads gctx
 	// here, so this span parents under risk.scanForEnforcement).
@@ -586,7 +574,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID
 				}
 			}
 		case ra.SourcePromptInjection:
-			findings, err := s.piScanner.Scan(ctx, text, policy.OrganizationID, policy.ProjectID.String(), userID, judgemessage.New(messageType, toolName, text), piEngineOn)
+			findings, err := s.piScanner.Scan(ctx, text, policy.OrganizationID, policy.ProjectID.String(), userID, judgemessage.New(messageType, toolName, text))
 			if err != nil {
 				return nil, fmt.Errorf("prompt injection scan: %w", err)
 			}
