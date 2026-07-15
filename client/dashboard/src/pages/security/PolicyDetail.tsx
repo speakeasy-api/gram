@@ -2637,8 +2637,12 @@ function SessionTranscript({
       hasMoreAfter: transcript.hasMoreAfter,
       onLoadOlder: transcript.fetchOlder,
       onLoadNewer: transcript.fetchNewer,
+      // The from-start transcript's only missing range is the tail, so the
+      // break button drains the rest of the conversation.
+      onLoadAllOlder: transcript.fetchOlder,
+      onLoadAllNewer: transcript.loadRest,
       isFetchingOlder: transcript.isFetchingOlder,
-      isFetchingNewer: transcript.isFetchingNewer,
+      isFetchingNewer: transcript.isFetchingNewer || transcript.isLoadingRest,
       initialScrollIndex: null,
       scrollToFinding: false,
     }),
@@ -2647,8 +2651,10 @@ function SessionTranscript({
       transcript.hasMoreAfter,
       transcript.fetchOlder,
       transcript.fetchNewer,
+      transcript.loadRest,
       transcript.isFetchingOlder,
       transcript.isFetchingNewer,
+      transcript.isLoadingRest,
     ],
   );
   const rowCtx = useMemo<RowContext>(
