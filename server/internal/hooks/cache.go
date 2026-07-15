@@ -62,10 +62,11 @@ const hookIdempotencyTTL = 10 * time.Minute
 // hookReplayIdempotencyTTL is the claim window for events redelivered from a
 // device's offline spool (X-Gram-Replayed). Replays can race each other far
 // outside a normal retry burst — the device agent's recovery trigger, the
-// hooks' opportunistic drain, and Windows' lock-free double drains can
-// deliver the same entry minutes or hours apart — so the claim must outlive
-// a drain cycle, not a backoff loop. Only downtime backlog pays this
-// keyspace cost, which keeps the volume trivial next to live traffic.
+// hooks' opportunistic drain, Windows' lock-free double drains, and a
+// failed post-accept unlink re-sent by a much later drain — so the claim
+// must cover the spool's full 14-day retention, not one drain cycle. Only
+// downtime backlog pays this keyspace cost, which keeps the volume trivial
+// next to live traffic.
 //
 // Scope, deliberately: this dedupes replay-vs-replay. It does NOT cover the
 // original-vs-replay case — a live delivery the server persisted but whose
@@ -75,4 +76,4 @@ const hookIdempotencyTTL = 10 * time.Minute
 // would hold a Redis key for every hook event fleet-wide; accepted and
 // tracked on DNO-498. A duplicate telemetry row is the cheaper failure next
 // to dropping downtime backlog.
-const hookReplayIdempotencyTTL = 48 * time.Hour
+const hookReplayIdempotencyTTL = 15 * 24 * time.Hour
