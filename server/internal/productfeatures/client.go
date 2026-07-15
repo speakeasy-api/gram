@@ -119,10 +119,39 @@ func (c *Client) UpdateFeatureCache(ctx context.Context, organizationID string, 
 	}
 }
 
+func provisionSkillsSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, organizationID string) error {
+	if _, err := authz.PatchRoleGrantsTx(ctx, dbtx, organizationID, authz.SystemRoleMember, "", []*authz.RoleGrant{
+		{
+			Scope:     string(authz.ScopeSkillRead),
+			Effect:    authz.PolicyEffectAllow,
+			Selectors: nil,
+		},
+	}, nil); err != nil {
+		return fmt.Errorf("provision member Skills grants: %w", err)
+	}
+
+	if _, err := authz.PatchRoleGrantsTx(ctx, dbtx, organizationID, authz.SystemRoleAdmin, "", []*authz.RoleGrant{
+		{
+			Scope:     string(authz.ScopeSkillRead),
+			Effect:    authz.PolicyEffectAllow,
+			Selectors: nil,
+		},
+		{
+			Scope:     string(authz.ScopeSkillWrite),
+			Effect:    authz.PolicyEffectAllow,
+			Selectors: nil,
+		},
+	}, nil); err != nil {
+		return fmt.Errorf("provision admin Skills grants: %w", err)
+	}
+
+	return nil
+}
+
 // EnableSkillsTx provisions the built-in Skills grants when RBAC is already
 // active, then enables the org-level Skills feature in the caller's transaction.
-// When RBAC is off, EnableRBACTx will seed the complete system-role defaults
-// later. Existing grants and exclusions are preserved.
+// When RBAC is off, EnableRBACTx provisions them after seeding system roles.
+// Existing grants and exclusions are preserved.
 func EnableSkillsTx(ctx context.Context, dbtx repo.DBTX, organizationID string) error {
 	q := repo.New(dbtx)
 	rbacEnabled, err := q.IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{
@@ -134,29 +163,8 @@ func EnableSkillsTx(ctx context.Context, dbtx repo.DBTX, organizationID string) 
 	}
 
 	if rbacEnabled {
-		if _, err := authz.PatchRoleGrantsTx(ctx, dbtx, organizationID, authz.SystemRoleMember, "", []*authz.RoleGrant{
-			{
-				Scope:     string(authz.ScopeSkillRead),
-				Effect:    authz.PolicyEffectAllow,
-				Selectors: nil,
-			},
-		}, nil); err != nil {
-			return fmt.Errorf("provision member Skills grants: %w", err)
-		}
-
-		if _, err := authz.PatchRoleGrantsTx(ctx, dbtx, organizationID, authz.SystemRoleAdmin, "", []*authz.RoleGrant{
-			{
-				Scope:     string(authz.ScopeSkillRead),
-				Effect:    authz.PolicyEffectAllow,
-				Selectors: nil,
-			},
-			{
-				Scope:     string(authz.ScopeSkillWrite),
-				Effect:    authz.PolicyEffectAllow,
-				Selectors: nil,
-			},
-		}, nil); err != nil {
-			return fmt.Errorf("provision admin Skills grants: %w", err)
+		if err := provisionSkillsSystemRoleGrantsTx(ctx, dbtx, organizationID); err != nil {
+			return err
 		}
 	}
 
@@ -183,11 +191,25 @@ func EnableRBACTx(ctx context.Context, dbtx repo.DBTX, organizationID string) er
 		return fmt.Errorf("seed system role grants: %w", err)
 	}
 
+	q := repo.New(dbtx)
+	skillsEnabled, err := q.IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{
+		OrganizationID: organizationID,
+		FeatureName:    string(FeatureSkills),
+	})
+	if err != nil {
+		return fmt.Errorf("check Skills feature flag: %w", err)
+	}
+	if skillsEnabled {
+		if err := provisionSkillsSystemRoleGrantsTx(ctx, dbtx, organizationID); err != nil {
+			return err
+		}
+	}
+
 	// EnableFeature inserts ON CONFLICT DO NOTHING against the partial unique
 	// index (org, feature) WHERE deleted IS FALSE, so re-enabling an already-
 	// enabled org is a true no-op rather than a UniqueViolation that would
 	// poison the transaction.
-	if err := repo.New(dbtx).EnableFeature(ctx, repo.EnableFeatureParams{
+	if err := q.EnableFeature(ctx, repo.EnableFeatureParams{
 		OrganizationID: organizationID,
 		FeatureName:    string(FeatureRBAC),
 	}); err != nil {

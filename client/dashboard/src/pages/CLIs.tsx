@@ -2,11 +2,15 @@ import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Badge } from "@/components/ui/badge";
 import { Type } from "@/components/ui/type";
+import { useProject } from "@/contexts/Auth";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { Icon } from "@speakeasy-api/moonshine";
 
 export default function CLIs(): JSX.Element {
-  const { data: features } = useProductFeatures();
+  const { id: projectId } = useProject();
+  const { data: features } = useProductFeatures(undefined, undefined, {
+    staleTime: 30_000,
+  });
   const skillsEnabled = features?.skillsEnabled === true;
 
   return (
@@ -17,6 +21,7 @@ export default function CLIs(): JSX.Element {
       <Page.Body>
         <RequireScope
           scope={skillsEnabled ? "skill:read" : "project:read"}
+          resourceId={skillsEnabled ? projectId : undefined}
           level="page"
         >
           <Page.Section>
@@ -26,21 +31,13 @@ export default function CLIs(): JSX.Element {
               discovery and improve performance.
             </Page.Section.Description>
             <Page.Section.Body>
-              {skillsEnabled ? (
-                <SkillsEnabledBody />
-              ) : (
-                <SkillsEmptyState comingSoon />
-              )}
+              <SkillsEmptyState comingSoon={!skillsEnabled} />
             </Page.Section.Body>
           </Page.Section>
         </RequireScope>
       </Page.Body>
     </Page>
   );
-}
-
-function SkillsEnabledBody(): JSX.Element {
-  return <SkillsEmptyState />;
 }
 
 function SkillsEmptyState({ comingSoon = false }: { comingSoon?: boolean }) {

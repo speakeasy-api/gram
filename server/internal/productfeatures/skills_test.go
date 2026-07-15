@@ -120,6 +120,47 @@ func TestProductFeaturesService_SkillsBeforeRBACSeedsCompleteDefaults(t *testing
 	}
 }
 
+func TestProductFeaturesService_SkillsBeforeRBACPatchesRetainedSystemRoleGrants(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestProductFeaturesService(t)
+	organizationID := activeOrganizationID(t, ctx)
+	seedOrganization(t, ctx, ti.conn, organizationID)
+
+	err := ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
+		FeatureName: string(productfeatures.FeatureSkills),
+		Enabled:     true,
+	})
+	require.NoError(t, err)
+	require.NoError(t, authz.SeedSystemRoleGrants(ctx, ti.conn, organizationID))
+
+	q := accessrepo.New(ti.conn)
+	admin := systemRolePrincipal(t, ctx, q, authz.SystemRoleAdmin)
+	member := systemRolePrincipal(t, ctx, q, authz.SystemRoleMember)
+	deleteGrant(t, ctx, q, organizationID, admin, authz.ScopeSkillRead, authz.WildcardResource)
+	deleteGrant(t, ctx, q, organizationID, admin, authz.ScopeSkillWrite, authz.WildcardResource)
+	deleteGrant(t, ctx, q, organizationID, member, authz.ScopeSkillRead, authz.WildcardResource)
+	upsertGrant(t, ctx, q, organizationID, admin, authz.ScopeRiskPolicyEvaluate, "policy-retained")
+	upsertGrant(t, ctx, q, organizationID, member, authz.ScopeSkillBlockedRead, "project-excluded")
+
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, productfeatures.EnableRBACTx(ctx, tx, organizationID))
+	require.NoError(t, tx.Commit(ctx))
+
+	grants := organizationGrantKeys(t, ctx, q, organizationID)
+	for roleSlug, principal := range map[string]urn.Principal{
+		authz.SystemRoleAdmin:  admin,
+		authz.SystemRoleMember: member,
+	} {
+		for _, grant := range authz.SystemRoleGrants[roleSlug] {
+			require.Equal(t, 1, grants[grantKey(principal, authz.Scope(grant.Scope), authz.WildcardResource)])
+		}
+	}
+	require.Equal(t, 1, grants[grantKey(admin, authz.ScopeRiskPolicyEvaluate, "policy-retained")])
+	require.Equal(t, 1, grants[grantKey(member, authz.ScopeSkillBlockedRead, "project-excluded")])
+	require.Len(t, grants, len(authz.SystemRoleGrants[authz.SystemRoleAdmin])+len(authz.SystemRoleGrants[authz.SystemRoleMember])+2)
+}
+
 func TestEnableSkillsTx_RollsBackWithCallerTransaction(t *testing.T) {
 	t.Parallel()
 
