@@ -349,6 +349,7 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 
 		if err := entriesRepo.UpdateEnvironmentEntry(ctx, repo.UpsertEnvironmentEntryParams{
 			EnvironmentID: environment.ID,
+			ProjectID:     projectID,
 			Name:          updatedEntry.Name,
 			Value:         value, // This is the actual environment value to update too, do not redact it
 			IsSecret:      isSecret,

@@ -643,7 +643,9 @@ func (q *Queries) UpdateEnvironment(ctx context.Context, arg UpdateEnvironmentPa
 
 const upsertEnvironmentEntry = `-- name: UpsertEnvironmentEntry :one
 INSERT INTO environment_entries (environment_id, name, value, is_secret, updated_at)
-VALUES ($1, $2, $3, $4, now())
+SELECT e.id, $1::text, $2::text, $3::boolean, now()
+FROM environments e
+WHERE e.id = $4 AND e.project_id = $5
 ON CONFLICT (environment_id, name)
 DO UPDATE SET
     value = EXCLUDED.value,
@@ -653,18 +655,20 @@ RETURNING name, value, is_secret, environment_id, created_at, updated_at
 `
 
 type UpsertEnvironmentEntryParams struct {
-	EnvironmentID uuid.UUID
 	Name          string
 	Value         string
 	IsSecret      bool
+	EnvironmentID uuid.UUID
+	ProjectID     uuid.UUID
 }
 
 func (q *Queries) UpsertEnvironmentEntry(ctx context.Context, arg UpsertEnvironmentEntryParams) (EnvironmentEntry, error) {
 	row := q.db.QueryRow(ctx, upsertEnvironmentEntry,
-		arg.EnvironmentID,
 		arg.Name,
 		arg.Value,
 		arg.IsSecret,
+		arg.EnvironmentID,
+		arg.ProjectID,
 	)
 	var i EnvironmentEntry
 	err := row.Scan(

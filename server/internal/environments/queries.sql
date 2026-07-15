@@ -130,7 +130,9 @@ WHERE ee.environment_id = @source_environment_id::uuid
 
 -- name: UpsertEnvironmentEntry :one
 INSERT INTO environment_entries (environment_id, name, value, is_secret, updated_at)
-VALUES ($1, $2, $3, $4, now())
+SELECT e.id, @name::text, @value::text, @is_secret::boolean, now()
+FROM environments e
+WHERE e.id = @environment_id AND e.project_id = @project_id
 ON CONFLICT (environment_id, name)
 DO UPDATE SET
     value = EXCLUDED.value,
