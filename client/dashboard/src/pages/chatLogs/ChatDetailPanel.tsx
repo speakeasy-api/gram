@@ -2,8 +2,10 @@ import { format, formatDistanceToNow } from "date-fns";
 import {
   ArrowLeft,
   ChevronDown,
+  ChevronsDown,
   ChevronUp,
   Info,
+  Loader2,
   Search,
   Sparkles,
   SlidersHorizontal,
@@ -55,6 +57,7 @@ import { personalAccountEmail } from "@/components/observe/account-display-utils
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useIsPlatformAdmin } from "@/contexts/Auth";
+import { useSdkClient } from "@/contexts/Sdk";
 import { handleError, toError } from "@/lib/errors";
 import {
   ExclusionEditor,
@@ -765,6 +768,7 @@ function ChatDetailPanel({
   riskFocus = false,
   dimNonRisk: dimNonRiskProp = false,
 }: ChatDetailPanelProps) {
+  const client = useSdkClient();
   const isPlatformAdmin = useIsPlatformAdmin();
   const { hasScope } = useRBAC();
   const canManageChat = isPlatformAdmin || hasScope("org:admin");
@@ -833,11 +837,11 @@ function ChatDetailPanel({
   const searchTranscript = useWindowedTranscript(chatId, searchActive, {
     query: searchQuery,
   });
-  const active = riskWindowed
-    ? riskTranscript
-    : searchActive
-      ? searchTranscript
-      : transcript;
+  // Risk and search are both server-windowed; only their source differs. The
+  // plain keyset transcript drives loads directly when neither is active.
+  const windowedChoice = riskWindowed ? riskTranscript : searchTranscript;
+  const windowed = riskWindowed || searchActive ? windowedChoice : null;
+  const active = windowed ?? transcript;
   // Prefer the enriched (cost/usage) normal-load chat, but fall back to the
   // active transcript's chat so a windowed view still renders if only that load
   // resolved (otherwise the panel would show "Not found" despite having data).
@@ -948,11 +952,7 @@ function ChatDetailPanel({
   }, [transcriptRows, typeFilter, riskyOnly, riskResultsByMessage]);
   const hasMoreBefore = active.hasMoreBefore;
   const hasMoreAfter = active.hasMoreAfter;
-  const windowGaps = riskWindowed
-    ? riskTranscript.gaps
-    : searchActive
-      ? searchTranscript.gaps
-      : undefined;
+  const windowGaps = windowed?.gaps;
   const displayItems = useMemo(
     () =>
       buildDisplayItems({
@@ -1031,26 +1031,25 @@ function ChatDetailPanel({
   );
 
   const transcriptPagination = useMemo<TranscriptPagination>(() => {
-    // Risk and search are both server-windowed; only their source differs. The
-    // plain keyset transcript drives edge loads directly when neither is active.
-    const windowed = riskWindowed
-      ? riskTranscript
-      : searchActive
-        ? searchTranscript
-        : null;
     return {
       hasMoreBefore,
       hasMoreAfter,
+      // Scrolling near an edge streams single pages; the break buttons load
+      // everything missing in their range in one action.
       onLoadOlder: () =>
         windowed ? windowed.loadBefore() : transcript.fetchOlder(),
       onLoadNewer: () =>
         windowed ? windowed.loadAfter() : transcript.fetchNewer(),
+      onLoadAllOlder: () =>
+        windowed ? windowed.loadAllBefore() : transcript.fetchOlder(),
+      onLoadAllNewer: () =>
+        windowed ? windowed.loadAllAfter() : transcript.loadRest(),
       isFetchingOlder: windowed
         ? windowed.loadingKey === "before"
         : transcript.isFetchingOlder,
       isFetchingNewer: windowed
         ? windowed.loadingKey === "after"
-        : transcript.isFetchingNewer,
+        : transcript.isFetchingNewer || transcript.isLoadingRest,
       onLoadGap: windowed ? windowed.loadGap : undefined,
       isLoadingGap: windowed
         ? (afterSeq: number) => windowed.loadingKey === `gap:${afterSeq}`
@@ -1076,13 +1075,25 @@ function ChatDetailPanel({
     hasMoreAfter,
     riskWindowed,
     searchActive,
-    riskTranscript,
-    searchTranscript,
+    windowed,
     transcript,
     initialScrollIndex,
     scrollNonce,
     activeOccurrence,
   ]);
+
+  // "Load all messages": shown whenever part of the conversation isn't loaded
+  // (a paged-out tail, or un-expanded windowed segments/edges). One click
+  // fetches every missing message.
+  const fullyLoaded =
+    !hasMoreBefore && !hasMoreAfter && (windowGaps?.size ?? 0) === 0;
+  const loadingAllMessages = windowed
+    ? windowed.loadingKey === "all"
+    : transcript.isLoadingRest;
+  const loadAllMessages = useCallback(() => {
+    if (windowed) windowed.loadAll();
+    else transcript.loadRest();
+  }, [windowed, transcript]);
 
   // Personal-account sessions label the user's turns with the account's own
   // email (mirrors the sessions list) instead of the attributed employee's
@@ -1219,10 +1230,12 @@ function ChatDetailPanel({
           )
         }
         onExport={() => {
-          exportTraceDataAsJson({
+          // Fetches the complete transcript server-side — the export must not
+          // depend on which messages the panel happens to have loaded.
+          void exportTraceDataAsJson({
+            client,
             chatId,
             chat,
-            messages: chatMessages,
             telemetryLogLimit: PANEL_TELEMETRY_LOG_LIMIT,
             telemetryLogs: logs,
             riskResults,
@@ -1243,6 +1256,25 @@ function ChatDetailPanel({
           it, so returning lands back at the same scroll position rather than
           re-scrolling to the first finding. */}
       <div className="relative flex flex-1 flex-col overflow-hidden">
+        {!fullyLoaded && (
+          <div className="bg-muted/30 flex items-center justify-center border-b px-4 py-1.5">
+            <button
+              type="button"
+              disabled={loadingAllMessages}
+              onClick={loadAllMessages}
+              className="text-muted-foreground hover:text-foreground inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium transition-colors disabled:cursor-default"
+            >
+              {loadingAllMessages ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <ChevronsDown className="size-3.5" />
+              )}
+              {loadingAllMessages
+                ? "Loading all messages…"
+                : "Load all messages"}
+            </button>
+          </div>
+        )}
         <CreateExclusionContext.Provider
           value={canManageChat ? openExclusion : null}
         >
