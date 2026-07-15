@@ -332,11 +332,14 @@ export function EntityProfile({
     : collection
       ? "Breakdown"
       : "Project";
-  // Raw ancestor values joined by chevrons (e.g. "R&D › Engineering › elena@…").
-  // Values stay raw — the title already shows the entity's pretty name.
   const ancestryTrail = ancestors
-    .map((c) => displayValue(c.value))
+    .map((c) => displayName(c.dim, c.value))
     .join("  ›  ");
+  const parent = ancestors[ancestors.length - 1];
+  let parentLabel = projectName || "All costs";
+  if (parentValue) {
+    parentLabel = parent ? displayName(parent.dim, parentValue) : parentValue;
+  }
   const palette = entityPalette(title);
   const Icon =
     !entity && collection
@@ -417,9 +420,7 @@ export function EntityProfile({
               <span className="max-w-[220px] truncate">
                 Back to{" "}
                 <span className="text-foreground font-semibold">
-                  {parentValue
-                    ? displayValue(parentValue)
-                    : projectName || "All costs"}
+                  {parentLabel}
                 </span>
               </span>
             </button>
