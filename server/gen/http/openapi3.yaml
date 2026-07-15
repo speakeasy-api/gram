@@ -47253,6 +47253,11 @@ components:
                     format: double
                     minimum: 0.1
                     maximum: 10
+                shadow_mcp_allowed_urls:
+                    type: array
+                    items:
+                        type: string
+                    description: Complete desired canonical URL allow set for this policy. Omit to preserve; send empty to clear.
                 sources:
                     type: array
                     items:
@@ -61721,6 +61726,11 @@ components:
                     format: double
                     minimum: 0.1
                     maximum: 10
+                shadow_mcp_allowed_urls:
+                    type: array
+                    items:
+                        type: string
+                    description: Complete desired canonical URL allow set for this policy. Omit to preserve; send empty to clear.
                 sources:
                     type: array
                     items:

@@ -100,6 +100,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/resources"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
+	"github.com/speakeasy-api/gram/server/internal/risk/policybypass"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	piopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptinjection/openrouter"
@@ -1193,6 +1194,7 @@ func newStartCommand() *cli.Command {
 				celEngine,
 				builtinPresets,
 				hookPromptJudge,
+				policybypass.ReconcilePolicyURLs,
 			)
 			chatWriter.AddObserver(riskService)
 			risk.Attach(mux, riskService)
