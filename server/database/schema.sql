@@ -2918,6 +2918,11 @@ CREATE TABLE IF NOT EXISTS tunneled_mcp_servers (
   key_prefix TEXT NOT NULL CHECK (key_prefix <> ''),
   -- Durable source lifecycle. Live connection state is derived from Redis.
   status TEXT NOT NULL DEFAULT 'created' CHECK (status IN ('created', 'active', 'revoked')),
+  -- Owner consent for serving this source through a public (anonymous) MCP
+  -- endpoint. An mcp_servers row fronting this source may only take
+  -- visibility=public while this is true (double opt-in, enforced in
+  -- application code at create/update validation and at serve time).
+  allow_public boolean NOT NULL DEFAULT false,
   -- Last persisted tunnel agent version reported for this source.
   agent_version TEXT CHECK (agent_version IS NULL OR agent_version <> ''),
   -- Most recent persisted heartbeat time, used when Redis liveness data is absent.
@@ -2951,6 +2956,7 @@ COMMENT ON COLUMN tunneled_mcp_servers.name IS 'User-facing display name for the
 COMMENT ON COLUMN tunneled_mcp_servers.key_hash IS 'Hash of the one-time tunnel key. Used for future tunnel authentication without storing the plaintext key.';
 COMMENT ON COLUMN tunneled_mcp_servers.key_prefix IS 'Non-secret prefix of the tunnel key shown in the UI so users can identify which key/source they are using.';
 COMMENT ON COLUMN tunneled_mcp_servers.status IS 'Durable lifecycle state for the source: created, active, or revoked. Live connection state is derived from Redis.';
+COMMENT ON COLUMN tunneled_mcp_servers.allow_public IS 'Owner consent for anonymous public MCP serving of this source. Double opt-in with mcp_servers.visibility=public, enforced in application code.';
 COMMENT ON COLUMN tunneled_mcp_servers.agent_version IS 'Last persisted tunnel agent version reported for this source. Per-connection agent versions are stored in Redis.';
 COMMENT ON COLUMN tunneled_mcp_servers.last_seen_at IS 'Most recent persisted heartbeat time for the source, used when Redis liveness data is absent or expired.';
 COMMENT ON COLUMN tunneled_mcp_servers.created_at IS 'Time when the tunneled MCP source was created.';
