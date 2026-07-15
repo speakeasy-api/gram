@@ -303,3 +303,26 @@ func TestTrimSpoolSweepsStaleTmpOrphans(t *testing.T) {
 	_, freshErr := os.Stat(filepath.Join(dir, fresh))
 	require.NoError(t, freshErr, "fresh .tmp files may still belong to a live writer")
 }
+
+// TestLiveSendOmitsReplayMarker pins the other half of the replay contract:
+// the marker rides client state now (not a drain-only transport), so live
+// traffic must provably not carry it — a flipped default would grant every
+// live event the long idempotency window and tag it as downtime backlog,
+// and no other test inspects the header on the live path.
+func TestLiveSendOmitsReplayMarker(t *testing.T) {
+	fs := newFakeServer(t, nil)
+	cl := newClient(fs.URL)
+	cl.send(t.Context(), creds{ServerURL: "", APIKey: "k", Project: "p", Email: "", Org: "", Source: credEnv}, components.IngestRequestBody{
+		SchemaVersion: schemaVersion,
+		Source:        components.HookIngestSource{Adapter: "claude", AdapterVersion: nil, RawEventName: nil, Hostname: nil, UserEmail: nil},
+		Session:       nil,
+		Event:         components.HookIngestEvent{Type: components.TypeSessionUpdated, OccurredAt: nil},
+		Data:          nil,
+		Raw:           nil,
+	}, newIdempotencyToken())
+
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+	require.Len(t, fs.headers, 1)
+	require.Empty(t, fs.headers[0].Values("X-Gram-Replayed"), "live sends must not carry the replay marker")
+}
