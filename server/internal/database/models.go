@@ -1675,6 +1675,56 @@ type SourceEnvironment struct {
 	UpdatedAt     pgtype.Timestamptz
 }
 
+type SpendRule struct {
+	ID             uuid.UUID
+	OrganizationID string
+	Name           string
+	Slug           string
+	Description    string
+	TargetExpr     string
+	LimitUsd       float64
+	RuleExpr       string
+	WindowKind     string
+	WarnAtPct      int32
+	Action         string
+	Enabled        bool
+	Version        int64
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
+type SpendRuleEvent struct {
+	ID             uuid.UUID
+	OrganizationID string
+	SpendRuleID    uuid.UUID
+	RuleUrn        string
+	EventType      string
+	UserID         pgtype.Text
+	Email          string
+	DisplayName    pgtype.Text
+	SpendUsd       float64
+	LimitUsd       float64
+	WindowStart    pgtype.Timestamptz
+	WindowEnd      pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+}
+
+type SpendRuleVersion struct {
+	ID             uuid.UUID
+	OrganizationID string
+	SpendRuleID    uuid.UUID
+	Version        int64
+	TargetExpr     string
+	RuleExpr       string
+	LimitUsd       float64
+	WindowKind     string
+	WarnAtPct      int32
+	Action         string
+	CreatedAt      pgtype.Timestamptz
+}
+
 // Durable record of a blocked tool call or prompt. One row per hook-time block decision, carrying the exact reason shown to the agent. Backs the durable /blocks/:id page and its thumbs feedback. The risk_results / risk_policies foreign keys are nullable enrichment links — the page renders from this row alone.
 type ToolCallBlock struct {
 	ID             uuid.UUID
