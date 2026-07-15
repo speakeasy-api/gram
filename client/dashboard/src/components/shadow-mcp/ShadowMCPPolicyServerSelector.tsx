@@ -101,6 +101,29 @@ function AccessCell({ server }: { server: ShadowMCPInventoryServer }) {
   );
 }
 
+function AppliedServerRow({ server }: { server: ShadowMCPInventoryServer }) {
+  const label = serverLabel(server);
+
+  return (
+    <div
+      data-testid="applied-shadow-mcp-server"
+      className="grid h-9 grid-cols-[minmax(7rem,0.35fr)_minmax(0,1fr)] items-center gap-3 px-3"
+    >
+      <Type variant="small" className="truncate font-medium" title={label}>
+        {label}
+      </Type>
+      <Type
+        muted
+        small
+        className="truncate font-mono text-xs"
+        title={server.canonicalServerUrl}
+      >
+        {server.canonicalServerUrl}
+      </Type>
+    </div>
+  );
+}
+
 function AppliedServerList({
   servers,
 }: {
@@ -108,26 +131,19 @@ function AppliedServerList({
 }) {
   if (servers.length === 0) {
     return (
-      <div className="border-border bg-muted/20 rounded-md border border-dashed px-4 py-5 text-center">
-        <Type muted small>
-          No servers selected
-        </Type>
-      </div>
+      <Type muted small>
+        No servers selected
+      </Type>
     );
   }
 
   return (
-    <div className="border-border divide-border divide-y overflow-hidden rounded-md border">
+    <div
+      data-testid="applied-shadow-mcp-servers"
+      className="border-border divide-border max-h-[198px] divide-y overflow-y-auto rounded-md border"
+    >
       {servers.map((server) => (
-        <div
-          key={server.canonicalServerUrl}
-          className="flex items-center justify-between gap-4 px-3 py-2.5"
-        >
-          <ServerCell server={server} />
-          <Type muted small className="shrink-0">
-            {shadowMCPInventoryStatusLabel(inventoryAccessStatus(server))}
-          </Type>
-        </div>
+        <AppliedServerRow key={server.canonicalServerUrl} server={server} />
       ))}
     </div>
   );

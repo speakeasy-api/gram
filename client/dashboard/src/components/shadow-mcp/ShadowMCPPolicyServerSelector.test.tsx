@@ -102,6 +102,48 @@ describe("ShadowMCPPolicyServerSelector", () => {
     });
     expect(within(section).getByText("No servers selected")).toBeTruthy();
     expect(within(section).getByText("0 servers selected")).toBeTruthy();
+    expect(
+      within(section).queryByTestId("applied-shadow-mcp-servers"),
+    ).toBeNull();
+  });
+
+  it("renders a compact scrollable applied summary with only names and URLs", () => {
+    const servers = Array.from({ length: 6 }, (_, index) =>
+      inventoryServer(`https://server-${index}.example.com/mcp`, {
+        access: index === 0 ? "allowed" : "none",
+        serverName: `Server ${index}`,
+      }),
+    );
+
+    render(
+      <ControlledSelector
+        servers={servers}
+        initialSelection={servers.map((server) => server.canonicalServerUrl)}
+      />,
+    );
+
+    const section = screen.getByRole("region", {
+      name: "Allowed Shadow MCP servers",
+    });
+    const list = within(section).getByTestId("applied-shadow-mcp-servers");
+
+    expect(list.className).toContain("max-h-[198px]");
+    expect(list.className).toContain("overflow-y-auto");
+    const rows = within(list).getAllByTestId("applied-shadow-mcp-server");
+    expect(rows).toHaveLength(6);
+
+    const firstRow = rows[0];
+    if (!firstRow) throw new Error("Expected an applied server row");
+
+    expect(within(firstRow).getByText("Server 0").getAttribute("title")).toBe(
+      "Server 0",
+    );
+    expect(
+      within(firstRow)
+        .getByText("https://server-0.example.com/mcp")
+        .getAttribute("title"),
+    ).toBe("https://server-0.example.com/mcp");
+    expect(within(section).queryByText("Allowed", { exact: true })).toBeNull();
   });
 
   it("renders every inventory field including optional and zero values", () => {
