@@ -39,7 +39,7 @@ func (q *Queries) DeleteFeature(ctx context.Context, arg DeleteFeatureParams) (O
 	return i, err
 }
 
-const enableFeature = `-- name: EnableFeature :exec
+const enableFeature = `-- name: EnableFeature :execrows
 INSERT INTO organization_features (
     organization_id,
     feature_name
@@ -56,9 +56,12 @@ type EnableFeatureParams struct {
 	FeatureName    string
 }
 
-func (q *Queries) EnableFeature(ctx context.Context, arg EnableFeatureParams) error {
-	_, err := q.db.Exec(ctx, enableFeature, arg.OrganizationID, arg.FeatureName)
-	return err
+func (q *Queries) EnableFeature(ctx context.Context, arg EnableFeatureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, enableFeature, arg.OrganizationID, arg.FeatureName)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const isFeatureEnabled = `-- name: IsFeatureEnabled :one

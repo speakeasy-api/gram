@@ -17,8 +17,8 @@ export const FeatureName = {
   Webhooks: "webhooks",
   Sso: "sso",
   Scim: "scim",
-  ObservabilityMode: "observability_mode",
   HooksBrowserLogin: "hooks_browser_login",
+  HooksFailOpen: "hooks_fail_open",
   CustomModelKeys: "custom_model_keys",
   Skills: "skills",
 } as const;

@@ -2136,10 +2136,11 @@ func TestPluginsService_PublishProject_RegeneratesHooksOnBrowserLoginFlip(t *tes
 	require.NotEmpty(t, hooksBefore)
 	versionBefore := observabilityManifestVersion(t, mock.lastPushedFiles)
 
-	require.NoError(t, productfeaturesrepo.New(ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{
+	_, pfErr := productfeaturesrepo.New(ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		FeatureName:    string(productfeatures.FeatureHooksBrowserLogin),
-	}))
+	})
+	require.NoError(t, pfErr)
 
 	second, err := ti.service.PublishProject(ctx, input)
 	require.NoError(t, err)

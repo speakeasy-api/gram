@@ -22,13 +22,13 @@ export type GetProductFeaturesResponseBody = {
    */
   hooksBrowserLoginEnabled: boolean;
   /**
+   * Whether hooks fail open when the Speakeasy control plane is unreachable or erroring — blocking policies are not enforced for the duration of the outage
+   */
+  hooksFailOpenEnabled: boolean;
+  /**
    * Whether logging is enabled
    */
   logsEnabled: boolean;
-  /**
-   * Whether observability mode is enabled, making generated hook plugins fully non-blocking
-   */
-  observabilityModeEnabled: boolean;
   /**
    * Whether SCIM/directory sync setup is enabled for the organization
    */
@@ -64,8 +64,8 @@ export const GetProductFeaturesResponseBody$inboundSchema: z.ZodMiniType<
     authz_challenge_logging_enabled: z.boolean(),
     custom_model_keys_enabled: z.boolean(),
     hooks_browser_login_enabled: z.boolean(),
+    hooks_fail_open_enabled: z.boolean(),
     logs_enabled: z.boolean(),
-    observability_mode_enabled: z.boolean(),
     scim_enabled: z.boolean(),
     session_capture_enabled: z.boolean(),
     skills_enabled: z.boolean(),
@@ -78,8 +78,8 @@ export const GetProductFeaturesResponseBody$inboundSchema: z.ZodMiniType<
       "authz_challenge_logging_enabled": "authzChallengeLoggingEnabled",
       "custom_model_keys_enabled": "customModelKeysEnabled",
       "hooks_browser_login_enabled": "hooksBrowserLoginEnabled",
+      "hooks_fail_open_enabled": "hooksFailOpenEnabled",
       "logs_enabled": "logsEnabled",
-      "observability_mode_enabled": "observabilityModeEnabled",
       "scim_enabled": "scimEnabled",
       "session_capture_enabled": "sessionCaptureEnabled",
       "skills_enabled": "skillsEnabled",

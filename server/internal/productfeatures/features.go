@@ -18,8 +18,8 @@ const (
 	FeatureWebhooks              Feature = "webhooks"
 	FeatureSSO                   Feature = "sso"
 	FeatureSCIM                  Feature = "scim"
-	FeatureObservabilityMode     Feature = "observability_mode"
 	FeatureHooksBrowserLogin     Feature = "hooks_browser_login"
+	FeatureHooksFailOpen         Feature = "hooks_fail_open"
 	FeatureCustomModelKeys       Feature = "custom_model_keys"
 	FeatureSkills                Feature = "skills"
 )

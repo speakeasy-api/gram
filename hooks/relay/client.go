@@ -26,6 +26,11 @@ const perAttemptTime = 10 * time.Second
 // verdict.
 const sendBudget = 45 * time.Second
 
+// retryMaxElapsedMS caps the SDK's backoff budget for retryable statuses
+// (429/5xx). A var rather than a const so tests that script 5xx responses can
+// shrink it below the wall clock they can afford.
+var retryMaxElapsedMS = 30_000
+
 // decision is the server's verdict for a hook event.
 type decision struct {
 	Decision string `json:"decision"`
@@ -43,6 +48,9 @@ type ingestResult struct {
 	decision   decision
 	// authRejected is true when the server rejected the credential (401/403).
 	authRejected bool
+	// failOpen carries the org's downtime posture from the response's
+	// org_settings effects; nil when the server sent none.
+	failOpen *bool
 }
 
 // client posts canonical hook events through the generated ingest SDK with
@@ -70,7 +78,7 @@ func newClient(serverURL string) *client {
 					InitialInterval: 1_000,
 					MaxInterval:     4_000,
 					Exponent:        1.5,
-					MaxElapsedTime:  30_000,
+					MaxElapsedTime:  retryMaxElapsedMS,
 				},
 				RetryConnectionErrors: true,
 			}),
@@ -116,12 +124,17 @@ func (cl *client) send(ctx context.Context, c creds, body components.IngestReque
 		}
 	}
 
-	out := ingestResult{statusCode: res.StatusCode, decision: decision{Decision: "", Reason: "", Message: ""}, authRejected: false}
+	out := ingestResult{statusCode: res.StatusCode, decision: decision{Decision: "", Reason: "", Message: ""}, authRejected: false, failOpen: nil}
 	if res.IngestHookResult != nil {
 		out.decision = decision{
 			Decision: string(res.IngestHookResult.Decision),
 			Reason:   strDeref(res.IngestHookResult.Reason),
 			Message:  strDeref(res.IngestHookResult.Message),
+		}
+		if settings, ok := res.IngestHookResult.Effects["org_settings"].(map[string]any); ok {
+			if v, ok := settings["fail_open"].(bool); ok {
+				out.failOpen = &v
+			}
 		}
 	}
 	return out
@@ -138,6 +151,7 @@ func interpretError(err error) ingestResult {
 			statusCode:   status,
 			decision:     decision{Decision: "", Reason: svcErr.Name, Message: svcErr.Message},
 			authRejected: status == http.StatusUnauthorized || status == http.StatusForbidden,
+			failOpen:     nil,
 		}
 	}
 	var apiErr *apierrors.APIError
@@ -152,15 +166,17 @@ func interpretError(err error) ingestResult {
 				statusCode:   0,
 				decision:     decision{Decision: "", Reason: "", Message: "Speakeasy hooks could not read the server's verdict."},
 				authRejected: false,
+				failOpen:     nil,
 			}
 		}
 		return ingestResult{
 			statusCode:   apiErr.StatusCode,
 			decision:     decision{Decision: "", Reason: "", Message: ""},
 			authRejected: apiErr.StatusCode == http.StatusUnauthorized || apiErr.StatusCode == http.StatusForbidden,
+			failOpen:     nil,
 		}
 	}
-	return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: ""}, authRejected: false}
+	return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: ""}, authRejected: false, failOpen: nil}
 }
 
 func strDeref(s *string) string {
