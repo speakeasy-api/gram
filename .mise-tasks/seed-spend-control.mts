@@ -19,8 +19,6 @@
 import crypto from "node:crypto";
 
 import { intro, log, outro } from "@clack/prompts";
-import { GramCore } from "@gram/client/core.js";
-import { authInfo } from "@gram/client/funcs/authInfo.js";
 import { $ } from "zx";
 
 interface Persona {
@@ -304,15 +302,19 @@ async function main(): Promise<void> {
     );
   }
 
-  const gram = new GramCore({ serverURL });
   const sessionId = await authenticateViaDevIDP(serverURL);
-  const res = await authInfo(gram, undefined, {
-    sessionHeaderGramSession: sessionId,
+  const infoResponse = await fetch(`${serverURL}/rpc/auth.info`, {
+    headers: { "Gram-Session": sessionId },
   });
-  if (!res.ok) {
-    throw new Error(`authInfo failed: ${JSON.stringify(res.error)}`);
+  if (!infoResponse.ok) {
+    throw new Error(
+      `auth.info failed (${infoResponse.status}): ${await infoResponse.text()}`,
+    );
   }
-  const orgId = res.value.result.activeOrganizationId;
+  const info = (await infoResponse.json()) as {
+    active_organization_id?: string;
+  };
+  const orgId = info.active_organization_id;
   if (!orgId) throw new Error("No active organization on session");
   log.info(`Active org: ${orgId}`);
 
