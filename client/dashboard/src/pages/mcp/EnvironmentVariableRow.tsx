@@ -353,11 +353,16 @@ export function EnvironmentVariableRow({
           </div>
         </div>
 
-        {envVar.state === "system" && (
-          <div className="ml-3 shrink-0">
-            <MoreActions actions={actions} />
-          </div>
-        )}
+        {/* Kept in the layout for every state so switching modes doesn't
+            shift the value input; only the system state shows the menu. */}
+        <div
+          className={cn(
+            "ml-3 shrink-0",
+            envVar.state !== "system" && "invisible",
+          )}
+        >
+          <MoreActions actions={actions} />
+        </div>
       </div>
     </div>
   );
