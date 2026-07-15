@@ -82,6 +82,7 @@ import {
   shadowMCPAllowedURLsForMutation,
   shadowMCPSelectionBaselineForUpdate,
   shadowMCPSelectionIsDirty,
+  shadowMCPSelectionIsInitialized,
 } from "./policy-shadow-mcp-setup";
 import { type Step } from "@/pages/setup/components/onboarding-stepper";
 import {
@@ -3450,7 +3451,7 @@ function ReviewAgreementControl({
 // Reuses PolicyCenter's detector/scope/action/audience building blocks and its
 // payload mapping. `policy === null` means create mode.
 
-function StandardPolicyEditor({
+export function StandardPolicyEditor({
   policy,
 }: {
   policy: RiskPolicy | null;
@@ -3459,7 +3460,8 @@ function StandardPolicyEditor({
   const project = useProject();
   const queryClient = useQueryClient();
   const { customRules } = useDetectionRulesStore();
-  const initializedInventoryForPolicy = useRef<string | null>(null);
+  const [initializedInventoryForPolicy, setInitializedInventoryForPolicy] =
+    useState<string | null>(null);
 
   const [step, setStep] = useStepParam(STANDARD_STEPS);
 
@@ -3557,7 +3559,7 @@ function StandardPolicyEditor({
     if (
       !targetIsShadowMCPBlock ||
       !inventoryQuery.data ||
-      initializedInventoryForPolicy.current === editorIdentity
+      initializedInventoryForPolicy === editorIdentity
     ) {
       return;
     }
@@ -3568,9 +3570,10 @@ function StandardPolicyEditor({
         : new Set<string>();
     setSelectedShadowMCPURLs(new Set(initialURLs));
     setOriginalShadowMCPURLs(new Set(initialURLs));
-    initializedInventoryForPolicy.current = editorIdentity;
+    setInitializedInventoryForPolicy(editorIdentity);
   }, [
     editorIdentity,
+    initializedInventoryForPolicy,
     inventoryQuery.data,
     originalIsShadowMCPBlock,
     policyID,
@@ -3597,8 +3600,16 @@ function StandardPolicyEditor({
     (inventoryQuery.isPending ||
       inventoryQuery.isError ||
       inventoryQuery.data === undefined);
+  const shadowMCPSelectionInitialized = shadowMCPSelectionIsInitialized(
+    targetIsShadowMCPBlock,
+    initializedInventoryForPolicy,
+    editorIdentity,
+  );
   const saveBlocked =
-    !hasEnabledDetector || audienceMissing || shadowMCPInventoryUnavailable;
+    !hasEnabledDetector ||
+    audienceMissing ||
+    shadowMCPInventoryUnavailable ||
+    !shadowMCPSelectionInitialized;
 
   const shadowMCPSelectionDirty = shadowMCPSelectionIsDirty(
     targetIsShadowMCPBlock,

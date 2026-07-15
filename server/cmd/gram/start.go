@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/sourcegraph/conc/pool"
@@ -1174,6 +1175,7 @@ func newStartCommand() *cli.Command {
 			// synchronously in the drain goroutine below, while Temporal is still open.
 			riskReconciler := &background.TemporalRiskExclusionReconciler{TemporalEnv: temporalEnv, Logger: logger}
 			riskResultsCleaner := &background.TemporalRiskPolicyResultsCleaner{TemporalEnv: temporalEnv, Logger: logger}
+			shadowMCPInventoryRepo := telemetryrepo.New(chDB)
 			riskService := risk.NewService(
 				logger,
 				tracerProvider,
@@ -1195,6 +1197,16 @@ func newStartCommand() *cli.Command {
 				builtinPresets,
 				hookPromptJudge,
 				policybypass.ReconcilePolicyURLs,
+				func(ctx context.Context, projectID uuid.UUID, canonicalURL string) (bool, error) {
+					row, err := shadowMCPInventoryRepo.GetShadowMCPInventoryURL(ctx, telemetryrepo.GetShadowMCPInventoryURLParams{
+						GramProjectID:      projectID.String(),
+						CanonicalServerURL: canonicalURL,
+					})
+					if err != nil {
+						return false, fmt.Errorf("get shadow mcp inventory url: %w", err)
+					}
+					return row != nil, nil
+				},
 			)
 			chatWriter.AddObserver(riskService)
 			risk.Attach(mux, riskService)

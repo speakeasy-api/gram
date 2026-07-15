@@ -97,6 +97,7 @@ type Service struct {
 	completionClient             openrouter.CompletionClient
 	shadowMCPClient              *shadowmcp.Client
 	reconcileShadowMCPPolicyURLs ShadowMCPPolicyURLReconciler
+	shadowMCPInventoryURLLookup  ShadowMCPInventoryURLLookup
 	audit                        *audit.Logger
 	// cache backs the rpbr2 policy-bypass request links: the link generator
 	// stores request state here and CreateRiskPolicyBypassRequest reads it
@@ -150,6 +151,7 @@ func NewObserver(
 		completionClient:             nil,
 		shadowMCPClient:              nil,
 		reconcileShadowMCPPolicyURLs: nil,
+		shadowMCPInventoryURLLookup:  nil,
 		audit:                        auditLogger,
 		cache:                        nil,
 		jwtSecret:                    "",
@@ -184,6 +186,7 @@ func NewService(
 	builtinPresets *presetlib.Library,
 	promptJudge promptpolicy.Evaluator,
 	reconcileShadowMCPPolicyURLs ShadowMCPPolicyURLReconciler,
+	shadowMCPInventoryURLLookup ShadowMCPInventoryURLLookup,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("risk"))
 
@@ -200,6 +203,7 @@ func NewService(
 		completionClient:             completionClient,
 		shadowMCPClient:              shadowMCPClient,
 		reconcileShadowMCPPolicyURLs: reconcileShadowMCPPolicyURLs,
+		shadowMCPInventoryURLLookup:  shadowMCPInventoryURLLookup,
 		audit:                        auditLogger,
 		cache:                        cacheImpl,
 		jwtSecret:                    jwtSecret,
@@ -247,6 +251,20 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
+	}
+
+	requestedIdempotencyKey := conv.PtrValOr(payload.IdempotencyKey, "")
+	if requestedIdempotencyKey != "" {
+		row, err := s.repo.GetRiskPolicyByIdempotencyKey(ctx, repo.GetRiskPolicyByIdempotencyKeyParams{
+			ProjectID:      *authCtx.ProjectID,
+			IdempotencyKey: conv.ToPGText(requestedIdempotencyKey),
+		})
+		if err == nil {
+			return s.policyToType(ctx, row)
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeUnexpected, err, "get committed idempotent risk policy create").LogError(ctx, s.logger)
+		}
 	}
 
 	name := ""
@@ -346,7 +364,7 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 
 	var shadowMCPAllowedURLs []string
 	if payload.ShadowMcpAllowedUrls != nil {
-		shadowMCPAllowedURLs, err = validateShadowMCPAllowedURLs(enabled, sources, action, payload.ShadowMcpAllowedUrls)
+		shadowMCPAllowedURLs, err = validateShadowMCPAllowedURLs(ctx, s.shadowMCPInventoryURLLookup, *authCtx.ProjectID, enabled, sources, action, payload.ShadowMcpAllowedUrls)
 		if err != nil {
 			return nil, err
 		}
@@ -793,7 +811,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 
 	var shadowMCPAllowedURLs []string
 	if payload.ShadowMcpAllowedUrls != nil {
-		shadowMCPAllowedURLs, err = validateShadowMCPAllowedURLs(enabled, sources, action, payload.ShadowMcpAllowedUrls)
+		shadowMCPAllowedURLs, err = validateShadowMCPAllowedURLs(ctx, s.shadowMCPInventoryURLLookup, *authCtx.ProjectID, enabled, sources, action, payload.ShadowMcpAllowedUrls)
 		if err != nil {
 			return nil, err
 		}

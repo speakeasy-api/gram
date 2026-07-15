@@ -72,6 +72,16 @@ export function shadowMCPSelectionIsDirty(
   return false;
 }
 
+export function shadowMCPSelectionIsInitialized(
+  targetIsShadowMCPBlock: boolean,
+  initializedEditorIdentity: string | null,
+  editorIdentity: string,
+): boolean {
+  return (
+    !targetIsShadowMCPBlock || initializedEditorIdentity === editorIdentity
+  );
+}
+
 export function shadowMCPSelectionBaselineForUpdate(body: {
   shadowMcpAllowedUrls?: readonly string[];
 }): Set<string> | undefined {

@@ -6,6 +6,7 @@ import {
   shadowMCPAllowedURLsForMutation,
   shadowMCPSelectionBaselineForUpdate,
   shadowMCPSelectionIsDirty,
+  shadowMCPSelectionIsInitialized,
   type SubmissionKeyCache,
 } from "./policy-shadow-mcp-setup";
 
@@ -124,6 +125,22 @@ describe("shadowMCPSelectionIsDirty", () => {
         new Set(),
       ),
     ).toBe(false);
+  });
+});
+
+describe("shadowMCPSelectionIsInitialized", () => {
+  it("blocks a target draft until the current editor identity is initialized", () => {
+    expect(shadowMCPSelectionIsInitialized(true, null, "policy-1")).toBe(false);
+    expect(shadowMCPSelectionIsInitialized(true, "policy-2", "policy-1")).toBe(
+      false,
+    );
+    expect(shadowMCPSelectionIsInitialized(true, "policy-1", "policy-1")).toBe(
+      true,
+    );
+  });
+
+  it("does not gate a non-target draft", () => {
+    expect(shadowMCPSelectionIsInitialized(false, null, "policy-1")).toBe(true);
   });
 });
 
