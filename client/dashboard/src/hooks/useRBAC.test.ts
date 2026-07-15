@@ -29,6 +29,11 @@ describe("resourceKindForScope", () => {
     expect(resourceKindForScope("environment:write")).toBe("environment");
   });
 
+  it("returns 'skill' for skill scopes", () => {
+    expect(resourceKindForScope("skill:read")).toBe("skill");
+    expect(resourceKindForScope("skill:write")).toBe("skill");
+  });
+
   it("returns 'risk_policy' for risk_policy scopes", () => {
     expect(resourceKindForScope("risk_policy:evaluate")).toBe("risk_policy");
     expect(resourceKindForScope("risk_policy:bypass")).toBe("risk_policy");
@@ -91,6 +96,22 @@ describe("selectorMatches", () => {
       selectorMatches(grant, {
         resourceKind: "mcp",
         resourceId: "proj_123",
+      }),
+    ).toBe(false);
+  });
+
+  it("skill selectors match only the selected project", () => {
+    const grant = { resourceKind: "skill", resourceId: "project_a" };
+    expect(
+      selectorMatches(grant, {
+        resourceKind: "skill",
+        resourceId: "project_a",
+      }),
+    ).toBe(true);
+    expect(
+      selectorMatches(grant, {
+        resourceKind: "skill",
+        resourceId: "project_b",
       }),
     ).toBe(false);
   });

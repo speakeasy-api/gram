@@ -24,6 +24,7 @@ export type ResourceType =
   | "project"
   | "mcp"
   | "environment"
+  | "skill"
   | "risk_policy"
   | "chat";
 

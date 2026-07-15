@@ -436,6 +436,13 @@ describe("computeRuleLabel", () => {
         projects,
       ),
     ).toBe("2 projects");
+    expect(
+      computeRuleLabel(
+        [sel({ resourceKind: "skill", resourceId: "p1" })],
+        "skill",
+        projects,
+      ),
+    ).toBe("Project: ecommerce-api");
   });
 
   it("single server → 1 server", () => {
@@ -452,6 +459,19 @@ describe("computeRuleLabel", () => {
         projects,
       ),
     ).toBe("2 servers");
+  });
+
+  it("skill selectors describe projects", () => {
+    expect(
+      computeRuleLabel(
+        [
+          sel({ resourceKind: "skill", resourceId: "p1" }),
+          sel({ resourceKind: "skill", resourceId: "p2" }),
+        ],
+        "skill",
+        projects,
+      ),
+    ).toBe("2 projects");
   });
 });
 
@@ -563,5 +583,16 @@ describe("computeRuleTooltip", () => {
         projects,
       ),
     ).toBe("Permits access to 2 servers");
+  });
+
+  it("skill selectors describe project access", () => {
+    expect(
+      computeRuleTooltip(
+        "allow",
+        [sel({ resourceKind: "skill", resourceId: "p1" })],
+        "skill",
+        projects,
+      ),
+    ).toBe("Permits access to skills in ecommerce-api");
   });
 });

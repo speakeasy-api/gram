@@ -65,8 +65,10 @@ export function computePanelState(
   resourceType: ResourceType,
   customTab?: CustomTab,
 ): PanelState {
-  const noun = resourceType === "project" ? "project" : "server";
-  const allLabel = resourceType === "project" ? "All projects" : "All servers";
+  const projectSelectable =
+    resourceType === "project" || resourceType === "skill";
+  const noun = projectSelectable ? "project" : "server";
+  const allLabel = projectSelectable ? "All projects" : "All servers";
 
   // Unrestricted
   if (selectors === null) {
