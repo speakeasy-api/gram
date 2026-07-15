@@ -1,14 +1,20 @@
-import { CodeBlock } from "@/components/code";
+import { CodeBlock, type CodeBlockSlot } from "@/components/code";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
-import { tunnelGatewayURL } from "@/lib/utils";
+import { cn, tunnelGatewayURL } from "@/lib/utils";
 import { Badge } from "@speakeasy-api/moonshine";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-const DEFAULT_MCP_URL = "http://localhost:3000/mcp";
+const DEFAULT_MCP_URL = "https://placeholder.net/mcp";
 const DEFAULT_SERVICE_VERSION = "1.0.0";
+
+// Sentinels embedded in the snippet text; CodeBlock swaps the shiki token
+// containing each one for a live-updating <FlashOnChange> node, so the code
+// string itself is stable across keystrokes and never re-tokenizes.
+const MCP_URL_SENTINEL = "__SLOT_mcpUrl__";
+const SERVICE_VERSION_SENTINEL = "__SLOT_serviceVersion__";
 
 export function TunneledMcpSetupTabs({
   tunnelKey,
@@ -63,24 +69,46 @@ spec:
                   name: gram-tunnel-key
                   key: TUNNEL_KEY
             - name: TUNNEL_LOCAL_MCP_URL
-              value: ${yamlQuote(mcpUrl)}
+              value: ${yamlQuote(MCP_URL_SENTINEL)}
             - name: TUNNEL_GATEWAY_URL
               value: ${yamlQuote(gateway)}
             - name: TUNNEL_SERVICE_VERSION
-              value: ${yamlQuote(serviceVersion)}`;
+              value: ${yamlQuote(SERVICE_VERSION_SENTINEL)}`;
 
   const docker = `docker run --rm --name gram-tunnel-${slug} \\
   -e TUNNEL_KEY=${shellQuote(renderedKey)} \\
-  -e TUNNEL_LOCAL_MCP_URL=${shellQuote(mcpUrl)} \\
+  -e TUNNEL_LOCAL_MCP_URL='${MCP_URL_SENTINEL}' \\
   -e TUNNEL_GATEWAY_URL=${shellQuote(gateway)} \\
-  -e TUNNEL_SERVICE_VERSION=${shellQuote(serviceVersion)} \\
+  -e TUNNEL_SERVICE_VERSION='${SERVICE_VERSION_SENTINEL}' \\
   ghcr.io/speakeasy-api/gram-tunnel-agent:latest`;
 
   const cli = `TUNNEL_GATEWAY_URL=${shellQuote(gateway)} \\
 TUNNEL_KEY=${shellQuote(renderedKey)} \\
-TUNNEL_LOCAL_MCP_URL=${shellQuote(mcpUrl)} \\
-TUNNEL_SERVICE_VERSION=${shellQuote(serviceVersion)} \\
+TUNNEL_LOCAL_MCP_URL='${MCP_URL_SENTINEL}' \\
+TUNNEL_SERVICE_VERSION='${SERVICE_VERSION_SENTINEL}' \\
 gram tunnel run`;
+
+  // Each slot's display text must reproduce the full shiki token it replaces:
+  // YAML emits the quoted value as one token, and bash merges a KEY='value'
+  // option argument into a single token (so the Docker slots re-render the key
+  // too). In the CLI snippet's assignment position the quoted value stands
+  // alone. copyText fills the bare sentinel between the quotes already present
+  // in the snippet text, so it is the escaped value without outer quotes.
+  const yamlSlots = {
+    [MCP_URL_SENTINEL]: yamlSlot(mcpUrl),
+    [SERVICE_VERSION_SENTINEL]: yamlSlot(serviceVersion),
+  };
+  const dockerSlots = {
+    [MCP_URL_SENTINEL]: shellSlot(mcpUrl, "TUNNEL_LOCAL_MCP_URL="),
+    [SERVICE_VERSION_SENTINEL]: shellSlot(
+      serviceVersion,
+      "TUNNEL_SERVICE_VERSION=",
+    ),
+  };
+  const cliSlots = {
+    [MCP_URL_SENTINEL]: shellSlot(mcpUrl),
+    [SERVICE_VERSION_SENTINEL]: shellSlot(serviceVersion),
+  };
 
   const snippetTabs = [
     {
@@ -89,6 +117,7 @@ gram tunnel run`;
       language: "yaml",
       hint: "Deploy the tunnel agent in your cluster. Use your MCP server's in-cluster address, e.g. http://my-mcp.default.svc.cluster.local:3000/mcp.",
       code: kubernetes,
+      slots: yamlSlots,
     },
     {
       value: "docker",
@@ -96,6 +125,7 @@ gram tunnel run`;
       language: "bash",
       hint: "Run the tunnel agent as a container. If your MCP server runs on the Docker host, use http://host.docker.internal:<port> as the address.",
       code: docker,
+      slots: dockerSlots,
     },
     {
       value: "cli",
@@ -103,12 +133,13 @@ gram tunnel run`;
       language: "bash",
       hint: "Run the Gram CLI agent on the same host as your MCP server.",
       code: cli,
+      slots: cliSlots,
     },
   ];
 
   return (
     <div className="rounded-lg border p-6">
-      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+      <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div>
           <Type variant="subheading">Connect your MCP server</Type>
           <Type muted small className="mt-1">
@@ -122,15 +153,14 @@ gram tunnel run`;
         )}
       </div>
 
-      <div className="bg-muted/30 mb-5 rounded-md border p-4">
-        <Type variant="subheading" className="mb-1">
-          Tunnel config
-        </Type>
-        <Type muted small className="mb-4 max-w-3xl">
-          Describe the MCP server the tunnel agent should proxy to. The values
-          are templated into the setup snippets below.
-        </Type>
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">
+        <div className="bg-card border-border flex flex-col gap-3 rounded-lg border px-4 py-3 shadow-md lg:sticky lg:top-6 dark:bg-neutral-950">
+          <div className="flex flex-col gap-0.5">
+            <Type className="font-semibold">Tunnel config</Type>
+            <Type muted small>
+              Templated into the setup snippets.
+            </Type>
+          </div>
           <SnippetField
             id="tunnel-config-mcp-url"
             label="MCP server address"
@@ -148,26 +178,68 @@ gram tunnel run`;
             placeholder={DEFAULT_SERVICE_VERSION}
           />
         </div>
-      </div>
 
-      <Tabs defaultValue="kubernetes">
-        <TabsList>
+        <Tabs defaultValue="kubernetes">
+          <TabsList>
+            {snippetTabs.map((tab) => (
+              <TabsTrigger key={tab.value} value={tab.value}>
+                {tab.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
           {snippetTabs.map((tab) => (
-            <TabsTrigger key={tab.value} value={tab.value}>
-              {tab.label}
-            </TabsTrigger>
+            <TabsContent key={tab.value} value={tab.value} className="mt-4">
+              <Type muted small className="mb-3">
+                {tab.hint}
+              </Type>
+              <CodeBlock language={tab.language} slots={tab.slots}>
+                {tab.code}
+              </CodeBlock>
+            </TabsContent>
           ))}
-        </TabsList>
-        {snippetTabs.map((tab) => (
-          <TabsContent key={tab.value} value={tab.value} className="mt-4">
-            <Type muted small className="mb-3">
-              {tab.hint}
-            </Type>
-            <CodeBlock language={tab.language}>{tab.code}</CodeBlock>
-          </TabsContent>
-        ))}
-      </Tabs>
+        </Tabs>
+      </div>
     </div>
+  );
+}
+
+function yamlSlot(value: string): CodeBlockSlot {
+  return {
+    node: <FlashOnChange text={yamlQuote(value)} />,
+    copyText: yamlEscape(value),
+  };
+}
+
+function shellSlot(value: string, tokenPrefix = ""): CodeBlockSlot {
+  return {
+    node: <FlashOnChange text={`${tokenPrefix}${shellQuote(value)}`} />,
+    copyText: shellEscape(value),
+  };
+}
+
+// Highlights its text with a background fade-in whenever the text changes,
+// then fades back out shortly after the last change.
+function FlashOnChange({ text }: { text: string }) {
+  const [flashing, setFlashing] = useState(false);
+  const prevText = useRef(text);
+
+  useEffect(() => {
+    if (prevText.current === text) return;
+    prevText.current = text;
+    setFlashing(true);
+    const timer = setTimeout(() => setFlashing(false), 400);
+    return () => clearTimeout(timer);
+  }, [text]);
+
+  return (
+    <span
+      className={cn(
+        "rounded-xs transition-colors",
+        flashing ? "bg-primary/20 duration-150" : "bg-transparent duration-700",
+      )}
+    >
+      {text}
+    </span>
   );
 }
 
@@ -187,8 +259,11 @@ function SnippetField({
   placeholder: string;
 }) {
   return (
-    <div className="min-w-0">
-      <Label htmlFor={id} className="mb-2">
+    <div className="flex min-w-0 flex-col gap-1.5">
+      <Label
+        htmlFor={id}
+        className="text-muted-foreground font-mono text-xs tracking-wide uppercase"
+      >
         {label}
       </Label>
       <Input
@@ -197,7 +272,7 @@ function SnippetField({
         onChange={onChange}
         placeholder={placeholder}
       />
-      <Type muted small className="mt-1">
+      <Type muted small>
         {description}
       </Type>
     </div>
@@ -213,10 +288,18 @@ function slugForSnippet(name: string | undefined): string {
   return slug || "internal-mcp";
 }
 
+function yamlEscape(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
 function yamlQuote(value: string): string {
-  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+  return `"${yamlEscape(value)}"`;
+}
+
+function shellEscape(value: string): string {
+  return value.replace(/'/g, "'\\''");
 }
 
 function shellQuote(value: string): string {
-  return `'${value.replace(/'/g, "'\\''")}'`;
+  return `'${shellEscape(value)}'`;
 }
