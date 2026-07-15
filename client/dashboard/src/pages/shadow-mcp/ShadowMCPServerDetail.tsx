@@ -1,4 +1,5 @@
 import { formatShortDate } from "@/components/access/shadow-mcp-utils";
+import { InlineEditableText } from "@/components/inline-editable-text";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import {
@@ -31,6 +32,7 @@ import {
   invalidateAllShadowMCPInventoryServer,
   useShadowMCPInventoryServer,
 } from "@gram/client/react-query/shadowMCPInventoryServer.js";
+import { useUpdateShadowMCPInventoryServerNameMutation } from "@gram/client/react-query/updateShadowMCPInventoryServerName.js";
 import {
   invalidateAllShadowMCPInventoryUsers,
   useShadowMCPInventoryUsers,
@@ -317,6 +319,8 @@ export default function ShadowMCPServerDetail(): JSX.Element {
     { enabled: queryEnabled },
   );
   const server = serverQuery.data;
+  const serverDisplayName =
+    server?.serverName || server?.urlHost || "Shadow MCP Server";
   const serverURL = server?.canonicalServerUrl ?? "";
   const usersQueryEnabled = queryEnabled && serverURL.length > 0;
   const usersScope = usersQueryEnabled ? `${project.id}:${serverURL}` : "";
@@ -340,6 +344,7 @@ export default function ShadowMCPServerDetail(): JSX.Element {
   const upsertPolicyBypass = useUpsertShadowMCPInventoryPolicyBypassMutation();
   const deletePolicyBypass = useDeleteShadowMCPInventoryPolicyBypassMutation();
   const resolveInventoryRequest = useResolveShadowMCPInventoryRequestMutation();
+  const updateServerName = useUpdateShadowMCPInventoryServerNameMutation();
   const [activeAction, setActiveAction] =
     useState<ActiveInventoryAction | null>(null);
   const [isSubmittingAction, setIsSubmittingAction] = useState(false);
@@ -485,6 +490,47 @@ export default function ShadowMCPServerDetail(): JSX.Element {
     }
   };
 
+  const saveServerName = async (name: string) => {
+    if (!server) return false;
+
+    try {
+      await updateServerName.mutateAsync({
+        request: {
+          updateShadowMCPInventoryServerNameForm: {
+            projectId: project.id,
+            serverUrl: server.canonicalServerUrl,
+            name,
+          },
+        },
+      });
+      await Promise.all([
+        invalidateAllShadowMCPInventoryServer(queryClient),
+        invalidateAllShadowMCPInventory(queryClient),
+      ]);
+      return true;
+    } catch {
+      toast.error("Unable to update Shadow MCP server name");
+      return false;
+    }
+  };
+
+  let serverNameTitle = <span className="truncate">{serverDisplayName}</span>;
+  if (server) {
+    serverNameTitle = (
+      <InlineEditableText
+        value={serverDisplayName}
+        onSubmit={saveServerName}
+        inputLabel="Shadow MCP server name"
+        editTitle="Rename Shadow MCP server"
+        maxLength={255}
+        editorClassName="w-[24rem] max-w-full"
+        inputClassName="text-lg font-semibold"
+      >
+        {serverNameTitle}
+      </InlineEditableText>
+    );
+  }
+
   const openAction = (mode: InventoryActionMode) => {
     if (!server) return;
     setActiveAction({ mode, server });
@@ -503,9 +549,7 @@ export default function ShadowMCPServerDetail(): JSX.Element {
       <Page.Body fullHeight className="pb-8">
         <RequireScope scope="org:admin" level="page">
           <Page.Section>
-            <Page.Section.Title stage="beta">
-              {server?.serverName || server?.urlHost || "Shadow MCP Server"}
-            </Page.Section.Title>
+            <Page.Section.Title>{serverNameTitle}</Page.Section.Title>
             <Page.Section.Description>
               {server?.canonicalServerUrl || serverSlug}
             </Page.Section.Description>

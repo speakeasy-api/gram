@@ -159,6 +159,27 @@ func (s *Service) GetShadowMCPInventoryServer(ctx context.Context, payload *gen.
 	return buildShadowMCPInventoryServer(*inventoryRow, usageByURL[inventoryRow.CanonicalServerURL], policyState.forURL(inventoryRow.CanonicalServerURL)), nil
 }
 
+func (s *Service) UpdateShadowMCPInventoryServerName(ctx context.Context, payload *gen.UpdateShadowMCPInventoryServerNamePayload) error {
+	_, projectID, inventoryURL, err := s.shadowMCPInventoryMutationContext(ctx, payload.ProjectID, payload.ServerURL)
+	if err != nil {
+		return err
+	}
+
+	updated, err := telemetryrepo.New(s.chConn).UpdateShadowMCPInventoryURLNameOverride(ctx, telemetryrepo.UpdateShadowMCPInventoryURLNameOverrideParams{
+		GramProjectID:      projectID.String(),
+		CanonicalServerURL: inventoryURL.CanonicalURL,
+		ServerNameOverride: strings.TrimSpace(payload.Name),
+		UpdatedAt:          time.Now(),
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "update shadow mcp inventory server name").LogError(ctx, s.logger)
+	}
+	if !updated {
+		return oops.E(oops.CodeNotFound, nil, "shadow mcp inventory url not found").LogError(ctx, s.logger)
+	}
+	return nil
+}
+
 func (s *Service) ListShadowMCPInventoryUsers(ctx context.Context, payload *gen.ListShadowMCPInventoryUsersPayload) (*gen.ListShadowMCPInventoryUsersResult, error) {
 	ac, err := s.requireOrgAdmin(ctx)
 	if err != nil {
@@ -939,7 +960,10 @@ func shadowMCPInventoryBypassDimensions(raw []byte) (map[string]string, error) {
 
 func buildShadowMCPInventoryServer(row telemetryrepo.ShadowMCPInventoryURLRow, usage telemetryrepo.ShadowMCPInventoryUsageRow, rowState shadowMCPInventoryRowState) *gen.ShadowMCPInventoryServer {
 	var serverName *string
-	serverNameValue := row.ServerName
+	serverNameValue := row.ServerNameOverride
+	if serverNameValue == "" {
+		serverNameValue = row.ServerName
+	}
 	if serverNameValue == "" {
 		serverNameValue = usage.ServerName
 	}
