@@ -117,15 +117,11 @@ func (i *UserAgentAllowlistInterceptor) Name() string {
 // User-Agent header is rejected like an unlisted one: the allowlist encodes
 // "only these clients", and anonymous callers cannot be one of them.
 func (i *UserAgentAllowlistInterceptor) InterceptUserRequest(ctx context.Context, req *proxy.UserRequest) error {
-	if req == nil || req.UserHTTPRequest == nil {
-		return &proxy.RejectError{
-			Code:    proxy.RejectCodeServerError,
-			Message: fmt.Sprintf("missing User-Agent header: this MCP server only accepts requests from approved clients, see %s", i.catalogURL),
-			Data:    nil,
-		}
+	var userAgent string
+	if req != nil && req.UserHTTPRequest != nil {
+		userAgent = req.UserHTTPRequest.UserAgent()
 	}
 
-	userAgent := req.UserHTTPRequest.UserAgent()
 	loweredUA := strings.ToLower(userAgent)
 	for _, token := range i.allowed {
 		if strings.Contains(loweredUA, token) {

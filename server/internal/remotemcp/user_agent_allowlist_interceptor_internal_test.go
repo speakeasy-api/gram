@@ -17,9 +17,7 @@ func newFigmaInterceptorForTest(t *testing.T) *UserAgentAllowlistInterceptor {
 
 func newUserRequestWithUserAgent(userAgent string) *proxy.UserRequest {
 	r := httptest.NewRequest("POST", "/x/mcp/figma", nil)
-	if userAgent != "" {
-		r.Header.Set("User-Agent", userAgent)
-	}
+	r.Header.Set("User-Agent", userAgent)
 	return &proxy.UserRequest{
 		UserHTTPRequest: r,
 		JSONRPCMessages: nil,
