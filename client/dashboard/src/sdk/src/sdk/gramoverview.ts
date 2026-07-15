@@ -4,7 +4,7 @@
 
 import { spendRulesOverviewGet } from "../funcs/spendRulesOverviewGet.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { SpendRulesOverviewResult } from "../models/components/spendrulesoverviewresult.js";
 import {
   GetSpendRulesOverviewRequest,
   GetSpendRulesOverviewSecurity,
@@ -22,7 +22,7 @@ export class GramOverview extends ClientSDK {
     request?: GetSpendRulesOverviewRequest | undefined,
     security?: GetSpendRulesOverviewSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.SpendRulesOverviewResult> {
+  ): Promise<SpendRulesOverviewResult> {
     return unwrapAsync(spendRulesOverviewGet(
       this,
       request,

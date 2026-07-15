@@ -9,7 +9,9 @@ import { spendRulesRulesList } from "../funcs/spendRulesRulesList.js";
 import { spendRulesRulesPreview } from "../funcs/spendRulesRulesPreview.js";
 import { spendRulesRulesUpdate } from "../funcs/spendRulesRulesUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { ListSpendRulesResult } from "../models/components/listspendrulesresult.js";
+import { PreviewSpendRuleResult } from "../models/components/previewspendruleresult.js";
+import { SpendRule } from "../models/components/spendrule.js";
 import {
   CreateSpendRuleRequest,
   CreateSpendRuleSecurity,
@@ -47,7 +49,7 @@ export class GramRules extends ClientSDK {
     request: CreateSpendRuleRequest,
     security?: CreateSpendRuleSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.SpendRule> {
+  ): Promise<SpendRule> {
     return unwrapAsync(spendRulesRulesCreate(
       this,
       request,
@@ -85,7 +87,7 @@ export class GramRules extends ClientSDK {
     request: GetSpendRuleRequest,
     security?: GetSpendRuleSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.SpendRule> {
+  ): Promise<SpendRule> {
     return unwrapAsync(spendRulesRulesGet(
       this,
       request,
@@ -104,7 +106,7 @@ export class GramRules extends ClientSDK {
     request?: ListSpendRulesRequest | undefined,
     security?: ListSpendRulesSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListSpendRulesResult> {
+  ): Promise<ListSpendRulesResult> {
     return unwrapAsync(spendRulesRulesList(
       this,
       request,
@@ -123,7 +125,7 @@ export class GramRules extends ClientSDK {
     request: PreviewSpendRuleRequest,
     security?: PreviewSpendRuleSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.PreviewSpendRuleResult> {
+  ): Promise<PreviewSpendRuleResult> {
     return unwrapAsync(spendRulesRulesPreview(
       this,
       request,
@@ -142,7 +144,7 @@ export class GramRules extends ClientSDK {
     request: UpdateSpendRuleRequest,
     security?: UpdateSpendRuleSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.SpendRule> {
+  ): Promise<SpendRule> {
     return unwrapAsync(spendRulesRulesUpdate(
       this,
       request,

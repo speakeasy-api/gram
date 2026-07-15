@@ -4,7 +4,7 @@
 
 import { spendRulesEventsList } from "../funcs/spendRulesEventsList.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { ListSpendRuleEventsResult } from "../models/components/listspendruleeventsresult.js";
 import {
   ListSpendRuleEventsRequest,
   ListSpendRuleEventsSecurity,
@@ -22,7 +22,7 @@ export class Events extends ClientSDK {
     request?: ListSpendRuleEventsRequest | undefined,
     security?: ListSpendRuleEventsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListSpendRuleEventsResult> {
+  ): Promise<ListSpendRuleEventsResult> {
     return unwrapAsync(spendRulesEventsList(
       this,
       request,
