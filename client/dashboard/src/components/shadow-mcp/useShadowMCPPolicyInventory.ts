@@ -1,9 +1,28 @@
 import { useSdkClient } from "@/contexts/Sdk";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
-import { useQuery, type UseQueryResult } from "@tanstack/react-query";
+import {
+  useQuery,
+  type QueryClient,
+  type UseQueryResult,
+} from "@tanstack/react-query";
 
 const INVENTORY_PAGE_LIMIT = 200;
 const INVENTORY_STALE_TIME_MS = 30_000;
+
+export function shadowMCPPolicyInventoryQueryKey(
+  projectID: string,
+): readonly ["shadow-mcp", "policy-setup-inventory", string] {
+  return ["shadow-mcp", "policy-setup-inventory", projectID] as const;
+}
+
+export function invalidateShadowMCPPolicyInventory(
+  queryClient: QueryClient,
+  projectID: string,
+): Promise<void> {
+  return queryClient.invalidateQueries({
+    queryKey: shadowMCPPolicyInventoryQueryKey(projectID),
+  });
+}
 
 export function useShadowMCPPolicyInventory(
   projectID: string,
@@ -12,7 +31,7 @@ export function useShadowMCPPolicyInventory(
   const client = useSdkClient();
 
   return useQuery({
-    queryKey: ["shadow-mcp", "policy-setup-inventory", projectID],
+    queryKey: shadowMCPPolicyInventoryQueryKey(projectID),
     enabled: enabled && projectID.length > 0,
     staleTime: INVENTORY_STALE_TIME_MS,
     queryFn: async ({ signal }) => {

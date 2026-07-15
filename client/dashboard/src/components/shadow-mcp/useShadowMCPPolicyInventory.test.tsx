@@ -5,7 +5,9 @@ import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  invalidateShadowMCPPolicyInventory,
   initialShadowMCPPolicyURLs,
+  shadowMCPPolicyInventoryQueryKey,
   useShadowMCPPolicyInventory,
 } from "./useShadowMCPPolicyInventory";
 
@@ -143,5 +145,22 @@ describe("initialShadowMCPPolicyURLs", () => {
     expect(
       initialShadowMCPPolicyURLs([githubServer, linearServer], "policy-1"),
     ).toEqual(new Set([githubServer.canonicalServerUrl]));
+  });
+});
+
+describe("invalidateShadowMCPPolicyInventory", () => {
+  it("invalidates the custom all-pages inventory query for the project", async () => {
+    const queryClient = new QueryClient();
+    const projectKey = shadowMCPPolicyInventoryQueryKey("project-1");
+    const otherProjectKey = shadowMCPPolicyInventoryQueryKey("project-2");
+    queryClient.setQueryData(projectKey, []);
+    queryClient.setQueryData(otherProjectKey, []);
+
+    await invalidateShadowMCPPolicyInventory(queryClient, "project-1");
+
+    expect(queryClient.getQueryState(projectKey)?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(otherProjectKey)?.isInvalidated).toBe(
+      false,
+    );
   });
 });

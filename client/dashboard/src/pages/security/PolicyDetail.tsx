@@ -1,5 +1,11 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import { ShadowMCPPolicyServerSelector } from "@/components/shadow-mcp/ShadowMCPPolicyServerSelector";
+import {
+  initialShadowMCPPolicyURLs,
+  invalidateShadowMCPPolicyInventory,
+  useShadowMCPPolicyInventory,
+} from "@/components/shadow-mcp/useShadowMCPPolicyInventory";
 import { Card } from "@/components/ui/card";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
@@ -26,10 +32,12 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
+import { useProject } from "@/contexts/Auth";
 import { useRiskCreatePolicyMutation } from "@gram/client/react-query/riskCreatePolicy.js";
 import { useRiskCategories } from "@gram/client/react-query/riskCategories.js";
 import { invalidateAllRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
 import { useRiskPoliciesUpdateMutation } from "@gram/client/react-query/riskPoliciesUpdate.js";
+import { invalidateAllShadowMCPInventory } from "@gram/client/react-query/shadowMCPInventory.js";
 import {
   invalidateAllRiskPoliciesGet,
   useRiskPoliciesGet,
@@ -69,6 +77,10 @@ import {
 } from "react";
 import { useParams } from "react-router";
 import { useQueryState } from "nuqs";
+import {
+  isBlockingShadowMCPPolicy,
+  shadowMCPAllowedURLsForMutation,
+} from "./policy-shadow-mcp-setup";
 import { type Step } from "@/pages/setup/components/onboarding-stepper";
 import {
   DETECTION_RULES,
@@ -1897,6 +1909,7 @@ function ActionStep({
   score,
   setScore,
   flagOnlySelected = false,
+  shadowMCPAllowedServers,
 }: {
   action: PolicyAction;
   setAction: React.Dispatch<React.SetStateAction<PolicyAction>>;
@@ -1911,6 +1924,7 @@ function ActionStep({
   score: number;
   setScore: React.Dispatch<React.SetStateAction<number>>;
   flagOnlySelected?: boolean;
+  shadowMCPAllowedServers?: ReactNode;
 }): JSX.Element {
   return (
     <div className="space-y-4">
@@ -1925,6 +1939,7 @@ function ActionStep({
             setFormAction={setAction}
             flagOnlySelected={flagOnlySelected}
           />
+          {shadowMCPAllowedServers}
           <PolicyAudiencePicker
             formAudienceType={audienceType}
             setFormAudienceType={setAudienceType}
@@ -3439,8 +3454,10 @@ function StandardPolicyEditor({
   policy: RiskPolicy | null;
 }): JSX.Element {
   const routes = useRoutes();
+  const project = useProject();
   const queryClient = useQueryClient();
   const { customRules } = useDetectionRulesStore();
+  const initializedInventoryForPolicy = useRef<string | null>(null);
 
   const [step, setStep] = useStepParam(STANDARD_STEPS);
 
@@ -3489,6 +3506,11 @@ function StandardPolicyEditor({
   const [action, setAction] = useState<PolicyAction>(
     (policy?.action as PolicyAction) ?? "flag",
   );
+  const [selectedShadowMCPURLs, setSelectedShadowMCPURLs] = useState<
+    Set<string>
+  >(() => new Set());
+  const [originalShadowMCPURLs, setOriginalShadowMCPURLs] =
+    useState<Set<string> | null>(null);
   const [userMessage, setUserMessage] = useState(policy?.userMessage ?? "");
   const [audienceType, setAudienceType] = useState<"everyone" | "targeted">(
     policy?.audienceType === "targeted" ? "targeted" : "everyone",
@@ -3514,6 +3536,45 @@ function StandardPolicyEditor({
   );
 
   // ── Derived state ──
+  const targetIsShadowMCPBlock = isBlockingShadowMCPPolicy(
+    true,
+    [...selectedCategories],
+    action,
+  );
+  const inventoryQuery = useShadowMCPPolicyInventory(
+    project.id,
+    targetIsShadowMCPBlock,
+  );
+  const policyID = policy?.id ?? null;
+  const editorIdentity = policyID ?? "create";
+  const originalIsShadowMCPBlock = policy
+    ? isBlockingShadowMCPPolicy(policy.enabled, policy.sources, policy.action)
+    : false;
+
+  useEffect(() => {
+    if (
+      !targetIsShadowMCPBlock ||
+      !inventoryQuery.data ||
+      initializedInventoryForPolicy.current === editorIdentity
+    ) {
+      return;
+    }
+
+    const initialURLs =
+      policyID && originalIsShadowMCPBlock
+        ? initialShadowMCPPolicyURLs(inventoryQuery.data, policyID)
+        : new Set<string>();
+    setSelectedShadowMCPURLs(new Set(initialURLs));
+    setOriginalShadowMCPURLs(new Set(initialURLs));
+    initializedInventoryForPolicy.current = editorIdentity;
+  }, [
+    editorIdentity,
+    inventoryQuery.data,
+    originalIsShadowMCPBlock,
+    policyID,
+    targetIsShadowMCPBlock,
+  ]);
+
   const flagOnlySelected = [...FLAG_ONLY_CATEGORIES].some((c) =>
     selectedCategories.has(c),
   );
@@ -3529,7 +3590,17 @@ function StandardPolicyEditor({
     );
   const audienceMissing =
     audienceType === "targeted" && audiencePrincipalUrns.size === 0;
-  const saveBlocked = !hasEnabledDetector || audienceMissing;
+  const shadowMCPInventoryUnavailable =
+    targetIsShadowMCPBlock &&
+    (inventoryQuery.isPending ||
+      inventoryQuery.isError ||
+      inventoryQuery.data === undefined);
+  const saveBlocked =
+    !hasEnabledDetector || audienceMissing || shadowMCPInventoryUnavailable;
+
+  const shadowMCPSelectionDirty =
+    originalShadowMCPURLs !== null &&
+    !sameSet(selectedShadowMCPURLs, originalShadowMCPURLs);
 
   const dirty =
     !!orig &&
@@ -3544,17 +3615,22 @@ function StandardPolicyEditor({
       approvedDomains !== orig.approvedDomains ||
       score !== orig.score ||
       (presidioActive && presidioThreshold !== orig.presidioThreshold) ||
-      !sameSet(audiencePrincipalUrns, orig.audiencePrincipalUrns));
+      !sameSet(audiencePrincipalUrns, orig.audiencePrincipalUrns) ||
+      shadowMCPSelectionDirty);
 
   const updateMutation = useRiskPoliciesUpdateMutation({
     onSuccess: () => {
       void invalidateAllRiskPoliciesGet(queryClient);
       void invalidateAllRiskListPolicies(queryClient);
+      void invalidateAllShadowMCPInventory(queryClient);
+      void invalidateShadowMCPPolicyInventory(queryClient, project.id);
     },
   });
   const createMutation = useRiskCreatePolicyMutation({
     onSuccess: () => {
       void invalidateAllRiskListPolicies(queryClient);
+      void invalidateAllShadowMCPInventory(queryClient);
+      void invalidateShadowMCPPolicyInventory(queryClient, project.id);
       routes.policyCenter.goTo();
     },
   });
@@ -3614,6 +3690,14 @@ function StandardPolicyEditor({
       selectedCategories,
       scopeOverrides,
     );
+    const shadowMcpAllowedUrls = shadowMCPAllowedURLsForMutation({
+      action: resolvedAction,
+      selectedCategories,
+      selectedURLs: selectedShadowMCPURLs,
+      originalPolicy: policy,
+    });
+    const setupFields =
+      shadowMcpAllowedUrls === undefined ? {} : { shadowMcpAllowedUrls };
 
     if (policy) {
       updateMutation.mutate({
@@ -3641,6 +3725,7 @@ function StandardPolicyEditor({
             presidioScoreThreshold: presidioActive
               ? presidioThreshold
               : DEFAULT_PRESIDIO_THRESHOLD,
+            ...setupFields,
             ...(identityActive ? { approvedEmailDomains } : {}),
           },
         },
@@ -3666,6 +3751,7 @@ function StandardPolicyEditor({
             ...(presidioActive
               ? { presidioScoreThreshold: presidioThreshold }
               : {}),
+            ...setupFields,
             ...(identityActive ? { approvedEmailDomains } : {}),
           },
         },
@@ -3783,6 +3869,18 @@ function StandardPolicyEditor({
             score={score}
             setScore={setScore}
             flagOnlySelected={flagOnlySelected}
+            shadowMCPAllowedServers={
+              targetIsShadowMCPBlock ? (
+                <ShadowMCPPolicyServerSelector
+                  servers={inventoryQuery.data ?? []}
+                  selectedURLs={selectedShadowMCPURLs}
+                  onSelectionChange={setSelectedShadowMCPURLs}
+                  isLoading={inventoryQuery.isPending}
+                  error={inventoryQuery.error}
+                  onRetry={() => void inventoryQuery.refetch()}
+                />
+              ) : undefined
+            }
           />
         )}
 
