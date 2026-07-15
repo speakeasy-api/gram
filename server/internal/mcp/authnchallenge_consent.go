@@ -82,9 +82,13 @@ type consentTemplateData struct {
 	// completed (a card is Connected). Cancel is always available.
 	ConsentEnabled bool
 	// FirstParty swaps the approve/deny client-grant footer for a terminal
-	// "you can close this tab" message: a first-party challenge has no MCP
-	// client to grant to, so linking the cards is the whole job.
+	// completion message: a first-party challenge has no MCP client to grant
+	// to, so linking the cards is the whole job.
 	FirstParty bool
+	// AutoClose marks a completed first-party connection. The consent script
+	// closes only this terminal state; incomplete connections and MCP client
+	// consent remain open.
+	AutoClose bool
 }
 
 // remoteSessionCard is the per-remote view rendered by the {{range}} block
@@ -214,13 +218,14 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		return oops.E(oops.CodeUnexpected, err, "build remote session cards").LogError(ctx, logger)
 	}
 
-	consentEnabled := len(cards) == 0
+	hasConnectedCard := false
 	for _, c := range cards {
 		if c.Connected {
-			consentEnabled = true
+			hasConnectedCard = true
 			break
 		}
 	}
+	consentEnabled := len(cards) == 0 || hasConnectedCard
 
 	data := consentTemplateData{
 		ClientName:         clientName,
@@ -234,6 +239,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		RemoteSessionCards: cards,
 		ConsentEnabled:     consentEnabled,
 		FirstParty:         challengeState.FirstParty,
+		AutoClose:          challengeState.FirstParty && hasConnectedCard,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
