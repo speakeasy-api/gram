@@ -26,7 +26,11 @@ import (
 // load-bearing: concurrent hook processes write without contention, and the
 // file lock available on Windows is a no-op (see codextools_lock_windows.go),
 // so nothing may ever rewrite a shared file. Caps are enforced at write time
-// by the writer, which is the only party that knows the entry's size.
+// by the writer, which is the only party that knows the entry's size — and
+// they are deliberately soft under concurrency: simultaneous failed hooks
+// can each pass the trim before committing, overshooting by a handful of
+// bounded entries, which costs less than a cross-process lock on the
+// session-gating path would.
 
 const (
 	// spoolEntryVersion versions the on-disk entry schema; drain skips
@@ -167,10 +171,21 @@ func spoolFileName(now time.Time) string {
 }
 
 // spoolNanos extracts the creation time from an entry filename; ok is false
-// for files that don't follow the naming scheme (they are left alone).
+// for anything that doesn't match the exact %020d-%06d-%06d.json shape the
+// writer produces — a foreign file that merely starts with digits must never
+// be trimmed, expired, or drained as an entry.
 func spoolNanos(name string) (int64, bool) {
-	if !strings.HasSuffix(name, ".json") || len(name) < 20 {
+	const shape = len("00000000000000000000-000000-000000.json")
+	if len(name) != shape || name[20] != '-' || name[27] != '-' || !strings.HasSuffix(name, ".json") {
 		return 0, false
+	}
+	for i := 0; i < len(name)-len(".json"); i++ {
+		if i == 20 || i == 27 {
+			continue
+		}
+		if name[i] < '0' || name[i] > '9' {
+			return 0, false
+		}
 	}
 	n, err := strconv.ParseInt(name[:20], 10, 64)
 	if err != nil {

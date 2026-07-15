@@ -96,8 +96,11 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 		}
 		path := filepath.Join(dir, name)
 		if nanos, _ := spoolNanos(name); nanos < cutoff {
-			_ = os.Remove(path)
-			s.Expired++
+			if removeSpoolEntry(path) {
+				s.Expired++
+			} else {
+				s.Skipped++
+			}
 			continue
 		}
 		b, err := os.ReadFile(path)
@@ -156,13 +159,22 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 		}
 		switch {
 		case res.accepted():
-			_ = os.Remove(path)
-			s.Replayed++
+			if removeSpoolEntry(path) {
+				s.Replayed++
+			} else {
+				// Delivered but not deleted: the next drain re-sends under
+				// the same key and the server dedupes; count it skipped so
+				// Remaining stays truthful.
+				s.Skipped++
+			}
 		case res.unsent():
 			s.Aborted = true
 		default:
-			_ = os.Remove(path)
-			s.Dropped++
+			if removeSpoolEntry(path) {
+				s.Dropped++
+			} else {
+				s.Skipped++
+			}
 		}
 		if s.Aborted {
 			break
@@ -243,9 +255,22 @@ func resolveDrainAuth(entry spoolEntry, key string, memo map[string]drainAuth) d
 				}
 			}
 		}
+		if a.ok && entry.ProjectSlug != "" {
+			// The stored deployment identity is the replay routing truth: a
+			// GRAM_HOOKS_PROJECT_SLUG (or cached project) inherited from the
+			// spawning session must not reroute another project's entries.
+			a.c.Project = entry.ProjectSlug
+		}
 	}
 	memo[key] = a
 	return a
+}
+
+// removeSpoolEntry deletes an entry file, treating already-gone as success —
+// a concurrent trim raced us to it.
+func removeSpoolEntry(path string) bool {
+	err := os.Remove(path)
+	return err == nil || os.IsNotExist(err)
 }
 
 // listSpoolEntries returns the conforming entry filenames, oldest first.

@@ -218,6 +218,9 @@ func TestTrimSpoolLeavesForeignFilesAlone(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "README.txt"), []byte("x"), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "not-nanos.json"), []byte("x"), 0o600))
+	// A digits-prefixed foreign file must not parse as an entry either —
+	// only the exact writer-produced shape counts.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "01234567890123456789-report.json"), []byte("x"), 0o600))
 	for i := range 3 {
 		writeSpoolFixture(t, dir, time.Duration(i)*time.Minute, 10)
 	}
@@ -227,7 +230,7 @@ func TestTrimSpoolLeavesForeignFilesAlone(t *testing.T) {
 
 	des, err := os.ReadDir(dir)
 	require.NoError(t, err)
-	require.Len(t, des, 2, "files that don't follow the naming scheme are not the trimmer's to delete")
+	require.Len(t, des, 3, "files that don't follow the naming scheme are not the trimmer's to delete")
 }
 
 // TestSpoolEntriesAccumulateAcrossEvents pins ordering: successive failed

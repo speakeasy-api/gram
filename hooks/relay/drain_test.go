@@ -342,3 +342,20 @@ func TestRunDrainAbortExitsNonZero(t *testing.T) {
 	require.Equal(t, 1, RunDrain(t.Context(), &out))
 	require.Contains(t, out.String(), "aborted=true")
 }
+
+// TestDrainPinsEntryProject: a GRAM_HOOKS_PROJECT_SLUG inherited from the
+// spawning session must not reroute another project's entries — the stored
+// deployment identity is the routing truth.
+func TestDrainPinsEntryProject(t *testing.T) {
+	drainEnv(t)
+	t.Setenv("GRAM_HOOKS_PROJECT_SLUG", "someone-elses-project")
+	fs := newFakeServer(t, nil)
+	seedSpoolEntry(t, fs.URL, time.Hour, "sess-1")
+
+	s := Drain(t.Context())
+	require.Equal(t, 1, s.Replayed)
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+	require.Equal(t, "default", fs.headers[0].Get("Gram-Project"),
+		"the replay must route to the entry's recorded project, not the drain environment's")
+}
