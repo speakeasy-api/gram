@@ -43,9 +43,14 @@ var hooksArtifactIndex = map[string]map[string]hooksBinaryTarget{
 // response is not the artifact we pinned.
 const maxHooksArtifactBytes = 128 << 20
 
-// hooksArtifactFetchTimeout caps the server-side upstream fetch. The bootstrap
-// scripts give up at 45s, so a slower fetch could never serve them anyway.
-const hooksArtifactFetchTimeout = 45 * time.Second
+// hooksArtifactFetchTimeout caps the server-side upstream fetch. It must sit
+// well under the bootstrap scripts' 45s download budget: a cold request pays
+// upstream fetch + verification before the first byte streams out, so the gap
+// between the two budgets is the client's headroom to actually receive the
+// archive. A fetch slower than this fails the request quickly instead of
+// burning the client's whole window — the fetch that does complete is cached,
+// so the next hook invocation installs from warm bytes.
+const hooksArtifactFetchTimeout = 30 * time.Second
 
 // HooksArtifactServer serves the pinned speakeasy-hooks release archives from
 // the Gram server domain. It is a verifying proxy in front of the GitHub
