@@ -283,4 +283,64 @@ describe("fromGram", () => {
       expect(JSON.stringify(result.content)).not.toContain("stack");
     });
   });
+
+  describe("clientInfo on ToolContext", () => {
+    // A tool that echoes back whatever `ctx.clientInfo` it was given.
+    const echoClientInfo = new Gram().tool({
+      name: "whoami",
+      description: "Echoes the calling client's info",
+      inputSchema: {},
+      async execute(ctx) {
+        return ctx.json({ clientInfo: ctx.clientInfo ?? null });
+      },
+    });
+
+    function parseClientInfo(result: Awaited<ReturnType<Client["callTool"]>>) {
+      const content = result.content as Array<{ type: string; text: string }>;
+      return JSON.parse(content[0]!.text).clientInfo;
+    }
+
+    test("populates ctx.clientInfo from the initialize handshake", async () => {
+      const client = await setup(echoClientInfo);
+      const result = await client.callTool({ name: "whoami", arguments: {} });
+
+      // setup() connects a Client named "test-client"; that identity is what
+      // the server captures during the MCP initialize handshake.
+      expect(parseClientInfo(result)).toEqual({
+        name: "test-client",
+        version: "0.0.0",
+      });
+    });
+
+    test("prefers per-call _meta clientInfo over the handshake identity", async () => {
+      const client = await setup(echoClientInfo);
+      const result = await client.callTool({
+        name: "whoami",
+        arguments: {},
+        _meta: {
+          "io.modelcontextprotocol/clientInfo": {
+            name: "vega",
+            version: "2.1.0",
+          },
+        },
+      });
+
+      expect(parseClientInfo(result)).toEqual({ name: "vega", version: "2.1.0" });
+    });
+
+    test("ignores a malformed _meta clientInfo and falls back to the handshake", async () => {
+      const client = await setup(echoClientInfo);
+      const result = await client.callTool({
+        name: "whoami",
+        arguments: {},
+        // Missing `name` → not a usable clientInfo; fall back to the handshake.
+        _meta: { "io.modelcontextprotocol/clientInfo": { version: "9.9.9" } },
+      });
+
+      expect(parseClientInfo(result)).toEqual({
+        name: "test-client",
+        version: "0.0.0",
+      });
+    });
+  });
 });
