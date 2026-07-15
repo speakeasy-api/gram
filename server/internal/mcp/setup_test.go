@@ -131,12 +131,7 @@ func newTestMCPServiceWithDevIDP(t *testing.T) (context.Context, *testInstance, 
 func newTestMCPServiceWithIdentityResolver(t *testing.T, identityResolver mcp.IdentityResolver) (context.Context, *testInstance) {
 	t.Helper()
 
-	// ForceEnabled bypasses the PostHog rollout flag (the test posthog client
-	// cannot evaluate flags); the kill switch and allow_public consent are
-	// still enforced and covered by tests.
 	return newTestMCPServiceWithTunnelPublicConfig(t, identityResolver, mcp.TunnelPublicConfig{
-		Disabled:           false,
-		ForceEnabled:       true,
 		SessionTTL:         0,
 		LiveSessionCap:     0,
 		InitializeRate:     ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},

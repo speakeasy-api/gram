@@ -407,40 +407,13 @@ func TestServePublic_Tunneled_StripsBackendChallenge(t *testing.T) {
 	require.Empty(t, w.Header().Get(wire.HeaderTunnelAgentSession), "internal tunnel headers must not leak")
 }
 
-// TestServePublic_Tunneled_KillSwitchOverridesConsent: the emergency kill
-// switch beats owner consent and rollout flags.
-func TestServePublic_Tunneled_KillSwitchOverridesConsent(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPServiceWithTunnelPublicConfig(t, &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{
-		Disabled:           true,
-		ForceEnabled:       true,
-		SessionTTL:         0,
-		LiveSessionCap:     0,
-		InitializeRate:     ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
-		RequestRate:        ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
-		MaxRequestLifetime: 0,
-	})
-	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "backend-secret-session", legacy: false, dead: false, challenge: ""}
-	fixture := newPublicTunnelFixture(t, ctx, ti, gateway, true)
-
-	_, err := serveTunneledPublicRequest(t, ti, fixture.endpointSlug, http.MethodPost, makeInitializeBody(), "")
-	require.Error(t, err)
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
-	require.Zero(t, gateway.forwardCount())
-}
-
 // TestServePublic_Tunneled_LiveSessionCapRejectsInitialize: once the
 // per-tunnel anonymous session cap is reached, further initializes are
-// rejected with a JSON-RPC error before touching the customer's backend.
+// rejected before touching the customer's backend.
 func TestServePublic_Tunneled_LiveSessionCapRejectsInitialize(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPServiceWithTunnelPublicConfig(t, &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{
-		Disabled:           false,
-		ForceEnabled:       true,
 		SessionTTL:         0,
 		LiveSessionCap:     1,
 		InitializeRate:     ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},

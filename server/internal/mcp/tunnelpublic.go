@@ -28,7 +28,6 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelsessions"
@@ -36,7 +35,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
@@ -52,12 +50,6 @@ const anonymousAffinityPrefix = "anonsid"
 // tunneled MCP serving. Zero values are replaced with the defaults below in
 // newTunnelPublicRuntime.
 type TunnelPublicConfig struct {
-	// Disabled is the emergency kill switch: when true no tunneled MCP
-	// server is served publicly regardless of flags or consent.
-	Disabled bool
-	// ForceEnabled bypasses the per-org PostHog rollout flag. For local
-	// development, tests, and preview validation only — never production.
-	ForceEnabled bool
 	// SessionTTL is the sliding lifetime of an anonymous session mapping.
 	SessionTTL time.Duration
 	// LiveSessionCap bounds concurrently tracked anonymous sessions per
@@ -69,8 +61,7 @@ type TunnelPublicConfig struct {
 	RequestRate ratelimit.Rate
 	// MaxRequestLifetime hard-bounds any single anonymous request, including
 	// SSE streams — the proxy's idle timeout alone would let an active
-	// stream outlive its session slot, and the kill switch cannot retract
-	// an already-flushed stream.
+	// stream outlive its session slot.
 	MaxRequestLifetime time.Duration
 }
 
@@ -131,18 +122,21 @@ func hashSessionID(sid string) string {
 	return hex.EncodeToString(sum[:8])
 }
 
-// requireTunneledPublicConsent fail-closed gates anonymous public serving:
-// kill switch → per-org rollout flag → owner's allow_public consent. Every
-// rejection surfaces as 404 so unauthenticated callers cannot distinguish a
-// gated endpoint from a missing one; the distinct causes are logged.
+// requireTunneledPublicConsent fail-closed gates anonymous public serving on
+// the tunnel owner's allow_public consent (double opt-in with
+// visibility=public). Every rejection surfaces as 404 so unauthenticated
+// callers cannot distinguish a gated endpoint from a missing one; the
+// distinct causes are logged. A nil runtime (no Redis wired) also fails
+// closed — the abuse controls that bound anonymous traffic cannot run
+// without it.
 func (s *Service) requireTunneledPublicConsent(
 	ctx context.Context,
 	logger *slog.Logger,
 	endpoint *mcpendpointsrepo.McpEndpoint,
 	mcpServer *mcpserversrepo.McpServer,
 ) error {
-	if s.tunnelPublic == nil || s.tunnelPublic.cfg.Disabled {
-		return oops.E(oops.CodeNotFound, nil, "not found").LogWarn(ctx, logger.With(attr.SlogErrorMessage("public tunnels disabled")))
+	if s.tunnelPublic == nil {
+		return oops.E(oops.CodeNotFound, nil, "not found").LogWarn(ctx, logger.With(attr.SlogErrorMessage("public tunnel runtime unavailable")))
 	}
 
 	source, err := tunneledmcprepo.New(s.db).GetServerByID(ctx, tunneledmcprepo.GetServerByIDParams{
@@ -157,28 +151,6 @@ func (s *Service) requireTunneledPublicConsent(
 	}
 	if !source.AllowPublic {
 		return oops.E(oops.CodeNotFound, nil, "not found").LogWarn(ctx, logger.With(attr.SlogErrorMessage("tunnel source does not allow public serving")))
-	}
-
-	if s.tunnelPublic.cfg.ForceEnabled {
-		return nil
-	}
-
-	project, err := projectsrepo.New(s.db).GetProjectByID(ctx, endpoint.ProjectID)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "load project for public tunnel gate").LogError(ctx, logger)
-	}
-	org, err := s.orgsRepo.GetOrganizationMetadata(ctx, project.OrganizationID)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "load organization for public tunnel gate").LogError(ctx, logger)
-	}
-	enabled, err := s.posthog.IsFlagEnabled(ctx, feature.FlagPublicTunnels, project.OrganizationID, feature.OrgProjectGroups(org.Slug, project.Slug))
-	if err != nil {
-		// Fail closed: an unreachable flag service must not open an
-		// anonymous surface.
-		return oops.E(oops.CodeNotFound, err, "not found").LogError(ctx, logger)
-	}
-	if !enabled {
-		return oops.E(oops.CodeNotFound, nil, "not found").LogWarn(ctx, logger.With(attr.SlogErrorMessage("public tunnels flag not enabled for organization")))
 	}
 	return nil
 }
