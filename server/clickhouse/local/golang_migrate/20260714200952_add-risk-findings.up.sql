@@ -1,5 +1,5 @@
 -- create "risk_findings" table
-CREATE TABLE `risk_findings` (
+CREATE TABLE IF NOT EXISTS `risk_findings` (
   `id` UUID COMMENT 'Finding UUIDv7, supplied by the scanner that produced it.',
   `created_at` DateTime64(9) COMMENT 'Time the finding was produced.' CODEC(DoubleDelta, ZSTD(1)),
   `organization_id` String COMMENT 'Organization the finding belongs to (HKDF salt for the tenant fingerprint).' CODEC(ZSTD(1)),
