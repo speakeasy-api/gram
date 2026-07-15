@@ -1,10 +1,15 @@
 import { formatShortDate } from "@/components/access/shadow-mcp-utils";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Type } from "@/components/ui/type";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
-import { Badge, Button, type Column, Table } from "@speakeasy-api/moonshine";
+import {
+  Badge,
+  Button,
+  type Column,
+  Dialog,
+  Table,
+} from "@speakeasy-api/moonshine";
 import { useCallback, useDeferredValue, useMemo, useState } from "react";
 import {
   shadowMCPInventoryStatusBadgeVariant,
