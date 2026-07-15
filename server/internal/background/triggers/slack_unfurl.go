@@ -32,6 +32,11 @@ func (a *App) unfurlSlackGramLinks(ctx context.Context, instance triggerrepo.Tri
 	if a.slackClient == nil || a.siteURL == nil || instance.DefinitionSlug != DefinitionSlugSlack {
 		return
 	}
+	// ProcessEvent runs after this call and only enforces the pause for
+	// dispatch; a paused trigger must not keep producing link previews either.
+	if instance.Status != StatusActive {
+		return
+	}
 	evt, isSlack := event.Event.(slackTriggerEvent)
 	if !isSlack || evt.EventType != "link_shared" {
 		return
@@ -108,21 +113,26 @@ func gramLinkTitle(u *url.URL) string {
 		segments = segments[2:]
 	}
 
-	meaningful := make([]string, 0, len(segments))
+	// Collect humanized labels, dropping opaque ids and separator-only
+	// segments (e.g. "--") whose humanized form is empty.
+	labels := make([]string, 0, len(segments))
 	for _, segment := range segments {
-		if !opaqueSlugPattern.MatchString(segment) {
-			meaningful = append(meaningful, segment)
+		if opaqueSlugPattern.MatchString(segment) {
+			continue
+		}
+		if label := humanizeSlug(segment); label != "" {
+			labels = append(labels, label)
 		}
 	}
-	if len(meaningful) == 0 {
+	if len(labels) == 0 {
 		return "Speakeasy dashboard"
 	}
 
-	section := humanizeSlug(meaningful[0])
-	if len(meaningful) == 1 {
+	section := labels[0]
+	if len(labels) == 1 {
 		return section
 	}
-	return humanizeSlug(meaningful[len(meaningful)-1]) + " · " + section
+	return labels[len(labels)-1] + " · " + section
 }
 
 // humanizeSlug turns a URL slug into title-cased words: "my-cool-toolset" →

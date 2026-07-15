@@ -62,7 +62,7 @@ func TestUnfurlSlackGramLinksCallsChatUnfurl(t *testing.T) {
 		siteURL:     siteURL,
 		slackClient: slackclient.NewSlackClientWithBaseURL(server.URL, server.Client()),
 	}
-	instance := triggerrepo.TriggerInstance{DefinitionSlug: DefinitionSlugSlack}
+	instance := triggerrepo.TriggerInstance{DefinitionSlug: DefinitionSlugSlack, Status: StatusActive}
 	env := map[string]string{"SLACK_BOT_TOKEN": "xoxb-test-token"}
 	envelope := EventEnvelope{Event: slackTriggerEvent{EventType: "link_shared"}}
 
@@ -126,13 +126,47 @@ func TestUnfurlSlackGramLinksSkipsForeignLinksOnly(t *testing.T) {
 
 	app.unfurlSlackGramLinks(
 		t.Context(),
-		triggerrepo.TriggerInstance{DefinitionSlug: DefinitionSlugSlack},
+		triggerrepo.TriggerInstance{DefinitionSlug: DefinitionSlugSlack, Status: StatusActive},
 		map[string]string{"SLACK_BOT_TOKEN": "xoxb-test-token"},
 		[]byte(body),
 		EventEnvelope{Event: slackTriggerEvent{EventType: "link_shared"}},
 	)
 
 	require.False(t, called, "chat.unfurl must not be called when no dashboard links are shared")
+}
+
+func TestUnfurlSlackGramLinksSkipsPausedTriggers(t *testing.T) {
+	t.Parallel()
+
+	called := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		called = true
+		w.Header().Set("Content-Type", "application/json")
+		if _, err := w.Write([]byte(`{"ok":true}`)); err != nil {
+			t.Errorf("write response: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	siteURL, err := url.Parse("https://app.getgram.ai")
+	require.NoError(t, err)
+	app := &App{
+		// testenv.NewLogger is unavailable here (import cycle back into this
+		// package); the logger only fires on the warn path anyway.
+		logger:      slog.New(slog.DiscardHandler), //nolint:forbidigo // GG006: testenv imports this package, so testenv.NewLogger(t) cannot be used here
+		siteURL:     siteURL,
+		slackClient: slackclient.NewSlackClientWithBaseURL(server.URL, server.Client()),
+	}
+
+	app.unfurlSlackGramLinks(
+		t.Context(),
+		triggerrepo.TriggerInstance{DefinitionSlug: DefinitionSlugSlack, Status: StatusPaused},
+		map[string]string{"SLACK_BOT_TOKEN": "xoxb-test-token"},
+		[]byte(linkSharedWebhookBody),
+		EventEnvelope{Event: slackTriggerEvent{EventType: "link_shared"}},
+	)
+
+	require.False(t, called, "chat.unfurl must not be called for a paused trigger")
 }
 
 func TestGramLinkTitleFromDashboardPaths(t *testing.T) {
@@ -150,6 +184,10 @@ func TestGramLinkTitleFromDashboardPaths(t *testing.T) {
 		{"https://app.getgram.ai/acme", "Speakeasy dashboard"},
 		{"https://app.getgram.ai/", "Speakeasy dashboard"},
 		{"https://app.getgram.ai/acme/projects/default/logs/12345", "Logs"},
+		// Separator-only segments humanize to nothing and must not produce
+		// an empty label.
+		{"https://app.getgram.ai/acme/projects/default/--/__", "Speakeasy dashboard"},
+		{"https://app.getgram.ai/acme/projects/default/toolsets/--", "Toolsets"},
 	}
 
 	for _, tc := range cases {
