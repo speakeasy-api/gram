@@ -46,6 +46,7 @@ func TestPollAPIKeyRejectedSeesThroughWrappedSyncErrors(t *testing.T) {
 			MessagePagesFetched: 0,
 			MessagePagesWritten: 0,
 			CursorReached:       "",
+			CursorPersisted:     "",
 		},
 	}
 	wrapped := oops.E(oops.CodeUnauthorized, syncErr, "anthropic compliance rejected the configured api key")
@@ -72,6 +73,7 @@ func TestNewPollFailureErrorCarriesStageAndProgressDetails(t *testing.T) {
 			MessagePagesFetched: 210,
 			MessagePagesWritten: 208,
 			CursorReached:       "activity_9",
+			CursorPersisted:     "activity_5",
 		},
 	}
 	cause := oops.E(oops.CodeUnexpected, syncErr, "sync anthropic compliance data")
