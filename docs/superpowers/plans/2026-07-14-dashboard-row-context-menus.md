@@ -30,11 +30,13 @@
 ### Task 1: TableRowContextMenu + shared menu content
 
 **Files:**
+
 - Modify: `src/components/card-context-menu.tsx` (extract shared content)
 - Create: `src/components/table-row-context-menu.tsx`
 - Test: `src/components/table-row-context-menu.test.tsx`
 
 **Interfaces:**
+
 - Produces: `ActionContextMenuContent({ actions }: { actions: Action[] })` exported from `card-context-menu.tsx`; `TableRowContextMenu({ actions, children }: { actions: Action[]; children: React.ReactElement })`.
 
 - [ ] **Step 1:** In `card-context-menu.tsx`, extract the `<ContextMenuContent>` block (lines 41–55) into an exported component in the same file, and use it in `CardContextMenu`:
@@ -68,10 +70,7 @@ export function ActionContextMenuContent({
 - [ ] **Step 2:** Create `src/components/table-row-context-menu.tsx`:
 
 ```tsx
-import {
-  ContextMenu,
-  ContextMenuTrigger,
-} from "./ui/context-menu";
+import { ContextMenu, ContextMenuTrigger } from "./ui/context-menu";
 import { ActionContextMenuContent } from "./card-context-menu";
 import type { Action } from "./ui/more-actions";
 
@@ -216,9 +215,7 @@ const actions: Action[] = [
     },
   ]}
 >
-  <button onClick={() => onSelectChat(chat)} /* rest unchanged */>
-    ...
-  </button>
+  <button onClick={() => onSelectChat(chat)} /* rest unchanged */>...</button>
 </TableRowContextMenu>
 ```
 
@@ -264,6 +261,7 @@ return (
 ```
 
 `canManageRoles` already exists in the file (`hasAnyScope(["org:admin"])`); thread it into `RoleRow` if not already a prop. Keep `RoleActionsMenu` unchanged (its `setTimeout`-deferred `onEdit`/`onDelete` stay for the dropdown; direct calls are fine from the context menu).
+
 - [ ] Type-check; commit `feat(dashboard): right-click menu on role rows`.
 
 ### Task 10: Flat moonshine tables — Deployments, Exclusions, Policy Center
@@ -306,7 +304,7 @@ return (
 **Files:** Modify `src/pages/team/Team.tsx`
 **Depends on:** moonshine `renderRow`.
 
-- [ ] Extract the menu *model* from the members actions column (lines 493–583) into `useMemberMenuModel(member)` in the same file, returning the booleans and callbacks both renderers need: `{ scimManaged, accessMember, showChallenges: isRbacEnabled, canRemove: !isSelf && !isLastAdmin, openManageRoles, openChallenges, openRemove }`.
+- [ ] Extract the menu _model_ from the members actions column (lines 493–583) into `useMemberMenuModel(member)` in the same file, returning the booleans and callbacks both renderers need: `{ scimManaged, accessMember, showChallenges: isRbacEnabled, canRemove: !isSelf && !isLastAdmin, openManageRoles, openChallenges, openRemove }`.
 - [ ] The dropdown render fn consumes the model (same JSX, conditions now from the model). Add a `MemberRowContextMenu({ member, children })` component rendering `ContextMenu`/`ContextMenuTrigger asChild`/`ContextMenuContent` with the mirrored items: Manage roles (disabled when `scimManaged`, wrapped in `RequireScope scope="org:admin" level="component"` when not), View challenges (when `isRbacEnabled`), separator + destructive Remove member (when `canRemove`, scope-gated). Import `ContextMenuSeparator` from `@/components/ui/context-menu`. If no item is renderable, return children unwrapped.
 - [ ] Wire `renderRow={(row, el) => <MemberRowContextMenu key={row.userId} member={row}>{el}</MemberRowContextMenu>}` on the members `<Table>` only (invites table out of scope).
 - [ ] Type-check; commit `feat(dashboard): right-click menu on team member rows`.

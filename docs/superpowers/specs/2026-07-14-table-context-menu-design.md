@@ -72,12 +72,14 @@ kebab (`MoreActions` or existing `DropdownMenu`) and the context menu.
 ### Targets
 
 DotTable rows:
+
 - `src/components/sources/SourceTableRow.tsx` (Sources)
 - `src/pages/remote-identity-providers/tabs/client/McpServersTab.tsx`
 - `src/pages/remote-identity-providers/tabs/client/SessionsTab.tsx`
 - `src/pages/remote-identity-providers/tabs/issuer/ClientsTab.tsx`
 
 Moonshine tables (via new `renderRow`):
+
 - `src/pages/deployments/Deployments.tsx`
 - `src/pages/team/Team.tsx`
 - `src/pages/access/RolesTab.tsx`
@@ -87,6 +89,7 @@ Moonshine tables (via new `renderRow`):
 - `src/components/shadow-mcp/ShadowMCPInventoryTable.tsx`
 
 Cards/lists (via existing `CardContextMenu`):
+
 - `src/pages/org/OrgHome.tsx` (project cards)
 - `src/pages/plugins/PluginCard.tsx`
 - `src/components/sources/Sources.tsx` (grid)
@@ -117,6 +120,7 @@ table system it uses, confirmed during implementation.
 ## Rollout
 
 Two PRs:
+
 1. Moonshine: `renderRow` prop + ref-forwarding `RowContainer`, minor release.
 2. Gram: bump `@speakeasy-api/moonshine`, add `TableRowContextMenu`, wire all
    targets. The DotTable/card work doesn't depend on the moonshine release but
