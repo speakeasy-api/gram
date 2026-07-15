@@ -170,7 +170,12 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 		payload.Source.UserEmail = new(email)
 	}
 	r.correlateCodexToolID(typed, &payload)
-	res := r.client.send(ctx, c, payload)
+	// One idempotency key covers this event end to end: the send's internal
+	// replays, the org-key retry below, and — if the control plane is down —
+	// the spooled copy a later drain replays. The server stores at most one
+	// event per key, so every redelivery path is safe.
+	idemKey := newIdempotencyToken()
+	res := r.client.send(ctx, c, payload, idemKey)
 	r.debugf("event=%s type=%s server=%s authfile=%s status=%d denied=%t", agenthooks.EventOf(typed).NativeName, payload.Event.Type, r.cfg.ServerURL, authFilePath(), res.statusCode, res.decision.denied())
 	if res.authRejected && c.Source == credEnv {
 		// The configured key is authoritative and a re-login can never replace
@@ -200,11 +205,20 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 				Org:       r.cfg.OrgID,
 				Source:    credOrg,
 			}
-			res = r.client.send(ctx, orgCreds, payload)
+			res = r.client.send(ctx, orgCreds, payload, idemKey)
 			r.debugf("event=%s auth-retry=org status=%d denied=%t", agenthooks.EventOf(typed).NativeName, res.statusCode, res.decision.denied())
+			if unsent(res) {
+				r.spoolUnsent(idemKey, payload)
+			}
 			return res, stateReady
 		}
 		return res, stateReauthNeeded
+	}
+	// The exchange is final; if the control plane was unreachable or failing,
+	// keep the payload for replay. Auth rejections and other 4xx don't spool
+	// — the server answered, and would reject the replay identically.
+	if unsent(res) {
+		r.spoolUnsent(idemKey, payload)
 	}
 	return res, stateReady
 }

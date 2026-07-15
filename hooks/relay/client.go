@@ -84,14 +84,19 @@ func newClient(serverURL string) *client {
 // here — safe because the Idempotency-Key is minted once and reused, and
 // necessary because a blocking hook would otherwise deny over one dropped
 // connection.
-func (cl *client) send(ctx context.Context, c creds, body components.IngestRequestBody) ingestResult {
+//
+// The caller mints idemKey (see deliver) so the same key survives beyond
+// this exchange: a payload spooled after a failed send replays under the
+// original key, and the server dedupes it against any partially delivered
+// original.
+func (cl *client) send(ctx context.Context, c creds, body components.IngestRequestBody, idemKey string) ingestResult {
 	ctx, cancel := context.WithTimeout(ctx, cl.budget)
 	defer cancel()
 
 	req := operations.IngestHookEventRequest{
 		GramKey:        new(c.APIKey),
 		GramProject:    nil,
-		IdempotencyKey: new(newIdempotencyToken()),
+		IdempotencyKey: new(idemKey),
 		Body:           body,
 	}
 	if c.Project != "" {

@@ -228,7 +228,7 @@ func TestSendRetriesTransientConnectionFailure(t *testing.T) {
 		Event:         components.HookIngestEvent{Type: components.TypeSessionUpdated, OccurredAt: nil},
 		Data:          nil,
 		Raw:           nil,
-	})
+	}, newIdempotencyToken())
 
 	<-killed
 	require.Equal(t, http.StatusOK, res.statusCode, "a transient connection drop must be replayed, not surfaced")
@@ -1288,7 +1288,7 @@ func TestSendBoundsTotalRetryTime(t *testing.T) {
 		Event:         components.HookIngestEvent{Type: components.TypeSessionUpdated, OccurredAt: nil},
 		Data:          nil,
 		Raw:           nil,
-	})
+	}, newIdempotencyToken())
 
 	require.Equal(t, 0, res.statusCode, "a hung endpoint yields a transport failure, not a verdict")
 	require.Less(t, time.Since(start), 10*time.Second, "the send budget must bound retries end to end")
