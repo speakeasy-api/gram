@@ -4,6 +4,8 @@ import {
   idempotencyKeyForFingerprint,
   isBlockingShadowMCPPolicy,
   shadowMCPAllowedURLsForMutation,
+  shadowMCPSelectionBaselineForUpdate,
+  shadowMCPSelectionIsDirty,
   type SubmissionKeyCache,
 } from "./policy-shadow-mcp-setup";
 
@@ -100,5 +102,47 @@ describe("idempotencyKeyForFingerprint", () => {
     expect(idempotencyKeyForFingerprint(cache, "body-b", createKey)).toBe(
       "key-2",
     );
+  });
+});
+
+describe("shadowMCPSelectionIsDirty", () => {
+  it("marks a changed selection dirty for a blocking Shadow MCP draft", () => {
+    expect(
+      shadowMCPSelectionIsDirty(
+        true,
+        new Set(["https://github.example.com/mcp"]),
+        new Set(),
+      ),
+    ).toBe(true);
+  });
+
+  it("ignores hidden selection changes for a non-target draft", () => {
+    expect(
+      shadowMCPSelectionIsDirty(
+        false,
+        new Set(["https://github.example.com/mcp"]),
+        new Set(),
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("shadowMCPSelectionBaselineForUpdate", () => {
+  it("returns the explicitly submitted URL set", () => {
+    expect(
+      shadowMCPSelectionBaselineForUpdate({
+        shadowMcpAllowedUrls: ["https://github.example.com/mcp"],
+      }),
+    ).toEqual(new Set(["https://github.example.com/mcp"]));
+  });
+
+  it("returns an empty baseline for an explicit clear", () => {
+    expect(
+      shadowMCPSelectionBaselineForUpdate({ shadowMcpAllowedUrls: [] }),
+    ).toEqual(new Set());
+  });
+
+  it("does not invent a baseline when the field was omitted", () => {
+    expect(shadowMCPSelectionBaselineForUpdate({})).toBeUndefined();
   });
 });

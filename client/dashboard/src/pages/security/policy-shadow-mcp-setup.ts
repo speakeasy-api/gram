@@ -57,3 +57,26 @@ export function idempotencyKeyForFingerprint(
   cache.current = { fingerprint, key };
   return key;
 }
+
+export function shadowMCPSelectionIsDirty(
+  targetIsShadowMCPBlock: boolean,
+  selectedURLs: ReadonlySet<string>,
+  originalURLs: ReadonlySet<string> | null,
+): boolean {
+  if (!targetIsShadowMCPBlock || originalURLs === null) return false;
+  if (selectedURLs.size !== originalURLs.size) return true;
+
+  for (const url of selectedURLs) {
+    if (!originalURLs.has(url)) return true;
+  }
+  return false;
+}
+
+export function shadowMCPSelectionBaselineForUpdate(body: {
+  shadowMcpAllowedUrls?: readonly string[];
+}): Set<string> | undefined {
+  if (!Object.prototype.hasOwnProperty.call(body, "shadowMcpAllowedUrls")) {
+    return undefined;
+  }
+  return new Set(body.shadowMcpAllowedUrls ?? []);
+}

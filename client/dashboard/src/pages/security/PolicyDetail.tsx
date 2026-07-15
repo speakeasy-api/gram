@@ -80,6 +80,8 @@ import { useQueryState } from "nuqs";
 import {
   isBlockingShadowMCPPolicy,
   shadowMCPAllowedURLsForMutation,
+  shadowMCPSelectionBaselineForUpdate,
+  shadowMCPSelectionIsDirty,
 } from "./policy-shadow-mcp-setup";
 import { type Step } from "@/pages/setup/components/onboarding-stepper";
 import {
@@ -3598,9 +3600,11 @@ function StandardPolicyEditor({
   const saveBlocked =
     !hasEnabledDetector || audienceMissing || shadowMCPInventoryUnavailable;
 
-  const shadowMCPSelectionDirty =
-    originalShadowMCPURLs !== null &&
-    !sameSet(selectedShadowMCPURLs, originalShadowMCPURLs);
+  const shadowMCPSelectionDirty = shadowMCPSelectionIsDirty(
+    targetIsShadowMCPBlock,
+    selectedShadowMCPURLs,
+    originalShadowMCPURLs,
+  );
 
   const dirty =
     !!orig &&
@@ -3619,7 +3623,14 @@ function StandardPolicyEditor({
       shadowMCPSelectionDirty);
 
   const updateMutation = useRiskPoliciesUpdateMutation({
-    onSuccess: () => {
+    onSuccess: (_policy, variables) => {
+      const submittedURLs = shadowMCPSelectionBaselineForUpdate(
+        variables.request.updateRiskPolicyRequestBody,
+      );
+      if (submittedURLs !== undefined) {
+        setSelectedShadowMCPURLs(new Set(submittedURLs));
+        setOriginalShadowMCPURLs(new Set(submittedURLs));
+      }
       void invalidateAllRiskPoliciesGet(queryClient);
       void invalidateAllRiskListPolicies(queryClient);
       void invalidateAllShadowMCPInventory(queryClient);
