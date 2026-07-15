@@ -294,9 +294,10 @@ var EnvironmentEntryInput = Type("EnvironmentEntryInput", func() {
 	Description("A single environment entry")
 
 	Attribute("name", String, "The name of the environment variable")
-	Attribute("value", String, "The value of the environment variable")
+	Attribute("value", String, "The value of the environment variable. Omit on an existing secret entry to preserve its stored value. Required when creating an entry or when changing is_secret from true to false.")
+	Attribute("is_secret", Boolean, "Whether the value is a secret. Secret values are encrypted at rest and redacted in reads; non-secret values are readable after save. When omitted, new entries default to secret and existing entries keep their current secrecy.")
 
-	Required("name", "value")
+	Required("name")
 })
 
 var CreateEnvironmentForm = Type("CreateEnvironmentForm", func() {

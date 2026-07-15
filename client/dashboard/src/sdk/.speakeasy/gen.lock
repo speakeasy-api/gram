@@ -2304,7 +2304,7 @@ examples:
         application/json: {"new_name": "<value>"}
       responses:
         "200":
-          application/json: {"created_at": "2025-10-20T20:04:05.659Z", "entries": [{"created_at": "2025-01-06T15:50:05.639Z", "name": "<value>", "updated_at": "2026-06-15T19:26:29.483Z", "value": "<value>"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2026-12-23T01:37:04.789Z"}
+          application/json: {"created_at": "2025-10-20T20:04:05.659Z", "entries": [{"created_at": "2025-01-06T15:50:05.639Z", "is_secret": false, "name": "<value>", "updated_at": "2026-06-15T19:26:29.483Z", "value": "<value>"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2026-12-23T01:37:04.789Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -4078,7 +4078,7 @@ examples:
           toolset_id: "7003cb87-ab79-4484-b08e-a7afac2dc2b5"
       responses:
         "200":
-          application/json: {"created_at": "2024-10-11T00:52:32.537Z", "entries": [{"created_at": "2025-10-05T02:06:46.478Z", "name": "<value>", "updated_at": "2026-02-11T02:25:29.751Z", "value": "<value>"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2024-03-14T08:23:10.020Z"}
+          application/json: {"created_at": "2024-10-11T00:52:32.537Z", "entries": [{"created_at": "2025-10-05T02:06:46.478Z", "is_secret": true, "name": "<value>", "updated_at": "2026-02-11T02:25:29.751Z", "value": "<value>"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2024-03-14T08:23:10.020Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

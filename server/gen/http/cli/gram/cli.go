@@ -8723,7 +8723,7 @@ func environmentsCreateEnvironmentUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "environments create-environment --body '{\n      \"description\": \"abc123\",\n      \"entries\": [\n         {\n            \"name\": \"abc123\",\n            \"value\": \"abc123\"\n         }\n      ],\n      \"name\": \"abc123\",\n      \"organization_id\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "environments create-environment --body '{\n      \"description\": \"abc123\",\n      \"entries\": [\n         {\n            \"is_secret\": false,\n            \"name\": \"abc123\",\n            \"value\": \"abc123\"\n         }\n      ],\n      \"name\": \"abc123\",\n      \"organization_id\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func environmentsListEnvironmentsUsage() {
@@ -8767,7 +8767,7 @@ func environmentsUpdateEnvironmentUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "environments update-environment --body '{\n      \"description\": \"abc123\",\n      \"entries_to_remove\": [\n         \"abc123\"\n      ],\n      \"entries_to_update\": [\n         {\n            \"name\": \"abc123\",\n            \"value\": \"abc123\"\n         }\n      ],\n      \"name\": \"abc123\"\n   }' --slug \"aaa\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "environments update-environment --body '{\n      \"description\": \"abc123\",\n      \"entries_to_remove\": [\n         \"abc123\"\n      ],\n      \"entries_to_update\": [\n         {\n            \"is_secret\": false,\n            \"name\": \"abc123\",\n            \"value\": \"abc123\"\n         }\n      ],\n      \"name\": \"abc123\"\n   }' --slug \"aaa\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func environmentsCloneEnvironmentUsage() {
