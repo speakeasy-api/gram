@@ -101,10 +101,15 @@ export function hasScopeInGrants(
   scope: Scope,
   resourceId?: string,
 ): boolean {
-  const check: Record<string, string> = {
+  const allowCheck: Record<string, string> = {
     resourceKind: resourceKindForScope(scope),
   };
-  if (resourceId) check.resourceId = resourceId;
+  if (resourceId) allowCheck.resourceId = resourceId;
+  // Unscoped allows are existential, but strict exclusions must distinguish
+  // unrestricted wildcards from exclusions for one concrete resource.
+  const exclusionCheck = resourceId
+    ? allowCheck
+    : { ...allowCheck, resourceId: "*" };
 
   const exclusionScopes = exclusionScopesForScope(scope);
   let hasAllow = false;
@@ -119,7 +124,7 @@ export function hasScopeInGrants(
       exclusionScopes.includes(grant.scope);
     if (
       (isLegacyDeny || isExclusion) &&
-      grantSelectorsMatch(grant, check, true)
+      grantSelectorsMatch(grant, exclusionCheck, true)
     ) {
       return false;
     }
@@ -129,7 +134,7 @@ export function hasScopeInGrants(
     if (
       effect === "allow" &&
       scopeMatches &&
-      grantSelectorsMatch(grant, check, false)
+      grantSelectorsMatch(grant, allowCheck, false)
     ) {
       hasAllow = true;
     }

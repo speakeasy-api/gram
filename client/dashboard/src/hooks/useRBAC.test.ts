@@ -195,7 +195,7 @@ describe("selectorMatchesStrict", () => {
 });
 
 describe("exclusionScopesForScope", () => {
-  it("matches project and MCP exclusion expansions", () => {
+  it("matches project, MCP, and Skills exclusion expansions", () => {
     expect(exclusionScopesForScope("project:read")).toEqual([
       "project:blocked_read",
     ]);
@@ -215,6 +215,13 @@ describe("exclusionScopesForScope", () => {
     expect(exclusionScopesForScope("mcp:connect")).toEqual([
       "mcp:blocked_connect",
     ]);
+    expect(exclusionScopesForScope("skill:read")).toEqual([
+      "skill:blocked_read",
+    ]);
+    expect(exclusionScopesForScope("skill:write")).toEqual([
+      "skill:blocked_write",
+      "skill:blocked_read",
+    ]);
   });
 });
 
@@ -224,6 +231,41 @@ describe("hasScopeInGrants", () => {
     selectors: [{ resourceKind: "skill", resourceId: "*" }],
     subScopes: ["skill:read"],
   };
+
+  it("applies an unrestricted exclusion to an unscoped check", () => {
+    const grants = [
+      skillWildcard,
+      {
+        scope: "skill:blocked_read",
+        selectors: [{ resourceKind: "skill", resourceId: "*" }],
+      },
+    ];
+
+    expect(hasScopeInGrants(grants, "skill:read")).toBe(false);
+  });
+
+  it("allows a specific resource grant to satisfy an unscoped check", () => {
+    const grants = [
+      {
+        scope: "skill:read",
+        selectors: [{ resourceKind: "skill", resourceId: "project_a" }],
+      },
+    ];
+
+    expect(hasScopeInGrants(grants, "skill:read")).toBe(true);
+  });
+
+  it("does not let a specific exclusion erase unscoped access", () => {
+    const grants = [
+      skillWildcard,
+      {
+        scope: "skill:blocked_read",
+        selectors: [{ resourceKind: "skill", resourceId: "project_a" }],
+      },
+    ];
+
+    expect(hasScopeInGrants(grants, "skill:read")).toBe(true);
+  });
 
   it("subtracts a project-specific skill write exclusion", () => {
     const grants = [
