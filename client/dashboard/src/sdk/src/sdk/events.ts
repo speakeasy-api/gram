@@ -5,7 +5,10 @@
 import { spendRulesEventsList } from "../funcs/spendRulesEventsList.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import {
+  ListSpendRuleEventsRequest,
+  ListSpendRuleEventsSecurity,
+} from "../models/operations/listspendruleevents.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Events extends ClientSDK {
@@ -16,8 +19,8 @@ export class Events extends ClientSDK {
    * List warning and breach events emitted by spend rule evaluation, most recent first.
    */
   async list(
-    request?: operations.ListSpendRuleEventsRequest | undefined,
-    security?: operations.ListSpendRuleEventsSecurity | undefined,
+    request?: ListSpendRuleEventsRequest | undefined,
+    security?: ListSpendRuleEventsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.ListSpendRuleEventsResult> {
     return unwrapAsync(spendRulesEventsList(

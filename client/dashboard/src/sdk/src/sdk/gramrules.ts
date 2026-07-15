@@ -10,7 +10,30 @@ import { spendRulesRulesPreview } from "../funcs/spendRulesRulesPreview.js";
 import { spendRulesRulesUpdate } from "../funcs/spendRulesRulesUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import {
+  CreateSpendRuleRequest,
+  CreateSpendRuleSecurity,
+} from "../models/operations/createspendrule.js";
+import {
+  DeleteSpendRuleRequest,
+  DeleteSpendRuleSecurity,
+} from "../models/operations/deletespendrule.js";
+import {
+  GetSpendRuleRequest,
+  GetSpendRuleSecurity,
+} from "../models/operations/getspendrule.js";
+import {
+  ListSpendRulesRequest,
+  ListSpendRulesSecurity,
+} from "../models/operations/listspendrules.js";
+import {
+  PreviewSpendRuleRequest,
+  PreviewSpendRuleSecurity,
+} from "../models/operations/previewspendrule.js";
+import {
+  UpdateSpendRuleRequest,
+  UpdateSpendRuleSecurity,
+} from "../models/operations/updatespendrule.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class GramRules extends ClientSDK {
@@ -21,8 +44,8 @@ export class GramRules extends ClientSDK {
    * Create a new spend control rule for the current organization.
    */
   async create(
-    request: operations.CreateSpendRuleRequest,
-    security?: operations.CreateSpendRuleSecurity | undefined,
+    request: CreateSpendRuleRequest,
+    security?: CreateSpendRuleSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.SpendRule> {
     return unwrapAsync(spendRulesRulesCreate(
@@ -40,8 +63,8 @@ export class GramRules extends ClientSDK {
    * Delete a spend control rule. Any open circuits for the rule close on the next evaluation cycle.
    */
   async delete(
-    request: operations.DeleteSpendRuleRequest,
-    security?: operations.DeleteSpendRuleSecurity | undefined,
+    request: DeleteSpendRuleRequest,
+    security?: DeleteSpendRuleSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(spendRulesRulesDelete(
@@ -59,8 +82,8 @@ export class GramRules extends ClientSDK {
    * Get a spend control rule by ID.
    */
   async get(
-    request: operations.GetSpendRuleRequest,
-    security?: operations.GetSpendRuleSecurity | undefined,
+    request: GetSpendRuleRequest,
+    security?: GetSpendRuleSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.SpendRule> {
     return unwrapAsync(spendRulesRulesGet(
@@ -78,8 +101,8 @@ export class GramRules extends ClientSDK {
    * List all spend control rules for the current organization.
    */
   async list(
-    request?: operations.ListSpendRulesRequest | undefined,
-    security?: operations.ListSpendRulesSecurity | undefined,
+    request?: ListSpendRulesRequest | undefined,
+    security?: ListSpendRulesSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.ListSpendRulesResult> {
     return unwrapAsync(spendRulesRulesList(
@@ -97,8 +120,8 @@ export class GramRules extends ClientSDK {
    * Preview which actors a target expression matches and their current spend against a proposed budget. Powers the live preview in the rule editor and the per-actor breakdown in the rule detail view.
    */
   async preview(
-    request: operations.PreviewSpendRuleRequest,
-    security?: operations.PreviewSpendRuleSecurity | undefined,
+    request: PreviewSpendRuleRequest,
+    security?: PreviewSpendRuleSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.PreviewSpendRuleResult> {
     return unwrapAsync(spendRulesRulesPreview(
@@ -116,8 +139,8 @@ export class GramRules extends ClientSDK {
    * Update a spend control rule. Material changes (target, limit_usd, window_kind, warn_at_pct, action) bump the rule version.
    */
   async update(
-    request: operations.UpdateSpendRuleRequest,
-    security?: operations.UpdateSpendRuleSecurity | undefined,
+    request: UpdateSpendRuleRequest,
+    security?: UpdateSpendRuleSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.SpendRule> {
     return unwrapAsync(spendRulesRulesUpdate(

@@ -5,7 +5,10 @@
 import { spendRulesOverviewGet } from "../funcs/spendRulesOverviewGet.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import {
+  GetSpendRulesOverviewRequest,
+  GetSpendRulesOverviewSecurity,
+} from "../models/operations/getspendrulesoverview.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class GramOverview extends ClientSDK {
@@ -16,8 +19,8 @@ export class GramOverview extends ClientSDK {
    * Get spend control overview metrics: aggregate card numbers plus current-window usage per rule.
    */
   async get(
-    request?: operations.GetSpendRulesOverviewRequest | undefined,
-    security?: operations.GetSpendRulesOverviewSecurity | undefined,
+    request?: GetSpendRulesOverviewRequest | undefined,
+    security?: GetSpendRulesOverviewSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.SpendRulesOverviewResult> {
     return unwrapAsync(spendRulesOverviewGet(
