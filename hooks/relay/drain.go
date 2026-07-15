@@ -184,11 +184,11 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 	return s
 }
 
-// decodeSpoolEntry unmarshals an entry, restoring Envelope.Raw to the stored
-// bytes verbatim: the generated envelope decoder produces float64 maps for
-// Raw, which silently mutates integers above 2^53 (nanosecond timestamps,
-// snowflake ids) on re-marshal, while json.RawMessage — the same type
-// buildEnvelope put there — round-trips exactly.
+// decodeSpoolEntry unmarshals an entry, restoring every any-typed envelope
+// field (Raw, and the tool call's input/output/error) to the stored bytes
+// verbatim: the generated decoder produces float64 maps for those fields,
+// which silently mutates integers above 2^53 (nanosecond timestamps,
+// snowflake ids) on re-marshal, while json.RawMessage round-trips exactly.
 func decodeSpoolEntry(b []byte) (spoolEntry, error) {
 	var entry spoolEntry
 	if err := json.Unmarshal(b, &entry); err != nil {
@@ -196,13 +196,40 @@ func decodeSpoolEntry(b []byte) (spoolEntry, error) {
 	}
 	var probe struct {
 		Envelope struct {
-			Raw json.RawMessage `json:"raw"`
+			Raw  json.RawMessage `json:"raw"`
+			Data struct {
+				ToolCall struct {
+					Input  json.RawMessage `json:"input"`
+					Output json.RawMessage `json:"output"`
+					Error  json.RawMessage `json:"error"`
+				} `json:"tool_call"`
+			} `json:"data"`
 		} `json:"envelope"`
 	}
-	if err := json.Unmarshal(b, &probe); err == nil && len(probe.Envelope.Raw) > 0 && string(probe.Envelope.Raw) != "null" {
+	if err := json.Unmarshal(b, &probe); err != nil {
+		return entry, nil
+	}
+	if rawPresent(probe.Envelope.Raw) {
 		entry.Envelope.Raw = probe.Envelope.Raw
 	}
+	if entry.Envelope.Data != nil && entry.Envelope.Data.ToolCall != nil {
+		tc := probe.Envelope.Data.ToolCall
+		if rawPresent(tc.Input) {
+			entry.Envelope.Data.ToolCall.Input = tc.Input
+		}
+		if rawPresent(tc.Output) {
+			entry.Envelope.Data.ToolCall.Output = tc.Output
+		}
+		if rawPresent(tc.Error) {
+			entry.Envelope.Data.ToolCall.Error = tc.Error
+		}
+	}
 	return entry, nil
+}
+
+// rawPresent reports whether a probed field carried a value worth restoring.
+func rawPresent(m json.RawMessage) bool {
+	return len(m) > 0 && string(m) != "null"
 }
 
 type drainAuth struct {

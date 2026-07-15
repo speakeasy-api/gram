@@ -359,3 +359,31 @@ func TestDrainPinsEntryProject(t *testing.T) {
 	require.Equal(t, "default", fs.headers[0].Get("Gram-Project"),
 		"the replay must route to the entry's recorded project, not the drain environment's")
 }
+
+// TestDecodeSpoolEntryPreservesLargeIntegers pins byte-level fidelity for
+// every any-typed envelope field: raw and the tool call's input/output/error
+// must survive the spool round-trip without float64 rounding of >2^53
+// integers.
+func TestDecodeSpoolEntryPreservesLargeIntegers(t *testing.T) {
+	const bigID = "9007199254740993" // 2^53 + 1: rounds to ...992 through float64
+	entryJSON := `{
+		"v": 1,
+		"idempotency_key": "k",
+		"server_url": "https://gram.test",
+		"envelope": {
+			"schema_version": "` + schemaVersion + `",
+			"source": {"adapter": "claude"},
+			"event": {"type": "tool.completed"},
+			"data": {"tool_call": {"name": "t", "input": {"id": ` + bigID + `}, "output": {"ts": ` + bigID + `}, "error": {"code": ` + bigID + `}}},
+			"raw": {"snowflake": ` + bigID + `}
+		}
+	}`
+
+	entry, err := decodeSpoolEntry([]byte(entryJSON))
+	require.NoError(t, err)
+
+	remarshaled, err := json.Marshal(entry.Envelope)
+	require.NoError(t, err)
+	require.Equal(t, 4, bytes.Count(remarshaled, []byte(bigID)),
+		"raw, input, output, and error must all round-trip the integer exactly; a float64 detour rounds it")
+}

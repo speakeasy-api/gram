@@ -120,18 +120,36 @@ func (r *Relay) spoolUnsent(idemKey string, payload components.IngestRequestBody
 	if dropped := trimSpool(dir, len(data), time.Now(), spoolEntryCap, spoolBytesCap); dropped > 0 {
 		r.debugf("spool: cap reached; dropped %d oldest entries", dropped)
 	}
-	name := spoolFileName(time.Now())
-	tmp := filepath.Join(dir, name+".tmp")
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		r.debugf("spool: write failed: %v", err)
-		return
+	// Two attempts: the one self-inflicted failure mode is the stale-.tmp
+	// sweep racing a writer that a suspend paused for over an hour between
+	// write and rename. The data is still in hand, so a failed commit just
+	// retries under a fresh (current-time) name.
+	var commitErr error
+	for range 2 {
+		if commitErr = commitSpoolEntry(dir, data); commitErr == nil {
+			break
+		}
 	}
-	if err := os.Rename(tmp, filepath.Join(dir, name)); err != nil {
-		_ = os.Remove(tmp)
-		r.debugf("spool: commit failed: %v", err)
+	if commitErr != nil {
+		r.debugf("spool: commit failed: %v", commitErr)
 		return
 	}
 	r.debugf("spool: stored event=%s bytes=%d", payload.Event.Type, len(data))
+}
+
+// commitSpoolEntry writes one entry under a fresh chronological name via the
+// same-directory temp+rename idiom.
+func commitSpoolEntry(dir string, data []byte) error {
+	name := spoolFileName(time.Now())
+	tmp := filepath.Join(dir, name+".tmp")
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, filepath.Join(dir, name)); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
 }
 
 // spoolDirPath resolves the spool directory without creating it, or "" when
@@ -217,7 +235,9 @@ func trimSpool(dir string, incomingBytes int, now time.Time, entryCap, bytesCap 
 		}
 		// A writer killed between write and rename leaves a .tmp orphan that
 		// no cap or expiry would ever see; sweep ones old enough that no
-		// live writer can still own them.
+		// running writer plausibly owns them. A writer that a suspend parked
+		// inside that window loses only its rename — spoolUnsent retries the
+		// commit under a fresh name, so the event survives the sweep.
 		if before, ok := strings.CutSuffix(de.Name(), ".tmp"); ok {
 			if nanos, ok := spoolNanos(before); ok && nanos < now.Add(-time.Hour).UnixNano() {
 				_ = os.Remove(filepath.Join(dir, de.Name()))
