@@ -10,11 +10,27 @@ import (
 	"go.temporal.io/sdk/activity"
 
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/risk/policyflags"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 )
+
+// setEventMatch stamps each llm_judge finding with the full event the judge saw
+// (rendered from the source message) as its Match. Judge findings carry no
+// literal offending substring, so the "match" surfaced in the Risk Events UI is
+// the entire flagged event.
+func setEventMatch(findings []scanners.Finding, msg batchMessage) {
+	if len(findings) == 0 {
+		return
+	}
+	ev := judgemessage.Render(batchJudgeMessage(msg))
+	for j := range findings {
+		findings[j].Match = ev
+		findings[j].EndPos = len(ev)
+	}
+}
 
 // judgeConcurrency bounds the number of in-flight judge calls per batch.
 const judgeConcurrency = 8
@@ -83,8 +99,11 @@ func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchAr
 	}
 
 	if a.judge == nil || !policy.Prompt.Valid || strings.TrimSpace(policy.Prompt.String) == "" {
-		findings := promptpolicy.FindingsFromEvaluation(cfg, nil, nil, true)
+		// Fresh slice per index (not one shared slice) so setEventMatch below
+		// stamps each finding with its own message rather than aliasing.
 		for _, idx := range indices {
+			findings := promptpolicy.FindingsFromEvaluation(cfg, nil, nil, true)
+			setEventMatch(findings, messages[idx])
 			out[idx] = findings
 		}
 		return out
@@ -95,7 +114,9 @@ func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchAr
 		args.OrganizationID, args.ProjectID.String(), policy.Prompt.String, cfg,
 		messages, indices,
 		func(_, idx int, verdict *promptpolicy.Verdict, err error, _ time.Duration) {
-			out[idx] = promptpolicy.FindingsFromEvaluation(cfg, verdict, err, false)
+			findings := promptpolicy.FindingsFromEvaluation(cfg, verdict, err, false)
+			setEventMatch(findings, messages[idx])
+			out[idx] = findings
 		},
 		func(end int) { activity.RecordHeartbeat(ctx, promptpolicy.Source, end) },
 	)

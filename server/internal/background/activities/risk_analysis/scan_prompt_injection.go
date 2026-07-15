@@ -28,5 +28,18 @@ func (a *AnalyzeBatch) scanPromptInjection(ctx context.Context, args AnalyzeBatc
 	if results == nil {
 		return out
 	}
+	// Surface the full flagged event (body + tool calls) as the Match, replacing
+	// the content-only text so tool-request findings — whose content is empty —
+	// still show what was flagged in the Risk Events UI.
+	for i := range results {
+		if len(results[i]) == 0 {
+			continue
+		}
+		ev := judgemessage.Render(judgeMessages[i])
+		for j := range results[i] {
+			results[i][j].Match = ev
+			results[i][j].EndPos = len(ev)
+		}
+	}
 	return results
 }
