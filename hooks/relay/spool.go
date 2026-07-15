@@ -120,10 +120,11 @@ func (r *Relay) spoolUnsent(idemKey string, payload components.IngestRequestBody
 	r.debugf("spool: stored event=%s bytes=%d", payload.Event.Type, len(data))
 }
 
-// spoolDir resolves (and creates) the spool directory, or "" when state
-// cannot be kept — the entry is then dropped, matching the pre-spool
-// behavior. Mirrors codexToolStatePath's XDG_STATE_HOME resolution.
-func spoolDir() string {
+// spoolDirPath resolves the spool directory without creating it, or "" when
+// no state home exists. Mirrors codexToolStatePath's XDG_STATE_HOME
+// resolution. Readers (drain, the spawn check) use this so an install that
+// never spooled doesn't grow an empty directory.
+func spoolDirPath() string {
 	stateHome := strings.TrimSpace(os.Getenv("XDG_STATE_HOME"))
 	if stateHome == "" {
 		home, err := os.UserHomeDir()
@@ -132,7 +133,16 @@ func spoolDir() string {
 		}
 		stateHome = filepath.Join(home, ".local", "state")
 	}
-	dir := filepath.Join(stateHome, "gram", "hooks", "spool")
+	return filepath.Join(stateHome, "gram", "hooks", "spool")
+}
+
+// spoolDir resolves and creates the spool directory, or "" when state cannot
+// be kept — the entry is then dropped, matching the pre-spool behavior.
+func spoolDir() string {
+	dir := spoolDirPath()
+	if dir == "" {
+		return ""
+	}
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return ""
 	}

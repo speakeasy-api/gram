@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"sort"
 	"testing"
 	"time"
 
@@ -17,21 +16,16 @@ import (
 	"github.com/speakeasy-api/gram/hooks/sdk/models/components"
 )
 
-// spoolFiles returns the entry filenames under the test's spool dir, sorted.
+// spoolFiles returns the conforming entry filenames under the test's spool
+// dir, sorted — the same filter the drain applies, so lock/marker siblings
+// don't count as entries.
 func spoolFiles(t *testing.T) []string {
 	t.Helper()
 	dir := filepath.Join(os.Getenv("XDG_STATE_HOME"), "gram", "hooks", "spool")
-	des, err := os.ReadDir(dir)
-	if os.IsNotExist(err) {
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
 		return nil
 	}
-	require.NoError(t, err)
-	var names []string
-	for _, de := range des {
-		names = append(names, de.Name())
-	}
-	sort.Strings(names)
-	return names
+	return listSpoolEntries(dir)
 }
 
 func readSpoolEntry(t *testing.T, name string) spoolEntry {

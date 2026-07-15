@@ -207,19 +207,16 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 			}
 			res = r.client.send(ctx, orgCreds, payload, idemKey)
 			r.debugf("event=%s auth-retry=org status=%d denied=%t", agenthooks.EventOf(typed).NativeName, res.statusCode, res.decision.denied())
-			if unsent(res) {
-				r.spoolUnsent(idemKey, payload)
-			}
+			r.finishExchange(idemKey, payload, res)
 			return res, stateReady
 		}
 		return res, stateReauthNeeded
 	}
-	// The exchange is final; if the control plane was unreachable or failing,
-	// keep the payload for replay. Auth rejections and other 4xx don't spool
-	// — the server answered, and would reject the replay identically.
-	if unsent(res) {
-		r.spoolUnsent(idemKey, payload)
-	}
+	// The exchange is final: an unsent payload (unreachable/5xx/429/408) is
+	// kept for replay, a healthy exchange flushes any backlog, and a
+	// definitive 4xx does neither — the server answered, and would reject a
+	// replay identically.
+	r.finishExchange(idemKey, payload, res)
 	return res, stateReady
 }
 
