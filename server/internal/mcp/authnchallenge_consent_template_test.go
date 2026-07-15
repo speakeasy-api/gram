@@ -75,4 +75,5 @@ func TestConsentScriptClosesOnlyMarkedPages(t *testing.T) {
 	script := string(consentScriptData)
 	require.Contains(t, script, `document.body.hasAttribute("data-auto-close")`)
 	require.Contains(t, script, "window.close();")
+	require.Contains(t, script, "}, 3000);")
 }

@@ -17,7 +17,7 @@
   if (document.body.hasAttribute("data-auto-close")) {
     window.setTimeout(function () {
       window.close();
-    }, 1500);
+    }, 3000);
   }
 
   // Replace an element's contents with a spinner + label.
