@@ -19,6 +19,15 @@ func NewSlackClient(guardianPolicy *guardian.Policy) *SlackClient {
 	}
 }
 
+// NewSlackClientWithBaseURL builds a client against a custom Slack API root
+// with a caller-supplied HTTP client. Used by tests to point the client at a
+// fake Slack server.
+func NewSlackClientWithBaseURL(baseURL string, httpClient *guardian.HTTPClient) *SlackClient {
+	return &SlackClient{
+		api: slackapi.NewClient(baseURL, httpClient),
+	}
+}
+
 type SlackSetThreadStatusInput struct {
 	ChannelID       string
 	ThreadTS        string
