@@ -17,27 +17,15 @@ else
     READINESS_TIMEOUT=30
 fi
 
-# Resolve a `timeout` binary if available (coreutils `timeout`, or `gtimeout`
-# from Homebrew coreutils on macOS). Used to bound each probe so a hung
-# `docker compose exec` or Docker Engine call cannot block past the deadline.
-TIMEOUT_BIN=""
-if command -v timeout > /dev/null 2>&1; then
-    TIMEOUT_BIN="timeout"
-elif command -v gtimeout > /dev/null 2>&1; then
-    TIMEOUT_BIN="gtimeout"
-fi
-
 # run_bounded <seconds> <command...>
-# Runs the command, killing it after <seconds> when a timeout binary is
-# available; otherwise runs it unbounded (best effort on systems without one).
+# Runs the command via `gum spin` (gum is provided by mise), which aborts it
+# after <seconds> and propagates its exit code (124 on timeout). This bounds
+# each probe so a hung `docker compose exec` or Docker Engine call cannot block
+# past the deadline.
 run_bounded() {
     local secs="$1"
     shift
-    if [[ -n "$TIMEOUT_BIN" ]]; then
-        "$TIMEOUT_BIN" "$secs" "$@"
-    else
-        "$@"
-    fi
+    gum spin --timeout "${secs}s" --show-output -- "$@"
 }
 
 # wait_for <display-name> <compose-service> <check command...>
