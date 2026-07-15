@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -81,7 +82,9 @@ func TestDrainReplaysOldestFirstWithStoredKeys(t *testing.T) {
 	require.Equal(t, keyOld, fs.headers[0].Get("Idempotency-Key"), "replay must reuse the original send's key")
 	require.Equal(t, keyNew, fs.headers[1].Get("Idempotency-Key"))
 	for _, h := range fs.headers {
-		require.Equal(t, "1", h.Get("X-Gram-Replayed"), "replayed traffic must be distinguishable from live traffic")
+		marker, err := strconv.ParseBool(h.Get("X-Gram-Replayed"))
+		require.NoError(t, err)
+		require.True(t, marker, "replayed traffic must be distinguishable from live traffic")
 	}
 }
 

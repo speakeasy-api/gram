@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -382,21 +381,15 @@ func (r *Relay) finishExchange(idemKey string, payload components.IngestRequestB
 }
 
 // newReplayClient is newClient plus the replay marker: every request carries
-// X-Gram-Replayed: 1 so the server can distinguish downtime backlog from
-// live traffic and tag it for observability (DNO-499). The marker rides a
-// transport wrapper because the generated SDK has no per-request header
-// hook.
+// X-Gram-Replayed so the server applies the long idempotency window and can
+// distinguish downtime backlog from live traffic (DNO-499). Uses the SDK's
+// typed header field, regenerated from the same Goa design the server
+// decodes with — the one definition both sides share. The flag marks only
+// client.send's ingest operation; a future second operation on this client
+// would need its own marker (the deleted transport wrapper stamped every
+// request structurally, this does not).
 func newReplayClient(serverURL string) *client {
-	return clientWith(serverURL, &http.Client{
-		Timeout:   perAttemptTime,
-		Transport: replayMarkerTransport{base: http.DefaultTransport},
-	})
-}
-
-type replayMarkerTransport struct{ base http.RoundTripper }
-
-func (t replayMarkerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	req = req.Clone(req.Context())
-	req.Header.Set("X-Gram-Replayed", "1")
-	return t.base.RoundTrip(req)
+	cl := newClient(serverURL)
+	cl.replayed = true
+	return cl
 }

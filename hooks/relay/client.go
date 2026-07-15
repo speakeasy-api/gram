@@ -78,21 +78,18 @@ type client struct {
 	sdk *sdk.SpeakeasyHooks
 	// budget caps one send end to end; a field so tests can shrink it.
 	budget time.Duration
+	// replayed stamps X-Gram-Replayed on every request via the typed SDK
+	// field, marking a drain redelivery so the server applies the long
+	// idempotency window and tags telemetry. Set by newReplayClient.
+	replayed bool
 }
 
 func newClient(serverURL string) *client {
-	return clientWith(serverURL, &http.Client{Timeout: perAttemptTime})
-}
-
-// clientWith builds the ingest client around a caller-supplied HTTP client,
-// so the drain can layer its replay-marker transport under the same retry
-// posture live sends get.
-func clientWith(serverURL string, hc *http.Client) *client {
 	return &client{
 		budget: sendBudget,
 		sdk: sdk.New(
 			sdk.WithServerURL(strings.TrimRight(serverURL, "/")),
-			sdk.WithClient(hc),
+			sdk.WithClient(&http.Client{Timeout: perAttemptTime}),
 			// Retries cover connection errors and 429/5xx; the SDK rewinds the
 			// request body per attempt, so the Idempotency-Key header minted in
 			// send is reused across redeliveries. The elapsed cap keeps the
@@ -130,7 +127,11 @@ func (cl *client) send(ctx context.Context, c creds, body components.IngestReque
 		GramKey:        new(c.APIKey),
 		GramProject:    nil,
 		IdempotencyKey: new(idemKey),
+		XGramReplayed:  nil,
 		Body:           body,
+	}
+	if cl.replayed {
+		req.XGramReplayed = new(true)
 	}
 	if c.Project != "" {
 		req.GramProject = new(c.Project)
