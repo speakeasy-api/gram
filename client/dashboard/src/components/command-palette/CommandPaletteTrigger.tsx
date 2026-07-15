@@ -1,3 +1,4 @@
+import { Kbd } from "@/components/ui/kbd";
 import {
   Tooltip,
   TooltipContent,
@@ -36,7 +37,7 @@ export function CommandPaletteTrigger({
           onClick={open}
           aria-label="Search (Command palette)"
           className={cn(
-            "text-muted-foreground hover:text-foreground hover:bg-muted flex size-7 shrink-0 items-center justify-center rounded-md transition-colors",
+            "text-muted-foreground hover:text-foreground hover:bg-muted flex size-7 shrink-0 items-center justify-center transition-colors",
             className,
           )}
         >
@@ -45,9 +46,9 @@ export function CommandPaletteTrigger({
       </TooltipTrigger>
       <TooltipContent className="flex items-center gap-1.5">
         <span>Search</span>
-        <kbd className="border-neutral-softest bg-muted text-muted-foreground pointer-events-none inline-flex h-5 items-center gap-0.5 rounded border px-1.5 font-mono text-[10px] font-medium select-none">
+        <Kbd className="pointer-events-none gap-0.5 px-1.5 select-none">
           {isMac ? <span className="text-xs">⌘</span> : "Ctrl"}K
-        </kbd>
+        </Kbd>
       </TooltipContent>
     </Tooltip>
   );

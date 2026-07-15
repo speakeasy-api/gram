@@ -1,68 +1,40 @@
-import { DotCard } from "@/components/ui/dot-card";
+import { CardContextMenu } from "@/components/card-context-menu";
+import { Card } from "@/components/ui/card";
+import { Action, MoreActions } from "@/components/ui/more-actions";
 import { Type } from "@/components/ui/type";
 import { HumanizeDateTime } from "@/lib/dates";
 import { useRoutes } from "@/routes";
-import { useSdkClient } from "@/contexts/Sdk";
-import type { Plugin } from "@gram/client/models/components/plugin.js";
-import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
-import {
-  Badge,
-  Button,
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-  Icon,
-} from "@speakeasy-api/moonshine";
+import { Plugin } from "@gram/client/models/components/plugin.js";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { ArrowRight, Puzzle, Server } from "lucide-react";
-import { useState } from "react";
 import { Link, useNavigate } from "react-router";
-import { toast } from "sonner";
-import { DEFAULT_PLUGIN_DESCRIPTION } from "./default-plugin";
-import { downloadPluginPackage } from "./downloadPluginPackage";
-import { InstallInstructionsDialog } from "./InstallInstructionsDialog";
 
 export function PluginCard({
   plugin,
-  publishStatus,
+  onDelete,
 }: {
   plugin: Plugin;
-  publishStatus: PublishStatusResult | undefined;
+  onDelete: (plugin: Plugin) => void;
 }): JSX.Element {
   const routes = useRoutes();
   const navigate = useNavigate();
-  const client = useSdkClient();
   const detailHref = routes.plugins.detail.href(plugin.id);
   const serverCount = plugin.serverCount ?? 0;
-  const isDefault = plugin.isDefault ?? false;
-  const description =
-    plugin.description ?? (isDefault ? DEFAULT_PLUGIN_DESCRIPTION : undefined);
-  const [isInstallOpen, setIsInstallOpen] = useState(false);
-  const [isDownloadMenuOpen, setIsDownloadMenuOpen] = useState(false);
-  const installTarget =
-    publishStatus?.connected &&
-    publishStatus.repoOwner &&
-    publishStatus.repoName
-      ? {
-          repoOwner: publishStatus.repoOwner,
-          repoName: publishStatus.repoName,
-          marketplaceUrl: publishStatus.marketplaceUrl,
-        }
-      : undefined;
 
-  const handleDownload = async (platform: "claude" | "cursor" | "codex") => {
-    setIsDownloadMenuOpen(false);
-    try {
-      await downloadPluginPackage(client, plugin.id, platform);
-    } catch (_err) {
-      toast.error("Failed to download plugin package");
-    }
-  };
+  const actions: Action[] = [
+    {
+      label: "Delete",
+      icon: "trash-2",
+      destructive: true,
+      onClick: () => onDelete(plugin),
+    },
+  ];
 
   return (
-    <div>
-      <DotCard
+    <CardContextMenu actions={actions}>
+      <Card
         className="cursor-pointer"
         onClick={() => {
           void navigate(detailHref);
@@ -71,26 +43,14 @@ export function PluginCard({
       >
         <div className="mb-2 flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5">
-              <Type
-                variant="subheading"
-                as="div"
-                className="text-md group-hover:text-primary truncate transition-colors"
-                title={plugin.name}
-              >
-                {plugin.name}
-              </Type>
-              {isDefault && (
-                <Badge variant="information">
-                  <Badge.Text>Default</Badge.Text>
-                </Badge>
-              )}
-              {publishStatus?.upToDate === false && (
-                <Badge variant="warning">
-                  <Badge.Text>Needs syncing</Badge.Text>
-                </Badge>
-              )}
-            </div>
+            <Type
+              variant="subheading"
+              as="div"
+              className="text-md group-hover:text-primary truncate transition-colors"
+              title={plugin.name}
+            >
+              {plugin.name}
+            </Type>
             <Type
               small
               muted
@@ -100,124 +60,49 @@ export function PluginCard({
               {plugin.slug}
             </Type>
           </div>
-          <Badge variant="neutral" className="shrink-0">
-            <Badge.LeftIcon>
-              <Server className="h-3 w-3" />
-            </Badge.LeftIcon>
-            <Badge.Text>
-              {serverCount} {serverCount === 1 ? "server" : "servers"}
-            </Badge.Text>
-          </Badge>
-        </div>
-
-        {description && (
-          <Type small muted className="mb-1 line-clamp-3">
-            {description}
-          </Type>
-        )}
-        <Type small className="text-muted-foreground/60 mt-2 mb-3">
-          {publishStatus?.lastPublishedAt ? (
-            <>
-              Published{" "}
-              <HumanizeDateTime date={publishStatus.lastPublishedAt} />
-            </>
-          ) : (
-            <>
-              Updated <HumanizeDateTime date={plugin.updatedAt} />
-            </>
-          )}
-        </Type>
-
-        <div className="mt-auto flex items-center justify-end gap-2 pt-2">
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1">
+            <Badge variant="neutral" background={false}>
+              <Badge.LeftIcon>
+                <Server className="h-3 w-3" />
+              </Badge.LeftIcon>
+              <Badge.Text>
+                {`${serverCount} ${serverCount === 1 ? "server" : "servers"}`}
+              </Badge.Text>
+            </Badge>
             <div onClick={(e) => e.stopPropagation()}>
-              <DropdownMenu
-                open={isDownloadMenuOpen}
-                onOpenChange={setIsDownloadMenuOpen}
-              >
-                <DropdownMenuTrigger asChild>
-                  <Button variant="primary" size="sm">
-                    <Button.Text>Install</Button.Text>
-                    <span className="bg-primary-foreground/25 mx-1 h-4 w-px self-center" />
-                    <Button.RightIcon>
-                      <Icon name="chevron-down" className="h-4 w-4" />
-                    </Button.RightIcon>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem
-                    disabled={!installTarget}
-                    onClick={() => {
-                      // Defer until after the dropdown has fully closed to
-                      // avoid a Radix focus-trap/body-lock conflict between
-                      // the closing menu and the opening sheet (same pattern
-                      // as MCPDetails.tsx).
-                      setTimeout(() => setIsInstallOpen(true), 0);
-                    }}
-                  >
-                    <div className="flex flex-col">
-                      <span>GitHub installation (preferred)</span>
-                      {!installTarget && (
-                        <span className="text-muted-foreground text-xs">
-                          Requires marketplace setup
-                        </span>
-                      )}
-                    </div>
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={() => {
-                      void handleDownload("claude");
-                    }}
-                  >
-                    Download as zip — Claude
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      void handleDownload("cursor");
-                    }}
-                  >
-                    Download as zip — Cursor
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      void handleDownload("codex");
-                    }}
-                  >
-                    Download as zip — Codex
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <MoreActions actions={actions} />
             </div>
-            <Link to={detailHref} onClick={(e) => e.stopPropagation()}>
-              <Button variant="secondary" size="sm">
-                <Button.Text>View</Button.Text>
-                <Button.RightIcon>
-                  <ArrowRight className="h-4 w-4" />
-                </Button.RightIcon>
-              </Button>
-            </Link>
           </div>
         </div>
-      </DotCard>
-      {installTarget && (
-        <div onClick={(e) => e.stopPropagation()}>
-          <InstallInstructionsDialog
-            open={isInstallOpen}
-            onOpenChange={setIsInstallOpen}
-            repoOwner={installTarget.repoOwner}
-            repoName={installTarget.repoName}
-            marketplaceUrl={installTarget.marketplaceUrl}
-            candidatePlugins={[
-              {
-                name: plugin.name,
-                slug: plugin.slug,
-                description: plugin.description,
-              },
-            ]}
-          />
+
+        {plugin.description && (
+          <Type small muted className="mb-3 line-clamp-2">
+            {plugin.description}
+          </Type>
+        )}
+
+        <div className="mt-auto flex items-center justify-between gap-2 pt-2">
+          <Stack
+            direction="horizontal"
+            gap={1}
+            align="center"
+            className="text-muted-foreground"
+          >
+            <Type small muted>
+              Updated <HumanizeDateTime date={plugin.updatedAt} />
+            </Type>
+          </Stack>
+
+          <Link to={detailHref} onClick={(e) => e.stopPropagation()}>
+            <Button variant="secondary" size="sm">
+              <Button.Text>View</Button.Text>
+              <Button.RightIcon>
+                <ArrowRight className="h-4 w-4" />
+              </Button.RightIcon>
+            </Button>
+          </Link>
         </div>
-      )}
-    </div>
+      </Card>
+    </CardContextMenu>
   );
 }

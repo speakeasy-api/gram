@@ -17,21 +17,22 @@ import {
   ArrowUp,
   Bot,
   ChevronDown,
+  ChevronRight,
   ChevronUp,
   Ellipsis,
   GitBranch,
   Loader2,
+  Settings,
   ShieldOff,
   SlidersHorizontal,
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import {
-  Badge,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Icon,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/dropdown-menu";
 import { MessageContent, type SectionMatch, ToolUI } from "@gram-ai/elements";
 import type { ClaudeToolUsage } from "@gram/client/models/components/claudetoolusage.js";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
@@ -351,12 +352,12 @@ function TurnHeader({
       <div
         className={cn(
           "flex items-center gap-3 pt-7 pb-5",
-          flagged ? "text-red-800" : "text-muted-foreground",
+          flagged ? "text-destructive" : "text-muted-foreground",
         )}
       >
         <ZigZagRule
           bold={flagged}
-          className={flagged ? "bg-red-800" : undefined}
+          className={flagged ? "bg-destructive" : undefined}
         />
         <div className="flex items-center gap-2 whitespace-nowrap">
           {when && (
@@ -373,7 +374,7 @@ function TurnHeader({
               trigger={
                 <button
                   type="button"
-                  className="inline-flex cursor-pointer items-center gap-1 font-mono text-[13px] font-medium whitespace-nowrap text-red-800 uppercase"
+                  className="text-destructive inline-flex cursor-pointer items-center gap-1 font-mono text-[13px] font-medium whitespace-nowrap uppercase"
                   onClick={(e) => e.stopPropagation()}
                 >
                   {riskCount} {riskCount === 1 ? "risk" : "risks"}
@@ -385,7 +386,7 @@ function TurnHeader({
         </div>
         <ZigZagRule
           bold={flagged}
-          className={flagged ? "bg-red-800" : undefined}
+          className={flagged ? "bg-destructive" : undefined}
         />
       </div>
       <div className="flex items-center justify-between pt-1 pb-3">
@@ -438,7 +439,7 @@ function UserMessageRow({
     >
       <div
         className={cn(
-          "bg-muted text-foreground mx-2 max-w-[80%] rounded-xl px-4 py-2 wrap-break-word",
+          "bg-muted text-foreground mx-2 max-w-[80%] px-4 py-2 wrap-break-word",
         )}
       >
         {flagged ? (
@@ -559,13 +560,10 @@ function SystemMessageRow({
   const text = messageText(row.message.content);
   return (
     <div className={cn("px-4 py-2", dimClass(ctx.dimNonRisk))}>
-      <details className="border-muted bg-muted/20 group overflow-hidden rounded-md border">
+      <details className="border-muted bg-muted/20 group overflow-hidden border">
         <summary className="text-muted-foreground hover:bg-muted/40 flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-xs select-none">
-          <Icon
-            name="chevron-right"
-            className="size-3 transition-transform group-open:rotate-90"
-          />
-          <Icon name="settings" className="size-3" />
+          <ChevronRight className="size-3 transition-transform group-open:rotate-90" />
+          <Settings className="size-3" />
           <span>System prompt</span>
         </summary>
         <div className="border-muted border-t p-3 font-mono text-xs whitespace-pre-wrap">
@@ -1118,7 +1116,7 @@ export function ChatTranscript({
         <button
           type="button"
           onClick={scrollToStart}
-          className="bg-background text-muted-foreground hover:text-foreground hover:bg-muted absolute top-2 left-1/2 z-10 inline-flex -translate-x-1/2 items-center gap-1 rounded-full border px-2.5 py-1 text-xs shadow-sm transition-colors"
+          className="bg-background text-muted-foreground hover:text-foreground hover:bg-muted absolute top-2 left-1/2 z-10 inline-flex -translate-x-1/2 items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition-colors"
         >
           <ArrowUp className="size-3" />
           Start of thread

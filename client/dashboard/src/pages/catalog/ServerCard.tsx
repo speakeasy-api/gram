@@ -2,11 +2,12 @@ import {
   PoweredBySpeakeasyBadge,
   ToolCollectionBadge,
 } from "@/components/tool-collection-badge";
-import { DotCard } from "@/components/ui/dot-card";
+import { Card } from "@/components/ui/card";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import type { DeploymentExternalMCP } from "@gram/client/models/components/deploymentexternalmcp.js";
-import { Badge, Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { ArrowRight, Check } from "lucide-react";
 import { Link } from "react-router";
 import type { PulseMCPServer } from "./hooks";
@@ -73,7 +74,7 @@ export function ServerCard({
         }
       }}
     >
-      <DotCard
+      <Card
         className={cn(
           "cursor-pointer",
           isAdded && "border-success/50 ring-success/20 ring-1",
@@ -100,21 +101,19 @@ export function ServerCard({
         {/* Header row with name and tool badge */}
         <div className="mb-2 flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <Type
-                variant="subheading"
-                as="div"
-                className="text-md group-hover:text-primary truncate transition-colors"
-                title={displayName}
-              >
-                {displayName}
-              </Type>
-            </div>
+            <Type
+              variant="subheading"
+              as="div"
+              className="text-md group-hover:text-primary min-w-0 truncate transition-colors"
+              title={displayName}
+            >
+              {displayName}
+            </Type>
             <Type small muted className="truncate">
               v{server.version}
             </Type>
           </div>
-          <div className="flex items-baseline gap-1">
+          <div className="flex min-w-0 shrink flex-wrap items-baseline justify-end gap-1">
             {isSpeakeasyServer && <PoweredBySpeakeasyBadge />}
             <ManualSetupBadge server={server} className="mr-1" />
             <ToolCollectionBadge
@@ -133,8 +132,11 @@ export function ServerCard({
         <div className="mt-auto flex items-center justify-between gap-2 pt-2">
           {/* Selection indicator */}
           {isSelected ? (
-            <div className="flex size-6 items-center justify-center rounded-full bg-[#1DA1F2]">
-              <Check className="size-3.5 text-white" strokeWidth={5} />
+            <div className="bg-primary flex size-6 items-center justify-center rounded-full">
+              <Check
+                className="text-primary-foreground size-3.5"
+                strokeWidth={5}
+              />
             </div>
           ) : (
             <div className="border-muted-foreground/30 size-6 rounded-full border-2" />
@@ -154,7 +156,7 @@ export function ServerCard({
             </Button>
           </Link>
         </div>
-      </DotCard>
+      </Card>
     </div>
   );
 }

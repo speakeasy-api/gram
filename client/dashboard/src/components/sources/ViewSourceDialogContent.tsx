@@ -1,4 +1,5 @@
-import { Button, Dialog } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
 import { Type } from "@/components/ui/type";
 import { SkeletonCode } from "@/components/ui/skeleton";
 import { useProject } from "@/contexts/Auth";

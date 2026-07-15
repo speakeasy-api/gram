@@ -1,10 +1,12 @@
+import { DetailLayout } from "@/components/layouts/detail-layout";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import {
   RouteNotFoundState,
   SecondaryRouteAction,
 } from "@/components/route-not-found-state";
-import { Heading } from "@/components/ui/heading";
+import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { dateTimeFormatters } from "@/lib/dates";
 import { isNotFoundError, isUuidRouteParam } from "@/lib/route-errors";
@@ -14,7 +16,7 @@ import {
   useDeployment,
   useDeploymentSuspense,
 } from "@gram/client/react-query/deployment.js";
-import { Button, Separator, Skeleton } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/button";
 import {
   CheckIcon,
   DotIcon,
@@ -76,9 +78,7 @@ function DeploymentPageContent({ deploymentId }: { deploymentId: string }) {
           <Page.Header.Breadcrumbs />
         </Page.Header>
         <Page.Body>
-          <Skeleton>
-            <div className="h-4 w-1/3" />
-          </Skeleton>
+          <Skeleton className="h-4 w-1/3" />
         </Page.Body>
       </Page>
     );
@@ -90,7 +90,7 @@ function DeploymentPageContent({ deploymentId }: { deploymentId: string }) {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <Suspense fallback={<div>Loading logs...</div>}>
+        <Suspense fallback={<Skeleton className="h-4 w-1/3" />}>
           <DeploymentLogs deploymentId={deploymentId} />
         </Suspense>
       </Page.Body>
@@ -133,23 +133,18 @@ function DeploymentLogs(props: { deploymentId: string }) {
   };
 
   return (
-    <div className="grid w-full gap-16 overflow-x-hidden">
-      <section className="min-w-0 space-y-6">
-        <HeadingSection />
+    <DetailLayout>
+      <DetailLayout.Header
+        eyebrow="Deployment"
+        title="Deployment Overview"
+        actions={
+          <RequireScope scope="project:write" level="section">
+            <RedeployButton />
+          </RequireScope>
+        }
+      />
 
-        <Suspense
-          fallback={
-            <Skeleton>
-              <div className="h-4 w-1/3" />
-            </Skeleton>
-          }
-        >
-          <StatsSection
-            onClickTools={() => setSearchParams({ tab: "tools" })}
-            onClickAssets={() => setSearchParams({ tab: "assets" })}
-          />
-        </Suspense>
-
+      <DetailLayout.Section>
         {failedDeployment.hasFailures && failedDeployment.deployment && (
           <FailedSourcesSection
             failedSources={failedDeployment.failedSources}
@@ -160,37 +155,50 @@ function DeploymentLogs(props: { deploymentId: string }) {
             }}
           />
         )}
-      </section>
+        <Suspense fallback={<Skeleton className="h-4 w-1/3" />}>
+          <StatsSection
+            onClickTools={() => setSearchParams({ tab: "tools" })}
+            onClickAssets={() => setSearchParams({ tab: "assets" })}
+          />
+        </Suspense>
+      </DetailLayout.Section>
 
       <Tabs
         value={searchParams.tab}
         onValueChange={handleUpdateTab}
         className="min-w-0 gap-16"
       >
-        <TabsList>
-          <TabsTrigger value="logs">Logs</TabsTrigger>
-          <TabsTrigger value="assets">Assets</TabsTrigger>
-          <TabsTrigger value="tools">Tools</TabsTrigger>
-        </TabsList>
-        <TabsContent value="logs">
-          <Suspense fallback={<div>Loading logs...</div>}>
-            <LogsTabContent />
-          </Suspense>
-        </TabsContent>
-        <TabsContent value="assets">
-          <Suspense fallback={<div>Loading assets...</div>}>
-            <AssetsTabContent />
-          </Suspense>
-        </TabsContent>
-        <TabsContent value="tools">
-          <ToolsTabContent deploymentId={deploymentId} />
-        </TabsContent>
+        <DetailLayout.Tabs>
+          <TabsList>
+            <TabsTrigger value="logs">Logs</TabsTrigger>
+            <TabsTrigger value="assets">Assets</TabsTrigger>
+            <TabsTrigger value="tools">Tools</TabsTrigger>
+          </TabsList>
+        </DetailLayout.Tabs>
+
+        <DetailLayout.Content>
+          <DetailLayout.Main>
+            <TabsContent value="logs">
+              <Suspense fallback={<Skeleton className="h-4 w-1/3" />}>
+                <LogsTabContent />
+              </Suspense>
+            </TabsContent>
+            <TabsContent value="assets">
+              <Suspense fallback={<Skeleton className="h-4 w-1/3" />}>
+                <AssetsTabContent />
+              </Suspense>
+            </TabsContent>
+            <TabsContent value="tools">
+              <ToolsTabContent deploymentId={deploymentId} />
+            </TabsContent>
+          </DetailLayout.Main>
+        </DetailLayout.Content>
       </Tabs>
-    </div>
+    </DetailLayout>
   );
 }
 
-const HeadingSection = () => {
+const RedeployButton = () => {
   const { deploymentId } = useParams();
   const { data: deployment } = useDeployment({ id: deploymentId! }, undefined, {
     staleTime: Infinity,
@@ -210,52 +218,41 @@ const HeadingSection = () => {
     });
   };
 
-  const RedeployButton = () => {
-    if (!deployment)
-      return (
-        <Button onClick={handleRedeploy} disabled>
-          <Button.LeftIcon>
-            <RefreshCcwIcon size={16} />
-          </Button.LeftIcon>
-          <Button.Text>Roll Back</Button.Text>
-        </Button>
-      );
-
-    const isActiveDeployment = activeDeployment?.id === deploymentId!;
-    const { isPending } = redeployMutation;
-
-    let buttonText: string;
-    if (isActiveDeployment) {
-      if (isPending) buttonText = "Retrying Deployment";
-      else buttonText = "Retry Deployment";
-    } else if (deployment.status === "completed") {
-      if (isPending) buttonText = "Rolling Back...";
-      else buttonText = "Roll Back";
-    } else {
-      if (isPending) buttonText = "Redeploying...";
-      else buttonText = "Redeploy";
-    }
-
+  if (!deployment)
     return (
-      <Button onClick={handleRedeploy} disabled={isPending}>
+      <Button onClick={handleRedeploy} disabled>
         <Button.LeftIcon>
-          <RefreshCcwIcon
-            size={16}
-            className={cn(isPending && "direction-reverse animate-spin")}
-          />
+          <RefreshCcwIcon size={16} />
         </Button.LeftIcon>
-        <Button.Text>{buttonText}</Button.Text>
+        <Button.Text>Roll Back</Button.Text>
       </Button>
     );
-  };
+
+  const isActiveDeployment = activeDeployment?.id === deploymentId!;
+  const { isPending } = redeployMutation;
+
+  let buttonText: string;
+  if (isActiveDeployment) {
+    if (isPending) buttonText = "Retrying Deployment";
+    else buttonText = "Retry Deployment";
+  } else if (deployment.status === "completed") {
+    if (isPending) buttonText = "Rolling Back...";
+    else buttonText = "Roll Back";
+  } else {
+    if (isPending) buttonText = "Redeploying...";
+    else buttonText = "Redeploy";
+  }
 
   return (
-    <div className="flex items-center justify-between">
-      <Heading variant="h1">Deployment Overview</Heading>
-      <RequireScope scope="project:write" level="section">
-        <RedeployButton />
-      </RequireScope>
-    </div>
+    <Button onClick={handleRedeploy} disabled={isPending}>
+      <Button.LeftIcon>
+        <RefreshCcwIcon
+          size={16}
+          className={cn(isPending && "direction-reverse animate-spin")}
+        />
+      </Button.LeftIcon>
+      <Button.Text>{buttonText}</Button.Text>
+    </Button>
   );
 };
 

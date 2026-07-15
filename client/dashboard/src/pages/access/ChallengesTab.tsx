@@ -1,3 +1,5 @@
+import { Card } from "@/components/ui/card";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import {
   Select,
   SelectContent,
@@ -6,6 +8,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { SkeletonTable } from "@/components/ui/skeleton";
+import { LoadMoreFooter } from "@/components/ui/load-more-footer";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import type { AuthzChallenge } from "@gram/client/models/components/authzchallenge.js";
@@ -13,13 +16,9 @@ import type { ChallengeBucket } from "@gram/client/models/components/challengebu
 import { Outcome } from "@gram/client/models/operations/listchallengebuckets.js";
 import { useChallengeBuckets } from "@gram/client/react-query/challengeBuckets.js";
 import { useChallenges } from "@gram/client/react-query/challenges.js";
-import {
-  Badge as MoonshineBadge,
-  type Column,
-  Table,
-} from "@speakeasy-api/moonshine";
-import { Button } from "@/components/ui/button";
-import { Check, Loader2 } from "lucide-react";
+import { Badge as MoonshineBadge } from "@/components/ui/badge";
+import { type Column, Table } from "@/components/ui/table";
+import { Check } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
@@ -119,7 +118,7 @@ function FilterPill({
       type="button"
       onClick={onClick}
       className={cn(
-        "inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
+        "inline-flex cursor-pointer items-center gap-1.5 border px-2.5 py-1 text-xs font-medium transition-colors",
         active
           ? "border-primary bg-primary/5 text-primary"
           : "border-border text-muted-foreground hover:bg-accent hover:text-foreground",
@@ -146,25 +145,24 @@ export function ChallengesEmptyState({
   outcomeFilter: OutcomeFilter;
 }): JSX.Element {
   return (
-    <div className="border-border/50 bg-muted/20 rounded-lg border px-6 py-16 text-center">
-      <div className="bg-primary/10 mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full">
-        <Check className="text-primary h-6 w-6" />
-      </div>
-      <Type variant="body" className="font-medium">
-        {outcomeFilter === "deny"
+    <InlineEmptyState
+      icon={<Check />}
+      title={
+        outcomeFilter === "deny"
           ? "No denied access attempts"
           : outcomeFilter === "resolved"
             ? "No resolved challenges yet"
-            : "No challenges found"}
-      </Type>
-      <Type variant="body" className="text-muted-foreground mt-1 text-sm">
-        {outcomeFilter === "deny"
+            : "No challenges found"
+      }
+      description={
+        outcomeFilter === "deny"
           ? "All authorization checks are passing. Your team's permissions look good."
           : outcomeFilter === "resolved"
             ? "Denied challenges that are resolved by granting access will appear here."
-            : "Authorization challenges will appear here as your team uses the platform."}
-      </Type>
-    </div>
+            : "Authorization challenges will appear here as your team uses the platform."
+      }
+      className="py-16"
+    />
   );
 }
 
@@ -507,38 +505,20 @@ export function ChallengesTab(): JSX.Element {
             </Table.Body>
           </Table>
           {(accumulated.length > 0 || isLoadingMore) && (
-            <div className="bg-muted/20 flex items-center justify-between border-t px-4 py-3">
-              <Type muted small>
-                Showing {accumulated.length.toLocaleString()} of{" "}
-                {totalBuckets.toLocaleString()}
-              </Type>
-              {hasMore ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPageCount((p) => p + 1)}
-                  disabled={isLoadingMore}
-                >
-                  {isLoadingMore ? (
-                    <>
-                      <Loader2 className="size-4 animate-spin" />
-                      Loading...
-                    </>
-                  ) : (
-                    "Load more"
-                  )}
-                </Button>
-              ) : (
-                <Type muted small>
-                  All results loaded
-                </Type>
-              )}
-            </div>
+            <LoadMoreFooter
+              shown={accumulated.length}
+              total={totalBuckets}
+              noun="results"
+              hasMore={hasMore}
+              isLoading={isLoadingMore}
+              onLoadMore={() => setPageCount((p) => p + 1)}
+              endLabel="All results loaded"
+            />
           )}
         </>
       )}
 
-      <div className="border-border/50 bg-muted/30 mt-8 rounded-md border px-4 py-3">
+      <Card className="bg-muted/30 mt-8 gap-0 p-4">
         <Type variant="subheading" className="mb-3">
           About Challenges
         </Type>
@@ -570,7 +550,7 @@ export function ChallengesTab(): JSX.Element {
             </Type>
           </div>
         </div>
-      </div>
+      </Card>
 
       {grantFlowPortals}
     </div>

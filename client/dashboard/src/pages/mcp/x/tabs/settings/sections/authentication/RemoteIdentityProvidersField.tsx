@@ -1,13 +1,14 @@
 import { AssetImage } from "@/components/asset-image";
 import { RequireScope } from "@/components/require-scope";
+import { Card } from "@/components/ui/card";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import { Type } from "@/components/ui/type";
 import { formatRemoteSessionIssuerDisplay } from "@/lib/sources";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/button";
 import { Plus, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
-import { SettingsInlineEmptyState } from "../../SettingsInlineEmptyState";
 
 export function RemoteIdentityProvidersField({
   associatedIssuers,
@@ -31,7 +32,7 @@ export function RemoteIdentityProvidersField({
     );
   } else if (associatedIssuers.length === 0) {
     providerControls = (
-      <SettingsInlineEmptyState
+      <InlineEmptyState
         title="No remote identity providers"
         description="Attach a provider if the upstream service requires users to sign in to access their data."
         action={
@@ -83,12 +84,12 @@ function RemoteIdentityProviderRow({
   onDelete: () => void;
 }) {
   return (
-    <div className="rounded-md border p-3">
+    <Card size="sm">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         {issuer.logoAssetId ? (
           <AssetImage
             assetId={issuer.logoAssetId}
-            className="size-8 shrink-0 rounded"
+            className="size-8 shrink-0"
           />
         ) : null}
         <div className="min-w-0 flex-1">
@@ -117,6 +118,6 @@ function RemoteIdentityProviderRow({
           </div>
         </RequireScope>
       </div>
-    </div>
+    </Card>
   );
 }

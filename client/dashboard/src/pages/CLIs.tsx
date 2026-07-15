@@ -1,8 +1,9 @@
 import { Page } from "@/components/page-layout";
+import { ListLayout } from "@/components/layouts/list-layout";
 import { RequireScope } from "@/components/require-scope";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import { Badge } from "@/components/ui/badge";
-import { Type } from "@/components/ui/type";
-import { Icon } from "@speakeasy-api/moonshine";
+import { Terminal } from "lucide-react";
 
 export default function CLIs(): JSX.Element {
   return (
@@ -12,33 +13,25 @@ export default function CLIs(): JSX.Element {
       </Page.Header>
       <Page.Body>
         <RequireScope scope="project:read" level="page">
-          <Page.Section>
-            <Page.Section.Title>Skills</Page.Section.Title>
-            <Page.Section.Description>
-              Build and distribute skills with your team. Track usage, enable
-              discovery and improve performance.
-            </Page.Section.Description>
-            <Page.Section.Body>
-              <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
-                <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
-                  <Icon
-                    name="terminal"
-                    className="text-muted-foreground h-6 w-6"
-                  />
-                </div>
-                <Type variant="subheading" className="mb-1">
-                  No skills yet
-                </Type>
-                <Type small muted className="max-w-md text-center">
-                  Build and distribute skills to your team. Track usage, enable
-                  discovery and improve performance.
-                </Type>
-                <Badge variant="secondary" className="mt-3">
-                  Coming Soon
-                </Badge>
-              </div>
-            </Page.Section.Body>
-          </Page.Section>
+          <ListLayout>
+            <ListLayout.Header
+              title="Skills"
+              subtitle="Build and distribute skills with your team. Track usage, enable discovery and improve performance."
+            />
+            <ListLayout.List>
+              <InlineEmptyState
+                size="lg"
+                icon={<Terminal />}
+                title="No skills yet"
+                description="Build and distribute skills to your team. Track usage, enable discovery and improve performance."
+                action={
+                  <Badge variant="neutral" background={false}>
+                    <Badge.Text>Coming Soon</Badge.Text>
+                  </Badge>
+                }
+              />
+            </ListLayout.List>
+          </ListLayout>
         </RequireScope>
       </Page.Body>
     </Page>

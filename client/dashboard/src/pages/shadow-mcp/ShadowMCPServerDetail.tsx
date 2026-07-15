@@ -38,13 +38,10 @@ import {
   useShadowMCPInventoryUsers,
 } from "@gram/client/react-query/shadowMCPInventoryUsers.js";
 import { useUpsertShadowMCPInventoryPolicyBypassMutation } from "@gram/client/react-query/upsertShadowMCPInventoryPolicyBypass.js";
-import {
-  Badge,
-  Button,
-  type Column,
-  Icon,
-  Table,
-} from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/ui/icon";
+import { Table, type Column } from "@/components/ui/table";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router";

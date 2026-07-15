@@ -1,4 +1,4 @@
-import { cn } from "@speakeasy-api/moonshine";
+import { cn } from "@/lib/utils";
 import { ReactNode } from "react";
 
 export type ChartButtonProps = {
@@ -19,7 +19,7 @@ export function ChartButton({
       type="button"
       onClick={onClick}
       className={cn(
-        "text-muted-foreground hover:text-foreground hover:bg-accent/75 shrink-0 rounded-md p-1.5 flex transition-colors min-w-6 h-6 items-center justify-center text-xs gap-1",
+        "text-muted-foreground hover:text-foreground hover:bg-accent/75 flex h-6 min-w-6 shrink-0 items-center justify-center gap-1 p-1.5 text-xs transition-colors",
         className,
       )}
       aria-label={ariaLabel}

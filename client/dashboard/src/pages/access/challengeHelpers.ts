@@ -8,11 +8,6 @@ export function isDisplayableBucket(b: ChallengeBucket): boolean {
   return !!b.scope && !!b.resourceKind && !!b.resourceId;
 }
 
-export function getInitials(identifier: string): string {
-  const name = identifier.split("@")[0] ?? identifier;
-  return name.slice(0, 2).toUpperCase();
-}
-
 export function principalDisplayName(
   userEmail: string | undefined,
   principalUrn: string,

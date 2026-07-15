@@ -1,12 +1,15 @@
-import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { CopyButton } from "@/components/ui/copy-button";
 import { Dialog } from "@/components/ui/dialog";
+import { Heading } from "@/components/ui/heading";
+import { Type } from "@/components/ui/type";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { useRoutes } from "@/routes";
 import { useMarketplaceSettings } from "@gram/client/react-query/marketplaceSettings";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
@@ -66,13 +69,15 @@ function ClaudeInstallContent({
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="mb-2 text-sm font-semibold">Test Yourself</h3>
-        <p className="text-muted-foreground mb-4 text-sm">
-          Install your org's published hooks plugin in your own Claude Code
+        <Heading variant="h6" className="mb-2 font-semibold">
+          Test Yourself
+        </Heading>
+        <Type muted small className="mb-4">
+          Install your org&apos;s published hooks plugin in your own Claude Code
           instance:
-        </p>
+        </Type>
         {addCommand && installCommand ? (
-          <div className="bg-muted/50 space-y-2 rounded-lg p-4 font-mono text-sm">
+          <div className="bg-muted/50 space-y-2 p-4 font-mono text-sm">
             <div className="flex items-center justify-between gap-2">
               <code className="break-all">{addCommand}</code>
               <CopyButton
@@ -99,19 +104,27 @@ function ClaudeInstallContent({
       </div>
 
       <div>
-        <h3 className="mb-2 text-sm font-semibold">Distribute to Your Team</h3>
-        <p className="text-muted-foreground mb-4 text-sm">
+        <Heading variant="h6" className="mb-2 font-semibold">
+          Distribute to Your Team
+        </Heading>
+        <Type muted small className="mb-4">
           Require your team to use hooks by configuring their Claude Code
           settings:
-        </p>
+        </Type>
 
         <div className="space-y-4">
           <div>
-            <h4 className="text-muted-foreground mb-2 text-xs font-medium">
-              1. Register the marketplace
-            </h4>
+            <Type
+              mono
+              small
+              muted
+              as="div"
+              className="mb-2 uppercase tracking-[0.08em]"
+            >
+              1. Require the marketplace
+            </Type>
             {requireMarketplaceJson ? (
-              <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm">
+              <div className="bg-muted/50 p-4 font-mono text-sm">
                 <div className="flex items-start justify-between gap-2">
                   <pre className="overflow-x-auto whitespace-pre-wrap">
                     {requireMarketplaceJson}
@@ -132,11 +145,17 @@ function ClaudeInstallContent({
           </div>
 
           <div>
-            <h4 className="text-muted-foreground mb-2 text-xs font-medium">
+            <Type
+              mono
+              small
+              muted
+              as="div"
+              className="mb-2 uppercase tracking-[0.08em]"
+            >
               2. Require the plugin
-            </h4>
+            </Type>
             {requirePluginJson ? (
-              <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm">
+              <div className="bg-muted/50 p-4 font-mono text-sm">
                 <div className="flex items-start justify-between gap-2">
                   <pre className="overflow-x-auto whitespace-pre-wrap">
                     {requirePluginJson}
@@ -156,7 +175,7 @@ function ClaudeInstallContent({
             )}
           </div>
 
-          <Button variant="outline" size="sm" asChild>
+          <Button variant="secondary" size="sm" asChild>
             <a
               href="https://code.claude.com/docs/en/plugin-marketplaces#require-marketplaces-for-your-team"
               target="_blank"
@@ -177,12 +196,14 @@ function CursorInstallContent() {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="mb-2 text-sm font-semibold">1. Publish the Plugin</h3>
-        <p className="text-muted-foreground mb-4 text-sm">
+        <Heading variant="h6" className="mb-2 font-semibold">
+          1. Publish the Plugin
+        </Heading>
+        <Type muted small className="mb-4">
           Add the hooks plugin to your Cursor team marketplace and mark it as
           required so it auto-installs for all team members:
-        </p>
-        <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm">
+        </Type>
+        <div className="bg-muted/50 p-4 font-mono text-sm">
           <a
             href="https://cursor.com/dashboard/team-content"
             target="_blank"
@@ -195,16 +216,16 @@ function CursorInstallContent() {
       </div>
 
       <div>
-        <h3 className="mb-2 text-sm font-semibold">2. Configure Credentials</h3>
-        <p className="text-muted-foreground mb-4 text-sm">
+        <Heading variant="h6" className="mb-2 font-semibold">
+          2. Configure Credentials
+        </Heading>
+        <Type muted small className="mb-4">
           In the Cursor team dashboard, add a{" "}
-          <code className="bg-muted rounded px-1 py-0.5 text-xs">
-            Session Start
-          </code>{" "}
+          <code className="bg-muted px-1 py-0.5 text-xs">Session Start</code>{" "}
           hook that injects your platform credentials. These are automatically
           passed to all subsequent hooks in the session.
-        </p>
-        <p className="text-muted-foreground mb-4 text-sm">
+        </Type>
+        <Type muted small className="mb-4">
           Go to{" "}
           <a
             href="https://cursor.com/dashboard/team-content?section=hooks"
@@ -215,8 +236,8 @@ function CursorInstallContent() {
             cursor.com/dashboard/team-content
           </a>{" "}
           and create a new hook with:
-        </p>
-        <div className="bg-muted/50 space-y-3 rounded-lg p-4 text-sm">
+        </Type>
+        <div className="bg-muted/50 space-y-3 p-4 text-sm">
           <div className="flex items-baseline gap-2">
             <span className="text-muted-foreground shrink-0 font-medium">
               Hook Name:
@@ -239,7 +260,7 @@ function CursorInstallContent() {
             <span className="text-muted-foreground font-medium">
               Script Content:
             </span>
-            <div className="bg-background/50 mt-1 overflow-x-auto rounded p-3 font-mono text-xs break-all whitespace-pre-wrap">
+            <div className="bg-background/50 mt-1 overflow-x-auto p-3 font-mono text-xs break-all whitespace-pre-wrap">
               {`#!/bin/bash\necho '{"env":{"GRAM_HOOKS_API_KEY":"`}
               <span className="text-primary font-semibold">{`<YOUR_API_KEY>`}</span>
               {`","GRAM_HOOKS_PROJECT_SLUG":"`}
@@ -265,7 +286,7 @@ function CursorInstallContent() {
       </div>
 
       <div className="flex items-center gap-3">
-        <Button variant="outline" size="sm" asChild>
+        <Button variant="secondary" size="sm" asChild>
           <a
             href="https://cursor.com/docs/plugins"
             target="_blank"
@@ -276,7 +297,7 @@ function CursorInstallContent() {
             Plugin Docs
           </a>
         </Button>
-        <Button variant="outline" size="sm" asChild>
+        <Button variant="secondary" size="sm" asChild>
           <a
             href="https://cursor.com/docs/hooks"
             target="_blank"
@@ -317,14 +338,14 @@ function CodexInstallContent({
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="mb-2 text-sm font-semibold">
+        <Heading variant="h6" className="mb-2 font-semibold">
           1. Register the marketplace
-        </h3>
-        <p className="text-muted-foreground mb-4 text-sm">
+        </Heading>
+        <Type muted small className="mb-4">
           Register your org's published marketplace with Codex:
-        </p>
+        </Type>
         {addCommand ? (
-          <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm">
+          <div className="bg-muted/50 p-4 font-mono text-sm">
             <div className="flex items-center justify-between gap-2">
               <code className="break-all">{addCommand}</code>
               <CopyButton
@@ -335,26 +356,26 @@ function CodexInstallContent({
             </div>
           </div>
         ) : (
-          <p className="text-muted-foreground text-sm italic">
+          <Type muted small italic>
             Publish your plugins to GitHub first to get a marketplace URL.
-          </p>
+          </Type>
         )}
       </div>
 
       <div>
-        <h3 className="mb-2 text-sm font-semibold">
+        <Heading variant="h6" className="mb-2 font-semibold">
           2. Enable hooks and the plugin in{" "}
           <code className="text-sm">~/.codex/config.toml</code>
-        </h3>
-        <p className="text-muted-foreground mb-3 text-sm">
+        </Heading>
+        <Type muted small className="mb-3">
           Hooks are behind a feature flag and the plugin must be explicitly
           enabled. Add all of the following to{" "}
-          <code className="bg-muted rounded px-1 py-0.5 text-xs">
+          <code className="bg-muted px-1 py-0.5 text-xs">
             ~/.codex/config.toml
           </code>
           :
-        </p>
-        <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm">
+        </Type>
+        <div className="bg-muted/50 p-4 font-mono text-sm">
           <div className="flex items-start justify-between gap-2">
             <pre className="whitespace-pre-wrap">
               {[
@@ -374,38 +395,36 @@ function CodexInstallContent({
       </div>
 
       <div>
-        <h3 className="mb-2 text-sm font-semibold">
+        <Heading variant="h6" className="mb-2 font-semibold">
           3. Approve hooks in Codex
-        </h3>
-        <p className="text-muted-foreground text-sm">
+        </Heading>
+        <Type muted small>
           After restarting Codex, open{" "}
-          <code className="bg-muted rounded px-1 py-0.5 text-xs">
-            Settings → Hooks
-          </code>{" "}
+          <code className="bg-muted px-1 py-0.5 text-xs">Settings → Hooks</code>{" "}
           and enable each hook listed under the{" "}
-          <code className="bg-muted rounded px-1 py-0.5 text-xs">
+          <code className="bg-muted px-1 py-0.5 text-xs">
             {pluginName ?? "observability"}
           </code>{" "}
           plugin. Codex requires manual approval for each hook event before it
           will fire.
-        </p>
+        </Type>
       </div>
 
       <div>
-        <h3 className="mb-2 text-sm font-semibold">Or install from a ZIP</h3>
-        <p className="text-muted-foreground mb-4 text-sm">
+        <Heading variant="h6" className="mb-2 font-semibold">
+          Or install from a ZIP
+        </Heading>
+        <Type muted small className="mb-4">
           Download a self-contained Codex plugin ZIP from the{" "}
           <strong>Plugins</strong> page (
-          <code className="bg-muted rounded px-1 py-0.5 text-xs">
+          <code className="bg-muted px-1 py-0.5 text-xs">
             Download Observability Plugin → Codex
           </code>
           ). The ZIP includes an{" "}
-          <code className="bg-muted rounded px-1 py-0.5 text-xs">
-            install.sh
-          </code>{" "}
-          that handles all three steps automatically:
-        </p>
-        <div className="bg-muted/50 space-y-1 rounded-lg p-4 font-mono text-sm">
+          <code className="bg-muted px-1 py-0.5 text-xs">install.sh</code> that
+          handles all three steps automatically:
+        </Type>
+        <div className="bg-muted/50 space-y-1 p-4 font-mono text-sm">
           <code>unzip observability-codex.zip -d ~/gram-observability</code>
           <div className="mt-1">
             <code>bash ~/gram-observability/install.sh</code>
@@ -414,7 +433,7 @@ function CodexInstallContent({
       </div>
 
       <div className="flex items-center gap-3">
-        <Button variant="outline" size="sm" asChild>
+        <Button variant="secondary" size="sm" asChild>
           <a
             href="https://developers.openai.com/codex/hooks"
             target="_blank"
@@ -425,7 +444,7 @@ function CodexInstallContent({
             Hooks Docs
           </a>
         </Button>
-        <Button variant="outline" size="sm" asChild>
+        <Button variant="secondary" size="sm" asChild>
           <a
             href="https://developers.openai.com/codex/plugins/build"
             target="_blank"
@@ -487,23 +506,23 @@ const providers: {
 function PublishedRepoPanel() {
   const routes = useRoutes();
   return (
-    <div className="border-primary/30 bg-primary/5 mb-6 rounded-lg border p-4">
+    <Card className="border-primary/30 hover:border-primary/30 bg-primary/5 mb-6">
       <div className="mb-2 flex items-center gap-2">
         <Sparkles className="text-primary size-4" />
-        <h3 className="text-sm font-semibold">
+        <Heading variant="h6" className="font-semibold">
           Recommended: install via your org's published marketplace
-        </h3>
+        </Heading>
       </div>
-      <p className="text-muted-foreground mb-3 text-sm">
+      <Type muted small className="mb-3">
         Your org publishes plugins to a private GitHub repo with credentials
         already embedded. Installing the <code>base</code> plugin gives your
         team observability automatically — no manual SessionStart hook, no
         credential paste.
-      </p>
-      <Button variant="outline" size="sm" asChild>
+      </Type>
+      <Button variant="secondary" size="sm" asChild>
         <Link to={routes.plugins.href()}>Go to Plugins</Link>
       </Button>
-    </div>
+    </Card>
   );
 }
 
@@ -546,7 +565,7 @@ export function HooksSetupDialog({
                 }}
                 disabled={!p.available}
                 className={cn(
-                  "relative flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors",
+                  "relative flex items-center gap-2 border px-3 py-2 text-sm font-medium transition-colors",
                   selected === p.id
                     ? "border-primary bg-primary/5"
                     : "border-border hover:border-primary/50 hover:bg-muted/50",
@@ -604,9 +623,11 @@ export function HooksSetupButton(): JSX.Element {
 
   return (
     <>
-      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
-        <Plus className="h-4 w-4" />
-        Add provider
+      <Button variant="secondary" size="sm" onClick={() => setOpen(true)}>
+        <Button.LeftIcon>
+          <Plus />
+        </Button.LeftIcon>
+        <Button.Text>Add provider</Button.Text>
       </Button>
       <HooksSetupDialog open={open} onOpenChange={setOpen} />
     </>

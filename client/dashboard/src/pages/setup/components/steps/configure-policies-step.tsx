@@ -34,7 +34,8 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
-import { Badge, Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useSlugs } from "@/contexts/Sdk";
 import { StepContainer } from "../step-container";
 import {
@@ -457,7 +458,7 @@ export function ConfigurePoliciesStep({
   return (
     <StepContainer
       icon={
-        <div className="bg-secondary flex h-12 w-12 items-center justify-center rounded-lg">
+        <div className="bg-secondary flex h-12 w-12 items-center justify-center">
           <ShieldCheck className="text-foreground h-6 w-6" />
         </div>
       }
@@ -498,7 +499,7 @@ export function ConfigurePoliciesStep({
             </RouterLink>
           </div>
 
-          <div className="border-border bg-card divide-border/60 divide-y overflow-hidden rounded-xl border">
+          <div className="border-border bg-card divide-border/60 divide-y overflow-hidden border">
             {WIZARD_CATEGORIES.map((cat) => {
               const meta = RULE_CATEGORY_META[cat];
               const cfg = configs[cat];
@@ -512,7 +513,7 @@ export function ConfigurePoliciesStep({
                 >
                   <div
                     className={cn(
-                      "flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg transition-colors",
+                      "flex h-9 w-9 flex-shrink-0 items-center justify-center transition-colors",
                       cfg.enabled
                         ? "bg-foreground/8 text-foreground"
                         : "bg-secondary text-muted-foreground/70",
@@ -580,7 +581,7 @@ export function ConfigurePoliciesStep({
               </SheetHeader>
 
               <div className="flex items-start gap-4 px-6 pt-6 pr-14">
-                <div className="bg-secondary flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-md">
+                <div className="bg-secondary flex h-10 w-10 flex-shrink-0 items-center justify-center">
                   <ActiveIcon className="text-foreground h-5 w-5" />
                 </div>
                 <div className="min-w-0 flex-1">
@@ -674,7 +675,7 @@ export function ConfigurePoliciesStep({
                           key={t}
                           htmlFor={id}
                           className={cn(
-                            "border-border bg-secondary/20 flex items-start gap-3 rounded-md border p-3",
+                            "border-border bg-secondary/20 flex items-start gap-3 border p-3",
                             !activeConfig.enabled && "opacity-50",
                           )}
                         >
@@ -732,7 +733,7 @@ function ShadowMcpHero({
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-lg backdrop-blur-xl transition-all duration-700 ease-out",
+        "relative overflow-hidden backdrop-blur-xl transition-all duration-700 ease-out",
         "bg-gradient-to-br from-slate-500/85 via-slate-600/85 to-slate-700/85",
         "dark:from-slate-600/85 dark:via-slate-700/85 dark:to-slate-800/85",
         "ring-1",
@@ -773,12 +774,12 @@ function ShadowMcpHero({
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 rounded-lg bg-gradient-to-b from-white/[0.04] to-transparent"
+        className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/[0.04] to-transparent"
       />
       <div className="relative flex items-start gap-5 p-6 pb-8">
         <div
           className={cn(
-            "flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-md ring-1 backdrop-blur-md transition-all duration-500 ease-out",
+            "flex h-12 w-12 flex-shrink-0 items-center justify-center ring-1 backdrop-blur-md transition-all duration-500 ease-out",
             "shadow-[0_1px_0_rgba(255,255,255,0.12)_inset,0_8px_16px_-8px_rgba(15,23,42,0.6)]",
             config.enabled
               ? "bg-white/60 ring-white/50"
@@ -865,7 +866,7 @@ function ActionRadio({
     <label
       htmlFor={id}
       className={cn(
-        "border-border bg-secondary/20 flex cursor-pointer items-start gap-3 rounded-md border p-3 transition-colors",
+        "border-border bg-secondary/20 flex cursor-pointer items-start gap-3 border p-3 transition-colors",
         selected && !disabled && "border-foreground/40 bg-secondary/50",
         disabled && "cursor-not-allowed opacity-50",
       )}

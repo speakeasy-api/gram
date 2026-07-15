@@ -1,9 +1,10 @@
-import { Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Type } from "@/components/ui/type";
 import { useState } from "react";
-import { toast } from "sonner";
-import { Button } from "./ui/button";
+import { toastError } from "@/lib/toast-error";
 import { Dialog } from "./ui/dialog";
-import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { ImageUpload } from "./upload";
 
@@ -30,6 +31,24 @@ type InputProps =
       optional?: boolean;
       hint?: string | ((value: string) => React.ReactNode);
     };
+
+// Moonshine's Input has no built-in `validate` prop (the old local Input did
+// the inline error text/border itself), so InputDialog now derives the error
+// state itself. Mirrors the old Input's v(): an empty value never shows an
+// error (even if validate would reject it) — formValid below still gates
+// submission on the raw validate() result independent of this display rule.
+function inputErrorState(input: InputProps): {
+  hasError: boolean;
+  message: string | null;
+} {
+  if (input.type === "image" || input.value === "") {
+    return { hasError: false, message: null };
+  }
+  const result = input.validate?.(input.value);
+  if (result === false) return { hasError: true, message: null };
+  if (typeof result === "string") return { hasError: true, message: result };
+  return { hasError: false, message: null };
+}
 
 export function InputDialog({
   open,
@@ -64,7 +83,7 @@ export function InputDialog({
       await onSubmit?.();
       onOpenChange(false);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Something went wrong");
+      toastError(err, "Something went wrong");
     } finally {
       setPending(false);
     }
@@ -96,44 +115,57 @@ export function InputDialog({
           )}
         </Dialog.Header>
         <Stack gap={6} className="my-4">
-          {inputsArray.map((input) => (
-            <Stack key={input.label} gap={2}>
-              <Label>
-                {input.label}
-                {input.optional && (
-                  <span className="text-muted-foreground">(optional)</span>
+          {inputsArray.map((input) => {
+            const errorState = inputErrorState(input);
+            return (
+              <Stack key={input.label} gap={2}>
+                <Label>
+                  {input.label}
+                  {input.optional && (
+                    <span className="text-muted-foreground">(optional)</span>
+                  )}
+                </Label>
+                {input.type !== "image" && (
+                  <Input
+                    placeholder={input.placeholder}
+                    value={input.value}
+                    onChange={(e) => input.onChange(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") void submit();
+                    }}
+                    disabled={input.disabled || pending}
+                    error={errorState.hasError}
+                    multiline={!!input.lines && input.lines > 1}
+                  />
                 )}
-              </Label>
-              {input.type !== "image" && (
-                <Input
-                  placeholder={input.placeholder}
-                  value={input.value}
-                  onChange={input.onChange}
-                  onEnter={() => void submit()}
-                  disabled={input.disabled || pending}
-                  validate={input.validate}
-                  lines={input.lines}
-                />
-              )}
-              {input.type === "image" && (
-                <ImageUpload
-                  onUpload={(asset) => input.onChange(asset.id)}
-                  existingAssetId={input.value}
-                />
-              )}
-              {input.hint && (
-                <div className="text-muted-foreground text-sm">
-                  {typeof input.hint === "function"
-                    ? input.hint(input.value)
-                    : input.hint}
-                </div>
-              )}
-            </Stack>
-          ))}
+                {input.type === "image" && (
+                  <ImageUpload
+                    onUpload={(asset) => input.onChange(asset.id)}
+                    existingAssetId={input.value}
+                  />
+                )}
+                {input.type !== "image" &&
+                  (errorState.message ? (
+                    <Type variant="small" className="text-destructive! h-4">
+                      {errorState.message}
+                    </Type>
+                  ) : (
+                    <div className="h-[8px]" />
+                  ))}
+                {input.hint && (
+                  <div className="text-muted-foreground text-sm">
+                    {typeof input.hint === "function"
+                      ? input.hint(input.value)
+                      : input.hint}
+                  </div>
+                )}
+              </Stack>
+            );
+          })}
         </Stack>
         <Dialog.Footer>
           <Button
-            variant="ghost"
+            variant="tertiary"
             onClick={() => onOpenChange(false)}
             disabled={pending}
           >
@@ -143,7 +175,7 @@ export function InputDialog({
             onClick={() => void submit()}
             disabled={!formValid || pending}
           >
-            {pending ? "Submitting\u2026" : submitButtonText}
+            {pending ? "Submitting…" : submitButtonText}
           </Button>
         </Dialog.Footer>
       </Dialog.Content>

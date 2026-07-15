@@ -10,8 +10,8 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  ThemeSwitcher,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/dropdown-menu";
+import { ThemeSwitcher } from "@/components/ui/theme-switcher";
 import {
   ActivityIcon,
   BookOpenIcon,
@@ -28,6 +28,7 @@ import {
 import { useCallback, useState } from "react";
 import { useNavigate } from "react-router";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
+import { Type } from "./ui/type";
 
 export function SidebarUserMenu(): JSX.Element {
   const user = useUser();
@@ -73,7 +74,7 @@ export function SidebarUserMenu(): JSX.Element {
         type="button"
         aria-label="Open account menu"
         onClick={() => setMenuOpen(true)}
-        className="hover:bg-accent flex min-w-0 flex-1 items-center gap-2 rounded-md p-1 text-left group-data-[collapsible=icon]:hidden"
+        className="hover:bg-accent flex min-w-0 flex-1 items-center gap-2 p-1 text-left group-data-[collapsible=icon]:hidden"
       >
         <Avatar className="size-7 shrink-0">
           <AvatarImage
@@ -113,12 +114,12 @@ export function SidebarUserMenu(): JSX.Element {
           <DropdownMenuLabel className="font-normal">
             <div className="flex items-start justify-between gap-2">
               <div className="flex flex-col space-y-1">
-                <p className="text-sm leading-none font-medium">
+                <Type variant="small" className="leading-none font-medium">
                   {user.displayName || "User"}
-                </p>
-                <p className="text-muted-foreground text-xs leading-none">
+                </Type>
+                <Type variant="small" muted className="text-xs leading-none">
                   {user.email}
-                </p>
+                </Type>
               </div>
               {projectSlug && (
                 <button

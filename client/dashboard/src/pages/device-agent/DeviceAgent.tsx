@@ -1,15 +1,19 @@
+import { KeyRound } from "lucide-react";
 import { CodeBlock } from "@/components/code";
 import { Page } from "@/components/page-layout";
+import { GuideLayout } from "@/components/layouts/guide-layout";
+import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { RequireScope } from "@/components/require-scope";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Link as ExternalLink } from "@/components/ui/link";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
 import { useOrganization } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useAgentToken } from "@/hooks/useAgentToken";
 import { useOrgRoutes } from "@/routes";
-import { Button, Icon } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/button";
+import { Alert } from "@/components/ui/alert";
+import { Link as ExternalLink } from "@/components/ui/link";
+import { DynamicIcon } from "@/components/ui/dynamic-icon";
 import { useQuery } from "@tanstack/react-query";
 import React from "react";
 import { Link, Navigate } from "react-router";
@@ -81,16 +85,21 @@ function DownloadAgent() {
   const cli = data?.latest?.["speakeasy"];
   if (isError || !daemon || !cli) {
     return (
-      <Alert variant="warning">
-        <Icon name="triangle-alert" className="h-4 w-4" />
-        <AlertTitle>Couldn't load the latest release</AlertTitle>
-        <AlertDescription>
-          Open the{" "}
-          <ExternalLink to={MANIFEST_URL} external>
-            release manifest
-          </ExternalLink>{" "}
-          for the current version and per-platform download URLs.
-        </AlertDescription>
+      <Alert variant="warning" iconName="triangle-alert" dismissible={false}>
+        <div className="flex flex-col gap-1">
+          <Type className="font-medium">Couldn't load the latest release</Type>
+          <Type small>
+            Open the{" "}
+            <ExternalLink
+              href={MANIFEST_URL}
+              size="sm"
+              iconSuffixName="external-link"
+            >
+              release manifest
+            </ExternalLink>{" "}
+            for the current version and per-platform download URLs.
+          </Type>
+        </div>
       </Alert>
     );
   }
@@ -146,7 +155,11 @@ function DownloadAgent() {
       </Table>
       <Type small muted>
         Hover a link for its <code>sha256</code>, or read the full{" "}
-        <ExternalLink to={MANIFEST_URL} external>
+        <ExternalLink
+          href={MANIFEST_URL}
+          size="sm"
+          iconSuffixName="external-link"
+        >
           manifest
         </ExternalLink>
         .
@@ -200,7 +213,7 @@ function SetupTab({
   desc,
 }: {
   value: string;
-  icon: React.ComponentProps<typeof Icon>["name"];
+  icon: React.ComponentProps<typeof DynamicIcon>["name"];
   title: string;
   desc: React.ReactNode;
 }) {
@@ -210,7 +223,7 @@ function SetupTab({
       className="border-border data-[state=active]:border-primary data-[state=active]:ring-primary h-auto flex-col items-start justify-start gap-1 rounded-lg p-4 text-left whitespace-normal data-[state=active]:ring-1"
     >
       <div className="flex items-center gap-2">
-        <Icon name={icon} className="h-4 w-4" />
+        <DynamicIcon name={icon} className="h-4 w-4" />
         <span className="font-medium">{title}</span>
       </div>
       <span className="text-muted-foreground text-sm font-normal">{desc}</span>
@@ -525,7 +538,7 @@ function GenerateInlineButton({
       className="-my-1 inline-flex h-6 items-center px-2 py-0 align-middle text-xs"
     >
       <Button.LeftIcon>
-        <Icon name="key-round" className="h-3 w-3" />
+        <KeyRound className="h-3 w-3" />
       </Button.LeftIcon>
       <Button.Text>{pending ? pendingLabel : label}</Button.Text>
     </Button>
@@ -678,40 +691,50 @@ function FleetIdentity() {
 
         <div className="mt-4 flex flex-col gap-3">
           {generatedToken && (
-            <Alert variant="warning">
-              <Icon name="triangle-alert" className="h-4 w-4" />
-              <AlertTitle>
-                {autoCopied
-                  ? "managed.json copied to your clipboard"
-                  : "Copy your managed.json now"}
-              </AlertTitle>
-              <AlertDescription>
-                {autoCopied
-                  ? "We've copied the full managed.json — with the new org_token — to your clipboard; paste it into your MDM profile."
-                  : "The new org_token is spliced into the example above — copy the file now."}{" "}
-                The <code>org_token</code> is shown only once and can't be
-                retrieved again. Manage or revoke agent tokens anytime under
-                Settings →{" "}
-                <Link to={apiKeysHref} className={LINK_CLASS}>
-                  API Keys
-                </Link>
-                .
-              </AlertDescription>
+            <Alert
+              variant="warning"
+              iconName="triangle-alert"
+              dismissible={false}
+            >
+              <div className="flex flex-col gap-1">
+                <Type className="font-medium">
+                  {autoCopied
+                    ? "managed.json copied to your clipboard"
+                    : "Copy your managed.json now"}
+                </Type>
+                <Type small>
+                  {autoCopied
+                    ? "We've copied the full managed.json — with the new org_token — to your clipboard; paste it into your MDM profile."
+                    : "The new org_token is spliced into the example above — copy the file now."}{" "}
+                  The <code>org_token</code> is shown only once and can't be
+                  retrieved again. Manage or revoke agent tokens anytime under
+                  Settings →{" "}
+                  <Link to={apiKeysHref} className={LINK_CLASS}>
+                    API Keys
+                  </Link>
+                  .
+                </Type>
+              </div>
             </Alert>
           )}
 
           {isError && (
-            <Alert variant="destructive">
-              <Icon name="triangle-alert" className="h-4 w-4" />
-              <AlertTitle>Couldn't generate a token</AlertTitle>
-              <AlertDescription>
-                Something went wrong creating the agent token. Try again, or
-                create one under Settings →{" "}
-                <Link to={apiKeysHref} className={LINK_CLASS}>
-                  API Keys
-                </Link>{" "}
-                with the Agent scope.
-              </AlertDescription>
+            <Alert
+              variant="error"
+              iconName="triangle-alert"
+              dismissible={false}
+            >
+              <div className="flex flex-col gap-1">
+                <Type className="font-medium">Couldn't generate a token</Type>
+                <Type small>
+                  Something went wrong creating the agent token. Try again, or
+                  create one under Settings →{" "}
+                  <Link to={apiKeysHref} className={LINK_CLASS}>
+                    API Keys
+                  </Link>{" "}
+                  with the Agent scope.
+                </Type>
+              </div>
             </Alert>
           )}
         </div>
@@ -746,61 +769,6 @@ function FleetIdentity() {
   );
 }
 
-// SetupPanel is the device-agent page body: install steps + identity setup.
-// Per-user "who's running the agent" now lives on the Employee Enrollment page
-// (Observe) as a Device Agent column, rather than a tab here.
-function SetupPanel() {
-  return (
-    <>
-      <Page.Section>
-        <Page.Section.Title stage="preview">
-          Install the agent
-        </Page.Section.Title>
-        <Page.Section.Description>
-          The Speakeasy device agent runs on-device and enforces your org's
-          required AI-tool plugins and MCP configuration, then reports
-          compliance back to Speakeasy.
-        </Page.Section.Description>
-        <Page.Section.Body>
-          <InstallAgent />
-        </Page.Section.Body>
-      </Page.Section>
-
-      <Page.Section>
-        <Page.Section.Title>Set the user's identity</Page.Section.Title>
-        <Page.Section.Description>
-          How the agent learns who's on the device. Fleet is the recommended
-          path for an org; personal enrollment is handy for testing.
-        </Page.Section.Description>
-        <Page.Section.Body>
-          <Tabs defaultValue="fleet" className="gap-6">
-            <TabsList className="grid h-auto w-full items-stretch gap-4 bg-transparent p-0 @2xl/main:grid-cols-2">
-              <SetupTab
-                value="fleet"
-                icon="building-2"
-                title="Fleet (MDM)"
-                desc="Deploy a managed.json so IT sets identity centrally — no per-user step."
-              />
-              <SetupTab
-                value="personal"
-                icon="user"
-                title="Personal / PoC"
-                desc="Each user signs in once with speakeasy enroll. Good for testing."
-              />
-            </TabsList>
-            <TabsContent value="fleet" className="pt-2">
-              <FleetIdentity />
-            </TabsContent>
-            <TabsContent value="personal" className="pt-2">
-              <ManualIdentity />
-            </TabsContent>
-          </Tabs>
-        </Page.Section.Body>
-      </Page.Section>
-    </>
-  );
-}
-
 export default function DeviceAgent(): React.JSX.Element | null {
   const telemetry = useTelemetry();
   const isDeviceAgentEnabled = telemetry.isFeatureEnabled("gram-device-agent");
@@ -821,7 +789,52 @@ export default function DeviceAgent(): React.JSX.Element | null {
       </Page.Header>
       <Page.Body>
         <RequireScope scope={["org:read", "org:admin"]} level="page">
-          <SetupPanel />
+          <GuideLayout>
+            <GuideLayout.Header
+              title={
+                <span className="inline-flex items-center gap-2">
+                  Device Agent
+                  <ReleaseStageBadge stage="preview" />
+                </span>
+              }
+              subtitle="The Speakeasy device agent runs on-device and enforces your org's required AI-tool plugins and MCP configuration, then reports compliance back to Speakeasy."
+            />
+            <GuideLayout.Body>
+              <GuideLayout.Step index={1} title="Install the agent">
+                <InstallAgent />
+              </GuideLayout.Step>
+
+              <GuideLayout.Step index={2} title="Set the user's identity">
+                <Type muted small className="mb-4">
+                  How the agent learns who's on the device. Fleet is the
+                  recommended path for an org; personal enrollment is handy for
+                  testing.
+                </Type>
+                <Tabs defaultValue="fleet" className="gap-6">
+                  <TabsList className="grid h-auto w-full items-stretch gap-4 bg-transparent p-0 @2xl/main:grid-cols-2">
+                    <SetupTab
+                      value="fleet"
+                      icon="building-2"
+                      title="Fleet (MDM)"
+                      desc="Deploy a managed.json so IT sets identity centrally — no per-user step."
+                    />
+                    <SetupTab
+                      value="personal"
+                      icon="user"
+                      title="Personal / PoC"
+                      desc="Each user signs in once with speakeasy enroll. Good for testing."
+                    />
+                  </TabsList>
+                  <TabsContent value="fleet" className="pt-2">
+                    <FleetIdentity />
+                  </TabsContent>
+                  <TabsContent value="personal" className="pt-2">
+                    <ManualIdentity />
+                  </TabsContent>
+                </Tabs>
+              </GuideLayout.Step>
+            </GuideLayout.Body>
+          </GuideLayout>
         </RequireScope>
       </Page.Body>
     </Page>

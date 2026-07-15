@@ -1,6 +1,8 @@
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
+import { Badge } from "@/components/ui/badge";
+import { Heading } from "@/components/ui/heading";
+import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
-import { Icon } from "@speakeasy-api/moonshine";
 import { Workflow } from "lucide-react";
 import { useState } from "react";
 import { HooksSetupDialog } from "./HooksSetupDialog";
@@ -33,7 +35,7 @@ function ProviderCard({
     <button
       onClick={onInstall}
       className={cn(
-        "relative flex min-w-[160px] flex-col items-center rounded-lg border p-6 transition-all",
+        "relative flex min-w-[160px] flex-col items-center border p-6 transition-all",
         status === "available"
           ? "border-border hover:border-primary hover:bg-muted/50 cursor-pointer"
           : "border-border/50 hover:border-primary/50 hover:bg-muted/30 cursor-pointer opacity-60",
@@ -43,9 +45,9 @@ function ProviderCard({
       <span className="text-sm font-medium">{name}</span>
       {isComingSoon && (
         <div className="absolute top-3 right-3">
-          <span className="text-muted-foreground bg-muted rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase">
+          <Badge variant="neutral" size="sm">
             Coming Soon
-          </span>
+          </Badge>
         </div>
       )}
     </button>
@@ -84,21 +86,23 @@ export function HooksEmptyState({
           {/* Icon and Title */}
           <div className="flex flex-col items-center gap-4">
             <div className="bg-muted flex size-16 items-center justify-center rounded-full">
-              <Icon name="workflow" className="text-muted-foreground size-8" />
+              <Workflow className="text-muted-foreground size-8" />
             </div>
             <div>
-              <h2 className="mb-2 text-xl font-semibold">{title}</h2>
-              <p className="text-muted-foreground mx-auto max-w-md text-sm">
+              <Heading variant="h2" className="mb-2 normal-case">
+                {title}
+              </Heading>
+              <Type muted small className="mx-auto max-w-md">
                 {subtitle}
-              </p>
+              </Type>
             </div>
           </div>
 
           {/* Installation Options */}
           <div>
-            <h3 className="mb-4 text-sm font-medium">
+            <Heading variant="h6" className="mb-4">
               Choose Your AI Coding Assistant
-            </h3>
+            </Heading>
             <div className="flex flex-wrap items-center justify-center gap-4">
               <ProviderCard
                 name="Claude Code"

@@ -2,8 +2,8 @@ import { AssistantOwner } from "@/components/assistants/assistant-owner";
 import { AssistantSessionsList } from "@/components/assistants/sessions-list";
 import { AssistantStatusToggle } from "@/components/assistants/status-toggle";
 import { EditInstructionsDialog } from "@/components/assistants/edit-instructions-dialog";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { DetailList } from "@/components/ui/detail-list";
+import { useConfirm } from "@/components/ui/use-confirm";
 import {
   PageTabsTrigger,
   Tabs,
@@ -15,9 +15,11 @@ import { useRoutes } from "@/routes";
 import { useAssistantsDeleteMutation } from "@gram/client/react-query/assistantsDelete.js";
 import { invalidateAllAssistantsList } from "@gram/client/react-query/assistantsList.js";
 import { useTriggers } from "@gram/client/react-query/triggers.js";
-import { Icon, Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
+import { Bot, ChevronRight, Loader2, Pencil, Trash } from "lucide-react";
 import { parseAsStringLiteral, useQueryState } from "nuqs";
 import { useState } from "react";
 import { useAssistantDraft } from "./useAssistantDraft";
@@ -40,6 +42,7 @@ export function AssistantDraftPanel(): JSX.Element {
     parseAsStringLiteral(DETAIL_TABS).withDefault("overview"),
   );
   const [editingInstructions, setEditingInstructions] = useState(false);
+  const { confirm: requestConfirm, dialog } = useConfirm();
 
   // Only fetch triggers when the Triggers tab is active — they are no longer
   // surfaced on the Overview tab, so loading the panel shouldn't pay for them.
@@ -71,7 +74,7 @@ export function AssistantDraftPanel(): JSX.Element {
         <div className="flex flex-1 items-center justify-center px-4 py-8 text-center">
           <Stack gap={3} align="center" className="max-w-xs">
             <div className="bg-muted/40 flex h-10 w-10 items-center justify-center rounded-full">
-              <Icon name="bot" className="text-muted-foreground h-5 w-5" />
+              <Bot className="text-muted-foreground h-5 w-5" />
             </div>
             <Type small muted>
               Once you describe your assistant in the chat, the live spec will
@@ -85,6 +88,16 @@ export function AssistantDraftPanel(): JSX.Element {
 
   const a = draft.assistant;
 
+  const handleDelete = async () => {
+    if (!draft.assistantId) return;
+    const confirmed = await requestConfirm({
+      title: "Delete this assistant? This cannot be undone.",
+      destructive: true,
+    });
+    if (!confirmed) return;
+    del.mutate({ request: { id: draft.assistantId } });
+  };
+
   return (
     <div className="flex h-full flex-col">
       <div className="border-border flex items-center justify-between gap-2 border-b px-4 py-3">
@@ -92,23 +105,20 @@ export function AssistantDraftPanel(): JSX.Element {
           {a?.name ?? "Loading…"}
         </Type>
         <Button
-          variant="ghost"
+          variant="tertiary"
           size="sm"
           className="shrink-0"
           aria-label="Delete assistant"
-          onClick={() => {
-            if (!draft.assistantId) return;
-            if (!confirm("Delete this assistant? This cannot be undone."))
-              return;
-            del.mutate({ request: { id: draft.assistantId } });
-          }}
+          onClick={() => void handleDelete()}
           disabled={del.isPending}
         >
-          {del.isPending ? (
-            <Loader2 className="h-3 w-3 animate-spin" />
-          ) : (
-            <Icon name="trash" className="h-3 w-3" />
-          )}
+          <Button.LeftIcon>
+            {del.isPending ? (
+              <Loader2 className="size-3 animate-spin" />
+            ) : (
+              <Trash className="size-3" />
+            )}
+          </Button.LeftIcon>
         </Button>
       </div>
 
@@ -123,7 +133,7 @@ export function AssistantDraftPanel(): JSX.Element {
           className="flex min-h-0 flex-1 flex-col"
         >
           <div className="border-border border-b px-4">
-            <TabsList className="h-auto gap-6 rounded-none bg-transparent p-0">
+            <TabsList className="h-auto gap-6 bg-transparent p-0">
               <PageTabsTrigger value="overview">Overview</PageTabsTrigger>
               <PageTabsTrigger value="sessions">Sessions</PageTabsTrigger>
               <PageTabsTrigger value="triggers">Triggers</PageTabsTrigger>
@@ -136,40 +146,55 @@ export function AssistantDraftPanel(): JSX.Element {
           >
             <Stack gap={5}>
               <Section title="Overview">
-                <Row label="Status">
-                  <AssistantStatusToggle
-                    assistant={a}
-                    onUpdated={() => void draft.refetchAssistant()}
+                <DetailList orientation="inline" className="gap-y-2.5">
+                  <DetailList.Item
+                    label="Status"
+                    value={
+                      <AssistantStatusToggle
+                        assistant={a}
+                        onUpdated={() => void draft.refetchAssistant()}
+                      />
+                    }
                   />
-                </Row>
-                <Row label="Model">
-                  <code className="text-xs">{a.model}</code>
-                </Row>
-                <Row label="Owner">
-                  <AssistantOwner
-                    createdByUserId={a.createdByUserId}
-                    variant="row"
+                  <DetailList.Item
+                    label="Model"
+                    value={<code className="text-xs">{a.model}</code>}
                   />
-                </Row>
-                <Row label="Concurrency">
-                  <Type small>{a.maxConcurrency}</Type>
-                </Row>
-                <Row label="Warm TTL">
-                  <Type small>{a.warmTtlSeconds}s</Type>
-                </Row>
+                  <DetailList.Item
+                    label="Owner"
+                    value={
+                      <AssistantOwner
+                        createdByUserId={a.createdByUserId}
+                        variant="row"
+                      />
+                    }
+                  />
+                  <DetailList.Item
+                    label="Concurrency"
+                    value={<Type small>{a.maxConcurrency}</Type>}
+                  />
+                  <DetailList.Item
+                    label="Warm TTL"
+                    value={<Type small>{a.warmTtlSeconds}s</Type>}
+                  />
+                </DetailList>
               </Section>
 
               <Section
                 title="System instructions"
                 action={
                   <Button
-                    variant="ghost"
+                    variant="tertiary"
                     size="sm"
                     className="h-auto gap-1 px-1.5 py-0.5 text-xs"
                     onClick={() => setEditingInstructions(true)}
                   >
-                    <Icon name="pencil" className="h-3 w-3" />
-                    {a.instructions ? "Expand & edit" : "Add"}
+                    <Button.LeftIcon>
+                      <Pencil className="size-3" />
+                    </Button.LeftIcon>
+                    <Button.Text>
+                      {a.instructions ? "Expand & edit" : "Add"}
+                    </Button.Text>
                   </Button>
                 }
               >
@@ -177,9 +202,9 @@ export function AssistantDraftPanel(): JSX.Element {
                   <button
                     type="button"
                     onClick={() => setEditingInstructions(true)}
-                    className="hover:border-border block w-full rounded-md border border-transparent text-left"
+                    className="hover:border-border block w-full border border-transparent text-left"
                   >
-                    <pre className="bg-muted/30 max-h-48 overflow-y-auto rounded-md p-3 font-mono text-[11px] whitespace-pre-wrap">
+                    <pre className="bg-muted/30 max-h-48 overflow-y-auto p-3 font-mono text-[11px] whitespace-pre-wrap">
                       {a.instructions}
                     </pre>
                   </button>
@@ -204,7 +229,7 @@ export function AssistantDraftPanel(): JSX.Element {
                     <routes.mcp.details.Link
                       key={t.toolsetSlug}
                       params={[t.toolsetSlug]}
-                      className="border-border hover:bg-surface-secondary flex items-center justify-between rounded-md border px-3 py-2 transition-colors hover:no-underline"
+                      className="border-border hover:bg-surface-secondary flex items-center justify-between border px-3 py-2 transition-colors hover:no-underline"
                     >
                       <Stack gap={0} className="min-w-0">
                         <code className="truncate text-xs">
@@ -216,17 +241,14 @@ export function AssistantDraftPanel(): JSX.Element {
                           </Type>
                         )}
                       </Stack>
-                      <Icon
-                        name="chevron-right"
-                        className="text-muted-foreground h-4 w-4 shrink-0"
-                      />
+                      <ChevronRight className="text-muted-foreground h-4 w-4 shrink-0" />
                     </routes.mcp.details.Link>
                   ))}
                   {(a.mcpServers ?? []).map((m) => (
                     <routes.mcp.x.Link
                       key={m.mcpServerSlug}
                       params={[m.mcpServerSlug]}
-                      className="border-border hover:bg-surface-secondary flex items-center justify-between rounded-md border px-3 py-2 transition-colors hover:no-underline"
+                      className="border-border hover:bg-surface-secondary flex items-center justify-between border px-3 py-2 transition-colors hover:no-underline"
                     >
                       <Stack gap={0} className="min-w-0">
                         <code className="truncate text-xs">
@@ -238,10 +260,7 @@ export function AssistantDraftPanel(): JSX.Element {
                           </Type>
                         )}
                       </Stack>
-                      <Icon
-                        name="chevron-right"
-                        className="text-muted-foreground h-4 w-4 shrink-0"
-                      />
+                      <ChevronRight className="text-muted-foreground h-4 w-4 shrink-0" />
                     </routes.mcp.x.Link>
                   ))}
                 </Stack>
@@ -269,14 +288,18 @@ export function AssistantDraftPanel(): JSX.Element {
                 {triggers.map((t) => (
                   <div
                     key={t.id}
-                    className="border-border flex items-start justify-between gap-2 rounded-md border px-3 py-2"
+                    className="border-border flex items-start justify-between gap-2 border px-3 py-2"
                   >
                     <Stack gap={1} className="min-w-0">
                       <Stack direction="horizontal" gap={2} align="center">
                         <Type small className="font-medium">
                           {t.name}
                         </Type>
-                        <Badge variant="outline" className="text-[10px]">
+                        <Badge
+                          variant="neutral"
+                          background={false}
+                          className="text-[10px]"
+                        >
                           {t.definitionSlug}
                         </Badge>
                       </Stack>
@@ -287,11 +310,13 @@ export function AssistantDraftPanel(): JSX.Element {
                       )}
                     </Stack>
                     {t.status === "active" ? (
-                      <Badge variant="default" className="text-[10px]">
-                        Active
-                      </Badge>
+                      <Badge className="text-[10px]">Active</Badge>
                     ) : (
-                      <Badge variant="secondary" className="text-[10px]">
+                      <Badge
+                        variant="neutral"
+                        background={false}
+                        className="text-[10px]"
+                      >
                         Paused
                       </Badge>
                     )}
@@ -311,6 +336,7 @@ export function AssistantDraftPanel(): JSX.Element {
           onUpdated={() => void draft.refetchAssistant()}
         />
       )}
+      {dialog}
     </div>
   );
 }
@@ -331,7 +357,7 @@ function Section({
   return (
     <div>
       <div className="mb-2 flex items-center justify-between gap-2">
-        <Type variant="body" className="text-xs font-semibold uppercase">
+        <Type as="div" mono small muted className="tracking-[0.08em] uppercase">
           {title}
         </Type>
         {action}
@@ -343,23 +369,6 @@ function Section({
       ) : (
         children
       )}
-    </div>
-  );
-}
-
-function Row({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-center justify-between py-1">
-      <Type small muted>
-        {label}
-      </Type>
-      <div>{children}</div>
     </div>
   );
 }

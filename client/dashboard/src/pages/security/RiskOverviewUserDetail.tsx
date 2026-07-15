@@ -1,4 +1,6 @@
 import { MetricCard } from "@/components/chart/MetricCard";
+import { RankedBar, type RankedBarItem } from "@/components/chart/RankedBar";
+import { DetailLayout } from "@/components/layouts/detail-layout";
 import {
   formatDateRangeLabel,
   useDateRangeFilter,
@@ -8,12 +10,16 @@ import { RequireScope } from "@/components/require-scope";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
 import { type DateRangePreset } from "@gram-ai/elements";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
+import { Card } from "@/components/ui/card";
+import { Heading } from "@/components/ui/heading";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
+import { Type } from "@/components/ui/type";
 import { useListChats } from "@gram/client/react-query/listChats.js";
 import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
 import { useRiskUserBreakdown } from "@gram/client/react-query/riskUserBreakdown.js";
 import { RULE_CATEGORY_META, type RuleCategory } from "./policy-data";
 import { getRuleTitleFallback } from "./risk-utils";
-import { Icon } from "@speakeasy-api/moonshine";
+import { ChevronRight, Inbox, LoaderCircle, MessageSquare } from "lucide-react";
 import { useCallback, useMemo } from "react";
 import { useParams, useSearchParams } from "react-router";
 
@@ -128,31 +134,34 @@ function RiskOverviewUserDetailContent() {
 
   return (
     <>
-      <Page.Section>
-        <Page.Section.Title stage="beta" className="normal-case">
-          {userLabel}
-        </Page.Section.Title>
-        <Page.Section.Description>
-          Risk findings and chat sessions for this user
-          {rangeLabel && ` across ${rangeLabel}.`}
-        </Page.Section.Description>
-        <Page.Section.CTA>{controls}</Page.Section.CTA>
-        <Page.Section.Body>
-          <div className="space-y-6">
-            <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-              <MetricCard
-                title="Findings"
-                value={userEntry?.findings ?? 0}
-                format="compact"
-                icon="flag"
-              />
-              <MetricCard
-                title="Chat Sessions"
-                value={totalChats}
-                format="compact"
-                icon="message-square"
-              />
-            </div>
+      <DetailLayout>
+        <DetailLayout.Header
+          eyebrow="User"
+          title={userLabel}
+          subtitle={`Risk findings and chat sessions for this user${
+            rangeLabel ? ` across ${rangeLabel}.` : ""
+          }`}
+          actions={controls}
+        />
+
+        <DetailLayout.Content>
+          <DetailLayout.Main>
+            <DetailLayout.Section>
+              <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+                <MetricCard
+                  title="Findings"
+                  value={userEntry?.findings ?? 0}
+                  format="compact"
+                  icon="flag"
+                />
+                <MetricCard
+                  title="Chat Sessions"
+                  value={totalChats}
+                  format="compact"
+                  icon="message-square"
+                />
+              </div>
+            </DetailLayout.Section>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <CategoryBreakdown
                 categories={breakdownQuery.data?.categories ?? []}
@@ -168,9 +177,9 @@ function RiskOverviewUserDetailContent() {
               isLoading={chatsQuery.isLoading}
               onSelectChat={setSelectedChatId}
             />
-          </div>
-        </Page.Section.Body>
-      </Page.Section>
+          </DetailLayout.Main>
+        </DetailLayout.Content>
+      </DetailLayout>
 
       <ChatDetailSheet
         chatId={selectedChatId}
@@ -202,7 +211,7 @@ function ChatList({
   if (isLoading) {
     return (
       <div className="text-muted-foreground flex items-center justify-center gap-2 py-12">
-        <Icon name="loader-circle" className="size-5 animate-spin" />
+        <LoaderCircle className="size-5 animate-spin" />
         <span>Loading chats...</span>
       </div>
     );
@@ -210,19 +219,16 @@ function ChatList({
 
   if (chats.length === 0) {
     return (
-      <div className="flex flex-col items-center gap-3 py-12 text-center">
-        <div className="bg-muted flex size-12 items-center justify-center rounded-full">
-          <Icon name="inbox" className="text-muted-foreground size-6" />
-        </div>
-        <span className="text-foreground font-medium">
-          No chats in this time range
-        </span>
-      </div>
+      <InlineEmptyState
+        className="py-12"
+        icon={<Inbox />}
+        title="No chats in this time range"
+      />
     );
   }
 
   return (
-    <ul className="divide-border divide-y rounded-lg border">
+    <ul className="divide-border divide-y border">
       {chats.map((chat) => (
         <li key={chat.id}>
           <button
@@ -230,10 +236,7 @@ function ChatList({
             onClick={() => onSelectChat(chat.id)}
             className="hover:bg-muted/40 flex w-full items-center gap-3 px-4 py-3 text-left transition-colors"
           >
-            <Icon
-              name="message-square"
-              className="text-muted-foreground size-4 shrink-0"
-            />
+            <MessageSquare className="text-muted-foreground size-4 shrink-0" />
             <div className="min-w-0 flex-1">
               <div className="truncate text-sm font-medium">
                 {chat.title || "Untitled chat"}
@@ -248,10 +251,7 @@ function ChatList({
                   : ""}
               </div>
             </div>
-            <Icon
-              name="chevron-right"
-              className="text-muted-foreground size-4 shrink-0"
-            />
+            <ChevronRight className="text-muted-foreground size-4 shrink-0" />
           </button>
         </li>
       ))}
@@ -268,47 +268,25 @@ function CategoryBreakdown({
 }) {
   if (isLoading && categories.length === 0) {
     return (
-      <div className="text-muted-foreground rounded-lg border p-4 text-sm">
-        Loading category breakdown...
-      </div>
+      <Card size="sm">
+        <Type muted className="text-sm">
+          Loading category breakdown...
+        </Type>
+      </Card>
     );
   }
   if (categories.length === 0) return null;
-  const max = categories[0]?.findings || 1;
+
+  const items: RankedBarItem[] = categories.map((c) => ({
+    label: RULE_CATEGORY_META[c.category as RuleCategory]?.label ?? c.category,
+    value: Number(c.findings),
+  }));
 
   return (
-    <div className="space-y-3 rounded-lg border p-4">
-      <h4 className="text-sm font-medium">Findings by category</h4>
-      <ul className="space-y-2">
-        {categories.map((c, i) => {
-          const meta = RULE_CATEGORY_META[c.category as RuleCategory];
-          const label = meta?.label ?? c.category;
-          return (
-            <li key={c.category} className="flex items-center gap-3">
-              <span className="text-muted-foreground w-4 shrink-0 text-right text-xs">
-                {i + 1}
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="mb-1 flex items-center justify-between gap-2">
-                  <span className="truncate text-sm">{label}</span>
-                  <span className="text-muted-foreground shrink-0 text-xs">
-                    {Number(c.findings).toLocaleString()}
-                  </span>
-                </div>
-                <div className="bg-muted h-1 w-full rounded-full">
-                  <div
-                    className="h-1 rounded-full bg-blue-700 dark:bg-blue-500"
-                    style={{
-                      width: `${(Number(c.findings) / Number(max)) * 100}%`,
-                    }}
-                  />
-                </div>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
+    <Card size="sm" className="gap-3">
+      <Heading variant="h6">Findings by category</Heading>
+      <RankedBar items={items} />
+    </Card>
   );
 }
 
@@ -321,55 +299,24 @@ function RuleBreakdown({
 }) {
   if (isLoading && rules.length === 0) {
     return (
-      <div className="text-muted-foreground rounded-lg border p-4 text-sm">
-        Loading rule breakdown...
-      </div>
+      <Card size="sm">
+        <Type muted className="text-sm">
+          Loading rule breakdown...
+        </Type>
+      </Card>
     );
   }
   if (rules.length === 0) return null;
-  const max = rules[0]?.findings || 1;
+
+  const items: RankedBarItem[] = rules.map((r) => ({
+    label: r.ruleId ? getRuleTitleFallback(r.ruleId) : "(no rule_id)",
+    value: Number(r.findings),
+  }));
 
   return (
-    <div className="space-y-3 rounded-lg border p-4">
-      <h4 className="text-sm font-medium">Findings by rule</h4>
-      <ul className="space-y-2">
-        {rules.map((r, i) => {
-          const label = r.ruleId
-            ? getRuleTitleFallback(r.ruleId)
-            : "(no rule_id)";
-          return (
-            <li
-              key={r.ruleId || `__none_${i}`}
-              className="flex items-center gap-3"
-            >
-              <span className="text-muted-foreground w-4 shrink-0 text-right text-xs">
-                {i + 1}
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="mb-1 flex items-center justify-between gap-2">
-                  <span
-                    className="truncate text-sm"
-                    title={r.ruleId || undefined}
-                  >
-                    {label}
-                  </span>
-                  <span className="text-muted-foreground shrink-0 text-xs">
-                    {Number(r.findings).toLocaleString()}
-                  </span>
-                </div>
-                <div className="bg-muted h-1 w-full rounded-full">
-                  <div
-                    className="h-1 rounded-full bg-blue-700 dark:bg-blue-500"
-                    style={{
-                      width: `${(Number(r.findings) / Number(max)) * 100}%`,
-                    }}
-                  />
-                </div>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
+    <Card size="sm" className="gap-3">
+      <Heading variant="h6">Findings by rule</Heading>
+      <RankedBar items={items} />
+    </Card>
   );
 }

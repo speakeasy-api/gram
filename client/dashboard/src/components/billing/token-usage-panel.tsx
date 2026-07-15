@@ -8,7 +8,7 @@ import {
   Legend,
   LinearScale,
 } from "chart.js";
-import { useMoonshineConfig } from "@speakeasy-api/moonshine";
+import { useTheme } from "@/contexts/theme-context";
 import { Info } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Bar } from "react-chartjs-2";
@@ -403,7 +403,7 @@ export function TokenUsagePanel({
 
   // Chart.js paints the canvas with static defaults that ignore the CSS
   // theme, so axis/legend text and gridlines need explicit dark-mode colors.
-  const { theme } = useMoonshineConfig();
+  const { theme } = useTheme();
   const isDark = theme === "dark";
 
   const chartOptions = useMemo<ChartOptions<"bar">>(() => {

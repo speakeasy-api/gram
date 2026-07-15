@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 import { useAssetImageUploadHandler } from "@/components/useAssetImageUploadHandler";
 import { Asset } from "@gram/client/models/components/asset.js";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/stack";
 import { Loader2, UploadIcon } from "lucide-react";
 import { useState } from "react";
 import { AssetImage } from "./asset-image";
@@ -134,7 +134,7 @@ export function FullWidthUpload({
         <label
           htmlFor="dropzone-file"
           className={cn(
-            "trans flex w-full flex-col items-center justify-center rounded-lg border-1 border-dashed p-10",
+            "trans flex w-full flex-col items-center justify-center border-1 border-dashed p-10",
             isLoading
               ? "border-primary/50 bg-primary/5 cursor-default"
               : !handlers.isValidFile
@@ -180,5 +180,65 @@ export function FullWidthUpload({
         </label>
       </div>
     </div>
+  );
+}
+
+export function CompactUpload({
+  onUpload,
+  allowedExtensions,
+  className,
+  renderFilePreview,
+}: {
+  onUpload: (file: File) => void;
+  allowedExtensions?: string[];
+  label?: React.ReactNode;
+  className?: string;
+  renderFilePreview?: () => React.ReactNode;
+}): JSX.Element {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      onUpload(file);
+    }
+  };
+
+  const { isValidFile, ...handlers } = useFileDropZoneHandlers(
+    onUpload,
+    allowedExtensions,
+  );
+  return (
+    <label
+      htmlFor="dropzone-file"
+      tabIndex={0}
+      className={cn(
+        "inline-flex flex-col items-center justify-center gap-2",
+        "cursor-pointer border-1 border-dashed p-6",
+        "aspect-square",
+        !isValidFile
+          ? "border-destructive bg-destructive/10"
+          : "border-muted-foreground/50 hover:bg-input/20",
+        className,
+      )}
+      {...handlers}
+    >
+      {(renderFilePreview && renderFilePreview()) ?? (
+        <Stack align={"center"} gap={2}>
+          <UploadIcon className="h-4 w-4" />
+          <Type mono muted className="text-xs">
+            {allowedExtensions?.map((ext) => `.${ext}`)?.join(", ")}
+          </Type>
+          <Type mono muted className="text-xs">
+            (max 8MiB)
+          </Type>
+        </Stack>
+      )}
+      <input
+        id="dropzone-file"
+        type="file"
+        className="hidden"
+        onChange={handleFileChange}
+        accept={allowedExtensions?.map((ext) => `.${ext}`)?.join(",")}
+      />
+    </label>
   );
 }

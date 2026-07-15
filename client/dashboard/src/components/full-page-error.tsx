@@ -1,6 +1,9 @@
 import { GramLogo } from "@/components/gram-logo/index";
 import { toError } from "@/lib/errors";
-import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
+import { Heading } from "@/components/ui/heading";
+import { CircleAlert, RotateCcw } from "lucide-react";
 
 interface FullPageErrorProps {
   error: unknown;
@@ -17,8 +20,10 @@ export function FullPageError({
 
         <Stack gap={3} align="center">
           <Stack direction="horizontal" gap={2} align="center">
-            <Icon name="circle-alert" className="text-destructive h-5 w-5" />
-            <h2 className="text-lg font-medium">Something went wrong</h2>
+            <CircleAlert className="text-destructive h-5 w-5" />
+            <Heading variant="h2" className="normal-case">
+              Something went wrong
+            </Heading>
           </Stack>
 
           <p className="text-muted-foreground text-sm">
@@ -26,7 +31,7 @@ export function FullPageError({
             support if the problem persists.
           </p>
 
-          <div className="bg-muted w-full rounded-md p-3">
+          <div className="bg-muted w-full p-3">
             <p className="text-muted-foreground font-mono text-xs break-all">
               {error.message}
             </p>
@@ -43,7 +48,7 @@ export function FullPageError({
         <Stack direction="horizontal" gap={2}>
           <Button variant="brand" onClick={() => window.location.reload()}>
             <Button.LeftIcon>
-              <Icon name="rotate-ccw" className="h-4 w-4" />
+              <RotateCcw className="h-4 w-4" />
             </Button.LeftIcon>
             <Button.Text>Reload page</Button.Text>
           </Button>

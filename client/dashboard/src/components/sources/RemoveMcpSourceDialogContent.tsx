@@ -1,8 +1,11 @@
-import { Input } from "@/components/ui/input";
 import { Type } from "@/components/ui/type";
 import { LinkedMcpServerRow } from "@/components/sources/LinkedMcpServerRow";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
-import { Alert, Button, Dialog } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/button";
+import { Alert } from "@/components/ui/alert";
+import { Input } from "@/components/ui/input";
+import { Dialog } from "@/components/ui/dialog";
+import { toastError } from "@/lib/toast-error";
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -56,8 +59,7 @@ export function RemoveMcpSourceDialogContent({
       toast.success(successMessage);
       onSuccess();
     } catch (error) {
-      const message = error instanceof Error ? error.message : failureMessage;
-      toast.error(message);
+      toastError(error, failureMessage);
     }
   };
 
@@ -76,7 +78,7 @@ export function RemoveMcpSourceDialogContent({
           <Type small muted>
             The following will also be removed:
           </Type>
-          <ul className="divide-border space-y-2 rounded-md border">
+          <ul className="divide-border space-y-2 border">
             {linkedMcpServers.map((server) => (
               <LinkedMcpServerRow key={server.id} server={server} />
             ))}
@@ -90,7 +92,7 @@ export function RemoveMcpSourceDialogContent({
         </Type>
         <Input
           value={confirmation}
-          onChange={setConfirmation}
+          onChange={(e) => setConfirmation(e.target.value)}
           placeholder={confirmValue}
           disabled={isPending}
         />

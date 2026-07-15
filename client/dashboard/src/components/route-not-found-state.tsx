@@ -1,5 +1,7 @@
 import { Type } from "@/components/ui/type";
-import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
+import { CircleAlert } from "lucide-react";
 import type { ReactNode } from "react";
 
 type RouteNotFoundStateProps = {
@@ -16,7 +18,7 @@ export function RouteNotFoundState({
   return (
     <div className="flex min-h-[420px] w-full items-center justify-center">
       <Stack gap={4} align="center" className="max-w-md text-center">
-        <Icon name="circle-alert" className="size-10" />
+        <CircleAlert className="size-10" />
         <Stack gap={2} align="center">
           <Type variant="subheading">{title}</Type>
           <Type muted>{description}</Type>

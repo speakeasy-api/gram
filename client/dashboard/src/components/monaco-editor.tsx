@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 import Editor, { loader, OnMount } from "@monaco-editor/react";
-import { useMoonshineConfig } from "@speakeasy-api/moonshine";
+import { useTheme } from "@/contexts/theme-context";
 import type * as Monaco from "monaco-editor";
 import * as monaco from "monaco-editor";
 import { useEffect, useRef } from "react";
@@ -60,7 +60,7 @@ export function MonacoEditor({
   height = "100%",
   wordWrap = "off",
 }: MonacoEditorProps): JSX.Element {
-  const { theme } = useMoonshineConfig();
+  const { theme } = useTheme();
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
 
   const handleEditorDidMount: OnMount = (editor, _monaco) => {
@@ -74,7 +74,7 @@ export function MonacoEditor({
       renderWhitespace: "selection",
       fontSize: 12,
       fontFamily:
-        'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
+        '"Diatype Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
       lineNumbers: "on",
       folding: true,
       automaticLayout: true,

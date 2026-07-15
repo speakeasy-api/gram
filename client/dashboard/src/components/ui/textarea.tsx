@@ -1,6 +1,14 @@
 import { cn } from "@/lib/utils";
 
-const textAreaClassNames = "w-full border-2 rounded-lg py-1 px-2 resize-y";
+// Mirrors the visual contract of `Input` (see components/ui/input.tsx):
+// a 1px hairline on the inset surface, squared corners, no shadow.
+const textAreaClassNames = cn(
+  "w-full resize-y border border-neutral-default bg-inset px-4 py-3",
+  "font-sans text-sm font-light text-default shadow-none outline-none transition-colors",
+  "placeholder:text-placeholder focus-visible:border-neutral-active",
+  "disabled:cursor-not-allowed disabled:opacity-50",
+  "aria-invalid:border-destructive-default",
+);
 
 export function TextArea({
   id,

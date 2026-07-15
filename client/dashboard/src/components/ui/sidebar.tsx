@@ -1,3 +1,4 @@
+import { PanelLeft } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -13,7 +14,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn, isMacPlatform } from "@/lib/utils";
-import { Button, Icon } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/button";
 import * as React from "react";
 import {
   SidebarContext,
@@ -222,7 +223,7 @@ function Sidebar({
         <div
           data-sidebar="sidebar"
           data-slot="sidebar-inner"
-          className="bg-sidebar group-data-[variant=floating]:border-sidebar-border flex h-full w-full flex-col group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:shadow-sm"
+          className="bg-sidebar group-data-[variant=floating]:border-sidebar-border flex h-full w-full flex-col group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border"
         >
           {children}
         </div>
@@ -259,7 +260,7 @@ function SidebarTrigger({
           {...props}
         >
           <Button.LeftIcon>
-            <Icon name="panel-left" />
+            <PanelLeft className="size-4" />
           </Button.LeftIcon>
           <Button.Text className="sr-only">Toggle Sidebar</Button.Text>
         </Button>
@@ -279,8 +280,8 @@ function SidebarInset({
     <main
       data-slot="sidebar-inset"
       className={cn(
-        "bg-surface-primary relative flex min-w-0 flex-1 flex-col",
-        "md:peer-data-[variant=inset]:m-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:shadow-sm md:peer-data-[variant=inset]:peer-data-[state=collapsed]:ml-2",
+        "bg-canvas relative flex min-w-0 flex-1 flex-col",
+        "md:peer-data-[variant=inset]:m-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:border md:peer-data-[variant=inset]:peer-data-[state=collapsed]:ml-2",
         className,
       )}
       {...props}

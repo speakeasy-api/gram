@@ -209,7 +209,7 @@ export function NavGroupProvider({
       >
         {highlightRect && (
           <motion.div
-            className="bg-card ring-border/50 pointer-events-none absolute rounded-lg ring-1"
+            className="bg-card ring-border/50 pointer-events-none absolute ring-1"
             animate={{
               top: highlightRect.top,
               left: highlightRect.left,
@@ -386,7 +386,7 @@ export function NavButton({
       target={target}
       onClick={handleClick}
       className={cn(
-        "relative z-1 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm transition-colors hover:no-underline",
+        "relative z-1 flex w-full items-center gap-2 px-2 py-2 text-sm transition-colors hover:no-underline",
         "group-data-[collapsible=icon]:min-w-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0 group-data-[collapsible=icon]:p-2!",
         active
           ? "text-foreground font-semibold"
@@ -486,17 +486,18 @@ export function CollapsibleNavGroup({
             to={defaultHref ?? "#"}
             onClick={handleClick}
             className={cn(
-              "relative z-1 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm transition-colors hover:no-underline",
+              // Group headers read as mono eyebrows (Claude Design); the icon
+              // only shows in the collapsed icon-rail mode where the label is
+              // hidden.
+              "relative z-1 flex w-full items-center gap-2 px-2 py-2 text-left font-mono text-xs font-light tracking-[0.08em] uppercase transition-colors hover:no-underline",
               "group-data-[collapsible=icon]:min-w-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0 group-data-[collapsible=icon]:p-2!",
               "cursor-pointer outline-hidden",
-              isOpen
-                ? "text-foreground font-semibold"
-                : "text-muted-foreground hover:text-foreground font-medium",
+              isOpen ? "text-highlight" : "text-muted hover:text-highlight",
             )}
           >
             <Icon
               className={cn(
-                "size-4 shrink-0 transition-colors",
+                "hidden size-4 shrink-0 transition-colors group-data-[collapsible=icon]:block",
                 isOpen ? "text-foreground" : "text-muted-foreground",
               )}
             />
@@ -589,7 +590,7 @@ export function CollapsibleNavItem({
           to={item.href()}
           onClick={handleClick}
           className={cn(
-            "relative z-1 flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:no-underline",
+            "relative z-1 flex items-center gap-2 px-2 py-1.5 text-sm transition-colors hover:no-underline",
             item.active
               ? "text-foreground font-semibold"
               : "text-muted-foreground hover:text-foreground",

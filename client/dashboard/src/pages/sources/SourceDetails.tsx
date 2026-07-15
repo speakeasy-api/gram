@@ -1,4 +1,4 @@
-import { DetailHero } from "@/components/detail-hero";
+import { DetailLayout } from "@/components/layouts/detail-layout";
 import MonacoEditorLazy from "@/components/monaco-editor.lazy";
 import { Page } from "@/components/page-layout";
 import { computeTelemetrySummary } from "@/components/sources/sourceTelemetrySummary";
@@ -10,7 +10,6 @@ import {
   TabsContent,
   TabsList,
 } from "@/components/ui/tabs";
-import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
 import { useProject } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
@@ -29,7 +28,8 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { useToolUpdate } from "@/hooks/useToolUpdate";
 import { invalidateAllListTools } from "@gram/client/react-query/listTools.js";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Badge, Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { Navigate, useParams } from "react-router";
 import { SourceDeploymentsPanel } from "./SourceDeploymentsPanel";
@@ -255,37 +255,26 @@ export default function SourceDetails(): JSX.Element {
         />
       </Page.Header>
 
-      <Page.Body
-        fullWidth
-        noPadding
-        fullHeight
-        overflowHidden
-        className="gap-0"
-      >
-        <DetailHero>
-          <div className="flex flex-col gap-2">
-            <div className="ml-1 flex items-center gap-3">
-              <Heading variant="h1">{source?.name || sourceSlug}</Heading>
+      <Page.Body fullHeight overflowHidden className="gap-0">
+        <DetailLayout className="min-h-0 flex-1">
+          <DetailLayout.Header
+            eyebrow="Source"
+            title={source?.name || sourceSlug}
+            subtitle={source?.slug}
+            actions={
               <Badge variant="neutral">
                 <Badge.Text>{sourceType}</Badge.Text>
               </Badge>
-            </div>
-            <div className="ml-1 flex items-center gap-2">
-              <Type className="text-muted-foreground max-w-2xl truncate">
-                {source?.slug}
-              </Type>
-            </div>
-          </div>
-        </DetailHero>
+            }
+          />
 
-        {/* Tabs */}
-        <Tabs
-          value={activeTab}
-          onValueChange={handleTabChange}
-          className="flex min-h-0 w-full flex-1 flex-col"
-        >
-          <div className="shrink-0 border-b">
-            <div className="mx-auto max-w-[1270px] px-8">
+          {/* Tabs */}
+          <Tabs
+            value={activeTab}
+            onValueChange={handleTabChange}
+            className="flex min-h-0 w-full flex-1 flex-col"
+          >
+            <DetailLayout.Tabs>
               <TabsList className="h-auto gap-6 rounded-none bg-transparent p-0">
                 <PageTabsTrigger value="overview">Overview</PageTabsTrigger>
                 <PageTabsTrigger value="tools">
@@ -306,92 +295,104 @@ export default function SourceDetails(): JSX.Element {
                 </PageTabsTrigger>
                 <PageTabsTrigger value="settings">Settings</PageTabsTrigger>
               </TabsList>
-            </div>
-          </div>
+            </DetailLayout.Tabs>
 
-          <TabsContent value="overview" className="mt-0 flex-1">
-            <SourceOverviewTab
-              source={source ?? null}
-              isOpenAPI={isOpenAPI}
-              underlyingAsset={underlyingAsset}
-              activeDeploymentItem={activeDeploymentItem}
-              sourceToolMetrics={sourceToolMetrics}
-              isLoadingTelemetry={isLoadingTelemetry}
-              sourceTelemetrySummary={sourceTelemetrySummary}
-            />
-          </TabsContent>
+            <DetailLayout.Content className="min-h-0 flex-1">
+              <DetailLayout.Main className="min-h-0">
+                <TabsContent value="overview" className="mt-0 flex-1">
+                  <SourceOverviewTab
+                    source={source ?? null}
+                    isOpenAPI={isOpenAPI}
+                    underlyingAsset={underlyingAsset}
+                    activeDeploymentItem={activeDeploymentItem}
+                    sourceToolMetrics={sourceToolMetrics}
+                    isLoadingTelemetry={isLoadingTelemetry}
+                    sourceTelemetrySummary={sourceTelemetrySummary}
+                  />
+                </TabsContent>
 
-          <TabsContent
-            value="tools"
-            className="mt-0 flex min-h-0 flex-1 flex-col"
-          >
-            <SourceToolsTab
-              relatedTools={relatedTools}
-              isOpenAPI={isOpenAPI}
-              uniqueRuntimes={uniqueRuntimes}
-              onToolUpdate={canWriteTools ? updateTool : undefined}
-              isToolUpdating={isUpdating}
-            />
-          </TabsContent>
+                <TabsContent
+                  value="tools"
+                  className="mt-0 flex min-h-0 flex-1 flex-col"
+                >
+                  <SourceToolsTab
+                    relatedTools={relatedTools}
+                    isOpenAPI={isOpenAPI}
+                    uniqueRuntimes={uniqueRuntimes}
+                    onToolUpdate={canWriteTools ? updateTool : undefined}
+                    isToolUpdating={isUpdating}
+                  />
+                </TabsContent>
 
-          <TabsContent value="mcp-servers" className="mt-0 flex-1">
-            <SourceMCPServersTab associatedToolsets={associatedToolsets} />
-          </TabsContent>
+                <TabsContent value="mcp-servers" className="mt-0 flex-1">
+                  <SourceMCPServersTab
+                    associatedToolsets={associatedToolsets}
+                  />
+                </TabsContent>
 
-          {isOpenAPI && (
-            <TabsContent value="spec" className="mt-0">
-              {isLoadingSpec ? (
-                <div className="p-8">
-                  <SkeletonCode lines={20} />
-                </div>
-              ) : specError ? (
-                <div className="py-8 text-center">
-                  <Type className="text-destructive">
-                    {specError instanceof Error
-                      ? specError.message
-                      : "Failed to fetch spec"}
-                  </Type>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="mt-4"
-                    onClick={() => {
-                      void refetchSpec();
-                    }}
+                {isOpenAPI && (
+                  <TabsContent value="spec" className="mt-0">
+                    {isLoadingSpec ? (
+                      <div className="p-8">
+                        <SkeletonCode lines={20} />
+                      </div>
+                    ) : specError ? (
+                      <div className="py-8 text-center">
+                        <Type className="text-destructive">
+                          {specError instanceof Error
+                            ? specError.message
+                            : "Failed to fetch spec"}
+                        </Type>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          className="mt-4"
+                          onClick={() => {
+                            void refetchSpec();
+                          }}
+                        >
+                          <Button.Text>Retry</Button.Text>
+                        </Button>
+                      </div>
+                    ) : specContent ? (
+                      <MonacoEditorLazy
+                        value={specContent.content}
+                        language={specContent.language}
+                        height="calc(100vh - 380px)"
+                        wordWrap="on"
+                      />
+                    ) : (
+                      <Type className="text-muted-foreground py-8 text-center">
+                        No spec content available
+                      </Type>
+                    )}
+                  </TabsContent>
+                )}
+
+                <TabsContent
+                  value="deployments"
+                  className="mt-0 min-h-0 flex-1"
+                >
+                  <Suspense
+                    fallback={<div className="p-8">Loading deployments...</div>}
                   >
-                    <Button.Text>Retry</Button.Text>
-                  </Button>
-                </div>
-              ) : specContent ? (
-                <MonacoEditorLazy
-                  value={specContent.content}
-                  language={specContent.language}
-                  height="calc(100vh - 380px)"
-                  wordWrap="on"
-                />
-              ) : (
-                <Type className="text-muted-foreground py-8 text-center">
-                  No spec content available
-                </Type>
-              )}
-            </TabsContent>
-          )}
+                    <SourceDeploymentsPanel
+                      sourceKind={sourceKind}
+                      attachmentType={attachmentTypeForSourceKind(sourceKind)}
+                    />
+                  </Suspense>
+                </TabsContent>
 
-          <TabsContent value="deployments" className="mt-0 min-h-0 flex-1">
-            <Suspense
-              fallback={<div className="p-8">Loading deployments...</div>}
-            >
-              <SourceDeploymentsPanel
-                sourceKind={sourceKind}
-                attachmentType={attachmentTypeForSourceKind(sourceKind)}
-              />
-            </Suspense>
-          </TabsContent>
-
-          <TabsContent value="settings" className="mt-0 flex-1">
-            <SourceSettingsTab isOpenAPI={isOpenAPI} source={source ?? null} />
-          </TabsContent>
-        </Tabs>
+                <TabsContent value="settings" className="mt-0 flex-1">
+                  <SourceSettingsTab
+                    isOpenAPI={isOpenAPI}
+                    source={source ?? null}
+                  />
+                </TabsContent>
+              </DetailLayout.Main>
+            </DetailLayout.Content>
+          </Tabs>
+        </DetailLayout>
       </Page.Body>
     </Page>
   );

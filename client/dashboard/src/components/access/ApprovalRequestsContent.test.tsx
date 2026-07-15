@@ -80,13 +80,15 @@ vi.mock("nuqs", () => ({
   useQueryState: mocks.useQueryState,
 }));
 
-vi.mock("@speakeasy-api/moonshine", () => ({
+vi.mock("@/components/ui/badge", () => ({
   Badge: Object.assign(
     ({ children }: { children: ReactNode }) => <span>{children}</span>,
     {
       Text: ({ children }: { children: ReactNode }) => <span>{children}</span>,
     },
   ),
+}));
+vi.mock("@/components/ui/button", () => ({
   Button: Object.assign(
     ({
       children,
@@ -108,22 +110,8 @@ vi.mock("@speakeasy-api/moonshine", () => ({
       Text: ({ children }: { children: ReactNode }) => <span>{children}</span>,
     },
   ),
-  Dialog: Object.assign(
-    ({
-      children,
-      open,
-    }: {
-      children: ReactNode;
-      open?: boolean;
-      onOpenChange?: (open: boolean) => void;
-    }) => (open ? <div role="dialog">{children}</div> : null),
-    {
-      Content: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-      Header: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-      Title: ({ children }: { children: ReactNode }) => <h2>{children}</h2>,
-      Footer: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-    },
-  ),
+}));
+vi.mock("@/components/ui/table", () => ({
   Table: ({
     columns,
     data,
@@ -155,6 +143,25 @@ vi.mock("@speakeasy-api/moonshine", () => ({
         ))}
       </tbody>
     </table>
+  ),
+}));
+
+vi.mock("@/components/ui/dialog", () => ({
+  Dialog: Object.assign(
+    ({
+      children,
+      open,
+    }: {
+      children: ReactNode;
+      open?: boolean;
+      onOpenChange?: (open: boolean) => void;
+    }) => (open ? <div role="dialog">{children}</div> : null),
+    {
+      Content: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+      Header: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+      Title: ({ children }: { children: ReactNode }) => <h2>{children}</h2>,
+      Footer: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+    },
   ),
 }));
 

@@ -1,9 +1,7 @@
-import { AnyField } from "@/components/moon/any-field";
-import { InputField } from "@/components/moon/input-field";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
-import { Button as LocalButton } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Field, FieldLabel } from "@/components/ui/field";
 import {
   Sheet,
   SheetContent,
@@ -12,6 +10,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { TextArea } from "@/components/ui/textarea";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import { useOrganization } from "@/contexts/Auth";
@@ -24,7 +23,9 @@ import {
 import { invalidateAllRoles } from "@gram/client/react-query/roles.js";
 import { useListScopes } from "@gram/client/react-query/listScopes.js";
 import { useUpdateRoleMutation } from "@gram/client/react-query/updateRole.js";
-import { Alert, Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/button";
+import { Alert } from "@/components/ui/alert";
+import { Input } from "@/components/ui/input";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router";
 import { useOrgRoutes } from "@/routes";
@@ -43,7 +44,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import {
   getSelectableMembers,
   isMemberLockedToRole,
@@ -118,6 +119,8 @@ export function CreateRoleDialog({
 }: CreateRoleDialogProps): JSX.Element {
   const isEditing = !!editingRole;
   const isSystemRole = !!editingRole?.isSystem;
+  const nameFieldId = useId();
+  const descriptionFieldId = useId();
 
   // ─── Form state ───────────────────────────────────────────────
   const [name, setName] = useState("");
@@ -564,7 +567,7 @@ export function CreateRoleDialog({
                 <button
                   type="button"
                   onClick={saveAndCloseRuleEditor}
-                  className="text-muted-foreground hover:text-foreground -ml-1 rounded-sm p-1 transition-colors"
+                  className="text-muted-foreground hover:text-foreground -ml-1 p-1 transition-colors"
                 >
                   <ArrowLeft className="h-4 w-4" />
                 </button>
@@ -609,31 +612,33 @@ export function CreateRoleDialog({
                   .
                 </Alert>
               )}
-              <InputField
-                label="Name"
-                placeholder="e.g., Project Manager"
-                required
-                autoFocus
-                disabled={editingRole?.isSystem}
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
+              <Field>
+                <FieldLabel htmlFor={nameFieldId}>Name</FieldLabel>
+                <Input
+                  id={nameFieldId}
+                  placeholder="e.g., Project Manager"
+                  required
+                  autoFocus
+                  disabled={editingRole?.isSystem}
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </Field>
 
-              <AnyField
-                label="Description"
-                render={(props) => (
-                  <textarea
-                    {...props}
-                    rows={2}
-                    required
-                    disabled={editingRole?.isSystem}
-                    placeholder="Describe what this role can do..."
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    className="border-input placeholder:text-muted-foreground focus-visible:ring-ring flex w-full resize-none rounded-md border bg-transparent px-3 py-2 text-sm shadow-xs focus-visible:ring-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                  />
-                )}
-              />
+              <Field>
+                <FieldLabel htmlFor={descriptionFieldId}>
+                  Description
+                </FieldLabel>
+                <TextArea
+                  id={descriptionFieldId}
+                  rows={2}
+                  required
+                  disabled={editingRole?.isSystem}
+                  placeholder="Describe what this role can do..."
+                  value={description}
+                  onChange={setDescription}
+                />
+              </Field>
 
               {/* ─── Permissions ─── */}
               <div className="border-border border-t pt-4">
@@ -669,10 +674,7 @@ export function CreateRoleDialog({
                       const someSelected = selectedInGroup > 0 && !allSelected;
 
                       return (
-                        <div
-                          key={group.label}
-                          className="border-border rounded-md border"
-                        >
+                        <div key={group.label} className="border-border border">
                           {/* Group header */}
                           <div
                             role="button"
@@ -684,7 +686,7 @@ export function CreateRoleDialog({
                                 toggleGroup(group.label);
                               }
                             }}
-                            className="hover:bg-muted/50 flex w-full cursor-pointer items-start justify-between gap-2 rounded-t-md px-3 py-2"
+                            className="hover:bg-muted/50 flex w-full cursor-pointer items-start justify-between gap-2 px-3 py-2"
                           >
                             <div className="flex items-start gap-2">
                               <Checkbox
@@ -772,7 +774,7 @@ export function CreateRoleDialog({
 
                                       {/* Static label for org/environment */}
                                       {isChecked && !isConfigurable && (
-                                        <span className="border-input text-muted-foreground inline-flex h-7 shrink-0 items-center rounded-md border bg-transparent px-2 py-1 text-xs">
+                                        <span className="border-input text-muted-foreground inline-flex h-7 shrink-0 items-center border bg-transparent px-2 py-1 text-xs">
                                           {scopeDef.resourceType ===
                                           "environment"
                                             ? "All in project"
@@ -818,11 +820,11 @@ export function CreateRoleDialog({
                                           getDenyPanels(
                                             getAllowLevel(grant.rules),
                                           ).length > 0 && (
-                                            <LocalButton
+                                            <Button
                                               type="button"
-                                              variant="ghost"
-                                              size="inline"
-                                              className="text-muted-foreground text-xs"
+                                              variant="tertiary"
+                                              size="xs"
+                                              className="text-muted-foreground"
                                               onClick={() =>
                                                 openRuleEditor(
                                                   scopeDef.slug,
@@ -830,9 +832,11 @@ export function CreateRoleDialog({
                                                 )
                                               }
                                             >
-                                              <Plus className="h-3 w-3" />
-                                              Except…
-                                            </LocalButton>
+                                              <Button.LeftIcon>
+                                                <Plus />
+                                              </Button.LeftIcon>
+                                              <Button.Text>Except…</Button.Text>
+                                            </Button>
                                           )}
                                       </div>
                                     )}
@@ -873,7 +877,7 @@ export function CreateRoleDialog({
                   </button>
 
                   {showMembers && (
-                    <div className="border-border divide-border mt-3 divide-y rounded-md border">
+                    <div className="border-border divide-border mt-3 divide-y border">
                       {/* Select-all header */}
                       {(() => {
                         const selectableMembers = getSelectableMembers(
@@ -1077,7 +1081,7 @@ function RuleChip({
   const chip = (
     <span
       className={cn(
-        "border-input bg-background inline-flex items-center gap-1 overflow-hidden rounded-md border px-1 py-1 text-xs",
+        "border-input bg-background inline-flex items-center gap-1 overflow-hidden border px-1 py-1 text-xs",
         isDeny && "border-destructive/30",
       )}
     >
@@ -1086,16 +1090,15 @@ function RuleChip({
         onClick={onClick}
         disabled={readOnly && !onClick}
         className={cn(
-          "hover:bg-accent inline-flex items-center gap-1 rounded-md px-2 py-1 transition-colors",
+          "hover:bg-accent inline-flex items-center gap-1 px-2 py-1 transition-colors",
           isDeny
             ? "text-destructive hover:bg-destructive/5"
             : "text-foreground",
-          readOnly && "rounded-md",
           !readOnly && onClick && "cursor-pointer",
         )}
       >
         {isAllow ? (
-          <Check className="h-3 w-3 shrink-0 text-emerald-600 dark:text-emerald-400" />
+          <Check className="text-default-success h-3 w-3 shrink-0" />
         ) : (
           <Ban className="h-3 w-3 shrink-0 opacity-70" />
         )}
@@ -1116,7 +1119,7 @@ function RuleChip({
             type="button"
             onClick={onRemove}
             className={cn(
-              "hover:bg-accent inline-flex items-center rounded-md px-1.5 py-1 transition-colors",
+              "hover:bg-accent inline-flex items-center px-1.5 py-1 transition-colors",
               isDeny
                 ? "text-destructive/60 hover:text-destructive hover:bg-destructive/5"
                 : "text-muted-foreground hover:text-foreground",

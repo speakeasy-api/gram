@@ -1,4 +1,3 @@
-// oxlint-disable react/only-export-components -- compound component (Object.assign) pattern
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useOrganization, useProject } from "@/contexts/Auth.tsx";
@@ -19,7 +18,7 @@ function PageHeaderComponent({
 }: {
   className?: string;
   children: React.ReactNode;
-}) {
+}): React.JSX.Element {
   return (
     <>
       <header
@@ -104,18 +103,13 @@ function BreadcrumbCrumb({
   }
   if (elem.isCurrentPage || elem.disableLink) {
     return (
-      <span
-        className={elem.isCurrentPage ? undefined : "text-muted-foreground"}
-      >
+      <span className={elem.isCurrentPage ? "text-highlight" : "text-muted"}>
         {elem.display}
       </span>
     );
   }
   return (
-    <Link
-      to={elem.url}
-      className="text-muted-foreground hover:text-foreground trans"
-    >
+    <Link to={elem.url} className="text-muted hover:text-highlight trans">
       {elem.display}
     </Link>
   );
@@ -247,28 +241,36 @@ function PageHeaderBreadcrumbs({
   visibleElements.push(...pageElements);
 
   return (
-    // Breadcrumbs + hint share their own justify-between row so the hint
-    // always pins to the true right edge of the nav bar, independent of the
-    // SidebarTrigger/Separator siblings in the outer header row (their width
-    // otherwise threw off the old ml-auto-on-both-siblings layout).
-    <div className="flex w-full items-center justify-between gap-2">
-      <PageHeader.Title
-        className={cn(fullWidth ? "max-w-full" : "", className)}
+    // The shortcut hint is a sibling of the breadcrumb band — not nested inside
+    // it — so it pins to the true right edge of the nav bar. Nested, it would
+    // stop at the right edge of the centered max-w-[1270px] band, landing
+    // mid-bar on wide screens. Breadcrumbs are unchanged; only the hint moves.
+    // Breadcrumbs read as the brand caption strip: mono, uppercase, tracked,
+    // middot-separated (Claude Design).
+    <>
+      <div
+        className={cn(
+          "ml-1 w-full max-w-[1270px] font-mono text-xs font-light tracking-[0.08em] uppercase",
+          fullWidth ? "max-w-full" : "",
+          className,
+        )}
       >
-        <div className="flex items-center gap-2 normal-case">
+        <div className="ml-auto flex items-center gap-2">
           {visibleElements.map((elem, index) => (
             <React.Fragment key={`${elem.url}-${index}`}>
               <BreadcrumbCrumb elem={elem} />
               {index < visibleElements.length - 1 && (
-                <span className="text-muted-foreground"> / </span>
+                <span className="text-muted" aria-hidden>
+                  ·
+                </span>
               )}
             </React.Fragment>
           ))}
           {stage && <ReleaseStageBadge stage={stage} />}
         </div>
-      </PageHeader.Title>
-      <InsightsDockShortcutHint className="shrink-0" />
-    </div>
+      </div>
+      <InsightsDockShortcutHint className="ml-auto shrink-0" />
+    </>
   );
 }
 
@@ -286,8 +288,8 @@ function PageHeaderActions({
   );
 }
 
-export const PageHeader = Object.assign(PageHeaderComponent, {
-  Title: PageHeaderTitle,
-  Breadcrumbs: PageHeaderBreadcrumbs,
-  Actions: PageHeaderActions,
-});
+PageHeaderComponent.Title = PageHeaderTitle;
+PageHeaderComponent.Breadcrumbs = PageHeaderBreadcrumbs;
+PageHeaderComponent.Actions = PageHeaderActions;
+
+export { PageHeaderComponent as PageHeader };

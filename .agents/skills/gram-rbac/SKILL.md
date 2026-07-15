@@ -294,6 +294,6 @@ This file documents conventions that evolve over time. Adding a new scope, resou
 - `gram-management-api` — the `access` service itself, and every service that gates handlers with `authz.Require`, follows that skill's flow.
 - `gram-audit-logging` — role and member mutations emit audit events via `server/internal/audit/access.go`; subjects are `access_role` and `access_member`.
 - `golang` — error handling through `oops`, the no-defensive-checks rule for `ActiveOrganizationID`, the `setup_test.go` / black-box test conventions used by RBAC tests.
-- `frontend` — everything under `client/dashboard/src/pages/access/` (component structure, `cn()`/Moonshine styling, React Query usage).
+- `frontend` — everything under `client/dashboard/src/pages/access/` (component structure, `cn()`/design-system styling, React Query usage).
 - `postgresql` — the `principal_grants` (with `selectors JSONB NOT NULL`), `roles`, and related tables backing the `access/repo` SQLc package.
 - `mise-tasks` — when modifying the `.mise-tasks/gen/*.sh` scripts referenced above.

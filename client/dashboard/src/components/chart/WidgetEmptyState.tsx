@@ -1,5 +1,6 @@
 import { Type } from "@/components/ui/type";
-import { cn, Icon } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/icon";
+import { cn } from "@/lib/utils";
 
 /**
  * Shared empty state for analytics widgets (charts, ranked lists, tables).

@@ -4,8 +4,6 @@ import { EnterpriseGate } from "@/components/enterprise-gate";
 import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
-import { ErrorAlert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import {
@@ -60,14 +58,27 @@ import type { ToolUsageUserFilter } from "@gram/client/models/components/toolusa
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useListAttributeKeys } from "@gram/client/react-query/listAttributeKeys.js";
 import { unwrapAsync } from "@gram/client/types/fp";
-import { Badge, Icon } from "@speakeasy-api/moonshine";
-import type { BadgeProps } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Alert } from "@/components/ui/alert";
+import { type BadgeProps } from "@/components/ui/badge";
+import { ObservabilityLayout } from "@/components/layouts/observability-layout";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Table, type Column } from "@/components/ui/table";
 import {
   useInfiniteQuery,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { Settings } from "lucide-react";
+import {
+  Inbox,
+  Info,
+  LoaderCircle,
+  Pencil,
+  Settings,
+  ShieldAlert,
+} from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 
@@ -115,7 +126,7 @@ function SlowSearchNotice() {
     <SimpleTooltip tooltip="Free-text search and custom attribute filters scan raw logs instead of the pre-aggregated summaries, so results may take longer to load. Server, user, agent, type, and date filters stay fast.">
       <Badge variant="warning">
         <Badge.LeftIcon>
-          <Icon name="info" size="small" />
+          <Info className="size-3" />
         </Badge.LeftIcon>
         <Badge.Text>Custom search — may be slower</Badge.Text>
       </Badge>
@@ -331,7 +342,6 @@ export function LogsTools(): JSX.Element {
     return [...new Set([...known, ...selected])];
   }, [activeFilters, filterOptionsData?.users]);
 
-  const [expandedTraceId, setExpandedTraceId] = useState<string | null>(null);
   const [selectedLog, setSelectedLog] = useState<TelemetryLogRecord | null>(
     null,
   );
@@ -450,10 +460,6 @@ export function LogsTools(): JSX.Element {
     setSelectedLog(log);
   }, []);
 
-  const toggleExpand = useCallback((traceId: string) => {
-    setExpandedTraceId((prev) => (prev === traceId ? null : traceId));
-  }, []);
-
   const refetch = useCallback(() => {
     void refetchLogs();
     void queryClient.invalidateQueries({ queryKey: ["trace-logs"] });
@@ -483,85 +489,85 @@ export function LogsTools(): JSX.Element {
         hideTrigger={isLogsDisabled}
         suggestions={INSIGHTS_SUGGESTIONS["logs/tools"]}
       />
-      {isLogsDisabled ? (
-        <div className="min-h-0 w-full flex-1 space-y-6 overflow-y-auto p-8 pb-24">
-          <div className="flex min-w-0 flex-col gap-1">
-            <h1 className="text-xl font-semibold">Tool Logs</h1>
-            <p className="text-muted-foreground text-sm">
-              Dive into tool traces across all tools, skills, and MCP servers
-              used by organization members in this project
-            </p>
-          </div>
-          <div className="relative flex-1">
-            <div
-              className="pointer-events-none h-full select-none"
-              aria-hidden="true"
-            >
-              <ObservabilitySkeleton />
-            </div>
-            <EnableLoggingOverlay onEnabled={refetch} />
-          </div>
-        </div>
-      ) : (
-        <EnterpriseGate
-          icon="workflow"
-          description="Tools are available on the Enterprise plan. Book a time to get started."
+      <ObservabilityLayout fullHeight>
+        <ObservabilityLayout.Header
+          title="Tool Logs"
+          subtitle="Dive into tool traces across all tools, skills, and MCP servers used by organization members in this project"
+          className="px-8 pt-4"
+        />
+        <ObservabilityLayout.Scroll
+          ref={containerRef}
+          onScroll={handleScroll}
+          className="px-8 py-6"
         >
-          <LogsToolsContent
-            isLoading={isLoading}
-            isFetching={isFetching}
-            onRefresh={refetch}
-            error={displayError}
-            traces={traces}
-            serverOptionGroups={serverOptionGroups}
-            onServerSelectionChange={handleServerSelectionChange}
-            userEmailOptions={toolUsageUserEmailOptions}
-            onUserEmailSelectionChange={handleUserEmailSelectionChange}
-            sourceOptions={hookSourceOptions}
-            onSourceSelectionChange={handleHookSourceSelectionChange}
-            activeFilters={activeFilters}
-            selectedTypes={selectedHookTypes}
-            onTypesChange={(types) =>
-              handleHookTypesChange(types.filter(isToolUsageType))
-            }
-            selectedStatuses={selectedStatuses}
-            onStatusesChange={handleStatusesChange}
-            roleOptions={roleOptions}
-            selectedRoleIds={selectedRoleIds}
-            onRoleSelectionChange={handleRoleSelectionChange}
-            expandedTraceId={expandedTraceId}
-            toggleExpand={toggleExpand}
-            selectedLog={selectedLog}
-            handleLogClick={handleLogClick}
-            setSelectedLog={setSelectedLog}
-            containerRef={containerRef}
-            handleScroll={handleScroll}
-            hasNextPage={hasNextPage}
-            isFetchingNextPage={isFetchingNextPage}
-            dateRange={dateRange}
-            customRange={customRange}
-            customRangeLabel={customRangeLabel}
-            onDateRangeChange={setDateRangeParam}
-            onCustomRangeChange={setCustomRangeParam}
-            onClearCustomRange={clearCustomRange}
-            projectSlug={projectSlug}
-            serverNameMappings={serverNameMappings}
-            attributeSearchInput={attributeSearchInput}
-            attributeSearchQuery={attributeSearchQuery}
-            attributeFilters={attributeFilters}
-            attributeKeys={attributeKeysData?.keys ?? []}
-            isLoadingAttributeKeys={isLoadingAttributeKeys}
-            onAttributeSearchInputChange={setAttributeSearchInput}
-            onAttributeSearchSubmit={updateAttributeSearchQuery}
-            onAttributeFiltersChange={updateAttributeFilters}
-            onAddFilterFromLog={handleAddFilterFromLog}
-            accountType={accountType}
-            onAccountTypeChange={setAccountType}
-            from={from}
-            to={to}
-          />
-        </EnterpriseGate>
-      )}
+          {isLogsDisabled ? (
+            <div className="relative flex-1">
+              <div
+                className="pointer-events-none h-full select-none"
+                aria-hidden="true"
+              >
+                <ObservabilitySkeleton />
+              </div>
+              <EnableLoggingOverlay onEnabled={refetch} />
+            </div>
+          ) : (
+            <EnterpriseGate
+              icon="workflow"
+              description="Tools are available on the Enterprise plan. Book a time to get started."
+            >
+              <LogsToolsContent
+                isLoading={isLoading}
+                isFetching={isFetching}
+                onRefresh={refetch}
+                error={displayError}
+                traces={traces}
+                serverOptionGroups={serverOptionGroups}
+                onServerSelectionChange={handleServerSelectionChange}
+                userEmailOptions={toolUsageUserEmailOptions}
+                onUserEmailSelectionChange={handleUserEmailSelectionChange}
+                sourceOptions={hookSourceOptions}
+                onSourceSelectionChange={handleHookSourceSelectionChange}
+                activeFilters={activeFilters}
+                selectedTypes={selectedHookTypes}
+                onTypesChange={(types) =>
+                  handleHookTypesChange(types.filter(isToolUsageType))
+                }
+                selectedStatuses={selectedStatuses}
+                onStatusesChange={handleStatusesChange}
+                roleOptions={roleOptions}
+                selectedRoleIds={selectedRoleIds}
+                onRoleSelectionChange={handleRoleSelectionChange}
+                selectedLog={selectedLog}
+                handleLogClick={handleLogClick}
+                setSelectedLog={setSelectedLog}
+                hasNextPage={hasNextPage}
+                isFetchingNextPage={isFetchingNextPage}
+                dateRange={dateRange}
+                customRange={customRange}
+                customRangeLabel={customRangeLabel}
+                onDateRangeChange={setDateRangeParam}
+                onCustomRangeChange={setCustomRangeParam}
+                onClearCustomRange={clearCustomRange}
+                projectSlug={projectSlug}
+                serverNameMappings={serverNameMappings}
+                attributeSearchInput={attributeSearchInput}
+                attributeSearchQuery={attributeSearchQuery}
+                attributeFilters={attributeFilters}
+                attributeKeys={attributeKeysData?.keys ?? []}
+                isLoadingAttributeKeys={isLoadingAttributeKeys}
+                onAttributeSearchInputChange={setAttributeSearchInput}
+                onAttributeSearchSubmit={updateAttributeSearchQuery}
+                onAttributeFiltersChange={updateAttributeFilters}
+                onAddFilterFromLog={handleAddFilterFromLog}
+                accountType={accountType}
+                onAccountTypeChange={setAccountType}
+                from={from}
+                to={to}
+              />
+            </EnterpriseGate>
+          )}
+        </ObservabilityLayout.Scroll>
+      </ObservabilityLayout>
     </>
   );
 }
@@ -586,13 +592,9 @@ function LogsToolsContent({
   roleOptions,
   selectedRoleIds,
   onRoleSelectionChange,
-  expandedTraceId,
-  toggleExpand,
   selectedLog,
   handleLogClick,
   setSelectedLog,
-  containerRef,
-  handleScroll,
   hasNextPage,
   isFetchingNextPage,
   dateRange,
@@ -638,13 +640,9 @@ function LogsToolsContent({
   roleOptions: Array<{ id: string; name: string }>;
   selectedRoleIds: string[];
   onRoleSelectionChange: (values: string[]) => void;
-  expandedTraceId: string | null;
-  toggleExpand: (traceId: string) => void;
   selectedLog: TelemetryLogRecord | null;
   handleLogClick: (log: TelemetryLogRecord) => void;
   setSelectedLog: (log: TelemetryLogRecord | null) => void;
-  containerRef: React.RefObject<HTMLDivElement | null>;
-  handleScroll: (e: React.UIEvent<HTMLDivElement>) => void;
   hasNextPage: boolean;
   isFetchingNextPage: boolean;
   dateRange: DateRangePreset;
@@ -673,135 +671,101 @@ function LogsToolsContent({
 
   return (
     <>
-      <div className="flex min-h-0 w-full flex-1 flex-col">
-        <div className="flex min-h-0 flex-1 flex-col gap-6 px-8 pt-8">
-          <div className="flex shrink-0 items-start justify-between gap-4">
-            <div className="flex min-w-0 flex-col gap-1">
-              <h1 className="text-xl font-semibold">Tool Logs</h1>
-              <p className="text-muted-foreground text-sm">
-                Dive into tool traces across all tools, skills, and MCP servers
-                used by organization members in this project
-              </p>
+      <div className="flex flex-col gap-6">
+        <div className="flex shrink-0 items-center justify-end gap-2">
+          <HooksSetupButton />
+          <Button variant="secondary" size="sm" asChild>
+            <Link to={orgRoutes.logs.href()}>
+              <Settings className="h-4 w-4" />
+              Configure settings
+            </Link>
+          </Button>
+        </div>
+
+        <ObserveFilterBar
+          serverOptions={[]}
+          serverOptionGroups={serverOptionGroups}
+          onServerSelectionChange={onServerSelectionChange}
+          userEmailOptions={userEmailOptions}
+          onUserEmailSelectionChange={onUserEmailSelectionChange}
+          sourceOptions={sourceOptions}
+          onSourceSelectionChange={onSourceSelectionChange}
+          activeFilters={activeFilters}
+          selectedTypes={selectedTypes}
+          onTypesChange={onTypesChange}
+          typeOptions={TOOL_USAGE_TYPE_OPTIONS}
+          selectedStatuses={selectedStatuses}
+          onStatusesChange={onStatusesChange}
+          statusOptions={TOOL_USAGE_STATUS_OPTIONS}
+          roleOptions={roleOptions}
+          selectedRoleIds={selectedRoleIds}
+          onRoleSelectionChange={onRoleSelectionChange}
+          dateRange={dateRange}
+          customRange={customRange}
+          customRangeLabel={customRangeLabel}
+          onDateRangeChange={onDateRangeChange}
+          onCustomRangeChange={onCustomRangeChange}
+          onClearCustomRange={onClearCustomRange}
+          projectSlug={projectSlug}
+          serverNameMappings={serverNameMappings}
+          accountType={accountType}
+          onAccountTypeChange={onAccountTypeChange}
+          attributeSearchControl={
+            <div className="min-w-[260px] flex-[1.2]">
+              <LogFilterBar
+                filters={attributeFilters}
+                onChange={onAttributeFiltersChange}
+                attributeKeys={attributeKeys}
+                isLoadingKeys={isLoadingAttributeKeys}
+                searchInput={attributeSearchInput}
+                onSearchInputChange={onAttributeSearchInputChange}
+                onSearchSubmit={onAttributeSearchSubmit}
+              />
             </div>
-            <div className="flex items-center gap-2">
-              <HooksSetupButton />
-              <Button variant="outline" size="sm" asChild>
-                <Link to={orgRoutes.logs.href()}>
-                  <Settings className="h-4 w-4" />
-                  Configure settings
-                </Link>
-              </Button>
-            </div>
+          }
+          onRefresh={onRefresh}
+          isRefreshing={isFetching}
+        />
+
+        {isCustomSearchActive(attributeSearchQuery, attributeFilters) && (
+          <div className="flex shrink-0">
+            <SlowSearchNotice />
           </div>
+        )}
 
-          <ObserveFilterBar
-            serverOptions={[]}
-            serverOptionGroups={serverOptionGroups}
-            onServerSelectionChange={onServerSelectionChange}
-            userEmailOptions={userEmailOptions}
-            onUserEmailSelectionChange={onUserEmailSelectionChange}
-            sourceOptions={sourceOptions}
-            onSourceSelectionChange={onSourceSelectionChange}
-            activeFilters={activeFilters}
-            selectedTypes={selectedTypes}
-            onTypesChange={onTypesChange}
-            typeOptions={TOOL_USAGE_TYPE_OPTIONS}
-            selectedStatuses={selectedStatuses}
-            onStatusesChange={onStatusesChange}
-            statusOptions={TOOL_USAGE_STATUS_OPTIONS}
-            roleOptions={roleOptions}
-            selectedRoleIds={selectedRoleIds}
-            onRoleSelectionChange={onRoleSelectionChange}
-            dateRange={dateRange}
-            customRange={customRange}
-            customRangeLabel={customRangeLabel}
-            onDateRangeChange={onDateRangeChange}
-            onCustomRangeChange={onCustomRangeChange}
-            onClearCustomRange={onClearCustomRange}
-            projectSlug={projectSlug}
-            serverNameMappings={serverNameMappings}
-            accountType={accountType}
-            onAccountTypeChange={onAccountTypeChange}
-            attributeSearchControl={
-              <div className="min-w-[260px] flex-[1.2]">
-                <LogFilterBar
-                  filters={attributeFilters}
-                  onChange={onAttributeFiltersChange}
-                  attributeKeys={attributeKeys}
-                  isLoadingKeys={isLoadingAttributeKeys}
-                  searchInput={attributeSearchInput}
-                  onSearchInputChange={onAttributeSearchInputChange}
-                  onSearchSubmit={onAttributeSearchSubmit}
-                />
-              </div>
-            }
-            onRefresh={onRefresh}
-            isRefreshing={isFetching}
-          />
-
-          {isCustomSearchActive(attributeSearchQuery, attributeFilters) && (
-            <div className="flex shrink-0">
-              <SlowSearchNotice />
-            </div>
+        <div className="bg-card relative flex flex-col border">
+          {isFetching && traces.length > 0 && (
+            <Skeleton className="bg-primary/60 absolute top-0 right-0 left-0 z-20 h-1 w-full" />
           )}
 
-          <div className="flex min-h-0 flex-1 overflow-hidden">
-            <div className="min-h-0 flex-1 overflow-y-auto border">
-              <div className="bg-background relative flex h-full flex-col">
-                {isFetching && traces.length > 0 && (
-                  <div className="bg-primary/20 absolute top-0 right-0 left-0 z-20 h-1">
-                    <div className="bg-primary h-full animate-pulse" />
-                  </div>
-                )}
+          <LogsToolsTableContent
+            error={error}
+            isLoading={isLoading}
+            traces={traces}
+            hasActiveFilters={
+              activeFilters.length > 0 ||
+              selectedTypes.length > 0 ||
+              selectedStatuses.length > 0 ||
+              selectedRoleIds.length > 0 ||
+              attributeFilters.length > 0 ||
+              accountType !== "" ||
+              Boolean(attributeSearchQuery)
+            }
+            isFetchingNextPage={isFetchingNextPage}
+            onLogClick={handleLogClick}
+            serverNameMappings={serverNameMappings}
+            from={from}
+            to={to}
+          />
 
-                <div className="bg-muted/30 text-muted-foreground flex shrink-0 items-center gap-3 border-b px-5 py-2.5 text-xs font-medium tracking-wide uppercase">
-                  <div className="min-w-[150px] shrink-0">Timestamp</div>
-                  <div className="w-5 shrink-0" />
-                  <div className="min-w-0 flex-2">Source / Tool</div>
-                  <div className="min-w-[200px] flex-1 text-left">User</div>
-                  <div className="min-w-28 shrink-0">Agent</div>
-                  <div className="min-w-20 shrink-0 text-center">Status</div>
-                </div>
-
-                <div
-                  ref={containerRef}
-                  className="flex-1 overflow-y-auto"
-                  onScroll={handleScroll}
-                >
-                  <LogsToolsTableContent
-                    error={error}
-                    isLoading={isLoading}
-                    traces={traces}
-                    hasActiveFilters={
-                      activeFilters.length > 0 ||
-                      selectedTypes.length > 0 ||
-                      selectedStatuses.length > 0 ||
-                      selectedRoleIds.length > 0 ||
-                      attributeFilters.length > 0 ||
-                      accountType !== "" ||
-                      Boolean(attributeSearchQuery)
-                    }
-                    expandedTraceId={expandedTraceId}
-                    isFetchingNextPage={isFetchingNextPage}
-                    onToggleExpand={toggleExpand}
-                    onLogClick={handleLogClick}
-                    serverNameMappings={serverNameMappings}
-                    from={from}
-                    to={to}
-                  />
-                </div>
-
-                {traces.length > 0 && (
-                  <div className="bg-muted/30 text-muted-foreground flex shrink-0 items-center gap-4 border-t px-5 py-3 text-sm">
-                    <span>
-                      {traces.length} {traces.length === 1 ? "trace" : "traces"}
-                      {hasNextPage && " • Scroll to load more"}
-                    </span>
-                  </div>
-                )}
-              </div>
+          {traces.length > 0 && (
+            <div className="bg-card text-muted-foreground flex shrink-0 items-center gap-4 border-t px-5 py-3 text-sm">
+              <span>
+                {traces.length} {traces.length === 1 ? "trace" : "traces"}
+                {hasNextPage && " • Scroll to load more"}
+              </span>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
@@ -817,14 +781,28 @@ function LogsToolsContent({
   );
 }
 
+function traceTimeAgo(startTimeUnixNano: string): string {
+  const timestamp = new Date(Number(BigInt(startTimeUnixNano) / 1_000_000n));
+  const diff = Date.now() - timestamp.getTime();
+  const seconds = Math.max(0, Math.floor(diff / 1000));
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  return days > 0
+    ? `${days}d ago`
+    : hours > 0
+      ? `${hours}h ago`
+      : minutes > 0
+        ? `${minutes}m ago`
+        : `${seconds}s ago`;
+}
+
 function LogsToolsTableContent({
   error,
   isLoading,
   traces,
   hasActiveFilters,
-  expandedTraceId,
   isFetchingNextPage,
-  onToggleExpand,
   onLogClick,
   serverNameMappings,
   from,
@@ -834,21 +812,125 @@ function LogsToolsTableContent({
   isLoading: boolean;
   traces: ToolUsageTraceSummary[];
   hasActiveFilters: boolean;
-  expandedTraceId: string | null;
   isFetchingNextPage: boolean;
-  onToggleExpand: (traceId: string) => void;
   onLogClick: (log: TelemetryLogRecord) => void;
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
   from: Date;
   to: Date;
 }) {
+  const columns = useMemo<Column<ToolUsageTraceSummary>[]>(
+    () => [
+      {
+        key: "timestamp",
+        header: "Timestamp",
+        width: "150px",
+        render: (trace) => (
+          <span className="text-muted-foreground min-w-0 truncate font-mono text-xs">
+            {traceTimeAgo(trace.startTimeUnixNano)}
+          </span>
+        ),
+      },
+      {
+        key: "source",
+        header: "Source / Tool",
+        width: "2fr",
+        render: (trace) => (
+          <SourceToolCell
+            trace={trace}
+            serverNameMappings={serverNameMappings}
+          />
+        ),
+      },
+      {
+        key: "user",
+        header: "User",
+        width: "1fr",
+        render: (trace) => (
+          <div className="flex min-w-0 items-center gap-2 text-xs">
+            <AccountTypeIcon
+              accountType={trace.accountType}
+              className="shrink-0"
+            />
+            <span className="text-muted-foreground min-w-0 truncate">
+              {trace.userLabel || "—"}
+            </span>
+          </div>
+        ),
+      },
+      {
+        key: "agent",
+        header: "Agent",
+        width: "150px",
+        render: (trace) =>
+          trace.hookSource ? (
+            <div className="flex min-w-0 items-center gap-2">
+              <HookSourceIcon
+                source={trace.hookSource}
+                className="size-4 shrink-0"
+              />
+              <span className="text-foreground truncate text-xs font-medium">
+                {trace.hookSource}
+              </span>
+            </div>
+          ) : (
+            <span className="text-muted-foreground truncate text-xs">
+              Direct
+            </span>
+          ),
+      },
+      {
+        key: "status",
+        header: "Status",
+        width: "110px",
+        render: (trace) => {
+          const statusConfig = getStatusConfig(trace);
+          return statusConfig ? (
+            <Badge variant={statusConfig.variant}>
+              <Badge.Text>{statusConfig.label}</Badge.Text>
+            </Badge>
+          ) : null;
+        },
+      },
+    ],
+    [serverNameMappings],
+  );
+
+  const renderExpandedContent = useCallback(
+    (trace: ToolUsageTraceSummary) => (
+      <>
+        {trace.hookStatus === "blocked" && (
+          <div className="border-warning/30 bg-warning/10 flex items-start gap-3 border-y px-5 py-3 text-xs">
+            <ShieldAlert className="text-warning mt-0.5 size-4 shrink-0" />
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <div className="text-warning font-semibold tracking-wide uppercase">
+                Blocked
+              </div>
+              <div className="text-foreground wrap-break-words">
+                {trace.blockReason || "No reason provided"}
+              </div>
+            </div>
+          </div>
+        )}
+        <TraceLogsList
+          logGroup={trace.logGroup}
+          toolName={trace.toolName}
+          isExpanded
+          onLogClick={onLogClick}
+          parentTimestamp={trace.startTimeUnixNano}
+          from={from}
+          to={to}
+        />
+      </>
+    ),
+    [onLogClick, from, to],
+  );
+
   if (error) {
     return (
-      <ErrorAlert
-        error={error}
-        title="Error loading tool logs"
-        className="m-4"
-      />
+      <Alert variant="error" dismissible={false} className="m-4">
+        <span className="font-medium">Error loading tool logs</span>
+        <div>{error.message}</div>
+      </Alert>
     );
   }
 
@@ -867,40 +949,29 @@ function LogsToolsTableContent({
     }
 
     return (
-      <div className="py-12 text-center">
-        <div className="flex flex-col items-center gap-3">
-          <div className="bg-muted flex size-12 items-center justify-center rounded-full">
-            <Icon name="inbox" className="text-muted-foreground size-6" />
-          </div>
-          <span className="text-foreground font-medium">
-            No matching tool logs
-          </span>
-          <span className="text-muted-foreground max-w-sm text-sm">
-            Try adjusting your filters or time range
-          </span>
-        </div>
-      </div>
+      <InlineEmptyState
+        className="py-12"
+        icon={<Inbox />}
+        title="No matching tool logs"
+        description="Try adjusting your filters or time range"
+      />
     );
   }
 
   return (
     <>
-      {traces.map((trace) => (
-        <LogsToolsTraceRow
-          key={trace.id}
-          trace={trace}
-          isExpanded={expandedTraceId === trace.id}
-          onToggle={() => onToggleExpand(trace.id)}
-          onLogClick={onLogClick}
-          serverNameMappings={serverNameMappings}
-          from={from}
-          to={to}
-        />
-      ))}
+      <Table
+        columns={columns}
+        data={traces}
+        rowKey={(trace) => trace.id}
+        renderExpandedContent={renderExpandedContent}
+        lazyExpandedContent
+        className="min-w-[900px] rounded-none border-none"
+      />
 
       {isFetchingNextPage && (
         <div className="text-muted-foreground flex items-center justify-center gap-2 border-t py-4">
-          <Icon name="loader-circle" className="size-4 animate-spin" />
+          <LoaderCircle className="size-4 animate-spin" />
           <span className="text-sm">Loading more logs...</span>
         </div>
       )}
@@ -908,41 +979,17 @@ function LogsToolsTableContent({
   );
 }
 
-function LogsToolsTraceRow({
+// The Source / Tool cell: a target-type tag, the (optional) server label and
+// tool name, plus the hover-only pencil that opens the shadow-MCP rename dialog.
+// Holds the dialog's open state per row (each cell owns its own dialog).
+function SourceToolCell({
   trace,
-  isExpanded,
-  onToggle,
-  onLogClick,
   serverNameMappings,
-  from,
-  to,
 }: {
   trace: ToolUsageTraceSummary;
-  isExpanded: boolean;
-  onToggle: () => void;
-  onLogClick: (log: TelemetryLogRecord) => void;
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
-  from: Date;
-  to: Date;
 }) {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const timestamp = new Date(
-    Number(BigInt(trace.startTimeUnixNano) / 1_000_000n),
-  );
-  const now = new Date();
-  const diff = now.getTime() - timestamp.getTime();
-  const seconds = Math.max(0, Math.floor(diff / 1000));
-  const minutes = Math.floor(seconds / 60);
-  const hours = Math.floor(minutes / 60);
-  const days = Math.floor(hours / 24);
-  const timeAgo =
-    days > 0
-      ? `${days}d ago`
-      : hours > 0
-        ? `${hours}h ago`
-        : minutes > 0
-          ? `${minutes}m ago`
-          : `${seconds}s ago`;
 
   const targetLabel =
     trace.targetType === "shadow_mcp_server"
@@ -971,135 +1018,44 @@ function LogsToolsTraceRow({
     trace.targetType,
   ]);
 
-  const statusConfig = getStatusConfig(trace);
   const targetConfig = getTargetConfig(trace.targetType);
-  const userLabel = trace.userLabel || "—";
 
   return (
-    <div className="border-border/50 border-b last:border-b-0">
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={onToggle}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") onToggle();
-        }}
-        className="hover:bg-muted/50 flex w-full cursor-pointer items-center gap-3 px-5 py-2.5 text-left transition-colors"
-      >
-        <div className="text-muted-foreground min-w-[150px] shrink-0 font-mono text-xs">
-          {timeAgo}
-        </div>
-
-        <div className="flex w-5 shrink-0 items-center justify-center">
-          <Icon
-            name={isExpanded ? "chevron-down" : "chevron-right"}
-            className="text-muted-foreground size-4"
-          />
-        </div>
-
-        <div className="flex min-w-0 flex-2 items-center gap-2">
-          <div className="group/server relative flex shrink-0 items-center">
-            <span
-              className={cn(
-                "shrink-0 truncate rounded-xs px-2 py-1 font-mono text-xs",
-                targetConfig.className,
-              )}
-            >
-              {targetConfig.label}
-            </span>
-            {editDialogProps && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setEditDialogOpen(true);
-                }}
-                className="text-muted-foreground hover:text-foreground bg-card hover:bg-muted border-border invisible absolute -right-6 size-6 rounded border p-1 shadow-sm transition-colors group-hover/server:visible"
-                aria-label="Edit display name"
-              >
-                <Icon name="pencil" className="size-3" />
-              </button>
-            )}
-          </div>
-          <div className="flex min-w-0 items-baseline gap-2">
-            {showTargetLabel && (
-              <span className="text-muted-foreground min-w-0 truncate font-mono text-xs">
-                {targetLabel}
-                {" /"}
-              </span>
-            )}
-            <span className="truncate font-mono text-xs">
-              {formatToolName(trace.toolName)}
-            </span>
-          </div>
-        </div>
-
-        <div className="flex min-w-[200px] flex-1 items-center gap-2 text-xs">
-          <AccountTypeIcon
-            accountType={trace.accountType}
-            className="shrink-0"
-          />
-          <span className="text-muted-foreground min-w-0 truncate">
-            {userLabel || "—"}
-          </span>
-        </div>
-
-        <div className="flex min-w-28 shrink-0 items-center gap-2">
-          {trace.hookSource ? (
-            <>
-              <HookSourceIcon
-                source={trace.hookSource}
-                className="size-4 shrink-0"
-              />
-              <span className="text-foreground truncate text-xs font-medium">
-                {trace.hookSource}
-              </span>
-            </>
-          ) : (
-            <span className="text-muted-foreground truncate text-xs">
-              Direct
-            </span>
+    <div className="flex min-w-0 items-center gap-2">
+      <div className="group/server relative flex shrink-0 items-center">
+        <span
+          className={cn(
+            "shrink-0 truncate px-2 py-1 font-mono text-xs",
+            targetConfig.className,
           )}
-        </div>
-
-        <div className="flex min-w-20 shrink-0 justify-center">
-          {statusConfig && (
-            <Badge variant={statusConfig.variant}>
-              <Badge.Text>{statusConfig.label}</Badge.Text>
-            </Badge>
-          )}
-        </div>
+        >
+          {targetConfig.label}
+        </span>
+        {editDialogProps && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setEditDialogOpen(true);
+            }}
+            className="text-muted-foreground hover:text-foreground bg-card hover:bg-muted border-border invisible absolute -right-6 size-6 border p-1 transition-colors group-hover/server:visible"
+            aria-label="Edit display name"
+          >
+            <Pencil className="size-3" />
+          </button>
+        )}
       </div>
-
-      {isExpanded && (
-        <>
-          {trace.hookStatus === "blocked" && (
-            <div className="border-warning/30 bg-warning/10 flex items-start gap-3 border-y px-5 py-3 text-xs">
-              <Icon
-                name="shield-alert"
-                className="text-warning mt-0.5 size-4 shrink-0"
-              />
-              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <div className="text-warning font-semibold tracking-wide uppercase">
-                  Blocked
-                </div>
-                <div className="text-foreground wrap-break-words ">
-                  {trace.blockReason || "No reason provided"}
-                </div>
-              </div>
-            </div>
-          )}
-          <TraceLogsList
-            logGroup={trace.logGroup}
-            toolName={trace.toolName}
-            isExpanded={isExpanded}
-            onLogClick={onLogClick}
-            parentTimestamp={trace.startTimeUnixNano}
-            from={from}
-            to={to}
-          />
-        </>
-      )}
+      <div className="flex min-w-0 items-baseline gap-2">
+        {showTargetLabel && (
+          <span className="text-muted-foreground min-w-0 truncate font-mono text-xs">
+            {targetLabel}
+            {" /"}
+          </span>
+        )}
+        <span className="truncate font-mono text-xs">
+          {formatToolName(trace.toolName)}
+        </span>
+      </div>
 
       {editDialogProps && (
         <EditServerNameDialog
@@ -1133,14 +1089,12 @@ function getTargetConfig(targetType: ToolUsageTraceSummary["targetType"]) {
     case "shadow_mcp_server":
       return {
         label: "Shadow MCP",
-        className:
-          "bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-300",
+        className: "bg-warning/15 text-warning",
       };
     case "skill":
       return {
         label: "Skill",
-        className:
-          "bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-300",
+        className: "bg-accent text-accent-foreground",
       };
     case "local_tool":
     default:

@@ -1,97 +1,118 @@
-import * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
+import { Modifier, Variant } from "./alert-types";
+import { Icon } from "@/components/ui/icon";
+import { iconNames } from "@/components/ui/icon/names";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { Icon } from "@speakeasy-api/moonshine";
 
-const alertVariants = cva(
-  "relative w-full rounded-lg border px-4 py-3 text-sm [&>svg+div]:translate-y-[-3px] [&>svg]:absolute [&>svg]:left-4 [&>svg]:top-4 [&>svg]:text-foreground [&>svg~*]:pl-7",
+const flexClasses = "flex flex-row items-center gap-3";
+
+const alertVariants = cva<{
+  variant: {
+    [k in Variant]: string;
+  };
+  modifiers: {
+    [k in Modifier]: string;
+  };
+}>(
+  `min-w-48 max-h-fit flex flex-row subpixel-antialiased font-light items-center px-3 pr-2 py-2 w-full border`,
   {
     variants: {
       variant: {
-        default: "bg-background text-foreground",
-        destructive:
-          "border-destructive/50 text-destructive dark:border-destructive [&>svg]:text-destructive",
+        default: "bg-card",
+        success:
+          "bg-success-softest text-default-success border-success-softest",
+        error:
+          "bg-destructive-softest text-default-destructive border-destructive-softest",
         warning:
-          "border-yellow-500/50 text-yellow-600 dark:border-yellow-500 dark:text-yellow-400 [&>svg]:text-yellow-600 dark:[&>svg]:text-yellow-400",
-        info: "border-blue-500/50 text-blue-600 dark:border-blue-500 dark:text-blue-400 [&>svg]:text-blue-600 dark:[&>svg]:text-blue-400",
+          "bg-warning-softest text-default-warning border-warning-softest",
+        info: "bg-information-softest text-default-information border-information-softest",
+        feature: "bg-feature text-feature-foreground",
       },
-    },
-    defaultVariants: {
-      variant: "default",
+      modifiers: {
+        inline: "inline-flex",
+      },
     },
   },
 );
 
-const Alert = React.forwardRef<
-  HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement> & VariantProps<typeof alertVariants>
->(({ className, variant, ...props }, ref) => (
-  <div
-    ref={ref}
-    role="alert"
-    className={cn(alertVariants({ variant }), className)}
-    {...props}
-  />
-));
-Alert.displayName = "Alert";
-
-const AlertTitle = React.forwardRef<
-  HTMLParagraphElement,
-  React.HTMLAttributes<HTMLHeadingElement>
->(({ className, ...props }, ref) => (
-  <h5
-    ref={ref}
-    className={cn("mb-1 leading-none font-medium tracking-tight", className)}
-    {...props}
-  />
-));
-AlertTitle.displayName = "AlertTitle";
-
-const AlertDescription = React.forwardRef<
-  HTMLParagraphElement,
-  React.HTMLAttributes<HTMLParagraphElement>
->(({ className, ...props }, ref) => (
-  <div
-    ref={ref}
-    className={cn("text-sm [&_p]:leading-relaxed", className)}
-    {...props}
-  />
-));
-AlertDescription.displayName = "AlertDescription";
-
-interface ErrorAlertProps {
-  error: Error | string;
-  title?: string;
+export type AlertProps = {
+  variant: NonNullable<VariantProps<typeof alertVariants>["variant"]>;
+  children: React.ReactNode;
+  inline?: boolean;
+  dismissible?: boolean;
   onDismiss?: () => void;
+  iconName?: (typeof iconNames)[number];
+  useContainer?: boolean;
   className?: string;
-}
-
-const ErrorAlert = ({
-  error,
-  title = "Error",
-  onDismiss,
-  className,
-}: ErrorAlertProps): React.JSX.Element => {
-  const errorMessage = typeof error === "string" ? error : error.message;
-
-  return (
-    <Alert variant="destructive" className={cn("relative", className)}>
-      <Icon name="circle-alert" className="h-4 w-4" />
-      <AlertTitle className="flex items-center justify-between">
-        {title}
-        {onDismiss && (
-          <button
-            onClick={onDismiss}
-            className="ml-2 opacity-70 transition-opacity hover:opacity-100"
-            aria-label="Dismiss"
-          >
-            <Icon name="x" className="h-4 w-4" />
-          </button>
-        )}
-      </AlertTitle>
-      <AlertDescription>{errorMessage}</AlertDescription>
-    </Alert>
-  );
 };
 
-export { Alert, AlertTitle, AlertDescription, ErrorAlert };
+const iconForVariant: Record<Variant, (typeof iconNames)[number] | undefined> =
+  {
+    default: "info",
+    success: "check",
+    error: "circle-alert",
+    warning: "circle-alert",
+    info: "info",
+    feature: "star",
+  };
+
+export function Alert({
+  variant,
+  children,
+  inline = false,
+  dismissible = true,
+  onDismiss,
+  iconName,
+  useContainer = false,
+  className,
+}: AlertProps): React.JSX.Element {
+  const [isDismissing, setIsDismissing] = useState(false);
+  const handleDismiss = () => {
+    setIsDismissing(true);
+    onDismiss?.();
+  };
+  const icon = iconName ?? iconForVariant[variant];
+  const innerContent = (
+    <div className={flexClasses}>
+      <div className="flex-shrink-0">
+        {icon && <Icon name={icon} size="small" />}
+      </div>
+      <div>{children}</div>
+    </div>
+  );
+
+  const dismissableContent = dismissible && (
+    <div className="ml-auto self-start">
+      <button
+        className="p-2 hover:rounded-lg hover:bg-accent/10"
+        onClick={handleDismiss}
+      >
+        <Icon name="x" />
+      </button>
+    </div>
+  );
+
+  return (
+    <div
+      role="alert"
+      className={cn(
+        alertVariants({ variant, modifiers: inline ? "inline" : undefined }),
+        isDismissing && "opacity-0 transition-opacity duration-500",
+        className,
+      )}
+    >
+      {useContainer ? (
+        <div className="container flex">
+          {innerContent}
+          {dismissableContent}
+        </div>
+      ) : (
+        <>
+          {innerContent}
+          {dismissableContent}
+        </>
+      )}
+    </div>
+  );
+}

@@ -1,7 +1,6 @@
-import { DetailHero } from "@/components/detail-hero";
+import { DetailLayout } from "@/components/layouts/detail-layout";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Heading } from "@/components/ui/heading";
 import {
   PageTabsTrigger,
   Tabs,
@@ -52,24 +51,24 @@ export default function RemoteIdentityProviderDetail(): JSX.Element {
       <Page.Header>
         <Page.Header.Breadcrumbs substitutions={{ [issuerId]: label }} />
       </Page.Header>
-      <Page.Body fullWidth noPadding className="gap-0">
-        <DetailHero>
-          <div className="flex items-center gap-3">
-            <Type small muted>
-              Remote Identity Provider
-            </Type>
-            {issuer && <ScopeBadge projectScoped={Boolean(issuer.projectId)} />}
-          </div>
-          <Heading variant="h1" className="break-all normal-case">
-            {label}
-          </Heading>
-        </DetailHero>
+      <Page.Body>
+        <DetailLayout>
+          <DetailLayout.Header
+            eyebrow="Remote Identity Provider"
+            title={
+              <span className="inline-flex items-center gap-3 break-all">
+                {label}
+                {issuer && (
+                  <ScopeBadge projectScoped={Boolean(issuer.projectId)} />
+                )}
+              </span>
+            }
+          />
 
-        <RequireScope scope={["org:read", "org:admin"]} level="page">
-          <Tabs value={activeTab} className="flex w-full flex-1 flex-col">
-            <div className="shrink-0 border-b">
-              <div className="mx-auto max-w-[1270px] px-8">
-                <TabsList className="h-auto gap-6 rounded-none bg-transparent p-0">
+          <RequireScope scope={["org:read", "org:admin"]} level="page">
+            <Tabs value={activeTab} className="flex w-full flex-1 flex-col">
+              <DetailLayout.Tabs>
+                <TabsList className="h-auto gap-6 bg-transparent p-0">
                   <PageTabsTrigger value="overview" asChild>
                     <Link to={tabHref("overview")}>Overview</Link>
                   </PageTabsTrigger>
@@ -80,24 +79,26 @@ export default function RemoteIdentityProviderDetail(): JSX.Element {
                     <Link to={tabHref("settings")}>Settings</Link>
                   </PageTabsTrigger>
                 </TabsList>
-              </div>
-            </div>
+              </DetailLayout.Tabs>
 
-            <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
-              <TabsContent value="overview" className="mt-0">
-                {issuer && <OverviewTab issuer={issuer} />}
-              </TabsContent>
-              <TabsContent value="clients" className="mt-0">
-                {issuer && <ClientsTab issuer={issuer} />}
-                {isLoading && <Type muted>Loading…</Type>}
-              </TabsContent>
-              <TabsContent value="settings" className="mt-0">
-                {issuer && <SettingsTab key={issuer.id} issuer={issuer} />}
-                {isLoading && <Type muted>Loading…</Type>}
-              </TabsContent>
-            </div>
-          </Tabs>
-        </RequireScope>
+              <DetailLayout.Content>
+                <DetailLayout.Main>
+                  <TabsContent value="overview" className="mt-0">
+                    {issuer && <OverviewTab issuer={issuer} />}
+                  </TabsContent>
+                  <TabsContent value="clients" className="mt-0">
+                    {issuer && <ClientsTab issuer={issuer} />}
+                    {isLoading && <Type muted>Loading…</Type>}
+                  </TabsContent>
+                  <TabsContent value="settings" className="mt-0">
+                    {issuer && <SettingsTab key={issuer.id} issuer={issuer} />}
+                    {isLoading && <Type muted>Loading…</Type>}
+                  </TabsContent>
+                </DetailLayout.Main>
+              </DetailLayout.Content>
+            </Tabs>
+          </RequireScope>
+        </DetailLayout>
       </Page.Body>
     </Page>
   );

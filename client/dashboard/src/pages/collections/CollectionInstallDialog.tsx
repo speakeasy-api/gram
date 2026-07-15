@@ -1,5 +1,4 @@
 import { ProjectAvatar } from "@/components/project-menu";
-import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog } from "@/components/ui/dialog";
 import { Type } from "@/components/ui/type";
@@ -8,16 +7,20 @@ import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
 import type { PulseMCPServer as CatalogServer } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
 import type { ProjectEntry } from "@gram/client/models/components/projectentry.js";
-import { Button, Icon, Input } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
+import { SearchBar } from "@/components/ui/search-bar";
 import {
   ArrowRight,
+  Check,
   Circle,
   FolderOpen,
   Loader2,
   Search,
   Server,
+  X,
 } from "lucide-react";
-import type { ChangeEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 
 type InstallResult = {
@@ -227,7 +230,7 @@ export function CollectionInstallDialog({
                 </Dialog.Description>
               </Dialog.Header>
               <div className="space-y-4 py-2">
-                <div className="rounded-lg border p-3">
+                <div className="border p-3">
                   <div className="flex items-center gap-2 text-sm font-medium">
                     <Server className="h-4 w-4" />
                     {servers.length}{" "}
@@ -236,12 +239,10 @@ export function CollectionInstallDialog({
                   </div>
                 </div>
                 {projects.length === 0 ? (
-                  <div className="flex flex-col items-center py-6 text-center">
-                    <FolderOpen className="text-muted-foreground mb-2 h-8 w-8" />
-                    <p className="text-muted-foreground text-sm">
-                      No projects found.
-                    </p>
-                  </div>
+                  <InlineEmptyState
+                    icon={<FolderOpen />}
+                    title="No projects found."
+                  />
                 ) : (
                   <div className="space-y-3">
                     <div className="space-y-1">
@@ -264,26 +265,18 @@ export function CollectionInstallDialog({
                       )}
                     </div>
                     {projects.length > 5 && (
-                      <div className="relative">
-                        <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-                        <Input
-                          value={projectSearch}
-                          placeholder="Search projects..."
-                          onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                            setProjectSearch(e.target.value)
-                          }
-                          className="pl-9"
-                        />
-                      </div>
+                      <SearchBar
+                        value={projectSearch}
+                        onChange={setProjectSearch}
+                        placeholder="Search projects..."
+                      />
                     )}
-                    <div className="max-h-64 overflow-y-auto rounded-lg border">
+                    <div className="max-h-64 overflow-y-auto border">
                       {filteredProjects.length === 0 ? (
-                        <div className="flex flex-col items-center py-6 text-center">
-                          <Search className="text-muted-foreground mb-2 h-6 w-6" />
-                          <p className="text-muted-foreground text-sm">
-                            No projects match your search.
-                          </p>
-                        </div>
+                        <InlineEmptyState
+                          icon={<Search />}
+                          title="No projects match your search."
+                        />
                       ) : (
                         filteredProjects.map((project) => {
                           const checked = selectedProjectSlugs.includes(
@@ -362,7 +355,7 @@ function ProjectProgressList({
           <div
             key={project.slug}
             className={cn(
-              "bg-card flex items-start gap-3 rounded-lg border p-3 transition-colors",
+              "bg-card flex items-start gap-3 border p-3 transition-colors",
               status === "installing" && "border-primary/30 bg-primary/5",
               status === "failed" && "border-destructive/30 bg-destructive/5",
             )}
@@ -408,12 +401,12 @@ function ResultStat({
   tone: "success" | "danger";
 }) {
   const toneClass = {
-    success: "border-emerald-500/20 bg-emerald-500/10",
+    success: "border-success/20 bg-success/10",
     danger: "border-destructive/30 bg-destructive/5",
   }[tone];
 
   return (
-    <div className={cn("rounded-lg border p-3 text-center", toneClass)}>
+    <div className={cn("border p-3 text-center", toneClass)}>
       <div className="flex items-center justify-center gap-1.5">
         <StatusCircleIcon tone={tone} />
         <span className="text-lg font-semibold">{value}</span>
@@ -428,17 +421,21 @@ function ResultStat({
 function InstallResultBadge({ status }: { status: InstallResult["status"] }) {
   if (status === "succeeded") {
     return (
-      <Badge variant="secondary" className="text-emerald-600">
-        <StatusCircleIcon tone="success" size="sm" />
-        Succeeded
+      <Badge variant="neutral" background={false} className="text-success">
+        <Badge.LeftIcon>
+          <StatusCircleIcon tone="success" size="sm" />
+        </Badge.LeftIcon>
+        <Badge.Text>Succeeded</Badge.Text>
       </Badge>
     );
   }
 
   return (
-    <Badge variant="outline" className="text-destructive">
-      <StatusCircleIcon tone="danger" size="sm" />
-      Failed
+    <Badge variant="neutral" background={false} className="text-destructive">
+      <Badge.LeftIcon>
+        <StatusCircleIcon tone="danger" size="sm" />
+      </Badge.LeftIcon>
+      <Badge.Text>Failed</Badge.Text>
     </Badge>
   );
 }
@@ -446,18 +443,26 @@ function InstallResultBadge({ status }: { status: InstallResult["status"] }) {
 function ProjectStatusIndicator({ status }: { status: ProjectInstallStatus }) {
   if (status === "pending") {
     return (
-      <Badge variant="outline" className="text-muted-foreground">
-        <Circle className="mr-1 h-3 w-3" />
-        Pending
+      <Badge
+        variant="neutral"
+        background={false}
+        className="text-muted-foreground"
+      >
+        <Badge.LeftIcon>
+          <Circle className="h-3 w-3" />
+        </Badge.LeftIcon>
+        <Badge.Text>Pending</Badge.Text>
       </Badge>
     );
   }
 
   if (status === "installing") {
     return (
-      <Badge variant="secondary" className="text-primary">
-        <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-        Installing
+      <Badge variant="neutral" background={false} className="text-primary">
+        <Badge.LeftIcon>
+          <Loader2 className="h-3 w-3 animate-spin" />
+        </Badge.LeftIcon>
+        <Badge.Text>Installing</Badge.Text>
       </Badge>
     );
   }
@@ -482,7 +487,11 @@ function StatusCircleIcon({
         size === "sm" ? "mr-1 h-4 w-4" : "h-5 w-5",
       )}
     >
-      <Icon name={tone === "success" ? "check" : "x"} className="h-3 w-3" />
+      {tone === "success" ? (
+        <Check className="h-3 w-3" />
+      ) : (
+        <X className="h-3 w-3" />
+      )}
     </span>
   );
 }

@@ -1,12 +1,14 @@
 import { CopyButton } from "@/components/ui/copy-button";
 import { Heading } from "@/components/ui/heading";
+import { StatusDot, type StatusDotTone } from "@/components/ui/status-dot";
 import { Type } from "@/components/ui/type";
-import { dateTimeFormatters } from "@/lib/dates";
 import { cn } from "@/lib/utils";
+import { dateTimeFormatters } from "@/lib/dates";
 import { useListDeploymentsSuspense } from "@gram/client/react-query/listDeployments.js";
 import type { DeploymentSummary } from "@gram/client/models/components/deploymentsummary.js";
 import { useRoutes } from "@/routes";
-import { Badge, Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { ExternalLink } from "lucide-react";
 import { Suspense, useState } from "react";
 import { DeploymentsEmptyState } from "../deployments/DeploymentsEmptyState";
@@ -15,17 +17,10 @@ import { LogsTabContent } from "../deployments/deployment/LogsTabContent";
 
 // ─── Status dot ──────────────────────────────────────────────
 
-function StatusDot({ status }: { status: string }) {
-  return (
-    <span
-      className={cn(
-        "size-2 shrink-0 rounded-full",
-        status === "completed" && "bg-success",
-        status === "failed" && "bg-destructive",
-        status !== "completed" && status !== "failed" && "bg-warning",
-      )}
-    />
-  );
+function deploymentStatusTone(status: string): StatusDotTone {
+  if (status === "completed") return "success";
+  if (status === "failed") return "destructive";
+  return "warning";
 }
 
 // ─── Sidebar item ────────────────────────────────────────────
@@ -55,7 +50,7 @@ function DeploymentSidebarItem({
       )}
     >
       <div className="flex items-center gap-2">
-        <StatusDot status={deployment.status} />
+        <StatusDot tone={deploymentStatusTone(deployment.status)} />
         <span className="text-sm capitalize">{deployment.status}</span>
         <span className="ml-auto">
           {isActive ? (
@@ -128,7 +123,7 @@ function DeploymentDetailPanel({
   return (
     <div className="flex-1 space-y-6 overflow-y-auto p-6">
       {/* Info section */}
-      <div className="border-border rounded-lg border p-4">
+      <div className="border-border border p-4">
         <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
           <div>
             <dt className="text-muted-foreground mb-0.5 text-xs">
@@ -143,7 +138,7 @@ function DeploymentDetailPanel({
           <div>
             <dt className="text-muted-foreground mb-0.5 text-xs">Status</dt>
             <dd className="flex items-center gap-2">
-              <StatusDot status={deployment.status} />
+              <StatusDot tone={deploymentStatusTone(deployment.status)} />
               <span className="capitalize">{deployment.status}</span>
               {isActive && (
                 <Badge variant="success" className="px-1.5 py-0">
@@ -233,7 +228,7 @@ export function SourceDeploymentsPanel({
         </routes.deployments.Link>
       </div>
 
-      <div className="border-border grid min-h-0 flex-1 grid-cols-[280px_1fr] overflow-hidden rounded-lg border">
+      <div className="border-border grid min-h-0 flex-1 grid-cols-[280px_1fr] overflow-hidden border">
         {/* ── Left sidebar ── */}
         <div className="border-border bg-muted/30 overflow-y-auto border-r">
           {deployments.map((d) => (

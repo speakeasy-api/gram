@@ -1,10 +1,10 @@
-// oxlint-disable react/only-export-components -- compound component (Object.assign) pattern
 import { useTelemetry } from "@/contexts/Telemetry.tsx";
 import { cn } from "@/lib/utils.ts";
 import { useIsProjectEmpty } from "@/pages/onboarding/upload-openapi-utils";
 import { InitialChoiceStep } from "@/pages/onboarding/Wizard.tsx";
 import { useRoutes } from "@/routes.tsx";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
 import React, { ReactElement } from "react";
 import { ContentErrorBoundary } from "./content-error-boundary.tsx";
 import { PageHeader } from "./page-header.tsx";
@@ -15,7 +15,11 @@ import { Toolbar } from "./ui/toolbar.tsx";
 import { Type } from "./ui/type.tsx";
 import { XYFade } from "./ui/xy-fade.tsx";
 
-function PageLayout({ children }: { children: React.ReactNode }) {
+function PageLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}): React.JSX.Element {
   return (
     // Height accounts for the SidebarInset visual gutter (m-2 top+bottom = 1rem)
     // and the impersonation banner via --banner-offset. The top bar is gone, so
@@ -71,11 +75,11 @@ function PageBody({
 }
 
 type PageSectionChild =
-  | ReactElement<typeof PageSection.Title>
-  | ReactElement<typeof PageSection.Description>
-  | ReactElement<typeof PageSection.CTA>
-  | ReactElement<typeof PageSection.Body>
-  | ReactElement<typeof PageSection.MoreActions>
+  | ReactElement<typeof PageSectionTitle>
+  | ReactElement<typeof PageSectionDescription>
+  | ReactElement<typeof PageSectionCTA>
+  | ReactElement<typeof PageSectionBody>
+  | ReactElement<typeof MoreActions>
   | null;
 
 function PageSectionComponent({ children }: { children: PageSectionChild[] }) {
@@ -99,7 +103,7 @@ function PageSectionComponent({ children }: { children: PageSectionChild[] }) {
         slots.ctas.push(child);
       } else if (child.type === PageSectionBody) {
         slots.body = child;
-      } else if (child.type === PageSection.MoreActions) {
+      } else if (child.type === MoreActions) {
         slots.moreActions = child;
       }
     }
@@ -148,7 +152,7 @@ function PageSectionTitle({
   if (stage) {
     return (
       <Stack direction="horizontal" align="center" gap={2}>
-        <Heading variant="h3" className={className}>
+        <Heading variant="h2" className={className}>
           {children}
         </Heading>
         <ReleaseStageBadge stage={stage} />
@@ -157,7 +161,7 @@ function PageSectionTitle({
   }
 
   return (
-    <Heading variant="h3" className={className}>
+    <Heading variant="h2" className={className}>
       {children}
     </Heading>
   );
@@ -185,25 +189,26 @@ function PageSectionCTA({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-const PageSection = Object.assign(PageSectionComponent, {
-  Title: PageSectionTitle,
-  Description: PageSectionDescription,
-  Body: PageSectionBody,
-  CTA: PageSectionCTA,
-  MoreActions: MoreActions,
-});
-
 function PageBanner({ children }: { children: React.ReactNode }) {
   return <div className="flex w-full shrink-0 flex-col">{children}</div>;
 }
 
-export const Page = Object.assign(PageLayout, {
-  Header: PageHeader,
-  Banner: PageBanner,
-  Body: PageBody,
-  Section: PageSection,
-  Toolbar: Toolbar,
-});
+// Compound members are attached by mutation rather than Object.assign: the
+// react/only-export-components rule recognizes the former as a component
+// export and flags the latter.
+PageSectionComponent.Title = PageSectionTitle;
+PageSectionComponent.Description = PageSectionDescription;
+PageSectionComponent.Body = PageSectionBody;
+PageSectionComponent.CTA = PageSectionCTA;
+PageSectionComponent.MoreActions = MoreActions;
+
+PageLayout.Header = PageHeader;
+PageLayout.Banner = PageBanner;
+PageLayout.Body = PageBody;
+PageLayout.Section = PageSectionComponent;
+PageLayout.Toolbar = Toolbar;
+
+export { PageLayout as Page };
 
 export function EmptyState({
   heading,
@@ -247,7 +252,7 @@ export function EmptyState({
   if (isLoading) {
     CTA = (
       <Button disabled size="sm">
-        CHECKING PROJECT...
+        Checking project…
       </Button>
     );
   } else if (!isEmpty && nonEmptyProjectCTA) {
@@ -255,7 +260,7 @@ export function EmptyState({
   }
 
   return (
-    <div className="bg-background flex h-[600px] w-full items-center justify-center rounded-xl border">
+    <div className="bg-background border-neutral-softest flex h-[600px] w-full items-center justify-center border">
       <Stack
         gap={1}
         className="m-8 w-full max-w-sm"

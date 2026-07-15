@@ -9,12 +9,13 @@ import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { useInsightsState } from "@/components/insights-context";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
-import { ErrorAlert } from "@/components/ui/alert";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Card } from "@/components/ui/card";
+import { IdentityCell } from "@/components/ui/identity-cell";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Button } from "@/components/ui/button";
+import { Type } from "@/components/ui/type";
 import { Page } from "@/components/page-layout";
+import { ObservabilityLayout } from "@/components/layouts/observability-layout";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { cn } from "@/lib/utils";
@@ -41,7 +42,13 @@ import { useSyncedAgentUsers } from "@gram/client/react-query/syncedAgentUsers.j
 import { unwrapAsync } from "@gram/client/types/fp";
 import { type DateRangePreset, getPresetRange } from "@gram-ai/elements";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, Info } from "lucide-react";
+import {
+  ArrowRight,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Info,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { useRoutes } from "@/routes";
@@ -49,14 +56,11 @@ import { useSlugs } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { dateTimeFormatters } from "@/lib/dates";
 import { slugify } from "@/lib/constants";
-import {
-  Badge,
-  type Column,
-  Icon,
-  type SortDescriptor,
-  Table,
-  sortTableData,
-} from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Alert } from "@/components/ui/alert";
+import { type Column, type SortDescriptor, Table } from "@/components/ui/table";
+import { sortTableData } from "@/components/ui/table/sorting";
 import { HooksSetupDialog } from "@/pages/hooks/HooksSetupDialog";
 
 type EmployeeView = "employees" | "unattributed";
@@ -441,21 +445,19 @@ export function InsightsEmployeesContent(): JSX.Element {
         contextInfo={`Project-scoped Employees tab: ${enrolledEmployees} of ${totalEmployees} employees have hooks activity in ${rangeLabel} and are enrolled; ${notEnrolledEmployees} employees have no hooks activity and are not enrolled.`}
         suggestions={INSIGHTS_SUGGESTIONS["insights/employees"]}
       />
-      <div className="min-h-0 w-full flex-1 overflow-y-auto p-8 pb-24">
-        <div className="mx-auto flex max-w-7xl flex-col gap-6">
-          <div className="flex flex-col gap-4">
-            <div className="flex min-w-0 flex-col gap-1">
-              <div className="flex items-center gap-2">
-                <h1 className="text-xl font-semibold">Employee Enrollment</h1>
-                <ReleaseStageBadge stage="preview" />
-              </div>
-              <p className="text-muted-foreground text-sm">
-                Track platform adoption for organization members in this project
-                over {rangeLabel}. Employees with tool or agent session activity
-                are marked enrolled; employees without any activity are marked
-                not enrolled.
-              </p>
-            </div>
+      <ObservabilityLayout fullHeight>
+        <ObservabilityLayout.Header
+          className="px-8 pt-8"
+          title={
+            <span className="inline-flex items-center gap-2">
+              Employee Enrollment
+              <ReleaseStageBadge stage="preview" />
+            </span>
+          }
+          subtitle={`Track platform adoption for organization members in this project over ${rangeLabel}. Employees with tool or agent session activity are marked enrolled; employees without any activity are marked not enrolled.`}
+        />
+        <ObservabilityLayout.Scroll className="px-8 pb-24">
+          <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 pt-6">
             <Page.Toolbar>
               <Page.Toolbar.Search
                 value={search}
@@ -493,86 +495,80 @@ export function InsightsEmployeesContent(): JSX.Element {
                 }
               />
             </Page.Toolbar>
+
+            {error ? (
+              <Alert variant="error" dismissible={false}>
+                <span className="font-medium">
+                  Unable to load employee enrollment data
+                </span>
+                <div>{error.message}</div>
+              </Alert>
+            ) : isLoading ? (
+              <EmployeesLoadingState isInsightsOpen={isInsightsOpen} />
+            ) : (
+              <>
+                <section
+                  className={cn(
+                    "grid gap-4 transition-all duration-300",
+                    isInsightsOpen
+                      ? "grid-cols-1 md:grid-cols-2"
+                      : "grid-cols-1 md:grid-cols-2 lg:grid-cols-4",
+                  )}
+                >
+                  <MetricCard
+                    title={isUnattributedView ? "Unknown users" : "Employees"}
+                    value={totalEmployees}
+                    subtext={
+                      isUnattributedView
+                        ? "Usage not matched to a member"
+                        : "Organization members"
+                    }
+                  />
+                  <MetricCard
+                    title="Enrolled"
+                    value={enrolledEmployees}
+                    displayValue={isUnattributedView ? "-" : undefined}
+                    subtext={
+                      isUnattributedView
+                        ? "Not applicable to unknown users"
+                        : "Platform activity present"
+                    }
+                  />
+                  <MetricCard
+                    title="Not Enrolled"
+                    value={notEnrolledEmployees}
+                    displayValue={isUnattributedView ? "-" : undefined}
+                    subtext={
+                      isUnattributedView
+                        ? "Not applicable to unknown users"
+                        : "No platform activity found"
+                    }
+                  />
+                  <MetricCard
+                    title="Token Count"
+                    value={totalTokenCount}
+                    subtext={
+                      isUnattributedView
+                        ? undefined
+                        : `${enrollmentRate.toFixed(0)}% enrolled`
+                    }
+                  />
+                </section>
+
+                <EmployeeTable
+                  key={view}
+                  employees={employees}
+                  search={search}
+                  onSelectUser={openUser}
+                  deviceSyncByEmail={deviceSyncByEmail}
+                  deviceStatus={deviceStatus}
+                />
+                <EnrollmentLegend />
+              </>
+            )}
           </div>
-
-          {error ? (
-            <ErrorAlert
-              title="Unable to load employee enrollment data"
-              error={error}
-            />
-          ) : isLoading ? (
-            <EmployeesLoadingState isInsightsOpen={isInsightsOpen} />
-          ) : (
-            <>
-              <section
-                className={cn(
-                  "grid gap-4 transition-all duration-300",
-                  isInsightsOpen
-                    ? "grid-cols-1 md:grid-cols-2"
-                    : "grid-cols-1 md:grid-cols-2 lg:grid-cols-4",
-                )}
-              >
-                <MetricCard
-                  title={isUnattributedView ? "Unknown users" : "Employees"}
-                  value={totalEmployees}
-                  icon="user"
-                  accentColor="blue"
-                  subtext={
-                    isUnattributedView
-                      ? "Usage not matched to a member"
-                      : "Organization members"
-                  }
-                />
-                <MetricCard
-                  title="Enrolled"
-                  value={enrolledEmployees}
-                  displayValue={isUnattributedView ? "-" : undefined}
-                  icon="circle-check"
-                  accentColor="green"
-                  subtext={
-                    isUnattributedView
-                      ? "Not applicable to unknown users"
-                      : "Platform activity present"
-                  }
-                />
-                <MetricCard
-                  title="Not Enrolled"
-                  value={notEnrolledEmployees}
-                  displayValue={isUnattributedView ? "-" : undefined}
-                  icon="triangle-alert"
-                  accentColor="orange"
-                  subtext={
-                    isUnattributedView
-                      ? "Not applicable to unknown users"
-                      : "No platform activity found"
-                  }
-                />
-                <MetricCard
-                  title="Token Count"
-                  value={totalTokenCount}
-                  icon="gauge"
-                  accentColor="purple"
-                  subtext={
-                    isUnattributedView
-                      ? undefined
-                      : `${enrollmentRate.toFixed(0)}% enrolled`
-                  }
-                />
-              </section>
-
-              <EmployeeTable
-                key={view}
-                employees={employees}
-                search={search}
-                onSelectUser={openUser}
-                deviceSyncByEmail={deviceSyncByEmail}
-                deviceStatus={deviceStatus}
-              />
-              <EnrollmentLegend />
-            </>
-          )}
-        </div>
-      </div>
+        </ObservabilityLayout.Scroll>
+      </ObservabilityLayout>
     </>
   );
 }
@@ -625,20 +621,11 @@ function EmployeeTable({
         sortValue: (item) => item.name.toLowerCase(),
         width: "2fr",
         render: (item) => (
-          <div className="flex items-center gap-3">
-            <Avatar className="size-9">
-              {item.photoUrl && (
-                <AvatarImage src={item.photoUrl} alt={item.name} />
-              )}
-              <AvatarFallback className="text-sm font-semibold">
-                {getInitials(item.name)}
-              </AvatarFallback>
-            </Avatar>
-            <div>
-              <p className="font-medium">{item.name}</p>
-              <p className="text-muted-foreground text-xs">{item.email}</p>
-            </div>
-          </div>
+          <IdentityCell
+            name={item.name}
+            subtitle={item.email}
+            imageUrl={item.photoUrl ?? undefined}
+          />
         ),
       },
       {
@@ -737,18 +724,20 @@ function EmployeeTable({
         width: "auto",
         render: (item) => (
           <div className="text-right">
-            <button
-              type="button"
-              className="flex items-center gap-1"
+            <Button
+              variant="tertiary"
+              size="xs"
               aria-label={`View ${item.name}`}
               onClick={(event) => {
                 event.stopPropagation();
                 onSelectUser(item);
               }}
             >
-              View
-              <Icon name="arrow-right" />
-            </button>
+              <Button.Text>View</Button.Text>
+              <Button.RightIcon>
+                <ArrowRight />
+              </Button.RightIcon>
+            </Button>
           </div>
         ),
       },
@@ -789,11 +778,11 @@ function EmployeeTable({
   const NoResultsMessage = () => {
     return (
       <div className="flex h-full items-center justify-center">
-        <p className="text-muted-foreground text-sm">
+        <Type muted small>
           {search
             ? `No employees matching "${search}".`
             : "No organization members found."}
-        </p>
+        </Type>
       </div>
     );
   };
@@ -814,27 +803,33 @@ function EmployeeTable({
       />
       {totalPages > 1 && (
         <div className="flex items-center justify-between border-t px-4 py-3">
-          <p className="text-muted-foreground text-sm">
+          <Type muted small>
             {safePage * PAGE_SIZE + 1}–
             {Math.min((safePage + 1) * PAGE_SIZE, sortedEmployees.length)} of{" "}
             {sortedEmployees.length}
-          </p>
+          </Type>
           <div className="flex items-center gap-1">
             <Button
-              variant="ghost"
+              variant="tertiary"
               size="sm"
               onClick={() => setPage((p) => p - 1)}
               disabled={safePage === 0}
+              aria-label="Previous page"
             >
-              <ChevronLeft className="size-4" />
+              <Button.LeftIcon>
+                <ChevronLeft className="size-4" />
+              </Button.LeftIcon>
             </Button>
             <Button
-              variant="ghost"
+              variant="tertiary"
               size="sm"
               onClick={() => setPage((p) => p + 1)}
               disabled={safePage >= totalPages - 1}
+              aria-label="Next page"
             >
-              <ChevronRight className="size-4" />
+              <Button.LeftIcon>
+                <ChevronRight className="size-4" />
+              </Button.LeftIcon>
             </Button>
           </div>
         </div>
@@ -856,10 +851,10 @@ function EnrollmentLegend() {
 
   return (
     <>
-      <section className="bg-muted/40 border-border flex flex-col gap-4 rounded-xl border p-5 md:flex-row md:items-center md:justify-between">
+      <Card className="bg-muted/40 gap-4 md:flex-row md:items-center md:justify-between">
         <div className="max-w-3xl space-y-1">
-          <h2 className="text-sm font-semibold">How enrollment works</h2>
-          <p className="text-muted-foreground text-sm">
+          <Card.Title>How enrollment works</Card.Title>
+          <Type muted small>
             Employees appear as enrolled once the{" "}
             <Link
               to={routes.plugins.href()}
@@ -870,7 +865,7 @@ function EnrollmentLegend() {
             is installed in their AI agent and sends activity to this project.
             Not enrolled yet? Install the observability plugin to start tracking
             their usage.
-          </p>
+          </Type>
         </div>
         <Button
           size="sm"
@@ -879,7 +874,7 @@ function EnrollmentLegend() {
         >
           Set up hooks
         </Button>
-      </section>
+      </Card>
       <HooksSetupDialog
         open={showSetupDialog}
         onOpenChange={setShowSetupDialog}
@@ -904,14 +899,14 @@ function EmployeesLoadingState({
         )}
       >
         {Array.from({ length: 4 }).map((_, index) => (
-          <div key={index} className="bg-card rounded-lg border p-5">
+          <div key={index} className="bg-card border p-5">
             <Skeleton className="mb-4 h-4 w-28" />
             <Skeleton className="h-9 w-20" />
             <Skeleton className="mt-3 h-3 w-36" />
           </div>
         ))}
       </section>
-      <section className="bg-card rounded-xl border p-5">
+      <section className="bg-card border p-5">
         <Skeleton className="h-5 w-44" />
         <Skeleton className="mt-2 h-4 w-80" />
         <div className="mt-6 space-y-3">
@@ -1000,24 +995,26 @@ function AccountsPopover({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <button
-          type="button"
+        <Button
+          variant="tertiary"
+          size="xs"
+          className="-mx-1.5 gap-1.5"
           // Don't let the row's navigate handler fire when opening the popover.
           onClick={(e) => e.stopPropagation()}
-          className="hover:bg-muted/60 -mx-1.5 flex items-center gap-1.5 rounded-md px-1.5 py-1 transition-colors"
         >
-          <span className={cn("text-muted-foreground", labelClassName)}>
+          <Button.Text className={cn("text-muted-foreground", labelClassName)}>
             {label}
-          </span>
-          <Icon
-            name="chevron-down"
-            className="text-muted-foreground/60 size-3"
-          />
-        </button>
+          </Button.Text>
+          <Button.RightIcon>
+            <ChevronDown className="text-muted-foreground/60 size-3" />
+          </Button.RightIcon>
+        </Button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-72 p-0">
         <div className="border-b px-3 py-2">
-          <p className="text-xs font-medium">{title}</p>
+          <Type as="p" mono small muted className="uppercase tracking-[0.08em]">
+            {title}
+          </Type>
         </div>
         <ul className="divide-border/60 max-h-64 divide-y overflow-y-auto">
           {accounts.map((a, i) => (
@@ -1067,15 +1064,6 @@ function LastActivityCell({ employee }: { employee: Employee }) {
       accounts={[employee.mostRecentAccount]}
     />
   );
-}
-
-function getInitials(name: string) {
-  return name
-    .split(" ")
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
 }
 
 async function fetchEmployeeUsage(

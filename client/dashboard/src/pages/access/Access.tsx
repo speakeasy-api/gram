@@ -1,17 +1,16 @@
 import { Page } from "@/components/page-layout";
+import { DetailLayout } from "@/components/layouts/detail-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Heading } from "@/components/ui/heading";
 import {
   PageTabsTrigger,
   Tabs,
   TabsContent,
   TabsList,
 } from "@/components/ui/tabs";
-import { Type } from "@/components/ui/type";
 import { useOrganization } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useOrgRoutes } from "@/routes";
-import { Alert } from "@speakeasy-api/moonshine";
+import { Alert } from "@/components/ui/alert";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import { Link, Navigate, useLocation, useNavigate } from "react-router";
@@ -88,19 +87,14 @@ function AccessInner() {
   };
 
   return (
-    <>
-      <div className="-mt-4">
-        <Heading variant="h4" className="mb-2">
-          Roles &amp; Permissions
-        </Heading>
-        <Type variant="body" className="text-muted-foreground mb-2">
-          Manage access control for your team by defining roles and assigning
-          permissions. View past authorization challenges.
-        </Type>
-      </div>
+    <DetailLayout>
+      <DetailLayout.Header
+        title="Roles & Permissions"
+        subtitle="Manage access control for your team by defining roles and assigning permissions. View past authorization challenges."
+      />
 
       {organization.scimEnabled && (
-        <Alert variant="info" dismissible={false} className="mb-6 text-sm">
+        <Alert variant="info" dismissible={false} className="mt-6 text-sm">
           Directory Sync (SCIM) is enabled. Roles are assigned from your
           identity provider, not here.{" "}
           <Link
@@ -113,8 +107,8 @@ function AccessInner() {
       )}
 
       <Tabs value={currentTab} onValueChange={handleTabChange}>
-        <div className="border-border -mx-8 border-b px-8">
-          <TabsList className="h-auto justify-start gap-4 rounded-none bg-transparent p-0 text-sm">
+        <DetailLayout.Tabs>
+          <TabsList className="h-auto justify-start gap-4 bg-transparent p-0 text-sm">
             <PageTabsTrigger value="roles">
               Roles{roleCount != null ? ` (${roleCount})` : ""}
             </PageTabsTrigger>
@@ -125,20 +119,24 @@ function AccessInner() {
               Authorization Challenges
             </PageTabsTrigger>
           </TabsList>
-        </div>
+        </DetailLayout.Tabs>
 
-        <TabsContent value="roles" className="mt-6">
-          <RolesTab />
-        </TabsContent>
+        <DetailLayout.Content>
+          <DetailLayout.Main>
+            <TabsContent value="roles">
+              <RolesTab />
+            </TabsContent>
 
-        <TabsContent value="members" className="mt-6">
-          <MembersTab />
-        </TabsContent>
+            <TabsContent value="members">
+              <MembersTab />
+            </TabsContent>
 
-        <TabsContent value="challenges" className="mt-6">
-          <ChallengesTab />
-        </TabsContent>
+            <TabsContent value="challenges">
+              <ChallengesTab />
+            </TabsContent>
+          </DetailLayout.Main>
+        </DetailLayout.Content>
       </Tabs>
-    </>
+    </DetailLayout>
   );
 }

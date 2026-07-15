@@ -1,4 +1,10 @@
-import { ArrowRight, ChevronsDownUp, Eye, EyeOff } from "lucide-react";
+import {
+  ArrowRight,
+  ChevronsDownUp,
+  Eye,
+  EyeOff,
+  ShieldAlert,
+} from "lucide-react";
 import {
   Fragment,
   type ReactElement,
@@ -7,7 +13,7 @@ import {
   useState,
 } from "react";
 import { Link } from "react-router";
-import { Badge, Icon } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/badge";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import {
   Popover,
@@ -111,7 +117,7 @@ export function HighlightedMessageText({
             {orphanMatches.map((m, i) => (
               <code
                 key={i}
-                className="bg-destructive/10 text-destructive rounded px-1 py-0.5 font-mono break-all"
+                className="bg-destructive/10 text-destructive px-1 py-0.5 font-mono break-all"
               >
                 {sensitive && !revealed ? maskValue(m) : m}
               </code>
@@ -160,7 +166,7 @@ function MaskedMatchInline({ value }: { value: string }): ReactNode {
   }
   return (
     <span className="mt-1 inline-flex items-center gap-1">
-      <code className="bg-destructive/10 text-destructive inline-block rounded px-1.5 py-0.5 font-mono text-xs break-all">
+      <code className="bg-destructive/10 text-destructive inline-block px-1.5 py-0.5 font-mono text-xs break-all">
         {value}
       </code>
       <button
@@ -364,8 +370,7 @@ export function RiskBadge({
               variant="destructive"
               className={compact ? "px-1.5 py-0 text-[10px]" : "text-xs"}
             >
-              <Icon
-                name="shield-alert"
+              <ShieldAlert
                 className={`mr-1 ${compact ? "size-2.5" : "size-3"}`}
               />
               {findings.length} {findings.length === 1 ? "Risk" : "Risks"}

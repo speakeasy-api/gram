@@ -7,7 +7,7 @@ import { telemetryGetToolUsageSummary } from "@gram/client/funcs/telemetryGetToo
 import type { GetToolUsageSummaryResult } from "@gram/client/models/components/gettoolusagesummaryresult.js";
 import { useGramContext } from "@gram/client/react-query/_context";
 import { unwrapAsync } from "@gram/client/types/fp";
-import { Column, Table } from "@speakeasy-api/moonshine";
+import { Table, type Column } from "@/components/ui/table";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 

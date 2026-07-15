@@ -1,14 +1,14 @@
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Icon,
-  IconName,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/dropdown-menu";
+import { DynamicIcon, type IconName } from "@/components/ui/dynamic-icon";
+import { ChevronDown, EllipsisVertical } from "lucide-react";
 import { useState } from "react";
-import { Button } from "./button";
 
 export type Action = {
   icon?: IconName;
@@ -40,13 +40,19 @@ export function MoreActions({
       <DropdownMenuTrigger asChild>
         {triggerLabel ? (
           <Button size="sm">
-            {triggerLabel}
-            <Icon name="chevron-down" className="ml-1 size-4" />
+            <Button.Text>{triggerLabel}</Button.Text>
+            <Button.RightIcon>
+              <ChevronDown />
+            </Button.RightIcon>
           </Button>
         ) : (
-          <Button variant="ghost" size="sm" className="mx-[-4px] h-8 w-8 p-0">
-            <Icon name="ellipsis-vertical" className="size-4" />
-            <span className="sr-only">Open menu</span>
+          <Button
+            variant="tertiary"
+            size="sm"
+            aria-label="Open menu"
+            className="mx-[-4px] h-8 w-8 p-0"
+          >
+            <EllipsisVertical className="size-4" />
           </Button>
         )}
       </DropdownMenuTrigger>
@@ -69,7 +75,7 @@ export function MoreActions({
           >
             {action.label}
             {action.icon && (
-              <Icon
+              <DynamicIcon
                 name={action.icon}
                 className={cn(
                   "size-3 opacity-0 group-hover:opacity-100",

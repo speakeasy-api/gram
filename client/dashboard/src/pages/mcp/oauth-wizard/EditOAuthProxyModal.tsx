@@ -1,11 +1,20 @@
 import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Type } from "@/components/ui/type";
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { Toolset } from "@/lib/toolTypes";
 import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
 import { useUpdateOAuthProxyServerMutation } from "@gram/client/react-query/updateOAuthProxyServer.js";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
+import { Alert } from "@/components/ui/alert";
+import { Input } from "@/components/ui/input";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
@@ -139,75 +148,84 @@ function EditOAuthProxyForm({
       </Dialog.Header>
 
       <div className="max-h-[60vh] space-y-4 overflow-auto">
-        {error && <Type className="mb-4 text-sm text-red-500!">{error}</Type>}
+        {error && (
+          <Alert variant="error" dismissible={false}>
+            {error}
+          </Alert>
+        )}
 
         <Stack gap={4}>
-          <div>
-            <Type className="mb-2 font-medium">OAuth Proxy Server Slug</Type>
+          <Field>
+            <FieldLabel>OAuth Proxy Server Slug</FieldLabel>
             <Input value={proxyServer.slug ?? ""} disabled />
-          </div>
+          </Field>
 
-          <div>
-            <Type className="mb-2 font-medium">Authorization Endpoint</Type>
+          <Field>
+            <FieldLabel>Authorization Endpoint</FieldLabel>
             <Input
               placeholder="https://provider.com/oauth/authorize"
               value={authorizationEndpoint}
-              onChange={(v: string) => setAuthorizationEndpoint(v)}
+              onChange={(e) => setAuthorizationEndpoint(e.target.value)}
             />
-          </div>
+          </Field>
 
-          <div>
-            <Type className="mb-2 font-medium">Token Endpoint</Type>
+          <Field>
+            <FieldLabel>Token Endpoint</FieldLabel>
             <Input
               placeholder="https://provider.com/oauth/token"
               value={tokenEndpoint}
-              onChange={(v: string) => setTokenEndpoint(v)}
+              onChange={(e) => setTokenEndpoint(e.target.value)}
             />
-          </div>
+          </Field>
 
-          <div>
-            <Type className="mb-2 font-medium">Scopes (comma-separated)</Type>
+          <Field>
+            <FieldLabel>Scopes (comma-separated)</FieldLabel>
             <Input
               placeholder="read, write, openid"
               value={scopes}
-              onChange={(v: string) => setScopes(v)}
+              onChange={(e) => setScopes(e.target.value)}
             />
-          </div>
+          </Field>
 
-          <div>
-            <Type className="mb-2 font-medium">Audience (optional)</Type>
+          <Field>
+            <FieldLabel optional>Audience</FieldLabel>
             <Input
               placeholder="https://api.example.com"
               value={audience}
-              onChange={(v: string) => setAudience(v)}
+              onChange={(e) => setAudience(e.target.value)}
             />
-            <Type muted small className="mt-1">
+            <FieldDescription>
               The audience parameter sent to the upstream OAuth provider.
               Required by some providers (e.g. Auth0) to return JWT access
               tokens.
-            </Type>
-          </div>
+            </FieldDescription>
+          </Field>
 
-          <div>
-            <Type className="mb-2 font-medium">Token Endpoint Auth Method</Type>
-            <select
-              className="bg-background w-full rounded border px-3 py-2"
-              value={tokenAuthMethod}
-              onChange={(e) => setTokenAuthMethod(e.target.value)}
-            >
-              <option value="client_secret_post">client_secret_post</option>
-              <option value="client_secret_basic">client_secret_basic</option>
-              <option value="none">none</option>
-            </select>
-          </div>
+          <Field>
+            <FieldLabel>Token Endpoint Auth Method</FieldLabel>
+            <Select value={tokenAuthMethod} onValueChange={setTokenAuthMethod}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="client_secret_post">
+                  client_secret_post
+                </SelectItem>
+                <SelectItem value="client_secret_basic">
+                  client_secret_basic
+                </SelectItem>
+                <SelectItem value="none">none</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
 
-          <div>
-            <Type className="mb-2 font-medium">Environment Slug</Type>
+          <Field>
+            <FieldLabel>Environment Slug</FieldLabel>
             <Input
               value={environmentSlug}
-              onChange={(v: string) => setEnvironmentSlug(v)}
+              onChange={(e) => setEnvironmentSlug(e.target.value)}
             />
-          </div>
+          </Field>
         </Stack>
       </div>
 

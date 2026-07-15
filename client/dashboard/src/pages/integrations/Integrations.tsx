@@ -3,11 +3,11 @@ import { AssetImage } from "@/components/asset-image";
 import { CreateThingCard } from "@/components/create-thing-card";
 import { InputDialog } from "@/components/input-dialog";
 import { Page } from "@/components/page-layout";
+import { ListLayout } from "@/components/layouts/list-layout";
 import { ToolCollectionBadge } from "@/components/tool-collection-badge";
 import { Card, Cards } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
-import { Input } from "@/components/ui/input";
 import { Type } from "@/components/ui/type";
 import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
@@ -17,8 +17,10 @@ import { IntegrationEntry } from "@gram/client/models/components/integrationentr
 import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import { useListIntegrations } from "@gram/client/react-query/listIntegrations.js";
 import { useListPackagesSuspense } from "@gram/client/react-query/listPackages.js";
-import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
-import { CheckIcon } from "lucide-react";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { CheckIcon, CopyPlus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
@@ -44,18 +46,19 @@ export default function Integrations(): JSX.Element {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <Page.Section>
-          <Page.Section.Title>Integrations</Page.Section.Title>
-          <Page.Section.Description>
-            Distribute platform toolsets as installable packages your customers
-            can pull from npm.
-          </Page.Section.Description>
-          {isAdmin ? (
-            <Page.Section.CTA>
-              <AddButton onClick={() => setCreateIntegrationDialogOpen(true)} />
-            </Page.Section.CTA>
-          ) : null}
-          <Page.Section.Body>
+        <ListLayout>
+          <ListLayout.Header
+            title="Integrations"
+            subtitle="Distribute platform toolsets as installable packages your customers can pull from npm."
+            actions={
+              isAdmin ? (
+                <AddButton
+                  onClick={() => setCreateIntegrationDialogOpen(true)}
+                />
+              ) : undefined
+            }
+          />
+          <ListLayout.List>
             <Cards>
               {integrations?.integrations?.map((integration) => (
                 <IntegrationCard
@@ -72,8 +75,8 @@ export default function Integrations(): JSX.Element {
                 Request an Integration
               </CreateThingCard>
             </Cards>
-          </Page.Section.Body>
-        </Page.Section>
+          </ListLayout.List>
+        </ListLayout>
         <CreateIntegrationDialog
           open={createIntegrationDialogOpen}
           onOpenChange={setCreateIntegrationDialogOpen}
@@ -300,7 +303,7 @@ function IntegrationCard({
         {firstParty ? (
           <Button variant="secondary" onClick={newVersionCallback}>
             <Button.LeftIcon>
-              <Icon name="copy-plus" className="h-4 w-4" />
+              <CopyPlus className="h-4 w-4" />
             </Button.LeftIcon>
             <Button.Text>New Version</Button.Text>
           </Button>
@@ -366,7 +369,7 @@ function RequestIntegrationDialog({
           <Input
             placeholder="Slack, GitHub, etc."
             value={integrationName}
-            onChange={setIntegrationName}
+            onChange={(e) => setIntegrationName(e.target.value)}
           />
         </Stack>
         <Dialog.Footer>

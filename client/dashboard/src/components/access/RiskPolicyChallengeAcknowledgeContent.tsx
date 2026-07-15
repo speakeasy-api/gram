@@ -5,7 +5,9 @@ import { buildLoginRedirectURL } from "@/lib/utils";
 import { useRiskAcknowledgePolicyChallengeMutation } from "@gram/client/react-query/riskAcknowledgePolicyChallenge.js";
 import { useRiskDeclinePolicyChallengeMutation } from "@gram/client/react-query/riskDeclinePolicyChallenge.js";
 import { useRiskGetPolicyChallengeMutation } from "@gram/client/react-query/riskGetPolicyChallenge.js";
-import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/ui/icon";
+import { Stack } from "@/components/ui/stack";
 import { type ComponentProps, useEffect, useRef, useState } from "react";
 
 type IconName = ComponentProps<typeof Icon>["name"];

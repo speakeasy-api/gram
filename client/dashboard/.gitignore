@@ -27,3 +27,5 @@ dist-ssr
 
 # Generated risk CEL wasm engine (build with `mise gen:celwasm`)
 /public/cel/
+storybook-static
+*storybook.log

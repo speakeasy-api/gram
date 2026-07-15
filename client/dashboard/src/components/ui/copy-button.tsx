@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { Check, Copy, type LucideIcon } from "lucide-react";
 import { useState } from "react";
@@ -34,18 +35,17 @@ export const CopyButton = ({
     onCopy?.();
   };
 
-  return (
+  const button = (
     <Button
-      variant={absolute ? "outline" : "ghost"}
-      size={size ?? "icon"}
+      variant={absolute ? "secondary" : "tertiary"}
+      size={size === "inline" || size === "icon-sm" ? "sm" : "md"}
       onClick={handleCopy}
-      tooltip={tooltip}
+      aria-label={tooltip ?? "Copy"}
       className={cn(
-        absolute && "absolute top-3 right-3 z-10 shadow-md",
+        absolute && "absolute top-3 right-3 z-10",
         size === "inline" && "h-6 w-6",
         className,
       )}
-      style={absolute ? { boxShadow: "0 2px 8px rgba(0,0,0,0.08)" } : undefined}
     >
       {recentlyCopied ? (
         <Check className="h-5 w-5" />
@@ -53,5 +53,11 @@ export const CopyButton = ({
         <Icon className="h-5 w-5" />
       )}
     </Button>
+  );
+
+  return tooltip ? (
+    <SimpleTooltip tooltip={tooltip}>{button}</SimpleTooltip>
+  ) : (
+    button
   );
 };

@@ -1,12 +1,11 @@
 import { Tool } from "@/lib/toolTypes";
+import { Stack } from "@/components/ui/stack";
+import { Badge } from "@/components/ui/badge";
 import {
-  Badge,
-  Stack,
   Tooltip,
   TooltipContent,
-  TooltipPortal,
   TooltipTrigger,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/tooltip";
 
 export function SubtoolsBadge({
   tool,
@@ -76,9 +75,7 @@ export function SubtoolsBadge({
           </Badge.Text>
         </Badge>
       </TooltipTrigger>
-      <TooltipPortal>
-        <TooltipContent>{tooltipContent}</TooltipContent>
-      </TooltipPortal>
+      <TooltipContent>{tooltipContent}</TooltipContent>
     </Tooltip>
   );
 }

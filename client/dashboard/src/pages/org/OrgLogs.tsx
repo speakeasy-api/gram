@@ -1,12 +1,9 @@
 import { Page } from "@/components/page-layout";
+import { SettingsLayout } from "@/components/layouts/settings-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Heading } from "@/components/ui/heading";
 import { Switch } from "@/components/ui/switch";
-import { Type } from "@/components/ui/type";
 import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
 import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet";
-import { Stack } from "@speakeasy-api/moonshine";
-import { Eye, FileText, LogIn, Monitor, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { AIIntegrationsSection } from "./AIIntegrationsSection";
 import { OtelForwardingSection } from "./OtelForwardingSection";
@@ -151,33 +148,17 @@ function OrgLogsInner() {
   };
 
   return (
-    <>
-      <Heading variant="h4" className="mb-2">
-        Logs
-      </Heading>
-      <Type muted small className="mb-6">
-        Configure logging and telemetry settings for all your tool capture. When
-        enabled, tool calls and traces are recorded for debugging and analytics.
-        These power the insights and logs page on the platform.
-      </Type>
-      <div className="border-border bg-card rounded-lg border p-4">
-        <Stack gap={4}>
-          <Stack direction="horizontal" justify="space-between" align="center">
-            <Stack gap={1}>
-              <Stack direction="horizontal" align="center" gap={2}>
-                <FileText className="text-muted-foreground h-4 w-4" />
-                <Type variant="body" className="font-medium">
-                  Enable Logs
-                </Type>
-              </Stack>
-              <Type
-                variant="body"
-                className="text-muted-foreground ml-6 text-sm"
-              >
-                Record tool call traces and telemetry data
-              </Type>
-            </Stack>
-            {!featuresLoading && (
+    <SettingsLayout>
+      <SettingsLayout.Header
+        title="Logs"
+        subtitle="Configure logging and telemetry settings for all your tool capture. When enabled, tool calls and traces are recorded for debugging and analytics. These power the insights and logs page on the platform."
+      />
+      <SettingsLayout.Body>
+        <SettingsLayout.Group
+          label="Enable Logs"
+          description="Record tool call traces and telemetry data"
+          actions={
+            !featuresLoading && (
               <RequireScope scope="org:admin" level="component">
                 <Switch
                   checked={effectiveLogsEnabled}
@@ -186,28 +167,15 @@ function OrgLogsInner() {
                   aria-label="Enable logs"
                 />
               </RequireScope>
-            )}
-          </Stack>
+            )
+          }
+        />
 
-          <div className="border-border border-t" />
-
-          <Stack direction="horizontal" justify="space-between" align="center">
-            <Stack gap={1}>
-              <Stack direction="horizontal" align="center" gap={2}>
-                <Eye className="text-muted-foreground h-4 w-4" />
-                <Type variant="body" className="font-medium">
-                  Record Tool I/O
-                </Type>
-              </Stack>
-              <Type
-                variant="body"
-                className="text-muted-foreground ml-6 text-sm"
-              >
-                Store tool inputs and outputs. May expose sensitive data in
-                logs.
-              </Type>
-            </Stack>
-            {!featuresLoading && (
+        <SettingsLayout.Group
+          label="Record Tool I/O"
+          description="Store tool inputs and outputs. May expose sensitive data in logs."
+          actions={
+            !featuresLoading && (
               <RequireScope scope="org:admin" level="component">
                 <Switch
                   checked={effectiveToolIoLogsEnabled}
@@ -216,29 +184,15 @@ function OrgLogsInner() {
                   aria-label="Record tool inputs and outputs"
                 />
               </RequireScope>
-            )}
-          </Stack>
+            )
+          }
+        />
 
-          <div className="border-border border-t" />
-
-          <Stack direction="horizontal" justify="space-between" align="center">
-            <Stack gap={1}>
-              <Stack direction="horizontal" align="center" gap={2}>
-                <Monitor className="text-muted-foreground h-4 w-4" />
-                <Type variant="body" className="font-medium">
-                  Agent Session Capture
-                </Type>
-              </Stack>
-              <Type
-                variant="body"
-                className="text-muted-foreground ml-6 text-sm"
-              >
-                Capture user prompts and assistant responses from agents like
-                Cursor, Claude Code, Codex, and more. Sessions appear in the
-                Agent Sessions tab.
-              </Type>
-            </Stack>
-            {!featuresLoading && (
+        <SettingsLayout.Group
+          label="Agent Session Capture"
+          description="Capture user prompts and assistant responses from agents like Cursor, Claude Code, Codex, and more. Sessions appear in the Agent Sessions tab."
+          actions={
+            !featuresLoading && (
               <RequireScope scope="org:admin" level="component">
                 <Switch
                   checked={effectiveSessionCaptureEnabled}
@@ -247,28 +201,15 @@ function OrgLogsInner() {
                   aria-label="Enable Claude Code session capture"
                 />
               </RequireScope>
-            )}
-          </Stack>
+            )
+          }
+        />
 
-          <div className="border-border border-t" />
-
-          <Stack direction="horizontal" justify="space-between" align="center">
-            <Stack gap={1}>
-              <Stack direction="horizontal" align="center" gap={2}>
-                <ShieldCheck className="text-muted-foreground h-4 w-4" />
-                <Type variant="body" className="font-medium">
-                  Observability Mode
-                </Type>
-              </Stack>
-              <Type
-                variant="body"
-                className="text-muted-foreground ml-6 text-sm"
-              >
-                Make generated hook plugins fully non-blocking. Hooks only
-                observe and report, and can never deny or delay a tool call.
-              </Type>
-            </Stack>
-            {!featuresLoading && (
+        <SettingsLayout.Group
+          label="Observability Mode"
+          description="Make generated hook plugins fully non-blocking. Hooks only observe and report, and can never deny or delay a tool call."
+          actions={
+            !featuresLoading && (
               <RequireScope scope="org:admin" level="component">
                 <Switch
                   checked={effectiveObservabilityModeEnabled}
@@ -277,29 +218,15 @@ function OrgLogsInner() {
                   aria-label="Enable observability mode"
                 />
               </RequireScope>
-            )}
-          </Stack>
+            )
+          }
+        />
 
-          <div className="border-border border-t" />
-
-          <Stack direction="horizontal" justify="space-between" align="center">
-            <Stack gap={1}>
-              <Stack direction="horizontal" align="center" gap={2}>
-                <LogIn className="text-muted-foreground h-4 w-4" />
-                <Type variant="body" className="font-medium">
-                  Hook Browser Sign-In
-                </Type>
-              </Stack>
-              <Type
-                variant="body"
-                className="text-muted-foreground ml-6 text-sm"
-              >
-                Let hook plugins sign users in through the browser to record
-                events under their own identity. When off, plugins use the
-                organization key or explicitly configured credentials.
-              </Type>
-            </Stack>
-            {!featuresLoading && (
+        <SettingsLayout.Group
+          label="Hook Browser Sign-In"
+          description="Let hook plugins sign users in through the browser to record events under their own identity. When off, plugins use the organization key or explicitly configured credentials."
+          actions={
+            !featuresLoading && (
               <RequireScope scope="org:admin" level="component">
                 <Switch
                   checked={effectiveHooksBrowserLoginEnabled}
@@ -308,18 +235,14 @@ function OrgLogsInner() {
                   aria-label="Enable hook browser sign-in"
                 />
               </RequireScope>
-            )}
-          </Stack>
-        </Stack>
-      </div>
+            )
+          }
+        />
 
-      <div className="mt-8">
         <AIIntegrationsSection />
-      </div>
 
-      <div className="mt-8">
         <OtelForwardingSection />
-      </div>
-    </>
+      </SettingsLayout.Body>
+    </SettingsLayout>
   );
 }

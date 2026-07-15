@@ -1,4 +1,3 @@
-// oxlint-disable react/only-export-components -- compound component (Object.assign) pattern
 import { cn } from "@/lib/utils";
 import {
   Accordion,
@@ -7,7 +6,7 @@ import {
   AccordionTrigger,
 } from "./ui/accordion";
 
-function ExpandableComponent({
+function Expandable({
   children,
   className,
   defaultExpanded,
@@ -15,7 +14,7 @@ function ExpandableComponent({
   children: React.ReactNode;
   className?: string;
   defaultExpanded?: boolean;
-}) {
+}): React.JSX.Element {
   return (
     <Accordion
       type="single"
@@ -66,7 +65,10 @@ function ExpandableContent({
   );
 }
 
-export const Expandable = Object.assign(ExpandableComponent, {
-  Trigger: ExpandableTrigger,
-  Content: ExpandableContent,
-});
+// Compound members are attached by mutation rather than Object.assign: the
+// react/only-export-components rule recognizes the former as a component
+// export and flags the latter.
+Expandable.Trigger = ExpandableTrigger;
+Expandable.Content = ExpandableContent;
+
+export { Expandable };

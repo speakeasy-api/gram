@@ -34,7 +34,7 @@ import {
   INSIGHTS_SUGGESTION_ICONS,
   type InsightsSuggestion,
 } from "@/lib/insights-suggestions";
-import { useMoonshineConfig } from "@speakeasy-api/moonshine";
+import { useTheme } from "@/contexts/theme-context";
 import type { UIMessage } from "ai";
 import {
   ArrowLeft,
@@ -110,19 +110,19 @@ const DOCK_REOPEN_WINDOW_MS = 2500;
 
 /** Icon-only buttons in the chat panel's Granola-style header. */
 const PANEL_ICON_BUTTON_CLASS =
-  "hover:bg-muted text-muted-foreground hover:text-foreground rounded-md p-1.5 transition-colors";
+  "hover:bg-muted text-muted-foreground hover:text-foreground p-1.5 transition-colors";
 
 /**
  * Restyles Elements' default chat composer (tall multi-row box with an
- * attachment/mention toolbar) into the same slim rounded-xl single-line row
- * as the docked pill that opens the panel, so the two read as one control.
+ * attachment/mention toolbar) into the same slim single-line row as the
+ * docked pill that opens the panel, so the two read as one control.
  * Injected into the Elements shadow root via `theme.customCss` — host-page
  * CSS can't reach it. Targets Elements' stable `aui-*` class hooks; the
  * toolbar is hidden but typing `@` still triggers tool mentions.
  */
 const DOCK_PANEL_COMPOSER_CSS = `
   .aui-composer-wrapper { padding-block: 0.5rem; }
-  .aui-composer-root { min-height: 0; border-radius: 0.75rem; padding: 0; }
+  .aui-composer-root { min-height: 0; border-radius: 0; padding: 0; }
   .aui-composer-input {
     min-height: 0;
     margin-bottom: 0;
@@ -193,12 +193,11 @@ const CHAT_FULLPAGE_COMPOSER_CSS = `
 // `text-link-primary`), but Moonshine's stylesheet — which carries the rule
 // `.text-link-primary { color: var(--text-link-primary) }` — isn't loaded in
 // the Elements shadow root, so the class has no effect and the link inherits
-// the body text color. Color the link directly with the Moonshine brand blue
-// (light/dark); the inner text span inherits it.
+// the body text color. Reference the custom property directly instead: it's
+// an inherited property, so it crosses the shadow boundary from the host
+// page and already resolves per-theme — no separate light/dark rule needed.
 const CHAT_LINK_CSS = `
-  .gram-elements a.text-link-primary { color: #1e5aae; }
-  .gram-elements.dark a.text-link-primary,
-  .dark .gram-elements a.text-link-primary { color: #619aea; }
+  .gram-elements a.text-link-primary { color: var(--text-link-primary); }
 `;
 
 function DockSubmitButton() {
@@ -238,13 +237,14 @@ interface InsightsDockProps {
   panel: React.ReactNode;
 }
 
-/** Width/shape/elevation of the dock card across its states: chat panel
- *  full-screen, chat panel open, composer focused (or holding draft text),
- *  and collapsed pill. Activity is signalled by deepening shadow. */
+/** Width/shape of the dock card across its states: chat panel full-screen,
+ *  chat panel open, composer focused (or holding draft text), and collapsed
+ *  pill. The card's hairline border (applied unconditionally by the caller)
+ *  is the only surface-separation cue — no shadow elevation. */
 function dockCardShapeClass(open: boolean, composerExpanded: boolean): string {
-  if (open) return "max-w-3xl rounded-2xl shadow-2xl";
-  if (composerExpanded) return "max-w-2xl rounded-2xl shadow-xl";
-  return "max-w-md rounded-full shadow-md hover:shadow-lg";
+  if (open) return "max-w-3xl";
+  if (composerExpanded) return "max-w-2xl";
+  return "max-w-md rounded-full";
 }
 
 /**
@@ -456,8 +456,8 @@ function InsightsDock({
                   expanded composer, so opening the chat reads as the input
                   surface growing into the conversation rather than an
                   unrelated white panel appearing. */}
-              <div className="bg-muted/40 rounded-2xl p-2">
-                <div className="border-border bg-card h-[min(640px,70vh)] overflow-hidden rounded-xl border">
+              <div className="bg-muted/40 p-2">
+                <div className="border-border bg-card h-[min(640px,70vh)] overflow-hidden border">
                   {panel}
                 </div>
               </div>
@@ -686,7 +686,7 @@ export function InsightsProvider({
       setHistoryReturnable(false);
     }
   }, [isExpanded]);
-  const { theme } = useMoonshineConfig();
+  const { theme } = useTheme();
   const { pathname } = useLocation();
   const routes = useRoutes();
   // The full-page chat lives at `/…/chat[/…]`. The shared assistant runtime is

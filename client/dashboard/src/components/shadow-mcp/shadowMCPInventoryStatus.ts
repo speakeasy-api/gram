@@ -1,6 +1,6 @@
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
-import type { BadgeProps } from "@speakeasy-api/moonshine";
+import type { BadgeProps } from "@/components/ui/badge";
 
 export type ShadowMCPPolicyState =
   | "blocking"

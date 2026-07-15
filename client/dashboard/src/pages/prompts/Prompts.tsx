@@ -1,7 +1,9 @@
 import { Page } from "@/components/page-layout";
+import { ListLayout } from "@/components/layouts/list-layout";
 import { RequireScope } from "@/components/require-scope";
 import { CardContextMenu } from "@/components/card-context-menu";
 import { Card, Cards } from "@/components/ui/card";
+import { useConfirm } from "@/components/ui/use-confirm";
 import { Action, MoreActions } from "@/components/ui/more-actions";
 import { UpdatedAt } from "@/components/updated-at";
 import { useRoutes } from "@/routes";
@@ -9,7 +11,7 @@ import { PromptTemplate } from "@gram/client/models/components/prompttemplate.js
 import { useDeleteTemplateMutation } from "@gram/client/react-query/deleteTemplate.js";
 import { invalidateAllTemplates } from "@gram/client/react-query/templates.js";
 import { usePrompts } from "./usePrompts";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/button";
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { Outlet } from "react-router";
@@ -47,27 +49,27 @@ function PromptsInner() {
   }
 
   return (
-    <Page.Section>
-      <Page.Section.Title>Prompt Templates</Page.Section.Title>
-      <Page.Section.Description>
-        Provide your users with MCP-native prompt templates
-      </Page.Section.Description>
-      <Page.Section.CTA>
-        <Button onClick={() => routes.prompts.newPrompt.goTo()}>
-          <Button.LeftIcon>
-            <Plus className="h-4 w-4" />
-          </Button.LeftIcon>
-          <Button.Text>New Prompt</Button.Text>
-        </Button>
-      </Page.Section.CTA>
-      <Page.Section.Body>
+    <ListLayout>
+      <ListLayout.Header
+        title="Prompt Templates"
+        subtitle="Provide your users with MCP-native prompt templates"
+        actions={
+          <Button onClick={() => routes.prompts.newPrompt.goTo()}>
+            <Button.LeftIcon>
+              <Plus className="h-4 w-4" />
+            </Button.LeftIcon>
+            <Button.Text>New Prompt</Button.Text>
+          </Button>
+        }
+      />
+      <ListLayout.List>
         <Cards isLoading={isLoading}>
           {prompts?.map((template) => {
             return <PromptTemplateCard key={template.id} template={template} />;
           })}
         </Cards>
-      </Page.Section.Body>
-    </Page.Section>
+      </ListLayout.List>
+    </ListLayout>
   );
 }
 
@@ -82,12 +84,23 @@ export function PromptTemplateCard({
 }): JSX.Element {
   const routes = useRoutes();
   const queryClient = useQueryClient();
+  const { confirm: requestConfirm, dialog } = useConfirm();
 
   const deleteTemplate = useDeleteTemplateMutation({
     onSuccess: () => {
       void invalidateAllTemplates(queryClient);
     },
   });
+
+  const handleDelete = async () => {
+    const confirmed = await requestConfirm({
+      title: "Are you sure you want to delete this prompt template?",
+      destructive: true,
+    });
+    if (confirmed) {
+      deleteTemplate.mutate({ request: { name: template.name } });
+    }
+  };
 
   const actions: Action[] = [
     {
@@ -97,39 +110,40 @@ export function PromptTemplateCard({
       onClick: () => {
         if (onDelete) {
           onDelete();
-        } else if (
-          confirm("Are you sure you want to delete this prompt template?")
-        ) {
-          deleteTemplate.mutate({ request: { name: template.name } });
+        } else {
+          void handleDelete();
         }
       },
     },
   ];
 
   return (
-    <CardContextMenu actions={actions}>
-      <routes.prompts.prompt.Link
-        params={[template.name]}
-        className="block h-full hover:no-underline"
-      >
-        <Card>
-          <Card.Header>
-            <Card.Title className="normal-case">{template.name}</Card.Title>
-            <div onClick={(e) => e.stopPropagation()}>
-              <MoreActions actions={actions} />
-            </div>
-          </Card.Header>
-          <Card.Content>
-            <Card.Description>
-              {template.description || "No description"}
-            </Card.Description>
-          </Card.Content>
-          <Card.Footer>
-            <div />
-            <UpdatedAt date={new Date(template.updatedAt)} />
-          </Card.Footer>
-        </Card>
-      </routes.prompts.prompt.Link>
-    </CardContextMenu>
+    <>
+      <CardContextMenu actions={actions}>
+        <routes.prompts.prompt.Link
+          params={[template.name]}
+          className="block h-full hover:no-underline"
+        >
+          <Card>
+            <Card.Header>
+              <Card.Title className="normal-case">{template.name}</Card.Title>
+              <div onClick={(e) => e.stopPropagation()}>
+                <MoreActions actions={actions} />
+              </div>
+            </Card.Header>
+            <Card.Content>
+              <Card.Description>
+                {template.description || "No description"}
+              </Card.Description>
+            </Card.Content>
+            <Card.Footer>
+              <div />
+              <UpdatedAt date={new Date(template.updatedAt)} />
+            </Card.Footer>
+          </Card>
+        </routes.prompts.prompt.Link>
+      </CardContextMenu>
+      {dialog}
+    </>
   );
 }

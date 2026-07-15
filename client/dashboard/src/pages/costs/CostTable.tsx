@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import {
   Tooltip,
@@ -16,9 +17,13 @@ import {
   GeminiIcon,
   HookSourceIcon,
 } from "../hooks/HookSourceIcon";
+import { Sparkline } from "@/components/chart/Sparkline";
+import {
+  trendDirection,
+  trendOf,
+  TREND_COLOR,
+} from "@/components/chart/sparkline-math";
 import { Gutter, SortHeader, SUBGRID_ROW_CLASS } from "./gridTable";
-import { Sparkline } from "./Sparkline";
-import { trendDirection, trendOf } from "./sparkline-math";
 import {
   costMeasureLabel,
   ESTIMATED_COST_TOOLTIP,
@@ -40,10 +45,10 @@ function costPerSession(row: QueryRow): number {
 }
 
 // Bucket the cost into three bands by its position in the column's range:
-// lowest third → emerald, middle → neutral (default text), highest → rose.
+// lowest third → success, middle → neutral (default text), highest → destructive.
 function costColor(t: number): string | undefined {
-  if (t >= 2 / 3) return "#e11d48"; // rose-600 — high cost
-  if (t <= 1 / 3) return "#059669"; // emerald-600 — low cost
+  if (t >= 2 / 3) return "var(--fill-destructive-default)"; // high cost
+  if (t <= 1 / 3) return "var(--fill-success-default)"; // low cost
   return undefined; // neutral
 }
 
@@ -97,10 +102,6 @@ function InfoTooltip({ text }: { text: string }): JSX.Element {
     </Tooltip>
   );
 }
-
-const GREEN = "#10b981";
-const RED = "#f43f5e";
-const GREY = "#94a3b8";
 
 function displayValue(groupValue: string): string {
   return groupValue === "" ? "(unset)" : groupValue;
@@ -296,7 +297,7 @@ export function CostTable({
 
   return (
     <div
-      className="border-border divide-border grid gap-x-3 gap-y-0 divide-y overflow-x-auto rounded-lg border"
+      className="border-border divide-border grid gap-x-3 gap-y-0 divide-y overflow-x-auto border"
       style={{ gridTemplateColumns: COLUMNS }}
     >
       <div
@@ -389,9 +390,9 @@ export function CostTable({
           <LegendTooltip
             intro="over the selected range"
             items={[
-              { key: "Green", label: "trending down", color: GREEN },
-              { key: "Red", label: "trending up", color: RED },
-              { key: "Grey", label: "no clear trend", color: GREY },
+              { key: "Green", label: "trending down", color: TREND_COLOR.down },
+              { key: "Red", label: "trending up", color: TREND_COLOR.up },
+              { key: "Grey", label: "no clear trend", color: TREND_COLOR.flat },
             ]}
           />
         </span>
@@ -483,7 +484,12 @@ export function CostTable({
                 {(row.measures.totalTokens ?? 0).toLocaleString()}
               </span>
               <span className="flex">
-                <Sparkline values={seriesByGroup.get(row.groupValue) ?? []} />
+                <Sparkline
+                  data={seriesByGroup.get(row.groupValue) ?? []}
+                  trendColor
+                  width={96}
+                  height={28}
+                />
               </span>
               <Gutter />
             </button>
@@ -496,30 +502,34 @@ export function CostTable({
           className="flex items-center justify-between px-5 py-3"
           style={{ gridColumn: "1 / -1" }}
         >
-          <p className="text-muted-foreground text-sm">
+          <Type muted small>
             {safePage * PAGE_SIZE + 1}–
             {Math.min((safePage + 1) * PAGE_SIZE, sorted.length)} of{" "}
             {sorted.length.toLocaleString()}
-          </p>
+          </Type>
           <div className="flex items-center gap-1">
-            <button
-              type="button"
-              aria-label="Previous page"
+            <Button
+              variant="tertiary"
+              size="sm"
               onClick={() => setPage((p) => p - 1)}
               disabled={safePage === 0}
-              className="hover:bg-muted inline-flex size-8 items-center justify-center rounded-md transition-colors disabled:pointer-events-none disabled:opacity-40"
             >
-              <ChevronLeft className="size-4" />
-            </button>
-            <button
-              type="button"
-              aria-label="Next page"
+              <Button.LeftIcon>
+                <ChevronLeft className="size-4" />
+              </Button.LeftIcon>
+              <Button.Text className="sr-only">Previous page</Button.Text>
+            </Button>
+            <Button
+              variant="tertiary"
+              size="sm"
               onClick={() => setPage((p) => p + 1)}
               disabled={safePage >= totalPages - 1}
-              className="hover:bg-muted inline-flex size-8 items-center justify-center rounded-md transition-colors disabled:pointer-events-none disabled:opacity-40"
             >
-              <ChevronRight className="size-4" />
-            </button>
+              <Button.LeftIcon>
+                <ChevronRight className="size-4" />
+              </Button.LeftIcon>
+              <Button.Text className="sr-only">Next page</Button.Text>
+            </Button>
           </div>
         </div>
       )}

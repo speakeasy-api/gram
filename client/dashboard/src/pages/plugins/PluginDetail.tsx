@@ -1,11 +1,21 @@
-import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
+import { DetailLayout } from "@/components/layouts/detail-layout";
 import { MCPStatusIndicator } from "@/components/mcp/MCPStatusIndicator";
 import { ToolCollectionBadge } from "@/components/tool-collection-badge";
-import { Button as UiButton } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
-import { DotCard } from "@/components/ui/dot-card";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { Heading } from "@/components/ui/heading";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import { mcpServerRouteParam } from "@/lib/sources";
@@ -21,37 +31,40 @@ import {
 } from "@gram/client/react-query/publishStatus";
 import { usePublishPluginsMutation } from "@gram/client/react-query/publishPlugins";
 import { useUpdatePluginMutation } from "@gram/client/react-query/updatePlugin";
-import { useDeletePluginMutation } from "@gram/client/react-query/deletePlugin";
 import { useAddPluginServerMutation } from "@gram/client/react-query/addPluginServer";
 import { useRemovePluginServerMutation } from "@gram/client/react-query/removePluginServer";
 import { useListToolsets } from "@gram/client/react-query/listToolsets";
-import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers";
 import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import {
-  Badge,
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
-  Icon,
-  Stack,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/dropdown-menu";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
-import { Network, Puzzle, Sparkles, Trash2 } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router";
+import {
+  ChevronDown,
+  Download,
+  Network,
+  Plus,
+  RefreshCw,
+  Trash2,
+  Upload,
+} from "lucide-react";
+import { useCallback, useId, useMemo, useRef, useState } from "react";
+import { useParams } from "react-router";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { PluginServer } from "@gram/client/models/components/pluginserver.js";
 import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import { useSdkClient } from "@/contexts/Sdk";
 import { toast } from "sonner";
-import { DEFAULT_PLUGIN_DESCRIPTION } from "./default-plugin";
-import { downloadPluginPackage } from "./downloadPluginPackage";
-import { InstallInstructionsDialog } from "./InstallInstructionsDialog";
+import { InstallInstructionsButton } from "./InstallInstructionsDialog";
 import { PublishDialog } from "./PublishDialog";
 
 // A selectable server for a plugin, sourced from either a toolset (Hosted) or
@@ -71,21 +84,16 @@ function serverOptionKey(kind: ServerOptionKind, id: string): string {
 export default function PluginDetail(): JSX.Element | null {
   const { pluginId } = useParams<{ pluginId: string }>();
   const queryClient = useQueryClient();
-  const routes = useRoutes();
-  const navigate = useNavigate();
+  const editNameFieldId = useId();
+  const editSlugFieldId = useId();
+  const editDescriptionFieldId = useId();
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isAddServerOpen, setIsAddServerOpen] = useState(false);
   const [isDownloadMenuOpen, setIsDownloadMenuOpen] = useState(false);
-  const [isInstallSheetOpen, setIsInstallSheetOpen] = useState(false);
   const [isPublishDialogOpen, setIsPublishDialogOpen] = useState(false);
-  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
 
   const { data: plugin } = usePluginSuspense({ id: pluginId! });
-  // Polled so the publish-freshness badges/banner pick up the Temporal
-  // generator-rollout schedule's auto-sync without a manual refresh.
-  const { data: publishStatus } = usePublishStatus(undefined, undefined, {
-    refetchInterval: 5_000,
-  });
+  const { data: publishStatus } = usePublishStatus();
 
   const client = useSdkClient();
 
@@ -96,32 +104,19 @@ export default function PluginDetail(): JSX.Element | null {
     [toolsetsData?.toolsets],
   );
 
-  // Remote MCP-backed mcp_servers for this project. All of them back the
-  // cards of already-attached plugin servers (an attached server that's been
-  // disabled or lost its endpoints must still resolve for display), while
-  // only non-disabled servers with at least one endpoint are publishable —
-  // mirroring the backend's AddPluginServer check, so the picker never
-  // offers a server the API would reject.
+  // Remote MCP-backed mcp_servers for this project. Only remote-backed,
+  // non-disabled servers are publishable today.
   const { data: mcpServersData, isLoading: isLoadingMcpServers } =
     useMcpServers({});
-  const { data: mcpEndpointsData, isLoading: isLoadingMcpEndpoints } =
-    useMcpEndpoints({});
   const mcpServers = useMemo(
     () =>
-      (mcpServersData?.mcpServers ?? []).filter((s) => !!s.remoteMcpServerId),
+      (mcpServersData?.mcpServers ?? []).filter(
+        (s) => !!s.remoteMcpServerId && s.visibility !== "disabled",
+      ),
     [mcpServersData],
   );
-  const publishableMcpServers = useMemo(() => {
-    const serverIdsWithEndpoint = new Set(
-      (mcpEndpointsData?.mcpEndpoints ?? []).map((e) => e.mcpServerId),
-    );
-    return mcpServers.filter(
-      (s) => s.visibility !== "disabled" && serverIdsWithEndpoint.has(s.id),
-    );
-  }, [mcpServers, mcpEndpointsData]);
 
-  const isLoadingServers =
-    isLoadingToolsets || isLoadingMcpServers || isLoadingMcpEndpoints;
+  const isLoadingServers = isLoadingToolsets || isLoadingMcpServers;
 
   // Invalidate publish status too so the dirty/up-to-date affordance reflects
   // the edit the moment a mutation lands.
@@ -203,15 +198,6 @@ export default function PluginDetail(): JSX.Element | null {
     },
   });
 
-  const deleteMutation = useDeletePluginMutation({
-    onSuccess: async () => {
-      setIsDeleteOpen(false);
-      await invalidateAll();
-      offerPublish("Plugin deleted");
-      void navigate(routes.plugins.href());
-    },
-  });
-
   const addServerMutation = useAddPluginServerMutation({
     onSuccess: () => {
       setIsAddServerOpen(false);
@@ -250,13 +236,6 @@ export default function PluginDetail(): JSX.Element | null {
     });
   };
 
-  const handleDelete = () => {
-    deleteMutation.mutate({
-      security: { sessionHeaderGramSession: "" },
-      request: { id: pluginId! },
-    });
-  };
-
   const handleAddServer: React.FormEventHandler<HTMLFormElement> = (e) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
@@ -286,7 +265,19 @@ export default function PluginDetail(): JSX.Element | null {
   const handleDownload = async (platform: "claude" | "cursor" | "codex") => {
     setIsDownloadMenuOpen(false);
     try {
-      await downloadPluginPackage(client, pluginId!, platform);
+      const { headers, result } = await client.plugins.downloadPluginPackage({
+        pluginId: pluginId!,
+        platform,
+      });
+      const blob = await new Response(result).blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download =
+        headers["content-disposition"]?.[0]?.match(/filename="(.+)"/)?.[1] ??
+        "plugin.zip";
+      a.click();
+      URL.revokeObjectURL(url);
     } catch (_err) {
       toast.error("Failed to download plugin package");
     }
@@ -304,15 +295,14 @@ export default function PluginDetail(): JSX.Element | null {
     return map;
   }, [mcpServers]);
 
-  // Merge toolsets and publishable Remote MCP-backed servers into one
-  // selectable list.
+  // Merge toolsets and Remote MCP-backed servers into one selectable list.
   const serverOptions = useMemo<ServerOption[]>(() => {
     const opts: ServerOption[] = toolsets.map((t) => ({
       kind: "toolset",
       id: t.id,
       name: t.name,
     }));
-    for (const s of publishableMcpServers) {
+    for (const s of mcpServers) {
       opts.push({
         kind: "mcpServer",
         id: s.id,
@@ -320,14 +310,9 @@ export default function PluginDetail(): JSX.Element | null {
       });
     }
     return opts;
-  }, [toolsets, publishableMcpServers]);
+  }, [toolsets, mcpServers]);
 
   if (!plugin) return null;
-
-  const isDefaultPlugin = plugin.isDefault ?? false;
-  const description =
-    plugin.description ??
-    (isDefaultPlugin ? DEFAULT_PLUGIN_DESCRIPTION : "No description");
 
   const servers = plugin.servers ?? [];
 
@@ -352,229 +337,175 @@ export default function PluginDetail(): JSX.Element | null {
         />
       </Page.Header>
       <Page.Body>
-        {/* Hero */}
-        <div className="mb-8 flex flex-wrap items-start justify-between gap-6">
-          <div className="flex min-w-0 items-start gap-4">
-            <div className="bg-primary/5 flex h-14 w-14 shrink-0 items-center justify-center rounded-xl dark:bg-neutral-800">
-              <Puzzle className="text-muted-foreground h-7 w-7" />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-bold">{plugin.name}</h1>
-                {isDefaultPlugin && (
-                  <Badge variant="information">
-                    <Badge.Text>Default</Badge.Text>
-                  </Badge>
+        <DetailLayout>
+          <DetailLayout.Header
+            eyebrow="Plugin"
+            title={plugin.name}
+            subtitle={
+              <div className="flex flex-col gap-1">
+                <span>
+                  {plugin.description ?? "No description"} — Slug:{" "}
+                  <code>{plugin.slug}</code>
+                </span>
+                <PublishFreshnessIndicator publishStatus={publishStatus} />
+              </div>
+            }
+            actions={
+              <>
+                <PublishStatusControl
+                  publishStatus={publishStatus}
+                  isPending={publishMutation.isPending}
+                  onRepublish={() => handlePublish([])}
+                  onOpenDialog={() => setIsPublishDialogOpen(true)}
+                />
+                <Button variant="secondary" onClick={() => setIsEditOpen(true)}>
+                  Edit
+                </Button>
+              </>
+            }
+          />
+
+          <DetailLayout.Content>
+            <DetailLayout.Main>
+              {/* Marketplace banner — durable path to the install instructions, so the
+                  published marketplace URL is reachable without going back to the list.
+                  Gated only on a connected repo URL (mirrors the plugins list); the
+                  owner/name display and install button degrade independently so partial
+                  metadata never hides the whole entrypoint. */}
+              {publishStatus?.connected && publishStatus.repoUrl && (
+                <Card className="flex-row flex-wrap items-center justify-between gap-3 px-4 py-3">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+                      Marketplace
+                    </span>
+                    <a
+                      href={publishStatus.repoUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="hover:text-primary text-foreground font-mono text-sm hover:underline"
+                    >
+                      {publishStatus.repoOwner && publishStatus.repoName
+                        ? `${publishStatus.repoOwner}/${publishStatus.repoName}`
+                        : publishStatus.repoUrl}
+                    </a>
+                  </div>
+                  {publishStatus.repoOwner && publishStatus.repoName && (
+                    <InstallInstructionsButton
+                      repoOwner={publishStatus.repoOwner}
+                      repoName={publishStatus.repoName}
+                      marketplaceUrl={publishStatus.marketplaceUrl}
+                    />
+                  )}
+                </Card>
+              )}
+
+              {/* Servers section */}
+              <div>
+                <Stack
+                  direction="horizontal"
+                  justify="space-between"
+                  align="center"
+                  className="mb-3"
+                >
+                  <Heading variant="h5">MCP Servers</Heading>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setIsAddServerOpen(true)}
+                  >
+                    Add Server
+                  </Button>
+                </Stack>
+                {servers.length === 0 ? (
+                  <InlineEmptyState
+                    title="No servers added yet"
+                    action={
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => setIsAddServerOpen(true)}
+                      >
+                        <Button.LeftIcon>
+                          <Plus className="h-4 w-4" />
+                        </Button.LeftIcon>
+                        <Button.Text>Add Server</Button.Text>
+                      </Button>
+                    }
+                  />
+                ) : (
+                  <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+                    {servers.map((server) => (
+                      <PluginServerCard
+                        key={server.id}
+                        server={server}
+                        toolset={
+                          server.toolsetId
+                            ? toolsetById.get(server.toolsetId)
+                            : undefined
+                        }
+                        mcpServer={
+                          server.mcpServerId
+                            ? mcpServerById.get(server.mcpServerId)
+                            : undefined
+                        }
+                        isLoading={isLoadingServers}
+                        onRemove={() => handleRemoveServer(server)}
+                      />
+                    ))}
+                  </div>
                 )}
               </div>
-              <Type muted small className="mt-1 font-mono">
-                {plugin.slug}
-              </Type>
-              <Type small className="mt-4 max-w-xl">
-                {description}
-              </Type>
-              <PublishFreshnessIndicator publishStatus={publishStatus} />
-            </div>
-          </div>
-          <Stack
-            direction="horizontal"
-            gap={2}
-            align="center"
-            className="shrink-0"
-          >
-            <DropdownMenu
-              open={isDownloadMenuOpen}
-              onOpenChange={setIsDownloadMenuOpen}
-            >
-              <DropdownMenuTrigger asChild>
-                <Button variant="primary">
-                  <Button.Text>Install</Button.Text>
-                  <span className="bg-primary-foreground/25 mx-1 h-4 w-px self-center" />
-                  <Button.RightIcon>
-                    <Icon name="chevron-down" className="h-4 w-4" />
-                  </Button.RightIcon>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  onClick={() => {
-                    // Defer until after the dropdown has fully closed to
-                    // avoid a Radix focus-trap/body-lock conflict between
-                    // the closing menu and the opening sheet (same pattern
-                    // as MCPDetails.tsx).
-                    setTimeout(() => setIsInstallSheetOpen(true), 0);
-                  }}
-                  disabled={
-                    !publishStatus?.connected ||
-                    !publishStatus.repoOwner ||
-                    !publishStatus.repoName
-                  }
-                >
-                  <div className="flex flex-col">
-                    <span>GitHub installation (preferred)</span>
-                    {(!publishStatus?.connected ||
-                      !publishStatus.repoOwner ||
-                      !publishStatus.repoName) && (
-                      <span className="text-muted-foreground text-xs">
-                        Requires marketplace setup
-                      </span>
-                    )}
-                  </div>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() => {
-                    void handleDownload("claude");
-                  }}
-                >
-                  Download as zip — Claude
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => {
-                    void handleDownload("cursor");
-                  }}
-                >
-                  Download as zip — Cursor
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => {
-                    void handleDownload("codex");
-                  }}
-                >
-                  Download as zip — Codex
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            {publishStatus?.connected &&
-              publishStatus.repoOwner &&
-              publishStatus.repoName && (
-                <InstallInstructionsDialog
-                  open={isInstallSheetOpen}
-                  onOpenChange={setIsInstallSheetOpen}
-                  repoOwner={publishStatus.repoOwner}
-                  repoName={publishStatus.repoName}
-                  marketplaceUrl={publishStatus.marketplaceUrl}
-                  candidatePlugins={[
-                    {
-                      name: plugin.name,
-                      slug: plugin.slug,
-                      description: plugin.description,
-                    },
-                  ]}
-                />
-              )}
-            <PublishStatusControl
-              publishStatus={publishStatus}
-              isPending={publishMutation.isPending}
-              onRepublish={() => handlePublish([])}
-              onOpenDialog={() => setIsPublishDialogOpen(true)}
-            />
-            <Button variant="secondary" onClick={() => setIsEditOpen(true)}>
-              Edit name
-            </Button>
-            <Button
-              variant="destructive-primary"
-              onClick={() => setIsDeleteOpen(true)}
-            >
-              Delete
-            </Button>
-          </Stack>
-        </div>
 
-        {/* Servers section */}
-        <div className="mb-3 flex items-center gap-3">
-          <div className="border-border flex-1 border-t" />
-          <Type
-            small
-            muted
-            className="shrink-0 font-mono text-xs tracking-wide uppercase"
-          >
-            MCP Servers
-          </Type>
-          <div className="border-border flex-1 border-t" />
-        </div>
-        <div className="mb-3 flex justify-end">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => setIsAddServerOpen(true)}
-          >
-            <Button.LeftIcon>
-              <Icon name="plus" className="h-4 w-4" />
-            </Button.LeftIcon>
-            <Button.Text>Add Server</Button.Text>
-          </Button>
-        </div>
-        <div className="mb-8">
-          {servers.length === 0 ? (
-            <Stack
-              gap={2}
-              className="border-border rounded-xl border py-8"
-              align="center"
-              justify="center"
-            >
-              <Type variant="body" muted>
-                No servers added yet
-              </Type>
-            </Stack>
-          ) : (
-            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-              {servers.map((server) => (
-                <PluginServerCard
-                  key={server.id}
-                  server={server}
-                  toolset={
-                    server.toolsetId
-                      ? toolsetById.get(server.toolsetId)
-                      : undefined
-                  }
-                  mcpServer={
-                    server.mcpServerId
-                      ? mcpServerById.get(server.mcpServerId)
-                      : undefined
-                  }
-                  isLoading={isLoadingServers}
-                  onRemove={() => handleRemoveServer(server)}
-                  lastPublishedAt={publishStatus?.lastPublishedAt}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Skills section — no plugin support yet, coming soon */}
-        <div className="mb-3 flex items-center gap-3">
-          <div className="border-border flex-1 border-t" />
-          <Type
-            small
-            muted
-            className="shrink-0 font-mono text-xs tracking-wide uppercase"
-          >
-            Skills
-          </Type>
-          <div className="border-border flex-1 border-t" />
-        </div>
-        <div className="mb-8">
-          <div className="border-border flex items-center gap-4 rounded-xl border border-dashed p-6 opacity-60">
-            <div className="bg-muted flex h-14 w-14 shrink-0 items-center justify-center rounded-xl">
-              <Sparkles className="text-muted-foreground h-7 w-7" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <Type variant="subheading" as="div">
-                  Skills
-                </Type>
-                <Badge variant="neutral">
-                  <Badge.Text>Coming soon</Badge.Text>
-                </Badge>
+              {/* Download section */}
+              <div>
+                <Heading variant="h5" className="mb-3">
+                  Download
+                </Heading>
+                <div>
+                  <DropdownMenu
+                    open={isDownloadMenuOpen}
+                    onOpenChange={setIsDownloadMenuOpen}
+                  >
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="secondary" size="sm">
+                        <Button.LeftIcon>
+                          <Download className="h-4 w-4" />
+                        </Button.LeftIcon>
+                        <Button.Text>Download Plugin</Button.Text>
+                        <Button.RightIcon>
+                          <ChevronDown className="h-4 w-4" />
+                        </Button.RightIcon>
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start">
+                      <DropdownMenuItem
+                        onClick={() => {
+                          void handleDownload("claude");
+                        }}
+                      >
+                        Claude
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => {
+                          void handleDownload("cursor");
+                        }}
+                      >
+                        Cursor
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => {
+                          void handleDownload("codex");
+                        }}
+                      >
+                        Codex
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
               </div>
-              <Type small muted>
-                Bundle reusable skills alongside your MCP servers in this
-                plugin.
-              </Type>
-            </div>
-          </div>
-        </div>
+            </DetailLayout.Main>
+          </DetailLayout.Content>
+        </DetailLayout>
 
         {/* Edit Dialog */}
         <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
@@ -583,23 +514,34 @@ export default function PluginDetail(): JSX.Element | null {
               <Dialog.Title>Edit Plugin</Dialog.Title>
             </Dialog.Header>
             <form onSubmit={handleUpdate} className="flex flex-col gap-4">
-              <InputField
-                label="Name"
-                name="name"
-                defaultValue={plugin.name}
-                required
-              />
-              <InputField
-                label="Slug"
-                name="slug"
-                defaultValue={plugin.slug}
-                required
-              />
-              <InputField
-                label="Description"
-                name="description"
-                defaultValue={plugin.description ?? ""}
-              />
+              <Field>
+                <FieldLabel htmlFor={editNameFieldId}>Name</FieldLabel>
+                <Input
+                  id={editNameFieldId}
+                  name="name"
+                  defaultValue={plugin.name}
+                  required
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor={editSlugFieldId}>Slug</FieldLabel>
+                <Input
+                  id={editSlugFieldId}
+                  name="slug"
+                  defaultValue={plugin.slug}
+                  required
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor={editDescriptionFieldId} optional>
+                  Description
+                </FieldLabel>
+                <Input
+                  id={editDescriptionFieldId}
+                  name="description"
+                  defaultValue={plugin.description ?? ""}
+                />
+              </Field>
               <Dialog.Footer>
                 <Button
                   variant="secondary"
@@ -613,34 +555,6 @@ export default function PluginDetail(): JSX.Element | null {
                 </Button>
               </Dialog.Footer>
             </form>
-          </Dialog.Content>
-        </Dialog>
-
-        {/* Delete Confirmation Dialog */}
-        <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
-          <Dialog.Content>
-            <Dialog.Header>
-              <Dialog.Title>Delete Plugin</Dialog.Title>
-              <Dialog.Description>
-                Are you sure you want to delete &quot;{plugin.name}&quot;? This
-                will remove it from all assigned users on the next publish.
-              </Dialog.Description>
-            </Dialog.Header>
-            <Dialog.Footer>
-              <Button
-                variant="secondary"
-                onClick={() => setIsDeleteOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="destructive-primary"
-                onClick={handleDelete}
-                disabled={deleteMutation.isPending}
-              >
-                Delete
-              </Button>
-            </Dialog.Footer>
           </Dialog.Content>
         </Dialog>
 
@@ -659,22 +573,22 @@ export default function PluginDetail(): JSX.Element | null {
                 {isLoadingServers ? (
                   <Skeleton className="h-9 w-full" />
                 ) : availableServerOptions.length > 0 ? (
-                  <select
-                    name="serverKey"
-                    className="bg-background rounded-md border px-3 py-2 text-sm"
-                    required
-                  >
-                    <option value="">Select an MCP server</option>
-                    {availableServerOptions.map((o) => (
-                      <option
-                        key={serverOptionKey(o.kind, o.id)}
-                        value={serverOptionKey(o.kind, o.id)}
-                      >
-                        {o.name}
-                        {o.kind === "mcpServer" ? " (Remote MCP)" : ""}
-                      </option>
-                    ))}
-                  </select>
+                  <Select name="serverKey" required>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select an MCP server" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableServerOptions.map((o) => (
+                        <SelectItem
+                          key={serverOptionKey(o.kind, o.id)}
+                          value={serverOptionKey(o.kind, o.id)}
+                        >
+                          {o.name}
+                          {o.kind === "mcpServer" ? " (Remote MCP)" : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 ) : serverOptions.length > 0 ? (
                   <Type muted small>
                     All available MCP servers have already been added to this
@@ -743,7 +657,7 @@ function PublishStatusControl({
     return (
       <Button variant="secondary" onClick={onOpenDialog} disabled={isPending}>
         <Button.LeftIcon>
-          <Icon name="upload" className="h-4 w-4" />
+          <Upload className="h-4 w-4" />
         </Button.LeftIcon>
         <Button.Text>
           {isPending ? "Publishing..." : "Publish Private Marketplace"}
@@ -763,14 +677,14 @@ function PublishStatusControl({
       disabled={isPending}
     >
       <Button.LeftIcon>
-        <Icon name="refresh-cw" className="h-4 w-4" />
+        <RefreshCw className="h-4 w-4" />
       </Button.LeftIcon>
       <Button.Text>
         {isPending
           ? "Publishing..."
           : hasUnpublishedChanges
             ? "Publish changes"
-            : "Sync"}
+            : "Re-publish"}
       </Button.Text>
     </Button>
   );
@@ -807,11 +721,13 @@ function PublishFreshnessIndicator({
   if (!hasUnpublishedChanges && !isUpToDate && !lastPublished) return null;
 
   return (
-    <Stack direction="horizontal" gap={2} align="center" className="mt-4">
+    <Stack direction="horizontal" gap={2} align="center" className="mt-2">
       {hasUnpublishedChanges ? (
         <Badge variant="warning">Unpublished changes</Badge>
       ) : isUpToDate ? (
-        <Badge variant="success">Up to date</Badge>
+        <Badge variant="neutral" background={false}>
+          Up to date
+        </Badge>
       ) : null}
       {lastPublished}
     </Stack>
@@ -824,27 +740,18 @@ function PluginServerCard({
   mcpServer,
   isLoading,
   onRemove,
-  lastPublishedAt,
 }: {
   server: PluginServer;
   toolset: ToolsetEntry | undefined;
   mcpServer: McpServer | undefined;
   isLoading: boolean;
   onRemove: () => void;
-  /** Undefined when the marketplace has never been published. */
-  lastPublishedAt: Date | undefined;
 }) {
   const routes = useRoutes();
 
   // Remote MCP-backed servers reference an mcp_server; toolset-backed servers
   // reference a toolset. Exactly one backend is set per row.
   const isRemote = !!server.mcpServerId;
-  // Approximates per-server publish freshness from the project-wide
-  // fingerprint: publish itself isn't scoped to a single server, but a
-  // server added after the last publish timestamp can't possibly be in the
-  // pushed repo yet.
-  const notYetPublished =
-    !lastPublishedAt || server.createdAt > lastPublishedAt;
   // The card is clickable only once its backing resource resolves.
   const isClickable = isRemote ? !!mcpServer : !!toolset;
 
@@ -859,7 +766,7 @@ function PluginServerCard({
   };
 
   return (
-    <DotCard
+    <Card
       className={cn(isClickable && "cursor-pointer")}
       onClick={isClickable ? handleClick : undefined}
       icon={<Network className="text-muted-foreground h-8 w-8" />}
@@ -873,24 +780,11 @@ function PluginServerCard({
         >
           {server.displayName}
         </Type>
-        <div className="flex items-center gap-2">
-          {notYetPublished ? (
-            <Badge
-              variant="warning"
-              className="text-xs"
-              title="Added since the marketplace was last published"
-            >
-              Unpublished
-            </Badge>
-          ) : (
-            <Badge variant="success" className="text-xs">
-              Published
-            </Badge>
-          )}
+        <div className="flex items-center gap-1">
           {isRemote ? (
             // Remote MCP servers have no Gram-side tool catalog, so the
             // tool-collection badge is omitted.
-            <Badge variant="neutral" className="text-xs">
+            <Badge variant="neutral" background={false} className="text-xs">
               Remote MCP
             </Badge>
           ) : toolset ? (
@@ -918,21 +812,22 @@ function PluginServerCard({
         ) : (
           <span />
         )}
-        <UiButton
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          tooltip="Remove server"
-          aria-label="Remove server"
-          className="hover:text-destructive"
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove();
-          }}
-        >
-          <Trash2 className="h-4 w-4" />
-        </UiButton>
+        <SimpleTooltip tooltip="Remove server">
+          <Button
+            type="button"
+            variant="tertiary"
+            size="sm"
+            aria-label="Remove server"
+            className="hover:text-destructive"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove();
+            }}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </SimpleTooltip>
       </div>
-    </DotCard>
+    </Card>
   );
 }

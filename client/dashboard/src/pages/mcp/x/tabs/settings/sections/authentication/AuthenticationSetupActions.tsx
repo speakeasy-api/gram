@@ -4,7 +4,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/button";
 import type { ProtectedResourceProbeStatus } from "./useProtectedResourceMetadata";
 
 export function AuthenticationSetupActions({

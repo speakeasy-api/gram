@@ -1,0 +1,963 @@
+/*
+ * Base CSS - Design Tokens and CSS Variables
+ *
+ * ⚠️  WARNING: DO NOT IMPORT THIS FILE DIRECTLY IN YOUR PROJECT!
+ * This file is only exposed for Tailwind's @reference directive to work.
+ * Use the utility classes from utilities.css instead of these raw tokens.
+ *
+ * Structure:
+ * 1. Primitive Tokens - Raw values (colors, fonts, etc.)
+ * 2. Semantic/Utility Tokens - Theme-aware variables that map to utilities
+ * 3. Component Tokens - Higher-level semantic tokens
+ * 4. Deprecated Tokens - Shadcn compatibility (to be removed)
+ */
+
+:root,
+:root.light {
+  /* ============================================
+   * 1. PRIMITIVE TOKENS
+   * Raw design values - do not use directly in components
+   * ============================================ */
+
+  /* Font Families */
+  --font-diatype:
+    "Diatype", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+    Arial, sans-serif;
+  --font-diatype-mono:
+    "Diatype Mono", SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
+  --font-tobias:
+    "Tobias", "Cormorant", Georgia, Cambria, "Times New Roman", Times, serif;
+
+  --color-base-white: hsl(0 0% 100%);
+  --color-base-black: hsl(0 0% 0%);
+  /* Deepest dark-mode surface: a warmer, deeper step below neutral-900
+   * (ink). True black is reserved for logo/rule work per the brandbook. */
+  --color-ink-black: hsl(23, 30%, 2%);
+
+  /*
+   * Neutrals — warm, ink-tinted ramp (Claude Design brandbook).
+   * Anchors: 100 = bone #FAFAFA (canvas), 700 = stone #575251 (secondary
+   * text), 900 = ink #0F0A07 (primary text / dark surfaces). True black
+   * (--color-base-black) is reserved for logo and rule work.
+   */
+  --color-neutral-100: hsl(0, 0%, 98%);
+  --color-neutral-200: hsl(20, 6%, 92%);
+  --color-neutral-300: hsl(20, 6%, 86%);
+  --color-neutral-400: hsl(18, 5%, 73%);
+  --color-neutral-500: hsl(15, 5%, 59%);
+  --color-neutral-600: hsl(12, 4%, 46%);
+  --color-neutral-700: hsl(10, 4%, 33%);
+  --color-neutral-800: hsl(16, 12%, 18%);
+  --color-neutral-900: hsl(23, 36%, 4%);
+
+  --color-neutral-100-40: hsl(from var(--color-neutral-100) h s l / 40%);
+  --color-neutral-100-56: hsl(from var(--color-neutral-100) h s l / 56%);
+  --color-neutral-100-64: hsl(from var(--color-neutral-100) h s l / 64%);
+
+  --color-neutral-200-56: hsl(from var(--color-neutral-200) h s l / 56%);
+
+  --color-neutral-400-40: hsl(from var(--color-neutral-400) h s l / 40%);
+
+  --color-neutral-600-40: hsl(from var(--color-neutral-600) h s l / 40%);
+
+  --color-neutral-800-56: hsl(from var(--color-neutral-800) h s l / 56%);
+
+  --color-neutral-900-40: hsl(from var(--color-neutral-900) h s l / 40%);
+  --color-neutral-900-56: hsl(from var(--color-neutral-900) h s l / 56%);
+  --color-neutral-900-64: hsl(from var(--color-neutral-900) h s l / 64%);
+
+  /* Brand red */
+  --color-brand-red-100: hsl(23, 96%, 62%);
+  --color-brand-red-200: hsl(19, 84%, 58%);
+  --color-brand-red-300: hsl(14, 74%, 54%);
+  --color-brand-red-400: hsl(9, 67%, 51%);
+  --color-brand-red-500: hsl(4, 67%, 47%);
+  --color-brand-red-600: hsl(1, 62%, 39%);
+  --color-brand-red-700: hsl(359, 58%, 31%);
+  --color-brand-red-800: hsl(352, 57%, 22%);
+  --color-brand-red-900: hsl(334, 54%, 13%);
+
+  --gradient-brand-red: radial-gradient(
+    138.34% 138.34% at 0% 4.4%,
+    var(--color-brand-red-900) 0%,
+    var(--color-brand-red-800) 12.5%,
+    var(--color-brand-red-700) 25%,
+    var(--color-brand-red-600) 37.5%,
+    var(--color-brand-red-500) 50%,
+    var(--color-brand-red-400) 62.5%,
+    var(--color-brand-red-300) 75%,
+    var(--color-brand-red-200) 87.5%,
+    var(--color-brand-red-100) 100%
+  );
+
+  /* Brand green */
+  --color-brand-green-100: hsl(68, 52%, 72%);
+  --color-brand-green-200: hsl(75, 37%, 64%);
+  --color-brand-green-300: hsl(84, 28%, 56%);
+  --color-brand-green-400: hsl(95, 23%, 49%);
+  --color-brand-green-500: hsl(108, 24%, 41%);
+  --color-brand-green-600: hsl(116, 24%, 34%);
+  --color-brand-green-700: hsl(128, 30%, 25%);
+  --color-brand-green-800: hsl(140, 44%, 16%);
+  --color-brand-green-900: hsl(154, 100%, 7%);
+
+  --gradient-brand-green: radial-gradient(
+    137.26% 137.26% at 0% 0%,
+    var(--color-brand-green-900) 0%,
+    var(--color-brand-green-800) 12.5%,
+    var(--color-brand-green-700) 25%,
+    var(--color-brand-green-600) 37.5%,
+    var(--color-brand-green-500) 50%,
+    var(--color-brand-green-400) 62.5%,
+    var(--color-brand-green-300) 75%,
+    var(--color-brand-green-200) 87.5%,
+    var(--color-brand-green-100) 100%
+  );
+
+  /* Brand blue */
+  --color-brand-blue-100: hsl(216, 100%, 100%);
+  --color-brand-blue-200: hsl(215, 86%, 73%);
+  --color-brand-blue-300: hsl(215, 77%, 65%);
+  --color-brand-blue-400: hsl(215, 72%, 58%);
+  --color-brand-blue-500: hsl(214, 69%, 50%);
+  --color-brand-blue-600: hsl(215, 71%, 40%);
+  --color-brand-blue-700: hsl(215, 75%, 31%);
+  --color-brand-blue-800: hsl(217, 82%, 21%);
+  --color-brand-blue-900: hsl(220, 100%, 12%);
+
+  --gradient-brand-blue: radial-gradient(
+    141.42% 141.42% at 0% 0%,
+    var(--color-brand-blue-900) 0%,
+    var(--color-brand-blue-800) 12.5%,
+    var(--color-brand-blue-700) 25%,
+    var(--color-brand-blue-600) 37.5%,
+    var(--color-brand-blue-500) 50%,
+    var(--color-brand-blue-400) 62.5%,
+    var(--color-brand-blue-300) 75%,
+    var(--color-brand-blue-200) 87.5%,
+    var(--color-brand-blue-100) 100%
+  );
+
+  /*
+   * Language palette (Claude Design brandbook): every color names a
+   * programming language. Colors are identifiers — labels, tags, legend
+   * swatches, chart series — never surface fills.
+   */
+  --color-lang-typescript: hsl(220, 100%, 12%); /* deep ink-blue */
+  --color-lang-javascript: hsl(215, 69%, 50%); /* primary blue   */
+  --color-lang-python: hsl(216, 100%, 80%); /* sky            */
+  --color-lang-go: hsl(154, 100%, 7%); /* forest         */
+  --color-lang-ruby: hsl(108, 24%, 41%); /* moss           */
+  --color-lang-php: hsl(68, 52%, 72%); /* sap            */
+  --color-lang-java: hsl(334, 54%, 13%); /* oxblood        */
+  --color-lang-csharp: hsl(4, 67%, 47%); /* vermilion      */
+  --color-lang-rust: hsl(23, 96%, 62%); /* ember          */
+
+  /* Signature gradient: runs through the full language palette. Use at
+   * most once per screen (top borders, hero strips, dividers). */
+  --gradient-brand-primary-colors:
+    var(--color-lang-java) 0%, var(--color-lang-csharp) 12.56%,
+    var(--color-lang-rust) 25.06%, var(--color-lang-php) 37.56%,
+    var(--color-lang-ruby) 50.06%, var(--color-lang-go) 62.06%,
+    var(--color-lang-typescript) 74.06%, var(--color-lang-javascript) 86.06%,
+    var(--color-lang-python) 97.06%;
+
+  --gradient-brand-primary: linear-gradient(
+    90deg,
+    var(--gradient-brand-primary-colors)
+  );
+
+  --gradient-brand-primary-y: linear-gradient(
+    180deg,
+    var(--gradient-brand-primary-colors)
+  );
+
+  /* Feedback colors */
+
+  /* Red */
+  --color-feedback-red-100: hsl(0, 100%, 97%);
+  --color-feedback-red-200: hsl(3, 84%, 85%);
+  --color-feedback-red-300: hsl(3, 78%, 71%);
+  --color-feedback-red-400: hsl(2, 74%, 58%);
+  --color-feedback-red-500: hsl(4, 67%, 47%);
+  --color-feedback-red-600: hsl(2, 65%, 39%);
+  --color-feedback-red-700: hsl(1, 64%, 32%);
+  --color-feedback-red-800: hsl(1, 63%, 24%);
+  --color-feedback-red-900: hsl(0, 62%, 17%);
+
+  --color-feedback-red-400-56: hsl(
+    from var(--color-feedback-red-400) h s l / 56%
+  );
+  --color-feedback-red-500-56: hsl(
+    from var(--color-feedback-red-500) h s l / 56%
+  );
+  --color-feedback-red-600-56: hsl(
+    from var(--color-feedback-red-600) h s l / 56%
+  );
+
+  /* Orange */
+  --color-feedback-orange-100: hsl(29, 100%, 95%);
+  --color-feedback-orange-200: hsl(30, 100%, 85%);
+  --color-feedback-orange-300: hsl(28, 100%, 74%);
+  --color-feedback-orange-400: hsl(27, 100%, 66%);
+  --color-feedback-orange-500: hsl(23, 96%, 62%);
+  --color-feedback-orange-600: hsl(22, 70%, 53%);
+  --color-feedback-orange-700: hsl(21, 64%, 43%);
+  --color-feedback-orange-800: hsl(19, 66%, 33%);
+  --color-feedback-orange-900: hsl(18, 69%, 24%);
+
+  --color-feedback-orange-400-56: hsl(
+    from var(--color-feedback-orange-400) h s l / 56%
+  );
+  --color-feedback-orange-500-56: hsl(
+    from var(--color-feedback-orange-500) h s l / 56%
+  );
+
+  /* Green */
+  --color-feedback-green-100: hsl(102, 35%, 93%);
+  --color-feedback-green-200: hsl(99, 33%, 83%);
+  --color-feedback-green-300: hsl(99, 30%, 73%);
+  --color-feedback-green-400: hsl(101, 28%, 62%);
+  --color-feedback-green-500: hsl(108, 24%, 41%);
+  --color-feedback-green-600: hsl(107, 24%, 34%);
+  --color-feedback-green-700: hsl(105, 24%, 27%);
+  --color-feedback-green-800: hsl(104, 24%, 20%);
+  --color-feedback-green-900: hsl(105, 24%, 13%);
+
+  --color-feedback-green-400-56: hsl(
+    from var(--color-feedback-green-400) h s l / 56%
+  );
+  --color-feedback-green-500-56: hsl(
+    from var(--color-feedback-green-500) h s l / 56%
+  );
+
+  /* Blue */
+  --color-feedback-blue-100: hsl(212, 100%, 95%);
+  --color-feedback-blue-200: hsl(214, 100%, 86%);
+  --color-feedback-blue-300: hsl(214, 100%, 77%);
+  --color-feedback-blue-400: hsl(214, 89%, 67%);
+  --color-feedback-blue-500: hsl(214, 69%, 50%);
+  --color-feedback-blue-600: hsl(215, 70%, 41%);
+  --color-feedback-blue-700: hsl(215, 71%, 32%);
+  --color-feedback-blue-800: hsl(217, 73%, 23%);
+  --color-feedback-blue-900: hsl(218, 73%, 15%);
+
+  --color-feedback-blue-400-56: hsl(
+    from var(--color-feedback-blue-400) h s l / 56%
+  );
+  --color-feedback-blue-500-56: hsl(
+    from var(--color-feedback-blue-500) h s l / 56%
+  );
+
+  /* Violet */
+  --color-feedback-violet-300: hsl(265, 77%, 65%);
+  --color-feedback-violet-600: hsl(268, 75%, 31%);
+
+  --color-link-default: var(--color-brand-blue-600);
+  --color-link-visited-primary: var(--color-feedback-violet-600);
+  --color-link-secondary: var(--color-base-black);
+  --color-link-visited-secondary: var(--color-feedback-violet-600);
+
+  /* ============================================
+   * 2. SEMANTIC/UTILITY TOKENS
+   * Theme-aware variables that map directly to utility classes
+   * These change based on light/dark mode
+   * ============================================ */
+
+  /* Text Colors */
+  /* TODO: These should use our skimmable colors for headings */
+  --text-heading-xl: var(--color-neutral-900);
+  --text-heading-lg: var(--color-neutral-900);
+  --text-heading-md: var(--color-neutral-900);
+  --text-heading-sm: var(--color-neutral-800);
+  --text-heading-xs: var(--color-neutral-800);
+
+  --text-display: var(--color-base-black);
+
+  --text-highlight: var(--color-neutral-900);
+  --text-default: var(--color-neutral-700);
+  --text-muted: var(--color-neutral-900-64);
+  --text-placeholder: var(--color-neutral-900-56);
+  --text-disabled: var(--color-neutral-900-40);
+
+  /* Fixed dark text */
+  --text-highlight-fixed-dark: var(--color-base-black);
+  --text-default-fixed-dark: var(--color-neutral-900);
+  --text-muted-fixed-dark: var(--color-neutral-900-64);
+
+  /* Fixed light text */
+  --text-highlight-fixed-light: var(--color-base-white);
+  --text-default-fixed-light: var(--color-neutral-100);
+  --text-muted-fixed-light: var(--color-neutral-100-64);
+
+  /* Inverse text */
+  --text-highlight-inverse: var(--color-base-white);
+  --text-default-inverse: var(--color-neutral-100);
+  --text-muted-inverse: var(--color-neutral-100-64);
+
+  --text-link-primary: var(--color-brand-blue-600);
+  --text-link-secondary: var(--color-base-black);
+  --text-link-visited: var(--color-feedback-violet-600);
+
+  --text-default-destructive: var(--color-feedback-red-700);
+  --text-link-destructive: var(--color-feedback-red-900);
+
+  --text-default-information: var(--color-feedback-blue-700);
+  --text-link-information: var(--color-feedback-blue-900);
+
+  --text-default-success: var(--color-feedback-green-700);
+  --text-link-success: var(--color-feedback-green-900);
+
+  --text-default-warning: var(--color-feedback-orange-700);
+  --text-link-warning: var(--color-feedback-orange-900);
+
+  --text-body: var(--color-neutral-900);
+  --text-body-muted: var(--color-neutral-400);
+
+  /* Warning State */
+  --bg-warning: var(--color-feedback-orange-100);
+  --text-warning: var(--color-feedback-orange-700);
+  --border-warning: var(--color-feedback-orange-300);
+
+  /* Link utilities */
+  --underline-link-primary: var(--color-brand-blue-600);
+  --underline-link-secondary: var(--color-base-black);
+  --underline-link-visited: var(--color-feedback-violet-600);
+
+  /* ============================================
+   * BORDER TOKENS
+   * ============================================ */
+
+  /* Border utilities - neutral states */
+  --border-neutral-active: var(--color-neutral-600);
+  --border-neutral-hover: var(--color-neutral-500);
+  --border-neutral-default: var(--color-neutral-400);
+  --border-neutral-disabled: var(--color-neutral-400-40);
+  --border-neutral-softest: var(--color-neutral-200);
+  --border-neutral-inset: var(--color-base-white);
+  --border-neutral-alpha: hsla(
+    0,
+    0%,
+    0%,
+    0.2
+  ); /* Black with 20% opacity for light mode */
+
+  /* Border Destructive utilities */
+  --border-destructive-highlight: var(--color-feedback-red-600);
+  --border-destructive-default: var(--color-feedback-red-500);
+  --border-destructive-muted: var(--color-feedback-red-500-56);
+  --border-destructive-softest: var(--color-feedback-red-300);
+
+  /* Border Information utilities */
+  --border-information-highlight: var(--color-feedback-blue-600);
+  --border-information-default: var(--color-feedback-blue-500);
+  --border-information-muted: var(--color-feedback-blue-500-56);
+  --border-information-softest: var(--color-feedback-blue-300);
+
+  /* Border Success utilities */
+  --border-success-highlight: var(--color-feedback-green-600);
+  --border-success-default: var(--color-feedback-green-500);
+  --border-success-muted: var(--color-feedback-green-500-56);
+  --border-success-softest: var(--color-feedback-green-300);
+
+  /* Border Warning utilities */
+  --border-warning-highlight: var(--color-feedback-orange-600);
+  --border-warning-default: var(--color-feedback-orange-500);
+  --border-warning-muted: var(--color-feedback-orange-500-56);
+  --border-warning-softest: var(--color-feedback-orange-300);
+
+  /* Border Focus utilities */
+  --border-focus: var(--color-brand-blue-600);
+
+  /* ============================================
+   * FILLS
+   * ============================================ */
+
+  /* Neutrals */
+  --fill-neutral-highlight: var(--color-base-black);
+  --fill-neutral-active: var(--color-neutral-900);
+  --fill-neutral-default: var(--color-neutral-800);
+  --fill-neutral-muted: var(--color-neutral-800-56);
+
+  /* Fixed dark fill */
+  --fill-neutral-highlight-fixed-dark: var(--color-base-black);
+  --fill-neutral-default-fixed-dark: var(--color-neutral-800);
+  --fill-neutral-muted-fixed-dark: var(--color-neutral-900-56);
+
+  /* Fixed light fill */
+  --fill-neutral-highlight-fixed-light: var(--color-base-white);
+  --fill-neutral-default-fixed-light: var(--color-neutral-100);
+  --fill-neutral-muted-fixed-light: var(--color-neutral-100-56);
+
+  /* Inverse fill */
+  --fill-neutral-highlight-inverse: var(--color-base-white);
+  --fill-neutral-default-inverse: var(--color-neutral-100);
+  --fill-neutral-muted-inverse: var(--color-neutral-100-56);
+
+  /* Links */
+  --fill-link-primary: var(--color-brand-blue-600);
+  --fill-link-secondary: var(--color-base-black);
+  --fill-link-visited: var(--color-feedback-violet-600);
+
+  /* Destructive */
+  --fill-destructive-highlight: var(--color-feedback-red-600);
+  --fill-destructive-default: var(--color-feedback-red-500);
+  --fill-destructive-muted: var(--color-feedback-red-600-56);
+
+  /* Information */
+  --fill-information-highlight: var(--color-feedback-blue-600);
+  --fill-information-default: var(--color-feedback-blue-500);
+  --fill-information-muted: var(--color-feedback-blue-500-56);
+
+  /* Success */
+  --fill-success-highlight: var(--color-feedback-green-600);
+  --fill-success-default: var(--color-feedback-green-500);
+  --fill-success-muted: var(--color-feedback-green-500-56);
+
+  /* Warning */
+  --fill-warning-highlight: var(--color-feedback-orange-600);
+  --fill-warning-default: var(--color-feedback-orange-500);
+  --fill-warning-muted: var(--color-feedback-orange-500-56);
+
+  /* ============================================
+   * Strokes
+   * ============================================ */
+
+  /* Neutrals */
+  --stroke-neutral-highlight: var(--color-base-black);
+  --stroke-neutral-active: var(--color-neutral-900);
+  --stroke-neutral-default: var(--color-neutral-800);
+  --stroke-neutral-muted: var(--color-neutral-800-56);
+
+  /* Fixed dark stroke */
+  --stroke-neutral-highlight-fixed-dark: var(--color-base-black);
+  --stroke-neutral-default-fixed-dark: var(--color-neutral-800);
+  --stroke-neutral-muted-fixed-dark: var(--color-neutral-900-56);
+
+  /* Fixed light stroke */
+  --stroke-neutral-highlight-fixed-light: var(--color-base-white);
+  --stroke-neutral-default-fixed-light: var(--color-neutral-100);
+  --stroke-neutral-muted-fixed-light: var(--color-neutral-100-56);
+
+  /* Inverse stroke */
+  --stroke-neutral-highlight-inverse: var(--color-base-white);
+  --stroke-neutral-default-inverse: var(--color-neutral-100);
+  --stroke-neutral-muted-inverse: var(--color-neutral-100-56);
+
+  /* Links */
+  --stroke-link-primary: var(--color-brand-blue-600);
+  --stroke-link-secondary: var(--color-base-black);
+  --stroke-link-visited: var(--color-feedback-violet-600);
+
+  /* Destructive */
+  --stroke-destructive-highlight: var(--color-feedback-red-600);
+  --stroke-destructive-default: var(--color-feedback-red-500);
+  --stroke-destructive-muted: var(--color-feedback-red-600-56);
+
+  /* Information */
+  --stroke-information-highlight: var(--color-feedback-blue-600);
+  --stroke-information-default: var(--color-feedback-blue-500);
+  --stroke-information-muted: var(--color-feedback-blue-500-56);
+
+  /* Success */
+  --stroke-success-highlight: var(--color-feedback-green-600);
+  --stroke-success-default: var(--color-feedback-green-500);
+  --stroke-success-muted: var(--color-feedback-green-500-56);
+
+  /* Warning */
+  --stroke-warning-highlight: var(--color-feedback-orange-600);
+  --stroke-warning-default: var(--color-feedback-orange-500);
+  --stroke-warning-muted: var(--color-feedback-orange-500-56);
+
+  /* ============================================
+   * BACKGROUNDS
+   * ============================================ */
+  --bg-surface-primary-default: var(--color-base-white);
+  --bg-surface-secondary-default: var(--color-neutral-100);
+  --bg-surface-tertiary-default: var(--color-neutral-200);
+  --bg-surface-primary-inverse: var(--color-base-black);
+  --bg-surface-secondary-inverse: var(--color-neutral-900);
+  --bg-surface-tertiary-inverse: var(--color-neutral-800);
+
+  /* State */
+  --bg-highlight: var(--color-neutral-300);
+  --bg-active: var(--color-neutral-200);
+  --bg-default: var(--color-neutral-100);
+  --bg-muted: var(--color-neutral-100-56);
+  --bg-inset: var(--color-base-white);
+
+  /* Light background in dark mode */
+  --bg-surface-primary-fixed-light: var(--color-base-white);
+  --bg-surface-secondary-fixed-light: var(--color-neutral-100);
+  --bg-surface-tertiary-fixed-light: var(--color-neutral-200);
+
+  /* Dark background in light mode */
+  --bg-surface-primary-fixed-dark: var(--color-base-black);
+  --bg-surface-secondary-fixed-dark: var(--color-neutral-900);
+  --bg-surface-tertiary-fixed-dark: var(--color-neutral-800);
+
+  /* Destructive */
+  --bg-destructive-highlight: var(--color-feedback-red-600);
+  --bg-destructive-default: var(--color-feedback-red-500);
+  --bg-destructive-muted: var(--color-feedback-red-500-56);
+  --bg-destructive-softest: var(--color-feedback-red-100);
+
+  /* Information */
+  --bg-information-highlight: var(--color-feedback-blue-600);
+  --bg-information-default: var(--color-feedback-blue-500);
+  --bg-information-muted: var(--color-feedback-blue-500-56);
+  --bg-information-softest: var(--color-feedback-blue-100);
+
+  /* Success */
+  --bg-success-highlight: var(--color-feedback-green-600);
+  --bg-success-default: var(--color-feedback-green-500);
+  --bg-success-muted: var(--color-feedback-green-500-56);
+  --bg-success-softest: var(--color-feedback-green-100);
+
+  /* Warning */
+  --bg-warning-highlight: var(--color-feedback-orange-600);
+  --bg-warning-default: var(--color-feedback-orange-500);
+  --bg-warning-muted: var(--color-feedback-orange-500-56);
+  --bg-warning-softest: var(--color-feedback-orange-100);
+
+  /* ============================================
+   * 3. COMPONENT TOKENS
+   * Higher-level semantic tokens for specific use cases
+   * ============================================ */
+
+  /* Border Radius — squared corners are a brand rule (Claude Design).
+   * Circles (rounded-full) remain for dots and avatars. */
+  --radius: 0px;
+  /* ============================================
+   * 4. DEPRECATED TOKENS - SHADCN COMPATIBILITY
+   * These will be removed in future versions
+   * DO NOT use in new code
+   * ============================================ */
+
+  --background-pure: var(--color-base-white);
+  --background: var(--color-neutral-100);
+  --foreground: var(--color-neutral-900);
+  --card: var(--color-base-white);
+  --card-foreground: var(--color-neutral-900);
+  --popover: var(--color-base-white);
+  --popover-foreground: var(--color-neutral-900);
+  --primary: var(--color-base-black);
+  --primary-foreground: var(--color-base-white);
+  --secondary: var(--color-neutral-100);
+  --secondary-foreground: var(--color-neutral-900);
+  --muted: var(--color-neutral-200);
+  --muted-foreground: var(--color-neutral-900-64);
+  --accent: var(--color-neutral-200);
+  --accent-foreground: var(--color-neutral-900);
+  --destructive: var(
+    --color-feedback-red-700
+  ); /* Note: conflicts with semantic token above */
+  --border: var(--color-neutral-300);
+  --input: var(--color-neutral-400);
+  --ring: var(--color-brand-blue-600);
+  --chart-1: var(--color-brand-red-600);
+  --chart-2: var(--color-brand-green-600);
+  --chart-3: var(--color-brand-red-600);
+  --chart-4: var(--color-brand-blue-600);
+  --chart-5: var(--color-brand-green-600);
+  --sidebar: var(--color-neutral-100);
+  --sidebar-foreground: var(--color-neutral-900);
+  --sidebar-primary: var(--color-base-black);
+  --sidebar-primary-foreground: var(--color-neutral-300);
+  --sidebar-accent: var(--color-neutral-300);
+  --sidebar-accent-foreground: var(--color-neutral-900);
+  --sidebar-border: var(--color-neutral-300);
+  --sidebar-ring: var(--color-brand-blue-600);
+
+  /* Feedback States */
+  --success: var(--color-feedback-green-100);
+  --success-foreground: var(--color-feedback-green-700);
+  --warning: var(--color-feedback-orange-100);
+  --warning-foreground: var(--color-feedback-orange-700);
+  --info: var(--color-info-100);
+  --info-foreground: var(--color-info-700);
+  /* This is a dupe of a shadcn token, may need to rename*/
+  --destructive: var(--color-feedback-red-700);
+  --destructive-foreground: var(--color-feedback-red-100);
+  --feature: var(--color-info-100);
+  --feature-foreground: var(--color-info-700);
+
+  /* UI Elements */
+  --shadow: hsl(0 0% 50%);
+
+  /* Custom Scrollbar */
+  --sb-size: 0.5rem;
+  --sb-track-color: var(--color-background);
+  --sb-thumb-color: var(--color-background);
+  --sb-track-border: var(--color-neutral-300);
+
+  /* Score Colors */
+  --score-low: var(--color-feedback-red-500);
+  --score-mid: var(--color-feedback-orange-500);
+  --score-high: var(--color-feedback-green-500);
+  --score-track: var(--color-neutral-700);
+
+  /* Animation Easing Functions */
+  --ease-in-quad: cubic-bezier(0.55, 0.085, 0.68, 0.53);
+  --ease-in-cubic: cubic-bezier(0.55, 0.055, 0.675, 0.19);
+  --ease-in-quart: cubic-bezier(0.895, 0.03, 0.685, 0.22);
+  --ease-in-quint: cubic-bezier(0.755, 0.05, 0.855, 0.06);
+  --ease-in-expo: cubic-bezier(0.95, 0.05, 0.795, 0.035);
+  --ease-in-circ: cubic-bezier(0.6, 0.04, 0.98, 0.335);
+
+  --ease-out-quad: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --ease-out-cubic: cubic-bezier(0.215, 0.61, 0.355, 1);
+  --ease-out-quart: cubic-bezier(0.165, 0.84, 0.44, 1);
+  --ease-out-quint: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-out-expo: cubic-bezier(0.19, 1, 0.22, 1);
+  --ease-out-circ: cubic-bezier(0.075, 0.82, 0.165, 1);
+
+  --ease-in-out-quad: cubic-bezier(0.455, 0.03, 0.515, 0.955);
+  --ease-in-out-cubic: cubic-bezier(0.645, 0.045, 0.355, 1);
+  --ease-in-out-quart: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-in-out-quint: cubic-bezier(0.86, 0, 0.07, 1);
+  --ease-in-out-expo: cubic-bezier(1, 0, 0, 1);
+  --ease-in-out-circ: cubic-bezier(0.785, 0.135, 0.15, 0.86);
+}
+
+/* ============================================
+ * BASE ELEMENT STYLES
+ * Default styles for HTML elements
+ * ============================================ */
+
+/*
+ * Tailwind v4 Compatibility Layer
+ * The default border color has changed to `currentColor` in Tailwind CSS v4.
+ * These styles maintain v3 behavior until we can audit all border usage.
+ */
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    @apply border-neutral-softest;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  body {
+    @apply bg-surface-primary-default text-default;
+  }
+}
+
+:root.dark {
+  /* ============================================
+   * DARK MODE OVERRIDES
+   * Only define values that change in dark mode
+   * ============================================ */
+
+  --color-link-default: var(--color-brand-blue-300);
+  --color-link-visited-primary: var(--color-feedback-violet-300);
+  --color-link-secondary: var(--color-base-white);
+  --color-link-visited-secondary: var(--color-feedback-violet-300);
+
+  /* ============================================
+   * 2. SEMANTIC/UTILITY TOKENS (Dark Mode)
+   * ============================================ */
+
+  /* Text Colors */
+  --text-heading-xl: var(--color-neutral-100);
+  --text-heading-lg: var(--color-neutral-100);
+  --text-heading-md: var(--color-neutral-100);
+  --text-heading-sm: var(--color-neutral-200);
+  --text-heading-xs: var(--color-neutral-200);
+
+  --text-display: var(--color-base-white);
+
+  --text-highlight: var(--color-neutral-100);
+  --text-default: var(--color-neutral-300);
+  --text-muted: var(--color-neutral-100-64);
+  --text-placeholder: var(--color-neutral-100-56);
+  --text-disabled: var(--color-neutral-100-40);
+
+  /* Inverse text */
+  --text-highlight-inverse: var(--color-base-black);
+  --text-default-inverse: var(--color-neutral-900);
+  --text-muted-inverse: var(--color-neutral-900-64);
+
+  --text-link-primary: var(--color-brand-blue-300);
+  --text-link-secondary: var(--color-base-white);
+  --text-link-visited: var(--color-feedback-violet-300);
+
+  --text-default-destructive: var(--color-feedback-red-300);
+  --text-link-destructive: var(--color-feedback-red-100);
+
+  --text-default-information: var(--color-feedback-blue-300);
+  --text-link-information: var(--color-feedback-blue-100);
+
+  --text-default-success: var(--color-feedback-green-300);
+  --text-link-success: var(--color-feedback-green-100);
+
+  --text-default-warning: var(--color-feedback-orange-300);
+  --text-link-warning: var(--color-feedback-orange-100);
+
+  --text-body: var(--color-neutral-200);
+  --text-body-muted: var(--color-neutral-600);
+
+  /* Warning State */
+  --bg-warning: var(--color-feedback-orange-900);
+  --text-warning: var(--color-feedback-orange-300);
+  --border-warning: var(--color-feedback-orange-700);
+
+  /* Link utilities (dark mode) */
+  --underline-link-primary: var(--color-brand-blue-300);
+  --underline-link-secondary: var(--color-base-white);
+  --underline-link-visited: var(--color-feedback-violet-300);
+
+  /* ============================================
+   * BORDER TOKENS
+   * ============================================ */
+
+  /* Border utilities - neutral states (dark mode) */
+  --border-neutral-active: var(--color-neutral-400);
+  --border-neutral-hover: var(--color-neutral-500);
+  --border-neutral-default: var(--color-neutral-600);
+  --border-neutral-disabled: var(--color-neutral-600-40);
+  --border-neutral-softest: var(--color-neutral-800-56);
+  --border-neutral-inset: var(--color-ink-black);
+  --border-neutral-alpha: hsla(
+    255,
+    255%,
+    255%,
+    0.2
+  ); /* White with 20% opacity */
+
+  /* Border destructive utilities */
+  --border-destructive-highlight: var(--color-feedback-red-400);
+  --border-destructive-default: var(--color-feedback-red-500);
+  --border-destructive-muted: var(--color-feedback-red-500-56);
+  --border-destructive-softest: var(--color-feedback-red-700);
+
+  /* Border Information utilities */
+  --border-information-highlight: var(--color-feedback-blue-400);
+  --border-information-default: var(--color-feedback-blue-500);
+  --border-information-muted: var(--color-feedback-blue-500-56);
+  --border-information-softest: var(--color-feedback-blue-700);
+
+  /* Border Success utilities */
+  --border-success-highlight: var(--color-feedback-green-400);
+  --border-success-default: var(--color-feedback-green-500);
+  --border-success-muted: var(--color-feedback-green-500-56);
+  --border-success-softest: var(--color-feedback-green-700);
+
+  /* Border Warning utilities */
+  --border-warning-highlight: var(--color-feedback-orange-400);
+  --border-warning-default: var(--color-feedback-orange-500);
+  --border-warning-muted: var(--color-feedback-orange-500-56);
+  --border-warning-softest: var(--color-feedback-orange-700);
+
+  /* Border Focus utilities */
+  --border-focus: var(--color-brand-blue-300);
+
+  /* ============================================
+   * FILLS
+   * ============================================ */
+
+  /* Neutrals */
+  --fill-neutral-highlight: var(--color-base-white);
+  --fill-neutral-active: var(--color-neutral-100);
+  --fill-neutral-default: var(--color-neutral-200);
+  --fill-neutral-muted: var(--color-neutral-200-56);
+
+  /* Fixed dark fill */
+
+  /* Fixed light fill */
+
+  /* Inverse fill */
+  --fill-neutral-highlight-inverse: var(--color-base-black);
+  --fill-neutral-default-inverse: var(--color-neutral-900);
+  --fill-neutral-muted-inverse: var(--color-neutral-900-56);
+
+  /* Links */
+  --fill-link-primary: var(--color-brand-blue-300);
+  --fill-link-secondary: var(--color-base-white);
+  --fill-link-visited: var(--color-feedback-violet-300);
+
+  /* Destructive */
+  --fill-destructive-highlight: var(--color-feedback-red-300);
+  --fill-destructive-default: var(--color-feedback-red-400);
+  --fill-destructive-muted: var(--color-feedback-red-400-56);
+
+  /* Information */
+  --fill-information-highlight: var(--color-feedback-blue-300);
+  --fill-information-default: var(--color-feedback-blue-400);
+  --fill-information-muted: var(--color-feedback-blue-400-56);
+
+  /* Success */
+  --fill-success-highlight: var(--color-feedback-green-300);
+  --fill-success-default: var(--color-feedback-green-400);
+  --fill-success-muted: var(--color-feedback-green-400-56);
+
+  /* Warning */
+  --fill-warning-highlight: var(--color-feedback-orange-300);
+  --fill-warning-default: var(--color-feedback-orange-400);
+  --fill-warning-muted: var(--color-feedback-orange-400-56);
+
+  /* ============================================
+   * Strokes
+   * ============================================ */
+
+  /* Neutrals */
+  --stroke-neutral-highlight: var(--color-base-white);
+  --stroke-neutral-active: var(--color-neutral-100);
+  --stroke-neutral-default: var(--color-neutral-200);
+  --stroke-neutral-muted: var(--color-neutral-200-56);
+
+  /* Fixed dark stroke*/
+
+  /* Fixed light stroke */
+
+  /* Inverse stroke */
+  --stroke-neutral-highlight-inverse: var(--color-base-black);
+  --stroke-neutral-default-inverse: var(--color-neutral-900);
+  --stroke-neutral-muted-inverse: var(--color-neutral-900-56);
+
+  /* Links */
+  --stroke-link-primary: var(--color-brand-blue-300);
+  --stroke-link-secondary: var(--color-base-white);
+  --stroke-link-visited: var(--color-feedback-violet-300);
+
+  /* Destructive */
+  --stroke-destructive-highlight: var(--color-feedback-red-300);
+  --stroke-destructive-default: var(--color-feedback-red-400);
+  --stroke-destructive-muted: var(--color-feedback-red-400-56);
+
+  /* Information */
+  --stroke-information-highlight: var(--color-feedback-blue-300);
+  --stroke-information-default: var(--color-feedback-blue-400);
+  --stroke-information-muted: var(--color-feedback-blue-400-56);
+
+  /* Success */
+  --stroke-success-highlight: var(--color-feedback-green-300);
+  --stroke-success-default: var(--color-feedback-green-400);
+  --stroke-success-muted: var(--color-feedback-green-400-56);
+
+  /* Warning */
+  --stroke-warning-highlight: var(--color-feedback-orange-300);
+  --stroke-warning-default: var(--color-feedback-orange-400);
+  --stroke-warning-muted: var(--color-feedback-orange-400-56);
+
+  /* ============================================
+   * BACKGROUNDS
+   * ============================================ */
+  --bg-surface-primary-default: var(--color-ink-black);
+  --bg-surface-secondary-default: var(--color-neutral-900);
+  --bg-surface-tertiary-default: var(--color-neutral-800);
+  --bg-surface-primary-inverse: var(--color-base-white);
+  --bg-surface-secondary-inverse: var(--color-neutral-100);
+  --bg-surface-tertiary-inverse: var(--color-neutral-200);
+
+  /* State */
+  --bg-highlight: var(--color-neutral-700);
+  --bg-active: var(--color-neutral-800);
+  --bg-default: var(--color-neutral-900);
+  --bg-muted: var(--color-neutral-900-56);
+  --bg-inset: var(--color-ink-black);
+
+  /* Light background in dark mode */
+
+  /* Dark background in light mode */
+
+  /* Destructive */
+  --bg-destructive-highlight: var(--color-feedback-red-400);
+  --bg-destructive-default: var(--color-feedback-red-500);
+  --bg-destructive-muted: var(--color-feedback-red-500-56);
+  --bg-destructive-softest: var(--color-feedback-red-900);
+
+  /* Information */
+  --bg-information-highlight: var(--color-feedback-blue-400);
+  --bg-information-default: var(--color-feedback-blue-500);
+  --bg-information-muted: var(--color-feedback-blue-500-56);
+  --bg-information-softest: var(--color-feedback-blue-900);
+
+  /* Success */
+  --bg-success-highlight: var(--color-feedback-green-400);
+  --bg-success-default: var(--color-feedback-green-500);
+  --bg-success-muted: var(--color-feedback-green-500-56);
+  --bg-success-softest: var(--color-feedback-green-900);
+
+  /* Warning */
+  --bg-warning-highlight: var(--color-feedback-orange-400);
+  --bg-warning-default: var(--color-feedback-orange-500);
+  --bg-warning-muted: var(--color-feedback-orange-500-56);
+  --bg-warning-softest: var(--color-feedback-orange-900);
+
+  /* ============================================
+   * 3. COMPONENT TOKENS (Dark Mode)
+   * ============================================ */
+
+  /* Feedback States */
+  --success: var(--color-feedback-green-500);
+  --success-foreground: var(--color-feedback-green-100);
+  --warning: var(--color-feedback-orange-500);
+  --warning-foreground: var(--color-feedback-orange-100);
+  --info: var(--color-info-500);
+  --info-foreground: var(--color-info-100);
+  --destructive: var(--color-feedback-red-500);
+  --destructive-foreground: var(--color-feedback-red-100);
+  --feature: var(--color-info-500);
+  --feature-foreground: var(--color-info-100);
+
+  /* Score Colors */
+  --score-low: hsl(350 89% 60%);
+  --score-mid: hsl(38 92% 50%);
+  --score-high: hsl(160 84% 39%);
+  --score-track: hsl(48 4% 28%);
+
+  /* Custom Scrollbar */
+  --sb-track-color: var(--color-neutral-800);
+  --sb-thumb-color: var(--color-neutral-900);
+  --sb-track-border: var(--color-neutral-800);
+
+  /* Misc */
+  --header-border: 0 0% 14.9%;
+
+  /* ============================================
+   * 4. DEPRECATED TOKENS - SHADCN (Dark Mode)
+   * ============================================ */
+
+  --background-pure: var(--color-ink-black);
+  --background: var(--color-ink-black);
+  --foreground: var(--color-neutral-300);
+  --card: var(--color-neutral-900);
+  --card-foreground: var(--color-neutral-300);
+  --popover: var(--color-ink-black);
+  --popover-foreground: var(--color-neutral-100);
+  --primary: var(--color-base-white);
+  --primary-foreground: var(--color-base-black);
+  --secondary: var(--color-neutral-900);
+  --secondary-foreground: var(--color-neutral-300);
+  --muted: var(--color-neutral-900);
+  --muted-foreground: var(--color-neutral-100-64);
+  --accent: var(--color-neutral-800);
+  --accent-foreground: var(--color-base-white);
+  --destructive: var(
+    --color-feedback-red-500
+  ); /* Note: conflicts with semantic token above */
+  --border: var(--color-neutral-700);
+  --input: var(--color-neutral-700);
+  --ring: var(--color-brand-blue-600);
+  --chart-1: var(--color-brand-red-600);
+  --chart-2: var(--color-brand-green-600);
+  --chart-3: var(--color-brand-red-600);
+  --chart-4: var(--color-brand-blue-600);
+  --chart-5: var(--color-brand-green-600);
+  --sidebar: var(--color-neutral-900);
+  --sidebar-foreground: var(--color-base-white);
+  --sidebar-primary: var(--color-brand-red-600);
+  --sidebar-primary-foreground: var(--color-neutral-300);
+  --sidebar-accent: var(--color-neutral-700);
+  --sidebar-accent-foreground: var(--color-base-white);
+  --sidebar-border: var(--color-neutral-700);
+  --sidebar-ring: var(--color-brand-blue-600);
+}

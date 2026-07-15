@@ -1,6 +1,6 @@
 import { EmptyState } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/button";
 import { ToolsetsGraphic } from "../ToolsetsEmptyState";
 
 export function ResourcesEmptyState({

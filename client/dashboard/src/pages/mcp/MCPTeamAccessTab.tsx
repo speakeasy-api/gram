@@ -1,5 +1,6 @@
-import { Page } from "@/components/page-layout";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Card } from "@/components/ui/card";
+import { IdentityCell } from "@/components/ui/identity-cell";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import {
   Sheet,
   SheetContent,
@@ -8,6 +9,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Type } from "@/components/ui/type";
+import { MethodBadge } from "@/components/tool-list/MethodBadge";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { Role } from "@gram/client/models/components/role.js";
 import type { Tool } from "@/lib/toolTypes";
@@ -15,18 +17,11 @@ import { resourceKindForScope, selectorMatches } from "@/hooks/useRBAC";
 import { useOrgRoutes } from "@/routes";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
-import { Badge, Button, Column, Table } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { type Column, Table } from "@/components/ui/table";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { useMemo, useState, ReactElement } from "react";
-
-function getInitials(name: string) {
-  return name
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
-}
 
 type AccessLevel = "full" | "server" | "tools" | "none";
 
@@ -111,21 +106,10 @@ function bestAccessLevel(levels: AccessLevel[]): AccessLevel {
   return best;
 }
 
-const METHOD_COLORS: Record<string, string> = {
-  GET: "text-blue-600 bg-blue-50",
-  POST: "text-green-600 bg-green-50",
-  PUT: "text-amber-600 bg-amber-50",
-  PATCH: "text-orange-600 bg-orange-50",
-  DELETE: "text-red-600 bg-red-50",
-};
-
 function ToolRow({ tool }: { tool: Tool }) {
   const isHttp = tool.type === "http";
   const httpTool = isHttp ? (tool as Tool & { type: "http" }) : null;
-  const method = httpTool?.httpMethod?.toUpperCase();
-  const methodColors = method
-    ? (METHOD_COLORS[method] ?? "text-muted-foreground bg-muted")
-    : null;
+  const method = httpTool?.httpMethod;
 
   const annotations = isHttp ? httpTool?.annotations : undefined;
   const annotationTags: string[] = [];
@@ -135,15 +119,9 @@ function ToolRow({ tool }: { tool: Tool }) {
   if (annotations?.openWorldHint) annotationTags.push("Open-world");
 
   return (
-    <div className="border-border rounded-lg border p-3">
+    <Card className="gap-0 p-3">
       <div className="flex items-start gap-2">
-        {method && methodColors && (
-          <span
-            className={`mt-0.5 inline-flex shrink-0 items-center rounded px-1.5 py-0.5 font-mono text-[10px] font-bold ${methodColors}`}
-          >
-            {method}
-          </span>
-        )}
+        {method && <MethodBadge method={method} />}
         <div className="min-w-0 flex-1">
           <Type variant="body" className="font-mono text-sm font-medium">
             {"name" in tool ? tool.name : "Unknown tool"}
@@ -169,16 +147,13 @@ function ToolRow({ tool }: { tool: Tool }) {
       {annotationTags.length > 0 && (
         <div className="mt-2 flex gap-1">
           {annotationTags.map((tag) => (
-            <span
-              key={tag}
-              className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-[10px]"
-            >
+            <Badge key={tag} variant="neutral" background={false} size="sm">
               {tag}
-            </span>
+            </Badge>
           ))}
         </div>
       )}
-    </div>
+    </Card>
   );
 }
 
@@ -191,31 +166,25 @@ function AccessBadge({
 }) {
   switch (level) {
     case "full":
-      return (
-        <Badge variant="neutral">
-          <Badge.Text>All servers</Badge.Text>
-        </Badge>
-      );
+      return <Badge>All servers</Badge>;
     case "server":
-      return (
-        <Badge variant="neutral">
-          <Badge.Text>This server</Badge.Text>
-        </Badge>
-      );
+      return <Badge background={false}>This server</Badge>;
     case "tools":
       return (
         <button type="button" onClick={onClick} className="cursor-pointer">
           <Badge
-            variant="neutral"
+            background={false}
             className="hover:bg-accent transition-colors"
           >
-            <Badge.Text>Specific tools &ensp;&rsaquo;</Badge.Text>
+            Specific tools &ensp;&rsaquo;
           </Badge>
         </button>
       );
     case "none":
       return (
-        <span className="text-muted-foreground/50 text-sm">No access</span>
+        <Type variant="body" className="text-muted-foreground/50 text-sm">
+          No access
+        </Type>
       );
   }
 }
@@ -320,27 +289,11 @@ export function MCPTeamAccessTab({
       header: "Member",
       width: "280px",
       render: (row) => (
-        <div className="flex items-center gap-3">
-          <Avatar className="h-8 w-8">
-            {row.member.photoUrl && (
-              <AvatarImage src={row.member.photoUrl} alt={row.member.name} />
-            )}
-            <AvatarFallback className="text-xs">
-              {getInitials(row.member.name)}
-            </AvatarFallback>
-          </Avatar>
-          <div className="min-w-0">
-            <Type variant="body" className="truncate font-medium">
-              {row.member.name}
-            </Type>
-            <Type
-              variant="body"
-              className="text-muted-foreground truncate text-xs"
-            >
-              {row.member.email}
-            </Type>
-          </div>
-        </div>
+        <IdentityCell
+          name={row.member.name}
+          subtitle={row.member.email}
+          imageUrl={row.member.photoUrl}
+        />
       ),
     },
     {
@@ -405,102 +358,92 @@ export function MCPTeamAccessTab({
   ];
 
   return (
-    <Page.Section>
-      <Page.Section.Title>Team access</Page.Section.Title>
-      <Page.Section.Body>
-        <div className="mb-4">
-          <Type variant="body" className="text-muted-foreground text-sm">
-            {memberAccess.length} team member
-            {memberAccess.length !== 1 ? "s" : ""} with access to this server
-          </Type>
-        </div>
-        <Table columns={columns}>
-          <Table.Header columns={columns} />
-          {memberAccess.length === 0 ? (
-            <Table.NoResultsMessage>
-              <div className="px-4 py-6 text-center">
-                No team members have access to this server.
-              </div>
-            </Table.NoResultsMessage>
-          ) : (
-            <Table.Body
-              columns={columns}
-              data={memberAccess}
-              rowKey={(row) => row.member.id}
-            />
-          )}
-          <Table.Row>
-            <div className="border-border bg-muted/20 col-span-full border-t py-5 text-center">
-              <Type variant="body" className="text-muted-foreground text-sm">
-                Want to grant new members access?
-              </Type>
-              <div className="mt-2">
-                <orgRoutes.access.roles.Link>
-                  <Button variant="primary" size="sm">
-                    <Button.Text>Configure Roles</Button.Text>
-                  </Button>
-                </orgRoutes.access.roles.Link>
-              </div>
+    <div>
+      <div className="mb-4">
+        <Type variant="body" className="text-muted-foreground text-sm">
+          {memberAccess.length} team member
+          {memberAccess.length !== 1 ? "s" : ""} with access to this server
+        </Type>
+      </div>
+      <Table columns={columns}>
+        <Table.Header columns={columns} />
+        {memberAccess.length === 0 ? (
+          <Table.NoResultsMessage>
+            No team members have access to this server.
+          </Table.NoResultsMessage>
+        ) : (
+          <Table.Body
+            columns={columns}
+            data={memberAccess}
+            rowKey={(row) => row.member.id}
+          />
+        )}
+        <Table.Row>
+          <div className="border-border bg-muted/20 col-span-full border-t py-5 text-center">
+            <Type variant="body" className="text-muted-foreground text-sm">
+              Want to grant new members access?
+            </Type>
+            <div className="mt-2">
+              <orgRoutes.access.roles.Link>
+                <Button variant="tertiary" size="sm">
+                  <Button.Text>Configure Roles</Button.Text>
+                </Button>
+              </orgRoutes.access.roles.Link>
             </div>
-          </Table.Row>
-        </Table>
+          </div>
+        </Table.Row>
+      </Table>
 
-        <Sheet open={!!sheetData} onOpenChange={() => setSheetData(null)}>
-          <SheetContent className="sm:max-w-md">
-            {sheetData && (
-              <>
-                <SheetHeader>
-                  <SheetTitle>{sheetData.scopeLabel} access</SheetTitle>
-                  <SheetDescription>
-                    <span className="text-foreground font-medium">
-                      {sheetData.member.name}
-                    </span>{" "}
-                    can {sheetData.scopeLabel.toLowerCase()}{" "}
-                    {sheetData.toolNames.length} tool
-                    {sheetData.toolNames.length !== 1 ? "s" : ""} on this server
-                    via the{" "}
-                    <span className="text-foreground font-medium">
-                      {sheetData.roles.map((r) => r.name).join(", ")}
-                    </span>{" "}
-                    {sheetData.roles.length === 1 ? "role" : "roles"}.
-                  </SheetDescription>
-                </SheetHeader>
-                <div className="flex-1 overflow-y-auto px-4 pb-4">
-                  <div className="space-y-2">
-                    {sheetData.tools.length > 0 ? (
-                      sheetData.tools.map((tool, i) => (
-                        <ToolRow key={i} tool={tool} />
-                      ))
-                    ) : sheetData.toolNames.length > 0 ? (
-                      // No catalog available (mcp_servers-backed servers don't
-                      // expose tools through Gram). Surface the raw tool
-                      // identifiers from the grant selectors so the user can
-                      // at least see what they have access to.
-                      sheetData.toolNames.map((name) => (
-                        <div
-                          key={name}
-                          className="border-border rounded-lg border p-3"
+      <Sheet open={!!sheetData} onOpenChange={() => setSheetData(null)}>
+        <SheetContent className="sm:max-w-md">
+          {sheetData && (
+            <>
+              <SheetHeader>
+                <SheetTitle>{sheetData.scopeLabel} access</SheetTitle>
+                <SheetDescription>
+                  <span className="text-foreground font-medium">
+                    {sheetData.member.name}
+                  </span>{" "}
+                  can {sheetData.scopeLabel.toLowerCase()}{" "}
+                  {sheetData.toolNames.length} tool
+                  {sheetData.toolNames.length !== 1 ? "s" : ""} on this server
+                  via the{" "}
+                  <span className="text-foreground font-medium">
+                    {sheetData.roles.map((r) => r.name).join(", ")}
+                  </span>{" "}
+                  {sheetData.roles.length === 1 ? "role" : "roles"}.
+                </SheetDescription>
+              </SheetHeader>
+              <div className="flex-1 overflow-y-auto px-4 pb-4">
+                <div className="space-y-2">
+                  {sheetData.tools.length > 0 ? (
+                    sheetData.tools.map((tool, i) => (
+                      <ToolRow key={i} tool={tool} />
+                    ))
+                  ) : sheetData.toolNames.length > 0 ? (
+                    // No catalog available (mcp_servers-backed servers don't
+                    // expose tools through Gram). Surface the raw tool
+                    // identifiers from the grant selectors so the user can
+                    // at least see what they have access to.
+                    sheetData.toolNames.map((name) => (
+                      <Card key={name} className="p-3">
+                        <Type
+                          variant="body"
+                          className="font-mono text-sm font-medium"
                         >
-                          <Type
-                            variant="body"
-                            className="font-mono text-sm font-medium"
-                          >
-                            {name}
-                          </Type>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="text-muted-foreground py-8 text-center text-sm">
-                        Could not resolve tool names from grants.
-                      </div>
-                    )}
-                  </div>
+                          {name}
+                        </Type>
+                      </Card>
+                    ))
+                  ) : (
+                    <InlineEmptyState title="Could not resolve tool names from grants." />
+                  )}
                 </div>
-              </>
-            )}
-          </SheetContent>
-        </Sheet>
-      </Page.Section.Body>
-    </Page.Section>
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
+    </div>
   );
 }

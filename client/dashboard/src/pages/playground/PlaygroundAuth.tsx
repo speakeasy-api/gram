@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { PrivateInput } from "@/components/ui/private-input";
 import { Type } from "@/components/ui/type";
@@ -11,7 +11,9 @@ import { getPlaygroundMcpBaseURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { useGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
 import { useListEnvironments } from "@gram/client/react-query/listEnvironments.js";
-import { Badge, Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle, ExternalLink, Loader2, LogOut } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -172,7 +174,7 @@ function ExternalMcpOAuthConnection({
   const isConnected = oauthStatus?.status === "authenticated";
 
   return (
-    <div className="bg-muted/30 rounded-md border p-3">
+    <Card className="bg-muted/30 p-3">
       <Stack gap={2}>
         <Stack
           direction="horizontal"
@@ -202,28 +204,27 @@ function ExternalMcpOAuthConnection({
           isIssuerGated ? null : (
             <Button
               size="sm"
-              variant="outline"
+              variant="secondary"
               className="w-full"
               onClick={() => disconnectMutation.mutate()}
               disabled={disconnectMutation.isPending}
             >
-              <LogOut className="mr-2 size-3" />
-              Disconnect
+              <Button.LeftIcon>
+                <LogOut className="size-3" />
+              </Button.LeftIcon>
+              <Button.Text>Disconnect</Button.Text>
             </Button>
           )
         ) : (
-          <Button
-            size="sm"
-            variant="default"
-            className="w-full"
-            onClick={handleConnect}
-          >
-            <ExternalLink className="mr-2 size-3" />
-            Connect
+          <Button size="sm" className="w-full" onClick={handleConnect}>
+            <Button.LeftIcon>
+              <ExternalLink className="size-3" />
+            </Button.LeftIcon>
+            <Button.Text>Connect</Button.Text>
           </Button>
         )}
       </Stack>
-    </div>
+    </Card>
   );
 }
 
@@ -340,7 +341,7 @@ export function PlaygroundAuth({
   return (
     <div className="space-y-3">
       {loginSecured && (
-        <div className="border-success-softest bg-success-softest rounded-md border p-3">
+        <div className="border-success-softest bg-success-softest border p-3">
           <Stack direction="horizontal" align="center" className="gap-2">
             <Badge variant="success">
               <CheckCircle className="mr-1 size-3" />
@@ -451,15 +452,16 @@ export function PlaygroundAuth({
       {envVars.some((v) => v.state === "user-provided") && (
         <Button
           size="sm"
-          variant="default"
           className="w-full"
           onClick={() => void handleSave()}
           disabled={editedKeys.size === 0 || playgroundEnv.isSaving}
         >
-          {playgroundEnv.isSaving ? (
-            <Loader2 className="mr-2 size-3 animate-spin" />
-          ) : null}
-          Save
+          {playgroundEnv.isSaving && (
+            <Button.LeftIcon>
+              <Loader2 className="size-3 animate-spin" />
+            </Button.LeftIcon>
+          )}
+          <Button.Text>Save</Button.Text>
         </Button>
       )}
       {missingRequiredCount > 0 && (

@@ -1,14 +1,27 @@
 import { AccountTypeIcon } from "@/components/account-type-icon";
 import { personalAccountEmail } from "@/components/observe/account-display-utils";
 import { Dialog } from "@/components/ui/dialog";
+import { Heading } from "@/components/ui/heading";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import { SimpleTooltip } from "@/components/ui/tooltip";
+import { Spinner } from "@/components/ui/spinner";
+import { CopyButton } from "@/components/ui/copy-button";
 import { cn } from "@/lib/utils";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { useSession } from "@/contexts/Auth";
 import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
-import { Button, Icon } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
-import { useCallback, useState } from "react";
+import { useState } from "react";
+import {
+  ChevronRight,
+  DollarSign,
+  Inbox,
+  MessageSquare,
+  Timer,
+  Trash2,
+  TriangleAlert,
+} from "lucide-react";
 
 // Label for a session's owner. Personal-account sessions show the account's own
 // email (the session's user fields carry the attributed employee's WORK email,
@@ -65,7 +78,7 @@ function RiskIndicator({ count, size = 44 }: { count: number; size?: number }) {
         >
           <span className="text-sm font-semibold tabular-nums">{count}</span>
         </div>
-        <span className="text-muted-foreground text-[9px] font-medium tracking-wider uppercase">
+        <span className="text-muted-foreground font-mono text-[9px] tracking-[0.08em] uppercase">
           Risk
         </span>
       </div>
@@ -87,57 +100,6 @@ function formatDuration(chat: ChatOverview): string {
     : `${minutes}m`;
 }
 
-// Subtle copy button - always visible
-function CopyButton({
-  value,
-  label,
-  className,
-}: {
-  value: string;
-  label: string;
-  className?: string;
-}) {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation(); // Don't trigger row selection
-      void navigator.clipboard.writeText(value);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    },
-    [value],
-  );
-
-  return (
-    <span
-      role="button"
-      tabIndex={0}
-      onClick={handleCopy}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ")
-          handleCopy(e as unknown as React.MouseEvent);
-      }}
-      className={cn(
-        "cursor-pointer rounded p-0.5 transition-colors",
-        "opacity-50 hover:opacity-100",
-        "hover:bg-muted/80",
-        copied && "opacity-100",
-        className,
-      )}
-      title={`Copy ${label}`}
-    >
-      <Icon
-        name={copied ? "check" : "copy"}
-        className={cn(
-          "size-3.5",
-          copied ? "text-emerald-500" : "text-muted-foreground",
-        )}
-      />
-    </span>
-  );
-}
-
 export function ChatLogsTable({
   chats,
   selectedChatId,
@@ -151,11 +113,9 @@ export function ChatLogsTable({
   if (isLoading && chats.length === 0) {
     return (
       <div className="flex h-64 items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <div className="border-muted-foreground/30 border-t-muted-foreground size-5 animate-spin rounded-full border-2" />
-          <span className="text-muted-foreground text-sm">
-            Loading traces...
-          </span>
+        <div className="text-muted-foreground flex items-center gap-2 text-sm">
+          <Spinner className="mr-0 size-4" />
+          Loading traces...
         </div>
       </div>
     );
@@ -163,40 +123,24 @@ export function ChatLogsTable({
 
   if (error) {
     return (
-      <div className="flex h-64 items-center justify-center">
-        <div className="flex flex-col items-center gap-3 px-4 text-center">
-          <div className="flex size-10 items-center justify-center rounded-full bg-rose-500/10">
-            <Icon name="triangle-alert" className="size-5 text-rose-500" />
-          </div>
-          <div>
-            <p className="text-foreground text-sm font-medium">
-              Failed to load traces
-            </p>
-            <p className="text-muted-foreground mt-1 text-xs">
-              {error.message}
-            </p>
-          </div>
-        </div>
+      <div className="flex h-64 items-center justify-center px-4">
+        <InlineEmptyState
+          icon={<TriangleAlert />}
+          title="Failed to load traces"
+          description={error.message}
+        />
       </div>
     );
   }
 
   if (chats.length === 0) {
     return (
-      <div className="flex h-64 items-center justify-center">
-        <div className="flex flex-col items-center gap-3 px-4 text-center">
-          <div className="bg-muted flex size-10 items-center justify-center rounded-full">
-            <Icon name="inbox" className="text-muted-foreground size-5" />
-          </div>
-          <div>
-            <p className="text-foreground text-sm font-medium">
-              No traces found
-            </p>
-            <p className="text-muted-foreground mt-1 text-xs">
-              Try adjusting your filters or time range
-            </p>
-          </div>
-        </div>
+      <div className="flex h-64 items-center justify-center px-4">
+        <InlineEmptyState
+          icon={<Inbox />}
+          title="No traces found"
+          description="Try adjusting your filters or time range"
+        />
       </div>
     );
   }
@@ -235,7 +179,12 @@ export function ChatLogsTable({
                     <span className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
                       {getTraceId(chat.id)}
                     </span>
-                    <CopyButton value={chat.id} label="Chat ID" />
+                    <CopyButton
+                      text={chat.id}
+                      tooltip="Copy Chat ID"
+                      size="inline"
+                      className="opacity-50 hover:opacity-100"
+                    />
                     <span className="text-muted-foreground/40">·</span>
                     <span className="text-muted-foreground text-sm">
                       Created {format(chat.createdAt, "MMM d, HH:mm")}
@@ -248,9 +197,12 @@ export function ChatLogsTable({
                   </div>
 
                   {/* Title */}
-                  <h3 className="text-foreground mb-2 line-clamp-2 text-sm leading-snug font-medium">
+                  <Heading
+                    variant="h6"
+                    className="text-foreground mb-2 line-clamp-2 leading-snug font-medium"
+                  >
                     {chat.title}
-                  </h3>
+                  </Heading>
 
                   {/* Metadata row */}
                   <div className="text-muted-foreground flex items-center gap-4 text-sm">
@@ -267,23 +219,24 @@ export function ChatLogsTable({
                       </span>
                     )}
                     <span className="flex items-center gap-1.5">
-                      <Icon name="timer" className="size-4 opacity-60" />
-                      {formatDuration(chat)}
+                      <Timer className="size-4 opacity-60" />
+                      <span className="tabular-nums">
+                        {formatDuration(chat)}
+                      </span>
                     </span>
                     <span className="flex items-center gap-1.5">
-                      <Icon
-                        name="message-square"
-                        className="size-4 opacity-60"
-                      />
-                      {chat.numMessages} messages
+                      <MessageSquare className="size-4 opacity-60" />
+                      <span className="tabular-nums">
+                        {chat.numMessages}
+                      </span>{" "}
+                      messages
                     </span>
                     {chat.totalCost !== undefined && chat.totalCost > 0 && (
                       <span className="flex items-center gap-0">
-                        <Icon
-                          name="dollar-sign"
-                          className="size-4 opacity-60"
-                        />
-                        {chat.totalCost.toFixed(4)}
+                        <DollarSign className="size-4 opacity-60" />
+                        <span className="tabular-nums">
+                          {chat.totalCost.toFixed(4)}
+                        </span>
                       </span>
                     )}
                   </div>
@@ -304,13 +257,12 @@ export function ChatLogsTable({
                         setDeleteConfirmId(chat.id);
                       }
                     }}
-                    className="hover:bg-destructive/10 text-muted-foreground hover:text-destructive rounded-md p-1 opacity-0 transition-all group-hover:opacity-100"
+                    className="hover:bg-destructive/10 text-muted-foreground hover:text-destructive p-1 opacity-0 transition-all group-hover:opacity-100"
                     aria-label="Delete chat"
                   >
-                    <Icon name="trash-2" className="size-4" />
+                    <Trash2 className="size-4" />
                   </span>
-                  <Icon
-                    name="chevron-right"
+                  <ChevronRight
                     className={cn(
                       "size-4 transition-colors",
                       isSelected

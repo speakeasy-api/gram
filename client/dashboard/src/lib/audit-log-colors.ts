@@ -30,24 +30,24 @@ export function getActionCategory(action: string): ActionCategory {
 
 const colorConfigs = {
   create: {
-    dot: "bg-emerald-500",
-    text: "text-emerald-700",
-    bg: "bg-emerald-50",
+    dot: "bg-success-default",
+    text: "text-default-success",
+    bg: "bg-success-softest",
   },
   update: {
-    dot: "bg-yellow-500",
-    text: "text-yellow-700",
-    bg: "bg-yellow-50",
+    dot: "bg-warning-default",
+    text: "text-default-warning",
+    bg: "bg-warning-softest",
   },
   deploy: {
-    dot: "bg-blue-500",
-    text: "text-blue-700",
-    bg: "bg-blue-50",
+    dot: "bg-information-default",
+    text: "text-default-information",
+    bg: "bg-information-softest",
   },
   destructive: {
-    dot: "bg-red-500",
-    text: "text-red-700",
-    bg: "bg-red-50",
+    dot: "bg-destructive-default",
+    text: "text-default-destructive",
+    bg: "bg-destructive-softest",
   },
 } as const;
 

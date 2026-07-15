@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useState } from "react";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { Checkbox } from "@/components/ui/checkbox";
 import { MultiSelect } from "@/components/ui/multi-select";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import {
   Select,
   SelectContent,
@@ -9,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Icon } from "@speakeasy-api/moonshine";
+import { Search, X } from "lucide-react";
 import {
   allLabelFor,
   flattenOptions,
@@ -124,7 +125,7 @@ export function FilterControl({
       );
     case "boolean":
       return (
-        <label className="border-border hover:bg-muted/50 inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm">
+        <label className="border-border hover:bg-muted/50 inline-flex h-9 cursor-pointer items-center gap-2 border px-3 text-sm">
           <Checkbox
             checked={value as boolean}
             onCheckedChange={(next) => onChange(next === true)}
@@ -205,6 +206,7 @@ function DebouncedTextInput({
   className?: string;
 }): JSX.Element {
   const [local, setLocal] = useState(value);
+  const debouncedLocal = useDebouncedValue(local, 350);
   const inputId = useId();
   const listId = useId();
 
@@ -213,10 +215,9 @@ function DebouncedTextInput({
   }, [value]);
 
   useEffect(() => {
-    if (local === value) return;
-    const timer = setTimeout(() => onChange(local), 350);
-    return () => clearTimeout(timer);
-  }, [local, value, onChange]);
+    if (debouncedLocal === value) return;
+    onChange(debouncedLocal);
+  }, [debouncedLocal, value, onChange]);
 
   // Browser-native <datalist> does substring matching client-side using these
   // as candidates; dedup and drop empties.
@@ -226,8 +227,8 @@ function DebouncedTextInput({
   );
 
   return (
-    <div className="border-border focus-within:border-ring inline-flex h-9 items-center gap-2 rounded-md border px-2">
-      <Icon name="search" className="text-muted-foreground size-4 shrink-0" />
+    <div className="border-border focus-within:border-ring inline-flex h-9 items-center gap-2 border px-2">
+      <Search className="text-muted-foreground size-4 shrink-0" />
       <input
         id={inputId}
         type="text"
@@ -261,7 +262,7 @@ function DebouncedTextInput({
           className="text-muted-foreground hover:text-foreground"
           aria-label="Clear filter"
         >
-          <Icon name="x" className="size-3.5" />
+          <X className="size-3.5" />
         </button>
       )}
     </div>
@@ -291,22 +292,22 @@ function DebouncedNumberInput({
   className?: string;
 }): JSX.Element {
   const [local, setLocal] = useState(value === null ? "" : String(value));
+  const debouncedLocal = useDebouncedValue(local, 350);
 
   useEffect(() => {
     setLocal(value === null ? "" : String(value));
   }, [value]);
 
   useEffect(() => {
-    const trimmed = local.trim();
+    const trimmed = debouncedLocal.trim();
     const parsed = trimmed === "" ? NaN : Number(trimmed);
     const next = Number.isFinite(parsed) ? parsed : null;
     if (next === value) return;
-    const timer = setTimeout(() => onChange(next), 350);
-    return () => clearTimeout(timer);
-  }, [local, value, onChange]);
+    onChange(next);
+  }, [debouncedLocal, value, onChange]);
 
   return (
-    <div className="border-border focus-within:border-ring inline-flex h-9 items-center gap-2 rounded-md border px-2">
+    <div className="border-border focus-within:border-ring inline-flex h-9 items-center gap-2 border px-2">
       <input
         type="number"
         inputMode="numeric"
@@ -337,7 +338,7 @@ function DebouncedNumberInput({
           className="text-muted-foreground hover:text-foreground"
           aria-label="Clear filter"
         >
-          <Icon name="x" className="size-3.5" />
+          <X className="size-3.5" />
         </button>
       )}
     </div>

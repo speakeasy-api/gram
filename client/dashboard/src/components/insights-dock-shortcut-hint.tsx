@@ -1,3 +1,4 @@
+import { Kbd } from "@/components/ui/kbd";
 import { useInsightsDockCta } from "@/hooks/useInsightsDockCta";
 import { cn, isMacPlatform } from "@/lib/utils";
 import { ReactElement } from "react";
@@ -29,12 +30,12 @@ export function InsightsShortcutKeys({
       className={cn("flex shrink-0 items-center gap-1 select-none", className)}
     >
       {keys.map((key) => (
-        <kbd
+        <Kbd
           key={key}
-          className="border-border bg-muted text-muted-foreground pointer-events-none inline-flex h-6 min-w-6 items-center justify-center rounded border px-1.5 font-mono text-sm leading-none font-medium select-none"
+          className="pointer-events-none h-6 min-w-6 px-1.5 text-sm select-none"
         >
           {key}
-        </kbd>
+        </Kbd>
       ))}
     </span>
   );

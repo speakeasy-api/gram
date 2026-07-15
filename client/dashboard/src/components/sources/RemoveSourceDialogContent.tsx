@@ -1,6 +1,9 @@
-import { Input } from "@/components/ui/input";
 import { slugify } from "@/lib/constants";
-import { Dialog, Alert, Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/button";
+import { Alert } from "@/components/ui/alert";
+import { Input } from "@/components/ui/input";
+import { Dialog } from "@/components/ui/dialog";
+import { Type } from "@/components/ui/type";
 import { Loader2Icon } from "lucide-react";
 import { useState } from "react";
 import { NamedAsset } from "./SourceCard";
@@ -87,11 +90,13 @@ export function RemoveSourceDialogContent({
         </Dialog.Description>
       </Dialog.Header>
       <div className="grid gap-2">
-        <span className="text-sm">
+        <Type small>
           To confirm, type "<strong>{sourceSlug}</strong>"
-        </span>
+        </Type>
 
-        <Input onChange={(v) => setInputMatches(v === sourceSlug)} />
+        <Input
+          onChange={(e) => setInputMatches(e.target.value === sourceSlug)}
+        />
       </div>
 
       <Alert variant="warning" dismissible={false}>

@@ -3,6 +3,7 @@ import { useCliAuthAuthorizeMutation } from "@gram/client/react-query/cliAuthAut
 import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
 import { useEffect, useState, useRef } from "react";
 import { useSessionData } from "@/contexts/Auth";
+import { Heading } from "@/components/ui/heading";
 
 interface CliCallbackProps {
   keyScope?: "producer" | "hooks";
@@ -159,8 +160,10 @@ function FailedScreen({ error }: { error: string }) {
   return (
     <div className="flex h-screen items-center justify-center">
       <div className="text-center">
-        <h1 className="mb-2 text-2xl font-bold text-red-600">Error</h1>
-        <p className="text-gray-600">{error}</p>
+        <Heading variant="h1" className="text-default-destructive mb-2">
+          Error
+        </Heading>
+        <p className="text-muted-foreground">{error}</p>
       </div>
     </div>
   );
@@ -170,8 +173,10 @@ function WaitScreen() {
   return (
     <div className="flex h-screen items-center justify-center">
       <div className="text-center">
-        <h1 className="mb-2 text-2xl font-bold">Redirecting...</h1>
-        <p className="text-gray-600">You will be redirected shortly</p>
+        <Heading variant="h1" className="mb-2">
+          Redirecting...
+        </Heading>
+        <p className="text-muted-foreground">You will be redirected shortly</p>
       </div>
     </div>
   );

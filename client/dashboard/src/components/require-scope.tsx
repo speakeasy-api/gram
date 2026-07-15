@@ -1,7 +1,7 @@
 import { useRBAC } from "@/hooks/useRBAC";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { cn } from "@/lib/utils";
-import { Icon } from "@speakeasy-api/moonshine";
+import { Lock } from "lucide-react";
 import React from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
@@ -168,7 +168,7 @@ function Unauthorized({
     <div className="flex h-full min-h-[400px] w-full items-center justify-center">
       <div className="flex max-w-sm flex-col items-center gap-3 text-center">
         <div className="bg-muted flex h-12 w-12 items-center justify-center rounded-full">
-          <Icon name="lock" className="text-muted-foreground h-5 w-5" />
+          <Lock className="text-muted-foreground h-5 w-5" />
         </div>
         <h2 className="text-lg font-medium">{title}</h2>
         <p className="text-muted-foreground text-sm">{description}</p>

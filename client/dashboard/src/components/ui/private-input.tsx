@@ -1,6 +1,7 @@
 import { Input } from "@/components/ui/input";
 import { Eye, EyeOff } from "lucide-react";
 import { useState } from "react";
+import { cn } from "@/lib/utils";
 
 interface PrivateInputProps {
   id?: string;
@@ -24,21 +25,22 @@ export function PrivateInput({
   const [isVisible, setIsVisible] = useState(false);
 
   return (
-    <Input
-      id={id}
-      type={isVisible ? "text" : "password"}
-      value={value}
-      onChange={onChange}
-      placeholder={placeholder}
-      className={className}
-      readOnly={readOnly}
-      disabled={disabled}
-    >
+    <div className={cn("relative", className)}>
+      <Input
+        id={id}
+        type={isVisible ? "text" : "password"}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="pr-9"
+        readOnly={readOnly}
+        disabled={disabled}
+      />
       <button
         type="button"
         tabIndex={-1}
         onClick={() => setIsVisible(!isVisible)}
-        className="text-muted-foreground hover:text-foreground absolute top-[6px] right-2 flex items-center justify-center transition-colors"
+        className="text-muted hover:text-highlight absolute top-1/2 right-2 flex -translate-y-1/2 items-center justify-center transition-colors"
         disabled={disabled || readOnly}
       >
         {isVisible ? (
@@ -47,6 +49,6 @@ export function PrivateInput({
           <Eye className="h-4 w-4" />
         )}
       </button>
-    </Input>
+    </div>
   );
 }

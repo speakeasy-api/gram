@@ -1,8 +1,8 @@
-import { Input } from "@/components/moon/input";
-import { Label } from "@/components/moon/label";
 import { Dialog } from "@/components/ui/dialog";
-import { Button, Icon } from "@speakeasy-api/moonshine";
-import { Loader2 } from "lucide-react";
+import { InputGroupInput } from "@/components/ui/input-group";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { Loader2, X } from "lucide-react";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 
 interface PublishDialogProps {
@@ -287,11 +287,11 @@ export const PublishDialog = memo(function PublishDialog({
                       aria-label={`Remove ${u}`}
                       className="hover:opacity-70"
                     >
-                      <Icon name="x" className="h-3 w-3" />
+                      <X className="h-3 w-3" />
                     </button>
                   </span>
                 ))}
-                <Input
+                <InputGroupInput
                   id="githubUsernames"
                   value={draft}
                   onChange={(e) => {
@@ -324,7 +324,7 @@ export const PublishDialog = memo(function PublishDialog({
                 <div
                   id="github-user-results"
                   role="listbox"
-                  className="bg-popover text-popover-foreground absolute z-50 mt-1 max-h-56 w-full overflow-y-auto rounded-md border p-1 shadow-lg"
+                  className="bg-popover text-popover-foreground absolute z-50 mt-1 max-h-56 w-full overflow-y-auto border p-1"
                 >
                   {searchLoading && (
                     <div className="text-muted-foreground flex items-center gap-2 px-2 py-1.5 text-xs">

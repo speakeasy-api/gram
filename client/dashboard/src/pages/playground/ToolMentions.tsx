@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
-import { Icon } from "@speakeasy-api/moonshine";
+import { Globe, MessageSquare, X } from "lucide-react";
 import { Type } from "@/components/ui/type";
 import { type Tool, parseMentionedTools } from "./tool-mention-utils";
 
@@ -165,7 +165,7 @@ export function ToolMentionAutocomplete({
     <div
       ref={suggestionsRef}
       className={cn(
-        "bg-popover absolute z-[100] max-w-[400px] min-w-[200px] rounded-md border shadow-md",
+        "bg-popover absolute z-[100] max-w-[400px] min-w-[200px] border",
         "max-h-[200px] overflow-auto",
       )}
       style={{
@@ -180,7 +180,7 @@ export function ToolMentionAutocomplete({
             type="button"
             key={tool.id}
             className={cn(
-              "flex w-full items-start gap-2 rounded px-2 py-1.5 text-left text-sm transition-colors",
+              "flex w-full items-start gap-2 px-2 py-1.5 text-left text-sm transition-colors",
               "hover:bg-accent hover:text-accent-foreground",
               index === selectedIndex && "bg-accent text-accent-foreground",
             )}
@@ -191,10 +191,11 @@ export function ToolMentionAutocomplete({
             }}
             onMouseEnter={() => setSelectedIndex(index)}
           >
-            <Icon
-              name={tool.type === "http" ? "globe" : "message-square"}
-              className="mt-0.5 h-3 w-3 flex-shrink-0 opacity-50"
-            />
+            {tool.type === "http" ? (
+              <Globe className="mt-0.5 h-3 w-3 flex-shrink-0 opacity-50" />
+            ) : (
+              <MessageSquare className="mt-0.5 h-3 w-3 flex-shrink-0 opacity-50" />
+            )}
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1">
                 <Type variant="small" className="font-medium">
@@ -245,21 +246,22 @@ export function MentionedToolsBadges({
         <div
           key={tool.id}
           className={cn(
-            "inline-flex items-center gap-1 rounded-md px-2 py-0.5",
+            "inline-flex items-center gap-1 px-2 py-0.5",
             "bg-primary/10 text-primary text-xs",
           )}
         >
-          <Icon
-            name={tool.type === "http" ? "globe" : "message-square"}
-            className="h-3 w-3"
-          />
+          {tool.type === "http" ? (
+            <Globe className="h-3 w-3" />
+          ) : (
+            <MessageSquare className="h-3 w-3" />
+          )}
           <span>{tool.name}</span>
           {onRemove && (
             <button
               onClick={() => onRemove(tool.id)}
               className="ml-1 hover:opacity-70"
             >
-              <Icon name="x" className="h-3 w-3" />
+              <X className="h-3 w-3" />
             </button>
           )}
         </div>

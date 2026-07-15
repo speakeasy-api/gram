@@ -17,11 +17,6 @@ const config: KnipConfig = {
     "src/lib.d.ts",
     "src/sdk/**/*",
   ],
-  ignoreDependencies: [
-    // Consumed via CSS @import inside @speakeasy-api/moonshine; knip's
-    // CSS plugin only scans first-party files so it misses this.
-    "@tailwindcss/typography",
-  ],
 };
 
 export default config;

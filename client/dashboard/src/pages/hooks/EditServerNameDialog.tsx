@@ -1,10 +1,10 @@
-import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { ServerNameMappings } from "@/hooks/useServerNameMappings";
 import type { ServerNameOverride } from "@gram/client/models/components/servernameoverride.js";
-import { Icon } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { LoaderCircle, Trash } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
 interface EditServerNameDialogProps {
@@ -187,23 +187,22 @@ export function EditServerNameDialog({
                     </Label>
                     {server.id && (
                       <Button
-                        variant="ghost"
+                        variant="tertiary"
                         size="sm"
                         onClick={() => {
                           void handleDelete(server.id);
                         }}
                         disabled={deletingIds.has(server.id) || isProcessing}
                         className="h-7 shrink-0 px-2"
+                        aria-label="Remove override"
                       >
-                        {deletingIds.has(server.id) ? (
-                          <Icon
-                            name="loader-circle"
-                            className="size-3 animate-spin"
-                          />
-                        ) : (
-                          <Icon name="trash" className="size-3" />
-                        )}
-                        <span className="sr-only">Remove override</span>
+                        <Button.LeftIcon>
+                          {deletingIds.has(server.id) ? (
+                            <LoaderCircle className="size-3 animate-spin" />
+                          ) : (
+                            <Trash className="size-3" />
+                          )}
+                        </Button.LeftIcon>
                       </Button>
                     )}
                   </div>
@@ -212,7 +211,8 @@ export function EditServerNameDialog({
                       individualDisplayNames.get(server.rawServerName) ||
                       server.displayName
                     }
-                    onChange={(value) => {
+                    onChange={(e) => {
+                      const value = e.target.value;
                       setIndividualDisplayNames((prev) => {
                         const next = new Map(prev);
                         next.set(server.rawServerName, value);
@@ -258,7 +258,7 @@ export function EditServerNameDialog({
                 <Input
                   id="display-name"
                   value={displayName}
-                  onChange={setDisplayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
                   placeholder="Enter a friendly name"
                   disabled={isProcessing}
                   autoFocus
@@ -279,7 +279,7 @@ export function EditServerNameDialog({
 
         <Dialog.Footer>
           <Button
-            variant="outline"
+            variant="secondary"
             onClick={() => onOpenChange(false)}
             disabled={isProcessing}
           >
@@ -287,7 +287,7 @@ export function EditServerNameDialog({
           </Button>
           {groupedOverrides.length > 0 && !isGrouped && (
             <Button
-              variant="destructive"
+              variant="destructive-primary"
               onClick={() => {
                 void handleDelete(groupedOverrides[0]!.id!);
               }}
@@ -295,11 +295,10 @@ export function EditServerNameDialog({
             >
               {isDeleting ? (
                 <>
-                  <Icon
-                    name="loader-circle"
-                    className="mr-2 size-4 animate-spin"
-                  />
-                  Removing...
+                  <Button.LeftIcon>
+                    <LoaderCircle className="animate-spin" />
+                  </Button.LeftIcon>
+                  <Button.Text>Removing...</Button.Text>
                 </>
               ) : (
                 "Clear Mapping"
@@ -319,11 +318,10 @@ export function EditServerNameDialog({
           >
             {isUpserting ? (
               <>
-                <Icon
-                  name="loader-circle"
-                  className="mr-2 size-4 animate-spin"
-                />
-                Saving...
+                <Button.LeftIcon>
+                  <LoaderCircle className="animate-spin" />
+                </Button.LeftIcon>
+                <Button.Text>Saving...</Button.Text>
               </>
             ) : (
               "Save"

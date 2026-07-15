@@ -1,4 +1,3 @@
-import { Button as UIButton } from "@/components/ui/button";
 import {
   Command,
   CommandEmpty,
@@ -12,9 +11,10 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { StatusDot } from "@/components/ui/status-dot";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/button";
 import { Check, ChevronsUpDown, Link, Plus, Unlink } from "lucide-react";
 import { useState } from "react";
 import {
@@ -123,22 +123,24 @@ export function EnvironmentSwitcher({
       <div className="py-2 pl-3">
         <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
           <PopoverTrigger asChild>
-            <UIButton
-              variant="outline"
+            <Button
+              variant="secondary"
               role="combobox"
               aria-expanded={pickerOpen}
               className="min-w-[200px] justify-between gap-2 px-3"
             >
-              <span className="flex items-center gap-2 truncate">
+              <Button.Text className="flex items-center gap-2 truncate">
                 {selectedIsAttached && (
                   <SimpleTooltip tooltip="Attached">
                     <Link className="text-foreground h-3 w-3 shrink-0" />
                   </SimpleTooltip>
                 )}
                 <span className="truncate">{selectedLabel}</span>
-              </span>
-              <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
-            </UIButton>
+              </Button.Text>
+              <Button.RightIcon>
+                <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
+              </Button.RightIcon>
+            </Button>
           </PopoverTrigger>
           <PopoverContent className="w-[280px] p-0" align="start">
             <Command>
@@ -190,10 +192,7 @@ export function EnvironmentSwitcher({
         {hasAnyUserEdits ? (
           <>
             {/* Unsaved changes indicator */}
-            <span className="flex items-center gap-1.5 text-xs font-medium text-amber-600">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500" />
-              Unsaved changes
-            </span>
+            <StatusDot tone="warning" pulse size="sm" label="Unsaved changes" />
 
             {/* Cancel button - only for existing configs */}
             {hasExistingConfigs && (

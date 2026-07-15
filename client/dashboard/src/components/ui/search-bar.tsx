@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/stack";
 import { SearchIcon, X } from "lucide-react";
 
 export function SearchBar({

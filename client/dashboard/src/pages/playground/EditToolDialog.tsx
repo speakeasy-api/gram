@@ -1,9 +1,9 @@
-import { Badge } from "@/components/ui/badge";
 import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import { KbdSequence } from "@/components/ui/kbd";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { TextArea } from "@/components/ui/textarea";
+import { Type } from "@/components/ui/type";
 import { TagsVariationEditor } from "@/components/tool-variation-tags-editor";
 import {
   Tool,
@@ -11,9 +11,11 @@ import {
   getToolTypeLabel,
   toolSupportsAnnotations,
 } from "@/lib/toolTypes";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { FileCode, PencilRuler, SquareFunction } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { McpIcon } from "@/components/ui/mcp-icon";
 
 function getToolIcon(tool: Tool) {
@@ -93,7 +95,6 @@ export function EditToolDialog({
   // TODO: extend tag variations to prompt tools once they support tags.
   const [tags, setTags] = useState<string[] | undefined>(undefined);
   const [saving, setSaving] = useState(false);
-  const nameInputRef = useRef<HTMLInputElement>(null);
 
   const hasAnnotations = tool ? toolSupportsAnnotations(tool) : false;
   const supportsTags = tool?.type === "http" || tool?.type === "function";
@@ -123,12 +124,13 @@ export function EditToolDialog({
     }
   }, [tool]);
 
-  // Focus name input when dialog opens
+  // Focus name input when dialog opens. Moonshine's Input isn't a forwardRef
+  // component, so it can't take a ref — look the field up by id instead.
   useEffect(() => {
-    if (open && nameInputRef.current) {
+    if (open) {
       // Small delay to ensure dialog animation completes
       setTimeout(() => {
-        nameInputRef.current?.focus();
+        document.getElementById("tool-name")?.focus();
       }, 50);
     }
   }, [open]);
@@ -227,7 +229,7 @@ export function EditToolDialog({
           <Dialog.Title className="flex items-center gap-2">
             <ToolIcon className="text-muted-foreground size-4" />
             <span>{source}</span>
-            <Badge variant="secondary" className="text-xs">
+            <Badge variant="neutral" background={false}>
               {typeLabel}
             </Badge>
           </Dialog.Title>
@@ -241,9 +243,8 @@ export function EditToolDialog({
             </Label>
             <Input
               id="tool-name"
-              ref={nameInputRef}
               value={name}
-              onChange={(value) => setName(value)}
+              onChange={(e) => setName(e.target.value)}
               placeholder="Tool name"
             />
           </div>
@@ -256,7 +257,7 @@ export function EditToolDialog({
               <Input
                 id="tool-title"
                 value={title}
-                onChange={(value) => setTitle(value)}
+                onChange={(e) => setTitle(e.target.value)}
                 placeholder="Display name override"
               />
             </div>
@@ -288,16 +289,16 @@ export function EditToolDialog({
           {hasAnnotations && (
             <div className="space-y-3">
               <Label className="text-sm font-medium">Behavior Hints</Label>
-              <p className="text-muted-foreground text-xs">
+              <Type variant="small" muted className="text-xs">
                 Override how this tool is presented to AI models.
-              </p>
+              </Type>
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm">Read-only</p>
-                    <p className="text-muted-foreground text-xs">
+                    <Type variant="small">Read-only</Type>
+                    <Type variant="small" muted className="text-xs">
                       Tool does not modify its environment
-                    </p>
+                    </Type>
                   </div>
                   <Switch
                     checked={readOnlyHint ?? false}
@@ -307,10 +308,10 @@ export function EditToolDialog({
                 </div>
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm">Destructive</p>
-                    <p className="text-muted-foreground text-xs">
+                    <Type variant="small">Destructive</Type>
+                    <Type variant="small" muted className="text-xs">
                       Tool may perform destructive updates
-                    </p>
+                    </Type>
                   </div>
                   <Switch
                     checked={destructiveHint ?? false}
@@ -320,11 +321,11 @@ export function EditToolDialog({
                 </div>
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm">Idempotent</p>
-                    <p className="text-muted-foreground text-xs">
+                    <Type variant="small">Idempotent</Type>
+                    <Type variant="small" muted className="text-xs">
                       Repeated calls with same arguments have no additional
                       effect
-                    </p>
+                    </Type>
                   </div>
                   <Switch
                     checked={idempotentHint ?? false}
@@ -334,10 +335,10 @@ export function EditToolDialog({
                 </div>
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm">Open-world</p>
-                    <p className="text-muted-foreground text-xs">
+                    <Type variant="small">Open-world</Type>
+                    <Type variant="small" muted className="text-xs">
                       Tool interacts with external entities
-                    </p>
+                    </Type>
                   </div>
                   <Switch
                     checked={openWorldHint ?? false}
@@ -365,7 +366,7 @@ export function EditToolDialog({
             >
               {saving ? "Saving..." : "Save"}
               {hasChanges && !saving && (
-                <span className="ml-2 text-xs opacity-60">⌘⏎</span>
+                <KbdSequence keys={["⌘", "⏎"]} className="ml-2" />
               )}
             </Button>
           </div>

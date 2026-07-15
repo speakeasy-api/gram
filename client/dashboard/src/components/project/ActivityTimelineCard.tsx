@@ -18,6 +18,7 @@ import {
 import { Link } from "react-router";
 import { DashboardCard } from "@/components/ui/dashboard-card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Type } from "@/components/ui/type";
 import { subjectHref } from "@/components/auditlogs/subject-href";
 import { useSlugs } from "@/contexts/Sdk";
 import { cn } from "@/lib/utils";
@@ -59,14 +60,16 @@ export function ActivityTimelineCard({
           ))}
         </div>
       ) : logs.length === 0 ? (
-        <p className="text-muted-foreground text-sm">No recent activity</p>
+        <Type muted small>
+          No recent activity
+        </Type>
       ) : (
         <div className="space-y-4">
           {logGroups.map((group) => (
             <div key={group.label}>
-              <p className="text-muted-foreground mb-2 text-xs font-medium tracking-wide uppercase">
+              <div className="text-muted-foreground mb-2 font-mono text-xs tracking-[0.08em] uppercase">
                 {group.label}
-              </p>
+              </div>
               <ul className="divide-border divide-y">
                 {group.logs.map((log) => {
                   const meta = getActionMeta(log.action);
@@ -81,14 +84,14 @@ export function ActivityTimelineCard({
                     >
                       <div
                         className={cn(
-                          "mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg",
+                          "mt-0.5 flex size-8 shrink-0 items-center justify-center",
                           meta.bg,
                         )}
                       >
                         <meta.icon className={cn("size-4", meta.fg)} />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm">
+                        <Type small>
                           <span className="font-medium">{actor}</span>{" "}
                           <span className="text-muted-foreground">
                             {actionLabel}
@@ -110,12 +113,12 @@ export function ActivityTimelineCard({
                               )}
                             </>
                           )}
-                        </p>
-                        <p className="text-muted-foreground mt-0.5 text-xs">
+                        </Type>
+                        <Type muted className="mt-0.5 text-xs">
                           {formatDistanceToNow(log.createdAt, {
                             addSuffix: true,
                           })}
-                        </p>
+                        </Type>
                       </div>
                     </li>
                   );
@@ -133,107 +136,51 @@ export function ActivityTimelineCard({
 
 type ActionMeta = { icon: LucideIcon; bg: string; fg: string };
 
+// Every icon badge shares the same neutral chrome; only destructive actions
+// (delete/revoke/remove) get the alarming tone. The design system's token
+// palette has one destructive tone, not a rainbow per category — the Lucide
+// icon shape (see actionIcon) is what differentiates categories at a glance.
+const NEUTRAL_META = { bg: "bg-muted", fg: "text-muted-foreground" } as const;
+const DESTRUCTIVE_META = {
+  bg: "bg-destructive-softest",
+  fg: "text-default-destructive",
+} as const;
+
+function actionIcon(action: string): LucideIcon {
+  if (action.startsWith("deployments:")) return Rocket;
+  if (action.startsWith("api_key:")) return KeyRound;
+  if (
+    action.startsWith("access_role:") ||
+    action.startsWith("access_member:") ||
+    action.startsWith("organization_invitation:")
+  ) {
+    return Shield;
+  }
+  if (action.startsWith("toolset:") && action.includes("oauth")) return Link2;
+  if (action.startsWith("toolset:")) return Package;
+  if (
+    action.startsWith("environment:") ||
+    action.startsWith("custom_domains:")
+  ) {
+    return Globe;
+  }
+  if (action.startsWith("template:")) return FileCode;
+  if (action.startsWith("project:")) return FolderOpen;
+  if (action.startsWith("asset:")) return File;
+  if (action.startsWith("variation:")) return Sparkles;
+  if (action.startsWith("plugin:")) return Puzzle;
+  return Clock;
+}
+
 function getActionMeta(action: string): ActionMeta {
   if (
     action.includes(":delete") ||
     action.includes(":revoke") ||
     action.includes(":remove")
   ) {
-    return {
-      icon: Trash2,
-      bg: "bg-red-100 dark:bg-red-950",
-      fg: "text-red-600 dark:text-red-400",
-    };
+    return { icon: Trash2, ...DESTRUCTIVE_META };
   }
-  if (action.startsWith("deployments:")) {
-    return {
-      icon: Rocket,
-      bg: "bg-blue-100 dark:bg-blue-950",
-      fg: "text-blue-600 dark:text-blue-400",
-    };
-  }
-  if (action.startsWith("api_key:")) {
-    return {
-      icon: KeyRound,
-      bg: "bg-purple-100 dark:bg-purple-950",
-      fg: "text-purple-600 dark:text-purple-400",
-    };
-  }
-  if (
-    action.startsWith("access_role:") ||
-    action.startsWith("access_member:") ||
-    action.startsWith("organization_invitation:")
-  ) {
-    return {
-      icon: Shield,
-      bg: "bg-orange-100 dark:bg-orange-950",
-      fg: "text-orange-600 dark:text-orange-400",
-    };
-  }
-  if (action.startsWith("toolset:") && action.includes("oauth")) {
-    return {
-      icon: Link2,
-      bg: "bg-indigo-100 dark:bg-indigo-950",
-      fg: "text-indigo-600 dark:text-indigo-400",
-    };
-  }
-  if (action.startsWith("toolset:")) {
-    return {
-      icon: Package,
-      bg: "bg-sky-100 dark:bg-sky-950",
-      fg: "text-sky-600 dark:text-sky-400",
-    };
-  }
-  if (
-    action.startsWith("environment:") ||
-    action.startsWith("custom_domains:")
-  ) {
-    return {
-      icon: Globe,
-      bg: "bg-teal-100 dark:bg-teal-950",
-      fg: "text-teal-600 dark:text-teal-400",
-    };
-  }
-  if (action.startsWith("template:")) {
-    return {
-      icon: FileCode,
-      bg: "bg-amber-100 dark:bg-amber-950",
-      fg: "text-amber-600 dark:text-amber-400",
-    };
-  }
-  if (action.startsWith("project:")) {
-    return {
-      icon: FolderOpen,
-      bg: "bg-green-100 dark:bg-green-950",
-      fg: "text-green-600 dark:text-green-400",
-    };
-  }
-  if (action.startsWith("asset:")) {
-    return {
-      icon: File,
-      bg: "bg-muted",
-      fg: "text-muted-foreground",
-    };
-  }
-  if (action.startsWith("variation:")) {
-    return {
-      icon: Sparkles,
-      bg: "bg-violet-100 dark:bg-violet-950",
-      fg: "text-violet-600 dark:text-violet-400",
-    };
-  }
-  if (action.startsWith("plugin:")) {
-    return {
-      icon: Puzzle,
-      bg: "bg-pink-100 dark:bg-pink-950",
-      fg: "text-pink-600 dark:text-pink-400",
-    };
-  }
-  return {
-    icon: Clock,
-    bg: "bg-muted",
-    fg: "text-muted-foreground",
-  };
+  return { icon: actionIcon(action), ...NEUTRAL_META };
 }
 
 const ACTION_LABELS: Record<string, string> = {

@@ -11,7 +11,7 @@ import { useRiskListCustomDetectionRulesSuspense } from "@gram/client/react-quer
 import { useRiskListPoliciesSuspense } from "@gram/client/react-query/riskListPolicies.js";
 import { usePluginsSuspense } from "@gram/client/react-query/plugins";
 import { useShadowMCPApprovalRequestsSuspense } from "@gram/client/react-query/shadowMCPApprovalRequests.js";
-import { Icon, type IconName } from "@speakeasy-api/moonshine";
+import { DynamicIcon, type IconName } from "@/components/ui/dynamic-icon";
 import { Suspense, useMemo, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { CommandErrorBoundary } from "./CommandErrorBoundary";
@@ -65,7 +65,7 @@ function ResultItem({
       className="flex items-center justify-between"
     >
       <div className="flex min-w-0 items-center gap-2">
-        {icon && <Icon name={icon} className="size-4 shrink-0" />}
+        {icon && <DynamicIcon name={icon} className="size-4 shrink-0" />}
         <span className="truncate">{label}</span>
       </div>
       {sublabel && (

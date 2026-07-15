@@ -3,7 +3,8 @@ import { DotRow } from "@/components/ui/dot-row";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import type { DeploymentExternalMCP } from "@gram/client/models/components/deploymentexternalmcp.js";
-import { Badge, Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { ArrowRight, Check } from "lucide-react";
 import { useMemo } from "react";
 import { Link } from "react-router";
@@ -64,8 +65,8 @@ export function ServerTableRow({
       {/* Selection */}
       <td className="w-10 px-3 py-3">
         {isSelected ? (
-          <div className="flex size-5 items-center justify-center rounded-full bg-[#1DA1F2]">
-            <Check className="size-3 text-white" strokeWidth={5} />
+          <div className="bg-primary flex size-5 items-center justify-center rounded-full">
+            <Check className="text-primary-foreground size-3" strokeWidth={5} />
           </div>
         ) : (
           <div className="border-muted-foreground/30 size-5 rounded-full border-2" />
@@ -78,7 +79,7 @@ export function ServerTableRow({
           <Type
             variant="subheading"
             as="div"
-            className="group-hover:text-primary truncate text-sm transition-colors"
+            className="group-hover:text-primary min-w-0 truncate text-sm transition-colors"
             title={displayName}
           >
             {displayName}

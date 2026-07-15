@@ -33,7 +33,7 @@ export function OnboardingBanner(): JSX.Element | null {
           ONBOARDING_CTA_CONTENT_VT_CLASS,
         )}
       >
-        <div className="bg-background border-border/60 flex size-10 shrink-0 items-center justify-center rounded-lg border shadow-sm">
+        <div className="bg-background border-border/60 flex size-10 shrink-0 items-center justify-center rounded-lg border">
           <Wrench className="text-foreground size-5" strokeWidth={1.75} />
         </div>
 
@@ -41,7 +41,7 @@ export function OnboardingBanner(): JSX.Element | null {
           <Type
             variant="subheading"
             as="span"
-            className="text-foreground text-sm leading-tight font-semibold"
+            className="text-foreground text-sm leading-tight"
           >
             Finish setup
           </Type>
@@ -58,12 +58,14 @@ export function OnboardingBanner(): JSX.Element | null {
         <div className="flex shrink-0 items-center gap-1">
           <orgRoutes.setup.Link>
             <Button variant="secondary" size="sm" className="group">
-              Continue setup
-              <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
+              <Button.Text>Continue setup</Button.Text>
+              <Button.RightIcon>
+                <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
+              </Button.RightIcon>
             </Button>
           </orgRoutes.setup.Link>
           <Button
-            variant="ghost"
+            variant="tertiary"
             size="sm"
             onClick={dismiss}
             aria-label="Dismiss setup banner"

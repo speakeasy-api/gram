@@ -2,10 +2,9 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { PublicMcpWarningDialog } from "./public-mcp-warning-dialog";
 
-// moonshine's bundle imports lucide-react/dynamicIconImports which can't be
-// resolved in the test environment (no package exports map). Mock the whole
-// package so Button renders as a plain <button>.
-vi.mock("@speakeasy-api/moonshine", () => ({
+// Bundled icon imports can't be resolved in the test environment (no package
+// exports map). Mock Button so it renders as a plain <button>.
+vi.mock("@/components/ui/button", () => ({
   Button: ({
     children,
     onClick,

@@ -1,3 +1,4 @@
+import { Card } from "@/components/ui/card";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import {
@@ -7,7 +8,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-import { Badge } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/badge";
 import { ReactNode } from "react";
 import { canAutoConfigureFromDiscovered, WizardContext } from "./machine";
 import type { DiscoveredOAuth } from "./machine-types";
@@ -112,14 +113,12 @@ const OAuthDetectedCallout = ({
   }
 
   return (
-    <div className="border-border bg-muted/50 flex items-start justify-between gap-4 rounded-md border p-4">
-      <div>
-        <Type small className="font-medium">
-          OAuth detected from {name}
-        </Type>
-        {description}
-      </div>
-    </div>
+    <Card className="bg-muted/50 gap-0 p-4">
+      <Type small className="font-medium">
+        OAuth detected from {name}
+      </Type>
+      {description}
+    </Card>
   );
 };
 
@@ -136,7 +135,7 @@ function PathOptionCard(props: {
     <button
       type="button"
       className={cn(
-        "border-border flex flex-col items-start gap-2 rounded-lg border p-6 text-left transition-colors",
+        "border-border flex flex-col items-start gap-2 border p-6 text-left transition-colors",
         "hover:border-primary hover:bg-muted/50",
       )}
       onClick={props.onClick}

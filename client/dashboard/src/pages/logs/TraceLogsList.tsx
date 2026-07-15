@@ -7,7 +7,7 @@ import { Operator as Op } from "@gram/client/models/components/logfilter";
 import type { SearchLogsPayload } from "@gram/client/models/components/searchlogspayload";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { unwrapAsync } from "@gram/client/types/fp";
-import { Icon } from "@speakeasy-api/moonshine";
+import { LoaderCircle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { formatNanoTimestamp, formatLogBody } from "./utils";
 
@@ -42,11 +42,12 @@ function buildTraceFilters(
   return null;
 }
 
-// Uses design system tokens where available (destructive, warning, muted).
-// INFO has no semantic token — hardcoded Tailwind is intentional and matches
-// the deployment logs palette (PR #2167).
 const severityColors = {
-  INFO: { dot: "bg-blue-500", text: "text-blue-700", bg: "bg-blue-50" },
+  INFO: {
+    dot: "bg-information-default",
+    text: "text-default-information",
+    bg: "bg-information-softest",
+  },
   WARN: { dot: "bg-warning", text: "text-warning", bg: "bg-warning/10" },
   ERROR: {
     dot: "bg-destructive",
@@ -142,7 +143,7 @@ export function TraceLogsList({
         <div className="w-1.5 shrink-0" />
         <div className="w-[150px] shrink-0" />
         <div className="flex w-5 shrink-0 justify-center">
-          <Icon name="loader-circle" className="size-4 animate-spin" />
+          <LoaderCircle className="size-4 animate-spin" />
         </div>
         <span className="text-xs">Loading spans...</span>
       </div>
@@ -239,7 +240,7 @@ function ChildLogRow({
       {/* Severity badge inline */}
       <span
         className={cn(
-          "shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase",
+          "shrink-0 px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase",
           colors.bg,
           colors.text,
         )}

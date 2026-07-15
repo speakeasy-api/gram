@@ -349,7 +349,7 @@ export function LogFilterBar({
           <div
             ref={barRef}
             className={cn(
-              "border-border flex min-h-[42px] flex-wrap items-center gap-1.5 rounded-md border px-3 py-1.5 transition-[border-color,box-shadow]",
+              "border-border flex min-h-[42px] flex-wrap items-center gap-1.5 border px-3 py-1.5 transition-[border-color,box-shadow]",
               inputFocused && "border-ring ring-ring/50 ring-[3px]",
             )}
           >
@@ -363,12 +363,12 @@ export function LogFilterBar({
               />
             ))}
             {step === "operator" && (
-              <span className="border-ring bg-accent text-accent-foreground inline-flex shrink-0 items-center gap-1 rounded-md border px-2 py-0.5 font-mono text-xs">
+              <span className="border-ring bg-accent text-accent-foreground inline-flex shrink-0 items-center gap-1 border px-2 py-0.5 font-mono text-xs">
                 {selectedKey}
               </span>
             )}
             {step === "value" ? (
-              <span className="border-ring bg-accent text-accent-foreground inline-flex shrink-0 items-center rounded-md border px-2 py-0.5 font-mono text-xs">
+              <span className="border-ring bg-accent text-accent-foreground inline-flex shrink-0 items-center border px-2 py-0.5 font-mono text-xs">
                 <span>
                   {selectedKey} {selectedOp && OP_LABELS[selectedOp]}
                   {"\u00A0"}
@@ -570,12 +570,12 @@ function EditableFilterChip({
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <span className="border-border bg-accent text-accent-foreground inline-flex shrink-0 items-center rounded-md border font-mono text-xs">
+      <span className="border-border bg-accent text-accent-foreground inline-flex shrink-0 items-center border font-mono text-xs">
         <PopoverTrigger asChild>
           <button
             type="button"
             aria-label={`Edit filter ${filter.path}`}
-            className="hover:bg-accent/60 cursor-pointer rounded-l-md py-0.5 pr-1 pl-2 transition-colors"
+            className="hover:bg-accent/60 cursor-pointer py-0.5 pr-1 pl-2 transition-colors"
           >
             {filter.path} {OP_LABELS[filter.op]}
             {filter.value !== undefined ? ` ${filter.value}` : ""}
@@ -588,7 +588,7 @@ function EditableFilterChip({
             e.stopPropagation();
             onRemove(filter.id);
           }}
-          className="text-muted-foreground hover:text-foreground hover:bg-accent/60 rounded-r-md px-1.5 py-0.5 transition-colors"
+          className="text-muted-foreground hover:text-foreground hover:bg-accent/60 px-1.5 py-0.5 transition-colors"
         >
           <X className="size-3" />
         </button>
@@ -636,14 +636,14 @@ function EditableFilterChip({
               }
             }}
             placeholder={valuePlaceholder}
-            className="border-border focus-visible:border-ring focus-visible:ring-ring/50 h-8 min-w-0 flex-1 rounded-md border bg-transparent px-2 font-mono text-xs outline-none focus-visible:ring-[3px]"
+            className="border-border focus-visible:border-ring focus-visible:ring-ring/50 h-8 min-w-0 flex-1 border bg-transparent px-2 font-mono text-xs outline-none focus-visible:ring-[3px]"
             autoFocus
           />
         </div>
         <div className="flex items-center justify-between">
           <Button
             type="button"
-            variant="destructiveGhost"
+            variant="destructive-secondary"
             size="sm"
             onClick={() => {
               onRemove(filter.id);
@@ -655,7 +655,7 @@ function EditableFilterChip({
           <div className="flex gap-2">
             <Button
               type="button"
-              variant="outline"
+              variant="secondary"
               size="sm"
               onClick={() => setOpen(false)}
             >

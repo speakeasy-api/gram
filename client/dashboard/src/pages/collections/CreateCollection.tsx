@@ -1,22 +1,20 @@
 import { Page } from "@/components/page-layout";
-import { Textarea } from "@/components/moon/textarea";
+import { SettingsLayout } from "@/components/layouts/settings-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Type } from "@/components/ui/type";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
+import { SearchBar } from "@/components/ui/search-bar";
+import { SegmentedControl } from "@/components/ui/segmented-control";
+import { TextArea } from "@/components/ui/textarea";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
-import { cn } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
-import { Button, Input, Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { useQueries } from "@tanstack/react-query";
-import {
-  Globe,
-  Lock,
-  Loader2,
-  Search,
-  Server as ServerIcon,
-} from "lucide-react";
+import { Globe, Lock, Loader2, Server as ServerIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useCreateCollection } from "./hooks";
 
@@ -208,20 +206,18 @@ function CreateCollectionForm() {
   };
 
   return (
-    <Page.Section>
-      <Page.Section.Title>Create Collection</Page.Section.Title>
-      <Page.Section.Description>
-        Create a curated collection of MCP servers that can be installed
-        together
-      </Page.Section.Description>
-      <Page.Section.Body>
+    <SettingsLayout>
+      <SettingsLayout.Header
+        title="Create Collection"
+        subtitle="Create a curated collection of MCP servers that can be installed together"
+      />
+      <SettingsLayout.Body>
         <form
           onSubmit={(e) => {
             void handleSubmit(e);
           }}
-          className="max-w-lg"
         >
-          <Stack direction="vertical" gap={4}>
+          <SettingsLayout.Group label="Details">
             <div>
               <label htmlFor="name" className="mb-1 block text-sm font-medium">
                 Name
@@ -281,11 +277,11 @@ function CreateCollectionForm() {
               >
                 Description
               </label>
-              <Textarea
+              <TextArea
                 id="description"
                 placeholder="Describe what this collection is for and what servers it includes..."
                 value={description}
-                onChange={(e) => setDescription(e.target.value)}
+                onChange={setDescription}
                 rows={3}
               />
             </div>
@@ -294,54 +290,48 @@ function CreateCollectionForm() {
               <label className="mb-2 block text-sm font-medium">
                 Visibility
               </label>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  className={cn(
-                    "flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition-colors",
-                    visibility === "public"
-                      ? "border-foreground/30 bg-accent"
-                      : "border-border hover:bg-accent/50",
-                  )}
-                  onClick={() => setVisibility("public")}
-                >
-                  <Globe className="h-3.5 w-3.5" />
-                  Public
-                </button>
-                <button
-                  type="button"
-                  className={cn(
-                    "flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition-colors",
-                    visibility === "private"
-                      ? "border-foreground/30 bg-accent"
-                      : "border-border hover:bg-accent/50",
-                  )}
-                  onClick={() => setVisibility("private")}
-                >
-                  <Lock className="h-3.5 w-3.5" />
-                  Private
-                </button>
-              </div>
+              <SegmentedControl
+                value={visibility}
+                onChange={setVisibility}
+                options={[
+                  {
+                    value: "public",
+                    label: (
+                      <span className="flex items-center gap-1.5">
+                        <Globe className="h-3.5 w-3.5" />
+                        Public
+                      </span>
+                    ),
+                  },
+                  {
+                    value: "private",
+                    label: (
+                      <span className="flex items-center gap-1.5">
+                        <Lock className="h-3.5 w-3.5" />
+                        Private
+                      </span>
+                    ),
+                  },
+                ]}
+              />
               <p className="text-muted-foreground mt-1.5 text-xs">
                 {visibility === "private"
                   ? "Private collections are only visible to your organization."
                   : "Public collections are visible to everyone."}
               </p>
             </div>
+          </SettingsLayout.Group>
 
+          <SettingsLayout.Group
+            label={`MCP Servers (${selectedCount} selected)`}
+          >
             <div>
-              <label className="mb-2 block text-sm font-medium">
-                MCP Servers ({selectedCount} selected)
-              </label>
-              <div className="rounded-md border">
-                <div className="relative border-b">
-                  <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    placeholder="Search servers..."
+              <div className="border">
+                <div className="border-b p-2">
+                  <SearchBar
                     value={serverSearch}
-                    onChange={(e) => setServerSearch(e.target.value)}
-                    className="placeholder:text-muted-foreground w-full bg-transparent py-2.5 pr-3 pl-9 text-sm outline-none"
+                    onChange={setServerSearch}
+                    placeholder="Search servers..."
                   />
                 </div>
                 <div className="max-h-64 overflow-y-auto">
@@ -350,14 +340,14 @@ function CreateCollectionForm() {
                       <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
                     </div>
                   ) : filteredServers.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center p-4 text-center">
-                      <ServerIcon className="text-muted-foreground mb-1 h-6 w-6" />
-                      <Type small muted>
-                        {serverSearch
+                    <InlineEmptyState
+                      icon={<ServerIcon />}
+                      title={
+                        serverSearch
                           ? "No servers match your search."
-                          : "No MCP servers available."}
-                      </Type>
-                    </div>
+                          : "No MCP servers available."
+                      }
+                    />
                   ) : (
                     filteredServers.map((server) => (
                       <label
@@ -376,17 +366,19 @@ function CreateCollectionForm() {
                             </span>
                             {server.kind === "mcpServer" && (
                               <Badge
-                                variant="secondary"
+                                variant="neutral"
+                                background={false}
                                 className="shrink-0 text-xs"
                               >
-                                Remote MCP
+                                <Badge.Text>Remote MCP</Badge.Text>
                               </Badge>
                             )}
                             <Badge
-                              variant="secondary"
+                              variant="neutral"
+                              background={false}
                               className="shrink-0 text-xs"
                             >
-                              {server.projectName}
+                              <Badge.Text>{server.projectName}</Badge.Text>
                             </Badge>
                           </div>
                           {server.description && (
@@ -401,29 +393,29 @@ function CreateCollectionForm() {
                 </div>
               </div>
             </div>
+          </SettingsLayout.Group>
 
-            <Stack direction="horizontal" gap={2}>
-              <Button
-                type="submit"
-                disabled={!name || !slug || createCollection.isPending}
-              >
-                <Button.Text>
-                  {createCollection.isPending
-                    ? "Creating..."
-                    : "Create Collection"}
-                </Button.Text>
-              </Button>
-              <Button
-                variant="secondary"
-                type="button"
-                onClick={() => orgRoutes.collections.goTo()}
-              >
-                <Button.Text>Cancel</Button.Text>
-              </Button>
-            </Stack>
+          <Stack direction="horizontal" gap={2}>
+            <Button
+              type="submit"
+              disabled={!name || !slug || createCollection.isPending}
+            >
+              <Button.Text>
+                {createCollection.isPending
+                  ? "Creating..."
+                  : "Create Collection"}
+              </Button.Text>
+            </Button>
+            <Button
+              variant="secondary"
+              type="button"
+              onClick={() => orgRoutes.collections.goTo()}
+            >
+              <Button.Text>Cancel</Button.Text>
+            </Button>
           </Stack>
         </form>
-      </Page.Section.Body>
-    </Page.Section>
+      </SettingsLayout.Body>
+    </SettingsLayout>
   );
 }

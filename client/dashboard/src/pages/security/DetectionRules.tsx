@@ -1,9 +1,12 @@
 import { Page } from "@/components/page-layout";
+import { SettingsLayout } from "@/components/layouts/settings-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group";
 import {
   Sheet,
   SheetContent,
@@ -14,8 +17,12 @@ import {
 } from "@/components/ui/sheet";
 import { TextArea } from "@/components/ui/textarea";
 import { Type } from "@/components/ui/type";
+import { toastError } from "@/lib/toast-error";
 import { cn } from "@/lib/utils";
-import { Icon, type IconName } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { DynamicIcon, type IconName } from "@/components/ui/dynamic-icon";
 import {
   ArrowLeft,
   Check,
@@ -148,31 +155,32 @@ function DetectionRulesContent() {
 
   return (
     <>
-      <Page.Section>
-        <Page.Section.Title stage="beta">Detection Rules</Page.Section.Title>
-        <Page.Section.Description>
-          Reusable built-in and custom rules your policies use to flag — or
-          exempt — messages.
-        </Page.Section.Description>
-        <Page.Section.CTA>
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Custom Detection Rule
-          </Button>
-        </Page.Section.CTA>
-        <Page.Section.Body>
-          <div className="space-y-8">
-            {customRulesLoading && (
-              <div className="text-muted-foreground text-sm">
-                Loading custom rules...
-              </div>
-            )}
-            {customRulesError && (
-              <div className="text-destructive text-sm">
-                Failed to load custom rules.
-              </div>
-            )}
-            {customRules.length > 0 && (
+      <SettingsLayout>
+        <SettingsLayout.Header
+          title="Detection Rules"
+          subtitle="Reusable built-in and custom rules your policies use to flag — or exempt — messages."
+          actions={
+            <Button onClick={() => setCreateOpen(true)}>
+              <Button.LeftIcon>
+                <Plus className="h-4 w-4" />
+              </Button.LeftIcon>
+              <Button.Text>Custom Detection Rule</Button.Text>
+            </Button>
+          }
+        />
+        <SettingsLayout.Body>
+          {customRulesLoading && (
+            <div className="text-muted-foreground text-sm">
+              Loading custom rules...
+            </div>
+          )}
+          {customRulesError && (
+            <div className="text-destructive text-sm">
+              Failed to load custom rules.
+            </div>
+          )}
+          {customRules.length > 0 && (
+            <SettingsLayout.Group label="Custom">
               <CustomRulesSection
                 rules={customRules}
                 expanded={expanded === "custom"}
@@ -181,16 +189,18 @@ function DetectionRulesContent() {
                 }
                 onSelect={(rule) => setSelected({ kind: "custom", rule })}
               />
-            )}
+            </SettingsLayout.Group>
+          )}
 
+          <SettingsLayout.Group label="Built-in">
             <BuiltinRulesSection
               expanded={expanded}
               onToggle={(cat) => setExpanded(expanded === cat ? null : cat)}
               onSelect={(rule) => setSelected({ kind: "builtin", rule })}
             />
-          </div>
-        </Page.Section.Body>
-      </Page.Section>
+          </SettingsLayout.Group>
+        </SettingsLayout.Body>
+      </SettingsLayout>
 
       <RuleDetailSheet
         selection={selected}
@@ -239,10 +249,7 @@ function CustomRulesSection({
   const meta = RULE_CATEGORY_META.custom;
   return (
     <div>
-      <Type variant="subheading" className="mb-3">
-        Custom
-      </Type>
-      <div className="border-border divide-border divide-y rounded-lg border">
+      <div className="border-border divide-border divide-y border">
         <CategoryHeader
           icon={meta.icon as IconName}
           label={meta.label}
@@ -283,10 +290,7 @@ function BuiltinRulesSection({
 }) {
   return (
     <div>
-      <Type variant="subheading" className="mb-3">
-        Built-in
-      </Type>
-      <div className="border-border divide-border divide-y rounded-lg border">
+      <div className="border-border divide-border divide-y border">
         {BUILTIN_CATEGORY_ORDER.map((cat) => {
           const meta = RULE_CATEGORY_META[cat];
           const rules = BUILTIN_RULES_BY_CATEGORY[cat];
@@ -352,14 +356,17 @@ function CategoryHeader({
           expanded && "rotate-90",
         )}
       />
-      <Icon name={icon} className="text-muted-foreground size-4 shrink-0" />
+      <DynamicIcon
+        name={icon}
+        className="text-muted-foreground size-4 shrink-0"
+      />
       <div className="min-w-0 flex-1">
         <div className="text-sm font-medium">{label}</div>
         <div className="text-muted-foreground line-clamp-1 text-xs">
           {description}
         </div>
       </div>
-      <Badge variant="secondary" className="shrink-0">
+      <Badge variant="neutral" background={false} className="shrink-0">
         {count}
       </Badge>
     </button>
@@ -447,7 +454,7 @@ function BuiltinRuleDetail({ rule }: { rule: BuiltinRule }) {
       <div className="flex-1 space-y-6 px-6 py-4">
         <DetailField label="Category">
           <div className="flex items-center gap-2">
-            <Icon
+            <DynamicIcon
               name={meta.icon as IconName}
               className="text-muted-foreground size-4"
             />
@@ -456,7 +463,9 @@ function BuiltinRuleDetail({ rule }: { rule: BuiltinRule }) {
         </DetailField>
 
         <DetailField label="Description">
-          <p className="text-sm leading-relaxed">{rule.description}</p>
+          <Type variant="small" className="leading-relaxed">
+            {rule.description}
+          </Type>
         </DetailField>
 
         <RulePlayground ruleId={rule.id} detectionExpr={null} />
@@ -565,7 +574,7 @@ function CustomRuleDetail({
       <div className="flex-1 space-y-5 px-6 py-4">
         <div className="space-y-2">
           <Label className="text-sm font-medium">Title</Label>
-          <Input value={title} onChange={setTitle} />
+          <Input value={title} onChange={(e) => setTitle(e.target.value)} />
         </div>
 
         <div className="space-y-2">
@@ -594,13 +603,15 @@ function CustomRuleDetail({
       </div>
       <SheetFooter className="border-border flex-row items-center justify-between border-t px-6 py-4">
         <Button
-          variant="ghost"
+          variant="tertiary"
           size="sm"
           onClick={onDelete}
           className="text-destructive hover:text-destructive"
         >
-          <Trash2 className="mr-2 h-4 w-4" />
-          Delete rule
+          <Button.LeftIcon>
+            <Trash2 className="h-4 w-4" />
+          </Button.LeftIcon>
+          <Button.Text>Delete rule</Button.Text>
         </Button>
         <div className="flex items-center gap-3">
           {saveState === "error" && (
@@ -616,11 +627,15 @@ function CustomRuleDetail({
             }
             onClick={() => void handleSave()}
           >
-            {saveState === "saving" && (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            {(saveState === "saving" || saveState === "saved") && (
+              <Button.LeftIcon>
+                {saveState === "saving" && (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                )}
+                {saveState === "saved" && <Check className="h-4 w-4" />}
+              </Button.LeftIcon>
             )}
-            {saveState === "saved" && <Check className="mr-2 h-4 w-4" />}
-            {saveLabel}
+            <Button.Text>{saveLabel}</Button.Text>
           </Button>
         </div>
       </SheetFooter>
@@ -654,14 +669,14 @@ function RulePlayground({
       >
         <label
           htmlFor={`pg-mode-sample-${ruleId}`}
-          className="hover:bg-muted/40 flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-xs"
+          className="hover:bg-muted/40 flex cursor-pointer items-center gap-2 border px-3 py-1.5 text-xs"
         >
           <RadioGroupItem value="sample" id={`pg-mode-sample-${ruleId}`} />
           Paste sample
         </label>
         <label
           htmlFor={`pg-mode-chat-${ruleId}`}
-          className="hover:bg-muted/40 flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-xs"
+          className="hover:bg-muted/40 flex cursor-pointer items-center gap-2 border px-3 py-1.5 text-xs"
         >
           <RadioGroupItem value="chat" id={`pg-mode-chat-${ruleId}`} />
           Run on a chat
@@ -694,8 +709,7 @@ function SamplePlayground({
       setReason(data.supported ? null : (data.reason ?? "Rule not supported"));
     },
     onError: (err) => {
-      const message = err instanceof Error ? err.message : "Failed to run rule";
-      toast.error(message);
+      toastError(err, "Failed to run rule");
     },
   });
 
@@ -727,10 +741,12 @@ function SamplePlayground({
           disabled={sample.trim().length === 0 || mutation.isPending}
           onClick={handleRun}
         >
-          {mutation.isPending ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : null}
-          Run rule
+          {mutation.isPending && (
+            <Button.LeftIcon>
+              <Loader2 className="h-4 w-4 animate-spin" />
+            </Button.LeftIcon>
+          )}
+          <Button.Text>Run rule</Button.Text>
         </Button>
       </div>
       {matches !== null && <MatchList matches={matches} reason={reason} />}
@@ -746,7 +762,7 @@ function MatchList({
   reason: string | null;
 }) {
   return (
-    <div className="border-border mt-3 rounded-lg border">
+    <div className="border-border mt-3 border">
       <div className="border-border bg-muted/40 flex items-center justify-between border-b px-3 py-2 text-xs font-medium">
         <span>
           {matches.length} match{matches.length === 1 ? "" : "es"}
@@ -768,7 +784,7 @@ function MatchList({
                   {getCategoryCodeForFinding(m.source, m.ruleId)}
                 </span>
               </div>
-              <pre className="bg-muted/50 overflow-x-auto rounded px-2 py-1 font-mono text-[11px]">
+              <pre className="bg-muted/50 overflow-x-auto px-2 py-1 font-mono text-[11px]">
                 {m.match}
               </pre>
               {m.description && (
@@ -924,7 +940,7 @@ function ChatPlayground({
         }
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to load chat");
+      toastError(err, "Failed to load chat");
     } finally {
       setRunning(false);
     }
@@ -987,8 +1003,12 @@ function ChatPlayground({
           disabled={!selectedChat || running}
           onClick={() => void handleRun()}
         >
-          {running ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-          Run on chat
+          {running && (
+            <Button.LeftIcon>
+              <Loader2 className="h-4 w-4 animate-spin" />
+            </Button.LeftIcon>
+          )}
+          <Button.Text>Run on chat</Button.Text>
         </Button>
         {overflowWarning && (
           <span className="text-muted-foreground text-xs">
@@ -998,7 +1018,7 @@ function ChatPlayground({
       </div>
 
       {results.length > 0 && (
-        <div className="border-border divide-border max-h-[420px] divide-y overflow-y-auto rounded-lg border">
+        <div className="border-border divide-border max-h-[420px] divide-y overflow-y-auto border">
           {results.map((r) => (
             <ChatMessageRow key={r.messageId} item={r} />
           ))}
@@ -1023,7 +1043,7 @@ function ChatPickerColumn({
 }) {
   return (
     <div>
-      <div className="text-muted-foreground mb-1 text-[11px] font-medium tracking-wide uppercase">
+      <div className="text-muted-foreground mb-1 font-mono text-[11px] tracking-[0.08em] uppercase">
         {title}
       </div>
       {items.length === 0 ? (
@@ -1032,7 +1052,7 @@ function ChatPickerColumn({
         <RadioGroup
           value={value ?? ""}
           onValueChange={onChange}
-          className="border-border divide-border max-h-48 divide-y overflow-y-auto rounded-md border"
+          className="border-border divide-border max-h-48 divide-y overflow-y-auto border"
         >
           {items.map((item) => (
             <label
@@ -1069,7 +1089,7 @@ function ChatMessageRow({ item }: { item: ChatMessageResult }) {
         onClick={() => setExpanded((e) => !e)}
         className="flex w-full items-start gap-3 text-left"
       >
-        <span className="text-muted-foreground w-6 shrink-0 text-[10px] uppercase">
+        <span className="text-muted-foreground w-6 shrink-0 font-mono text-[10px] tracking-[0.08em] uppercase">
           {item.role.slice(0, 4)}
         </span>
         <span className="min-w-0 flex-1">
@@ -1088,7 +1108,9 @@ function ChatMessageRow({ item }: { item: ChatMessageResult }) {
             (matchCount > 0 ? (
               <Badge>{matchCount}</Badge>
             ) : (
-              <Badge variant="secondary">0</Badge>
+              <Badge variant="neutral" background={false}>
+                0
+              </Badge>
             ))}
         </span>
       </button>
@@ -1099,7 +1121,7 @@ function ChatMessageRow({ item }: { item: ChatMessageResult }) {
               Full message ({item.fullText.length} chars):
             </p>
           )}
-          <pre className="bg-muted/40 max-h-40 overflow-auto rounded px-2 py-1 font-mono text-[11px] whitespace-pre-wrap">
+          <pre className="bg-muted/40 max-h-40 overflow-auto px-2 py-1 font-mono text-[11px] whitespace-pre-wrap">
             {item.fullText || "(empty)"}
           </pre>
           {item.status === "error" && (
@@ -1179,7 +1201,7 @@ function DetailField({
 }) {
   return (
     <div>
-      <div className="text-muted-foreground mb-2 text-xs font-medium tracking-wide uppercase">
+      <div className="text-muted-foreground mb-2 font-mono text-xs tracking-[0.08em] uppercase">
         {label}
       </div>
       {children}
@@ -1237,9 +1259,7 @@ function CreateCustomRuleSheet({
       setStep("review");
     },
     onError: (err) => {
-      const message =
-        err instanceof Error ? err.message : "Failed to generate suggestion";
-      toast.error(message);
+      toastError(err, "Failed to generate suggestion");
     },
   });
 
@@ -1352,7 +1372,7 @@ function CreateCustomRuleSheet({
               </div>
             </div>
             <SheetFooter className="border-border flex-row items-center justify-between border-t px-6 py-4">
-              <Button variant="ghost" size="sm" onClick={handleManual}>
+              <Button variant="tertiary" size="sm" onClick={handleManual}>
                 Skip, fill manually
               </Button>
               <Button
@@ -1361,12 +1381,14 @@ function CreateCustomRuleSheet({
                 }
                 onClick={handleSuggest}
               >
-                {suggestMutation.isPending ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Sparkles className="mr-2 h-4 w-4" />
-                )}
-                Suggest with AI
+                <Button.LeftIcon>
+                  {suggestMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-4 w-4" />
+                  )}
+                </Button.LeftIcon>
+                <Button.Text>Suggest with AI</Button.Text>
               </Button>
             </SheetFooter>
           </>
@@ -1375,17 +1397,17 @@ function CreateCustomRuleSheet({
             <div className="flex-1 space-y-5 px-6 py-4">
               <div className="space-y-2">
                 <Label className="text-sm font-medium">Rule ID</Label>
-                <div className="flex">
-                  <span className="border-input bg-muted text-muted-foreground inline-flex items-center rounded-l-md border border-r-0 px-3 font-mono text-xs">
+                <InputGroup>
+                  <InputGroupAddon className="font-mono text-xs">
                     {CUSTOM_RULE_ID_PREFIX}
-                  </span>
-                  <Input
+                  </InputGroupAddon>
+                  <InputGroupInput
                     value={idSuffix}
-                    onChange={setIdSuffix}
+                    onChange={(e) => setIdSuffix(e.target.value)}
                     placeholder="internal_token"
-                    className="rounded-l-none font-mono text-xs"
+                    className="font-mono text-xs"
                   />
-                </div>
+                </InputGroup>
                 {idError ? (
                   <p className="text-destructive text-xs">{idError}</p>
                 ) : (
@@ -1400,7 +1422,7 @@ function CreateCustomRuleSheet({
                 <Label className="text-sm font-medium">Title</Label>
                 <Input
                   value={title}
-                  onChange={setTitle}
+                  onChange={(e) => setTitle(e.target.value)}
                   placeholder="e.g. Internal API Token"
                 />
               </div>
@@ -1428,12 +1450,14 @@ function CreateCustomRuleSheet({
             </div>
             <SheetFooter className="border-border flex-row items-center justify-between border-t px-6 py-4">
               <Button
-                variant="ghost"
+                variant="tertiary"
                 size="sm"
                 onClick={() => setStep("prompt")}
               >
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Back
+                <Button.LeftIcon>
+                  <ArrowLeft className="h-4 w-4" />
+                </Button.LeftIcon>
+                <Button.Text>Back</Button.Text>
               </Button>
               <Button disabled={!canSubmit} onClick={handleSubmit}>
                 Create rule

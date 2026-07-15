@@ -6,24 +6,19 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import { Kbd } from "@/components/ui/kbd";
+import { BrandGradientLine } from "@/components/brand-gradient-line";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { useCommandPalette } from "@/contexts/CommandPalette";
 import { useSlugs } from "@/contexts/Sdk";
-import { Icon, IconName, Badge } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/badge";
+import { DynamicIcon, type IconName } from "@/components/ui/dynamic-icon";
+import { Sparkles } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { requestAskAi } from "./askAiBridge";
 import { useRecentlyVisited, useRecentsUserId } from "./recentlyVisited";
 import { ResourceResults } from "./ResourceResults";
-
-// Speakeasy brand spectrum — the same brand-language gradient the Project
-// Assistant uses. Rendered as a thin hairline at the top of the palette so the
-// surface reads as Gram without leaning on display type or heavy chrome.
-const BRAND_GRADIENT =
-  "linear-gradient(90deg, #320F1E 0%, #C83228 12.5%, #FB873F 25%, #D2DC91 37.5%, #5A8250 50%, #002314 62%, #00143C 74%, #2873D7 86%, #9BC3FF 100%)";
-
-const KBD_CLASS =
-  "border-neutral-softest bg-muted text-muted-foreground pointer-events-none inline-flex h-5 min-w-5 items-center justify-center gap-1 rounded border px-1.5 font-mono text-[10px] font-medium select-none";
 
 export function CommandPalette(): JSX.Element {
   const { isOpen, close, actions, contextBadge } = useCommandPalette();
@@ -125,7 +120,7 @@ export function CommandPalette(): JSX.Element {
         onSelect={handleAskAi}
         className="flex items-center gap-2"
       >
-        <Icon name="sparkles" className="text-primary size-4 shrink-0" />
+        <Sparkles className="text-primary size-4 shrink-0" />
         <span className="truncate">{askAiLabel}</span>
       </CommandItem>
     </CommandGroup>
@@ -138,12 +133,7 @@ export function CommandPalette(): JSX.Element {
         if (!open) closeAndReset();
       }}
     >
-      {/* Speakeasy brand hairline */}
-      <div
-        aria-hidden
-        className="h-0.5 w-full shrink-0"
-        style={{ background: BRAND_GRADIENT }}
-      />
+      <BrandGradientLine className="h-0.5" />
       {contextBadge && (
         <div className="px-3 pt-3 pb-2">
           <Badge variant="neutral">
@@ -184,7 +174,10 @@ export function CommandPalette(): JSX.Element {
                 className="flex items-center gap-2"
               >
                 {recent.icon && (
-                  <Icon name={recent.icon as IconName} className="size-4" />
+                  <DynamicIcon
+                    name={recent.icon as IconName}
+                    className="size-4"
+                  />
                 )}
                 <span className="truncate">{recent.label}</span>
               </CommandItem>
@@ -205,18 +198,17 @@ export function CommandPalette(): JSX.Element {
               >
                 <div className="flex items-center gap-2">
                   {action.icon && (
-                    <Icon name={action.icon as IconName} className="size-4" />
+                    <DynamicIcon
+                      name={action.icon as IconName}
+                      className="size-4"
+                    />
                   )}
                   <span>{action.label}</span>
                   {action.stage && (
                     <ReleaseStageBadge stage={action.stage} noTooltip />
                   )}
                 </div>
-                {action.shortcut && (
-                  <span className="text-muted-foreground text-xs">
-                    {action.shortcut}
-                  </span>
-                )}
+                {action.shortcut && <Kbd>{action.shortcut}</Kbd>}
               </CommandItem>
             ))}
           </CommandGroup>
@@ -237,16 +229,16 @@ export function CommandPalette(): JSX.Element {
       {/* Keyboard navigation hints */}
       <div className="text-muted-foreground flex items-center gap-3 border-t px-3 py-2 text-xs">
         <span className="flex items-center gap-1.5">
-          <kbd className={KBD_CLASS}>↑</kbd>
-          <kbd className={KBD_CLASS}>↓</kbd>
+          <Kbd>↑</Kbd>
+          <Kbd>↓</Kbd>
           to navigate
         </span>
         <span className="flex items-center gap-1.5">
-          <kbd className={KBD_CLASS}>↵</kbd>
+          <Kbd>↵</Kbd>
           to select
         </span>
         <span className="flex items-center gap-1.5">
-          <kbd className={KBD_CLASS}>esc</kbd>
+          <Kbd>esc</Kbd>
           to close
         </span>
       </div>

@@ -10,8 +10,8 @@ export function ScopeBadge({
   projectScoped: boolean;
 }): JSX.Element {
   return projectScoped ? (
-    <Badge variant="outline">Project-Specific</Badge>
+    <Badge background={false}>Project-Specific</Badge>
   ) : (
-    <Badge variant="secondary">Organizational</Badge>
+    <Badge background={false}>Organizational</Badge>
   );
 }

@@ -1,7 +1,7 @@
 import { Card } from "@/components/ui/card";
 import { Type } from "@/components/ui/type";
 import { Toolset } from "@/lib/toolTypes";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/stack";
 import { Server } from "lucide-react";
 
 interface ServerTabContentProps {
@@ -34,7 +34,7 @@ export function ServerTabContent({
       <Card>
         <Card.Title>
           <Stack direction="horizontal" gap={3} align="center">
-            <div className="bg-primary/10 flex h-10 w-10 items-center justify-center rounded-lg">
+            <div className="bg-primary/10 flex h-10 w-10 items-center justify-center">
               <Server className="text-primary h-5 w-5" />
             </div>
             <Stack gap={1}>

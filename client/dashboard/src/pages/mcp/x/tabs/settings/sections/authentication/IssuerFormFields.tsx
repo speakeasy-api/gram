@@ -1,5 +1,4 @@
 import { CopyButton } from "@/components/ui/copy-button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -11,7 +10,10 @@ import {
 import { Type } from "@/components/ui/type";
 import { getServerURL } from "@/lib/utils";
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
-import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
+import { Alert } from "@/components/ui/alert";
+import { Input } from "@/components/ui/input";
 import {
   CLIENT_TYPE_LABELS,
   clientTypeHelp,
@@ -37,7 +39,7 @@ function RedirectURICallout(): JSX.Element {
   return (
     <Stack gap={2}>
       <Label className="text-muted-foreground text-xs">Redirect URI</Label>
-      <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm">
+      <div className="bg-muted/50 p-4 font-mono text-sm">
         <div className="flex items-center justify-between gap-2">
           <code className="break-all">{redirectURI}</code>
           <CopyButton
@@ -75,7 +77,7 @@ export function IssuerUrlField({
       <Label className="text-muted-foreground text-xs">Issuer URL</Label>
       <Input
         value={issuerUrl}
-        onChange={onIssuerUrlChange}
+        onChange={(e) => onIssuerUrlChange(e.target.value)}
         placeholder="https://login.example.com"
       />
       <Type muted small>
@@ -174,7 +176,7 @@ export function EndpointsFields({
         </Label>
         <Input
           value={authorizationEndpoint}
-          onChange={onAuthorizationEndpointChange}
+          onChange={(e) => onAuthorizationEndpointChange(e.target.value)}
           placeholder="https://login.example.com/authorize"
         />
       </Stack>
@@ -183,7 +185,7 @@ export function EndpointsFields({
         <Label className="text-muted-foreground text-xs">Token Endpoint</Label>
         <Input
           value={tokenEndpoint}
-          onChange={onTokenEndpointChange}
+          onChange={(e) => onTokenEndpointChange(e.target.value)}
           placeholder="https://login.example.com/token"
         />
       </Stack>
@@ -194,7 +196,7 @@ export function EndpointsFields({
         </Label>
         <Input
           value={registrationEndpoint}
-          onChange={onRegistrationEndpointChange}
+          onChange={(e) => onRegistrationEndpointChange(e.target.value)}
           placeholder="https://login.example.com/register"
         />
       </Stack>
@@ -205,7 +207,7 @@ export function EndpointsFields({
         </Label>
         <Input
           value={jwksUri}
-          onChange={onJwksUriChange}
+          onChange={(e) => onJwksUriChange(e.target.value)}
           placeholder="https://login.example.com/.well-known/jwks.json"
         />
       </Stack>
@@ -332,7 +334,7 @@ export function ClientCredentialsFields({
         {clientIdEditable ? (
           <Input
             value={clientId}
-            onChange={onClientIdChange}
+            onChange={(e) => onClientIdChange(e.target.value)}
             placeholder="client_abc123"
           />
         ) : (
@@ -349,7 +351,7 @@ export function ClientCredentialsFields({
         <Input
           type="password"
           value={clientSecret}
-          onChange={onClientSecretChange}
+          onChange={(e) => onClientSecretChange(e.target.value)}
           placeholder={clientSecretPlaceholder}
         />
       </Stack>
@@ -385,7 +387,7 @@ export function OverridesFields({
         </Label>
         <Input
           value={scopeOverride}
-          onChange={onScopeOverrideChange}
+          onChange={(e) => onScopeOverrideChange(e.target.value)}
           placeholder="read, write, openid"
         />
         <Type muted small>
@@ -401,7 +403,7 @@ export function OverridesFields({
         </Label>
         <Input
           value={audienceOverride}
-          onChange={onAudienceOverrideChange}
+          onChange={(e) => onAudienceOverrideChange(e.target.value)}
           placeholder="https://api.example.com"
         />
         <Type muted small>

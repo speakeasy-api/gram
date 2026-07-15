@@ -5,7 +5,6 @@ import {
   FieldError,
   FieldLabel,
 } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -13,11 +12,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { toastError } from "@/lib/toast-error";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
 import { useUpdateUserSessionIssuerMutation } from "@gram/client/react-query/updateUserSessionIssuer.js";
 import { invalidateAllUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
 import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -79,11 +80,7 @@ export function UserSessionDurationField({
       toast.success("Session duration updated");
     },
     onError: (error) => {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to update session duration",
-      );
+      toastError(error, "Failed to update session duration");
     },
   });
 
@@ -122,7 +119,7 @@ export function UserSessionDurationField({
           type="number"
           min="1"
           value={String(durationNumber)}
-          onChange={handleNumberChange}
+          onChange={(e) => handleNumberChange(e.target.value)}
           className="w-[100px]"
         />
         <Select value={durationUnit} onValueChange={handleUnitChange}>

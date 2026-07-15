@@ -128,8 +128,9 @@ export const CodeBlockCopyButton = ({
     <Button
       className={cn("shrink-0", className)}
       onClick={() => void copyToClipboard()}
-      size="icon"
-      variant="ghost"
+      size="md"
+      variant="tertiary"
+      aria-label={isCopied ? "Copied" : "Copy code"}
       {...props}
     >
       {children ?? <Icon size={14} />}

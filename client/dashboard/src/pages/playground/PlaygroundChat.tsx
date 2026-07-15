@@ -14,7 +14,7 @@ import {
   type Model,
 } from "@gram-ai/elements";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate.js";
-import { useMoonshineConfig } from "@speakeasy-api/moonshine";
+import { useTheme } from "@/contexts/theme-context";
 import { useQuery } from "@tanstack/react-query";
 import { HistoryIcon } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
@@ -69,7 +69,7 @@ export function PlaygroundChat({
   const session = useSession();
   const project = useProject();
   const createSessionMutation = useChatSessionsCreateMutation();
-  const { theme: resolvedTheme } = useMoonshineConfig();
+  const { theme: resolvedTheme } = useTheme();
   const [historyOpen, setHistoryOpen] = useState(false);
   const [searchParams] = useSearchParams();
 
@@ -212,7 +212,7 @@ export function PlaygroundChat({
           <div className="border-b-border flex shrink-0 items-center justify-between gap-2 border-b px-4 py-3">
             <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
               <PopoverTrigger asChild>
-                <Button size="sm" variant="ghost">
+                <Button size="sm" variant="tertiary">
                   <HistoryIcon className="mr-2 size-4" />
                   Chat History
                 </Button>

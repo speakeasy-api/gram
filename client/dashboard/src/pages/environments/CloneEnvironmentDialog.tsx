@@ -1,9 +1,9 @@
 import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Type } from "@/components/ui/type";
 import { Environment } from "@gram/client/models/components/environment.js";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useState } from "react";
 import { useCloneEnvironment } from "./useEnvironmentActions";
 
@@ -54,14 +54,16 @@ export function CloneEnvironmentDialog({
             <Input
               autoFocus
               value={name}
-              onChange={setName}
-              onEnter={submit}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") submit();
+              }}
               placeholder="Environment name"
-              validate={(v) => v.trim().length > 0}
+              error={name !== "" && !name.trim()}
             />
           </div>
 
-          <div className="flex items-start justify-between gap-4 rounded-lg border p-3">
+          <div className="flex items-start justify-between gap-4 border p-3">
             <div className="flex flex-col gap-1">
               <Type variant="small" className="font-medium">
                 Copy stored secret values

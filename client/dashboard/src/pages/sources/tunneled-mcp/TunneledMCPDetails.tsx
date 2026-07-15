@@ -3,13 +3,13 @@ import { DetailHero } from "@/components/detail-hero";
 import { MCPServerCard } from "@/components/mcp/MCPServerCard";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import { McpServerCardsSkeleton } from "@/components/sources/McpServerCardsSkeleton";
 import {
   SourceInfoRow,
   SourceInfoTable,
 } from "@/components/sources/SourceInfoTable";
 import { CopyButton } from "@/components/ui/copy-button";
 import { Heading } from "@/components/ui/heading";
-import { Input } from "@/components/ui/input";
 import {
   PageTabsTrigger,
   Tabs,
@@ -24,6 +24,7 @@ import {
   formatTunneledMcpDisplay,
   getTunneledMcpServerArgs,
 } from "@/lib/sources";
+import { toastError } from "@/lib/toast-error";
 import { TUNNELED_MCP_FEATURE_FLAG } from "@/lib/tunneledMcp";
 import { tunnelGatewayURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
@@ -40,7 +41,12 @@ import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { invalidateAllTunneledMcpServers } from "@gram/client/react-query/tunneledMcpServers.js";
 import { useUpdateTunneledMcpServerMutation } from "@gram/client/react-query/updateTunneledMcpServer.js";
-import { Alert, Badge, Button, Dialog, Stack } from "@speakeasy-api/moonshine";
+import { Dialog } from "@/components/ui/dialog";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Alert } from "@/components/ui/alert";
+import { Input } from "@/components/ui/input";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import {
@@ -270,8 +276,8 @@ function TunneledMcpHero({
     <DetailHero>
       <Stack gap={2}>
         <Stack direction="horizontal" gap={3} align="center">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-cyan-500/10 dark:bg-cyan-500/20">
-            <Network className="h-5 w-5 text-cyan-700 dark:text-cyan-300" />
+          <div className="bg-muted flex h-10 w-10 shrink-0 items-center justify-center">
+            <Network className="text-muted-foreground h-5 w-5" />
           </div>
           <Heading variant="h1" className="break-all normal-case">
             {server ? formatTunneledMcpDisplay(server) : "Tunneled MCP server"}
@@ -419,7 +425,7 @@ function ConnectionsPanel({
     connectionResult?.activeConsumerSessionCount ?? 0;
 
   return (
-    <section className="rounded-lg border p-6">
+    <section className="border p-6">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
           <Heading variant="h4">Connections</Heading>
@@ -440,12 +446,12 @@ function ConnectionsPanel({
       </div>
 
       {isLoading ? (
-        <div className="rounded-md border border-dashed p-6 text-center">
+        <div className="border border-dashed p-6 text-center">
           <Loader2 className="text-muted-foreground mx-auto mb-2 size-4 animate-spin" />
           <Type muted>Loading live tunnel connections.</Type>
         </div>
       ) : connections.length === 0 ? (
-        <div className="rounded-md border border-dashed p-6 text-center">
+        <div className="border border-dashed p-6 text-center">
           <Type muted>No live tunnel connections.</Type>
         </div>
       ) : (
@@ -472,7 +478,7 @@ function ConnectionCard({ connection }: { connection: TunneledMcpConnection }) {
   const metadataEntries = Object.entries(connection.metadata ?? {});
 
   return (
-    <div className="rounded-md border p-4">
+    <div className="border p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
           <Type className="truncate text-sm font-medium">Tunnel agent</Type>
@@ -556,7 +562,7 @@ function McpServersTab({
   return (
     <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
       {isLoading ? (
-        <McpServersSkeleton />
+        <McpServerCardsSkeleton />
       ) : mcpServers.length > 0 ? (
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
           {mcpServers.map((server) => (
@@ -587,9 +593,7 @@ function McpServersEmptyState({
       await link.mutateAsync({ tunneledMcpServer });
       toast.success("MCP server added");
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to add MCP server";
-      toast.error(message);
+      toastError(error, "Failed to add MCP server");
     }
   };
 
@@ -617,24 +621,6 @@ function McpServersEmptyState({
           </Button.Text>
         </Button>
       </RequireScope>
-    </div>
-  );
-}
-
-function McpServersSkeleton() {
-  return (
-    <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-      {[1, 2, 3].map((i) => (
-        <div key={i} className="bg-card animate-pulse rounded-xl border p-6">
-          <div className="mb-4 flex items-center gap-3">
-            <div className="bg-muted h-10 w-10 rounded-lg" />
-            <div className="flex-1">
-              <div className="bg-muted mb-2 h-4 w-24 rounded" />
-              <div className="bg-muted h-3 w-32 rounded" />
-            </div>
-          </div>
-        </div>
-      ))}
     </div>
   );
 }
@@ -693,14 +679,12 @@ function NameSection({
       ]);
       toast.success("Tunneled MCP name updated");
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to update name";
-      toast.error(message);
+      toastError(error, "Failed to update name");
     }
   };
 
   return (
-    <div className="rounded-lg border p-6">
+    <div className="border p-6">
       <Type variant="subheading" className="mb-1">
         Display Name
       </Type>
@@ -710,7 +694,7 @@ function NameSection({
       <Stack gap={2}>
         <Input
           value={draft}
-          onChange={(value) => setDraft(value)}
+          onChange={(e) => setDraft(e.target.value)}
           placeholder="Internal MCP server"
         />
         {update.isError && (
@@ -769,14 +753,12 @@ function TunnelKeySection({
       setRotatedKey(result);
       toast.success("Tunnel key rotated");
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to rotate tunnel key";
-      toast.error(message);
+      toastError(error, "Failed to rotate tunnel key");
     }
   };
 
   return (
-    <div className="rounded-lg border p-6">
+    <div className="border p-6">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
           <Type variant="subheading" className="mb-1">
@@ -817,7 +799,7 @@ function TunnelKeySection({
               <Alert variant="warning" dismissible={false}>
                 Restart tunnel agents with the new key to reconnect this source.
               </Alert>
-              <div className="bg-muted flex items-center gap-2 rounded-md p-3">
+              <div className="bg-muted flex items-center gap-2 p-3">
                 <code className="min-w-0 flex-1 break-all text-sm">
                   {rotatedKey.tunnelKey}
                 </code>
@@ -902,7 +884,7 @@ function DangerZoneSection({
   const displayName = formatTunneledMcpDisplay(tunneledMcpServer);
 
   return (
-    <div className="border-destructive/30 rounded-lg border p-6">
+    <div className="border-destructive/30 border p-6">
       <Type variant="subheading" className="text-destructive mb-1">
         Danger Zone
       </Type>
@@ -1079,7 +1061,7 @@ TUNNEL_SERVICE_VERSION=${shellQuote(serviceVersion)} \\
 gram tunnel run`;
 
   return (
-    <div className="rounded-lg border p-6">
+    <div className="border p-6">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
           <Type variant="subheading">Connect your MCP server</Type>
@@ -1153,7 +1135,7 @@ function RequiredTunnelConfig({
   ];
 
   return (
-    <div className="bg-muted/30 mb-5 rounded-md border p-4">
+    <div className="bg-muted/30 mb-5 border p-4">
       <Type variant="subheading" className="mb-1">
         Required tunnel config
       </Type>

@@ -1,6 +1,7 @@
 import { type ShadowMCPPolicyState } from "@/components/shadow-mcp/shadowMCPInventoryStatus";
 import { Type } from "../ui/type";
-import { Icon, type IconName } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/icon";
+import type { IconName } from "@/components/ui/icon/names";
 
 function policyStatusText(state: ShadowMCPPolicyState): {
   label: string;

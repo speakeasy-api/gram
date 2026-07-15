@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  AlertCircle,
   Boxes,
   Check,
   Loader2,
@@ -27,9 +26,13 @@ import {
   invalidateAllPlugin,
   usePlugin,
 } from "@gram/client/react-query/plugin";
-import { Badge, Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Alert } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
+import { Card } from "@/components/ui/card";
 import { CopyButton } from "@/components/ui/copy-button";
+import { Field, FieldLabel } from "@/components/ui/field";
 import {
   Sheet,
   SheetContent,
@@ -355,7 +358,7 @@ export function DistributeServersStep({
   return (
     <StepContainer
       icon={
-        <div className="bg-secondary flex h-12 w-12 items-center justify-center rounded-lg">
+        <div className="bg-secondary flex h-12 w-12 items-center justify-center">
           <Boxes className="text-foreground h-6 w-6" />
         </div>
       }
@@ -371,17 +374,17 @@ export function DistributeServersStep({
       onBack={onBack}
     >
       <div className="space-y-6">
-        <div>
-          <label className="text-foreground text-sm font-medium">
+        <Field>
+          <FieldLabel htmlFor="distribute-servers-search">
             Select servers from the catalog
-          </label>
-          <div className="relative mt-3">
+          </FieldLabel>
+          <div className="relative">
             <Search className="text-muted-foreground pointer-events-none absolute top-[18px] left-3 h-4 w-4 -translate-y-1/2" />
             <Input
               type="search"
               value={query}
-              onChange={(value) => {
-                setQuery(value);
+              onChange={(e) => {
+                setQuery(e.target.value);
                 setShowAll(false);
               }}
               onKeyDown={(e) => {
@@ -395,6 +398,7 @@ export function DistributeServersStep({
               }}
               placeholder="Search MCP servers"
               className="pl-9"
+              id="distribute-servers-search"
             />
           </div>
 
@@ -403,13 +407,13 @@ export function DistributeServersStep({
               <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />
             </div>
           ) : matchedServers.length === 0 ? (
-            <p className="text-muted-foreground mt-3 text-sm">
+            <p className="text-muted-foreground text-sm">
               {query
                 ? `No auto-configurable servers match "${query}".`
                 : "No auto-configurable servers available."}
             </p>
           ) : (
-            <div className="mt-3 grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               {visibleServers.map((server) => {
                 const key = serverKey(server);
                 const isDistributed = distributedSpecifiers.has(
@@ -428,21 +432,17 @@ export function DistributeServersStep({
                       }
                     }}
                     className={cn(
-                      "flex min-h-[118px] items-start gap-3 rounded-lg border p-4 text-left transition-all",
+                      "flex min-h-[118px] items-start gap-3 border p-4 text-left transition-all",
                       isSelected && !isDistributed
                         ? "border-foreground bg-secondary"
                         : "border-border bg-card hover:border-foreground/30",
                     )}
                   >
-                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white">
+                    <div className="bg-background/90 dark:bg-neutral-800 flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden">
                       {server.iconUrl ? (
-                        <img
-                          src={server.iconUrl}
-                          alt=""
-                          className="h-6 w-6 rounded"
-                        />
+                        <img src={server.iconUrl} alt="" className="h-6 w-6" />
                       ) : (
-                        <ServerIcon className="h-5 w-5 text-neutral-600" />
+                        <ServerIcon className="text-muted-foreground h-5 w-5" />
                       )}
                     </div>
                     <div className="min-w-0 flex-1">
@@ -472,17 +472,18 @@ export function DistributeServersStep({
           )}
 
           {!showAll && matchedServers.length > INITIAL_VISIBLE && (
-            <button
-              type="button"
+            <Button
+              variant="tertiary"
+              size="sm"
+              className="text-muted-foreground hover:text-foreground w-full"
               onClick={() => setShowAll(true)}
-              className="text-muted-foreground hover:text-foreground mt-2 flex w-full items-center justify-center gap-1.5 py-2 text-sm transition-colors"
             >
-              Show more servers
-            </button>
+              <Button.Text>Show more servers</Button.Text>
+            </Button>
           )}
 
           {!isLoading && (
-            <p className="text-muted-foreground mt-4 text-xs leading-relaxed">
+            <p className="text-muted-foreground text-xs leading-relaxed">
               Only servers that support OAuth dynamic client registration (DCR)
               are shown here — Speakeasy can configure these automatically. More
               servers, including those that need manual OAuth or API key setup,
@@ -493,7 +494,7 @@ export function DistributeServersStep({
               .
             </p>
           )}
-        </div>
+        </Field>
       </div>
 
       <Sheet
@@ -555,15 +556,14 @@ export function DistributeServersStep({
                   publishing them to your marketplace. This can take a moment.
                 </p>
                 {drawerError ? (
-                  <div className="text-destructive bg-destructive/5 border-destructive/20 flex items-start gap-2 rounded-md border p-3 text-sm">
-                    <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                  <Alert variant="error" dismissible={false}>
                     <div>
                       <p className="font-medium">Couldn't add your servers</p>
                       <p className="text-muted-foreground mt-0.5">
                         {drawerError}
                       </p>
                     </div>
-                  </div>
+                  </Alert>
                 ) : (
                   <div className="flex flex-col items-center justify-center gap-3 py-12">
                     <Loader2 className="text-muted-foreground h-8 w-8 animate-spin" />
@@ -595,12 +595,12 @@ export function DistributeServersStep({
                     <p className="text-muted-foreground text-xs">
                       Registers the marketplace for your own account.
                     </p>
-                    <div className="bg-muted/50 flex items-center justify-between gap-2 rounded-md border p-3">
+                    <Card className="bg-muted/50 flex-row items-center justify-between gap-2 p-3">
                       <code className="text-foreground truncate text-xs">
                         {marketplaceCommand}
                       </code>
                       <CopyButton text={marketplaceCommand} />
-                    </div>
+                    </Card>
                   </div>
                 )}
                 {publishStatus?.repoOwner && publishStatus?.repoName && (

@@ -5,8 +5,8 @@ import { RequireScope } from "@/components/require-scope";
 import { InsightsConfig, InsightsProvider } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { Page } from "@/components/page-layout";
-import { Heading } from "@/components/ui/heading";
-import { Button } from "@/components/ui/button";
+import { ListLayout } from "@/components/layouts/list-layout";
+import { Kbd, KbdSequence } from "@/components/ui/kbd";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { Switch } from "@/components/ui/switch";
@@ -21,7 +21,15 @@ import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useAuditLogFacets } from "@gram/client/react-query/auditLogFacets.js";
 import { useAuditLogsInfinite } from "@gram/client/react-query/auditLogs.js";
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
-import { Icon, Input } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  ArrowRight,
+  ChevronDown,
+  ChevronUp,
+  LoaderCircle,
+  Search,
+} from "lucide-react";
 import React, {
   useCallback,
   useDeferredValue,
@@ -41,10 +49,10 @@ import { StructuredDiff } from "@/components/auditlogs/structured-diff";
 import {
   ActionBadge,
   ActionDot,
-  AuditFeedFooter,
   DateGroupHeader,
   FacetSelect,
 } from "@/components/auditlogs/feed";
+import { LoadMoreFooter } from "@/components/ui/load-more-footer";
 import {
   formatDateHeader,
   formatTimeOnly,
@@ -248,7 +256,7 @@ function AuditLogRow({
           <button
             type="button"
             onClick={() => setDiffExpanded((v) => !v)}
-            className="ml-2 text-xs text-blue-500 hover:underline"
+            className="text-primary ml-2 text-xs hover:underline"
           >
             {diffExpanded ? "Hide diff ▴" : "Show diff ▾"}
           </button>
@@ -263,7 +271,7 @@ function AuditLogRow({
           aria-label={`Open ${getSubjectLabel(log)}`}
           className="text-muted-foreground hover:text-foreground focus-visible:text-foreground shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
         >
-          <Icon name="arrow-right" className="size-4" />
+          <ArrowRight className="size-4" />
         </Link>
       )}
     </div>
@@ -277,13 +285,13 @@ function AuditLogRow({
       >
         <div
           className={cn(
-            "rounded-t-lg border border-b-0",
+            "border border-b-0",
             isOdd ? "bg-muted/30" : "bg-background",
           )}
         >
           {rowContent}
         </div>
-        <div className="bg-background rounded-b-lg border border-t-0 px-4 pt-2 pb-3">
+        <div className="bg-background border border-t-0 px-4 pt-2 pb-3">
           <StructuredDiff log={log} />
         </div>
       </div>
@@ -294,7 +302,7 @@ function AuditLogRow({
     <div
       ref={rowRef}
       className={cn(
-        "rounded-none transition-colors",
+        "transition-colors",
         isOdd ? "bg-muted/30" : "bg-background",
         isHighlighted && "border-l-foreground border-l-4",
       )}
@@ -653,10 +661,7 @@ function OrgAuditLogsInner() {
         <>
           {parts.map((part, i) =>
             part.toLowerCase() === searchQuery.toLowerCase() ? (
-              <mark
-                key={i}
-                className="bg-yellow-200 text-inherit dark:bg-yellow-800"
-              >
+              <mark key={i} className="bg-warning-softest text-inherit">
                 {part}
               </mark>
             ) : (
@@ -778,281 +783,264 @@ function OrgAuditLogsInner() {
   ]);
 
   return (
-    <div className="flex w-full flex-col gap-4">
+    <>
       <InsightsConfig contextInfo={insightsContext} />
-      <div>
-        <Heading variant="h4" className="mb-2">
-          Recent activity across your organization
-        </Heading>
-        <Type muted small className="mt-1">
-          Review organization-wide and project-level actions in chronological
-          order. Search by project, actions, or actor.
-        </Type>
-      </div>
-
-      <div className="flex flex-wrap items-end gap-3">
-        <FacetSelect
-          label="Project"
-          value={selectedProjectSlug}
-          onValueChange={(value) => {
-            void setSelectedProjectSlug(value);
-          }}
-          placeholder="All projects"
-          allLabel="All projects"
-          options={projects.map((project) => ({
-            value: project.slug,
-            displayName: project.slug,
-          }))}
+      <ListLayout>
+        <ListLayout.Header
+          title="Recent activity across your organization"
+          subtitle="Review organization-wide and project-level actions in chronological order. Search by project, actions, or actor."
         />
-        <FacetSelect
-          label="Action"
-          value={selectedAction}
-          onValueChange={(value) => {
-            void setSelectedAction(value);
-          }}
-          placeholder="All actions"
-          allLabel="All actions"
-          options={actionOptions}
-        />
-        <FacetSelect
-          label="Actor"
-          value={selectedActor}
-          onValueChange={(value) => {
-            void setSelectedActor(value);
-          }}
-          placeholder="All actors"
-          allLabel="All actors"
-          options={actorOptions}
-        />
-        <div className="flex flex-col gap-1.5">
-          <Type small muted>
-            Filters
-          </Type>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!hasActiveFilters}
-            onClick={() => {
-              void Promise.allSettled([
-                setSelectedProjectSlug("all"),
-                setSelectedAction("all"),
-                setSelectedActor("all"),
-              ]);
-            }}
-          >
-            Clear filters
-          </Button>
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Type small muted>
-            Timestamp
-          </Type>
-          <div className="bg-background flex h-8 items-center gap-2 rounded-md border px-3">
-            <Type
-              small
-              className={
-                tsMode === "utc" ? "text-foreground" : "text-muted-foreground"
-              }
-            >
-              UTC
-            </Type>
-            <Switch
-              checked={tsMode === "local"}
-              onCheckedChange={(checked) => {
-                void setTimestampMode(checked ? "local" : "utc");
+        <ListLayout.List>
+          <div className="flex flex-wrap items-end gap-3">
+            <FacetSelect
+              label="Project"
+              value={selectedProjectSlug}
+              onValueChange={(value) => {
+                void setSelectedProjectSlug(value);
               }}
-              aria-label="Toggle timestamp timezone"
+              placeholder="All projects"
+              allLabel="All projects"
+              options={projects.map((project) => ({
+                value: project.slug,
+                displayName: project.slug,
+              }))}
             />
-            <Type
-              small
-              className={
-                tsMode === "local" ? "text-foreground" : "text-muted-foreground"
-              }
-            >
-              Local
-            </Type>
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-background overflow-hidden rounded-lg border">
-        {/* Search toolbar */}
-        {!isLoading && !error && logs.length > 0 && (
-          <div className="bg-surface/50 flex items-center gap-2 border-b p-2">
-            <div className="text-muted-foreground flex items-center gap-3 text-[11px]">
-              {searchQuery ? (
-                <>
-                  <span className="flex items-center gap-1">
-                    <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
-                      N
-                    </kbd>
-                    <span>/</span>
-                    <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
-                      ⇧N
-                    </kbd>
-                    <span className="ml-0.5">results</span>
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
-                      ESC
-                    </kbd>
-                    <span>clear</span>
-                  </span>
-                </>
-              ) : (
-                <>
-                  <span className="flex items-center gap-1">
-                    <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
-                      J
-                    </kbd>
-                    <span>/</span>
-                    <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
-                      K
-                    </kbd>
-                    <span className="ml-0.5">navigate</span>
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
-                      G
-                    </kbd>
-                    <span>first</span>
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
-                      ⇧G
-                    </kbd>
-                    <span>last</span>
-                  </span>
-                </>
-              )}
+            <FacetSelect
+              label="Action"
+              value={selectedAction}
+              onValueChange={(value) => {
+                void setSelectedAction(value);
+              }}
+              placeholder="All actions"
+              allLabel="All actions"
+              options={actionOptions}
+            />
+            <FacetSelect
+              label="Actor"
+              value={selectedActor}
+              onValueChange={(value) => {
+                void setSelectedActor(value);
+              }}
+              placeholder="All actors"
+              allLabel="All actors"
+              options={actorOptions}
+            />
+            <div className="flex flex-col gap-1.5">
+              <Type small muted>
+                Filters
+              </Type>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={!hasActiveFilters}
+                onClick={() => {
+                  void Promise.allSettled([
+                    setSelectedProjectSlug("all"),
+                    setSelectedAction("all"),
+                    setSelectedActor("all"),
+                  ]);
+                }}
+              >
+                Clear filters
+              </Button>
             </div>
-            <div className="relative ml-auto">
-              <Icon
-                name="search"
-                className="text-muted-foreground pointer-events-none absolute top-1/2 left-2 size-3 -translate-y-1/2"
-              />
-              <Input
-                data-audit-search-input
-                type="text"
-                placeholder="Search audit logs"
-                value={searchQuery}
-                onChange={(e) => handleSearchChange(e.target.value)}
-                onFocus={() => setSearchInputFocused(true)}
-                onBlur={() => setSearchInputFocused(false)}
-                className="w-56 rounded-sm py-1 pr-16 pl-7 text-xs"
-              />
-              {searchQuery || searchInputFocused ? (
-                searchMatchIndices.length > 0 ? (
-                  <div className="absolute top-1/2 right-1 flex -translate-y-1/2 items-center gap-0.5">
-                    <span className="text-muted-foreground bg-muted rounded-sm px-1 py-0.5 text-[10px]">
-                      ESC
-                    </span>
-                    <span className="text-muted-foreground mx-0.5 text-[10px]">
-                      {effectiveSearchIndex + 1}/{searchMatchIndices.length}
-                    </span>
-                    <div className="flex items-center">
-                      <button
-                        onClick={() => navigateToResult("prev")}
-                        className="hover:bg-muted rounded-sm p-0.5 opacity-60 transition-opacity hover:opacity-100"
-                        title="Previous (Shift+N)"
-                      >
-                        <Icon name="chevron-up" className="size-2.5" />
-                      </button>
-                      <button
-                        onClick={() => navigateToResult("next")}
-                        className="hover:bg-muted rounded-sm p-0.5 opacity-60 transition-opacity hover:opacity-100"
-                        title="Next (N)"
-                      >
-                        <Icon name="chevron-down" className="size-2.5" />
-                      </button>
+            <div className="flex flex-col gap-1.5">
+              <Type small muted>
+                Timestamp
+              </Type>
+              <div className="bg-background flex h-8 items-center gap-2 border px-3">
+                <Type
+                  small
+                  className={
+                    tsMode === "utc"
+                      ? "text-foreground"
+                      : "text-muted-foreground"
+                  }
+                >
+                  UTC
+                </Type>
+                <Switch
+                  checked={tsMode === "local"}
+                  onCheckedChange={(checked) => {
+                    void setTimestampMode(checked ? "local" : "utc");
+                  }}
+                  aria-label="Toggle timestamp timezone"
+                />
+                <Type
+                  small
+                  className={
+                    tsMode === "local"
+                      ? "text-foreground"
+                      : "text-muted-foreground"
+                  }
+                >
+                  Local
+                </Type>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-background overflow-hidden border">
+            {/* Search toolbar */}
+            {!isLoading && !error && logs.length > 0 && (
+              <div className="bg-surface/50 flex items-center gap-2 border-b p-2">
+                <div className="text-muted-foreground flex items-center gap-3 text-[11px]">
+                  {searchQuery ? (
+                    <>
+                      <span className="flex items-center gap-1">
+                        <KbdSequence keys={["N", "⇧N"]} separator="/" />
+                        <span className="ml-0.5">results</span>
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Kbd>ESC</Kbd>
+                        <span>clear</span>
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="flex items-center gap-1">
+                        <KbdSequence keys={["J", "K"]} separator="/" />
+                        <span className="ml-0.5">navigate</span>
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Kbd>G</Kbd>
+                        <span>first</span>
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Kbd>⇧G</Kbd>
+                        <span>last</span>
+                      </span>
+                    </>
+                  )}
+                </div>
+                <div className="relative ml-auto">
+                  <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-2 size-3 -translate-y-1/2" />
+                  <Input
+                    data-audit-search-input
+                    type="text"
+                    placeholder="Search audit logs"
+                    value={searchQuery}
+                    onChange={(e) => handleSearchChange(e.target.value)}
+                    onFocus={() => setSearchInputFocused(true)}
+                    onBlur={() => setSearchInputFocused(false)}
+                    className="w-56 py-1 pr-16 pl-7 text-xs"
+                  />
+                  {searchQuery || searchInputFocused ? (
+                    searchMatchIndices.length > 0 ? (
+                      <div className="absolute top-1/2 right-1 flex -translate-y-1/2 items-center gap-0.5">
+                        <Kbd>ESC</Kbd>
+                        <span className="text-muted-foreground mx-0.5 text-[10px]">
+                          {effectiveSearchIndex + 1}/{searchMatchIndices.length}
+                        </span>
+                        <div className="flex items-center">
+                          <button
+                            onClick={() => navigateToResult("prev")}
+                            className="hover:bg-muted p-0.5 opacity-60 transition-opacity hover:opacity-100"
+                            title="Previous (Shift+N)"
+                          >
+                            <ChevronUp className="size-2.5" />
+                          </button>
+                          <button
+                            onClick={() => navigateToResult("next")}
+                            className="hover:bg-muted p-0.5 opacity-60 transition-opacity hover:opacity-100"
+                            title="Next (N)"
+                          >
+                            <ChevronDown className="size-2.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="absolute top-1/2 right-1.5 flex -translate-y-1/2 items-center gap-0.5">
+                        <Kbd>ESC</Kbd>
+                        <span className="text-muted-foreground ml-0.5 text-[10px]">
+                          0/0
+                        </span>
+                      </div>
+                    )
+                  ) : (
+                    <div className="absolute top-1/2 right-2 flex -translate-y-1/2 items-center">
+                      <Kbd>/</Kbd>
                     </div>
-                  </div>
-                ) : (
-                  <div className="absolute top-1/2 right-1.5 flex -translate-y-1/2 items-center gap-0.5">
-                    <span className="text-muted-foreground bg-muted rounded-sm px-1 py-0.5 text-[10px]">
-                      ESC
-                    </span>
-                    <span className="text-muted-foreground ml-0.5 text-[10px]">
-                      0/0
-                    </span>
-                  </div>
-                )
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div
+              ref={logsContainerRef}
+              tabIndex={0}
+              className="focus:outline-none"
+            >
+              {isLoading ? (
+                <div className="text-muted-foreground flex items-center justify-center gap-2 py-12">
+                  <LoaderCircle className="size-4 animate-spin" />
+                  <span>Loading audit logs...</span>
+                </div>
+              ) : error ? (
+                <div className="flex flex-col items-center gap-2 py-12 text-center">
+                  <Type className="font-medium">Error loading audit logs</Type>
+                  <Type muted small>
+                    {error.message}
+                  </Type>
+                </div>
+              ) : logs.length === 0 ? (
+                <div className="flex flex-col items-center gap-2 py-12 text-center">
+                  <Type className="font-medium">No audit logs found</Type>
+                  <Type muted small>
+                    {selectedProjectSlug === "all" &&
+                    selectedAction === "all" &&
+                    selectedActor === "all"
+                      ? "Activity will appear here as changes are made across your organization."
+                      : "No audit logs match the selected filters."}
+                  </Type>
+                </div>
               ) : (
-                <div className="absolute top-1/2 right-2 flex -translate-y-1/2 items-center">
-                  <span className="text-muted-foreground bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
-                    /
-                  </span>
+                <div>
+                  {dateGroups.map((group) => (
+                    <React.Fragment key={group.key}>
+                      <DateGroupHeader date={group.date} mode={tsMode} />
+                      {group.logs.map((log, rowIndex) => {
+                        const idx = logFlatIndices.get(log.id) ?? 0;
+                        return (
+                          <AuditLogRow
+                            key={log.id}
+                            log={log}
+                            orgSlug={orgSlug ?? ""}
+                            timestampMode={tsMode}
+                            isOdd={rowIndex % 2 === 1}
+                            isHighlighted={idx === currentLogIndex}
+                            rowRef={(el) => {
+                              if (el) logRefs.current.set(idx, el);
+                              else logRefs.current.delete(idx);
+                            }}
+                            highlightMatch={
+                              searchQuery ? highlightMatch : undefined
+                            }
+                          />
+                        );
+                      })}
+                    </React.Fragment>
+                  ))}
                 </div>
               )}
             </div>
+
+            {(logs.length > 0 || isFetchingNextPage) && (
+              <LoadMoreFooter
+                shown={logs.length}
+                noun="audit logs"
+                hasMore={hasNextPage ?? false}
+                isLoading={isFetchingNextPage}
+                isRefreshing={isFetching}
+                endLabel="End of audit log history"
+                onLoadMore={() => {
+                  void fetchNextPage();
+                }}
+              />
+            )}
           </div>
-        )}
-
-        <div ref={logsContainerRef} tabIndex={0} className="focus:outline-none">
-          {isLoading ? (
-            <div className="text-muted-foreground flex items-center justify-center gap-2 py-12">
-              <Icon name="loader-circle" className="size-4 animate-spin" />
-              <span>Loading audit logs...</span>
-            </div>
-          ) : error ? (
-            <div className="flex flex-col items-center gap-2 py-12 text-center">
-              <Type className="font-medium">Error loading audit logs</Type>
-              <Type muted small>
-                {error.message}
-              </Type>
-            </div>
-          ) : logs.length === 0 ? (
-            <div className="flex flex-col items-center gap-2 py-12 text-center">
-              <Type className="font-medium">No audit logs found</Type>
-              <Type muted small>
-                {selectedProjectSlug === "all" &&
-                selectedAction === "all" &&
-                selectedActor === "all"
-                  ? "Activity will appear here as changes are made across your organization."
-                  : "No audit logs match the selected filters."}
-              </Type>
-            </div>
-          ) : (
-            <div>
-              {dateGroups.map((group) => (
-                <React.Fragment key={group.key}>
-                  <DateGroupHeader date={group.date} mode={tsMode} />
-                  {group.logs.map((log, rowIndex) => {
-                    const idx = logFlatIndices.get(log.id) ?? 0;
-                    return (
-                      <AuditLogRow
-                        key={log.id}
-                        log={log}
-                        orgSlug={orgSlug ?? ""}
-                        timestampMode={tsMode}
-                        isOdd={rowIndex % 2 === 1}
-                        isHighlighted={idx === currentLogIndex}
-                        rowRef={(el) => {
-                          if (el) logRefs.current.set(idx, el);
-                          else logRefs.current.delete(idx);
-                        }}
-                        highlightMatch={
-                          searchQuery ? highlightMatch : undefined
-                        }
-                      />
-                    );
-                  })}
-                </React.Fragment>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <AuditFeedFooter
-          count={logs.length}
-          hasNextPage={hasNextPage ?? false}
-          isFetching={isFetching}
-          isFetchingNextPage={isFetchingNextPage}
-          onLoadMore={() => {
-            void fetchNextPage();
-          }}
-        />
-      </div>
-    </div>
+        </ListLayout.List>
+      </ListLayout>
+    </>
   );
 }

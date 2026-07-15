@@ -1,14 +1,12 @@
-import { DetailHero } from "@/components/detail-hero";
+import { DetailLayout } from "@/components/layouts/detail-layout";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Heading } from "@/components/ui/heading";
 import {
   PageTabsTrigger,
   Tabs,
   TabsContent,
   TabsList,
 } from "@/components/ui/tabs";
-import { Type } from "@/components/ui/type";
 import { useOrgRoutes } from "@/routes";
 import { useOrganizationRemoteSessionClient } from "@gram/client/react-query/organizationRemoteSessionClient.js";
 import { useOrganizationRemoteSessionIssuer } from "@gram/client/react-query/organizationRemoteSessionIssuer.js";
@@ -88,24 +86,24 @@ export default function RemoteSessionClientDetail(): JSX.Element {
           substitutions={{ [issuerId]: issuerLabel, [clientId]: label }}
         />
       </Page.Header>
-      <Page.Body fullWidth noPadding className="gap-0">
-        <DetailHero>
-          <div className="flex items-center gap-3">
-            <Type small muted>
-              Remote Session Client
-            </Type>
-            {client && <ScopeBadge projectScoped={Boolean(client.projectId)} />}
-          </div>
-          <Heading variant="h1" className="break-all normal-case">
-            {label}
-          </Heading>
-        </DetailHero>
+      <Page.Body>
+        <DetailLayout>
+          <DetailLayout.Header
+            eyebrow="Remote Session Client"
+            title={
+              <span className="inline-flex items-center gap-3 break-all">
+                {label}
+                {client && (
+                  <ScopeBadge projectScoped={Boolean(client.projectId)} />
+                )}
+              </span>
+            }
+          />
 
-        <RequireScope scope={["org:read", "org:admin"]} level="page">
-          <Tabs value={activeTab} className="flex w-full flex-1 flex-col">
-            <div className="shrink-0 border-b">
-              <div className="mx-auto max-w-[1270px] px-8">
-                <TabsList className="h-auto gap-6 rounded-none bg-transparent p-0">
+          <RequireScope scope={["org:read", "org:admin"]} level="page">
+            <Tabs value={activeTab} className="flex w-full flex-1 flex-col">
+              <DetailLayout.Tabs>
+                <TabsList className="h-auto gap-6 bg-transparent p-0">
                   <PageTabsTrigger value="overview" asChild>
                     <Link to={tabHref("overview")}>Overview</Link>
                   </PageTabsTrigger>
@@ -119,31 +117,33 @@ export default function RemoteSessionClientDetail(): JSX.Element {
                     <Link to={tabHref("settings")}>Settings</Link>
                   </PageTabsTrigger>
                 </TabsList>
-              </div>
-            </div>
+              </DetailLayout.Tabs>
 
-            <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
-              <TabsContent value="overview" className="mt-0">
-                {client && <OverviewTab client={client} />}
-              </TabsContent>
-              <TabsContent value="mcp-servers" className="mt-0">
-                <McpServersTab clientId={clientId} />
-              </TabsContent>
-              <TabsContent value="sessions" className="mt-0">
-                <SessionsTab clientId={clientId} />
-              </TabsContent>
-              <TabsContent value="settings" className="mt-0">
-                {client && (
-                  <SettingsTab
-                    key={client.id}
-                    client={client}
-                    issuerId={issuerId}
-                  />
-                )}
-              </TabsContent>
-            </div>
-          </Tabs>
-        </RequireScope>
+              <DetailLayout.Content>
+                <DetailLayout.Main>
+                  <TabsContent value="overview" className="mt-0">
+                    {client && <OverviewTab client={client} />}
+                  </TabsContent>
+                  <TabsContent value="mcp-servers" className="mt-0">
+                    <McpServersTab clientId={clientId} />
+                  </TabsContent>
+                  <TabsContent value="sessions" className="mt-0">
+                    <SessionsTab clientId={clientId} />
+                  </TabsContent>
+                  <TabsContent value="settings" className="mt-0">
+                    {client && (
+                      <SettingsTab
+                        key={client.id}
+                        client={client}
+                        issuerId={issuerId}
+                      />
+                    )}
+                  </TabsContent>
+                </DetailLayout.Main>
+              </DetailLayout.Content>
+            </Tabs>
+          </RequireScope>
+        </DetailLayout>
       </Page.Body>
     </Page>
   );

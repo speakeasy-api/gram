@@ -7,12 +7,12 @@ import {
   type OptionsById,
 } from "@/components/filters";
 import { Page } from "@/components/page-layout";
+import { ListLayout } from "@/components/layouts/list-layout";
 import { RequireScope } from "@/components/require-scope";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useOrgRoutes } from "@/routes";
 import { RevokeSessionsDialog } from "@/components/sessions/RevokeSessionsDialog";
 import { SessionTableRow } from "@/components/sessions/SessionTableRow";
-import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DotTable } from "@/components/ui/dot-table";
 import {
@@ -23,7 +23,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { LoadMoreButton } from "@/components/ui/load-more-footer";
 import { Type } from "@/components/ui/type";
+import { Button } from "@/components/ui/button";
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { sessionStatus, subjectLabel } from "@/lib/user-session-status";
@@ -204,21 +206,23 @@ function UserSessionsInner(): JSX.Element {
   } else if (isError && sessions.length === 0) {
     listBody = (
       <div className="flex items-center justify-between gap-3">
-        <p className="text-destructive text-sm">Couldn&apos;t load sessions.</p>
-        <Button variant="ghost" size="sm" onClick={() => void refetch()}>
+        <Type className="text-destructive text-sm">
+          Couldn&apos;t load sessions.
+        </Type>
+        <Button variant="tertiary" size="sm" onClick={() => void refetch()}>
           Retry
         </Button>
       </div>
     );
   } else if (sessions.length === 0) {
     listBody = (
-      <p className="text-muted-foreground text-sm">No sessions found</p>
+      <Type className="text-muted-foreground text-sm">No sessions found</Type>
     );
   } else if (filteredSessions.length === 0) {
     listBody = (
-      <p className="text-muted-foreground text-sm">
+      <Type className="text-muted-foreground text-sm">
         No sessions match your search
-      </p>
+      </Type>
     );
   } else {
     listBody = (
@@ -257,114 +261,106 @@ function UserSessionsInner(): JSX.Element {
   }
 
   return (
-    <Page.Section>
-      <Page.Section.Title>MCP Connections</Page.Section.Title>
-      <Page.Section.Description>
-        View and manage active connections agents have established with your MCP
-        servers, established via OAuth. Revoke a connection to immediately cut
-        off access.
-      </Page.Section.Description>
-      <Page.Section.Body>
-        <div className="space-y-4">
-          <div className="flex flex-col gap-1.5">
-            <Type small muted>
-              Project
-            </Type>
-            <Select value={projectSlug} onValueChange={handleProjectChange}>
-              <SelectTrigger size="sm" className="bg-background w-[260px]">
-                <SelectValue placeholder="Select project" />
-              </SelectTrigger>
-              <SelectContent>
-                {projects.map((p) => (
-                  <SelectItem key={p.slug} value={p.slug}>
-                    {p.slug}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+    <>
+      <ListLayout>
+        <ListLayout.Header
+          title="MCP Connections"
+          subtitle="View and manage active connections agents have established with your MCP servers, established via OAuth. Revoke a connection to immediately cut off access."
+        />
 
-          <Page.Toolbar>
-            <Page.Toolbar.Search
-              value={searchQuery}
-              onChange={setSearchQuery}
-              debounceMs={150}
-              placeholder="Search sessions"
-            />
-            <Page.Toolbar.Filters
-              schema={USER_SESSION_FILTERS}
-              values={filters.values}
-              optionsById={optionsById}
-              onChange={
-                filters.setValue as (id: string, value: FilterValue) => void
-              }
-              onClear={filters.clearValue as (id: string) => void}
-              onClearAll={filters.clearAll}
-            />
-            <Page.Toolbar.Count>
-              {filteredSessions.length} session
-              {filteredSessions.length === 1 ? "" : "s"}
-            </Page.Toolbar.Count>
-            <Page.Toolbar.Refresh
-              onRefresh={() => void refetch()}
-              isRefreshing={isFetching}
-            />
-          </Page.Toolbar>
-
-          {selectionEnabled && selectedIds.length > 0 && (
-            <div className="border-border bg-muted/30 flex items-center justify-between gap-3 rounded-md border px-3 py-2">
-              <Type small>{selectedIds.length} selected</Type>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setSelected(new Set())}
-                >
-                  Clear
-                </Button>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => setBulkConfirmOpen(true)}
-                >
-                  Revoke {selectedIds.length}
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {listBody}
-
-          {hasNextPage && (
-            <div className="flex justify-center">
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={isFetchingNextPage}
-                onClick={() => void fetchNextPage()}
-              >
-                {isFetchingNextPage ? "Loading…" : "Load more"}
-              </Button>
-            </div>
-          )}
+        <div className="mb-4 flex flex-col gap-1.5">
+          <Type small muted>
+            Project
+          </Type>
+          <Select value={projectSlug} onValueChange={handleProjectChange}>
+            <SelectTrigger size="sm" className="bg-background w-[260px]">
+              <SelectValue placeholder="Select project" />
+            </SelectTrigger>
+            <SelectContent>
+              {projects.map((p) => (
+                <SelectItem key={p.slug} value={p.slug}>
+                  {p.slug}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
-        <RevokeSessionsDialog
-          sessionIds={selectedIds}
-          open={bulkConfirmOpen}
-          onOpenChange={setBulkConfirmOpen}
-          onRevoked={(succeededIds) => {
-            // Clear only the sessions that actually revoked; keep any failures
-            // selected so the user can retry them.
-            setSelected((prev) => {
-              const next = new Set(prev);
-              for (const id of succeededIds) next.delete(id);
-              return next;
-            });
-            void refetch();
-          }}
-        />
-      </Page.Section.Body>
-    </Page.Section>
+        <ListLayout.Toolbar>
+          <ListLayout.Toolbar.Search
+            value={searchQuery}
+            onChange={setSearchQuery}
+            debounceMs={150}
+            placeholder="Search sessions"
+          />
+          <ListLayout.Toolbar.Filters
+            schema={USER_SESSION_FILTERS}
+            values={filters.values}
+            optionsById={optionsById}
+            onChange={
+              filters.setValue as (id: string, value: FilterValue) => void
+            }
+            onClear={filters.clearValue as (id: string) => void}
+            onClearAll={filters.clearAll}
+          />
+          <ListLayout.Toolbar.Count>
+            {filteredSessions.length} session
+            {filteredSessions.length === 1 ? "" : "s"}
+          </ListLayout.Toolbar.Count>
+          <ListLayout.Toolbar.Refresh
+            onRefresh={() => void refetch()}
+            isRefreshing={isFetching}
+          />
+        </ListLayout.Toolbar>
+
+        {selectionEnabled && selectedIds.length > 0 && (
+          <div className="border-border bg-muted/30 mt-4 flex items-center justify-between gap-3 border px-3 py-2">
+            <Type small>{selectedIds.length} selected</Type>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="tertiary"
+                size="sm"
+                onClick={() => setSelected(new Set())}
+              >
+                Clear
+              </Button>
+              <Button
+                variant="destructive-primary"
+                size="sm"
+                onClick={() => setBulkConfirmOpen(true)}
+              >
+                Revoke {selectedIds.length}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        <ListLayout.List>{listBody}</ListLayout.List>
+
+        <ListLayout.Footer>
+          <LoadMoreButton
+            hasMore={hasNextPage}
+            isLoading={isFetchingNextPage}
+            onLoadMore={() => void fetchNextPage()}
+          />
+        </ListLayout.Footer>
+      </ListLayout>
+
+      <RevokeSessionsDialog
+        sessionIds={selectedIds}
+        open={bulkConfirmOpen}
+        onOpenChange={setBulkConfirmOpen}
+        onRevoked={(succeededIds) => {
+          // Clear only the sessions that actually revoked; keep any failures
+          // selected so the user can retry them.
+          setSelected((prev) => {
+            const next = new Set(prev);
+            for (const id of succeededIds) next.delete(id);
+            return next;
+          });
+          void refetch();
+        }}
+      />
+    </>
   );
 }

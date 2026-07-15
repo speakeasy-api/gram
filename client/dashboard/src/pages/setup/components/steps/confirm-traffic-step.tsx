@@ -4,6 +4,8 @@ import { AnimatePresence, motion } from "motion/react";
 import { useVerifyOnboardingHooksSetup } from "@gram/client/react-query/verifyOnboardingHooksSetup.js";
 import type { OnboardingHookEvent } from "@gram/client/models/components/onboardinghookevent.js";
 import { StepContainer } from "../step-container";
+import { Card } from "@/components/ui/card";
+import { StatusDot } from "@/components/ui/status-dot";
 
 interface ConfirmTrafficStepProps {
   onComplete: () => void;
@@ -145,7 +147,7 @@ export function ConfirmTrafficStep({
     return (
       <StepContainer
         icon={
-          <div className="bg-secondary flex h-12 w-12 items-center justify-center rounded-lg">
+          <div className="bg-secondary flex h-12 w-12 items-center justify-center">
             <Activity className="text-foreground h-6 w-6" />
           </div>
         }
@@ -175,7 +177,7 @@ export function ConfirmTrafficStep({
   return (
     <StepContainer
       icon={
-        <div className="bg-secondary flex h-12 w-12 items-center justify-center rounded-lg">
+        <div className="bg-secondary flex h-12 w-12 items-center justify-center">
           <Activity className="text-foreground h-6 w-6" />
         </div>
       }
@@ -187,16 +189,13 @@ export function ConfirmTrafficStep({
       onBack={onBack}
     >
       <div className="space-y-6">
-        <div className="border-border bg-card overflow-hidden rounded-lg border">
+        <Card className="gap-0 overflow-hidden p-0">
           <div className="border-border flex items-center justify-between border-b px-4 py-3">
             <span className="text-foreground text-sm font-medium">
               Recent activity
             </span>
-            <span className="flex items-center gap-2 text-xs font-medium text-emerald-600">
-              <span className="relative flex h-2.5 w-2.5">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-75" />
-                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
-              </span>
+            <span className="text-default-success flex items-center gap-2 text-xs font-medium">
+              <StatusDot tone="success" pulse />
               Live tail
             </span>
           </div>
@@ -257,12 +256,12 @@ export function ConfirmTrafficStep({
               </div>
             )}
           </div>
-        </div>
+        </Card>
 
         {hasEvents && (
-          <div className="bg-foreground/5 border-foreground/10 rounded-lg border p-4">
+          <Card className="bg-foreground/5 border-foreground/10">
             <div className="flex items-start gap-3">
-              <div className="bg-foreground mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded">
+              <div className="bg-foreground mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center">
                 <PartyPopper className="text-background h-4 w-4" />
               </div>
               <div>
@@ -275,7 +274,7 @@ export function ConfirmTrafficStep({
                 </p>
               </div>
             </div>
-          </div>
+          </Card>
         )}
       </div>
     </StepContainer>

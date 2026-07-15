@@ -1,6 +1,8 @@
 import { Page } from "@/components/page-layout";
+import { WorkbenchLayout } from "@/components/layouts/workbench-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/button";
+import { ResizablePanel } from "@/components/ui/resizable-panel";
 import {
   Select,
   SelectContent,
@@ -29,7 +31,6 @@ import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { invalidateTemplate } from "@gram/client/react-query/template.js";
 import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
 import { useUpdateToolsetMutation } from "@gram/client/react-query/updateToolset.js";
-import { ResizablePanel } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { MessageCircle, Plus, ScrollTextIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -239,7 +240,7 @@ function PlaygroundInner() {
   }
 
   const logsButton = (
-    <Button size="sm" variant="ghost" onClick={() => setShowLogs(!showLogs)}>
+    <Button size="sm" variant="tertiary" onClick={() => setShowLogs(!showLogs)}>
       <ScrollTextIcon className="mr-2 size-4" />
       {showLogs ? "Hide" : "Show"} Logs
     </Button>
@@ -252,86 +253,98 @@ function PlaygroundInner() {
     </div>
   );
 
+  const configPane = (
+    <>
+      {selectedServer?.kind === "toolset" && (
+        <ToolsetPanel
+          toolsetSlug={selectedServer.toolsetSlug}
+          serverSelector={serverSelector}
+          setSelectedEnvironment={setSelectedEnvironment}
+          temperature={temperature}
+          setTemperature={setTemperature}
+          model={model}
+          setModel={setModel}
+          maxTokens={maxTokens}
+          setMaxTokens={setMaxTokens}
+          onPlaygroundEnvironmentSlug={setPlaygroundEnvironmentSlug}
+        />
+      )}
+      {selectedServer?.kind === "remote" && (
+        <RemoteServerPanel
+          mcpServerId={selectedServer.mcpServerId}
+          isIssuerGated={selectedServer.isIssuerGated}
+          serverSelector={serverSelector}
+          temperature={temperature}
+          setTemperature={setTemperature}
+          model={model}
+          setModel={setModel}
+          maxTokens={maxTokens}
+          setMaxTokens={setMaxTokens}
+        />
+      )}
+    </>
+  );
+
+  const chatArea = (
+    <div className="flex h-full flex-col">
+      {!selectedServer && (
+        <div className="flex h-full items-center justify-center">
+          <Type muted>Select an MCP server to start chatting</Type>
+        </div>
+      )}
+      {selectedServer?.kind === "toolset" && (
+        <PlaygroundElements
+          toolsetSlug={selectedServer.toolsetSlug}
+          environmentSlug={selectedEnvironment}
+          model={model}
+          playgroundEnvironmentSlug={playgroundEnvironmentSlug}
+          additionalActions={additionalActions}
+        />
+      )}
+      {selectedServer?.kind === "remote" && (
+        <PlaygroundRemoteChat
+          mcpServerId={selectedServer.mcpServerId}
+          isIssuerGated={selectedServer.isIssuerGated}
+          environmentSlug={selectedEnvironment}
+          model={model}
+          additionalActions={additionalActions}
+        />
+      )}
+    </div>
+  );
+
+  const previewNode = showLogs ? (
+    <ResizablePanel
+      direction="horizontal"
+      className="[&>[role='separator']]:bg-neutral-softest [&>[role='separator']]:hover:bg-primary h-full [&>[role='separator']]:relative [&>[role='separator']]:w-px [&>[role='separator']]:border-0 [&>[role='separator']]:before:absolute [&>[role='separator']]:before:inset-y-0 [&>[role='separator']]:before:-right-1 [&>[role='separator']]:before:-left-1 [&>[role='separator']]:before:cursor-col-resize"
+    >
+      <ResizablePanel.Pane minSize={35}>{chatArea}</ResizablePanel.Pane>
+      <ResizablePanel.Pane minSize={20} defaultSize={30}>
+        <PlaygroundLogsPanel
+          chatId={chat.id}
+          toolsetSlug={
+            selectedServer?.kind === "toolset"
+              ? selectedServer.toolsetSlug
+              : undefined
+          }
+          onClose={() => setShowLogs(false)}
+        />
+      </ResizablePanel.Pane>
+    </ResizablePanel>
+  ) : (
+    chatArea
+  );
+
   return (
     <Page>
       <Page.Header>
         <Page.Header.Breadcrumbs fullWidth />
       </Page.Header>
-      <Page.Body fullWidth fullHeight className="p-0">
-        <ResizablePanel
-          direction="horizontal"
-          className="[&>[role='separator']]:bg-neutral-softest [&>[role='separator']]:hover:bg-primary h-full [&>[role='separator']]:relative [&>[role='separator']]:w-px [&>[role='separator']]:border-0 [&>[role='separator']]:before:absolute [&>[role='separator']]:before:inset-y-0 [&>[role='separator']]:before:-right-1 [&>[role='separator']]:before:-left-1 [&>[role='separator']]:before:cursor-col-resize"
-        >
-          <ResizablePanel.Pane minSize={20} defaultSize={25}>
-            {selectedServer?.kind === "toolset" && (
-              <ToolsetPanel
-                toolsetSlug={selectedServer.toolsetSlug}
-                serverSelector={serverSelector}
-                setSelectedEnvironment={setSelectedEnvironment}
-                temperature={temperature}
-                setTemperature={setTemperature}
-                model={model}
-                setModel={setModel}
-                maxTokens={maxTokens}
-                setMaxTokens={setMaxTokens}
-                onPlaygroundEnvironmentSlug={setPlaygroundEnvironmentSlug}
-              />
-            )}
-            {selectedServer?.kind === "remote" && (
-              <RemoteServerPanel
-                mcpServerId={selectedServer.mcpServerId}
-                isIssuerGated={selectedServer.isIssuerGated}
-                serverSelector={serverSelector}
-                temperature={temperature}
-                setTemperature={setTemperature}
-                model={model}
-                setModel={setModel}
-                maxTokens={maxTokens}
-                setMaxTokens={setMaxTokens}
-              />
-            )}
-          </ResizablePanel.Pane>
-          <ResizablePanel.Pane minSize={35} order={0}>
-            <div className="flex h-full flex-col">
-              {!selectedServer && (
-                <div className="flex h-full items-center justify-center">
-                  <Type muted>Select an MCP server to start chatting</Type>
-                </div>
-              )}
-              {selectedServer?.kind === "toolset" && (
-                <PlaygroundElements
-                  toolsetSlug={selectedServer.toolsetSlug}
-                  environmentSlug={selectedEnvironment}
-                  model={model}
-                  playgroundEnvironmentSlug={playgroundEnvironmentSlug}
-                  additionalActions={additionalActions}
-                />
-              )}
-              {selectedServer?.kind === "remote" && (
-                <PlaygroundRemoteChat
-                  mcpServerId={selectedServer.mcpServerId}
-                  isIssuerGated={selectedServer.isIssuerGated}
-                  environmentSlug={selectedEnvironment}
-                  model={model}
-                  additionalActions={additionalActions}
-                />
-              )}
-            </div>
-          </ResizablePanel.Pane>
-          {showLogs && (
-            <ResizablePanel.Pane minSize={20} defaultSize={30}>
-              <PlaygroundLogsPanel
-                chatId={chat.id}
-                toolsetSlug={
-                  selectedServer?.kind === "toolset"
-                    ? selectedServer.toolsetSlug
-                    : undefined
-                }
-                onClose={() => setShowLogs(false)}
-              />
-            </ResizablePanel.Pane>
-          )}
-        </ResizablePanel>
+      <Page.Body fullWidth fullHeight noPadding>
+        <WorkbenchLayout>
+          <WorkbenchLayout.Header eyebrow="Playground" title="Playground" />
+          <WorkbenchLayout.Body config={configPane} preview={previewNode} />
+        </WorkbenchLayout>
       </Page.Body>
     </Page>
   );

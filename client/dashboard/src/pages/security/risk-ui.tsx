@@ -16,7 +16,8 @@ import {
   scoreToRating,
   type SeverityRating,
 } from "./risk-utils";
-import { Badge } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import {
   RevealAllContext,
@@ -176,19 +177,23 @@ export function RevealAllToggle({
     <SimpleTooltip
       tooltip={revealAll ? "Hide all matches" : "Reveal all matches"}
     >
-      <button
-        type="button"
+      <Button
+        variant="secondary"
+        size="sm"
         onClick={() => setRevealAll(!revealAll)}
         aria-pressed={revealAll}
         aria-label={revealAll ? "Hide all matches" : "Reveal all matches"}
-        className={
-          className ??
-          "border-border hover:bg-muted text-muted-foreground inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm transition-colors"
-        }
+        className={className}
       >
-        {revealAll ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
-        <span>{revealAll ? "Hide all" : "Reveal all"}</span>
-      </button>
+        <Button.Icon>
+          {revealAll ? (
+            <Eye className="size-4" />
+          ) : (
+            <EyeOff className="size-4" />
+          )}
+        </Button.Icon>
+        <Button.Text>{revealAll ? "Hide all" : "Reveal all"}</Button.Text>
+      </Button>
     </SimpleTooltip>
   );
 }

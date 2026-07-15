@@ -21,7 +21,10 @@ import {
   useRemoteMcpServerHeaders,
 } from "@gram/client/react-query/remoteMcpServerHeaders.js";
 import { useUpdateRemoteMcpServerHeaderMutation } from "@gram/client/react-query/updateRemoteMcpServerHeader.js";
-import { Alert, Badge, Button, Stack } from "@speakeasy-api/moonshine";
+import { Alert } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Stack } from "@/components/ui/stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Eye, EyeOff, Loader2, Plus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -531,7 +534,7 @@ function HeaderDraftRow({
             <Input
               value={draft.name}
               disabled={readOnly}
-              onChange={(value) => onChange({ ...draft, name: value })}
+              onChange={(e) => onChange({ ...draft, name: e.target.value })}
               placeholder="Authorization"
             />
           </div>
@@ -585,7 +588,9 @@ function HeaderDraftRow({
             <Input
               value={draft.staticValue}
               disabled={readOnly}
-              onChange={(value) => onChange({ ...draft, staticValue: value })}
+              onChange={(e) =>
+                onChange({ ...draft, staticValue: e.target.value })
+              }
               onFocus={(event) => {
                 // Editing a redacted secret should replace it, not append to
                 // the `***` placeholder. Select it so the first keystroke wins.
@@ -623,8 +628,8 @@ function HeaderDraftRow({
             <Input
               value={draft.valueFromRequestHeader}
               disabled={readOnly}
-              onChange={(value) =>
-                onChange({ ...draft, valueFromRequestHeader: value })
+              onChange={(e) =>
+                onChange({ ...draft, valueFromRequestHeader: e.target.value })
               }
               placeholder="X-Forwarded-Authorization"
             />

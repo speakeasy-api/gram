@@ -23,7 +23,8 @@ import {
 } from "@/components/ui/sheet";
 import { AGENT_PLATFORMS } from "../setup-data";
 import type { AgentPlatform, PlatformSetupStatus } from "../types";
-import { Button, Link } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/button";
+import { Link } from "@/components/ui/link";
 import { cn } from "@/lib/utils";
 import { PLATFORM_LOGOS, INVERT_LOGO_IN_DARK } from "./platform-logos";
 

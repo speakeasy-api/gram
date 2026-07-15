@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { buildAgentTokenTimeSeriesChartData } from "./agentTokenTimeSeriesChartData";
+import { buildAgentTokenTimeSeries } from "./agentTokenTimeSeriesChartData";
 
-describe("buildAgentTokenTimeSeriesChartData", () => {
-  it("preserves category chart data and returns timestamps for zoom", () => {
+describe("buildAgentTokenTimeSeries", () => {
+  it("shapes token buckets into one series per token kind", () => {
     const first = Date.UTC(2026, 0, 1, 12, 0);
     const second = Date.UTC(2026, 0, 1, 13, 0);
 
-    const result = buildAgentTokenTimeSeriesChartData(
+    const series = buildAgentTokenTimeSeries(
       [
         {
           bucketTimeUnixNano: `${BigInt(first) * BigInt(1_000_000)}`,
@@ -23,22 +23,32 @@ describe("buildAgentTokenTimeSeriesChartData", () => {
           totalCost: 0.2,
         },
       ],
-      second - first,
       "tokens",
     );
 
-    expect(result.timestamps).toEqual([first, second]);
-    expect(result.chartData.labels).toHaveLength(2);
-    expect(result.chartData.datasets[0]?.data).toEqual([10, 30]);
-    expect(result.chartData.datasets[1]?.data).toEqual([20, 40]);
-    expect(result.chartData.datasets[2]?.data).toEqual([5, 15]);
-    expect(result.chartData.datasets[3]?.data).toEqual([35, 85]);
+    expect(series.map((s) => s.label)).toEqual([
+      "Input Tokens",
+      "Output Tokens",
+      "Cache Read",
+    ]);
+    expect(series[0]?.data).toEqual([
+      { x: first, y: 10 },
+      { x: second, y: 30 },
+    ]);
+    expect(series[1]?.data).toEqual([
+      { x: first, y: 20 },
+      { x: second, y: 40 },
+    ]);
+    expect(series[2]?.data).toEqual([
+      { x: first, y: 5 },
+      { x: second, y: 15 },
+    ]);
   });
 
-  it("builds cost data without changing the category chart shape", () => {
+  it("builds a single cost series", () => {
     const first = Date.UTC(2026, 0, 1, 12, 0);
 
-    const result = buildAgentTokenTimeSeriesChartData(
+    const series = buildAgentTokenTimeSeries(
       [
         {
           bucketTimeUnixNano: `${BigInt(first) * BigInt(1_000_000)}`,
@@ -48,13 +58,11 @@ describe("buildAgentTokenTimeSeriesChartData", () => {
           totalCost: 0.123,
         },
       ],
-      60 * 60 * 1000,
       "cost",
     );
 
-    expect(result.timestamps).toEqual([first]);
-    expect(result.chartData.datasets).toHaveLength(2);
-    expect(result.chartData.datasets[0]?.data).toEqual([0.123]);
-    expect(result.chartData.datasets[1]?.data).toEqual([0.123]);
+    expect(series).toHaveLength(1);
+    expect(series[0]?.label).toBe("Cost");
+    expect(series[0]?.data).toEqual([{ x: first, y: 0.123 }]);
   });
 });

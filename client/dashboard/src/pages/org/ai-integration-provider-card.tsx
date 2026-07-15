@@ -1,6 +1,6 @@
 import { RequireScope } from "@/components/require-scope";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Card } from "@/components/ui/card";
+import { useConfirm } from "@/components/ui/use-confirm";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -13,7 +13,10 @@ import { Switch } from "@/components/ui/switch";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useAiIntegrationConfig } from "@gram/client/react-query/aiIntegrationConfig";
-import { Badge, Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import {
   AlertCircle,
   CheckCircle2,
@@ -35,15 +38,20 @@ export function AIIntegrationProviderCard({
   const apiKeyFieldId = `${provider.provider}-ai-integration-api-key`;
   const orgIdFieldId = `${provider.provider}-ai-integration-org-id`;
   const billingModeFieldId = `${provider.provider}-ai-integration-billing-mode`;
+  const { confirm: requestConfirm, dialog } = useConfirm();
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!form.isConfigured) return;
-    if (!window.confirm(`Delete the ${provider.name} AI integration?`)) return;
+    const confirmed = await requestConfirm({
+      title: `Delete the ${provider.name} AI integration?`,
+      destructive: true,
+    });
+    if (!confirmed) return;
     form.remove();
   };
 
   return (
-    <div className="border-border bg-card flex flex-col gap-4 rounded-lg border p-4">
+    <Card className="gap-4">
       <Stack direction="horizontal" justify="space-between" align="center">
         <Stack gap={1}>
           <Stack direction="horizontal" align="center" gap={2}>
@@ -78,7 +86,7 @@ export function AIIntegrationProviderCard({
             form.hasSavedKey ? "•••••• (saved)" : provider.apiKeyPlaceholder
           }
           value={form.apiKey}
-          onChange={form.setApiKey}
+          onChange={(e) => form.setApiKey(e.target.value)}
           type="password"
           disabled={form.isLoading || form.isMutating}
         />
@@ -98,7 +106,7 @@ export function AIIntegrationProviderCard({
             id={orgIdFieldId}
             placeholder={provider.organizationIdPlaceholder}
             value={form.organizationId}
-            onChange={form.setOrganizationId}
+            onChange={(e) => form.setOrganizationId(e.target.value)}
             disabled={form.isLoading || form.isMutating}
           />
         </Stack>
@@ -134,13 +142,15 @@ export function AIIntegrationProviderCard({
       <Stack direction="horizontal" justify="space-between" align="center">
         <RequireScope scope="org:admin" level="component">
           <Button
-            variant="destructive"
+            variant="destructive-primary"
             size="sm"
-            onClick={handleDelete}
+            onClick={() => void handleDelete()}
             disabled={!form.isConfigured || form.isMutating}
           >
-            <Trash2 className="mr-1 h-3.5 w-3.5" />
-            Delete
+            <Button.LeftIcon>
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button.LeftIcon>
+            <Button.Text>Delete</Button.Text>
           </Button>
         </RequireScope>
         <RequireScope scope="org:admin" level="component">
@@ -149,7 +159,8 @@ export function AIIntegrationProviderCard({
           </Button>
         </RequireScope>
       </Stack>
-    </div>
+      {dialog}
+    </Card>
   );
 }
 

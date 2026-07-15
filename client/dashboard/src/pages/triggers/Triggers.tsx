@@ -1,7 +1,6 @@
 import { Page } from "@/components/page-layout";
-import { Badge } from "@/components/ui/badge";
+import { ListLayout } from "@/components/layouts/list-layout";
 import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -10,6 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Type } from "@/components/ui/type";
+import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import {
   Collapsible,
   CollapsibleContent,
@@ -30,14 +30,22 @@ import { TriggerInstance } from "@gram/client/models/components/triggerinstance.
 import { TriggerDefinition } from "@gram/client/models/components/triggerdefinition.js";
 import { CreateTriggerInstanceFormTargetKind as TargetKind } from "@gram/client/models/components/createtriggerinstanceform.js";
 import { useRoutes } from "@/routes";
-import {
-  Button,
-  type Column,
-  Icon,
-  Stack,
-  Table,
-} from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { type Column, Table } from "@/components/ui/table";
+import { Input } from "@/components/ui/input";
 import { useQueryClient } from "@tanstack/react-query";
+import {
+  Check,
+  ChevronRight,
+  Copy,
+  FileText,
+  LoaderCircle,
+  Plus,
+  Trash2,
+  Zap,
+} from "lucide-react";
 import { useState } from "react";
 import { Outlet } from "react-router";
 
@@ -89,32 +97,50 @@ function isTriggerTargetKind(value: string): value is TriggerTargetKindValue {
 function StatusBadge({ status }: { status: string }) {
   switch (status) {
     case "active":
-      return <Badge variant="default">Active</Badge>;
+      return <Badge>Active</Badge>;
     case "fired":
-      return <Badge variant="secondary">Fired</Badge>;
+      return (
+        <Badge variant="neutral" background={false}>
+          Fired
+        </Badge>
+      );
     case "cancelled":
-      return <Badge variant="secondary">Cancelled</Badge>;
+      return (
+        <Badge variant="neutral" background={false}>
+          Cancelled
+        </Badge>
+      );
     case "paused":
     default:
-      return <Badge variant="secondary">Paused</Badge>;
+      return (
+        <Badge variant="neutral" background={false}>
+          Paused
+        </Badge>
+      );
   }
 }
 
 function KindBadge({ kind }: { kind: string }) {
   if (kind === "webhook") {
-    return <Badge variant="outline">Webhook</Badge>;
+    return (
+      <Badge variant="neutral" background={false}>
+        Webhook
+      </Badge>
+    );
   }
-  return <Badge variant="outline">Schedule</Badge>;
+  return (
+    <Badge variant="neutral" background={false}>
+      Schedule
+    </Badge>
+  );
 }
 
 function WebhookUrlPill({ url }: { url: string }) {
-  const [copied, setCopied] = useState(false);
+  const { copied, copy } = useCopyToClipboard();
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
-    void navigator.clipboard.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    void copy(url);
   };
   return (
     <button
@@ -128,10 +154,11 @@ function WebhookUrlPill({ url }: { url: string }) {
       </span>
       <span aria-hidden="true" className="bg-border h-3 w-px shrink-0" />
       <span className="text-muted-foreground truncate font-mono">{url}</span>
-      <Icon
-        name={copied ? "check" : "copy"}
-        className="text-muted-foreground group-hover:text-foreground h-3 w-3 shrink-0"
-      />
+      {copied ? (
+        <Check className="text-muted-foreground group-hover:text-foreground h-3 w-3 shrink-0" />
+      ) : (
+        <Copy className="text-muted-foreground group-hover:text-foreground h-3 w-3 shrink-0" />
+      )}
     </button>
   );
 }
@@ -140,7 +167,7 @@ function TriggersEmptyState({ onCreate }: { onCreate: () => void }) {
   return (
     <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
       <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
-        <Icon name="zap" className="text-muted-foreground h-6 w-6" />
+        <Zap className="text-muted-foreground h-6 w-6" />
       </div>
       <Type variant="subheading" className="mb-1">
         No triggers yet
@@ -151,7 +178,7 @@ function TriggersEmptyState({ onCreate }: { onCreate: () => void }) {
       </Type>
       <Button onClick={onCreate}>
         <Button.LeftIcon>
-          <Icon name="plus" className="h-4 w-4" />
+          <Plus className="h-4 w-4" />
         </Button.LeftIcon>
         <Button.Text>Create Trigger</Button.Text>
       </Button>
@@ -235,7 +262,7 @@ function TriggersTable({
             queryParams={{ af: triggerLogsFilterParam(trigger.id) }}
             className="text-muted-foreground hover:text-foreground no-underline hover:no-underline"
           >
-            <Icon name="file-text" className="h-4 w-4" />
+            <FileText className="h-4 w-4" />
           </routes.logs.Link>
         </div>
       ),
@@ -330,7 +357,7 @@ function ConfigField({
       )}
       <Input
         value={typeof config[fieldKey] === "string" ? config[fieldKey] : ""}
-        onChange={(val) => onChange({ ...config, [fieldKey]: val })}
+        onChange={(e) => onChange({ ...config, [fieldKey]: e.target.value })}
         placeholder={typeof prop.default === "string" ? prop.default : ""}
       />
     </div>
@@ -382,10 +409,7 @@ function TriggerConfigFields({
       {optionalEntries.length > 0 && (
         <Collapsible>
           <CollapsibleTrigger className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm transition-colors [&[data-state=open]>svg]:rotate-90">
-            <Icon
-              name="chevron-right"
-              className="h-4 w-4 transition-transform"
-            />
+            <ChevronRight className="h-4 w-4 transition-transform" />
             Advanced
           </CollapsibleTrigger>
           <CollapsibleContent>
@@ -587,7 +611,11 @@ function TriggerDialog({
               <Type variant="body" className="mb-1 font-medium">
                 Name
               </Type>
-              <Input value={name} onChange={setName} placeholder="My Trigger" />
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="My Trigger"
+              />
             </div>
 
             {!isEditing && (
@@ -722,7 +750,7 @@ function TriggerDialog({
               </Type>
               <Input
                 value={targetDisplay}
-                onChange={setTargetDisplay}
+                onChange={(e) => setTargetDisplay(e.target.value)}
                 placeholder="e.g. My Assistant"
               />
             </div>
@@ -733,7 +761,7 @@ function TriggerDialog({
               </Type>
               <Input
                 value={targetRef}
-                onChange={setTargetRef}
+                onChange={(e) => setTargetRef(e.target.value)}
                 placeholder="e.g. assistant ID or slug"
               />
             </div>
@@ -767,7 +795,7 @@ function TriggerDialog({
                   onClick={() => setConfirmDelete(true)}
                 >
                   <Button.LeftIcon>
-                    <Icon name="trash-2" className="h-4 w-4" />
+                    <Trash2 className="h-4 w-4" />
                   </Button.LeftIcon>
                   <Button.Text>Delete</Button.Text>
                 </Button>
@@ -797,10 +825,14 @@ function TriggerDialog({
 
 /**
  * Triggers list, dialog, and empty/loading states without a surrounding
- * `Page` shell. Rendered standalone by the `/triggers` route (`TriggersIndex`)
- * and embedded as a tab on the Assistants page.
+ * `Page` shell. Rendered standalone by the `/triggers` route (`TriggersIndex`,
+ * as a `ListLayout`) and embedded as a tab on the Assistants page (`embedded`,
+ * keeping the plain `Page.Section` block — a second page-level header inside
+ * a tab panel would be redundant with the tab's own label).
  */
-export function TriggersPanel(): JSX.Element {
+export function TriggersPanel({
+  embedded = false,
+}: { embedded?: boolean } = {}): JSX.Element {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingTrigger, setEditingTrigger] = useState<TriggerInstance | null>(
     null,
@@ -831,43 +863,51 @@ export function TriggersPanel(): JSX.Element {
     setDialogOpen(true);
   };
 
+  const createButton = triggers.length > 0 && (
+    <Button onClick={openCreate}>
+      <Button.LeftIcon>
+        <Plus className="h-4 w-4" />
+      </Button.LeftIcon>
+      <Button.Text>Create Trigger</Button.Text>
+    </Button>
+  );
+
+  const body = isLoading ? (
+    <Stack align="center" justify="center" className="py-16">
+      <LoaderCircle className="text-muted-foreground h-6 w-6 animate-spin" />
+    </Stack>
+  ) : triggers.length === 0 ? (
+    <TriggersEmptyState onCreate={openCreate} />
+  ) : (
+    <TriggersTable
+      triggers={triggers}
+      definitions={definitions}
+      onEdit={openEdit}
+    />
+  );
+
   return (
     <>
-      <Page.Section>
-        <Page.Section.Title>Triggers</Page.Section.Title>
-        <Page.Section.Description>
-          Connect external events to your assistants via webhooks or cron
-          schedules.
-        </Page.Section.Description>
-        <Page.Section.CTA>
-          {triggers.length > 0 && (
-            <Button onClick={openCreate}>
-              <Button.LeftIcon>
-                <Icon name="plus" className="h-4 w-4" />
-              </Button.LeftIcon>
-              <Button.Text>Create Trigger</Button.Text>
-            </Button>
-          )}
-        </Page.Section.CTA>
-        <Page.Section.Body>
-          {isLoading ? (
-            <Stack align="center" justify="center" className="py-16">
-              <Icon
-                name="loader-circle"
-                className="text-muted-foreground h-6 w-6 animate-spin"
-              />
-            </Stack>
-          ) : triggers.length === 0 ? (
-            <TriggersEmptyState onCreate={openCreate} />
-          ) : (
-            <TriggersTable
-              triggers={triggers}
-              definitions={definitions}
-              onEdit={openEdit}
-            />
-          )}
-        </Page.Section.Body>
-      </Page.Section>
+      {embedded ? (
+        <Page.Section>
+          <Page.Section.Title>Triggers</Page.Section.Title>
+          <Page.Section.Description>
+            Connect external events to your assistants via webhooks or cron
+            schedules.
+          </Page.Section.Description>
+          <Page.Section.CTA>{createButton}</Page.Section.CTA>
+          <Page.Section.Body>{body}</Page.Section.Body>
+        </Page.Section>
+      ) : (
+        <ListLayout>
+          <ListLayout.Header
+            title="Triggers"
+            subtitle="Connect external events to your assistants via webhooks or cron schedules."
+            actions={createButton}
+          />
+          <ListLayout.List>{body}</ListLayout.List>
+        </ListLayout>
+      )}
 
       <TriggerDialog
         open={dialogOpen}

@@ -1,13 +1,17 @@
 import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
+import { ListLayout } from "@/components/layouts/list-layout";
 import { Page } from "@/components/page-layout";
+import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { RequireScope } from "@/components/require-scope";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { SearchBar } from "@/components/ui/search-bar";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
+import { Progress } from "@/components/ui/progress";
+import { StatusDot, type StatusDotTone } from "@/components/ui/status-dot";
 import { Switch } from "@/components/ui/switch";
 import { Dialog } from "@/components/ui/dialog";
 import { SimpleTooltip } from "@/components/ui/tooltip";
@@ -26,19 +30,19 @@ import {
   TabsList,
 } from "@/components/ui/tabs";
 import { ExclusionsTab, type ExclusionSheetState } from "./ExclusionsTab";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { type Column, Table } from "@/components/ui/table";
+import { Input } from "@/components/ui/input";
 import {
-  Badge,
-  Button,
-  type Column,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Icon,
-  Stack,
-  Table,
-} from "@speakeasy-api/moonshine";
-import type { BadgeProps, IconName } from "@speakeasy-api/moonshine";
+} from "@/components/ui/dropdown-menu";
+import { DynamicIcon, type IconName } from "@/components/ui/dynamic-icon";
+import { type BadgeProps } from "@/components/ui/badge";
 import {
   Plus,
   Shield,
@@ -71,6 +75,7 @@ import {
   invalidateAllRiskPoliciesStatus,
 } from "@gram/client/react-query/riskPoliciesStatus.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
+import type { WorkflowStatus } from "@gram/client/models/components/riskpolicystatus.js";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { Role } from "@gram/client/models/components/role.js";
 import {
@@ -129,11 +134,11 @@ export function DetectorCard({
   return (
     <div
       className={cn(
-        "flex gap-3 rounded-lg border p-3 transition-colors",
+        "flex gap-3 border p-3 transition-colors",
         selected ? "border-foreground bg-muted/40" : "border-border",
       )}
     >
-      <Icon
+      <DynamicIcon
         name={meta.icon as IconName}
         className="text-muted-foreground mt-0.5 size-5 shrink-0"
       />
@@ -204,7 +209,7 @@ function ApprovedDomainsConfig({
       </p>
       <Input
         value={value}
-        onChange={onChange}
+        onChange={(e) => onChange(e.target.value)}
         placeholder="e.g. acme.com, corp.acme.com"
       />
     </div>
@@ -330,7 +335,7 @@ export function CustomizeRulesSheet({
         <div className="px-6 pt-3">
           <Input
             value={search}
-            onChange={setSearch}
+            onChange={(e) => setSearch(e.target.value)}
             placeholder={`Search ${rules.length} ${meta.label.toLowerCase()} rules…`}
           />
         </div>
@@ -435,7 +440,7 @@ function RuleToggleRow({
   onToggle: (on: boolean) => void;
 }) {
   return (
-    <div className="hover:bg-muted flex items-center justify-between gap-3 rounded-md px-2 py-2 text-sm">
+    <div className="hover:bg-muted flex items-center justify-between gap-3 px-2 py-2 text-sm">
       <span className="min-w-0 truncate">{rule.title}</span>
       <Switch checked={checked} onCheckedChange={onToggle} />
     </div>
@@ -692,56 +697,51 @@ function PolicyCenterContent() {
   // page, otherwise the Exclusions tab (and global exclusions) would be
   // unreachable for projects that have no policies yet.
   const policiesEmptyState = (
-    <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
-      <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
-        <Shield className="text-muted-foreground h-6 w-6" />
-      </div>
-      <Type variant="subheading" className="mb-1">
-        No Risk Policies
-      </Type>
-      <Type small muted className="mb-4 max-w-md text-center">
-        Risk policies scan your chat messages for secrets and sensitive data.
-        Create your first policy to get started.
-      </Type>
-      <Button
-        onClick={() => {
-          const {
-            sources,
-            presidioEntities,
-            promptInjectionRules,
-            disabledRules: payloadDisabled,
-          } = categoriesToPayload(
-            new Set<RuleCategory>(["secrets", "pii"]),
-            new Set(),
-          );
-          createMutation.mutate({
-            request: {
-              createRiskPolicyRequestBody: {
-                autoName: true,
-                enabled: true,
-                sources,
-                presidioEntities,
-                promptInjectionRules,
-                disabledRules: payloadDisabled,
-                customRuleIds: [],
+    <InlineEmptyState
+      icon={<Shield />}
+      title="No Risk Policies"
+      description="Risk policies scan your chat messages for secrets and sensitive data. Create your first policy to get started."
+      action={
+        <Button
+          onClick={() => {
+            const {
+              sources,
+              presidioEntities,
+              promptInjectionRules,
+              disabledRules: payloadDisabled,
+            } = categoriesToPayload(
+              new Set<RuleCategory>(["secrets", "pii"]),
+              new Set(),
+            );
+            createMutation.mutate({
+              request: {
+                createRiskPolicyRequestBody: {
+                  autoName: true,
+                  enabled: true,
+                  sources,
+                  presidioEntities,
+                  promptInjectionRules,
+                  disabledRules: payloadDisabled,
+                  customRuleIds: [],
+                },
               },
-            },
-          });
-        }}
-        disabled={createMutation.isPending}
-      >
-        <Button.Text className="flex gap-2">
-          {createMutation.isPending ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Creating...
-            </>
-          ) : (
-            "Get Started"
-          )}
-        </Button.Text>
-      </Button>
-    </div>
+            });
+          }}
+          disabled={createMutation.isPending}
+        >
+          <Button.Text className="flex gap-2">
+            {createMutation.isPending ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Creating...
+              </>
+            ) : (
+              "Get Started"
+            )}
+          </Button.Text>
+        </Button>
+      }
+    />
   );
 
   const insightsContext = [
@@ -978,14 +978,12 @@ function PolicyCenterContent() {
   }
 
   const cta = isLoading ? null : (
-    <Page.Section.CTA>
-      <Button onClick={headerAction.onClick}>
-        <Button.LeftIcon>
-          <Plus className="mr-2 h-4 w-4" />
-        </Button.LeftIcon>
-        <Button.Text>{headerAction.label}</Button.Text>
-      </Button>
-    </Page.Section.CTA>
+    <Button onClick={headerAction.onClick}>
+      <Button.LeftIcon>
+        <Plus className="mr-2 h-4 w-4" />
+      </Button.LeftIcon>
+      <Button.Text>{headerAction.label}</Button.Text>
+    </Button>
   );
 
   return (
@@ -1000,14 +998,18 @@ function PolicyCenterContent() {
           title="Policy insights"
           subtitle="Ask about policy status, coverage, and detector capabilities. Match content is redacted before it reaches the assistant."
         />
-        <Page.Section>
-          <Page.Section.Title stage="beta">Policies</Page.Section.Title>
-          <Page.Section.Description>
-            Configure policies to detect secrets, sensitive information, and
-            prompt-defined risks in agent session interactions.
-          </Page.Section.Description>
-          {cta}
-          <Page.Section.Body>
+        <ListLayout>
+          <ListLayout.Header
+            title={
+              <span className="inline-flex items-center gap-2">
+                Policies
+                <ReleaseStageBadge stage="beta" />
+              </span>
+            }
+            subtitle="Configure policies to detect secrets, sensitive information, and prompt-defined risks in agent session interactions."
+            actions={cta}
+          />
+          <ListLayout.List>
             <Tabs
               value={activeTab}
               onValueChange={(value) =>
@@ -1015,7 +1017,7 @@ function PolicyCenterContent() {
               }
             >
               <div className="border-b">
-                <TabsList className="h-auto justify-start gap-4 rounded-none bg-transparent p-0 text-sm">
+                <TabsList className="h-auto justify-start gap-4 bg-transparent p-0 text-sm">
                   <PageTabsTrigger value="policies">Policies</PageTabsTrigger>
                   <PageTabsTrigger value="exclusions">
                     Exclusions
@@ -1033,8 +1035,8 @@ function PolicyCenterContent() {
                 />
               </TabsContent>
             </Tabs>
-          </Page.Section.Body>
-        </Page.Section>
+          </ListLayout.List>
+        </ListLayout>
 
         {/* View Run Panel */}
         <Sheet
@@ -1061,7 +1063,7 @@ function PolicyCenterContent() {
             </Dialog.Header>
             <Stack gap={4}>
               <Type variant="body">
-                <code className="bg-muted rounded px-1 py-0.5 font-mono font-bold">
+                <code className="bg-muted px-1 py-0.5 font-mono font-bold">
                   {policyToDelete?.policy.name}
                 </code>{" "}
                 policy will be permanently deleted.
@@ -1172,7 +1174,7 @@ export function PolicyAudiencePicker({
           selectAudienceChoice(value as PolicyAudienceChoice)
         }
       >
-        <div className="border-border divide-border divide-y rounded-lg border">
+        <div className="border-border divide-border divide-y border">
           <PolicyAudienceChoiceRow
             id="policy-audience-everyone"
             value="everyone"
@@ -1205,7 +1207,7 @@ export function PolicyAudiencePicker({
       )}
 
       {audienceChoice === "roles" && (
-        <div className="border-border rounded-lg border">
+        <div className="border-border border">
           <AudiencePrincipalSection title="Roles">
             {roles.length === 0 ? (
               <p className="text-muted-foreground px-4 py-3 text-sm">
@@ -1297,7 +1299,7 @@ function SpecificUsersAudienceSection({
   const hasSearch = userSearch.trim().length > 0;
 
   return (
-    <div className="border-border rounded-lg border">
+    <div className="border-border border">
       <div className="space-y-4 p-4">
         <SearchBar
           value={userSearch}
@@ -1311,7 +1313,7 @@ function SpecificUsersAudienceSection({
             <div className="text-muted-foreground text-xs font-medium">
               Selected users
             </div>
-            <div className="border-border divide-border divide-y overflow-hidden rounded-md border">
+            <div className="border-border divide-border divide-y overflow-hidden border">
               {selectedUserOptions.map((option) => (
                 <AudiencePrincipalRow
                   key={option.principalUrn}
@@ -1385,7 +1387,7 @@ function UserSearchResults({
       <div className="text-muted-foreground text-xs font-medium">
         Search results
       </div>
-      <div className="border-border divide-border divide-y overflow-hidden rounded-md border">
+      <div className="border-border divide-border divide-y overflow-hidden border">
         {results.map((member) => {
           const principalUrn = member.principalUrn;
           return (
@@ -1523,6 +1525,15 @@ function AudiencePrincipalRow({
 /*  RunPanel                                                                  */
 /* -------------------------------------------------------------------------- */
 
+const WORKFLOW_STATUS_PRESENTATION: Record<
+  WorkflowStatus,
+  { tone: StatusDotTone; pulse: boolean }
+> = {
+  running: { tone: "success", pulse: true },
+  sleeping: { tone: "warning", pulse: false },
+  not_started: { tone: "neutral", pulse: false },
+};
+
 function RunPanel({ policy }: { policy: RiskPolicy }) {
   const {
     data: status,
@@ -1556,30 +1567,23 @@ function RunPanel({ policy }: { policy: RiskPolicy }) {
           <>
             {/* Status + Version row */}
             <div className="grid grid-cols-2 gap-3">
-              <div className="border-border rounded-lg border p-3">
-                <p className="text-muted-foreground mb-1 text-xs font-medium">
+              <div className="border-border border p-3">
+                <p className="text-muted-foreground mb-1 font-mono text-xs tracking-[0.08em] uppercase">
                   Status
                 </p>
-                <div className="flex items-center gap-2">
-                  <span
-                    className={cn(
-                      "inline-block h-2.5 w-2.5 rounded-full",
-                      status.workflowStatus === "running" &&
-                        "animate-pulse bg-green-500",
-                      status.workflowStatus === "sleeping" && "bg-yellow-500",
-                      status.workflowStatus === "not_started" &&
-                        "bg-muted-foreground",
-                    )}
-                  />
-                  <span className="text-sm font-medium capitalize">
-                    {status.workflowStatus === "not_started"
-                      ? "Idle"
-                      : status.workflowStatus}
-                  </span>
-                </div>
+                <StatusDot
+                  {...WORKFLOW_STATUS_PRESENTATION[status.workflowStatus]}
+                  label={
+                    <span className="font-medium capitalize">
+                      {status.workflowStatus === "not_started"
+                        ? "Idle"
+                        : status.workflowStatus}
+                    </span>
+                  }
+                />
               </div>
-              <div className="border-border rounded-lg border p-3">
-                <p className="text-muted-foreground mb-1 text-xs font-medium">
+              <div className="border-border border p-3">
+                <p className="text-muted-foreground mb-1 font-mono text-xs tracking-[0.08em] uppercase">
                   Version
                 </p>
                 <p className="text-sm font-medium">v{status.policyVersion}</p>
@@ -1587,7 +1591,7 @@ function RunPanel({ policy }: { policy: RiskPolicy }) {
             </div>
 
             {/* Progress */}
-            <div className="border-border rounded-lg border p-4">
+            <div className="border-border border p-4">
               <div className="mb-3 flex items-center justify-between">
                 <p className="text-sm font-medium">Analysis Progress</p>
                 <div className="flex items-center gap-2">
@@ -1610,12 +1614,7 @@ function RunPanel({ policy }: { policy: RiskPolicy }) {
                   </span>
                 </div>
               </div>
-              <div className="bg-muted mb-2 h-2 overflow-hidden rounded-full">
-                <div
-                  className="bg-primary h-full rounded-full transition-all duration-500"
-                  style={{ width: `${pct}%` }}
-                />
-              </div>
+              <Progress value={pct} className="mb-2" />
               <p className="text-muted-foreground text-xs">
                 {status.analyzedMessages.toLocaleString()} of{" "}
                 {status.totalMessages.toLocaleString()} messages analyzed
@@ -1629,11 +1628,11 @@ function RunPanel({ policy }: { policy: RiskPolicy }) {
             </div>
 
             {/* Findings */}
-            <div className="border-border rounded-lg border p-4">
-              <p className="text-muted-foreground mb-1 text-xs font-medium">
+            <div className="border-border border p-4">
+              <p className="text-muted-foreground mb-1 font-mono text-xs tracking-[0.08em] uppercase">
                 Findings
               </p>
-              <p className="text-3xl font-bold tracking-tight">
+              <p className="font-display text-3xl font-thin tracking-[-0.02em] tabular-nums">
                 {status.findingsCount.toLocaleString()}
               </p>
               <p className="text-muted-foreground mt-1 text-xs">
@@ -1683,7 +1682,7 @@ export function ScopeCard({
   return (
     <label
       className={cn(
-        "flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors",
+        "flex cursor-pointer items-start gap-3 border p-3 transition-colors",
         checked
           ? "border-foreground bg-muted/40"
           : "border-border hover:bg-muted/30",
@@ -1736,7 +1735,7 @@ export function ActionPicker({
             key={opt.value}
             htmlFor={`action-${opt.value}`}
             className={cn(
-              "flex items-start gap-3 rounded-lg border p-3.5 transition-colors",
+              "flex items-start gap-3 border p-3.5 transition-colors",
               disabled
                 ? "border-border cursor-not-allowed opacity-60"
                 : selected
@@ -1824,7 +1823,7 @@ export function RuleSelectList({
         )}
       </button>
       {expanded && (
-        <div className="border-border divide-border divide-y rounded-lg border">
+        <div className="border-border divide-border divide-y border">
           <p className="text-muted-foreground px-4 py-3 text-xs">
             {description}
           </p>

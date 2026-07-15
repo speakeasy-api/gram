@@ -1,8 +1,9 @@
-import { AnyField } from "@/components/moon/any-field";
-import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
 import { Dialog } from "@/components/ui/dialog";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Heading } from "@/components/ui/heading";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
+import { ListLayout } from "@/components/layouts/list-layout";
 import {
   Select,
   SelectContent,
@@ -13,6 +14,7 @@ import {
 import { Type } from "@/components/ui/type";
 import { useOrganization, useUser } from "@/contexts/Auth";
 import { HumanizeDateTime } from "@/lib/dates";
+import { toastError } from "@/lib/toast-error";
 import { formatDistanceToNow } from "date-fns";
 import { z } from "zod";
 import {
@@ -32,20 +34,18 @@ import { useRoles } from "@gram/client/react-query/roles.js";
 import { OrganizationInvitation } from "@gram/client/models/components/organizationinvitation.js";
 import { OrganizationUser } from "@gram/client/models/components/organizationuser.js";
 import { SimpleTooltip } from "@/components/ui/tooltip";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
+import { Alert } from "@/components/ui/alert";
+import { type Column, Table } from "@/components/ui/table";
+import { Input } from "@/components/ui/input";
 import {
-  Alert,
-  Button,
-  Column,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  Icon,
-  Input,
-  Stack,
-  Table,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/dropdown-menu";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ChevronLeft,
@@ -58,7 +58,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { RequireScope } from "@/components/require-scope";
@@ -103,6 +103,7 @@ export default function Team(): JSX.Element {
 }
 
 function TeamInner() {
+  const inviteEmailFieldId = useId();
   const organization = useOrganization();
   const user = useUser();
   const { isRbacEnabled } = useRBAC();
@@ -203,17 +204,13 @@ function TeamInner() {
 
   const inviteMutation = useSendInviteMutation({
     onError: (error) => {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to send invite",
-      );
+      toastError(error, "Failed to send invite");
     },
   });
 
   const removeMemberMutation = useRemoveOrganizationUserMutation({
     onError: (error) => {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to remove member",
-      );
+      toastError(error, "Failed to remove member");
     },
   });
 
@@ -449,7 +446,7 @@ function TeamInner() {
                     <Link
                       key={roleId}
                       to={`${orgRoutes.access.roles.href()}?editRole=${roleId}`}
-                      className="text-foreground hover:text-primary rounded-sm border px-1.5 py-0.5 text-xs no-underline transition-colors"
+                      className="text-foreground hover:text-primary border px-1.5 py-0.5 text-xs no-underline transition-colors"
                     >
                       {getRoleName(roleId)}
                     </Link>
@@ -458,7 +455,7 @@ function TeamInner() {
                     <SimpleTooltip
                       tooltip={overflow.map((id) => getRoleName(id)).join(", ")}
                     >
-                      <span className="text-muted-foreground cursor-pointer rounded-sm border px-1.5 py-0.5 text-xs">
+                      <span className="text-muted-foreground cursor-pointer border px-1.5 py-0.5 text-xs">
                         +{overflow.length} more
                       </span>
                     </SimpleTooltip>
@@ -517,7 +514,7 @@ function TeamInner() {
               <button
                 type="button"
                 className={cn(
-                  "text-muted-foreground hover:bg-accent hover:text-foreground flex h-8 w-8 cursor-pointer items-center justify-center rounded-md transition-colors",
+                  "text-muted-foreground hover:bg-accent hover:text-foreground flex h-8 w-8 cursor-pointer items-center justify-center transition-colors",
                 )}
               >
                 <Ellipsis className="h-4 w-4" />
@@ -773,44 +770,37 @@ function TeamInner() {
     <>
       <Stack direction="vertical" gap={8}>
         {/* Members Section */}
-        <div>
-          <Stack
-            direction="horizontal"
-            justify="space-between"
-            align="center"
-            className="mb-4"
-          >
-            <Stack direction="vertical" gap={1}>
-              <Heading variant="h4">Team Members</Heading>
-              <Type variant="body" className="text-muted-foreground">
-                Manage who has access to {organization.name}
-              </Type>
-            </Stack>
-            <RequireScope scope="org:admin" level="component">
-              {organization.scimEnabled ? (
-                <SimpleTooltip tooltip="Managed by your identity provider">
-                  <span className="inline-flex">
-                    <Button
-                      onClick={() => setIsInviteDialogOpen(true)}
-                      disabled
-                    >
-                      <Button.LeftIcon>
-                        <UserPlus className="h-4 w-4" />
-                      </Button.LeftIcon>
-                      <Button.Text>Invite Member</Button.Text>
-                    </Button>
-                  </span>
-                </SimpleTooltip>
-              ) : (
-                <Button onClick={() => setIsInviteDialogOpen(true)}>
-                  <Button.LeftIcon>
-                    <UserPlus className="h-4 w-4" />
-                  </Button.LeftIcon>
-                  <Button.Text>Invite Member</Button.Text>
-                </Button>
-              )}
-            </RequireScope>
-          </Stack>
+        <ListLayout>
+          <ListLayout.Header
+            title="Team members"
+            subtitle={`Manage who has access to ${organization.name}`}
+            actions={
+              <RequireScope scope="org:admin" level="component">
+                {organization.scimEnabled ? (
+                  <SimpleTooltip tooltip="Managed by your identity provider">
+                    <span className="inline-flex">
+                      <Button
+                        onClick={() => setIsInviteDialogOpen(true)}
+                        disabled
+                      >
+                        <Button.LeftIcon>
+                          <UserPlus className="h-4 w-4" />
+                        </Button.LeftIcon>
+                        <Button.Text>Invite Member</Button.Text>
+                      </Button>
+                    </span>
+                  </SimpleTooltip>
+                ) : (
+                  <Button onClick={() => setIsInviteDialogOpen(true)}>
+                    <Button.LeftIcon>
+                      <UserPlus className="h-4 w-4" />
+                    </Button.LeftIcon>
+                    <Button.Text>Invite Member</Button.Text>
+                  </Button>
+                )}
+              </RequireScope>
+            }
+          />
 
           {organization.scimEnabled && (
             <Alert variant="info" dismissible={false} className="mb-8 text-sm">
@@ -825,22 +815,16 @@ function TeamInner() {
             </Alert>
           )}
 
-          <div className="relative">
-            <Icon
-              name="search"
-              className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
-            />
-            <Input
-              type="text"
-              placeholder="Search members..."
+          <ListLayout.Toolbar className="mb-4">
+            <ListLayout.Toolbar.Search
               value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
+              onChange={(value) => {
+                setSearch(value);
                 setPage(0);
               }}
-              className="mb-4 w-full py-2 pl-9 text-sm"
+              placeholder="Search members..."
             />
-          </div>
+          </ListLayout.Toolbar>
 
           <Table
             columns={memberColumns}
@@ -848,19 +832,15 @@ function TeamInner() {
             rowKey={(row) => row.userId}
             className="min-h-fit"
             noResultsMessage={
-              <Stack
-                gap={2}
-                className="bg-background h-full p-8"
-                align="center"
-                justify="center"
-              >
-                <Users className="text-muted-foreground h-12 w-12" />
-                <Type variant="body" className="text-muted-foreground">
-                  {search
+              <InlineEmptyState
+                icon={<Users />}
+                title={
+                  search
                     ? "No members matching your search"
-                    : "No team members yet"}
-                </Type>
-              </Stack>
+                    : "No team members yet"
+                }
+                className="border-none"
+              />
             }
           />
           {totalPages > 1 && (
@@ -896,7 +876,7 @@ function TeamInner() {
               </div>
             </div>
           )}
-        </div>
+        </ListLayout>
 
         {/* Pending Invites Section */}
         {invites.length > 0 && (
@@ -919,7 +899,7 @@ function TeamInner() {
         {/* Identity signpost */}
         <div className="border-border border-t pt-8">
           {organization.scimEnabled ? (
-            <div className="border-border bg-muted/30 flex items-start gap-3 rounded-md border px-4 py-3">
+            <div className="border-border bg-muted/30 flex items-start gap-3 border px-4 py-3">
               <FolderSync className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
               <div className="min-w-0 flex-1">
                 <Type variant="body" className="text-sm font-medium">
@@ -938,7 +918,7 @@ function TeamInner() {
               </div>
             </div>
           ) : (
-            <div className="border-border bg-muted/30 flex items-start gap-3 rounded-md border px-4 py-3">
+            <div className="border-border bg-muted/30 flex items-start gap-3 border px-4 py-3">
               <Shield className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
               <div className="min-w-0 flex-1">
                 <Type variant="body" className="text-sm font-medium">
@@ -974,49 +954,54 @@ function TeamInner() {
               </span>
               .
             </Type>
-            <InputField
-              label="Email address"
-              name="email"
-              type="email"
-              value={inviteEmail}
-              onChange={(e) => {
-                setInviteEmail(e.target.value);
-                if (!inviteEmailTouched) setInviteEmailTouched(true);
-              }}
-              onBlur={() => setInviteEmailTouched(true)}
-              error={inviteEmailError}
-              placeholder="colleague@company.com"
-              required
-              autoFocus
-              autoCapitalize="off"
-              autoComplete="off"
-              autoCorrect="off"
-              data-1p-ignore
-              data-lpignore="true"
-              data-bwignore
-            />
-            {isRbacEnabled && roles.length > 0 && (
-              <AnyField
-                label="Role"
-                optionality="hidden"
-                render={() => (
-                  <Select
-                    value={effectiveInviteRoleId}
-                    onValueChange={setInviteRoleId}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a role" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {roles.map((role) => (
-                        <SelectItem key={role.id} value={role.id}>
-                          {role.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
+            <Field data-invalid={inviteEmailError ? true : undefined}>
+              <FieldLabel htmlFor={inviteEmailFieldId}>
+                Email address
+              </FieldLabel>
+              <Input
+                id={inviteEmailFieldId}
+                name="email"
+                type="email"
+                value={inviteEmail}
+                onChange={(e) => {
+                  setInviteEmail(e.target.value);
+                  if (!inviteEmailTouched) setInviteEmailTouched(true);
+                }}
+                onBlur={() => setInviteEmailTouched(true)}
+                placeholder="colleague@company.com"
+                required
+                autoFocus
+                autoCapitalize="off"
+                autoComplete="off"
+                autoCorrect="off"
+                aria-invalid={!!inviteEmailError}
+                data-1p-ignore
+                data-lpignore="true"
+                data-bwignore
               />
+              {inviteEmailError ? (
+                <FieldError>{inviteEmailError}</FieldError>
+              ) : null}
+            </Field>
+            {isRbacEnabled && roles.length > 0 && (
+              <Field>
+                <FieldLabel>Role</FieldLabel>
+                <Select
+                  value={effectiveInviteRoleId}
+                  onValueChange={setInviteRoleId}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {roles.map((role) => (
+                      <SelectItem key={role.id} value={role.id}>
+                        {role.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
             )}
             <div className="flex justify-end space-x-2">
               <Button

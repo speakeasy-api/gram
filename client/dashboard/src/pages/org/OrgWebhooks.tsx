@@ -1,18 +1,17 @@
 import { Page } from "@/components/page-layout";
+import { SettingsLayout } from "@/components/layouts/settings-layout";
 import { RequireScope } from "@/components/require-scope";
+import { Card } from "@/components/ui/card";
 import { Heading } from "@/components/ui/heading";
 import { Switch } from "@/components/ui/switch";
-import { Type } from "@/components/ui/type";
 import { useCreatePortalSessionMutation } from "@gram/client/react-query/createPortalSession.js";
 import { useDisableWebhooksMutation } from "@gram/client/react-query/disableWebhooks.js";
 import { useEnableWebhooksMutation } from "@gram/client/react-query/enableWebhooks.js";
 import { useOrganization } from "@gram/client/react-query/organization.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
-import {
-  Button as MoonshineButton,
-  Stack,
-  useMoonshineConfig,
-} from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Button as MoonshineButton } from "@/components/ui/button";
+import { useTheme } from "@/contexts/theme-context";
 import { Webhook } from "lucide-react";
 import { AppPortal } from "svix-react";
 import React, { JSX } from "react";
@@ -62,32 +61,16 @@ function OrgWebhooksInner() {
     disableWebhooks.status !== "pending";
 
   return (
-    <>
-      <Heading variant="h3" className="mb-4">
-        Webhooks
-      </Heading>
-      <Type muted small className="mb-6">
-        Configure webhook delivery for various platform events.
-      </Type>
-      <div className="border-border bg-card rounded-lg border p-4">
-        <Stack gap={4}>
-          <Stack direction="horizontal" justify="space-between" align="center">
-            <Stack gap={1}>
-              <Stack direction="horizontal" align="center" gap={2}>
-                <Webhook className="text-muted-foreground h-4 w-4" />
-                <Type variant="body" className="font-medium">
-                  Enable Webhooks
-                </Type>
-              </Stack>
-              <Type
-                variant="body"
-                className="text-muted-foreground ml-6 text-sm"
-              >
-                Enable or disable webhook delivery of organization events.
-                Disabling this option does not destroy existing webhook
-                configuration below.
-              </Type>
-            </Stack>
+    <SettingsLayout>
+      <SettingsLayout.Header
+        title="Webhooks"
+        subtitle="Configure webhook delivery for various platform events."
+      />
+      <SettingsLayout.Body>
+        <SettingsLayout.Group
+          label="Enable Webhooks"
+          description="Enable or disable webhook delivery of organization events. Disabling this option does not destroy existing webhook configuration below."
+          actions={
             <RequireScope scope="org:admin" level="component">
               <Switch
                 checked={orgResult.data?.webhooksEnabled || false}
@@ -102,11 +85,12 @@ function OrgWebhooksInner() {
                 aria-label="Toggle webhooks"
               />
             </RequireScope>
-          </Stack>
-        </Stack>
-      </div>
-      {orgResult.data?.webhooksOnboarded && <WebhookConfigPortal />}
-    </>
+          }
+        >
+          {orgResult.data?.webhooksOnboarded && <WebhookConfigPortal />}
+        </SettingsLayout.Group>
+      </SettingsLayout.Body>
+    </SettingsLayout>
   );
 }
 
@@ -115,7 +99,7 @@ function WebhooksDisabled() {
   const { session } = useSessionData();
 
   return (
-    <div className="border-border bg-card rounded-lg border p-4">
+    <Card>
       <Stack gap={4} align="center" justify="center">
         <Webhook className="text-muted-foreground h-10 w-10" />
         <div>
@@ -143,12 +127,12 @@ function WebhooksDisabled() {
           </a>
         </MoonshineButton>
       </Stack>
-    </div>
+    </Card>
   );
 }
 
 function WebhookConfigPortal() {
-  const { theme: rawTheme } = useMoonshineConfig();
+  const { theme: rawTheme } = useTheme();
   const { mutate: createSession } = useCreatePortalSessionMutation();
   const [portalURL, setPortalURL] = React.useState<string | null>(null);
   React.useEffect(() => {

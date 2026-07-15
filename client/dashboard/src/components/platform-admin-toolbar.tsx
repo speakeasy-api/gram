@@ -10,6 +10,7 @@ import {
   PlatformAdminInfoPanel,
   PlatformAdminOnboardingPanel,
 } from "./platform-admin-panel";
+import { StatusDot, type StatusDotTone } from "./ui/status-dot";
 import { Switch } from "./ui/switch";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -34,6 +35,30 @@ const STORAGE_KEY = "gram-rbac-dev-override";
 const HIDDEN_KEY = "gram-dev-toolbar-hidden";
 const PLATFORM_ADMIN_KEY = "gram-dev-platform-admin";
 const DEV_TOOLBAR_PORTAL_SELECTOR = "[data-rbac-dev-toolbar-portal='true']";
+
+type DevToggleStatus = "active" | "inactive";
+
+type DevTogglePresentation = {
+  label: string;
+  tone: StatusDotTone;
+  pulse: boolean;
+};
+
+const PLATFORM_ADMIN_TOGGLE_PRESENTATION: Record<
+  DevToggleStatus,
+  DevTogglePresentation
+> = {
+  active: { label: "Platform admin active", tone: "warning", pulse: true },
+  inactive: { label: "Platform admin off", tone: "neutral", pulse: false },
+};
+
+const RBAC_OVERRIDE_TOGGLE_PRESENTATION: Record<
+  DevToggleStatus,
+  DevTogglePresentation
+> = {
+  active: { label: "Override active", tone: "success", pulse: true },
+  inactive: { label: "Override disabled", tone: "neutral", pulse: false },
+};
 
 // Shared className for the toolkit's top-level tabs. shrink-0 keeps tabs from
 // compressing; the tab bar scrolls horizontally when they overflow the panel.
@@ -661,16 +686,11 @@ function PlatformAdminToolbarInner({ onHide }: { onHide: () => void }) {
                     locally so non-admins can exercise admin-gated UI. */}
                 {import.meta.env.DEV && (
                   <div className="border-border bg-card flex items-center justify-between rounded-lg border px-3 py-2.5">
-                    <div className="flex items-center gap-2">
-                      <div
-                        className={`h-1.5 w-1.5 rounded-full ${platformAdmin ? "animate-pulse bg-amber-500" : "bg-muted-foreground/30"}`}
-                      />
-                      <span className="text-foreground text-xs font-medium">
-                        {platformAdmin
-                          ? "Platform admin active"
-                          : "Platform admin off"}
-                      </span>
-                    </div>
+                    <StatusDot
+                      {...PLATFORM_ADMIN_TOGGLE_PRESENTATION[
+                        platformAdmin ? "active" : "inactive"
+                      ]}
+                    />
                     <Switch
                       checked={platformAdmin}
                       onCheckedChange={(checked) => {
@@ -707,14 +727,11 @@ function PlatformAdminToolbarInner({ onHide }: { onHide: () => void }) {
               <>
                 {/* Master toggle */}
                 <div className="flex items-center justify-between border-b border-inherit px-3.5 py-2.5">
-                  <div className="flex items-center gap-2">
-                    <div
-                      className={`h-1.5 w-1.5 rounded-full ${state.enabled ? "animate-pulse bg-emerald-500" : "bg-muted-foreground/30"}`}
-                    />
-                    <span className="text-foreground text-xs font-medium">
-                      {state.enabled ? "Override active" : "Override disabled"}
-                    </span>
-                  </div>
+                  <StatusDot
+                    {...RBAC_OVERRIDE_TOGGLE_PRESENTATION[
+                      state.enabled ? "active" : "inactive"
+                    ]}
+                  />
                   <Switch
                     checked={state.enabled}
                     onCheckedChange={toggleEnabled}

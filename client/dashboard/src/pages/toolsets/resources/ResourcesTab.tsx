@@ -20,7 +20,8 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { useLatestDeployment, useListResources } from "@/hooks/toolTypes";
 import { Resource, Toolset } from "@/lib/toolTypes";
 import { useUpdateToolsetMutation } from "@gram/client/react-query/updateToolset.js";
-import { Dialog, Stack } from "@speakeasy-api/moonshine";
+import { Dialog } from "@/components/ui/dialog";
+import { Stack } from "@/components/ui/stack";
 import { Newspaper } from "lucide-react";
 import { useMemo, useState } from "react";
 import { GettingStartedInstructions } from "@/components/functions/GettingStartedInstructions";
@@ -155,7 +156,7 @@ function ResourceCard({
       <Card>
         <Card.Header>
           <Stack direction="horizontal" gap={2} align="center">
-            <div className="bg-muted shrink-0 rounded-md p-2">
+            <div className="bg-muted shrink-0 p-2">
               <Newspaper
                 className="text-muted-foreground size-5"
                 strokeWidth={1.5}
@@ -209,7 +210,7 @@ function ResourceSelectPopover({
           <Card className="hover:bg-muted/50 cursor-pointer transition-colors">
             <Card.Header>
               <Stack direction="horizontal" gap={2} align="center">
-                <div className="bg-muted shrink-0 rounded-md p-2">
+                <div className="bg-muted shrink-0 p-2">
                   <Newspaper
                     className="text-muted-foreground size-5"
                     strokeWidth={1.5}

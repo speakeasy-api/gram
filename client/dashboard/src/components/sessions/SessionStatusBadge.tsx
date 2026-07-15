@@ -1,4 +1,4 @@
-import { Badge } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/badge";
 import type { UserSession } from "@gram/client/models/components/usersession.js";
 
 import { sessionStatus, STATUS_PRESENTATION } from "@/lib/user-session-status";

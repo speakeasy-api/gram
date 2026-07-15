@@ -1,4 +1,5 @@
 import { Page } from "@/components/page-layout";
+import { ListLayout } from "@/components/layouts/list-layout";
 import { RequireScope } from "@/components/require-scope";
 import { DotTable } from "@/components/ui/dot-table";
 import { Heading } from "@/components/ui/heading";
@@ -11,7 +12,8 @@ import { CommandBar } from "@/pages/catalog/CommandBar";
 import { type PulseMCPServer, useListMCPCatalog } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
 import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
 import { SearchXIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Outlet } from "react-router";
@@ -128,80 +130,115 @@ function CatalogInner() {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <Page.Section>
-          <Page.Section.Title>MCP Catalog</Page.Section.Title>
-          <Page.Section.Description>
-            Discover and import official third-party MCP servers to your
-            project. Powered by the official{" "}
-            <a
-              href="https://www.speakeasy.com/product/mcp-gateway/catalog"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:text-foreground underline underline-offset-2"
-            >
-              MCP Registry
-            </a>
-            .
-          </Page.Section.Description>
-          <Page.Section.Body>
-            <Stack direction="vertical" gap={6}>
-              {/* Canonical toolbar: [search] [filters] [sort] … [count] [view]. */}
-              <Page.Toolbar>
-                <Page.Toolbar.Search
-                  value={searchQuery}
-                  onChange={setSearchQuery}
-                  placeholder="Search MCP servers..."
-                />
-                <Page.Toolbar.Filters
-                  schema={CATALOG_FILTERS}
-                  values={dimensionFilters.values}
-                  optionsById={CATALOG_FILTER_OPTIONS}
-                  onChange={
-                    dimensionFilters.setValue as (
-                      id: string,
-                      value: FilterValue,
-                    ) => void
-                  }
-                  onClear={dimensionFilters.clearValue as (id: string) => void}
-                  onClearAll={dimensionFilters.clearAll}
-                />
-                <Page.Toolbar.SortBy
-                  value={pageState.sort}
-                  onChange={(v) => pageState.setSort(v as SortOption)}
-                  options={CATALOG_SORT_OPTIONS}
-                />
-                {!isLoading && (
-                  <Page.Toolbar.Count>
-                    {filteredServers.length === allServers.length
-                      ? `${allServers.length} servers`
-                      : `${filteredServers.length} of ${allServers.length} servers`}
-                  </Page.Toolbar.Count>
-                )}
-                <Page.Toolbar.ViewAs value={viewMode} onChange={setViewMode} />
-                <Page.Toolbar.Refresh
-                  onRefresh={() => void refetchCatalog()}
-                  isRefreshing={isFetching}
-                />
-              </Page.Toolbar>
+        <ListLayout>
+          <ListLayout.Header
+            title="MCP Catalog"
+            subtitle={
+              <>
+                Discover and import official third-party MCP servers to your
+                project. Powered by the official{" "}
+                <a
+                  href="https://www.speakeasy.com/product/mcp-gateway/catalog"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-foreground underline underline-offset-2"
+                >
+                  MCP Registry
+                </a>
+                .
+              </>
+            }
+          />
 
-              {/* Server grid / table */}
-              {isLoading ? (
-                <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-                  {Array.from({ length: 6 }, (_, i) => `skeleton-${i}`).map(
-                    (id) => (
-                      <Skeleton key={id} className="h-[200px]" />
-                    ),
-                  )}
-                </div>
-              ) : viewMode === "grid" ? (
-                <div
-                  ref={setGridElement}
-                  className="grid grid-cols-1 gap-6 xl:grid-cols-2"
+          {/* Canonical toolbar: [search] [filters] [sort] … [count] [view]. */}
+          <ListLayout.Toolbar>
+            <ListLayout.Toolbar.Search
+              value={searchQuery}
+              onChange={setSearchQuery}
+              placeholder="Search MCP servers..."
+            />
+            <ListLayout.Toolbar.Filters
+              schema={CATALOG_FILTERS}
+              values={dimensionFilters.values}
+              optionsById={CATALOG_FILTER_OPTIONS}
+              onChange={
+                dimensionFilters.setValue as (
+                  id: string,
+                  value: FilterValue,
+                ) => void
+              }
+              onClear={dimensionFilters.clearValue as (id: string) => void}
+              onClearAll={dimensionFilters.clearAll}
+            />
+            <ListLayout.Toolbar.SortBy
+              value={pageState.sort}
+              onChange={(v) => pageState.setSort(v as SortOption)}
+              options={CATALOG_SORT_OPTIONS}
+            />
+            {!isLoading && (
+              <ListLayout.Toolbar.Count>
+                {filteredServers.length === allServers.length
+                  ? `${allServers.length} servers`
+                  : `${filteredServers.length} of ${allServers.length} servers`}
+              </ListLayout.Toolbar.Count>
+            )}
+            <ListLayout.Toolbar.ViewAs
+              value={viewMode}
+              onChange={setViewMode}
+            />
+            <ListLayout.Toolbar.Refresh
+              onRefresh={() => void refetchCatalog()}
+              isRefreshing={isFetching}
+            />
+          </ListLayout.Toolbar>
+
+          <ListLayout.List>
+            {/* Server grid / table */}
+            {isLoading ? (
+              <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+                {Array.from({ length: 6 }, (_, i) => `skeleton-${i}`).map(
+                  (id) => (
+                    <Skeleton key={id} className="h-[200px]" />
+                  ),
+                )}
+              </div>
+            ) : viewMode === "grid" ? (
+              <div
+                ref={setGridElement}
+                className="grid grid-cols-1 gap-6 xl:grid-cols-2"
+              >
+                {filteredServers.map((server) => {
+                  const serverKey = `${server.registryId}-${server.registrySpecifier}`;
+                  return (
+                    <ServerCard
+                      key={serverKey}
+                      server={server}
+                      detailHref={routes.catalog.detail.href(
+                        encodeURIComponent(server.registrySpecifier),
+                      )}
+                      externalMcps={externalMcps}
+                      isSelected={selectedServers.has(serverKey)}
+                      onToggleSelect={() => toggleServerSelection(serverKey)}
+                    />
+                  );
+                })}
+              </div>
+            ) : (
+              <div ref={setGridElement}>
+                <DotTable
+                  headers={[
+                    { label: "", className: "w-10" },
+                    { label: "Name" },
+                    { label: "Version" },
+                    { label: "Description" },
+                    { label: "Tools" },
+                    { label: "" },
+                  ]}
                 >
                   {filteredServers.map((server) => {
                     const serverKey = `${server.registryId}-${server.registrySpecifier}`;
                     return (
-                      <ServerCard
+                      <ServerTableRow
                         key={serverKey}
                         server={server}
                         detailHref={routes.catalog.detail.href(
@@ -213,60 +250,29 @@ function CatalogInner() {
                       />
                     );
                   })}
-                </div>
-              ) : (
-                <div ref={setGridElement}>
-                  <DotTable
-                    headers={[
-                      { label: "", className: "w-10" },
-                      { label: "Name" },
-                      { label: "Version" },
-                      { label: "Description" },
-                      { label: "Tools" },
-                      { label: "" },
-                    ]}
-                  >
-                    {filteredServers.map((server) => {
-                      const serverKey = `${server.registryId}-${server.registrySpecifier}`;
-                      return (
-                        <ServerTableRow
-                          key={serverKey}
-                          server={server}
-                          detailHref={routes.catalog.detail.href(
-                            encodeURIComponent(server.registrySpecifier),
-                          )}
-                          externalMcps={externalMcps}
-                          isSelected={selectedServers.has(serverKey)}
-                          onToggleSelect={() =>
-                            toggleServerSelection(serverKey)
-                          }
-                        />
-                      );
-                    })}
-                  </DotTable>
-                </div>
-              )}
+                </DotTable>
+              </div>
+            )}
 
-              {/* Empty state */}
-              {!isLoading && filteredServers.length === 0 && (
-                <EmptySearchResult
-                  hasFilters={
-                    hasActiveFilters ||
-                    filterState.category !== "all" ||
-                    searchQuery !== ""
-                  }
-                  onClear={() => {
-                    setSearchQuery("");
-                    // clearFilters resets category + sort + every filter param in
-                    // a single URL update (the unified state re-reads from it),
-                    // so a category-filtered empty state isn't left stuck.
-                    pageState.clearFilters();
-                  }}
-                />
-              )}
-            </Stack>
-          </Page.Section.Body>
-        </Page.Section>
+            {/* Empty state */}
+            {!isLoading && filteredServers.length === 0 && (
+              <EmptySearchResult
+                hasFilters={
+                  hasActiveFilters ||
+                  filterState.category !== "all" ||
+                  searchQuery !== ""
+                }
+                onClear={() => {
+                  setSearchQuery("");
+                  // clearFilters resets category + sort + every filter param in
+                  // a single URL update (the unified state re-reads from it),
+                  // so a category-filtered empty state isn't left stuck.
+                  pageState.clearFilters();
+                }}
+              />
+            )}
+          </ListLayout.List>
+        </ListLayout>
       </Page.Body>
 
       <AddServerDialog
@@ -301,7 +307,7 @@ function EmptySearchResult({
   onClear: () => void;
 }) {
   return (
-    <div className="bg-background flex w-full items-center justify-center rounded-xl border py-8">
+    <div className="bg-background flex w-full items-center justify-center border py-8">
       <Stack
         gap={1}
         className="m-8 w-full max-w-sm"

@@ -19,7 +19,8 @@ import {
   usePublishStatus,
 } from "@gram/client/react-query/publishStatus";
 import { useRemovePluginServerMutation } from "@gram/client/react-query/removePluginServer";
-import { Button, cn } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ChevronDown, CircleCheck, Plus } from "lucide-react";
 import { useEffect, useState } from "react";

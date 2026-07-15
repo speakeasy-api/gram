@@ -6,9 +6,9 @@ import { findQueryRanges } from "./transcript";
  * occurrence is pale so the current one stands out. (Search and risk are
  * mutually exclusive modes, so sharing the yellow family is unambiguous.) */
 const SEARCH_MARK_ACTIVE =
-  "rounded-sm bg-yellow-300/70 px-0.5 text-foreground ring-1 ring-yellow-500/40";
+  "bg-warning/70 px-0.5 text-foreground ring-1 ring-warning/40";
 const SEARCH_MARK_INACTIVE =
-  "rounded-sm bg-yellow-200/30 px-0.5 text-foreground ring-1 ring-yellow-400/20";
+  "bg-warning/30 px-0.5 text-foreground ring-1 ring-warning/20";
 
 /** Renders `text` with every case-insensitive occurrence of `query` wrapped in a
  * search highlight (original casing preserved; ILIKE-equivalent so "foo" lights

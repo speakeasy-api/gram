@@ -1,4 +1,6 @@
 import { Page } from "@/components/page-layout";
+import { SettingsLayout } from "@/components/layouts/settings-layout";
+import { Alert } from "@/components/ui/alert";
 import {
   invalidateTemplate,
   useTemplate,
@@ -22,7 +24,11 @@ export default function PromptPage(): JSX.Element {
   if (status === "pending") {
     content = null;
   } else if (status === "error") {
-    content = <p className="text-red-500">{error.message}</p>;
+    content = (
+      <Alert variant="error" dismissible={false}>
+        {error.message}
+      </Alert>
+    );
   } else if (status === "success" && data) {
     content = (
       <PromptEditor
@@ -45,7 +51,9 @@ export default function PromptPage(): JSX.Element {
     );
   } else {
     content = (
-      <p className="text-red-500">No data returned for prompt template</p>
+      <Alert variant="error" dismissible={false}>
+        No data returned for prompt template
+      </Alert>
     );
   }
 
@@ -54,7 +62,15 @@ export default function PromptPage(): JSX.Element {
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
-      <Page.Body>{content}</Page.Body>
+      <Page.Body>
+        <SettingsLayout>
+          <SettingsLayout.Header
+            title={promptName ?? "Prompt"}
+            subtitle="Edit this prompt template."
+          />
+          <SettingsLayout.Body>{content}</SettingsLayout.Body>
+        </SettingsLayout>
+      </Page.Body>
     </Page>
   );
 }

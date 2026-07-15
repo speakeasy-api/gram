@@ -1,9 +1,10 @@
 import { Page } from "@/components/page-layout";
+import { SettingsLayout } from "@/components/layouts/settings-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Card } from "@/components/ui/card";
 import { Heading } from "@/components/ui/heading";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import {
   Select,
   SelectContent,
@@ -34,7 +35,10 @@ import {
 } from "@gram/client/react-query/riskPoliciesGet.js";
 import { riskEvalsEvaluate } from "@gram/client/funcs/riskEvalsEvaluate.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
-import { Badge, Button, Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import {
   keepPreviousData,
   useQueries,
@@ -244,9 +248,14 @@ function PolicyDetailContent({ policyId }: { policyId: string }): JSX.Element {
       </Page.Header>
       <Page.Body>
         {isLoading || !policy ? (
-          <div className="flex items-center justify-center py-24">
-            <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
-          </div>
+          <SettingsLayout>
+            <SettingsLayout.Header title="Policy" />
+            <SettingsLayout.Body>
+              <div className="flex items-center justify-center py-24">
+                <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
+              </div>
+            </SettingsLayout.Body>
+          </SettingsLayout>
         ) : policy.policyType === "prompt_based" ? (
           <PromptPolicyEditor policy={policy} />
         ) : (
@@ -298,43 +307,40 @@ function PolicyKindChooser(): JSX.Element {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <Stack gap={4} className="mx-auto w-full max-w-2xl">
-          <Stack gap={1}>
-            <Heading variant="h3" className="normal-case">
-              Choose policy type
-            </Heading>
-            <Type small muted>
-              Start with a detector-based policy or define criteria in plain
-              language.
-            </Type>
-          </Stack>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <button
-              type="button"
-              onClick={() => void setKind("standard")}
-              className="hover:bg-muted/40 rounded-xl border p-5 text-left transition-colors"
-            >
-              <Shield className="text-muted-foreground mb-3 h-5 w-5" />
-              <Type className="font-medium">Detector-based</Type>
-              <Type small muted className="mt-1">
-                Scan for secrets, PII, and risky tool calls with built-in and
-                custom detection rules.
-              </Type>
-            </button>
-            <button
-              type="button"
-              onClick={() => void setKind("prompt")}
-              className="hover:bg-muted/40 rounded-xl border p-5 text-left transition-colors"
-            >
-              <Sparkles className="text-muted-foreground mb-3 h-5 w-5" />
-              <Type className="font-medium">Prompt-based</Type>
-              <Type small muted className="mt-1">
-                Describe the behavior to catch in plain language; an LLM judge
-                evaluates each in-scope message.
-              </Type>
-            </button>
-          </div>
-        </Stack>
+        <SettingsLayout>
+          <SettingsLayout.Header
+            title="Choose policy type"
+            subtitle="Start with a detector-based policy or define criteria in plain language."
+          />
+          <SettingsLayout.Body>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => void setKind("standard")}
+                className="hover:bg-muted/40 border p-5 text-left transition-colors"
+              >
+                <Shield className="text-muted-foreground mb-3 h-5 w-5" />
+                <Type className="font-medium">Detector-based</Type>
+                <Type small muted className="mt-1">
+                  Scan for secrets, PII, and risky tool calls with built-in and
+                  custom detection rules.
+                </Type>
+              </button>
+              <button
+                type="button"
+                onClick={() => void setKind("prompt")}
+                className="hover:bg-muted/40 border p-5 text-left transition-colors"
+              >
+                <Sparkles className="text-muted-foreground mb-3 h-5 w-5" />
+                <Type className="font-medium">Prompt-based</Type>
+                <Type small muted className="mt-1">
+                  Describe the behavior to catch in plain language; an LLM judge
+                  evaluates each in-scope message.
+                </Type>
+              </button>
+            </div>
+          </SettingsLayout.Body>
+        </SettingsLayout>
       </Page.Body>
     </Page>
   );
@@ -364,7 +370,7 @@ function HorizontalStepper({
             <button
               type="button"
               onClick={() => onStep(index)}
-              className="group flex shrink-0 items-center gap-2 rounded-md py-1 pr-1 text-left"
+              className="group flex shrink-0 items-center gap-2 py-1 pr-1 text-left"
             >
               <span
                 className={cn(
@@ -402,28 +408,39 @@ function HorizontalStepper({
 }
 
 function StepperShell({
+  eyebrow,
+  title,
   header,
   steps,
   current,
   onStep,
   children,
 }: {
+  eyebrow?: React.ReactNode;
+  title: React.ReactNode;
   header: React.ReactNode;
   steps: Step[];
   current: number;
   onStep: (index: number) => void;
   children: React.ReactNode;
 }): JSX.Element {
+  const activeStep = steps[current];
   return (
-    // Full width — Page.Body already centers content at max-w-7xl (the app's
-    // standard page width).
-    <Stack gap={6} className="w-full">
-      {header}
-      <div className="bg-muted/20 rounded-lg border px-4 py-3">
-        <HorizontalStepper steps={steps} current={current} onStep={onStep} />
-      </div>
-      <Stack gap={6}>{children}</Stack>
-    </Stack>
+    <SettingsLayout>
+      <SettingsLayout.Header eyebrow={eyebrow} title={title} />
+      <SettingsLayout.Body>
+        {header}
+        <div className="bg-muted/20 border px-4 py-3">
+          <HorizontalStepper steps={steps} current={current} onStep={onStep} />
+        </div>
+        <SettingsLayout.Group
+          label={activeStep?.title ?? ""}
+          description={activeStep?.description}
+        >
+          <Stack gap={6}>{children}</Stack>
+        </SettingsLayout.Group>
+      </SettingsLayout.Body>
+    </SettingsLayout>
   );
 }
 
@@ -506,7 +523,7 @@ function PolicyHeader({
           {editingName ? (
             <Input
               value={name}
-              onChange={onNameChange}
+              onChange={(e) => onNameChange(e.target.value)}
               placeholder={placeholder}
               autoFocus
               onBlur={() => setEditingName(false)}
@@ -839,6 +856,8 @@ function PromptPolicyEditor({
 
   return (
     <StepperShell
+      eyebrow="Policy"
+      title={isCreate ? "New prompt-based policy" : "Edit prompt-based policy"}
       header={header}
       steps={PROMPT_STEPS}
       current={step}
@@ -1094,28 +1113,14 @@ function ScopeStep({
       <SectionHeader description={description} />
       <Stack gap={5}>
         <div className="space-y-3">
-          <div className="border-border inline-flex rounded-md border p-0.5">
-            {(
-              [
-                { key: "messageTypes", label: "Message types" },
-                { key: "cel", label: "CEL expression" },
-              ] as const
-            ).map((opt) => (
-              <button
-                key={opt.key}
-                type="button"
-                onClick={() => setScopeMode(opt.key)}
-                className={cn(
-                  "rounded px-3 py-1 text-xs font-medium transition-colors",
-                  scopeMode === opt.key
-                    ? "bg-foreground text-background"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
+          <SegmentedControl
+            value={scopeMode}
+            onChange={setScopeMode}
+            options={[
+              { value: "messageTypes", label: "Message types" },
+              { value: "cel", label: "CEL expression" },
+            ]}
+          />
           <p className="text-muted-foreground text-xs">
             {scopeMode === "messageTypes"
               ? "Apply to whole session parts. Switch to a CEL expression to match on tool or content attributes instead."
@@ -1855,7 +1860,7 @@ function ReviewScorecard({
       ) : (
         <Stack gap={4}>
           <div>
-            <Type className="text-2xl font-semibold">
+            <Type className="font-display text-2xl font-thin tracking-[-0.015em] tabular-nums">
               {correct}/{judged}
             </Type>
             <Type small muted>
@@ -1940,7 +1945,7 @@ function ScoreStat({
         onClick={() => onSelect(verdict)}
         aria-pressed={active}
         className={cn(
-          "rounded-lg border p-3 text-left transition-colors",
+          "border p-3 text-left transition-colors",
           active
             ? "border-foreground/40 bg-muted/70"
             : "hover:bg-muted/40 hover:border-foreground/30",
@@ -1951,7 +1956,7 @@ function ScoreStat({
     );
   }
 
-  return <div className="rounded-lg border p-3">{content}</div>;
+  return <div className="border p-3">{content}</div>;
 }
 
 function verdictForAgreement(
@@ -2025,7 +2030,7 @@ function highlightQuery(text: string, query: string): ReactNode {
   return (
     <>
       {text.slice(0, matchIndex)}
-      <mark className="rounded-sm bg-yellow-200 px-0.5 text-foreground dark:bg-yellow-700/60">
+      <mark className="bg-warning/30 px-0.5 text-foreground">
         {text.slice(matchIndex, matchIndex + query.length)}
       </mark>
       {text.slice(matchIndex + query.length)}
@@ -2239,39 +2244,26 @@ function SessionReview({
           <div className="flex flex-wrap items-center gap-2">
             <Input
               value={query}
-              onChange={setQuery}
+              onChange={(e) => setQuery(e.target.value)}
               placeholder="Search by title or user"
               className="min-w-48 flex-1"
             />
             <ReevaluatingIndicator show={reevaluating} />
           </div>
-          <div className="border-border inline-flex self-start rounded-md border p-0.5">
-            {(
-              [
-                { key: "all", label: "All" },
-                { key: "flagged", label: "Flagged" },
-                { key: "clean", label: "Clean" },
-              ] as const
-            ).map((opt) => (
-              <button
-                key={opt.key}
-                type="button"
-                onClick={() => setFilter(opt.key)}
-                className={cn(
-                  "rounded px-3 py-1 text-xs font-medium transition-colors",
-                  filter === opt.key
-                    ? "bg-foreground text-background"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
+          <SegmentedControl
+            value={filter}
+            onChange={setFilter}
+            options={[
+              { value: "all", label: "All" },
+              { value: "flagged", label: "Flagged" },
+              { value: "clean", label: "Clean" },
+            ]}
+            className="self-start"
+          />
         </Stack>
 
         {/* Results list */}
-        <div className="min-h-0 flex-1 overflow-auto rounded-lg border">
+        <div className="min-h-0 flex-1 overflow-auto border">
           {reviewVerdictFilter ? (
             <ReviewedSessionRows
               chatIds={reviewedChatIds}
@@ -2335,7 +2327,7 @@ function ReevaluatingIndicator({
   if (!show) return null;
 
   return (
-    <div className="border-border bg-muted/30 text-muted-foreground flex h-9 items-center gap-1.5 rounded-md border px-2.5">
+    <div className="border-border bg-muted/30 text-muted-foreground flex h-9 items-center gap-1.5 border px-2.5">
       <Loader2 className="h-3.5 w-3.5 animate-spin" />
       <Type small muted>
         Re-evaluating…
@@ -2476,7 +2468,7 @@ function EvalJudgeVerdictBlock({
   verdict: PromptGuardrailMessageVerdict;
 }): JSX.Element {
   return (
-    <div className="border-warning bg-warning/10 rounded-sm border-l-[3px] px-3 py-2.5">
+    <div className="border-warning bg-warning/10 border-l-[3px] px-3 py-2.5">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-xs font-semibold">
           <TriangleAlert className="text-warning size-4 shrink-0" />
@@ -2723,7 +2715,7 @@ function SessionTranscript({
           </div>
           <button
             onClick={onClose}
-            className="hover:bg-muted rounded-md p-1 transition-colors"
+            className="hover:bg-muted p-1 transition-colors"
             aria-label="Close panel"
           >
             <X className="size-5" />
@@ -3146,6 +3138,8 @@ function StandardPolicyEditor({
   return (
     <>
       <StepperShell
+        eyebrow="Policy"
+        title={policy ? "Edit standard policy" : "New standard policy"}
         header={header}
         steps={STANDARD_STEPS}
         current={step}

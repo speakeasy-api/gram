@@ -2,6 +2,7 @@ import { RequireScope } from "@/components/require-scope";
 import { DotRow } from "@/components/ui/dot-row";
 import { DotTable } from "@/components/ui/dot-table";
 import { Type } from "@/components/ui/type";
+import { toastError } from "@/lib/toast-error";
 import type { RemoteSession } from "@gram/client/models/components/remotesession.js";
 import {
   invalidateAllOrganizationRemoteSessionClientSessions,
@@ -9,16 +10,15 @@ import {
 } from "@gram/client/react-query/organizationRemoteSessionClientSessions.js";
 import { useRefreshOrganizationRemoteSessionMutation } from "@gram/client/react-query/refreshOrganizationRemoteSession.js";
 import { useRevokeOrganizationRemoteSessionMutation } from "@gram/client/react-query/revokeOrganizationRemoteSession.js";
+import { Button } from "@/components/ui/button";
 import {
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Icon,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/dropdown-menu";
 import { useQueryClient } from "@tanstack/react-query";
-import { MoreHorizontal } from "lucide-react";
+import { MoreHorizontal, User } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { RevokeAllSessionsDialog } from "../../clientDialogs";
@@ -41,9 +41,7 @@ export function SessionsTab({ clientId }: { clientId: string }): JSX.Element {
       toast.success("Session revoked");
     },
     onError: (error) => {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to revoke session",
-      );
+      toastError(error, "Failed to revoke session");
     },
   });
 
@@ -55,9 +53,7 @@ export function SessionsTab({ clientId }: { clientId: string }): JSX.Element {
       toast.success("Session refreshed");
     },
     onError: (error) => {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to refresh session",
-      );
+      toastError(error, "Failed to refresh session");
     },
   });
 
@@ -97,9 +93,7 @@ export function SessionsTab({ clientId }: { clientId: string }): JSX.Element {
           {sessionItems.map((session: RemoteSession) => (
             <DotRow
               key={session.id}
-              icon={
-                <Icon name="user" className="text-muted-foreground h-5 w-5" />
-              }
+              icon={<User className="text-muted-foreground h-5 w-5" />}
             >
               <td className="px-3 py-3">
                 <Type small as="div" className="break-all">

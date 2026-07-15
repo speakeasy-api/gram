@@ -1,19 +1,17 @@
 import { useMemo, useState } from "react";
-import {
-  KeyRound,
-  ExternalLink,
-  Loader2,
-  ChevronDown,
-  Search,
-} from "lucide-react";
-import { useMoonshineConfig } from "@speakeasy-api/moonshine";
+import { KeyRound, ExternalLink, Loader2, ChevronDown } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { useTheme } from "@/contexts/theme-context";
+import { Card } from "@/components/ui/card";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { useGenerateWorkOSAdminPortalLinkMutation } from "@gram/client/react-query/generateWorkOSAdminPortalLink.js";
 import { useOnboardingStatus } from "@gram/client/react-query/onboardingStatus";
 import { toast } from "sonner";
 import { StepContainer } from "../step-container";
 import { IDP_PROVIDERS } from "../../providers";
 import type { IdpProvider } from "../../types";
-import { Input } from "@/components/ui/input";
+import { toastError } from "@/lib/toast-error";
 import { cn, getServerURL } from "@/lib/utils";
 
 function ProviderIcon({
@@ -23,7 +21,7 @@ function ProviderIcon({
   provider: IdpProvider;
   className?: string;
 }) {
-  const { theme } = useMoonshineConfig();
+  const { theme } = useTheme();
   const variant = theme === "dark" ? "dark" : "light";
   return (
     <img
@@ -71,11 +69,7 @@ export function ConnectIdpStep({
 
   const generatePortalLink = useGenerateWorkOSAdminPortalLinkMutation({
     onError: (error) => {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to launch SSO setup portal",
-      );
+      toastError(error, "Failed to launch SSO setup portal");
     },
   });
 
@@ -138,7 +132,7 @@ export function ConnectIdpStep({
   return (
     <StepContainer
       icon={
-        <div className="bg-secondary flex h-12 w-12 items-center justify-center rounded-lg">
+        <div className="bg-secondary flex h-12 w-12 items-center justify-center">
           <KeyRound className="text-foreground h-6 w-6" />
         </div>
       }
@@ -152,34 +146,32 @@ export function ConnectIdpStep({
       canContinue={!!selectedProvider}
     >
       <div className="space-y-6">
-        <div>
-          <label className="text-foreground text-sm font-medium">
+        <Field>
+          <FieldLabel htmlFor="idp-provider-search">
             Select provider<span className="text-accent">*</span>
-          </label>
-          <div className="relative mt-3">
-            <Search className="text-muted-foreground pointer-events-none absolute top-[18px] left-3 h-4 w-4 -translate-y-1/2" />
-            <Input
-              type="search"
-              value={query}
-              onChange={setQuery}
-              placeholder="Search providers"
-              className="pl-9"
-              disabled={generatePortalLink.isPending}
-            />
-          </div>
+          </FieldLabel>
+          <Input
+            id="idp-provider-search"
+            type="search"
+            icon="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search providers"
+            disabled={generatePortalLink.isPending}
+          />
           {isSearching && filteredProviders.length === 0 && (
-            <p className="text-muted-foreground mt-3 text-sm">
+            <p className="text-muted-foreground text-sm">
               No providers match &quot;{query}&quot;.
             </p>
           )}
-          <div className="mt-3 grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             {visibleProviders.map((p) => (
               <button
                 key={p.id}
                 onClick={() => setSelectedProvider(p.id)}
                 disabled={generatePortalLink.isPending}
                 className={cn(
-                  "flex items-center gap-3 rounded-lg border p-4 text-left transition-all",
+                  "flex items-center gap-3 border p-4 text-left transition-all",
                   selectedProvider === p.id
                     ? "border-foreground bg-secondary"
                     : "border-border bg-card hover:border-foreground/30",
@@ -188,7 +180,7 @@ export function ConnectIdpStep({
                     "cursor-not-allowed opacity-50",
                 )}
               >
-                <div className="bg-secondary flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg">
+                <div className="bg-secondary flex h-10 w-10 flex-shrink-0 items-center justify-center">
                   <ProviderIcon provider={p} />
                 </div>
                 <div className="min-w-0 flex-1">
@@ -211,21 +203,26 @@ export function ConnectIdpStep({
           {!isSearching &&
             !showAll &&
             IDP_PROVIDERS.length > INITIAL_VISIBLE && (
-              <button
-                type="button"
+              <Button
+                variant="tertiary"
+                size="sm"
+                className="text-muted-foreground hover:text-foreground w-full"
                 onClick={() => setShowAll(true)}
-                className="text-muted-foreground hover:text-foreground mt-2 flex w-full items-center justify-center gap-1.5 py-2 text-sm transition-colors"
               >
-                <ChevronDown className="h-4 w-4" />
-                Show {IDP_PROVIDERS.length - INITIAL_VISIBLE} more providers
-              </button>
+                <Button.LeftIcon>
+                  <ChevronDown className="h-4 w-4" />
+                </Button.LeftIcon>
+                <Button.Text>
+                  Show {IDP_PROVIDERS.length - INITIAL_VISIBLE} more providers
+                </Button.Text>
+              </Button>
             )}
-        </div>
+        </Field>
 
         {selectedProvider && !generatePortalLink.isPending && (
-          <div className="bg-card border-border rounded-lg border p-4">
+          <Card>
             <div className="flex items-start gap-3">
-              <div className="bg-secondary mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded">
+              <div className="bg-secondary mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center">
                 <ExternalLink className="text-muted-foreground h-4 w-4" />
               </div>
               <div>
@@ -239,7 +236,7 @@ export function ConnectIdpStep({
                 </p>
               </div>
             </div>
-          </div>
+          </Card>
         )}
       </div>
     </StepContainer>

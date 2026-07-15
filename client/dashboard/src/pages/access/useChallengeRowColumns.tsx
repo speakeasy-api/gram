@@ -1,4 +1,5 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { IdentityCell } from "@/components/ui/identity-cell";
 import {
   Tooltip,
   TooltipContent,
@@ -6,6 +7,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { HumanizeDateTime } from "@/lib/dates";
+import { getInitials } from "@/lib/initials";
 import { cn } from "@/lib/utils";
 import { useSession } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
@@ -13,16 +15,12 @@ import type { ChallengeBucket } from "@gram/client/models/components/challengebu
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useListMcpServersForOrg } from "@gram/client/react-query/listMcpServersForOrg.js";
 import { useListToolsetsForOrg } from "@gram/client/react-query/listToolsetsForOrg.js";
-import { Column } from "@speakeasy-api/moonshine";
+import { type Column } from "@/components/ui/table";
 import { KeyRound } from "lucide-react";
 import { useMemo } from "react";
 import { OutcomeBadge } from "./ChallengesTab";
 import { ResourceLink } from "./ResourceLink";
-import {
-  getInitials,
-  principalDisplayName,
-  reasonLabel,
-} from "./challengeHelpers";
+import { principalDisplayName, reasonLabel } from "./challengeHelpers";
 
 export function useChallengeRowColumns(
   animatingOutIds?: Set<string>,
@@ -89,50 +87,26 @@ export function useChallengeRowColumns(
 
     return [
       {
-        key: "avatar",
-        header: "",
-        width: "40px",
+        key: "identity",
+        header: "Identity",
+        width: "1.4fr",
         render: (row: ChallengeBucket) => {
           if (isChild(row)) return null;
           const isApiKey = row.principalType === "api_key";
           const display = principalDisplayName(row.userEmail, row.principalUrn);
           return (
-            <div className={cn(rowFade(row))}>
-              <Avatar className="h-8 w-8">
-                {row.photoUrl && (
-                  <AvatarImage src={row.photoUrl} alt={display} />
-                )}
-                <AvatarFallback className="text-[11px]">
-                  {isApiKey ? (
-                    <KeyRound className="h-4 w-4" />
-                  ) : (
-                    getInitials(display)
-                  )}
-                </AvatarFallback>
-              </Avatar>
-            </div>
-          );
-        },
-      },
-      {
-        key: "identity",
-        header: "Identity",
-        width: "1.2fr",
-        render: (row: ChallengeBucket) => {
-          if (isChild(row)) return null;
-          const display = principalDisplayName(row.userEmail, row.principalUrn);
-          return (
             <Tooltip>
               <TooltipTrigger asChild>
-                <Type
-                  variant="body"
-                  className={cn(
-                    "min-w-0 truncate text-sm font-medium",
-                    rowFade(row),
-                  )}
-                >
-                  {display}
-                </Type>
+                <div className={cn("min-w-0", rowFade(row))}>
+                  <IdentityCell
+                    name={display}
+                    imageUrl={row.photoUrl}
+                    fallbackIcon={
+                      isApiKey ? <KeyRound className="size-3.5" /> : undefined
+                    }
+                    size="md"
+                  />
+                </div>
               </TooltipTrigger>
               {row.roleSlugs.length > 0 && (
                 <TooltipContent side="bottom">

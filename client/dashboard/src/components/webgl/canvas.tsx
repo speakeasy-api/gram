@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 import { Canvas as R3FCanvas, useThree } from "@react-three/fiber";
 import { EffectComposer } from "@react-three/postprocessing";
 import * as THREE from "three";
-import { useMoonshineConfig } from "@speakeasy-api/moonshine";
+import { useTheme } from "@/contexts/theme-context";
 import { PerspectiveCamera } from "@react-three/drei";
 
 const CanvasManager = ({
@@ -20,7 +20,7 @@ const CanvasManager = ({
 }: {
   containerRef: RefObject<HTMLDivElement | null>;
 }) => {
-  const { theme: resolvedTheme } = useMoonshineConfig();
+  const { theme: resolvedTheme } = useTheme();
   const canvasZIndex = useWebGLStore((state) => state.canvasZIndex);
   const canvasBlendMode = useWebGLStore((state) => state.canvasBlendMode);
   const gl = useThree((state) => state.gl);

@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 import { Plus } from "lucide-react";
-import { DotCard } from "./ui/dot-card";
+import { Card } from "./ui/card";
 import { Type } from "./ui/type";
 
 type CreateResourceCardProps = {
@@ -24,7 +24,7 @@ export function CreateResourceCard({
       onClick={onClick}
       className={cn("w-full text-left hover:no-underline", className)}
     >
-      <DotCard
+      <Card
         icon={
           <Plus className="text-muted-foreground group-hover:text-primary h-10 w-10 transition-colors" />
         }
@@ -47,7 +47,7 @@ export function CreateResourceCard({
             <Plus className="h-3.5 w-3.5" />
           </div>
         </div>
-      </DotCard>
+      </Card>
     </button>
   );
 }

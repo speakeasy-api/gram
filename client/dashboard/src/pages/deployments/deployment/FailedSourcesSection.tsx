@@ -1,11 +1,16 @@
 import { RequireScope } from "@/components/require-scope";
+import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog } from "@/components/ui/dialog";
+import { Type } from "@/components/ui/type";
 import type { FailedSource } from "@/components/sources/useFailedDeploymentSources";
 import { cn } from "@/lib/utils";
 import { useSdkClient } from "@/contexts/Sdk";
 import type { Deployment } from "@gram/client/models/components/deployment.js";
 import type { DeploymentLogEvent } from "@gram/client/models/components/deploymentlogevent.js";
-import { Alert, Badge, Button, Dialog } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Alert } from "@/components/ui/alert";
 import {
   ChevronDown,
   ChevronRight,
@@ -174,20 +179,20 @@ export function FailedSourcesSection({
 
   return (
     <>
-      <section className="border-destructive/40 bg-destructive/5 space-y-3 rounded-lg border p-4">
+      <section className="border-destructive/40 bg-destructive/5 space-y-3 border p-4">
         <div className="flex items-center gap-2">
           <CircleAlert className="text-destructive size-5 shrink-0" />
-          <h3 className="text-sm font-semibold">
+          <Type as="h3" small className="font-semibold">
             {failedSources.length > 0
               ? `${failedSources.length} source${failedSources.length !== 1 ? "s" : ""} failed`
               : "Deployment failed"}
-          </h3>
+          </Type>
         </div>
 
         {failedSources.length > 0 && (
-          <p className="text-muted-foreground text-sm">
+          <Type muted small>
             Select the sources to remove and redeploy without them.
-          </p>
+          </Type>
         )}
 
         <div className="max-h-80 space-y-2 overflow-y-auto">
@@ -197,10 +202,10 @@ export function FailedSourcesSection({
             const isExpanded = expanded.has(source.id);
 
             return (
-              <div
+              <Card
                 key={source.id}
                 className={cn(
-                  "rounded-lg border p-3 transition-colors",
+                  "gap-2 p-3 transition-colors",
                   isSelected
                     ? "border-destructive/40 bg-destructive/5"
                     : "border-border bg-card",
@@ -212,7 +217,7 @@ export function FailedSourcesSection({
                     onCheckedChange={() => toggleSelected(source.id)}
                     disabled={pending}
                   />
-                  <div className="bg-destructive/10 flex h-8 w-8 shrink-0 items-center justify-center rounded-md">
+                  <div className="bg-destructive/10 flex h-8 w-8 shrink-0 items-center justify-center">
                     <IconComponent className="text-destructive h-4 w-4" />
                   </div>
                   <div className="min-w-0 flex-1">
@@ -242,7 +247,7 @@ export function FailedSourcesSection({
                     <button
                       type="button"
                       onClick={() => toggleExpanded(source.id)}
-                      className="hover:bg-muted text-muted-foreground rounded p-1 transition-colors"
+                      className="hover:bg-muted text-muted-foreground p-1 transition-colors"
                     >
                       {isExpanded ? (
                         <ChevronDown className="size-4" />
@@ -253,35 +258,37 @@ export function FailedSourcesSection({
                   )}
                 </div>
                 {isExpanded && source.errors.length > 0 && (
-                  <div className="mt-2 ml-11 space-y-1">
+                  <div className="ml-11 space-y-1">
                     {source.errors.map((err) => (
                       <div
                         key={err.id}
-                        className="text-destructive bg-destructive/5 rounded px-2 py-1.5 font-mono text-xs break-all"
+                        className="text-destructive bg-destructive/5 px-2 py-1.5 font-mono text-xs break-all"
                       >
                         {err.message}
                       </div>
                     ))}
                   </div>
                 )}
-              </div>
+              </Card>
             );
           })}
 
           {generalErrors.length > 0 && (
-            <div className="border-border bg-card rounded-lg border p-3">
-              <span className="text-sm font-medium">General errors</span>
-              <div className="mt-2 space-y-1">
+            <Card className="gap-2 p-3">
+              <Type small className="font-medium">
+                General errors
+              </Type>
+              <div className="space-y-1">
                 {generalErrors.map((err) => (
                   <div
                     key={err.id}
-                    className="text-destructive bg-destructive/5 rounded px-2 py-1.5 font-mono text-xs break-all"
+                    className="text-destructive bg-destructive/5 px-2 py-1.5 font-mono text-xs break-all"
                   >
                     {err.message}
                   </div>
                 ))}
               </div>
-            </div>
+            </Card>
           )}
         </div>
 

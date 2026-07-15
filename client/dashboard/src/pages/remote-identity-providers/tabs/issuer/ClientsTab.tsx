@@ -6,15 +6,14 @@ import { useOrgRoutes } from "@/routes";
 import type { OrganizationRemoteSessionClient } from "@gram/client/models/components/organizationremotesessionclient.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { useOrganizationRemoteSessionClients } from "@gram/client/react-query/organizationRemoteSessionClients.js";
+import { Button } from "@/components/ui/button";
 import {
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Icon,
-} from "@speakeasy-api/moonshine";
-import { MoreHorizontal, Plus } from "lucide-react";
+} from "@/components/ui/dropdown-menu";
+import { Key, MoreHorizontal, Plus } from "lucide-react";
 import { useState } from "react";
 import { remoteSessionClientDisplayName } from "../../clientDisplay";
 import { CreateRemoteSessionClientSheet } from "../../CreateRemoteSessionClientSheet";
@@ -61,7 +60,7 @@ export function ClientsTab({
         {items.map((item) => (
           <DotRow
             key={item.client.id}
-            icon={<Icon name="key" className="text-muted-foreground h-5 w-5" />}
+            icon={<Key className="text-muted-foreground h-5 w-5" />}
             href={orgRoutes.remoteIdentityProviders.clientDetail.href(
               issuer.id,
               item.client.id,

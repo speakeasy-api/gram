@@ -10,14 +10,10 @@ import {
   useShadowMCPInventory,
 } from "@gram/client/react-query/shadowMCPInventory.js";
 import { useUpsertShadowMCPInventoryPolicyBypassMutation } from "@gram/client/react-query/upsertShadowMCPInventoryPolicyBypass.js";
-import {
-  Badge,
-  type Column,
-  Icon,
-  type SortDescriptor,
-  Table,
-  sortTableData,
-} from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/badge";
+import { Icon } from "@/components/ui/icon";
+import { Table, type Column, type SortDescriptor } from "@/components/ui/table";
+import { sortTableData } from "@/components/ui/table/sorting";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";

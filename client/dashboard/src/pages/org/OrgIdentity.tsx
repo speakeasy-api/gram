@@ -1,14 +1,16 @@
 import { Page } from "@/components/page-layout";
+import { SettingsLayout } from "@/components/layouts/settings-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Heading } from "@/components/ui/heading";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useOrganization, useSessionData } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { toastError } from "@/lib/toast-error";
 import { useOrgRoutes } from "@/routes";
 import { useGenerateWorkOSAdminPortalLinkMutation } from "@gram/client/react-query/generateWorkOSAdminPortalLink.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
-import { Badge, Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { FolderSync, Loader2, Lock } from "lucide-react";
 import { toast } from "sonner";
 
@@ -95,9 +97,7 @@ function SetupStepButton({ step }: { step: "connect-idp" | "directory-sync" }) {
 function SSOConfigureButton() {
   const generatePortalLink = useGenerateWorkOSAdminPortalLinkMutation({
     onError: (error) => {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to start SSO setup",
-      );
+      toastError(error, "Failed to start SSO setup");
     },
   });
 
@@ -142,11 +142,7 @@ function SSOConfigureButton() {
 function DirectorySyncConfigureButton() {
   const generatePortalLink = useGenerateWorkOSAdminPortalLinkMutation({
     onError: (error) => {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to start Directory Sync setup",
-      );
+      toastError(error, "Failed to start Directory Sync setup");
     },
   });
 
@@ -234,46 +230,41 @@ function IdentitySection({
   children,
 }: IdentityCardProps) {
   return (
-    <section>
-      <div className="flex flex-col">
-        <Heading variant="h5" className="mb-1">
-          {heading}
-        </Heading>
-        <Type as="div" muted small className="mb-4">
-          {description}
-        </Type>
-        <div className="border-border overflow-hidden rounded-lg border">
-          <div className="flex items-center gap-4 p-4">
-            <div className="bg-muted flex h-10 w-10 shrink-0 items-center justify-center rounded-full">
-              {providerIcon}
-            </div>
-            <div className="min-w-0 flex-1">
-              <Type variant="body" className="font-medium">
-                {providerTitle}
-              </Type>
-              <Type muted small>
-                {providerSubtitle}
-              </Type>
-              {active && (
-                <Badge variant="success" className="mt-1.5">
-                  <Badge.Text>Connected</Badge.Text>
-                </Badge>
-              )}
-            </div>
-            {configureButton ?? <ConfigureButton sectionId={sectionId} />}
+    <SettingsLayout.Group
+      label={heading}
+      description={description}
+      actions={configureButton ?? <ConfigureButton sectionId={sectionId} />}
+    >
+      <div className="border-border overflow-hidden border">
+        <div className="flex items-center gap-4 p-4">
+          <div className="bg-muted flex h-10 w-10 shrink-0 items-center justify-center rounded-full">
+            {providerIcon}
           </div>
-          {children}
+          <div className="min-w-0 flex-1">
+            <Type variant="body" className="font-medium">
+              {providerTitle}
+            </Type>
+            <Type muted small>
+              {providerSubtitle}
+            </Type>
+            {active && (
+              <Badge variant="success" className="mt-1.5">
+                <Badge.Text>Connected</Badge.Text>
+              </Badge>
+            )}
+          </div>
         </div>
-        <a
-          href={learnMoreHref}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-muted-foreground hover:text-foreground mt-4 ml-auto block text-sm underline underline-offset-4 transition-colors"
-        >
-          {learnMoreText}
-        </a>
+        {children}
       </div>
-    </section>
+      <a
+        href={learnMoreHref}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-muted-foreground hover:text-foreground mt-4 ml-auto block text-sm underline underline-offset-4 transition-colors"
+      >
+        {learnMoreText}
+      </a>
+    </SettingsLayout.Group>
   );
 }
 
@@ -302,9 +293,9 @@ function OrgIdentityInner() {
   const scimActive = organization.scimEnabled === true;
 
   return (
-    <div className="flex flex-col gap-6">
-      <Heading variant="h4">Identity</Heading>
-      <div className="flex flex-col gap-6">
+    <SettingsLayout>
+      <SettingsLayout.Header title="Identity" />
+      <SettingsLayout.Body>
         <IdentitySection
           sectionId="sso"
           heading="Single Sign-On"
@@ -362,7 +353,7 @@ function OrgIdentityInner() {
             />
           }
         />
-      </div>
-    </div>
+      </SettingsLayout.Body>
+    </SettingsLayout>
   );
 }

@@ -1,10 +1,12 @@
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Link } from "@/components/ui/link";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { TextArea } from "@/components/ui/textarea";
 import { Type } from "@/components/ui/type";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
+import { Alert } from "@/components/ui/alert";
+import { Input } from "@/components/ui/input";
+import { Link } from "@/components/ui/link";
 
 import { WizardContext } from "./machine";
 
@@ -30,39 +32,45 @@ export function ExternalOAuthForm({
     <>
       <div className="max-h-[60vh] space-y-4 overflow-auto">
         {hasMultipleOAuth2AuthCode && (
-          <Alert variant="warning">
-            <AlertTitle>Multiple OAuth2 security schemes detected</AlertTitle>
-            <AlertDescription>
-              This MCP server has {oauth2SecurityCount} OAuth2 security schemes.
-              The applicable scheme can't be determined automatically.
-              Double-check that the configuration below matches the scheme you
-              intend to use before continuing.
-            </AlertDescription>
+          <Alert variant="warning" dismissible={false}>
+            <div>
+              <div className="font-medium">
+                Multiple OAuth2 security schemes detected
+              </div>
+              <div className="text-sm">
+                This MCP server has {oauth2SecurityCount} OAuth2 security
+                schemes. The applicable scheme can't be determined
+                automatically. Double-check that the configuration below matches
+                the scheme you intend to use before continuing.
+              </div>
+            </div>
           </Alert>
         )}
         {discovered && !external.prefilled && (
-          <div className="border-border bg-muted/50 mb-4 flex items-start justify-between gap-4 rounded-md border p-4">
-            <div>
-              <Type small className="font-medium">
-                OAuth detected from {discovered.name}
-              </Type>
+          <Alert variant="info" dismissible={false}>
+            <div className="flex w-full items-start justify-between gap-4">
+              <div>
+                <Type small className="font-medium">
+                  OAuth detected from {discovered.name}
+                </Type>
 
-              <Type muted small className="mt-1">
-                We discovered OAuth {discovered.version} metadata from this
-                server. You can use it to pre-fill the form below.
-              </Type>
+                <Type muted small className="mt-1">
+                  We discovered OAuth {discovered.version} metadata from this
+                  server. You can use it to pre-fill the form below.
+                </Type>
+              </div>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => send({ type: "APPLY_DISCOVERED" })}
+              >
+                Apply
+              </Button>
             </div>
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => send({ type: "APPLY_DISCOVERED" })}
-            >
-              Apply
-            </Button>
-          </div>
+          </Alert>
         )}
         {external.prefilled && (
-          <div className="border-border bg-muted/50 mb-4 rounded-md border p-4">
+          <Alert variant="info" dismissible={false}>
             <Type small className="font-medium">
               Pre-filled from detected OAuth metadata
             </Type>
@@ -72,7 +80,7 @@ export function ExternalOAuthForm({
               and refer to the MCP server or API's documentation to confirm
               these values are correct.
             </Type>
-          </div>
+          </Alert>
         )}
         <div>
           <Type className="mb-2 font-medium">
@@ -82,35 +90,32 @@ export function ExternalOAuthForm({
             Configure your MCP server to use an external authorization server if
             your API fits the very specific MCP OAuth requirements.{" "}
             <Link
-              external
-              to="https://docs.getgram.ai/host-mcp/adding-oauth#authorization-code"
+              href="https://docs.getgram.ai/host-mcp/adding-oauth#authorization-code"
+              rel="noopener noreferrer"
             >
               Docs
             </Link>
           </Type>
 
           <Stack gap={4}>
-            <div>
-              <Type className="mb-2 font-medium">OAuth Server Slug</Type>
+            <Field>
+              <FieldLabel>OAuth Server Slug</FieldLabel>
               <Input
                 placeholder="my-oauth-server"
                 value={external.slug}
-                onChange={(value: string) =>
-                  send({ type: "FIELD_EXTERNAL", key: "slug", value })
+                onChange={(e) =>
+                  send({
+                    type: "FIELD_EXTERNAL",
+                    key: "slug",
+                    value: e.target.value,
+                  })
                 }
                 maxLength={40}
               />
-            </div>
+            </Field>
 
-            <div>
-              <Type className="mb-2 font-medium">
-                OAuth Authorization Server Metadata
-              </Type>
-              {external.jsonError && (
-                <Type className="mt-1 text-sm text-red-500!">
-                  {external.jsonError}
-                </Type>
-              )}
+            <Field data-invalid={external.jsonError ? true : undefined}>
+              <FieldLabel>OAuth Authorization Server Metadata</FieldLabel>
               <TextArea
                 placeholder={`{
   "issuer": "https://your-oauth-server.com",
@@ -135,7 +140,10 @@ export function ExternalOAuthForm({
                 rows={12}
                 className="font-mono text-sm"
               />
-            </div>
+              {external.jsonError && (
+                <FieldError>{external.jsonError}</FieldError>
+              )}
+            </Field>
           </Stack>
         </div>
       </div>

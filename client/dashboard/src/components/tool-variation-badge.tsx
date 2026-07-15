@@ -1,7 +1,7 @@
 import { ReactElement } from "react";
 import { Tool } from "@/lib/toolTypes";
 import { CanonicalToolAttributes } from "@gram/client/models/components/canonicaltoolattributes.js";
-import { Icon } from "@speakeasy-api/moonshine";
+import { Layers2 } from "lucide-react";
 import { SimpleTooltip } from "./ui/tooltip";
 
 export const ToolVariationBadge = ({
@@ -37,7 +37,7 @@ export const ToolVariationBadge = ({
     <SimpleTooltip
       tooltip={`This tool has been modified. Fields changed: ${fieldsChanged.join(", ")}`}
     >
-      <Icon name="layers-2" size="small" className="text-muted-foreground/70" />
+      <Layers2 className="text-muted-foreground/70 size-4" />
     </SimpleTooltip>
   );
 };

@@ -1,6 +1,6 @@
 import { CodeBlock } from "@/components/code";
 import { Type } from "@/components/ui/type";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/stack";
 
 export function GettingStartedInstructions(): JSX.Element {
   const commands = [
@@ -30,10 +30,7 @@ export function GettingStartedInstructions(): JSX.Element {
             </div>
             <Type className="font-medium">{item.label}</Type>
           </Stack>
-          <CodeBlock
-            language="bash"
-            className="!bg-muted/50 !rounded-lg !border-0"
-          >
+          <CodeBlock language="bash" className="!bg-muted/50 !border-0">
             {item.command}
           </CodeBlock>
         </Stack>

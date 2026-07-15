@@ -1,4 +1,6 @@
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import { RequireScope } from "@/components/require-scope";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
@@ -315,7 +317,7 @@ export function GrantRuleDrawerContent({
     resourceType === "chat"
   ) {
     return (
-      <span className="border-input text-muted-foreground inline-flex h-7 items-center rounded-md border bg-transparent px-2 py-1 text-xs">
+      <span className="border-input text-muted-foreground inline-flex h-7 items-center border bg-transparent px-2 py-1 text-xs">
         {resourceType === "environment"
           ? "All in project"
           : resourceType === "chat"
@@ -812,7 +814,7 @@ function ToolSelectionPanel({
                     type="button"
                     onClick={() => toggleAnnotation(opt.key)}
                     className={cn(
-                      "border-input hover:bg-accent inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition-colors",
+                      "border-input hover:bg-accent inline-flex items-center gap-1 border px-2 py-1 text-xs transition-colors",
                       isActive &&
                         "border-primary bg-primary/5 text-primary font-medium",
                     )}
@@ -855,7 +857,7 @@ function ToolSelectionPanel({
 
           {/* Search */}
           <div className="flex items-center gap-2 px-3 pb-3">
-            <div className="border-input flex h-8 flex-1 items-center gap-2 rounded-md border px-2">
+            <div className="border-input flex h-8 flex-1 items-center gap-2 border px-2">
               <Wrench className="text-muted-foreground h-3 w-3 shrink-0" />
               <input
                 type="text"
@@ -1166,32 +1168,37 @@ function CollectionGroupPanel({
 
   if (collectionGroups.length === 0) {
     return (
-      <div className="flex flex-col items-center px-4 py-5 text-center">
-        <div className="bg-muted mb-3 flex h-8 w-8 items-center justify-center rounded-full">
-          <Info className="text-muted-foreground h-4 w-4" />
-        </div>
-        <p className="text-muted-foreground mb-4 text-xs leading-relaxed">
-          Collections group MCP servers for reuse across projects.
-          <br />
-          Selecting one grants access to all its tools.
-        </p>
-        <RequireScope
-          scope="org:admin"
-          level="component"
-          reason="You need org admin to create a collection."
-        >
-          {({ disabled }) => (
-            <button
-              type="button"
-              onClick={disabled ? undefined : goToCreateCollection}
-              className="border-input text-foreground hover:bg-accent inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs shadow-xs transition-colors"
-            >
-              <Plus className="h-3 w-3" />
-              Create new collection
-            </button>
-          )}
-        </RequireScope>
-      </div>
+      <InlineEmptyState
+        icon={<Info className="h-4 w-4" />}
+        title="No collections yet"
+        description={
+          <>
+            Collections group MCP servers for reuse across projects.
+            <br />
+            Selecting one grants access to all its tools.
+          </>
+        }
+        action={
+          <RequireScope
+            scope="org:admin"
+            level="component"
+            reason="You need org admin to create a collection."
+          >
+            {({ disabled }) => (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={disabled ? undefined : goToCreateCollection}
+              >
+                <Button.LeftIcon>
+                  <Plus className="h-3 w-3" />
+                </Button.LeftIcon>
+                <Button.Text>Create new collection</Button.Text>
+              </Button>
+            )}
+          </RequireScope>
+        }
+      />
     );
   }
 
@@ -1243,7 +1250,7 @@ function CollectionGroupPanel({
             key={group.id}
             type="button"
             onClick={toggleAll}
-            className="hover:bg-accent flex w-full cursor-pointer items-center gap-3 rounded-sm px-3 py-2.5 text-sm"
+            className="hover:bg-accent flex w-full cursor-pointer items-center gap-3 px-3 py-2.5 text-sm"
           >
             <Checkbox
               checked={allSelected}
@@ -1271,7 +1278,7 @@ function CollectionGroupPanel({
             <button
               type="button"
               onClick={disabled ? undefined : goToCreateCollection}
-              className="text-muted-foreground hover:text-foreground flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-sm px-3 py-1.5 text-xs transition-colors"
+              className="text-muted-foreground hover:text-foreground flex w-full cursor-pointer items-center justify-center gap-1.5 px-3 py-1.5 text-xs transition-colors"
             >
               <Plus className="h-3 w-3" />
               Create new collection
@@ -1302,7 +1309,7 @@ function ResourceCheckbox({
       onClick={() => onToggle(id)}
       className={cn(
         "hover:bg-accent flex w-full cursor-pointer items-center gap-2 px-3",
-        compact ? "h-10 rounded-none text-sm" : "rounded-sm py-2 text-sm",
+        compact ? "h-10 text-sm" : "py-2 text-sm",
         checked && "font-medium",
       )}
     >
@@ -1332,7 +1339,7 @@ function ScopeOption({
       type="button"
       onClick={onClick}
       className={cn(
-        "hover:bg-accent flex w-full cursor-pointer items-start gap-2 rounded-sm px-3 py-2 text-sm",
+        "hover:bg-accent flex w-full cursor-pointer items-start gap-2 px-3 py-2 text-sm",
         selected && "font-medium",
       )}
     >
@@ -1367,7 +1374,7 @@ function HighlightMatch({
   return (
     <span className={className}>
       {text.slice(0, idx)}
-      <mark className="rounded-sm bg-yellow-200 dark:bg-yellow-800/60">
+      <mark className="bg-warning-softest text-inherit">
         {text.slice(idx, idx + query.length)}
       </mark>
       {text.slice(idx + query.length)}

@@ -1,12 +1,12 @@
 import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { useDeleteProjectMutation } from "@gram/client/react-query/deleteProject";
 import { invalidateListProjects } from "@gram/client/react-query/listProjects";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useQueryClient } from "@tanstack/react-query";
 import { Trash2 } from "lucide-react";
 import { useState } from "react";
@@ -101,7 +101,7 @@ export function SettingsDangerZone(): JSX.Element {
               <Input
                 id="confirm-project-name"
                 value={deleteProjectConfirmation}
-                onChange={setDeleteProjectConfirmation}
+                onChange={(e) => setDeleteProjectConfirmation(e.target.value)}
                 placeholder={project.name}
                 autoComplete="off"
                 autoFocus

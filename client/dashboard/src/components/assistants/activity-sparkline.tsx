@@ -1,3 +1,4 @@
+import { Sparkline } from "@/components/chart/Sparkline";
 import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
 import { useListChats } from "@gram/client/react-query/listChats.js";
@@ -86,37 +87,22 @@ export function AssistantActivitySparkline({
   if (!canRead) return null;
 
   const hasActivity = counts.some((count) => count > 0);
-  const max = Math.max(...counts, 1);
-  const stepX = WIDTH / (counts.length - 1);
-  const points = counts
-    .map((count, i) => {
-      const x = i * stepX;
-      const y = HEIGHT - 1 - (count / max) * (HEIGHT - 2);
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    })
-    .join(" ");
 
   return (
-    <svg
-      width={WIDTH}
-      height={HEIGHT}
-      viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
+    <span
       className={cn(
-        "overflow-visible",
         hasActivity ? "text-primary" : "text-muted-foreground/30",
         className,
       )}
       aria-label={hasActivity ? "Recent activity" : "No recent activity"}
       role="img"
     >
-      <polyline
-        points={points}
-        fill="none"
-        stroke="currentColor"
+      <Sparkline
+        data={counts}
+        width={WIDTH}
+        height={HEIGHT}
         strokeWidth={1.25}
-        strokeLinejoin="round"
-        strokeLinecap="round"
       />
-    </svg>
+    </span>
   );
 }

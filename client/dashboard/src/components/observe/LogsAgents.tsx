@@ -19,10 +19,12 @@ import {
   useListChats,
 } from "@gram/client/react-query/listChats.js";
 import { formatPlatform } from "@/lib/formatPlatform";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Alert, Button, Icon } from "@speakeasy-api/moonshine";
+import { Alert } from "@/components/ui/alert";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import { Bot, X } from "lucide-react";
 import { Link, useSearchParams } from "react-router";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useOrgRoutes } from "@/routes";
@@ -34,6 +36,8 @@ import {
   type OptionsById,
 } from "@/components/filters";
 import { Page } from "@/components/page-layout";
+import { ObservabilityLayout } from "@/components/layouts/observability-layout";
+import { Type } from "@/components/ui/type";
 import { type DateRangePreset, getPresetRange } from "@gram-ai/elements";
 import { isValidPreset } from "@/components/observe/observeFilterUtils";
 
@@ -641,145 +645,131 @@ function AgentSessionsPageContent({
   total: number;
   onDeleteChat: (chatId: string) => void;
 }) {
-  if (isLogsDisabled) {
-    return (
-      <div className="min-h-0 w-full flex-1 space-y-6 overflow-y-auto p-8 pb-24">
-        <div className="flex min-w-0 flex-col gap-1">
-          <h1 className="text-xl font-semibold">Agent Sessions</h1>
-          <p className="text-muted-foreground text-sm">
-            View and debug individual agent sessions captured for organization
-            members in this project
-          </p>
-        </div>
-        <div className="relative flex-1">
-          <div
-            className="pointer-events-none h-full select-none"
-            aria-hidden="true"
-          >
-            <ObservabilitySkeleton />
-          </div>
-          <EnableLoggingOverlay onEnabled={onLogsEnabled} />
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <>
-      <div className="flex min-h-0 w-full flex-1 flex-col">
-        <div className="shrink-0 space-y-4 px-8 py-4">
-          <div className="flex min-w-0 flex-col gap-1">
-            <h1 className="text-xl font-semibold">Agent Sessions</h1>
-            <p className="text-muted-foreground text-sm">
-              View and debug individual agent sessions captured for organization
-              members in this project
-            </p>
-          </div>
-          {hasAssistantFilter && (
-            <Badge
-              variant="secondary"
-              className="w-fit gap-1.5 px-2.5 py-1 text-xs"
+    <ObservabilityLayout fullHeight>
+      <ObservabilityLayout.Header
+        title="Agent Sessions"
+        subtitle="View and debug individual agent sessions captured for organization members in this project"
+        className="px-8 pt-4"
+      />
+      <ObservabilityLayout.Scroll className="flex flex-col gap-4 px-8 py-4">
+        {isLogsDisabled ? (
+          <div className="relative flex-1">
+            <div
+              className="pointer-events-none h-full select-none"
+              aria-hidden="true"
             >
-              <Icon name="bot" className="size-3" />
-              <span>
-                Assistant:{" "}
-                <span className="font-medium">
-                  {assistantName ?? "Loading…"}
-                </span>
-              </span>
-              <button
-                type="button"
-                onClick={clearAssistantFilter}
-                aria-label="Clear assistant filter"
-                className="hover:bg-muted-foreground/20 -mr-1 ml-0.5 flex size-4 items-center justify-center rounded"
+              <ObservabilitySkeleton />
+            </div>
+            <EnableLoggingOverlay onEnabled={onLogsEnabled} />
+          </div>
+        ) : (
+          <>
+            {hasAssistantFilter && (
+              <Badge
+                variant="neutral"
+                background={false}
+                className="w-fit gap-1.5 px-2.5 py-1 text-xs"
               >
-                <Icon name="x" className="size-3" />
-              </button>
-            </Badge>
-          )}
-          <Page.Toolbar>
-            <Page.Toolbar.Search
-              value={searchQuery}
-              onChange={setSearchQuery}
-              placeholder="Search by chat ID, user ID, or title..."
-              debounceMs={500}
-            />
-            <Page.Toolbar.Filters
-              schema={SESSION_FILTERS}
-              values={{
-                date: {
-                  preset: customRange ? null : dateRange,
-                  customRange,
-                  customLabel: null,
-                },
-                has_risk: hasRisk || null,
-                account_type: accountType || null,
-                source: sources,
-                min_risk_score: minRiskScore ?? null,
-              }}
-              optionsById={filterOptions}
-              onChange={(id: string, value: FilterValue) => {
-                if (id === "date") {
-                  const dateValue = value as {
-                    preset: DateRangePreset | null;
-                    customRange: { from: Date; to: Date } | null;
-                  };
-                  if (dateValue.customRange) {
-                    setCustomRangeParam(
-                      dateValue.customRange.from,
-                      dateValue.customRange.to,
-                    );
-                  } else if (dateValue.preset) {
-                    setDateRangeParam(dateValue.preset);
-                  } else {
-                    clearCustomRange();
+                <Badge.LeftIcon>
+                  <Bot className="size-3" />
+                </Badge.LeftIcon>
+                <Badge.Text>
+                  Assistant:{" "}
+                  <span className="font-medium">
+                    {assistantName ?? "Loading…"}
+                  </span>
+                </Badge.Text>
+                <button
+                  type="button"
+                  onClick={clearAssistantFilter}
+                  aria-label="Clear assistant filter"
+                  className="hover:bg-muted-foreground/20 -mr-1 ml-0.5 flex size-4 items-center justify-center"
+                >
+                  <X className="size-3" />
+                </button>
+              </Badge>
+            )}
+            <Page.Toolbar>
+              <Page.Toolbar.Search
+                value={searchQuery}
+                onChange={setSearchQuery}
+                placeholder="Search by chat ID, user ID, or title..."
+                debounceMs={500}
+              />
+              <Page.Toolbar.Filters
+                schema={SESSION_FILTERS}
+                values={{
+                  date: {
+                    preset: customRange ? null : dateRange,
+                    customRange,
+                    customLabel: null,
+                  },
+                  has_risk: hasRisk || null,
+                  account_type: accountType || null,
+                  source: sources,
+                  min_risk_score: minRiskScore ?? null,
+                }}
+                optionsById={filterOptions}
+                onChange={(id: string, value: FilterValue) => {
+                  if (id === "date") {
+                    const dateValue = value as {
+                      preset: DateRangePreset | null;
+                      customRange: { from: Date; to: Date } | null;
+                    };
+                    if (dateValue.customRange) {
+                      setCustomRangeParam(
+                        dateValue.customRange.from,
+                        dateValue.customRange.to,
+                      );
+                    } else if (dateValue.preset) {
+                      setDateRangeParam(dateValue.preset);
+                    } else {
+                      clearCustomRange();
+                    }
+                  } else if (id === "has_risk") {
+                    setHasRisk((value as string | null) ?? "");
+                  } else if (id === "account_type") {
+                    setAccountType((value as string | null) ?? "");
+                  } else if (id === "source") {
+                    setSources((value as string[]) ?? []);
+                  } else if (id === "min_risk_score") {
+                    setMinRiskScore(value as number | null);
                   }
-                } else if (id === "has_risk") {
-                  setHasRisk((value as string | null) ?? "");
-                } else if (id === "account_type") {
-                  setAccountType((value as string | null) ?? "");
-                } else if (id === "source") {
-                  setSources((value as string[]) ?? []);
-                } else if (id === "min_risk_score") {
-                  setMinRiskScore(value as number | null);
-                }
-              }}
-              onClear={(id: string) => {
-                if (id === "date") {
-                  setDateRangeParam("30d");
-                } else if (id === "has_risk") {
-                  setHasRisk("");
-                } else if (id === "account_type") {
-                  setAccountType("");
-                } else if (id === "source") {
-                  setSources([]);
-                } else if (id === "min_risk_score") {
-                  setMinRiskScore(null);
-                }
-              }}
-              onClearAll={clearAllFilters}
-            />
-            <Page.Toolbar.SortBy
-              value={sortField}
-              onChange={(v) => setSortField(v as SortField)}
-              options={[
-                { value: "chronological", label: "Date" },
-                { value: "messageCount", label: "Message Count" },
-              ]}
-              direction={sortOrder}
-              onDirectionChange={setSortOrder}
-            />
-            <Page.Toolbar.Refresh
-              onRefresh={onRefresh}
-              isRefreshing={isRefreshing}
-            />
-          </Page.Toolbar>
-          <OwnSessionsNotice />
-        </div>
+                }}
+                onClear={(id: string) => {
+                  if (id === "date") {
+                    setDateRangeParam("30d");
+                  } else if (id === "has_risk") {
+                    setHasRisk("");
+                  } else if (id === "account_type") {
+                    setAccountType("");
+                  } else if (id === "source") {
+                    setSources([]);
+                  } else if (id === "min_risk_score") {
+                    setMinRiskScore(null);
+                  }
+                }}
+                onClearAll={clearAllFilters}
+              />
+              <Page.Toolbar.SortBy
+                value={sortField}
+                onChange={(v) => setSortField(v as SortField)}
+                options={[
+                  { value: "chronological", label: "Date" },
+                  { value: "messageCount", label: "Message Count" },
+                ]}
+                direction={sortOrder}
+                onDirectionChange={setSortOrder}
+              />
+              <Page.Toolbar.Refresh
+                onRefresh={onRefresh}
+                isRefreshing={isRefreshing}
+              />
+            </Page.Toolbar>
+            <OwnSessionsNotice />
 
-        <div className="min-h-0 flex-1 overflow-hidden border-t">
-          <div className="bg-background flex h-full flex-col overflow-hidden">
-            <div className="flex-1 overflow-y-auto">
+            <div className="border-t pt-4">
               <ChatLogsTable
                 chats={chats}
                 selectedChatId={selectedChat?.id}
@@ -788,37 +778,50 @@ function AgentSessionsPageContent({
                 isLoading={isLoading}
                 error={error}
               />
+              {(hasMore || offset > 0) && (
+                <div className="flex items-center justify-center gap-4 border-t p-4">
+                  <Button
+                    onClick={() => setOffset(Math.max(0, offset - limit))}
+                    disabled={offset === 0}
+                  >
+                    Previous
+                  </Button>
+                  <Type muted small>
+                    Page{" "}
+                    <span className="tabular-nums">
+                      {Math.floor(offset / limit) + 1}
+                    </span>
+                    {total > 0 && (
+                      <>
+                        {" "}
+                        of{" "}
+                        <span className="tabular-nums">
+                          {Math.ceil(total / limit)}
+                        </span>
+                      </>
+                    )}
+                  </Type>
+                  <Button
+                    onClick={() => setOffset(offset + limit)}
+                    disabled={!hasMore}
+                  >
+                    Next
+                  </Button>
+                </div>
+              )}
             </div>
-            {(hasMore || offset > 0) && (
-              <div className="bg-background flex shrink-0 items-center justify-center gap-4 border-t p-4">
-                <Button
-                  onClick={() => setOffset(Math.max(0, offset - limit))}
-                  disabled={offset === 0}
-                >
-                  Previous
-                </Button>
-                <span className="text-muted-foreground text-sm tabular-nums">
-                  Page {Math.floor(offset / limit) + 1}
-                  {total > 0 && ` of ${Math.ceil(total / limit)}`}
-                </span>
-                <Button
-                  onClick={() => setOffset(offset + limit)}
-                  disabled={!hasMore}
-                >
-                  Next
-                </Button>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+          </>
+        )}
+      </ObservabilityLayout.Scroll>
 
-      <ChatDetailSheet
-        chatId={selectedChatId ?? selectedChat?.id ?? null}
-        onClose={() => setSelectedChat(null)}
-        onDelete={onDeleteChat}
-        dimNonRisk={hasRisk === "true" || minRiskScore !== undefined}
-      />
-    </>
+      {!isLogsDisabled && (
+        <ChatDetailSheet
+          chatId={selectedChatId ?? selectedChat?.id ?? null}
+          onClose={() => setSelectedChat(null)}
+          onDelete={onDeleteChat}
+          dimNonRisk={hasRisk === "true" || minRiskScore !== undefined}
+        />
+      )}
+    </ObservabilityLayout>
   );
 }

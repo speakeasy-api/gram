@@ -1,6 +1,5 @@
 import { ToolList } from "@/components/tool-list";
 import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -10,7 +9,8 @@ import {
 } from "@/components/ui/select";
 import { useLatestDeployment, useListTools } from "@/hooks/toolTypes";
 import { Tool, Toolset, getToolSourceLabel } from "@/lib/toolTypes";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -206,7 +206,7 @@ export function AddToolsDialog({
             <Input
               placeholder="Search tools..."
               value={search}
-              onChange={setSearch}
+              onChange={(e) => setSearch(e.target.value)}
               className="flex-1"
               autoFocus
             />
@@ -228,11 +228,11 @@ export function AddToolsDialog({
           {/* Tool list with selection mode */}
           <div className="flex-1 overflow-auto">
             {isLoading ? (
-              <div className="py-8 text-center text-neutral-500">
+              <div className="text-muted-foreground py-8 text-center">
                 Loading tools...
               </div>
             ) : filteredTools.length === 0 ? (
-              <div className="py-8 text-center text-neutral-500">
+              <div className="text-muted-foreground py-8 text-center">
                 {noResultsMessage}
               </div>
             ) : (

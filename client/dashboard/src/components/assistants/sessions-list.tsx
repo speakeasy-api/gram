@@ -1,3 +1,4 @@
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
@@ -8,7 +9,8 @@ import {
   invalidateAllListChats,
   useListChats,
 } from "@gram/client/react-query/listChats.js";
-import { Icon, Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { ChevronRight } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Loader2 } from "lucide-react";
@@ -57,24 +59,26 @@ export function AssistantSessionsList({
 
   if (error) {
     return (
-      <Type small muted>
-        Couldn't load sessions. {error.message}
-      </Type>
+      <InlineEmptyState
+        title="Couldn't load sessions"
+        description={error.message}
+      />
     );
   }
 
   if (chats.length === 0) {
     return (
-      <Type small muted>
-        No sessions yet. Conversations with this assistant will appear here.
-      </Type>
+      <InlineEmptyState
+        title="No sessions yet"
+        description="Conversations with this assistant will appear here."
+      />
     );
   }
 
   return (
     <>
       <Stack gap={2}>
-        <div className="divide-border/60 overflow-hidden rounded-md border divide-y">
+        <div className="divide-border/60 overflow-hidden border divide-y">
           {chats.map((chat) => {
             const isSelected = selectedChatId === chat.id;
             const lastActivity = chat.lastMessageTimestamp ?? chat.createdAt;
@@ -119,10 +123,10 @@ export function AssistantSessionsList({
         {(data?.total ?? chats.length) > chats.length && (
           <routes.agentSessions.Link
             queryParams={{ assistantId }}
-            className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 self-start rounded-md px-1 py-1 text-xs no-underline transition-colors hover:no-underline"
+            className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 self-start px-1 py-1 text-xs no-underline transition-colors hover:no-underline"
           >
             View all sessions
-            <Icon name="chevron-right" className="h-3 w-3" />
+            <ChevronRight className="h-3 w-3" />
           </routes.agentSessions.Link>
         )}
       </Stack>

@@ -6,7 +6,9 @@ import { MCPServerCard } from "@/components/mcp/MCPServerCard";
 import { MCPServerTableRow } from "@/components/mcp/MCPServerTableRow";
 import { MCPTableRow, MCPTableRowSkeleton } from "@/components/mcp/MCPTableRow";
 import { Page } from "@/components/page-layout";
+import { ListLayout } from "@/components/layouts/list-layout";
 import { DotTable } from "@/components/ui/dot-table";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useViewMode } from "@/components/ui/use-view-mode";
@@ -14,8 +16,9 @@ import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 import { useRoutes } from "@/routes";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
-import { Badge, Button, Icon } from "@speakeasy-api/moonshine";
-import { Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Plus, TriangleAlert } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Outlet } from "react-router";
 import { toast } from "sonner";
@@ -228,7 +231,7 @@ function MCPOverview() {
     <SimpleTooltip tooltip="We couldn't reach the server to refresh this list. Showing the most recently loaded data.">
       <Badge variant="warning">
         <Badge.LeftIcon>
-          <Icon name="triangle-alert" className="inline-block" />
+          <TriangleAlert className="inline-block size-4" />
         </Badge.LeftIcon>
         <Badge.Text>Couldn&apos;t refresh</Badge.Text>
       </Badge>
@@ -251,10 +254,10 @@ function MCPOverview() {
         validate: (value) => value.length > 0 && value.length <= 40,
         hint: (value) => (
           <div className="flex w-full justify-between">
-            <p className="text-destructive">
+            <Type destructive small>
               {value.length > 40 && "Must be 40 characters or less"}
-            </p>
-            <p>{value.length}/40</p>
+            </Type>
+            <Type small>{value.length}/40</Type>
           </div>
         ),
       }}
@@ -295,51 +298,53 @@ function MCPOverview() {
 
   return (
     <>
-      <Page.Section>
-        <Page.Section.Title>Hosted MCP Servers</Page.Section.Title>
-        {hasRefreshError ? (
-          <Page.Section.CTA>{refreshErrorIndicator}</Page.Section.CTA>
-        ) : null}
-        <Page.Section.CTA>{newMcpServerButton}</Page.Section.CTA>
-        <Page.Section.Description className="max-w-2xl">
-          Sources exposed as MCP servers. These include all types of sources
-          such as OpenAPI, functions, third-party servers from the catalog, and
-          custom remote MCPs imported by URL.
-        </Page.Section.Description>
-        <Page.Section.Body>
-          {showFilters && (
-            <Page.Toolbar className="mb-4">
-              <Page.Toolbar.Search
-                value={search}
-                onChange={setSearch}
-                placeholder="Search MCP servers..."
-              />
-              <Page.Toolbar.Filters
-                schema={MCP_FILTERS}
-                values={mcpFilters.values}
-                optionsById={filterOptions}
-                onChange={
-                  mcpFilters.setValue as (
-                    id: string,
-                    value: FilterValue,
-                  ) => void
-                }
-                onClear={mcpFilters.clearValue as (id: string) => void}
-                onClearAll={mcpFilters.clearAll}
-              />
-              <Page.Toolbar.ViewAs value={viewMode} onChange={setViewMode} />
-              <Page.Toolbar.Refresh
-                onRefresh={handleRefresh}
-                isRefreshing={isRefreshing}
-              />
-            </Page.Toolbar>
-          )}
+      <ListLayout>
+        <ListLayout.Header
+          title="Hosted MCP Servers"
+          subtitle="Sources exposed as MCP servers. These include all types of sources such as OpenAPI, functions, third-party servers from the catalog, and custom remote MCPs imported by URL."
+          actions={
+            <>
+              {hasRefreshError ? refreshErrorIndicator : null}
+              {newMcpServerButton}
+            </>
+          }
+        />
+        {showFilters && (
+          <ListLayout.Toolbar>
+            <ListLayout.Toolbar.Search
+              value={search}
+              onChange={setSearch}
+              placeholder="Search MCP servers..."
+            />
+            <ListLayout.Toolbar.Filters
+              schema={MCP_FILTERS}
+              values={mcpFilters.values}
+              optionsById={filterOptions}
+              onChange={
+                mcpFilters.setValue as (id: string, value: FilterValue) => void
+              }
+              onClear={mcpFilters.clearValue as (id: string) => void}
+              onClearAll={mcpFilters.clearAll}
+            />
+            <ListLayout.Toolbar.ViewAs
+              value={viewMode}
+              onChange={setViewMode}
+            />
+            <ListLayout.Toolbar.Refresh
+              onRefresh={handleRefresh}
+              isRefreshing={isRefreshing}
+            />
+          </ListLayout.Toolbar>
+        )}
+        <ListLayout.List>
           {showNoMatches ? (
-            <Type muted className="py-8 text-center">
-              {search !== ""
-                ? `No MCP servers matching “${search}”`
-                : "No MCP servers match your filters"}
-            </Type>
+            <InlineEmptyState
+              title={
+                search !== ""
+                  ? `No MCP servers matching “${search}”`
+                  : "No MCP servers match your filters"
+              }
+            />
           ) : viewMode === "grid" ? (
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
               {isLoading ? (
@@ -396,8 +401,8 @@ function MCPOverview() {
               )}
             </DotTable>
           )}
-        </Page.Section.Body>
-      </Page.Section>
+        </ListLayout.List>
+      </ListLayout>
       {builtInSection}
       {newMcpServerDialog}
     </>

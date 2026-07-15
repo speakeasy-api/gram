@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import _Cal from "@calcom/embed-react";
 import { useSessionData } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { Heading } from "@/components/ui/heading";
 import { CAL_DEMO_LINK, splitDisplayName } from "./demo-booking";
 
 // Cal's .d.ts returns the legacy global `JSX.Element`, incompatible with
@@ -46,10 +47,10 @@ export function DemoBookingFlow(): JSX.Element {
   return (
     <div className="flex w-full flex-col gap-3">
       <div className="flex flex-col gap-1">
-        <h2 className="text-lg font-semibold text-gray-900">
+        <Heading variant="h2" className="normal-case">
           Looks like your company is new to Speakeasy
-        </h2>
-        <p className="text-sm text-gray-600">
+        </Heading>
+        <p className="text-muted-foreground text-sm">
           Book time with our team to activate your account and get started.
         </p>
       </div>

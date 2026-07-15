@@ -1,6 +1,6 @@
 import type { Toolset } from "@/lib/toolTypes";
 import { useRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { PageSection } from "./MCPDetails";
 import { AttachRemoteIdentityProviderSheet } from "./x/tabs/settings/sections/authentication/AttachRemoteIdentityProviderSheet";

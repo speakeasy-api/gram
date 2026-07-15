@@ -1,3 +1,4 @@
+import { Fingerprint, Settings, ShieldCheck } from "lucide-react";
 import {
   CollapsibleNavGroup,
   CollapsibleNavItem,
@@ -17,7 +18,6 @@ import { useTelemetry } from "@/contexts/Telemetry";
 import { useRBAC } from "@/hooks/useRBAC";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { AppRoute, useOrgRoutes } from "@/routes";
-import { Icon } from "@speakeasy-api/moonshine";
 import * as React from "react";
 import { Link } from "react-router";
 import { GramLogo } from "./gram-logo";
@@ -165,7 +165,7 @@ export function OrgSidebar({
               {/* Settings group */}
               <CollapsibleNavGroup
                 label="Settings"
-                Icon={(p) => <Icon {...p} name="settings" />}
+                Icon={Settings}
                 defaultHref={orgRoutes.billing.href()}
               >
                 <ScopeGatedNavItem
@@ -190,7 +190,7 @@ export function OrgSidebar({
               {/* Secure group */}
               <CollapsibleNavGroup
                 label="Secure"
-                Icon={(p) => <Icon {...p} name="shield-check" />}
+                Icon={ShieldCheck}
                 defaultHref={orgRoutes.auditLogs.href()}
               >
                 <ScopeGatedNavItem
@@ -214,7 +214,7 @@ export function OrgSidebar({
               {/* Identity group */}
               <CollapsibleNavGroup
                 label="Identity"
-                Icon={(p) => <Icon {...p} name="fingerprint" />}
+                Icon={Fingerprint}
                 defaultHref={orgRoutes.identity.href()}
               >
                 {isUserSessionsEnabled && (

@@ -1,8 +1,7 @@
-// oxlint-disable react/only-export-components -- compound component (Object.assign) pattern
 import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/button";
 import { Loader2, SaveIcon } from "lucide-react";
 import { createContext, use } from "react";
 
@@ -29,7 +28,7 @@ function SettingsSectionRoot({
 }: {
   children: React.ReactNode;
   id?: string;
-}) {
+}): React.JSX.Element {
   return (
     <SettingsSectionContext.Provider value={DEFAULT_SETTINGS_SECTION_CONTEXT}>
       <section id={id} className="space-y-3 scroll-mt-4">
@@ -43,7 +42,7 @@ function DangerSettingsSectionRoot({
   children,
 }: {
   children: React.ReactNode;
-}) {
+}): React.JSX.Element {
   return (
     <SettingsSectionContext.Provider value={DANGER_SETTINGS_SECTION_CONTEXT}>
       <section className="space-y-3">{children}</section>
@@ -98,7 +97,7 @@ function SettingsSectionPanel({
   return (
     <div
       className={cn(
-        "overflow-hidden rounded-xl border bg-card",
+        "overflow-hidden border bg-card",
         tone === "danger" && "border-destructive/30",
         className,
       )}
@@ -156,25 +155,31 @@ function SettingsSectionFooterActions({
   );
 }
 
-const settingsSectionSlots = {
-  Header: SettingsSectionHeader,
-  Title: SettingsSectionTitle,
-  Description: SettingsSectionDescription,
-  Panel: SettingsSectionPanel,
-  Body: SettingsSectionBody,
-  Footer: SettingsSectionFooter,
-  FooterHint: SettingsSectionFooterHint,
-  FooterActions: SettingsSectionFooterActions,
-};
+// Compound members are attached by mutation rather than Object.assign: the
+// react/only-export-components rule recognizes the former as a component
+// export and flags the latter.
+SettingsSectionRoot.Header = SettingsSectionHeader;
+SettingsSectionRoot.Title = SettingsSectionTitle;
+SettingsSectionRoot.Description = SettingsSectionDescription;
+SettingsSectionRoot.Panel = SettingsSectionPanel;
+SettingsSectionRoot.Body = SettingsSectionBody;
+SettingsSectionRoot.Footer = SettingsSectionFooter;
+SettingsSectionRoot.FooterHint = SettingsSectionFooterHint;
+SettingsSectionRoot.FooterActions = SettingsSectionFooterActions;
 
-export const SettingsSection = Object.assign(
-  SettingsSectionRoot,
-  settingsSectionSlots,
-);
-export const DangerSettingsSection = Object.assign(
-  DangerSettingsSectionRoot,
-  settingsSectionSlots,
-);
+DangerSettingsSectionRoot.Header = SettingsSectionHeader;
+DangerSettingsSectionRoot.Title = SettingsSectionTitle;
+DangerSettingsSectionRoot.Description = SettingsSectionDescription;
+DangerSettingsSectionRoot.Panel = SettingsSectionPanel;
+DangerSettingsSectionRoot.Body = SettingsSectionBody;
+DangerSettingsSectionRoot.Footer = SettingsSectionFooter;
+DangerSettingsSectionRoot.FooterHint = SettingsSectionFooterHint;
+DangerSettingsSectionRoot.FooterActions = SettingsSectionFooterActions;
+
+export {
+  SettingsSectionRoot as SettingsSection,
+  DangerSettingsSectionRoot as DangerSettingsSection,
+};
 
 export function FooterSaveButtonContent({
   pending,

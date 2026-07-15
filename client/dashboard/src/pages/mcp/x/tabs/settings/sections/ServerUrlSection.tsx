@@ -6,6 +6,7 @@ import {
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import {
   InputGroup,
   InputGroupAddon,
@@ -15,6 +16,7 @@ import { Type } from "@/components/ui/type";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useCustomDomains } from "@/hooks/useToolsetUrl";
+import { toastError } from "@/lib/toast-error";
 import { getServerURL } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
 import type { CustomDomain } from "@gram/client/models/components/customdomain.js";
@@ -23,16 +25,16 @@ import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { useDeleteMcpEndpointMutation } from "@gram/client/react-query/deleteMcpEndpoint.js";
 import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { useUpdateMcpEndpointMutation } from "@gram/client/react-query/updateMcpEndpoint.js";
-import { Button, Dialog, Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, Plus, Trash2, XIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useMcpEndpointSlugValidation } from "../../../useMcpEndpointSlugValidation";
-import { SettingsInlineEmptyState } from "../SettingsInlineEmptyState";
 import { RowSaveButtonContent, SettingsSection } from "../SettingsSection";
 
-const ADDRESS_INPUT_GROUP_CLASSNAME = "rounded-md";
 const ADDRESS_SLUG_INPUT_CLASSNAME = "font-mono pl-0! font-bold";
 const ADDRESS_RANDOM_SUFFIX_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
 const ADDRESS_RANDOM_SUFFIX_LENGTH = 5;
@@ -95,21 +97,35 @@ export function ServerUrlSection({
       }
 
       customAddressEmptyState = (
-        <SettingsInlineEmptyState
+        <InlineEmptyState
           title="No custom domains"
           description={description}
-          actionLabel={actionLabel}
-          onAction={onAction}
+          action={
+            actionLabel && onAction ? (
+              <Button variant="secondary" onClick={onAction}>
+                <Button.LeftIcon>
+                  <Plus className="size-4" />
+                </Button.LeftIcon>
+                <Button.Text>{actionLabel}</Button.Text>
+              </Button>
+            ) : undefined
+          }
         />
       );
     } else {
       customAddressEmptyState = (
         <RequireScope scope="mcp:write" level="component">
-          <SettingsInlineEmptyState
+          <InlineEmptyState
             title="No custom address"
             description="Create an MCP URL on your verified custom domain."
-            actionLabel="Add"
-            onAction={() => setAddingCustom(true)}
+            action={
+              <Button variant="secondary" onClick={() => setAddingCustom(true)}>
+                <Button.LeftIcon>
+                  <Plus className="size-4" />
+                </Button.LeftIcon>
+                <Button.Text>Add</Button.Text>
+              </Button>
+            }
           />
         </RequireScope>
       );
@@ -148,11 +164,20 @@ export function ServerUrlSection({
                   />
                 ) : (
                   <RequireScope scope="mcp:write" level="component">
-                    <SettingsInlineEmptyState
+                    <InlineEmptyState
                       title="No hosted address"
                       description="Create the default Speakeasy-hosted URL for this server."
-                      actionLabel="Add"
-                      onAction={() => setAddingPlatform(true)}
+                      action={
+                        <Button
+                          variant="secondary"
+                          onClick={() => setAddingPlatform(true)}
+                        >
+                          <Button.LeftIcon>
+                            <Plus className="size-4" />
+                          </Button.LeftIcon>
+                          <Button.Text>Add</Button.Text>
+                        </Button>
+                      }
                     />
                   </RequireScope>
                 )}
@@ -258,9 +283,7 @@ function AddressRow({
       toast.success("Address updated");
     },
     onError: (error) => {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to update address",
-      );
+      toastError(error, "Failed to update address");
     },
   });
   const [confirmRemoveOpen, setConfirmRemoveOpen] = useState(false);
@@ -272,9 +295,7 @@ function AddressRow({
     },
     onError: (error) => {
       setConfirmRemoveOpen(false);
-      toast.error(
-        error instanceof Error ? error.message : "Failed to remove address",
-      );
+      toastError(error, "Failed to remove address");
     },
   });
   const slugError = useMcpEndpointSlugValidation(
@@ -310,7 +331,7 @@ function AddressRow({
       className="gap-2"
     >
       <Stack direction="horizontal" gap={2} align="center">
-        <InputGroup className={ADDRESS_INPUT_GROUP_CLASSNAME}>
+        <InputGroup>
           <InputGroupAddon>{`${baseUrlPrefix}${slugPrefix}`}</InputGroupAddon>
           <InputGroupInput
             value={suffix}
@@ -459,7 +480,7 @@ function NewPlatformAddressRow({
       className="gap-2"
     >
       <Stack direction="horizontal" gap={2} align="center">
-        <InputGroup className={ADDRESS_INPUT_GROUP_CLASSNAME}>
+        <InputGroup>
           <InputGroupAddon>
             {`${getServerURL()}/mcp/${slugPrefix}`}
           </InputGroupAddon>
@@ -550,7 +571,7 @@ function NewCustomAddressRow({
       className="gap-2"
     >
       <Stack direction="horizontal" gap={2} align="center">
-        <InputGroup className={ADDRESS_INPUT_GROUP_CLASSNAME}>
+        <InputGroup>
           <InputGroupAddon>{`https://${customDomain?.domain ?? "custom-domain"}/mcp/`}</InputGroupAddon>
           <InputGroupInput
             value={slug}

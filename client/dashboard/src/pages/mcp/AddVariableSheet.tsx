@@ -11,8 +11,9 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { Button } from "@speakeasy-api/moonshine";
-import { ChevronDown, Plus, X } from "lucide-react";
+import { Type } from "@/components/ui/type";
+import { Button } from "@/components/ui/button";
+import { ChevronDown, Import, Plus, X } from "lucide-react";
 import { useCallback, useState } from "react";
 import { EnvVarState } from "./environmentVariableUtils";
 
@@ -102,9 +103,7 @@ export function AddVariableSheet({
         className="flex w-[500px] flex-col sm:max-w-[500px]"
       >
         <SheetHeader className="px-6 pt-6 pb-0">
-          <SheetTitle className="text-lg font-semibold">
-            Add Environment Variable
-          </SheetTitle>
+          <SheetTitle>Add Environment Variable</SheetTitle>
         </SheetHeader>
 
         <div className="flex-1 space-y-6 overflow-y-auto px-6 py-6">
@@ -116,12 +115,17 @@ export function AddVariableSheet({
               </Label>
               <Popover>
                 <PopoverTrigger asChild>
-                  <button className="border-input bg-background hover:bg-accent flex h-10 w-full items-center justify-between rounded-md border px-3 text-sm transition-colors">
-                    <span className="text-muted-foreground">
+                  <Button
+                    variant="secondary"
+                    className="w-full justify-between"
+                  >
+                    <Button.Text className="text-muted-foreground text-left">
                       Select a variable to add...
-                    </span>
-                    <ChevronDown className="text-muted-foreground h-4 w-4" />
-                  </button>
+                    </Button.Text>
+                    <Button.RightIcon>
+                      <ChevronDown className="h-4 w-4" />
+                    </Button.RightIcon>
+                  </Button>
                 </PopoverTrigger>
                 <PopoverContent
                   align="start"
@@ -130,7 +134,7 @@ export function AddVariableSheet({
                   {availableEnvVarsFromAttached.map((varName) => (
                     <div
                       key={varName}
-                      className="hover:bg-accent flex cursor-pointer items-center gap-2 rounded-sm px-3 py-2 text-sm"
+                      className="hover:bg-accent flex cursor-pointer items-center gap-2 px-3 py-2 text-sm"
                       onClick={() => onLoadFromEnvironment(varName)}
                     >
                       <div className="font-mono">{varName}</div>
@@ -138,17 +142,17 @@ export function AddVariableSheet({
                   ))}
                 </PopoverContent>
               </Popover>
-              <p className="text-muted-foreground mt-2 text-xs">
+              <Type small muted className="mt-2">
                 Variables from the attached environment that aren't already
                 added
-              </p>
+              </Type>
             </div>
           ) : attachedEnvironment &&
             availableEnvVarsFromAttached.length === 0 ? (
             <div className="border-b pb-4">
-              <p className="text-muted-foreground text-xs">
+              <Type small muted>
                 All variables from {attachedEnvironment.name} are already added
-              </p>
+              </Type>
             </div>
           ) : null}
 
@@ -174,7 +178,7 @@ export function AddVariableSheet({
                   value={entry.key}
                   onChange={(e) => updateEntry(index, "key", e.target.value)}
                   placeholder="CLIENT_KEY..."
-                  className="border-input bg-background placeholder:text-muted-foreground focus:ring-ring h-10 w-full rounded-md border px-3 font-mono text-sm focus:ring-2 focus:outline-none"
+                  className="border-input bg-background placeholder:text-muted-foreground focus:ring-ring h-10 w-full border px-3 font-mono text-sm focus:ring-2 focus:outline-none"
                 />
               </div>
               <div className="flex-1">
@@ -188,48 +192,45 @@ export function AddVariableSheet({
                   value={entry.value}
                   onChange={(e) => updateEntry(index, "value", e.target.value)}
                   placeholder=""
-                  className="border-input bg-background placeholder:text-muted-foreground focus:ring-ring h-10 w-full rounded-md border px-3 font-mono text-sm focus:ring-2 focus:outline-none"
+                  className="border-input bg-background placeholder:text-muted-foreground focus:ring-ring h-10 w-full border px-3 font-mono text-sm focus:ring-2 focus:outline-none"
                 />
               </div>
               {entries.length > 1 && (
-                <button
+                <Button
                   type="button"
                   onClick={() => removeEntry(index)}
-                  className="text-muted-foreground hover:text-foreground h-10 px-1 transition-colors"
+                  variant="tertiary"
+                  size="lg"
+                  className="px-1"
+                  aria-label="Remove variable"
                 >
-                  <X className="h-4 w-4" />
-                </button>
+                  <Button.Icon>
+                    <X className="h-4 w-4" />
+                  </Button.Icon>
+                </Button>
               )}
             </div>
           ))}
 
           {/* Add Another button */}
-          <button
-            type="button"
-            onClick={addEntry}
-            className="text-muted-foreground hover:text-foreground flex items-center gap-2 text-sm transition-colors"
-          >
-            <Plus className="h-4 w-4" />
-            Add Another
-          </button>
+          <Button type="button" onClick={addEntry} variant="tertiary" size="sm">
+            <Button.LeftIcon>
+              <Plus className="h-4 w-4" />
+            </Button.LeftIcon>
+            <Button.Text>Add Another</Button.Text>
+          </Button>
         </div>
 
         <SheetFooter className="flex-row items-center justify-between border-t px-6 py-4">
-          <button className="text-muted-foreground hover:text-foreground flex items-center gap-2 text-sm transition-colors">
-            <svg
-              className="h-4 w-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              strokeWidth="2"
-            >
-              <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-            </svg>
-            Import .env
-          </button>
-          <span className="text-muted-foreground text-xs">
+          <Button type="button" variant="tertiary" size="sm">
+            <Button.LeftIcon>
+              <Import className="h-4 w-4" />
+            </Button.LeftIcon>
+            <Button.Text>Import .env</Button.Text>
+          </Button>
+          <Type small muted>
             or paste .env contents in Key input
-          </span>
+          </Type>
           <Button onClick={handleSave} disabled={!hasValidEntry}>
             Save
           </Button>

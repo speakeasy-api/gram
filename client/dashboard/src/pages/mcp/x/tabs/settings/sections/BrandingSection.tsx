@@ -5,14 +5,15 @@ import {
   FieldError,
   FieldLabel,
 } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
 import { mcpServerRouteParam } from "@/lib/sources";
+import { toastError } from "@/lib/toast-error";
 import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { invalidateAllGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useUpdateMcpServerMutation } from "@gram/client/react-query/updateMcpServer.js";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
@@ -78,9 +79,7 @@ export function BrandingSection({
       ]);
       toast.success("MCP server updated");
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to update MCP server";
-      toast.error(message);
+      toastError(error, "Failed to update MCP server");
     }
   };
 
@@ -105,7 +104,7 @@ export function BrandingSection({
             <Input
               id="mcp-server-display-name"
               value={nameDraft}
-              onChange={(value) => setNameDraft(value)}
+              onChange={(e) => setNameDraft(e.target.value)}
               placeholder="My MCP server"
               maxLength={NAME_MAX_LENGTH}
               aria-invalid={update.isError}

@@ -1,5 +1,6 @@
 import { useSessionData } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
+import { Heading } from "@/components/ui/heading";
 import { AuthLayout } from "@/pages/login/components/login-section";
 import { JourneyDemo } from "@/pages/login/components/journey-demo";
 import {
@@ -9,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/button";
 import { LogOutIcon, AlertCircleIcon, BuildingIcon } from "lucide-react";
 import { useState } from "react";
 
@@ -66,18 +67,18 @@ export default function SwitchOrg({
       >
         <div className="flex flex-col items-center gap-3 text-center">
           <div
-            className={`flex h-12 w-12 items-center justify-center rounded-full ${gate ? "bg-amber-50" : "bg-blue-50"}`}
+            className={`flex h-12 w-12 items-center justify-center rounded-full ${gate ? "bg-warning-softest" : "bg-muted"}`}
           >
             {gate ? (
-              <AlertCircleIcon className="h-6 w-6 text-amber-500" />
+              <AlertCircleIcon className="text-default-warning h-6 w-6" />
             ) : (
-              <BuildingIcon className="h-6 w-6 text-blue-500" />
+              <BuildingIcon className="text-muted-foreground h-6 w-6" />
             )}
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900">
+          <Heading variant="h1" className="normal-case">
             {gate ? `No access for ${currentOrgName}` : "Switch organization"}
-          </h1>
-          <p className="text-sm leading-relaxed text-[#8B8684]">
+          </Heading>
+          <p className="text-muted-foreground text-sm leading-relaxed">
             {gate
               ? "This organization doesn't have access to the MCP platform. Switch to another organization to continue."
               : "Select which organization you'd like to work in."}

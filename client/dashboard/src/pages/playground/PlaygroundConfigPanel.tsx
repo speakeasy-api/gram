@@ -31,7 +31,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { McpIcon } from "@/components/ui/mcp-icon";
-import { Badge } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/badge";
 
 interface ToolsetInfo {
   name: string;
@@ -361,7 +361,7 @@ export function PlaygroundConfigPanel({
             {onOpenToolsModal && (
               <Button
                 size="sm"
-                variant="ghost"
+                variant="tertiary"
                 className="h-6 px-2"
                 onClick={(e: React.MouseEvent) => {
                   e.stopPropagation();

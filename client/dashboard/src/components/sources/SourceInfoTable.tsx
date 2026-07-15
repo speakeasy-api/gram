@@ -6,7 +6,7 @@ export function SourceInfoTable({
 }: {
   children: ReactNode;
 }): JSX.Element {
-  return <div className="divide-y rounded-lg border">{children}</div>;
+  return <div className="divide-y border">{children}</div>;
 }
 
 export function SourceInfoRow({

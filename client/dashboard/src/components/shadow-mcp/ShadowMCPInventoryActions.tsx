@@ -15,15 +15,15 @@ import type { AccessMember } from "@gram/client/models/components/accessmember.j
 import type { Role } from "@gram/client/models/components/role.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
-  Badge,
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Icon,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/dropdown-menu";
+import { Icon } from "@/components/ui/icon";
 import { useEffect, useState } from "react";
 
 export type ShadowMCPPolicy = Pick<

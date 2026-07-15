@@ -35,6 +35,8 @@ import {
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useSession } from "@/contexts/Auth";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Kbd } from "@/components/ui/kbd";
+import { getInitials } from "@/lib/initials";
 import {
   useHideInsightsDock,
   useInsightsState,
@@ -49,6 +51,8 @@ import {
 } from "@/lib/insights-suggestions";
 import { cn } from "@/lib/utils";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
+import { Heading } from "@/components/ui/heading";
+import { Type } from "@/components/ui/type";
 import { useRoutes } from "@/routes";
 
 // Shared pill-style icon button used by the page chrome (back affordances).
@@ -250,9 +254,9 @@ export function ChatLanding({
     <div className="flex w-full flex-col gap-6">
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <h1 className="text-foreground text-3xl font-semibold tracking-tight">
+          <Heading variant="h1" className="text-3xl normal-case">
             {greeting}
-          </h1>
+          </Heading>
           <ReleaseStageBadge stage="beta" />
         </div>
         <form
@@ -260,7 +264,7 @@ export function ChatLanding({
             e.preventDefault();
             submit();
           }}
-          className="border-border bg-card focus-within:border-foreground/30 relative rounded-2xl border px-4 py-3 shadow-sm transition-colors"
+          className="border-border bg-card focus-within:border-foreground/30 relative border px-4 py-3 transition-colors"
         >
           <input
             value={value}
@@ -291,9 +295,7 @@ export function ChatLanding({
                 {placeholder}
               </span>
               <div className="text-muted-foreground pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 flex items-center gap-1.5 text-xs">
-                <kbd className="border-border rounded border px-1.5 py-0.5 font-mono">
-                  /
-                </kbd>
+                <Kbd className="px-1.5 py-0.5 text-xs">/</Kbd>
                 for suggestions
               </div>
             </>
@@ -346,7 +348,7 @@ function SlashCommandMenu({
       id="ask-slash-menu"
       role="listbox"
       aria-label="Suggested prompts"
-      className="border-border bg-card absolute inset-x-0 top-full z-20 mt-2 max-h-80 overflow-y-auto rounded-xl border p-1 shadow-lg"
+      className="border-border bg-card absolute inset-x-0 top-full z-20 mt-2 max-h-80 overflow-y-auto border p-1"
     >
       {commands.map((command, index) => {
         const Icon = INSIGHTS_SUGGESTION_ICONS[command.icon ?? "sparkles"];
@@ -365,7 +367,7 @@ function SlashCommandMenu({
             onMouseEnter={() => onHover(index)}
             onClick={() => onSelect(command)}
             className={cn(
-              "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left",
+              "flex w-full items-center gap-3 px-3 py-2 text-left",
               active ? "bg-muted" : "hover:bg-muted/60",
             )}
           >
@@ -513,7 +515,15 @@ function ChatHomePinned(): ReactElement | null {
   }
   return (
     <section className="flex flex-col gap-2">
-      <h2 className="text-muted-foreground px-3 text-sm font-medium">Pinned</h2>
+      <Type
+        as="h2"
+        mono
+        small
+        muted
+        className="px-3 uppercase tracking-[0.08em]"
+      >
+        Pinned
+      </Type>
       <div className="flex flex-col">
         {chats.map((chat) => (
           <RecentRow key={chat.id} chat={chat} pinned />
@@ -531,9 +541,9 @@ function ChatHomeRecents(): ReactElement {
   return (
     <section className="flex flex-col gap-2">
       <div className="flex items-center justify-between px-3">
-        <h2 className="text-muted-foreground text-sm font-medium">
+        <Type as="h2" mono small muted className="uppercase tracking-[0.08em]">
           Recent Chats
-        </h2>
+        </Type>
         {chats.length > RECENTS_COLLAPSED_COUNT && (
           <button
             type="button"
@@ -565,16 +575,16 @@ function RecentsBody({
 }): ReactElement {
   if (loading) {
     return (
-      <p className="text-muted-foreground px-3 text-sm">
+      <Type muted small className="px-3">
         Loading conversations…
-      </p>
+      </Type>
     );
   }
   if (chats.length === 0) {
     return (
-      <p className="text-muted-foreground px-3 text-sm">
+      <Type muted small className="px-3">
         Your recent conversations will appear here.
-      </p>
+      </Type>
     );
   }
   const entries = buildRecentEntries(chats, showAll);
@@ -601,31 +611,18 @@ function RecentsBody({
 function RecentEntryView({ entry }: { entry: RecentEntry }): ReactElement {
   if (entry.type === "header") {
     return (
-      <h3 className="text-muted-foreground px-3 pt-4 pb-1 text-sm font-medium">
+      <Type
+        as="h3"
+        mono
+        small
+        muted
+        className="px-3 pt-4 pb-1 uppercase tracking-[0.08em]"
+      >
         {entry.label}
-      </h3>
+      </Type>
     );
   }
   return <RecentRow chat={entry.chat} pinned={false} />;
-}
-
-/**
- * Two-letter initials from a display name or email handle: first letter of
- * the first and last word for a multi-word name ("Adam Bull" -> "AB"), or
- * the first two characters of the email's local part / a single-word name
- * otherwise ("adam@..." -> "AD").
- */
-function initialsOf(identifier: string): string {
-  const handle = identifier.includes("@")
-    ? (identifier.split("@")[0] ?? identifier)
-    : identifier;
-  const words = handle.trim().split(/\s+/).filter(Boolean);
-  if (words.length >= 2) {
-    return (
-      words[0]!.charAt(0) + words[words.length - 1]!.charAt(0)
-    ).toUpperCase();
-  }
-  return handle.trim().slice(0, 2).toUpperCase();
 }
 
 // Row icon: the chat creator's avatar when it resolves against the org
@@ -654,14 +651,14 @@ function RecentRowIcon({
           <AvatarImage src={member.photoUrl} alt={display} />
         ) : null}
         <AvatarFallback className="border-border bg-card text-muted-foreground border text-xs font-medium">
-          {initialsOf(display)}
+          {getInitials(display)}
         </AvatarFallback>
       </Avatar>
     );
   }
 
   return (
-    <span className="border-border bg-card text-muted-foreground flex size-9 shrink-0 items-center justify-center rounded-lg border">
+    <span className="border-border bg-card text-muted-foreground flex size-9 shrink-0 items-center justify-center border">
       <MessageCircle className="size-4" />
     </span>
   );
@@ -679,7 +676,7 @@ function RecentRow({
   // container (not a Link) so the pin button isn't nested inside an anchor; the
   // Link covers the icon + title, and the pin button is a sibling action.
   return (
-    <div className="group/row hover:bg-accent flex items-center gap-3 rounded-lg px-3 py-1.5 transition-colors">
+    <div className="group/row hover:bg-accent flex items-center gap-3 px-3 py-1.5 transition-colors">
       <Link
         to={routes.chat.conversation.href(chat.id)}
         className="flex min-w-0 flex-1 items-center gap-3"
@@ -730,7 +727,7 @@ function PinButton({
       aria-label={pinned ? "Unpin chat" : "Pin chat"}
       title={pinned ? "Unpin chat" : "Pin chat"}
       className={cn(
-        "text-muted-foreground hover:text-foreground hover:bg-muted shrink-0 rounded p-1 transition-opacity",
+        "text-muted-foreground hover:text-foreground hover:bg-muted shrink-0 p-1 transition-opacity",
         pinned
           ? "text-foreground"
           : // Visible by default (touch has no hover to reveal it); only fade-until-hover
@@ -750,9 +747,15 @@ function ChatHomeSuggestions({
 }): ReactElement {
   return (
     <section className="flex flex-col gap-3">
-      <h2 className="text-muted-foreground px-3 text-sm font-medium">
+      <Type
+        as="h2"
+        mono
+        small
+        muted
+        className="px-3 uppercase tracking-[0.08em]"
+      >
         Suggestions
-      </h2>
+      </Type>
       <div className="flex flex-wrap gap-x-2 gap-y-2.5 px-3">
         {CHAT_LANDING_SUGGESTIONS.map((suggestion) => {
           const SuggestionIcon =
@@ -762,7 +765,7 @@ function ChatHomeSuggestions({
               key={suggestion.title}
               type="button"
               onClick={() => onPick(suggestion.prompt)}
-              className="border-border bg-card text-foreground hover:bg-accent hover:text-accent-foreground flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors"
+              className="border-border bg-card text-foreground hover:bg-accent hover:text-accent-foreground flex items-center gap-2 border px-3 py-2 text-sm transition-colors"
             >
               <SuggestionIcon className="size-4 shrink-0" />
               {suggestion.title}
@@ -841,8 +844,10 @@ function ConversationBody({
   // in-flight turn started in the dock keep streaming after maximize.
   if (needsAdmin) {
     return (
-      <div className="text-muted-foreground flex h-full items-center justify-center px-6 text-center text-sm">
-        Ask an admin to enable the Project Assistant for this project.
+      <div className="flex h-full items-center justify-center px-6 text-center">
+        <Type muted small>
+          Ask an admin to enable the Project Assistant for this project.
+        </Type>
       </div>
     );
   }

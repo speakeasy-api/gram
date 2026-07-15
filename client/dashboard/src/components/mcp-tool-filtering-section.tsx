@@ -1,5 +1,6 @@
 import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/heading";
+import { toastError } from "@/lib/toast-error";
 import { toolVariationsGroupDisplayName } from "@/lib/toolVariationGroups";
 import { cn } from "@/lib/utils";
 import {
@@ -21,7 +22,7 @@ import {
 } from "@gram/client/react-query/toolVariationGroups.js";
 import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
 import { useUpdateMcpServerMutation } from "@gram/client/react-query/updateMcpServer.js";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/button";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -51,11 +52,7 @@ export function MCPToolFilteringSection({
 
   const notifySaved = () => toast.success("Tool filtering settings updated");
   const notifyError = (error: unknown) =>
-    toast.error(
-      error instanceof Error
-        ? error.message
-        : "Failed to update tool filtering settings",
-    );
+    toastError(error, "Failed to update tool filtering settings");
 
   const setToolsetGroup = useSetToolsetToolVariationsGroupMutation({
     onSuccess: async () => {
@@ -116,10 +113,7 @@ export function MCPToolFilteringSection({
       // single click rather than leaving the user on "Disabled".
       applyGroup(data.group.id);
     },
-    onError: (error) =>
-      toast.error(
-        error instanceof Error ? error.message : "Failed to create tool group",
-      ),
+    onError: (error) => toastError(error, "Failed to create tool group"),
   });
 
   const currentGroupId =

@@ -53,7 +53,7 @@ function ObservePageShell({
           <Page.Header.Breadcrumbs fullWidth substitutions={substitutions} />
         </Page.Header>
         {tabsBase && <ObserveTabNav base={tabsBase} />}
-        <Page.Body fullWidth overflowHidden noPadding>
+        <Page.Body fullWidth fullHeight overflowHidden noPadding>
           {children}
         </Page.Body>
       </Page>

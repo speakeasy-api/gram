@@ -62,7 +62,7 @@ export const DotRow = forwardRef<HTMLTableRowElement, DotRowProps>(
             />
             {icon && (
               <div className="absolute inset-0 flex items-center justify-center">
-                <div className="bg-background/90 rounded-md p-1.5 shadow-sm backdrop-blur-sm dark:bg-neutral-800 dark:backdrop-blur-none">
+                <div className="bg-background/90 rounded-md p-1.5 backdrop-blur-sm dark:bg-neutral-800 dark:backdrop-blur-none">
                   {icon}
                 </div>
               </div>

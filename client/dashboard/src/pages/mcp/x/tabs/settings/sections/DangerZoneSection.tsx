@@ -2,6 +2,7 @@ import { RequireScope } from "@/components/require-scope";
 import { Switch } from "@/components/ui/switch";
 import { Type } from "@/components/ui/type";
 import { useSdkClient } from "@/contexts/Sdk";
+import { toastError } from "@/lib/toast-error";
 import { useRoutes } from "@/routes";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type {
@@ -17,7 +18,10 @@ import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
 import { useUpdateMcpServerMutation } from "@gram/client/react-query/updateMcpServer.js";
-import { Alert, Button, Dialog, Stack } from "@speakeasy-api/moonshine";
+import { Dialog } from "@/components/ui/dialog";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
+import { Alert } from "@/components/ui/alert";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, Trash2 } from "lucide-react";
 import { useState } from "react";
@@ -95,9 +99,7 @@ export function DangerZoneSection({
   const [isFetchingLatestMcpServer, setIsFetchingLatestMcpServer] =
     useState(false);
   const notifyVisibilityUpdateError = (error: unknown) => {
-    toast.error(
-      error instanceof Error ? error.message : "Failed to update MCP server",
-    );
+    toastError(error, "Failed to update MCP server");
   };
   const updateVisibility = useUpdateMcpServerMutation({
     onSuccess: async (_data, variables) => {
@@ -312,9 +314,7 @@ function DeleteMcpServerDialogContent({
       onSuccess();
     },
     onError: (error) => {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to delete MCP server",
-      );
+      toastError(error, "Failed to delete MCP server");
     },
   });
 

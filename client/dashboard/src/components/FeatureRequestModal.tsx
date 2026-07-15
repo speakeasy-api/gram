@@ -1,6 +1,6 @@
 import { Dialog } from "@/components/ui/dialog";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/button";
 import { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { useOrgRoutes } from "@/routes";

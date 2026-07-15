@@ -8,8 +8,9 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { MoreActions } from "@/components/ui/more-actions";
+import { StatusDot } from "@/components/ui/status-dot";
+import { Type } from "@/components/ui/type";
 import { useRBAC } from "@/hooks/useRBAC";
-import { cn } from "@/lib/utils";
 import {
   sessionStatus,
   sessionTimeLabel,
@@ -35,23 +36,20 @@ export function SessionRow({
 
   const rowContent = (
     <li className="flex items-center gap-3 px-3 py-2">
-      <span
-        className={cn(
-          "size-2 shrink-0 rounded-full",
-          STATUS_PRESENTATION[status].dotClass,
-        )}
-      />
+      <StatusDot tone={STATUS_PRESENTATION[status].badgeVariant} />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">{subjectLabel(session)}</p>
-        <p className="text-muted-foreground truncate text-xs">
+        <Type as="p" small className="truncate font-medium">
+          {subjectLabel(session)}
+        </Type>
+        <Type as="p" muted small className="truncate text-xs">
           {session.clientName ? `${session.clientName} · ` : ""}gated by{" "}
           {session.issuerSlug}
-        </p>
+        </Type>
       </div>
       <SessionStatusBadge session={session} />
-      <span className="text-muted-foreground shrink-0 text-xs">
+      <Type as="span" muted small className="shrink-0 text-xs">
         {sessionTimeLabel(session)}
-      </span>
+      </Type>
       {canRevoke && (
         <MoreActions
           actions={[

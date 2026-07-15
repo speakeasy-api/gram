@@ -17,7 +17,6 @@ import { useFetcher } from "@/contexts/Fetcher";
 import { cn } from "@/lib/utils";
 import { useMarketplaceSettings } from "@gram/client/react-query/marketplaceSettings";
 import { usePlugins } from "@gram/client/react-query/plugins";
-import { Button as MoonshineButton } from "@speakeasy-api/moonshine";
 import {
   ArrowLeft,
   BookOpen,
@@ -555,7 +554,7 @@ function CodexInstallContent({
           observability plugin specifically.
         </p>
         <Button
-          variant="outline"
+          variant="secondary"
           size="sm"
           disabled={isDownloading}
           onClick={() => void handleDownloadInstallScript()}
@@ -920,24 +919,24 @@ export function InstallInstructionsDialog({
 
         {stepIndex > 0 && (
           <div className="border-border flex items-center justify-between border-t px-6 py-4">
-            <MoonshineButton
+            <Button
               variant="tertiary"
               size="sm"
               onClick={() => goToStep(stepIndex - 1)}
             >
-              <MoonshineButton.LeftIcon>
+              <Button.LeftIcon>
                 <ArrowLeft className="h-3 w-3" />
-              </MoonshineButton.LeftIcon>
-              <MoonshineButton.Text>Back</MoonshineButton.Text>
-            </MoonshineButton>
+              </Button.LeftIcon>
+              <Button.Text>Back</Button.Text>
+            </Button>
             {stepIndex === totalSteps - 1 && (
-              <MoonshineButton
+              <Button
                 variant="primary"
                 size="sm"
                 onClick={() => handleOpenChange(false)}
               >
-                <MoonshineButton.Text>Done</MoonshineButton.Text>
-              </MoonshineButton>
+                <Button.Text>Done</Button.Text>
+              </Button>
             )}
           </div>
         )}
@@ -955,7 +954,7 @@ export function InstallInstructionsButton(props: ContentProps): JSX.Element {
 
   return (
     <>
-      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+      <Button variant="secondary" size="sm" onClick={() => setOpen(true)}>
         <BookOpen className="h-4 w-4" />
         Install instructions
       </Button>

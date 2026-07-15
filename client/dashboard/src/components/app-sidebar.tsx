@@ -32,14 +32,23 @@ import { useProductTier } from "@/hooks/useProductTier";
 import { useProjectNavRoutes } from "@/hooks/useProjectNavRoutes";
 import { AppRoute, useOrgRoutes, useRoutes } from "@/routes";
 import { useGetPeriodUsage } from "@gram/client/react-query/getPeriodUsage.js";
-import { cn, Icon, Stack } from "@speakeasy-api/moonshine";
-import { MinusIcon, Settings, TestTube2Icon } from "lucide-react";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import {
+  Eye,
+  Hammer,
+  MinusIcon,
+  Plug,
+  Settings,
+  Shield,
+  TestTube2Icon,
+} from "lucide-react";
 import * as React from "react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import { RequireScope } from "./require-scope";
 import { FeatureRequestModal } from "./FeatureRequestModal";
-import { Button } from "./ui/button";
 import { Type } from "./ui/type";
 
 function ScopeGatedNavItem({
@@ -203,7 +212,7 @@ export function AppSidebar({
           {/* Observe group */}
           <CollapsibleNavGroup
             label="Observe"
-            Icon={(p) => <Icon {...p} name="eye" />}
+            Icon={Eye}
             defaultHref={routes.costs.href()}
           >
             <ScopeGatedNavItem
@@ -231,7 +240,7 @@ export function AppSidebar({
           {/* Secure group */}
           <CollapsibleNavGroup
             label="Secure"
-            Icon={(p) => <Icon {...p} name="shield" />}
+            Icon={Shield}
             defaultHref={routes.riskOverview.href()}
             stage="beta"
           >
@@ -252,6 +261,10 @@ export function AppSidebar({
               scope={scopeFor(routes.shadowMCP)}
             />
             <ScopeGatedNavItem
+              item={routes.approvalRequests}
+              scope={scopeFor(routes.approvalRequests)}
+            />
+            <ScopeGatedNavItem
               item={routes.detectionRules}
               scope={scopeFor(routes.detectionRules)}
             />
@@ -260,7 +273,7 @@ export function AppSidebar({
           {/* Connect group */}
           <CollapsibleNavGroup
             label="Connect"
-            Icon={(p) => <Icon {...p} name="plug" />}
+            Icon={Plug}
             defaultHref={routes.sources.href()}
           >
             <ScopeGatedNavItem
@@ -286,7 +299,7 @@ export function AppSidebar({
           {/* Distribute group */}
           <CollapsibleNavGroup
             label="Distribute"
-            Icon={(p) => <Icon {...p} name="hammer" />}
+            Icon={Hammer}
             defaultHref={routes.mcp.href()}
           >
             <ScopeGatedNavItem item={routes.mcp} scope={scopeFor(routes.mcp)} />
@@ -427,8 +440,9 @@ const PersistentNotification = ({
 
   const closeButton = (
     <Button
-      variant="ghost"
-      size="icon"
+      variant="tertiary"
+      size="sm"
+      aria-label="Minimize"
       className="absolute top-0 right-0 hover:bg-transparent"
       onClick={() => setIsMinimized(true)}
     >
@@ -437,7 +451,7 @@ const PersistentNotification = ({
   );
 
   let classes =
-    "absolute bottom-2 left-1/2 h-[180px] w-[180px] -translate-x-1/2 rounded-lg p-4 border trans overflow-clip ";
+    "absolute bottom-2 left-1/2 h-[180px] w-[180px] -translate-x-1/2 p-4 border trans overflow-clip ";
   if (isMinimized) {
     classes +=
       "h-[12px] w-[12px] left-2 translate-x-0 cursor-pointer hover:scale-110";
@@ -452,8 +466,9 @@ const PersistentNotification = ({
       {!isMinimized && closeButton}
       {isMinimized && (
         <Button
-          variant="ghost"
-          size="icon"
+          variant="tertiary"
+          size="sm"
+          aria-label="Expand"
           className="flex h-full w-full items-center justify-center"
         >
           <Type>?</Type>

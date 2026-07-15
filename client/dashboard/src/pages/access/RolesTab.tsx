@@ -1,4 +1,4 @@
-import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
 import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
 import type { Role } from "@gram/client/models/components/role.js";
@@ -12,21 +12,21 @@ import {
 } from "@gram/client/react-query/members.js";
 import { useDeleteRoleMutation } from "@gram/client/react-query/deleteRole.js";
 import { SkeletonTable } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Icon,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/dropdown-menu";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router";
 import { CreateRoleDialog } from "./CreateRoleDialog";
 import { DeleteRoleDialog } from "./DeleteRoleDialog";
 import { MemberFacepile } from "@/components/member-facepile";
-import { Ellipsis } from "lucide-react";
+import { Ellipsis, Plus } from "lucide-react";
 import { RequireScope } from "@/components/require-scope";
 import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
@@ -55,7 +55,7 @@ function RoleActionsMenu({
               type="button"
               disabled={disabled}
               className={cn(
-                "text-muted-foreground hover:bg-accent hover:text-foreground flex h-8 w-8 cursor-pointer items-center justify-center rounded-md transition-colors",
+                "text-muted-foreground hover:bg-accent hover:text-foreground flex h-8 w-8 cursor-pointer items-center justify-center transition-colors",
                 open && "bg-accent text-foreground",
                 disabled && "cursor-not-allowed",
               )}
@@ -142,7 +142,7 @@ function RoleRow({
           {role.name}
         </Type>
         {role.isSystem && (
-          <Badge variant="outline" size="sm">
+          <Badge variant="neutral" background={false} size="sm">
             System
           </Badge>
         )}
@@ -222,7 +222,7 @@ export function RolesTab(): JSX.Element {
         <RequireScope scope="org:admin" level="component">
           <Button onClick={() => setIsCreateOpen(true)}>
             <Button.LeftIcon>
-              <Icon name="plus" className="h-4 w-4" />
+              <Plus className="h-4 w-4" />
             </Button.LeftIcon>
             <Button.Text>Add Role</Button.Text>
           </Button>
@@ -238,7 +238,7 @@ export function RolesTab(): JSX.Element {
         // subgrid spanning them, so cells align across rows. Description uses
         // minmax(0,1fr) (shrinks, absorbs slack); Members uses max-content
         // (sizes to the bounded facepile) — neither can overflow the table.
-        <div className="border-border mt-4 grid grid-cols-[max-content_minmax(0,24rem)_max-content_max-content_1fr_max-content] overflow-hidden rounded-lg border">
+        <div className="border-border mt-4 grid grid-cols-[max-content_minmax(0,24rem)_max-content_max-content_1fr_max-content] overflow-hidden border">
           <div className="text-muted-foreground border-border col-span-full grid grid-cols-subgrid items-center gap-x-6 border-b px-4 py-2.5 text-sm">
             <div>Name</div>
             <div>Description</div>
@@ -266,15 +266,16 @@ export function RolesTab(): JSX.Element {
         </div>
       )}
 
-      <div className="border-border/50 bg-muted/30 mt-8 rounded-md border px-4 py-3">
+      <Card className="bg-muted/30 mt-8 gap-0 p-4">
         <Type variant="subheading" className="mb-4">
           About System roles
         </Type>
         <div className="flex items-start gap-3 text-sm">
           <Badge
-            variant="outline"
+            variant="neutral"
+            background={false}
             size="sm"
-            className="mt-0.5 w-16 shrink-0 justify-center bg-white dark:bg-zinc-900"
+            className="bg-background mt-0.5 w-16 shrink-0 justify-center"
           >
             Member
           </Badge>
@@ -286,9 +287,10 @@ export function RolesTab(): JSX.Element {
         </div>
         <div className="mt-2 flex items-start gap-3 text-sm">
           <Badge
-            variant="outline"
+            variant="neutral"
+            background={false}
             size="sm"
-            className="mt-0.5 w-16 shrink-0 justify-center bg-white dark:bg-zinc-900"
+            className="bg-background mt-0.5 w-16 shrink-0 justify-center"
           >
             Admin
           </Badge>
@@ -297,7 +299,7 @@ export function RolesTab(): JSX.Element {
             management, every project, MCP server, skills and assistants.
           </Type>
         </div>
-      </div>
+      </Card>
 
       <CreateRoleDialog
         open={isCreateOpen || !!editingRole}

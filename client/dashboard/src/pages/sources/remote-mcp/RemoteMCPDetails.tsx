@@ -2,6 +2,7 @@ import { DetailHero } from "@/components/detail-hero";
 import { MCPServerCard } from "@/components/mcp/MCPServerCard";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import { McpServerCardsSkeleton } from "@/components/sources/McpServerCardsSkeleton";
 import { SourceActivityPanel } from "@/components/sources/SourceActivityPanel";
 import { computeTelemetrySummary } from "@/components/sources/sourceTelemetrySummary";
 import {
@@ -9,8 +10,8 @@ import {
   SourceInfoTable,
 } from "@/components/sources/SourceInfoTable";
 import { CopyButton } from "@/components/ui/copy-button";
+import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
-import { Input } from "@/components/ui/input";
 import {
   PageTabsTrigger,
   Tabs,
@@ -25,6 +26,7 @@ import {
   getRemoteMcpServerArgs,
   remoteMcpRouteParam,
 } from "@/lib/sources";
+import { toastError } from "@/lib/toast-error";
 import { useRoutes } from "@/routes";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
 import type { GetObservabilityOverviewResult } from "@gram/client/models/components/getobservabilityoverviewresult.js";
@@ -40,7 +42,11 @@ import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { invalidateAllRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.js";
 import { useUpdateRemoteMcpServerMutation } from "@gram/client/react-query/updateRemoteMcpServer.js";
 import { unwrapAsync } from "@gram/client/types/fp";
-import { Alert, Badge, Button, Dialog, Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Alert } from "@/components/ui/alert";
+import { Input } from "@/components/ui/input";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import {
@@ -252,8 +258,8 @@ function RemoteMcpHero({ server }: { server: RemoteMcpServer | undefined }) {
     <DetailHero>
       <Stack gap={2}>
         <Stack direction="horizontal" gap={3} align="center">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 dark:bg-violet-500/20">
-            <Network className="h-5 w-5 text-violet-600 dark:text-violet-400" />
+          <div className="bg-muted flex h-10 w-10 shrink-0 items-center justify-center">
+            <Network className="text-muted-foreground h-5 w-5" />
           </div>
           <Heading variant="h1" className="break-all normal-case">
             {server ? formatRemoteMcpDisplay(server) : "Remote MCP server"}
@@ -416,7 +422,7 @@ function McpServersTab({
   return (
     <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
       {isLoading ? (
-        <McpServersSkeleton />
+        <McpServerCardsSkeleton />
       ) : mcpServers.length > 0 ? (
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
           {mcpServers.map((server) => (
@@ -447,9 +453,7 @@ function McpServersEmptyState({
       await link.mutateAsync({ remoteMcpServer });
       toast.success("MCP server added");
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to add MCP server";
-      toast.error(message);
+      toastError(error, "Failed to add MCP server");
     }
   };
 
@@ -477,24 +481,6 @@ function McpServersEmptyState({
           </Button.Text>
         </Button>
       </RequireScope>
-    </div>
-  );
-}
-
-function McpServersSkeleton() {
-  return (
-    <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-      {[1, 2, 3].map((i) => (
-        <div key={i} className="bg-card animate-pulse rounded-xl border p-6">
-          <div className="mb-4 flex items-center gap-3">
-            <div className="bg-muted h-10 w-10 rounded-lg" />
-            <div className="flex-1">
-              <div className="bg-muted mb-2 h-4 w-24 rounded" />
-              <div className="bg-muted h-3 w-32 rounded" />
-            </div>
-          </div>
-        </div>
-      ))}
     </div>
   );
 }
@@ -569,14 +555,12 @@ function NameSection({
       ]);
       toast.success("Remote MCP name updated");
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to update name";
-      toast.error(message);
+      toastError(error, "Failed to update name");
     }
   };
 
   return (
-    <div className="rounded-lg border p-6">
+    <div className="border p-6">
       <Type variant="subheading" className="mb-1">
         Display Name
       </Type>
@@ -587,7 +571,7 @@ function NameSection({
       <Stack gap={2}>
         <Input
           value={draft}
-          onChange={(value) => setDraft(value)}
+          onChange={(e) => setDraft(e.target.value)}
           placeholder="My MCP server"
         />
         {update.isError && (
@@ -684,14 +668,12 @@ function UrlSection({
       ]);
       toast.success("Remote MCP URL updated");
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to update URL";
-      toast.error(message);
+      toastError(error, "Failed to update URL");
     }
   };
 
   return (
-    <div className="rounded-lg border p-6">
+    <div className="border p-6">
       <Type variant="subheading" className="mb-1">
         Remote URL
       </Type>
@@ -702,8 +684,8 @@ function UrlSection({
       <Stack gap={2}>
         <Input
           value={draft}
-          onChange={(value) => {
-            setDraft(value);
+          onChange={(e) => {
+            setDraft(e.target.value);
             if (!touched) setTouched(true);
           }}
           onBlur={() => setTouched(true)}
@@ -775,7 +757,7 @@ function DangerZoneSection({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   return (
-    <div className="border-destructive/30 rounded-lg border p-6">
+    <div className="border-destructive/30 border p-6">
       <Type variant="subheading" className="text-destructive mb-1">
         Danger Zone
       </Type>

@@ -1,13 +1,16 @@
-import { InputField } from "@/components/moon/input-field";
-import { Textarea } from "@/components/moon/textarea";
-import { Button } from "@speakeasy-api/moonshine";
+import { Alert } from "@/components/ui/alert";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { Heading } from "@/components/ui/heading";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { MUSTACHE_VAR_REGEX, PROMPT_NAME_PATTERN } from "@/lib/constants";
 import { assert, cn } from "@/lib/utils";
 import { PromptTemplate } from "@gram/client/models/components/prompttemplate.js";
 import { MutationStatus } from "@tanstack/react-query";
 import { Fullscreen, Loader2, X } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useId, useState } from "react";
 import * as z from "zod";
 
 const argsSchema = z.object({
@@ -49,6 +52,8 @@ export function PromptEditor({
     }
 )): JSX.Element {
   const isPending = status === "pending";
+  const nameFieldId = useId();
+  const descriptionFieldId = useId();
   const [fullScreenEditor, setFullScreenEditor] = useState(false);
   const parsedArgs = argsSchema.safeParse(
     JSON.parse(predecessor?.schema || "{}"),
@@ -131,22 +136,30 @@ export function PromptEditor({
         <div className="space-y-6">
           {predecessor == null ? (
             <div className="max-w-md">
-              <InputField
-                label="Name"
-                name="name"
-                pattern={PROMPT_NAME_PATTERN}
-                placeholder="my-prompt-name"
-                title="Only lowercase letters, numbers, hyphens, and underscores (max 128 characters)"
-                required
-              />
+              <Field>
+                <FieldLabel htmlFor={nameFieldId}>Name</FieldLabel>
+                <Input
+                  id={nameFieldId}
+                  name="name"
+                  pattern={PROMPT_NAME_PATTERN}
+                  placeholder="my-prompt-name"
+                  title="Only lowercase letters, numbers, hyphens, and underscores (max 128 characters)"
+                  required
+                />
+              </Field>
             </div>
           ) : null}
           <div className="max-w-md">
-            <InputField
-              label="Description"
-              name="description"
-              defaultValue={predecessor?.description ?? ""}
-            />
+            <Field>
+              <FieldLabel htmlFor={descriptionFieldId} optional>
+                Description
+              </FieldLabel>
+              <Input
+                id={descriptionFieldId}
+                name="description"
+                defaultValue={predecessor?.description ?? ""}
+              />
+            </Field>
           </div>
           <div>
             <dialog
@@ -170,11 +183,22 @@ export function PromptEditor({
                 <Label className="mb-3" htmlFor="newprompt_prompt">
                   Prompt
                 </Label>
-                <Textarea
+                {/*
+                  A plain native textarea, not the shared TextArea/Input
+                  primitives: this editor needs onKeyUp (to detect mustache
+                  variables as the user types) and a monospace/full-height
+                  style swap for the fullscreen mode, neither of which the
+                  shared components' prop surfaces support.
+                */}
+                <textarea
                   id="newprompt_prompt"
                   name="prompt"
-                  rows={fullScreenEditor ? void 0 : 4}
-                  className={cn("font-mono", fullScreenEditor ? "h-full" : "")}
+                  rows={fullScreenEditor ? undefined : 4}
+                  className={cn(
+                    "border-input placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:bg-input/30 flex field-sizing-content min-h-16 w-full border bg-transparent px-3 py-2 text-base transition-[color,box-shadow] outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
+                    "font-mono",
+                    fullScreenEditor ? "h-full" : "",
+                  )}
                   required
                   defaultValue={predecessor?.prompt}
                   onKeyUp={handleKeyUp}
@@ -229,23 +253,27 @@ export function PromptEditor({
                   })}
                 </ul>
               ) : (
-                <p className="text-muted-foreground border-muted-foreground/20 rounded-md border border-dashed p-4 text-sm">
-                  No arguments found in prompt template. You can add these using
-                  the syntax{" "}
-                  <code className="rounded bg-red-50 px-1 py-0.5 text-xs text-red-600">
-                    {"{{argument_name}}"}
-                  </code>
-                  .
-                </p>
+                <InlineEmptyState
+                  title="No arguments found in prompt template"
+                  description={
+                    <>
+                      You can add these using the syntax{" "}
+                      <code className="bg-muted rounded px-1 py-0.5 text-xs">
+                        {"{{argument_name}}"}
+                      </code>
+                      .
+                    </>
+                  }
+                />
               )}
             </fieldset>
           </div>
         </div>
         <div className="pt-6">
           {error ? (
-            <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3">
-              <p className="text-sm text-red-700">{error.message}</p>
-            </div>
+            <Alert variant="error" dismissible={false} className="mb-4">
+              {error.message}
+            </Alert>
           ) : null}
           <Button type="submit" disabled={isPending} size="md">
             {isPending ? (
@@ -255,16 +283,20 @@ export function PromptEditor({
           </Button>
         </div>
       </form>
-      <aside className="bg-secondary sticky top-8 w-80 flex-shrink-0 space-y-6 rounded-lg p-6">
+      <aside className="bg-secondary sticky top-8 w-80 flex-shrink-0 space-y-6 p-6">
         <div>
-          <h3 className="mb-2 text-sm font-medium">Prompt Templates</h3>
+          <Heading variant="h6" className="mb-2 font-medium">
+            Prompt Templates
+          </Heading>
           <p className="text-muted-foreground text-sm">
             Create reusable prompts with dynamic variables using the Mustache
             syntax.
           </p>
         </div>
         <div>
-          <h3 className="mb-2 text-sm font-medium">Using Variables</h3>
+          <Heading variant="h6" className="mb-2 font-medium">
+            Using Variables
+          </Heading>
           <p className="text-muted-foreground mb-2 text-sm">
             Add variables to your prompt using double curly braces:
           </p>
@@ -273,7 +305,9 @@ export function PromptEditor({
           </code>
         </div>
         <div>
-          <h3 className="mb-2 text-sm font-medium">Arguments</h3>
+          <Heading variant="h6" className="mb-2 font-medium">
+            Arguments
+          </Heading>
           <p className="text-muted-foreground text-sm">
             Variables detected in your prompt will automatically appear in the
             Arguments section. Add descriptions to help users understand what
@@ -281,7 +315,9 @@ export function PromptEditor({
           </p>
         </div>
         <div>
-          <h3 className="mb-2 text-sm font-medium">Tips</h3>
+          <Heading variant="h6" className="mb-2 font-medium">
+            Tips
+          </Heading>
           <ul className="text-muted-foreground space-y-1 text-sm">
             <li>• Use descriptive variable names</li>
             <li>• Keep prompts clear and concise</li>
@@ -301,9 +337,15 @@ const ArgumentEntry = ({
   name: string;
   defaultValue?: string;
 }) => {
+  const fieldId = useId();
   return (
     <li>
-      <InputField label={name} name={`_${name}`} defaultValue={defaultValue} />
+      <Field>
+        <FieldLabel htmlFor={fieldId} optional>
+          {name}
+        </FieldLabel>
+        <Input id={fieldId} name={`_${name}`} defaultValue={defaultValue} />
+      </Field>
     </li>
   );
 };

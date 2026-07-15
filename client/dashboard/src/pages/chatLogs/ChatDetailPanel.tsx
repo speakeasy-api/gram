@@ -3,7 +3,9 @@ import {
   ArrowLeft,
   ChevronDown,
   ChevronUp,
+  CircleAlert,
   Info,
+  RotateCcw,
   Search,
   Sparkles,
   SlidersHorizontal,
@@ -20,16 +22,15 @@ import {
   useMemo,
   useState,
 } from "react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
-  Badge,
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  Icon,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/dropdown-menu";
 import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { useSearchLogsMutation } from "@gram/client/react-query/searchLogs.js";
@@ -48,12 +49,14 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Dialog } from "@/components/ui/dialog";
+import { DetailList } from "@/components/ui/detail-list";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Switch } from "@/components/ui/switch";
 import { AccountTypeBadge } from "@/components/account-type-badge";
 import { personalAccountEmail } from "@/components/observe/account-display-utils";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { useRBAC } from "@/hooks/useRBAC";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { handleError, toError } from "@/lib/errors";
 import {
@@ -163,14 +166,14 @@ function ChatDetailErrorFallback({
 
   return (
     <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
-      <Icon name="circle-alert" className="text-destructive h-6 w-6" />
+      <CircleAlert className="text-destructive h-6 w-6" />
       <div>
         <p className="font-medium">Something went wrong loading this chat.</p>
         <p className="text-muted-foreground mt-1 text-sm">{error.message}</p>
       </div>
       <Button variant="secondary" size="sm" onClick={resetErrorBoundary}>
         <Button.LeftIcon>
-          <Icon name="rotate-ccw" className="h-4 w-4" />
+          <RotateCcw className="h-4 w-4" />
         </Button.LeftIcon>
         <Button.Text>Retry</Button.Text>
       </Button>
@@ -219,17 +222,6 @@ export function ChatDetailSheet({
   );
 }
 
-function MetaRow({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="flex items-start justify-between gap-3 py-1.5 text-xs">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="max-w-48 text-right font-medium break-words">
-        {children}
-      </span>
-    </div>
-  );
-}
-
 function SessionSummary({
   chat,
   messageCount,
@@ -266,7 +258,7 @@ function SessionSummary({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm transition-colors"
+          className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex items-center gap-1.5 px-2 py-1 text-sm transition-colors"
         >
           {compact ? (
             <span className="inline-flex items-center gap-1.5">
@@ -300,46 +292,64 @@ function SessionSummary({
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-72">
-        <div className="space-y-1">
-          <div className="mb-1 text-sm font-semibold">Session details</div>
-          <div className="divide-border divide-y">
-            <MetaRow label="User">{chat.externalUserId || "anonymous"}</MetaRow>
+        <div className="space-y-2">
+          <div className="text-sm font-semibold">Session details</div>
+          <DetailList orientation="inline">
+            <DetailList.Item
+              label="User"
+              value={chat.externalUserId || "anonymous"}
+            />
             {accountEmail && (
-              <MetaRow label="Account">
-                <span className="inline-flex flex-wrap items-center justify-end gap-1.5">
-                  {accountEmail}
-                  <AccountTypeBadge accountType={chat.accountType} noTooltip />
-                </span>
-              </MetaRow>
+              <DetailList.Item
+                label="Account"
+                value={
+                  <span className="inline-flex flex-wrap items-center justify-end gap-1.5">
+                    {accountEmail}
+                    <AccountTypeBadge
+                      accountType={chat.accountType}
+                      noTooltip
+                    />
+                  </span>
+                }
+              />
             )}
             {chat.source && (
-              <MetaRow label="Source">
-                <span className="inline-flex items-center gap-1.5">
-                  <HookSourceIcon source={chat.source} className="size-3.5" />
-                  {chat.source}
-                </span>
-              </MetaRow>
+              <DetailList.Item
+                label="Source"
+                value={
+                  <span className="inline-flex items-center gap-1.5">
+                    <HookSourceIcon source={chat.source} className="size-3.5" />
+                    {chat.source}
+                  </span>
+                }
+              />
             )}
-            <MetaRow label="Duration">{duration}s</MetaRow>
-            <MetaRow label="Messages">{messageCount}</MetaRow>
-            <MetaRow label="Tool calls">{toolCount}</MetaRow>
-            <MetaRow label="Total cost">
-              {hasCost ? formatUsageCost(chat.totalCost!) : "unknown"}
-            </MetaRow>
+            <DetailList.Item label="Duration" value={`${duration}s`} />
+            <DetailList.Item label="Messages" value={messageCount} />
+            <DetailList.Item label="Tool calls" value={toolCount} />
+            <DetailList.Item
+              label="Total cost"
+              value={hasCost ? formatUsageCost(chat.totalCost!) : "unknown"}
+            />
             {chat.totalInputTokens !== undefined && (
-              <MetaRow label="Input tokens">
-                {chat.totalInputTokens.toLocaleString()}
-              </MetaRow>
+              <DetailList.Item
+                label="Input tokens"
+                value={chat.totalInputTokens.toLocaleString()}
+              />
             )}
             {chat.totalOutputTokens !== undefined && (
-              <MetaRow label="Output tokens">
-                {chat.totalOutputTokens.toLocaleString()}
-              </MetaRow>
+              <DetailList.Item
+                label="Output tokens"
+                value={chat.totalOutputTokens.toLocaleString()}
+              />
             )}
             {tokens > 0 && (
-              <MetaRow label="Total tokens">{tokens.toLocaleString()}</MetaRow>
+              <DetailList.Item
+                label="Total tokens"
+                value={tokens.toLocaleString()}
+              />
             )}
-          </div>
+          </DetailList>
         </div>
       </PopoverContent>
     </Popover>
@@ -446,7 +456,7 @@ function MessageFilterBar({
 
   return (
     <div className="flex items-center justify-end gap-3">
-      <div className="bg-muted/40 inline-flex items-center gap-1 rounded-lg border p-1">
+      <div className="bg-muted/40 inline-flex items-center gap-1 border p-1">
         {MESSAGE_TYPES.map(({ key, label, icon: Glyph }) => {
           const on = typeFilter.has(key);
           return (
@@ -456,9 +466,9 @@ function MessageFilterBar({
               aria-pressed={on}
               onClick={() => toggleType(key)}
               className={cn(
-                "inline-flex items-center gap-2 rounded-md border px-3 py-1 text-xs font-medium transition-colors hover:border-foreground/40",
+                "inline-flex items-center gap-2 border px-3 py-1 text-xs font-medium transition-colors hover:border-foreground/40",
                 on
-                  ? "bg-background text-foreground shadow-sm hover:bg-muted/60"
+                  ? "bg-background text-foreground hover:bg-muted/60"
                   : "text-muted-foreground hover:bg-background hover:text-foreground",
               )}
             >
@@ -476,7 +486,7 @@ function MessageFilterBar({
               checked={riskyOnly}
               onCheckedChange={onRiskyOnlyChange}
               aria-label="Show only risky messages"
-              className={riskyOnly ? "bg-red-800" : undefined}
+              className={riskyOnly ? "bg-destructive" : undefined}
             />
             <span className="text-muted-foreground text-xs font-medium">
               Risky only
@@ -515,9 +525,9 @@ function ThreadSearchBar({
   // (meaningless) prev/next nav while keeping clear available.
   const overLimit = trimmedLen > MAX_SEARCH_QUERY_LEN;
   const navBtn =
-    "text-muted-foreground hover:text-foreground hover:bg-background flex size-6 shrink-0 items-center justify-center rounded transition-colors disabled:opacity-40";
+    "text-muted-foreground hover:text-foreground hover:bg-background flex size-6 shrink-0 items-center justify-center transition-colors disabled:opacity-40";
   return (
-    <div className="bg-background focus-within:border-foreground/40 flex h-9 items-center gap-2 rounded-lg border px-2.5 transition-colors">
+    <div className="bg-background focus-within:border-foreground/40 flex h-9 items-center gap-2 border px-2.5 transition-colors">
       {overLimit ? (
         <SimpleTooltip
           tooltip={`Queries are limited to ${MAX_SEARCH_QUERY_LEN} characters`}
@@ -682,7 +692,7 @@ function ChatDetailHeader({
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm transition-colors"
+                className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex items-center gap-1.5 px-2 py-1 text-sm transition-colors"
               >
                 <SlidersHorizontal className="size-4" />
                 Actions
@@ -717,10 +727,10 @@ function ChatDetailHeader({
           </DropdownMenu>
           <button
             onClick={onClose}
-            className="hover:bg-muted rounded-md p-1 transition-colors"
+            className="hover:bg-muted p-1 transition-colors"
             aria-label="Close panel"
           >
-            <Icon name="x" className="size-5" />
+            <X className="size-5" />
           </button>
         </div>
       </div>
@@ -799,10 +809,10 @@ function ChatDetailPanel({
     null,
   );
   const [scrollNonce, setScrollNonce] = useState(0);
+  const debouncedSearchInput = useDebouncedValue(searchInput, 250);
   useEffect(() => {
-    const handle = setTimeout(() => setSearchQuery(searchInput.trim()), 250);
-    return () => clearTimeout(handle);
-  }, [searchInput]);
+    setSearchQuery(debouncedSearchInput.trim());
+  }, [debouncedSearchInput]);
 
   // Risk-review contexts — explicit risk focus, or opened from the has-risk
   // filter — load the server-windowed risk transcript so findings load no matter

@@ -114,7 +114,7 @@ export function InlineEditableText({
               onMouseDown={(event) => event.preventDefault()}
               size="icon-sm"
               title="Save change"
-              variant="ghost"
+              variant="tertiary"
             >
               <Check />
             </InputGroupButton>

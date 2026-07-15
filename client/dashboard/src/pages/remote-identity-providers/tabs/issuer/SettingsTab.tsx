@@ -1,12 +1,14 @@
 import { RequireScope } from "@/components/require-scope";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Card } from "@/components/ui/card";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Type } from "@/components/ui/type";
 import { useOrgRoutes } from "@/routes";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { invalidateAllOrganizationRemoteSessionIssuer } from "@gram/client/react-query/organizationRemoteSessionIssuer.js";
 import { useUpdateOrganizationRemoteSessionIssuerMutation } from "@gram/client/react-query/updateOrganizationRemoteSessionIssuer.js";
-import { Alert, Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/button";
+import { Alert } from "@/components/ui/alert";
+import { Input } from "@/components/ui/input";
 import { useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useState } from "react";
 import { toast } from "sonner";
@@ -38,23 +40,6 @@ function SettingsSection({
         )}
       </div>
       {children}
-    </div>
-  );
-}
-
-function Field({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <Label>{label}</Label>
-      <Input value={value} onChange={onChange} />
     </div>
   );
 }
@@ -185,8 +170,22 @@ export function SettingsTab({
         title="Provider"
         description="How this identity provider is labelled in the dashboard."
       >
-        <Field label="Display name" value={name} onChange={setName} />
-        <Field label="Slug" value={slug} onChange={setSlug} />
+        <Field>
+          <FieldLabel htmlFor="issuer-display-name">Display name</FieldLabel>
+          <Input
+            id="issuer-display-name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="issuer-slug">Slug</FieldLabel>
+          <Input
+            id="issuer-slug"
+            value={slug}
+            onChange={(e) => setSlug(e.target.value)}
+          />
+        </Field>
       </SettingsSection>
 
       <SettingsSection
@@ -238,7 +237,7 @@ export function SettingsTab({
         </RequireScope>
       </div>
 
-      <div className="border-destructive/30 flex flex-col gap-2 rounded-md border p-4">
+      <Card className="border-destructive/30 gap-2">
         <Type className="font-medium">Danger Zone</Type>
         <Type small muted>
           Deleting this provider is permanent. All clients must be deleted
@@ -254,7 +253,7 @@ export function SettingsTab({
             </Button>
           </RequireScope>
         </div>
-      </div>
+      </Card>
 
       {showDelete && (
         <DeleteIssuerDialog

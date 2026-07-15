@@ -13,7 +13,8 @@ import {
 } from "@gram/client/react-query/getTokensUnderManagement.js";
 import { useListProjects } from "@gram/client/react-query/listProjects.js";
 import { useSetBillingMetadataMutation } from "@gram/client/react-query/setBillingMetadata.js";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/button";
+import { Stack } from "@/components/ui/stack";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Info, RotateCcw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -458,7 +459,7 @@ export const TumAdminSection = (): JSX.Element => {
               min={0}
               placeholder="Leave empty for no contracted limit"
               value={tokenLimit}
-              onChange={setTokenLimit}
+              onChange={(e) => setTokenLimit(e.target.value)}
             />
           </Stack>
           <Stack gap={2}>
@@ -468,7 +469,7 @@ export const TumAdminSection = (): JSX.Element => {
               type="email"
               placeholder="billing-alerts@customer.com"
               value={alertEmail}
-              onChange={setAlertEmail}
+              onChange={(e) => setAlertEmail(e.target.value)}
             />
           </Stack>
           <Stack gap={2}>
@@ -481,7 +482,7 @@ export const TumAdminSection = (): JSX.Element => {
               min={1}
               max={31}
               value={anchorDay}
-              onChange={setAnchorDay}
+              onChange={(e) => setAnchorDay(e.target.value)}
             />
           </Stack>
           <Stack direction="horizontal" align="center" gap={3}>

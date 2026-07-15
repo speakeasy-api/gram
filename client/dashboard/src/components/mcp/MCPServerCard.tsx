@@ -1,11 +1,11 @@
-import { DotCard } from "@/components/ui/dot-card";
+import { Card } from "@/components/ui/card";
 import { Type } from "@/components/ui/type";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
-import { Badge } from "@speakeasy-api/moonshine";
 import { ArrowRight, Network } from "lucide-react";
 import { Link } from "react-router";
+import { Badge } from "@/components/ui/badge";
 import { MCPStatusIndicator } from "./MCPStatusIndicator";
 
 // MCPServerCard renders an mcp_servers row inside the /mcp listing grid.
@@ -34,7 +34,7 @@ export function MCPServerCard({
       to={routes.mcp.x.overview.href(mcpServerRouteParam(server))}
       className="focus-visible:ring-ring block rounded-xl no-underline focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
     >
-      <DotCard icon={<Network className="text-muted-foreground h-8 w-8" />}>
+      <Card icon={<Network className="text-muted-foreground h-8 w-8" />}>
         {/* Header row with name */}
         <div className="mb-2 flex items-start justify-between gap-2">
           <Type
@@ -45,10 +45,8 @@ export function MCPServerCard({
           >
             {server.name || "MCP Server"}
           </Type>
-          <Badge variant="neutral" className="bg-card">
-            <Badge.Text>
-              {endpointCount} {endpointCount === 1 ? "endpoint" : "endpoints"}
-            </Badge.Text>
+          <Badge variant="neutral" background={false}>
+            {`${endpointCount} ${endpointCount === 1 ? "endpoint" : "endpoints"}`}
           </Badge>
         </div>
 
@@ -63,7 +61,7 @@ export function MCPServerCard({
             <ArrowRight className="h-3.5 w-3.5" />
           </div>
         </div>
-      </DotCard>
+      </Card>
     </Link>
   );
 }

@@ -1,19 +1,30 @@
 import { Page } from "@/components/page-layout";
+import { McpServerCardsSkeleton } from "@/components/sources/McpServerCardsSkeleton";
+import { MCPServerPortalCard } from "@/components/sources/MCPServerPortalCard";
 import { RemoveSourceDialogContent } from "@/components/sources/RemoveSourceDialogContent";
 import { ExternalMCPIllustration } from "@/components/sources/SourceCardIllustrations";
 import { useCatalogIconMap } from "@/components/sources/sources-hooks";
 import { Heading } from "@/components/ui/heading";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
+import {
+  PageTabsTrigger,
+  Tabs,
+  TabsContent,
+  TabsList,
+} from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
 import { useSdkClient } from "@/contexts/Sdk";
 import { attachmentToURNPrefix } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
-import { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import { RequireScope } from "@/components/require-scope";
-import { Badge, Button, Dialog, Stack } from "@speakeasy-api/moonshine";
-import { ChevronRight, Globe, Lock, Power, Server, Trash2 } from "lucide-react";
+import { Dialog } from "@/components/ui/dialog";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+
+import { Server, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
@@ -182,26 +193,13 @@ export default function ExternalMCPDetails(): JSX.Element {
           <div className="shrink-0 border-b">
             <div className="mx-auto max-w-[1270px] px-8">
               <TabsList className="h-auto gap-6 rounded-none bg-transparent p-0">
-                <TabsTrigger
-                  value="overview"
-                  className="text-muted-foreground data-[state=active]:text-foreground data-[state=active]:after:bg-primary relative h-11 rounded-none border-none bg-transparent! px-1 pt-3 pb-3 shadow-none! after:absolute after:right-0 after:bottom-0 after:left-0 after:h-0.5 after:bg-transparent data-[state=active]:bg-transparent!"
-                >
-                  Overview
-                </TabsTrigger>
-                <TabsTrigger
-                  value="mcp-servers"
-                  className="text-muted-foreground data-[state=active]:text-foreground data-[state=active]:after:bg-primary relative h-11 rounded-none border-none bg-transparent! px-1 pt-3 pb-3 shadow-none! after:absolute after:right-0 after:bottom-0 after:left-0 after:h-0.5 after:bg-transparent data-[state=active]:bg-transparent!"
-                >
+                <PageTabsTrigger value="overview">Overview</PageTabsTrigger>
+                <PageTabsTrigger value="mcp-servers">
                   MCP Servers{" "}
                   {associatedToolsets.length > 0 &&
                     `(${associatedToolsets.length})`}
-                </TabsTrigger>
-                <TabsTrigger
-                  value="settings"
-                  className="text-muted-foreground data-[state=active]:text-foreground data-[state=active]:after:bg-primary relative h-11 rounded-none border-none bg-transparent! px-1 pt-3 pb-3 shadow-none! after:absolute after:right-0 after:bottom-0 after:left-0 after:h-0.5 after:bg-transparent data-[state=active]:bg-transparent!"
-                >
-                  Settings
-                </TabsTrigger>
+                </PageTabsTrigger>
+                <PageTabsTrigger value="settings">Settings</PageTabsTrigger>
               </TabsList>
             </div>
           </div>
@@ -276,33 +274,18 @@ export default function ExternalMCPDetails(): JSX.Element {
           >
             <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
               {isLoadingToolsets ? (
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  {[1, 2, 3].map((i) => (
-                    <div
-                      key={i}
-                      className="bg-card animate-pulse rounded-xl border p-6"
-                    >
-                      <div className="mb-4 flex items-center gap-3">
-                        <div className="bg-muted h-10 w-10 rounded-lg" />
-                        <div className="flex-1">
-                          <div className="bg-muted mb-2 h-4 w-24 rounded" />
-                          <div className="bg-muted h-3 w-32 rounded" />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <McpServerCardsSkeleton />
               ) : associatedToolsets.length > 0 ? (
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
                   {associatedToolsets.map((toolset) => (
                     <MCPServerPortalCard key={toolset.slug} toolset={toolset} />
                   ))}
                 </div>
               ) : (
-                <div className="py-12 text-center">
-                  <Server className="text-muted-foreground/50 mx-auto mb-3 h-12 w-12" />
-                  <Type muted>No MCP servers are using this source yet.</Type>
-                </div>
+                <InlineEmptyState
+                  icon={<Server />}
+                  title="No MCP servers are using this source yet"
+                />
               )}
             </div>
           </TabsContent>
@@ -314,7 +297,7 @@ export default function ExternalMCPDetails(): JSX.Element {
           >
             <div className="mx-auto w-full max-w-[1270px] space-y-8 px-8 py-8">
               {/* Danger Zone */}
-              <div className="border-destructive/30 rounded-lg border p-6">
+              <div className="border-destructive/30 border p-6">
                 <Type variant="subheading" className="text-destructive mb-1">
                   Danger Zone
                 </Type>
@@ -353,89 +336,5 @@ export default function ExternalMCPDetails(): JSX.Element {
         </Dialog>
       </Page.Body>
     </Page>
-  );
-}
-
-// Portal-style card for MCP servers
-function MCPServerPortalCard({ toolset }: { toolset: ToolsetEntry }) {
-  const routes = useRoutes();
-
-  return (
-    <routes.mcp.details.Link
-      params={[toolset.slug]}
-      className="group bg-card hover:bg-surface-secondary hover:border-primary/30 block cursor-pointer rounded-xl border transition-all duration-200 hover:no-underline hover:shadow-lg"
-    >
-      <div className="p-5">
-        {/* Header with icon */}
-        <div className="mb-3 flex items-start justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="bg-primary/10 flex h-10 w-10 items-center justify-center rounded-lg">
-              <Server className="text-primary h-5 w-5" />
-            </div>
-            <div>
-              <Type className="group-hover:text-primary text-base font-semibold transition-colors">
-                {toolset.name}
-              </Type>
-              <div className="mt-1 flex items-center gap-2">
-                <McpEnabledBadge enabled={!!toolset.mcpEnabled} />
-                <McpPublicBadge isPublic={!!toolset.mcpIsPublic} />
-              </div>
-            </div>
-          </div>
-          <ChevronRight className="text-muted-foreground group-hover:text-primary mt-2 h-5 w-5 shrink-0 transition-all group-hover:translate-x-0.5" />
-        </div>
-
-        {/* Description */}
-        {toolset.description && (
-          <Type className="text-muted-foreground line-clamp-2 text-sm">
-            {toolset.description}
-          </Type>
-        )}
-
-        {/* Footer with tool count */}
-        <div className="mt-4 border-t pt-3">
-          <Type className="text-muted-foreground text-xs">
-            {toolset.toolUrns?.length || 0} tool
-            {(toolset.toolUrns?.length || 0) !== 1 ? "s" : ""} available
-          </Type>
-        </div>
-      </div>
-    </routes.mcp.details.Link>
-  );
-}
-
-function McpEnabledBadge({ enabled }: { enabled: boolean }) {
-  if (enabled) {
-    return (
-      <Badge variant="success" className="gap-1">
-        <Power size={12} />
-        <Badge.Text>Enabled</Badge.Text>
-      </Badge>
-    );
-  }
-
-  return (
-    <Badge variant="neutral" className="gap-1">
-      <Power size={12} />
-      <Badge.Text>Disabled</Badge.Text>
-    </Badge>
-  );
-}
-
-function McpPublicBadge({ isPublic }: { isPublic: boolean }) {
-  if (isPublic) {
-    return (
-      <Badge variant="success" className="gap-1">
-        <Globe size={12} />
-        <Badge.Text>Public</Badge.Text>
-      </Badge>
-    );
-  }
-
-  return (
-    <Badge variant="neutral" className="gap-1">
-      <Lock size={12} />
-      <Badge.Text>Private</Badge.Text>
-    </Badge>
   );
 }

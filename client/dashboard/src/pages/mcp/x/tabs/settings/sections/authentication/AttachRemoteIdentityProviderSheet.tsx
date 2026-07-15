@@ -1,4 +1,3 @@
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -31,7 +30,10 @@ import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/clie
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
-import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
+import { Alert } from "@/components/ui/alert";
+import { Input } from "@/components/ui/input";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -646,8 +648,8 @@ export function AttachRemoteIdentityProviderSheet({
                   <Label className="text-muted-foreground text-xs">Slug</Label>
                   <Input
                     value={slug}
-                    onChange={(value) => {
-                      setSlug(value);
+                    onChange={(e) => {
+                      setSlug(e.target.value);
                       setSlugDirty(true);
                     }}
                     placeholder="my-identity-provider"
@@ -664,8 +666,8 @@ export function AttachRemoteIdentityProviderSheet({
                   </Label>
                   <Input
                     value={name}
-                    onChange={(value) => {
-                      setName(value);
+                    onChange={(e) => {
+                      setName(e.target.value);
                       setNameDirty(true);
                     }}
                     placeholder="My Identity Provider"

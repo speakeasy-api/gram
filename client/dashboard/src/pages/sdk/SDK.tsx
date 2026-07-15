@@ -1,12 +1,15 @@
 import { Page } from "@/components/page-layout";
-import { Button, Icon } from "@speakeasy-api/moonshine";
+import { WorkbenchLayout } from "@/components/layouts/workbench-layout";
+import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { SkeletonCode } from "@/components/ui/skeleton";
 import { TextArea } from "@/components/ui/textarea";
 import { Type } from "@/components/ui/type";
 import { useProject } from "@/contexts/Auth";
 import { capitalize } from "@/lib/utils";
-import { CodeSnippet, Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { CodeSnippet } from "@/components/ui/code-snippet";
+import { WandSparkles } from "lucide-react";
 import { AgentifyProvider } from "../playground/Agentify";
 import { useAgentify } from "../playground/useAgentify";
 import {
@@ -22,19 +25,17 @@ export default function SDK(): JSX.Element {
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
-      <Page.Body>
-        <Page.Section>
-          <Page.Section.Title>SDKs</Page.Section.Title>
-          <Page.Section.Description>
-            Generate client code that calls your toolsets from the language and
-            framework of your choice.
-          </Page.Section.Description>
-          <Page.Section.Body>
-            <AgentifyProvider>
-              <SdkContent />
-            </AgentifyProvider>
-          </Page.Section.Body>
-        </Page.Section>
+      <Page.Body fullWidth fullHeight noPadding>
+        <WorkbenchLayout>
+          <WorkbenchLayout.Header
+            eyebrow="SDKs"
+            title="SDKs"
+            subtitle="Generate client code that calls your toolsets from the language and framework of your choice."
+          />
+          <AgentifyProvider>
+            <SdkContent />
+          </AgentifyProvider>
+        </WorkbenchLayout>
       </Page.Body>
     </Page>
   );
@@ -109,26 +110,21 @@ const SdkContent = ({
     </div>
   );
 
-  let heading = (
-    <div className="flex items-end justify-between gap-4">
+  const configPanel = (
+    <Stack gap={4} className="p-6">
       <Type variant="subheading">
         Use platform MCP servers to build agentic workflows in many popular
         frameworks
       </Type>
       {langFrameworkDropdowns}
-    </div>
-  );
-
-  if (prompt) {
-    heading = (
-      <Stack gap={1}>
-        <Type variant="subheading">
-          What should the agent do?{" "}
-          <span className="text-muted-foreground text-sm italic">
-            Chat history will also be included in the prompt.
-          </span>
-        </Type>
-        <Stack direction="horizontal" gap={4} align="end">
+      {prompt !== undefined && (
+        <Stack gap={1}>
+          <Type variant="subheading">
+            What should the agent do?{" "}
+            <span className="text-muted-foreground text-sm italic">
+              Chat history will also be included in the prompt.
+            </span>
+          </Type>
           <TextArea
             value={prompt}
             onChange={(value) => setPrompt(value)}
@@ -136,29 +132,25 @@ const SdkContent = ({
             placeholder="Look up the weather in San Francisco"
             className="h-20"
           />
-          <Stack gap={2}>
-            {langFrameworkDropdowns}
-            <Button
-              onClick={() => {
-                void agentify(toolset, environment);
-              }}
-              variant={outdated || inProgress ? "primary" : "secondary"}
-              disabled={inProgress}
-            >
-              <Button.LeftIcon>
-                <Icon name="wand-sparkles" className="h-4 w-4" />
-              </Button.LeftIcon>
-              <Button.Text>Regenerate</Button.Text>
-            </Button>
-          </Stack>
+          <Button
+            onClick={() => {
+              void agentify(toolset, environment);
+            }}
+            variant={outdated || inProgress ? "primary" : "secondary"}
+            disabled={inProgress}
+          >
+            <Button.LeftIcon>
+              <WandSparkles className="h-4 w-4" />
+            </Button.LeftIcon>
+            <Button.Text>Regenerate</Button.Text>
+          </Button>
         </Stack>
-      </Stack>
-    );
-  }
+      )}
+    </Stack>
+  );
 
-  return (
-    <Stack gap={2}>
-      {heading}
+  const previewPanel = (
+    <div className="p-6">
       {inProgress ? (
         <SkeletonCode />
       ) : (
@@ -171,8 +163,10 @@ const SdkContent = ({
           className="border-border"
         />
       )}
-    </Stack>
+    </div>
   );
+
+  return <WorkbenchLayout.Body config={configPanel} preview={previewPanel} />;
 };
 
 const SdkLanguageDropdown = ({

@@ -1,6 +1,6 @@
 import { useExternalMcpOAuthConfigStatus } from "@/components/sources/sources-hooks";
 import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import { Label } from "@/components/ui/label";
 import {
   Tooltip,
@@ -11,6 +11,7 @@ import { useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
 import { ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG } from "@/lib/externalMcpUserSessions";
+import { toastError } from "@/lib/toast-error";
 import { Toolset } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import type { McpEnvironmentConfigInput } from "@gram/client/models/components/mcpenvironmentconfiginput.js";
@@ -26,7 +27,10 @@ import {
 import { useMcpMetadataSetMutation } from "@gram/client/react-query/mcpMetadataSet.js";
 import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
 import { useUpdateEnvironmentMutation } from "@gram/client/react-query/updateEnvironment.js";
-import { Badge, Button, Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle, Link, Plus, Shield } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -216,9 +220,7 @@ export function MCPAuthenticationTab({
       });
     },
     onError: (error) => {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to create environment",
-      );
+      toastError(error, "Failed to create environment");
     },
   });
 
@@ -235,11 +237,7 @@ export function MCPAuthenticationTab({
       });
     },
     onError: (error) => {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to update attached environment",
-      );
+      toastError(error, "Failed to update attached environment");
     },
   });
 
@@ -653,9 +651,7 @@ export function MCPAuthenticationTab({
 
       toast.success(`Saved ${varsToSave.length} variable(s)`);
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to save variables",
-      );
+      toastError(error, "Failed to save variables");
       return;
     }
 
@@ -770,7 +766,7 @@ export function MCPAuthenticationTab({
 
         <div className="space-y-4">
           {envVars.length > 0 ? (
-            <div className="overflow-hidden rounded-lg border">
+            <div className="overflow-hidden border">
               <EnvironmentSwitcher
                 environments={environments}
                 selectedEnvironmentView={selectedEnvironmentView}
@@ -809,22 +805,21 @@ export function MCPAuthenticationTab({
               ))}
             </div>
           ) : (
-            <div className="rounded-lg border border-dashed p-8 text-center">
-              <p className="text-muted-foreground mb-2">
-                No environment variables configured yet.
-              </p>
-              <p className="text-muted-foreground mb-4 text-sm">
-                Add key-value pairs to pass API keys, configuration, or any
-                custom data to your backend. Environments can be shared across
-                multiple MCP servers.
-              </p>
-              <Button onClick={() => setIsAddingNew(true)} variant="secondary">
-                <Button.LeftIcon>
-                  <Plus className="h-4 w-4" />
-                </Button.LeftIcon>
-                <Button.Text>Add Variable</Button.Text>
-              </Button>
-            </div>
+            <InlineEmptyState
+              title="No environment variables configured yet."
+              description="Add key-value pairs to pass API keys, configuration, or any custom data to your backend. Environments can be shared across multiple MCP servers."
+              action={
+                <Button
+                  onClick={() => setIsAddingNew(true)}
+                  variant="secondary"
+                >
+                  <Button.LeftIcon>
+                    <Plus className="h-4 w-4" />
+                  </Button.LeftIcon>
+                  <Button.Text>Add Variable</Button.Text>
+                </Button>
+              }
+            />
           )}
 
           <div className="flex justify-end">
@@ -861,7 +856,7 @@ export function MCPAuthenticationTab({
               </Label>
               <Input
                 value={newEnvironmentName}
-                onChange={setNewEnvironmentName}
+                onChange={(e) => setNewEnvironmentName(e.target.value)}
                 placeholder="staging, production, dev..."
                 autoFocus
                 onKeyDown={(e: React.KeyboardEvent) => {
@@ -1134,110 +1129,111 @@ function OAuthStatusDisplay({
 
   if (loginSecured) {
     return (
-      <div className="border-success-softest bg-success-softest rounded-lg border border-dashed p-8 text-center">
-        <p className="text-success-foreground mb-1">
-          <CheckCircle className="text-success-foreground mx-auto mb-1 h-5 w-5" />
-          Login Secured
-        </p>
-        <p className="text-success-foreground text-sm">
-          Users will authenticate with interactive auth before accessing this
-          MCP server.
-        </p>
-      </div>
+      <InlineEmptyState
+        className="border-success-softest bg-success-softest"
+        icon={<CheckCircle className="text-success-foreground h-5 w-5" />}
+        title={<span className="text-success-foreground">Login Secured</span>}
+        description={
+          <span className="text-success-foreground">
+            Users will authenticate with interactive auth before accessing this
+            MCP server.
+          </span>
+        }
+      />
     );
   }
 
   if (isOAuthConnected && oauthParadigm) {
     return (
-      <div className="border-success-softest bg-success-softest rounded-lg border border-dashed p-8 text-center">
-        <p className="text-success-foreground mb-1">
-          <CheckCircle className="text-success-foreground mx-auto mb-1 h-5 w-5" />
-          {PARADIGM_LABELS[oauthParadigm]} is configured
-        </p>
-        <p className="text-success-foreground text-sm">
-          {oauthParadigm === "external" ? (
-            "Users will authenticate with your external OAuth server before accessing this MCP server."
-          ) : oauthParadigm === "gram" ? (
-            "Users will authenticate with Platform OAuth before accessing this MCP server."
-          ) : (
-            <>
-              The CLIENT_ID and CLIENT_SECRET values in the{" "}
-              {proxyEnvironmentSlug ? (
-                <routes.environments.environment.Link
-                  params={[proxyEnvironmentSlug]}
-                  className="underline"
-                >
-                  {proxyEnvironmentName}
-                </routes.environments.environment.Link>
-              ) : (
-                `"${proxyEnvironmentName}"`
-              )}{" "}
-              environment will be used to authenticate with the OAuth provider
-              before users can access this MCP server.
-            </>
-          )}
-        </p>
-      </div>
+      <InlineEmptyState
+        className="border-success-softest bg-success-softest"
+        icon={<CheckCircle className="text-success-foreground h-5 w-5" />}
+        title={
+          <span className="text-success-foreground">
+            {PARADIGM_LABELS[oauthParadigm]} is configured
+          </span>
+        }
+        description={
+          <span className="text-success-foreground">
+            {oauthParadigm === "external" ? (
+              "Users will authenticate with your external OAuth server before accessing this MCP server."
+            ) : oauthParadigm === "gram" ? (
+              "Users will authenticate with Platform OAuth before accessing this MCP server."
+            ) : (
+              <>
+                The CLIENT_ID and CLIENT_SECRET values in the{" "}
+                {proxyEnvironmentSlug ? (
+                  <routes.environments.environment.Link
+                    params={[proxyEnvironmentSlug]}
+                    className="underline"
+                  >
+                    {proxyEnvironmentName}
+                  </routes.environments.environment.Link>
+                ) : (
+                  `"${proxyEnvironmentName}"`
+                )}{" "}
+                environment will be used to authenticate with the OAuth provider
+                before users can access this MCP server.
+              </>
+            )}
+          </span>
+        }
+      />
     );
   }
 
   if (externalMcpRequiresOAuth) {
     return (
-      <div className="border-warning-foreground/80 bg-warning dark:bg-warning/10 dark:border-warning-foreground/30 rounded-lg border border-dashed px-6 py-8 text-center">
-        <AlertTriangle className="text-warning mx-auto mb-1 h-5 w-5" />
-        <p className="text-warning-foreground mb-1 font-bold">
-          OAuth setup required
-        </p>
-        <p className="text-warning-foreground/80 mb-3 text-sm">
-          This MCP server requires OAuth configuration before it can be used.
-        </p>
-        {showConfigureAction && (
-          <Button variant="secondary" onClick={onConfigureClick}>
-            <Button.Text>Configure OAuth</Button.Text>
-          </Button>
-        )}
-      </div>
+      <InlineEmptyState
+        className="border-warning-foreground/80 bg-warning dark:bg-warning/10 dark:border-warning-foreground/30"
+        icon={<AlertTriangle className="text-warning h-5 w-5" />}
+        title={
+          <span className="text-warning-foreground font-bold">
+            OAuth setup required
+          </span>
+        }
+        description={
+          <span className="text-warning-foreground/80">
+            This MCP server requires OAuth configuration before it can be used.
+          </span>
+        }
+        action={
+          showConfigureAction && (
+            <Button variant="secondary" onClick={onConfigureClick}>
+              <Button.Text>Configure OAuth</Button.Text>
+            </Button>
+          )
+        }
+      />
     );
   }
 
   if (isOAuthEligible) {
     return (
-      <div className="rounded-lg border border-dashed p-4 text-center">
-        <p className="text-muted-foreground mb-1">
-          <Shield className="text-muted-foreground mx-auto mb-1 h-5 w-5" />
-          OAuth is available but not configured
-        </p>
-        <p className="text-muted-foreground mb-3 text-sm">
-          Enable OAuth to require users to authenticate before accessing this
-          MCP server.
-        </p>
-        {showConfigureAction && (
-          <Button variant="secondary" onClick={onConfigureClick}>
-            <Button.Text>Configure OAuth</Button.Text>
-          </Button>
-        )}
-      </div>
+      <InlineEmptyState
+        icon={<Shield className="h-5 w-5" />}
+        title="OAuth is available but not configured"
+        description="Enable OAuth to require users to authenticate before accessing this MCP server."
+        action={
+          showConfigureAction && (
+            <Button variant="secondary" onClick={onConfigureClick}>
+              <Button.Text>Configure OAuth</Button.Text>
+            </Button>
+          )
+        }
+      />
     );
   }
 
   return (
-    <div className="rounded-lg border border-dashed px-6 py-8 text-center">
-      <Shield className="text-muted-foreground mx-auto mb-3 h-6 w-6" />
-      <p className="text-muted-foreground mb-2 font-medium">
-        OAuth is not applicable
-      </p>
-      {!mcpEnabled ? (
-        <p className="text-muted-foreground text-sm">
-          Enable the MCP server to configure OAuth.
-        </p>
-      ) : (
-        <p className="text-muted-foreground mx-auto max-w-lg text-sm">
-          OAuth cannot be configured because there are no tools in this server
-          that require OAuth authentication. OAuth is available for public MCP
-          servers that have at least one tool requiring OAuth authentication, or
-          private servers (using Speakeasy as an auth provider).
-        </p>
-      )}
-    </div>
+    <InlineEmptyState
+      icon={<Shield className="h-6 w-6" />}
+      title={<span className="font-medium">OAuth is not applicable</span>}
+      description={
+        !mcpEnabled
+          ? "Enable the MCP server to configure OAuth."
+          : "OAuth cannot be configured because there are no tools in this server that require OAuth authentication. OAuth is available for public MCP servers that have at least one tool requiring OAuth authentication, or private servers (using Speakeasy as an auth provider)."
+      }
+    />
   );
 }

@@ -3,6 +3,7 @@ import { DotRow } from "@/components/ui/dot-row";
 import { DotTable } from "@/components/ui/dot-table";
 import { Type } from "@/components/ui/type";
 import { useSlugs } from "@/contexts/Sdk";
+import { toastError } from "@/lib/toast-error";
 import { cn } from "@/lib/utils";
 import { formatRemoteMcpDisplay } from "@/lib/sources";
 import type { OrganizationMcpServer } from "@gram/client/models/components/organizationmcpserver.js";
@@ -11,16 +12,15 @@ import {
   useOrganizationRemoteSessionClientMcpServers,
 } from "@gram/client/react-query/organizationRemoteSessionClientMcpServers.js";
 import { useRemoveOrganizationRemoteSessionClientFromMcpServerMutation } from "@gram/client/react-query/removeOrganizationRemoteSessionClientFromMcpServer.js";
+import { Button } from "@/components/ui/button";
 import {
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Icon,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/dropdown-menu";
 import { useQueryClient } from "@tanstack/react-query";
-import { MoreHorizontal } from "lucide-react";
+import { MoreHorizontal, Network } from "lucide-react";
 import { toast } from "sonner";
 
 // mcpServerHref builds a cross-project link to a remote-MCP server's detail page
@@ -53,11 +53,7 @@ export function McpServersTab({ clientId }: { clientId: string }): JSX.Element {
       toast.success("Removed client from MCP server");
     },
     onError: (error) => {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to remove client from MCP server",
-      );
+      toastError(error, "Failed to remove client from MCP server");
     },
   });
 
@@ -90,9 +86,7 @@ export function McpServersTab({ clientId }: { clientId: string }): JSX.Element {
         return (
           <DotRow
             key={server.id}
-            icon={
-              <Icon name="network" className="text-muted-foreground h-5 w-5" />
-            }
+            icon={<Network className="text-muted-foreground h-5 w-5" />}
             href={href ?? undefined}
             ariaLabel={href ? `View MCP server ${label}` : undefined}
           >

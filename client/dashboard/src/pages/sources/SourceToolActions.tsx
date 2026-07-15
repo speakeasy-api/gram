@@ -1,7 +1,5 @@
 import { TagsVariationEditor } from "@/components/tool-variation-tags-editor";
-import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MoreActions } from "@/components/ui/more-actions";
 import { Switch } from "@/components/ui/switch";
@@ -10,7 +8,10 @@ import { Type } from "@/components/ui/type";
 import { ToolUpdateFields } from "@/hooks/useToolUpdate";
 import { TOOL_NAME_REGEX } from "@/lib/constants";
 import { Tool } from "@/lib/toolTypes";
-import { Icon, Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Layers2 } from "lucide-react";
 import { useMemo, useState } from "react";
 
 type EditMode = "name" | "description" | "annotations" | "tags";
@@ -196,7 +197,7 @@ export function SourceToolActions({
                   <Label className="text-sm font-medium">Title</Label>
                   <Input
                     value={annotTitle}
-                    onChange={setAnnotTitle}
+                    onChange={(e) => setAnnotTitle(e.target.value)}
                     placeholder="Display name override"
                   />
                 </div>
@@ -242,17 +243,13 @@ export function SourceToolActions({
               <Stack gap={2}>
                 <Input
                   value={editValue}
-                  onChange={setEditValue}
+                  onChange={(e) => setEditValue(e.target.value)}
                   placeholder="Tool name"
                 />
                 {tool.variation?.name &&
                   tool.variation?.name !== tool.canonical?.name && (
                     <Stack direction="horizontal" gap={2} align="center">
-                      <Icon
-                        name="layers-2"
-                        size="small"
-                        className="text-muted-foreground/70"
-                      />
+                      <Layers2 className="text-muted-foreground/70 size-4" />
                       <Type small muted>
                         Original name:
                       </Type>
@@ -274,13 +271,9 @@ export function SourceToolActions({
                 {tool.variation?.description &&
                   tool.variation?.description !==
                     tool.canonical?.description && (
-                    <Stack className="border-border/70 rounded-md border p-2">
+                    <Stack className="border-border/70 border p-2">
                       <Type small muted className="inline font-medium">
-                        <Icon
-                          name="layers-2"
-                          size="small"
-                          className="text-muted-foreground/70 inline align-text-bottom"
-                        />{" "}
+                        <Layers2 className="text-muted-foreground/70 inline size-4 align-text-bottom" />{" "}
                         Original Description
                       </Type>
                       <Type small muted>
@@ -294,7 +287,7 @@ export function SourceToolActions({
           </div>
           <Dialog.Footer>
             <Button
-              variant="ghost"
+              variant="tertiary"
               onClick={() => setEditDialogOpen(false)}
               disabled={isUpdating}
             >

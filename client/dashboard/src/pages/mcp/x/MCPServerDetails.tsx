@@ -1,9 +1,13 @@
 import { Page } from "@/components/page-layout";
+import { DetailLayout } from "@/components/layouts/detail-layout";
+import { PageTabsTrigger, Tabs, TabsList } from "@/components/ui/tabs";
+import { Type } from "@/components/ui/type";
 import { RequireScope } from "@/components/require-scope";
 import { cn } from "@/lib/utils";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useRBAC } from "@/hooks/useRBAC";
 import { getMcpServerArgs } from "@/lib/sources";
+import { toastError } from "@/lib/toast-error";
 import { useRoutes } from "@/routes";
 import type {
   McpServer,
@@ -18,15 +22,16 @@ import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js"
 import { invalidateAllPlugins } from "@gram/client/react-query/plugins";
 import { invalidateAllPublishStatus } from "@gram/client/react-query/publishStatus";
 import { useUpdateMcpServerMutation } from "@gram/client/react-query/updateMcpServer.js";
+import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/dropdown-menu";
 import { useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronDown } from "lucide-react";
-import { Navigate, useLocation, useParams } from "react-router";
+import { Link, Navigate, useLocation, useParams } from "react-router";
 import { toast } from "sonner";
 import { MCPTeamAccessTab } from "../MCPTeamAccessTab";
 import {
@@ -35,6 +40,7 @@ import {
   isLegacyAuthenticationTabPath,
   mcpServerTabHref,
 } from "./MCPServerDetailsRouting";
+import { MCPStatusIndicator } from "@/components/mcp/MCPStatusIndicator";
 import { MCPOverviewTab } from "@/pages/mcp/overview/MCPOverviewTab";
 import { ToolsTab } from "./tabs/ToolsTab";
 import { MCP_AUTHENTICATION_SECTION_ID } from "./tabs/settings/sections/authentication/AuthenticationSection";
@@ -177,10 +183,45 @@ export default function MCPServerDetails(): JSX.Element {
         />
       </Page.Header>
 
-      <Page.Body fullWidth className="gap-0">
-        <div className="mx-auto w-full max-w-[1270px] flex-1">
-          {renderTabContent()}
-        </div>
+      <Page.Body>
+        <DetailLayout>
+          <MCPServerHeader server={mcpServer} />
+
+          <Tabs value={activeTab} className="flex w-full flex-1 flex-col">
+            <DetailLayout.Tabs>
+              <TabsList className="h-auto gap-6 rounded-none bg-transparent p-0">
+                <PageTabsTrigger value="overview" asChild>
+                  <Link to={mcpServerTabHref(routes, idOrSlug, "overview")}>
+                    Overview
+                  </Link>
+                </PageTabsTrigger>
+                <PageTabsTrigger value="tools" asChild>
+                  <Link to={mcpServerTabHref(routes, idOrSlug, "tools")}>
+                    Tools
+                  </Link>
+                </PageTabsTrigger>
+                {isRbacEnabled && (
+                  <PageTabsTrigger value="team-access" asChild>
+                    <Link
+                      to={mcpServerTabHref(routes, idOrSlug, "team-access")}
+                    >
+                      Team Access
+                    </Link>
+                  </PageTabsTrigger>
+                )}
+                <PageTabsTrigger value="settings" asChild>
+                  <Link to={mcpServerTabHref(routes, idOrSlug, "settings")}>
+                    Settings
+                  </Link>
+                </PageTabsTrigger>
+              </TabsList>
+            </DetailLayout.Tabs>
+
+            <DetailLayout.Content>
+              <DetailLayout.Main>{renderTabContent()}</DetailLayout.Main>
+            </DetailLayout.Content>
+          </Tabs>
+        </DetailLayout>
       </Page.Body>
     </Page>
   );
@@ -199,16 +240,16 @@ const VISIBILITY_OPTIONS: {
   {
     value: "disabled",
     label: "Disabled",
-    description: "This server is offline. No users can connect to it",
-    dotClass: "bg-amber-400",
-    hoverDotClass: "group-hover:bg-amber-400",
+    description: "This server is offline. No users can connect to it.",
+    dotClass: "bg-warning-default",
+    hoverDotClass: "group-hover:bg-warning-default",
   },
   {
     value: "private",
     label: "Private",
     description: "The server serves traffic.",
-    dotClass: "bg-blue-400",
-    hoverDotClass: "group-hover:bg-blue-400",
+    dotClass: "bg-information-default",
+    hoverDotClass: "group-hover:bg-information-default",
   },
 ];
 
@@ -241,11 +282,7 @@ export function MCPServerStatusDropdown({
       );
     },
     onError: (error) => {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to update server visibility",
-      );
+      toastError(error, "Failed to update server visibility");
     },
   });
 
@@ -302,7 +339,8 @@ export function MCPServerStatusDropdown({
           <DropdownMenuItem
             key={option.value}
             onSelect={() => handleSelect(option.value)}
-            className="group flex cursor-pointer items-start gap-2.5 rounded-md p-2"
+            disabled={option.value === server.visibility}
+            className="group flex cursor-pointer items-start gap-2.5 p-2"
           >
             {option.value === server.visibility ? (
               <span
@@ -326,16 +364,47 @@ export function MCPServerStatusDropdown({
               />
             )}
             <div className="flex-1">
-              <span className="block font-mono text-xs font-semibold tracking-wide uppercase">
+              <Type
+                mono
+                small
+                as="span"
+                className="block font-semibold tracking-wide uppercase"
+              >
                 {option.label}
-              </span>
-              <span className="text-muted-foreground text-xs">
+              </Type>
+              <Type muted small as="span">
                 {option.description}
-              </span>
+              </Type>
             </div>
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+function MCPServerHeader({ server }: { server: McpServer | undefined }) {
+  const enabled = server?.visibility !== "disabled";
+  const isPublic = server?.visibility === "public";
+  const isHostedServer =
+    !!server?.remoteMcpServerId || !!server?.tunneledMcpServerId;
+  return (
+    <DetailLayout.Header
+      eyebrow="MCP Server"
+      title={
+        <span className="inline-flex items-center gap-3 break-all">
+          {server?.name || "MCP Server"}
+          {isHostedServer && (
+            <Badge variant="neutral">
+              <Badge.Text>Hosted MCP</Badge.Text>
+            </Badge>
+          )}
+        </span>
+      }
+      subtitle={
+        <MCPStatusIndicator mcpEnabled={enabled} mcpIsPublic={isPublic} />
+      }
+      actions={server && <MCPServerStatusDropdown server={server} />}
+    />
   );
 }

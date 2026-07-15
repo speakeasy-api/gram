@@ -1,6 +1,5 @@
-import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Heading } from "@/components/ui/heading";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RequireScope } from "@/components/require-scope";
 import { Switch } from "@/components/ui/switch";
@@ -12,7 +11,9 @@ import {
 import { useUpsertOtelForwardingConfigMutation } from "@gram/client/react-query/upsertOtelForwardingConfig";
 import { useDeleteOtelForwardingConfigMutation } from "@gram/client/react-query/deleteOtelForwardingConfig";
 import type { OtelForwardingHeader } from "@gram/client/models/components/otelforwardingheader.js";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus, Send, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -146,7 +147,7 @@ export function OtelForwardingSection(): JSX.Element {
         </Type>
       </div>
 
-      <div className="border-border bg-card flex flex-col gap-4 rounded-lg border p-4">
+      <Card className="gap-4">
         <Stack direction="horizontal" justify="space-between" align="center">
           <Stack gap={1}>
             <Stack direction="horizontal" align="center" gap={2}>
@@ -177,7 +178,7 @@ export function OtelForwardingSection(): JSX.Element {
             id="otel-forwarding-url"
             placeholder="https://collector.example.com"
             value={url}
-            onChange={setUrl}
+            onChange={(e) => setUrl(e.target.value)}
             disabled={isLoading || isMutating}
           />
         </Stack>
@@ -189,13 +190,15 @@ export function OtelForwardingSection(): JSX.Element {
             <Label>Headers</Label>
             <RequireScope scope="org:admin" level="component">
               <Button
-                variant="outline"
+                variant="secondary"
                 size="sm"
                 onClick={() => setHeaders((prev) => [...prev, blankRow()])}
                 disabled={isLoading || isMutating}
               >
-                <Plus className="mr-1 h-3.5 w-3.5" />
-                Add header
+                <Button.LeftIcon>
+                  <Plus className="h-3.5 w-3.5" />
+                </Button.LeftIcon>
+                <Button.Text>Add header</Button.Text>
               </Button>
             </RequireScope>
           </Stack>
@@ -234,13 +237,15 @@ export function OtelForwardingSection(): JSX.Element {
         <Stack direction="horizontal" justify="space-between" align="center">
           <RequireScope scope="org:admin" level="component">
             <Button
-              variant="destructive"
+              variant="destructive-primary"
               size="sm"
               onClick={handleDelete}
               disabled={!isConfigured || isMutating}
             >
-              <Trash2 className="mr-1 h-3.5 w-3.5" />
-              Delete
+              <Button.LeftIcon>
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button.LeftIcon>
+              <Button.Text>Delete</Button.Text>
             </Button>
           </RequireScope>
           <RequireScope scope="org:admin" level="component">
@@ -249,7 +254,7 @@ export function OtelForwardingSection(): JSX.Element {
             </Button>
           </RequireScope>
         </Stack>
-      </div>
+      </Card>
     </Stack>
   );
 }
@@ -270,20 +275,20 @@ function HeaderRow({
       <Input
         placeholder="Header name"
         value={header.name}
-        onChange={(value) => onChange({ ...header, name: value })}
+        onChange={(e) => onChange({ ...header, name: e.target.value })}
         disabled={disabled}
         className="flex-1"
       />
       <Input
         placeholder={header.hasStoredValue ? "•••••• (saved)" : "Header value"}
         value={header.value}
-        onChange={(value) => onChange({ ...header, value })}
+        onChange={(e) => onChange({ ...header, value: e.target.value })}
         type="password"
         disabled={disabled}
         className="flex-1"
       />
       <Button
-        variant="ghost"
+        variant="tertiary"
         size="sm"
         onClick={onRemove}
         disabled={disabled}

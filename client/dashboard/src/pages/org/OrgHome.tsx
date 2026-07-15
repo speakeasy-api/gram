@@ -1,14 +1,14 @@
 import { InputDialog } from "@/components/input-dialog";
 import { Page } from "@/components/page-layout";
+import { ListLayout } from "@/components/layouts/list-layout";
 import { MemberFacepile } from "@/components/member-facepile";
 import { ProjectAvatar } from "@/components/project-menu";
 import { DEFAULT_DATE_RANGE_PRESET } from "@/components/observe/useDateRangeFilter";
 import { buildProjectOverviewQuery } from "@/components/project/projectOverviewQuery";
 import { RequireScope } from "@/components/require-scope";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
 import { Heading } from "@/components/ui/heading";
-import { SearchBar } from "@/components/ui/search-bar";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import {
   Tooltip,
   TooltipContent,
@@ -22,13 +22,11 @@ import { useLocalStorageState } from "@/hooks/useLocalStorageState";
 import { useProjectFavorites } from "@/hooks/useProjectFavorites";
 import { useRBAC } from "@/hooks/useRBAC";
 import { dateTimeFormatters } from "@/lib/dates";
+import { getInitials } from "@/lib/initials";
 import { getPreferredProject } from "@/lib/preferredProject";
 import { cn } from "@/lib/utils";
 import { ChallengesEmptyState } from "@/pages/access/ChallengesTab";
-import {
-  getInitials,
-  isDisplayableBucket,
-} from "@/pages/access/challengeHelpers";
+import { isDisplayableBucket } from "@/pages/access/challengeHelpers";
 import { useOrgRoutes } from "@/routes";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { AuditLog } from "@gram/client/models/components/auditlog.js";
@@ -38,6 +36,8 @@ import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useAuditLogs } from "@gram/client/react-query/auditLogs.js";
 import { useChallengeBuckets } from "@gram/client/react-query/challengeBuckets.js";
 import { useMembers } from "@gram/client/react-query/members.js";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -45,7 +45,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/dropdown-menu";
 import {
   ChevronDown,
   ChevronUp,
@@ -274,122 +274,143 @@ function OrgHomeInner() {
 
   return (
     <>
-      <div className="flex flex-col gap-6">
-        <div className="flex items-center gap-2">
-          <SearchBar
+      <ListLayout>
+        <ListLayout.Header
+          title="Projects"
+          actions={
+            canAdmin && (
+              <AddNewMenu
+                onCreateProject={() => setCreateDialogOpen(true)}
+                onInviteMember={() => orgRoutes.team.goTo()}
+                onManageRoles={() => orgRoutes.access.roles.goTo()}
+              />
+            )
+          }
+        />
+
+        <ListLayout.Toolbar>
+          <ListLayout.Toolbar.Search
             value={search}
             onChange={setSearch}
             placeholder="Search projects..."
-            className="flex-1"
           />
-          <ViewModeToggle value={viewMode} onChange={setViewMode} />
-          {canAdmin && (
-            <AddNewMenu
-              onCreateProject={() => setCreateDialogOpen(true)}
-              onInviteMember={() => orgRoutes.team.goTo()}
-              onManageRoles={() => orgRoutes.access.roles.goTo()}
-            />
-          )}
-        </div>
+          <ListLayout.Toolbar.Actions>
+            <ViewModeToggle value={viewMode} onChange={setViewMode} />
+          </ListLayout.Toolbar.Actions>
+        </ListLayout.Toolbar>
 
-        <div className="grid grid-cols-1 gap-8 xl:grid-cols-[1fr_320px]">
-          <main className="flex min-w-0 flex-col gap-3">
-            <Heading variant="h4">Projects</Heading>
-
-            {filteredProjects.length === 0 && isSearching ? (
-              <div className="border-border bg-card flex flex-col items-center gap-3 rounded-lg border border-dashed py-12 text-center">
-                <Type muted>No projects matching &ldquo;{search}&rdquo;</Type>
-                <RequireScope scope="org:admin" level="component">
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      setNewProjectName(search);
-                      setCreateDialogOpen(true);
-                    }}
-                  >
-                    <Plus className="size-4" />
-                    Create &ldquo;{search}&rdquo;
-                  </Button>
-                </RequireScope>
-              </div>
-            ) : (
-              <>
-                {favoriteProjects.length > 0 && (
-                  <>
-                    <section className="flex flex-col gap-2">
-                      <div className="flex items-center gap-2">
-                        <Star className="text-foreground size-3.5 fill-current" />
-                        <Type small className="text-foreground font-medium">
-                          Your favorites
-                        </Type>
-                      </div>
-                      {renderProjectContainer(
-                        favoriteProjects.map(renderProjectItem),
-                      )}
-                    </section>
-                    {visibleOtherProjects.length > 0 && (
-                      <div
-                        className="flex items-center gap-3"
-                        aria-hidden="true"
+        <ListLayout.List>
+          <div className="grid grid-cols-1 gap-8 xl:grid-cols-[1fr_320px]">
+            <main className="flex min-w-0 flex-col gap-3">
+              {filteredProjects.length === 0 && isSearching ? (
+                <InlineEmptyState
+                  title={`No projects matching “${search}”`}
+                  action={
+                    <RequireScope scope="org:admin" level="component">
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          setNewProjectName(search);
+                          setCreateDialogOpen(true);
+                        }}
                       >
-                        <div className="bg-border h-px flex-1" />
-                        <Type muted small className="text-muted-foreground/80">
-                          All projects
-                        </Type>
-                        <div className="bg-border h-px flex-1" />
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {renderProjectContainer(
-                  visibleOtherProjects.map(renderProjectItem),
-                )}
-                {hasMore && (
-                  <button
-                    type="button"
-                    onClick={() => setExpanded((prev) => !prev)}
-                    className="text-muted-foreground hover:text-foreground border-border hover:bg-muted/40 flex items-center justify-center gap-1.5 rounded-lg border border-dashed py-3 text-sm font-medium transition-colors"
-                  >
-                    {expanded ? (
-                      <>
-                        Show less
-                        <ChevronUp className="size-4" />
-                      </>
-                    ) : (
-                      <>
-                        Show all {otherProjects.length} projects
-                        <ChevronDown className="size-4" />
-                      </>
-                    )}
-                  </button>
-                )}
-
-                {otherProjects.length === 0 &&
-                  favoriteProjects.length === 0 && (
-                    <div className="border-border bg-card flex flex-col items-center gap-3 rounded-lg border border-dashed py-12 text-center">
-                      <Type muted>No projects yet</Type>
-                      <RequireScope scope="org:admin" level="component">
-                        <Button
-                          size="sm"
-                          onClick={() => setCreateDialogOpen(true)}
-                        >
+                        <Button.LeftIcon>
                           <Plus className="size-4" />
-                          Create your first project
-                        </Button>
-                      </RequireScope>
-                    </div>
+                        </Button.LeftIcon>
+                        <Button.Text>Create &ldquo;{search}&rdquo;</Button.Text>
+                      </Button>
+                    </RequireScope>
+                  }
+                />
+              ) : (
+                <>
+                  {favoriteProjects.length > 0 && (
+                    <>
+                      <section className="flex flex-col gap-2">
+                        <div className="flex items-center gap-2">
+                          <Star className="text-foreground size-3.5 fill-current" />
+                          <Type small className="text-foreground font-medium">
+                            Your favorites
+                          </Type>
+                        </div>
+                        {renderProjectContainer(
+                          favoriteProjects.map(renderProjectItem),
+                        )}
+                      </section>
+                      {visibleOtherProjects.length > 0 && (
+                        <div
+                          className="flex items-center gap-3"
+                          aria-hidden="true"
+                        >
+                          <div className="bg-border h-px flex-1" />
+                          <Type
+                            muted
+                            small
+                            className="text-muted-foreground/80"
+                          >
+                            All projects
+                          </Type>
+                          <div className="bg-border h-px flex-1" />
+                        </div>
+                      )}
+                    </>
                   )}
-              </>
-            )}
-          </main>
 
-          <aside className="flex flex-col gap-8 xl:sticky xl:top-4 xl:self-start">
-            {isRbacEnabled && <RecentChallengesCompact />}
-            <RecentActivityCompact logs={auditLogs} />
-          </aside>
-        </div>
-      </div>
+                  {renderProjectContainer(
+                    visibleOtherProjects.map(renderProjectItem),
+                  )}
+                  {hasMore && (
+                    <button
+                      type="button"
+                      onClick={() => setExpanded((prev) => !prev)}
+                      className="text-muted-foreground hover:text-foreground border-border hover:bg-muted/40 flex items-center justify-center gap-1.5 border border-dashed py-3 text-sm font-medium transition-colors"
+                    >
+                      {expanded ? (
+                        <>
+                          Show less
+                          <ChevronUp className="size-4" />
+                        </>
+                      ) : (
+                        <>
+                          Show all {otherProjects.length} projects
+                          <ChevronDown className="size-4" />
+                        </>
+                      )}
+                    </button>
+                  )}
+
+                  {otherProjects.length === 0 &&
+                    favoriteProjects.length === 0 && (
+                      <InlineEmptyState
+                        title="No projects yet"
+                        action={
+                          <RequireScope scope="org:admin" level="component">
+                            <Button
+                              size="sm"
+                              onClick={() => setCreateDialogOpen(true)}
+                            >
+                              <Button.LeftIcon>
+                                <Plus className="size-4" />
+                              </Button.LeftIcon>
+                              <Button.Text>
+                                Create your first project
+                              </Button.Text>
+                            </Button>
+                          </RequireScope>
+                        }
+                      />
+                    )}
+                </>
+              )}
+            </main>
+
+            <aside className="flex flex-col gap-8 xl:sticky xl:top-4 xl:self-start">
+              {isRbacEnabled && <RecentChallengesCompact />}
+              <RecentActivityCompact logs={auditLogs} />
+            </aside>
+          </div>
+        </ListLayout.List>
+      </ListLayout>
 
       {createDialogOpen && (
         <InputDialog
@@ -431,9 +452,13 @@ function AddNewMenu({
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
         <Button className="h-[42px] shrink-0 px-4">
-          <Plus className="size-4" />
-          Add New
-          <ChevronDown className="size-3.5 opacity-70" />
+          <Button.LeftIcon>
+            <Plus className="size-4" />
+          </Button.LeftIcon>
+          <Button.Text>Add New</Button.Text>
+          <Button.RightIcon>
+            <ChevronDown className="size-3.5 opacity-70" />
+          </Button.RightIcon>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-48">
@@ -456,7 +481,7 @@ function AddNewMenu({
 
 function ProjectList({ children }: { children: React.ReactNode }) {
   return (
-    <div className="border-border bg-card divide-border divide-y overflow-hidden rounded-lg border">
+    <div className="border-border bg-card divide-border divide-y overflow-hidden border">
       {children}
     </div>
   );
@@ -478,7 +503,7 @@ function ViewModeToggle({
   onChange: (mode: "list" | "grid") => void;
 }) {
   return (
-    <div className="border-border bg-card flex h-[42px] shrink-0 items-center gap-0.5 rounded-md border p-1">
+    <div className="border-border bg-card flex h-[42px] shrink-0 items-center gap-0.5 border p-1">
       <ViewModeButton
         active={value === "grid"}
         onClick={() => onChange("grid")}
@@ -547,7 +572,7 @@ function ProjectRow({
           Link overlay below, while the actions region opts back in. */}
       <ProjectAvatar
         project={project}
-        className="pointer-events-none h-9 w-9 shrink-0 rounded-md"
+        className="pointer-events-none h-9 w-9 shrink-0"
       />
 
       <div className="pointer-events-none flex min-w-0 flex-1 items-center gap-6">
@@ -614,12 +639,9 @@ function ProjectCard({
   const { orgSlug } = useSlugs();
 
   return (
-    <div className="group border-border bg-card hover:border-foreground/20 relative flex h-full flex-col gap-4 rounded-lg border p-4 transition-all hover:shadow-sm">
+    <div className="group border-border bg-card hover:border-foreground/20 relative flex h-full flex-col gap-4 border p-4 transition-colors">
       <div className="pointer-events-none flex items-start gap-3">
-        <ProjectAvatar
-          project={project}
-          className="h-10 w-10 shrink-0 rounded-md"
-        />
+        <ProjectAvatar project={project} className="h-10 w-10 shrink-0" />
         <div className="min-w-0 flex-1">
           <Type
             variant="subheading"
@@ -658,7 +680,7 @@ function ProjectCard({
       <Link
         to={`/${orgSlug}/projects/${project.slug}`}
         aria-label={`Open ${project.name}`}
-        className="absolute inset-0 rounded-lg"
+        className="absolute inset-0"
       />
     </div>
   );
@@ -701,7 +723,7 @@ function ProjectRowActions({
         aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
         aria-pressed={isFavorite}
         className={cn(
-          "hover:bg-muted flex size-8 items-center justify-center rounded-md transition-colors",
+          "hover:bg-muted flex size-8 items-center justify-center transition-colors",
           isFavorite ? "text-foreground" : "text-muted-foreground",
         )}
       >
@@ -715,7 +737,7 @@ function ProjectRowActions({
           <button
             type="button"
             aria-label="More actions"
-            className="text-muted-foreground hover:bg-muted hover:text-foreground flex size-8 items-center justify-center rounded-md transition-colors"
+            className="text-muted-foreground hover:bg-muted hover:text-foreground flex size-8 items-center justify-center transition-colors"
           >
             <MoreHorizontal className="size-4" />
           </button>
@@ -823,13 +845,13 @@ function TimestampDetail({ date }: { date: Date }) {
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center gap-2">
-        <span className="bg-background/20 rounded-sm px-1 py-0.5 text-[10px] uppercase">
+        <span className="bg-background/20 px-1 py-0.5 text-[10px] uppercase">
           UTC
         </span>
         <span>{utc}</span>
       </div>
       <div className="flex items-center gap-2">
-        <span className="bg-background/20 rounded-sm px-1 py-0.5 text-[10px] uppercase">
+        <span className="bg-background/20 px-1 py-0.5 text-[10px] uppercase">
           {tzAbbr}
         </span>
         <span>{local}</span>
@@ -851,13 +873,13 @@ function RecentActivityCompact({ logs }: { logs: AuditLog[] }) {
         </orgRoutes.auditLogs.Link>
       </div>
       {preview.length === 0 ? (
-        <div className="border-border bg-card rounded-lg border border-dashed px-4 py-6 text-center">
+        <div className="border-border bg-card border border-dashed px-4 py-6 text-center">
           <Type muted small>
             Activity will appear here as your team makes changes.
           </Type>
         </div>
       ) : (
-        <ol className="border-border bg-card divide-border divide-y overflow-hidden rounded-lg border">
+        <ol className="border-border bg-card divide-border divide-y overflow-hidden border">
           {preview.map((log) => (
             <li
               key={log.id}
@@ -924,7 +946,7 @@ function RecentChallengesCompact() {
       {buckets.length === 0 ? (
         <ChallengesEmptyState outcomeFilter="deny" />
       ) : (
-        <ol className="border-border bg-card divide-border divide-y overflow-hidden rounded-lg border">
+        <ol className="border-border bg-card divide-border divide-y overflow-hidden border">
           {buckets.map((bucket) => (
             <li key={bucket.id}>
               <CompactChallengeRow bucket={bucket} />
@@ -971,9 +993,13 @@ function CompactChallengeRow({ bucket }: { bucket: ChallengeBucket }) {
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <div className="flex items-center gap-1.5">
-          <span className="bg-destructive/10 text-destructive shrink-0 rounded px-1 py-0.5 font-mono text-[10px] font-medium uppercase">
-            deny
-          </span>
+          <Badge
+            variant="destructive"
+            size="sm"
+            className="shrink-0 font-mono text-[10px] uppercase"
+          >
+            <Badge.Text>deny</Badge.Text>
+          </Badge>
           <Type
             small
             className="text-foreground truncate text-xs leading-snug font-medium"

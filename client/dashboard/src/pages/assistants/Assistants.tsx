@@ -1,15 +1,17 @@
 import { TopUpCTA, UsageProgress } from "@/components/billing/usage-controls";
 import { Page } from "@/components/page-layout";
+import { ListLayout } from "@/components/layouts/list-layout";
 import { getGradientColors } from "@/components/gradient-colors";
 import { RequireScope } from "@/components/require-scope";
+import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { AssistantActivitySparkline } from "@/components/assistants/activity-sparkline";
 import { AssistantOwner } from "@/components/assistants/assistant-owner";
 import { AssistantStatusToggle } from "@/components/assistants/status-toggle";
 import { CardContextMenu } from "@/components/card-context-menu";
-import { Badge } from "@/components/ui/badge";
-import { DotCard } from "@/components/ui/dot-card";
+import { Card } from "@/components/ui/card";
+import { useConfirm } from "@/components/ui/use-confirm";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import { Action, MoreActions } from "@/components/ui/more-actions";
-import { SearchBar } from "@/components/ui/search-bar";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   PageTabsTrigger,
@@ -29,9 +31,11 @@ import {
   useAssistantsList,
 } from "@gram/client/react-query/assistantsList.js";
 import { useGetPeriodUsage } from "@gram/client/react-query/getPeriodUsage.js";
-import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useQueryClient } from "@tanstack/react-query";
-import { Bot, Boxes, Cpu, Info, Plus } from "lucide-react";
+import { Bot, Boxes, Cpu, Info, LoaderCircle, Plus } from "lucide-react";
 import { parseAsStringLiteral, useQueryState } from "nuqs";
 import { MouseEvent, useMemo, useState } from "react";
 import { Outlet } from "react-router";
@@ -59,30 +63,27 @@ export function AssistantsRoot(): JSX.Element {
 
 function AssistantsEmptyState({ onCreate }: { onCreate: () => void }) {
   return (
-    <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
-      <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
-        <Icon name="bot" className="text-muted-foreground h-6 w-6" />
-      </div>
-      <Type variant="subheading" className="mb-1">
-        No assistants yet
-      </Type>
-      <Type small muted className="mb-4 max-w-md text-center">
-        Create an assistant to wire a model up to your MCP servers.
-      </Type>
-      <RequireScope
-        scope={["project:write", "mcp:write"]}
-        all
-        level="component"
-        reason="You don't have permission to create assistants."
-      >
-        <Button onClick={onCreate}>
-          <Button.LeftIcon>
-            <Plus className="h-4 w-4" />
-          </Button.LeftIcon>
-          <Button.Text>Create Assistant</Button.Text>
-        </Button>
-      </RequireScope>
-    </div>
+    <InlineEmptyState
+      className="py-16"
+      icon={<Bot />}
+      title="No assistants yet"
+      description="Create an assistant to wire a model up to your MCP servers."
+      action={
+        <RequireScope
+          scope={["project:write", "mcp:write"]}
+          all
+          level="component"
+          reason="You don't have permission to create assistants."
+        >
+          <Button onClick={onCreate}>
+            <Button.LeftIcon>
+              <Plus className="h-4 w-4" />
+            </Button.LeftIcon>
+            <Button.Text>Create Assistant</Button.Text>
+          </Button>
+        </RequireScope>
+      }
+    />
   );
 }
 
@@ -116,51 +117,68 @@ export default function AssistantsIndex(): JSX.Element {
   const showNoMatches =
     !isLoading && search !== "" && filteredAssistants.length === 0;
 
+  const newAssistantButton = (
+    <RequireScope
+      scope={["project:write", "mcp:write"]}
+      all
+      level="component"
+      reason="You don't have permission to create assistants."
+    >
+      <Button onClick={() => routes.assistants.newAssistant.goTo()}>
+        <Button.LeftIcon>
+          <Plus className="h-4 w-4" />
+        </Button.LeftIcon>
+        <Button.Text>New Assistant</Button.Text>
+      </Button>
+    </RequireScope>
+  );
+
   const content =
     !isLoading && assistants.length === 0 ? (
-      <AssistantsEmptyState
-        onCreate={() => routes.assistants.newAssistant.goTo()}
-      />
+      <ListLayout>
+        <ListLayout.Header
+          title={
+            <>
+              Assistants <ReleaseStageBadge stage="beta" />
+            </>
+          }
+          actions={newAssistantButton}
+        />
+        <ListLayout.List>
+          <AssistantsEmptyState
+            onCreate={() => routes.assistants.newAssistant.goTo()}
+          />
+        </ListLayout.List>
+      </ListLayout>
     ) : (
-      <Page.Section>
-        <Page.Section.Title stage="beta">Assistants</Page.Section.Title>
-        <Page.Section.Description className="max-w-xl">
-          Openclaw-inspired secure Assistants. Every assistant connects through
-          the MCPs and Skills your org already uses, with identity, guardrails,
-          and audit built in. Deployed to Slack.
-        </Page.Section.Description>
-        <Page.Section.CTA>
-          <RequireScope
-            scope={["project:write", "mcp:write"]}
-            all
-            level="component"
-            reason="You don't have permission to create assistants."
-          >
-            <Button onClick={() => routes.assistants.newAssistant.goTo()}>
-              <Button.LeftIcon>
-                <Plus className="h-4 w-4" />
-              </Button.LeftIcon>
-              <Button.Text>New Assistant</Button.Text>
-            </Button>
-          </RequireScope>
-        </Page.Section.CTA>
-        <Page.Section.Body>
-          {showSearch && (
-            <SearchBar
+      <ListLayout>
+        <ListLayout.Header
+          title={
+            <>
+              Assistants <ReleaseStageBadge stage="beta" />
+            </>
+          }
+          subtitle="Openclaw-inspired secure Assistants. Every assistant connects through the MCPs and Skills your org already uses, with identity, guardrails, and audit built in. Deployed to Slack."
+          actions={newAssistantButton}
+        />
+        {showSearch && (
+          <ListLayout.Toolbar>
+            <ListLayout.Toolbar.Search
               value={search}
               onChange={setSearch}
               placeholder="Search assistants..."
-              className="mb-4"
             />
-          )}
+          </ListLayout.Toolbar>
+        )}
+        <ListLayout.List>
           <AssistantsBody
             isLoading={isLoading}
             showNoMatches={showNoMatches}
             search={search}
             assistants={filteredAssistants}
           />
-        </Page.Section.Body>
-      </Page.Section>
+        </ListLayout.List>
+      </ListLayout>
     );
 
   return (
@@ -175,7 +193,7 @@ export default function AssistantsIndex(): JSX.Element {
           className="flex w-full flex-col"
         >
           <div className="border-b">
-            <TabsList className="h-auto gap-6 rounded-none bg-transparent p-0">
+            <TabsList className="h-auto gap-6 bg-transparent p-0">
               <PageTabsTrigger value="assistants">Assistants</PageTabsTrigger>
               <PageTabsTrigger value="triggers">Triggers</PageTabsTrigger>
               <PageTabsTrigger value="audit">Activity</PageTabsTrigger>
@@ -189,7 +207,7 @@ export default function AssistantsIndex(): JSX.Element {
             <UsageSection />
           </TabsContent>
           <TabsContent value="triggers" className="mt-6 w-full">
-            <TriggersPanel />
+            <TriggersPanel embedded />
           </TabsContent>
           <TabsContent value="audit" className="mt-6 w-full">
             <RequireScope scope="org:read" level="section">
@@ -216,10 +234,7 @@ function AssistantsBody({
   if (isLoading) {
     return (
       <Stack align="center" justify="center" className="py-16">
-        <Icon
-          name="loader-circle"
-          className="text-muted-foreground h-6 w-6 animate-spin"
-        />
+        <LoaderCircle className="text-muted-foreground h-6 w-6 animate-spin" />
       </Stack>
     );
   }
@@ -293,7 +308,7 @@ function AssistantIcon({ assistant }: { assistant: Pick<Assistant, "id"> }) {
   const colors = getGradientColors(assistant.id);
   return (
     <div
-      className="flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br"
+      className="flex h-12 w-12 items-center justify-center bg-gradient-to-br"
       style={{
         backgroundImage: `linear-gradient(${colors.angle}deg, ${colors.from}, ${colors.to})`,
       }}
@@ -327,14 +342,21 @@ function AssistantToolsets({ assistant }: { assistant: Assistant }) {
         {visible.map((toolset) => (
           <Badge
             key={toolset.toolsetSlug}
-            variant="outline"
+            variant="neutral"
+            background={false}
             className="max-w-[10rem]"
             title={toolset.toolsetSlug}
           >
-            <span className="min-w-0 truncate">{toolset.toolsetSlug}</span>
+            <Badge.Text>
+              <span className="min-w-0 truncate">{toolset.toolsetSlug}</span>
+            </Badge.Text>
           </Badge>
         ))}
-        {overflow > 0 && <Badge variant="outline">+{overflow}</Badge>}
+        {overflow > 0 && (
+          <Badge variant="neutral" background={false}>
+            +{overflow}
+          </Badge>
+        )}
       </div>
     </div>
   );
@@ -343,6 +365,7 @@ function AssistantToolsets({ assistant }: { assistant: Assistant }) {
 function AssistantCard({ assistant }: { assistant: Assistant }) {
   const routes = useRoutes();
   const queryClient = useQueryClient();
+  const { confirm: requestConfirm, dialog } = useConfirm();
 
   const deleteAssistant = useAssistantsDeleteMutation({
     onSuccess: () => {
@@ -350,66 +373,75 @@ function AssistantCard({ assistant }: { assistant: Assistant }) {
     },
   });
 
+  const handleDelete = async () => {
+    const confirmed = await requestConfirm({
+      title: `Delete assistant "${assistant.name}"?`,
+      destructive: true,
+    });
+    if (confirmed) {
+      deleteAssistant.mutate({ request: { id: assistant.id } });
+    }
+  };
+
   const actions: Action[] = [
     {
       label: "Delete",
       destructive: true,
       icon: "trash",
-      onClick: () => {
-        if (confirm(`Delete assistant "${assistant.name}"?`)) {
-          deleteAssistant.mutate({ request: { id: assistant.id } });
-        }
-      },
+      onClick: () => void handleDelete(),
     },
   ];
 
   return (
-    <CardContextMenu actions={actions}>
-      <routes.assistants.detail.Link
-        params={[assistant.id]}
-        className="focus-visible:ring-ring block h-full rounded-xl no-underline focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
-      >
-        <DotCard icon={<AssistantIcon assistant={assistant} />}>
-          {/* Header row: name + actions */}
-          <div className="mb-3 flex items-start justify-between gap-2">
-            <Type
-              variant="subheading"
-              as="div"
-              className="text-md group-hover:text-primary flex-1 truncate normal-case transition-colors"
-              title={assistant.name}
-            >
-              {assistant.name}
-            </Type>
-            <div onClick={stopLinkNavigation}>
-              <MoreActions actions={actions} />
-            </div>
-          </div>
-
-          {/* Metadata: model + MCP servers */}
-          <div className="mb-3 flex flex-col gap-2">
-            <div className="flex items-center gap-1.5">
-              <Cpu className="text-muted-foreground/70 size-3.5 shrink-0" />
-              <Type muted small className="truncate" title={assistant.model}>
-                {assistant.model}
+    <>
+      <CardContextMenu actions={actions}>
+        <routes.assistants.detail.Link
+          params={[assistant.id]}
+          className="focus-visible:ring-ring block h-full no-underline focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+        >
+          <Card icon={<AssistantIcon assistant={assistant} />}>
+            {/* Header row: name + actions */}
+            <div className="mb-3 flex items-start justify-between gap-2">
+              <Type
+                variant="subheading"
+                as="div"
+                className="text-md group-hover:text-primary flex-1 truncate normal-case transition-colors"
+                title={assistant.name}
+              >
+                {assistant.name}
               </Type>
+              <div onClick={stopLinkNavigation}>
+                <MoreActions actions={actions} />
+              </div>
             </div>
-            <AssistantToolsets assistant={assistant} />
-            <AssistantOwner
-              createdByUserId={assistant.createdByUserId}
-              variant="card"
-            />
-          </div>
 
-          {/* Footer row: status toggle + activity sparkline + last updated */}
-          <div className="border-border/60 mt-auto flex items-center justify-between gap-2 border-t pt-3">
-            <AssistantStatusToggle assistant={assistant} />
-            <div className="flex items-center gap-2">
-              <AssistantActivitySparkline assistantId={assistant.id} />
-              <UpdatedAt date={new Date(assistant.updatedAt)} />
+            {/* Metadata: model + MCP servers */}
+            <div className="mb-3 flex flex-col gap-2">
+              <div className="flex items-center gap-1.5">
+                <Cpu className="text-muted-foreground/70 size-3.5 shrink-0" />
+                <Type muted small className="truncate" title={assistant.model}>
+                  {assistant.model}
+                </Type>
+              </div>
+              <AssistantToolsets assistant={assistant} />
+              <AssistantOwner
+                createdByUserId={assistant.createdByUserId}
+                variant="card"
+              />
             </div>
-          </div>
-        </DotCard>
-      </routes.assistants.detail.Link>
-    </CardContextMenu>
+
+            {/* Footer row: status toggle + activity sparkline + last updated */}
+            <div className="border-border/60 mt-auto flex items-center justify-between gap-2 border-t pt-3">
+              <AssistantStatusToggle assistant={assistant} />
+              <div className="flex items-center gap-2">
+                <AssistantActivitySparkline assistantId={assistant.id} />
+                <UpdatedAt date={new Date(assistant.updatedAt)} />
+              </div>
+            </div>
+          </Card>
+        </routes.assistants.detail.Link>
+      </CardContextMenu>
+      {dialog}
+    </>
   );
 }

@@ -1,11 +1,16 @@
-import { Icon, type IconName } from "@speakeasy-api/moonshine";
 import { SimpleTooltip } from "@/components/ui/tooltip";
+import {
+  StatCard,
+  StatTile,
+  type StatTileDelta,
+  type StatTileTone,
+} from "@/components/ui/stat-tile";
 import { formatCompact } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { getValueColor, ThresholdConfig } from "./chartUtils";
-import { Loader2 } from "lucide-react";
+import { ArrowRight, Info } from "lucide-react";
 import { Link } from "react-router";
-
-type AccentColor = "red" | "orange" | "yellow" | "green" | "blue" | "purple";
+import type { IconName } from "@/components/ui/dynamic-icon";
 
 export type MetricCardProps = {
   title: string;
@@ -14,17 +19,20 @@ export type MetricCardProps = {
   displayValue?: string;
   previousValue?: number;
   format?: "compact" | "number" | "currency" | "percent" | "ms" | "seconds";
+  /** @deprecated The brand KPI strip carries no per-tile icon chrome. */
   icon?: IconName;
-  /** Replaces the icon with a spinner while cached data refreshes in the background. */
-  isRefreshing?: boolean;
+  /** @deprecated The brand KPI strip carries no per-tile accent tint. */
+  accentColor?: "red" | "orange" | "yellow" | "green" | "blue" | "purple";
   invertDelta?: boolean;
   thresholds?: ThresholdConfig;
   comparisonLabel?: string;
-  accentColor?: AccentColor;
   subtext?: string;
   tooltip?: string;
   link?: string;
   linkText?: string;
+  /** Draw the hairline-bordered tile. Off when the row is a connected strip. */
+  bordered?: boolean;
+  className?: string;
 };
 
 export function MetricCard(props: MetricCardProps): JSX.Element {
@@ -34,8 +42,6 @@ export function MetricCard(props: MetricCardProps): JSX.Element {
     displayValue,
     previousValue = 0,
     format = "compact",
-    icon,
-    isRefreshing = false,
     invertDelta = false,
     thresholds,
     comparisonLabel,
@@ -43,6 +49,8 @@ export function MetricCard(props: MetricCardProps): JSX.Element {
     tooltip,
     link,
     linkText = "View",
+    bordered = true,
+    className,
   } = props;
   const formatValue = (v: number) => {
     switch (format) {
@@ -77,87 +85,64 @@ export function MetricCard(props: MetricCardProps): JSX.Element {
   const isPositive = rawDelta > 0;
   const isGood = invertDelta ? !isPositive : isPositive;
 
+  // Threshold coloring is expressed as a text-color class; feed it through
+  // StatTile's escape hatch so alarming values keep their tone.
   const valueColor = getValueColor(value, thresholds);
+  const tone: StatTileTone = "default";
 
-  return (
-    <div className="bg-card border-border rounded-lg border p-5">
-      <div className="mb-3 flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
-          <span className="text-sm font-semibold">{title}</span>
-          {tooltip && (
-            <SimpleTooltip tooltip={tooltip}>
-              <button
-                type="button"
-                aria-label={`About ${title}`}
-                className="text-muted-foreground hover:text-foreground inline-flex cursor-help items-center"
-              >
-                <Icon name="info" className="size-3.5" />
-              </button>
-            </SimpleTooltip>
-          )}
-        </div>
-        {icon && (
-          <div className="bg-muted/50 rounded-lg p-2">
-            {isRefreshing ? (
-              <Loader2
-                aria-label={`Refreshing ${title}`}
-                className="text-muted-foreground size-4 animate-spin"
-              />
-            ) : (
-              <Icon name={icon} className="text-muted-foreground size-4" />
-            )}
-          </div>
-        )}
-      </div>
-      <div className="flex flex-nowrap items-end">
-        <div className="flex-1 flex flex-col gap-1">
-          <div className="flex items-end justify-between">
-            <span
-              className={`text-3xl font-semibold tracking-tight ${valueColor}`}
-            >
-              {displayValue ?? formatValue(value)}
-            </span>
-            {previousValue > 0 && delta !== 0 && (
-              <div className="flex flex-col items-end gap-0.5">
-                <div
-                  className={`flex items-center gap-1 text-xs font-medium ${
-                    isGood ? "text-emerald-600" : "text-red-500"
-                  }`}
-                >
-                  <Icon
-                    name={isPositive ? "trending-up" : "trending-down"}
-                    className="size-3"
-                  />
-                  <span>{delta.toFixed(1)}%</span>
-                </div>
-                {comparisonLabel && (
-                  <span className="text-muted-foreground text-[10px]">
-                    {comparisonLabel}
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
-          {subtext && (
-            <span className="text-muted-foreground mt-1 block text-xs">
-              {subtext}
-            </span>
-          )}
-        </div>
-
-        {link && (
-          <div className="shrink">
-            <Link
-              to={link}
-              aria-label={`View ${title}`}
-              className="text-primary/70 hover:text-primary flex items-center gap-1 text-xs no-underline"
-            >
-              {linkText}
-              <Icon name="arrow-right" />
-            </Link>
-          </div>
-        )}
-      </div>
-    </div>
+  const label = tooltip ? (
+    <span className="inline-flex items-center gap-1.5">
+      {title}
+      <SimpleTooltip tooltip={tooltip}>
+        <button
+          type="button"
+          aria-label={`About ${title}`}
+          className="hover:text-foreground inline-flex cursor-help items-center"
+        >
+          <Info className="size-3" />
+        </button>
+      </SimpleTooltip>
+    </span>
+  ) : (
+    title
   );
+
+  const statDelta: StatTileDelta | undefined =
+    previousValue > 0 && delta !== 0
+      ? {
+          value: `${isPositive ? "+" : "-"}${delta.toFixed(0)}%`,
+          tone: isGood ? "positive" : "negative",
+        }
+      : undefined;
+
+  const caption =
+    link || subtext || comparisonLabel ? (
+      <span className="flex items-center justify-between gap-2">
+        <span>{subtext ?? comparisonLabel}</span>
+        {link && (
+          <Link
+            to={link}
+            aria-label={`View ${title}`}
+            className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 whitespace-nowrap no-underline"
+          >
+            {linkText}
+            <ArrowRight className="size-3.5" />
+          </Link>
+        )}
+      </span>
+    ) : undefined;
+
+  const shared = {
+    label,
+    value: displayValue ?? formatValue(value),
+    delta: statDelta,
+    caption,
+    tone,
+    valueClassName: valueColor || undefined,
+  };
+
+  if (bordered) {
+    return <StatCard {...shared} cardClassName={className} />;
+  }
+  return <StatTile {...shared} className={cn("p-5", className)} />;
 }

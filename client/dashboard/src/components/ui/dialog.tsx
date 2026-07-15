@@ -1,4 +1,3 @@
-// oxlint-disable react/only-export-components -- compound component (Object.assign) pattern
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import * as React from "react";
 
@@ -7,7 +6,7 @@ import { XIcon } from "lucide-react";
 
 function DialogRoot({
   ...props
-}: React.ComponentProps<typeof DialogPrimitive.Root>) {
+}: React.ComponentProps<typeof DialogPrimitive.Root>): React.JSX.Element {
   return <DialogPrimitive.Root data-slot="dialog" {...props} />;
 }
 
@@ -56,7 +55,7 @@ function DialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          "bg-card data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg duration-200 sm:max-w-lg",
+          "bg-card data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 duration-200 sm:max-w-lg",
           className,
         )}
         // Prevent clicks from propagating to the page beneath the dialog, for example when the close button is clicked
@@ -128,12 +127,12 @@ function DialogDescription({
   );
 }
 
-export const Dialog = Object.assign(DialogRoot, {
-  Close: DialogClose,
-  Content: DialogContent,
-  Description: DialogDescription,
-  Footer: DialogFooter,
-  Header: DialogHeader,
-  Title: DialogTitle,
-  Trigger: DialogTrigger,
-});
+DialogRoot.Close = DialogClose;
+DialogRoot.Content = DialogContent;
+DialogRoot.Description = DialogDescription;
+DialogRoot.Footer = DialogFooter;
+DialogRoot.Header = DialogHeader;
+DialogRoot.Title = DialogTitle;
+DialogRoot.Trigger = DialogTrigger;
+
+export { DialogRoot as Dialog };

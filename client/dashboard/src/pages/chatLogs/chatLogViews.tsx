@@ -1,7 +1,10 @@
 import type { JSX } from "react";
-import { Badge, Icon } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/badge";
+import { Zap } from "lucide-react";
 import type { TelemetryLogRecord } from "@gram/client/models/components/telemetrylogrecord.js";
 import { cn } from "@/lib/utils";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
+import { Spinner } from "@/components/ui/spinner";
 import { formatLogTimestamp } from "./chatLogFilters";
 
 export function ToolCallsView({
@@ -15,23 +18,29 @@ export function ToolCallsView({
 }): JSX.Element {
   if (isLoading) {
     return (
-      <div className="text-muted-foreground p-6 text-center">
+      <div className="text-muted-foreground flex items-center justify-center gap-2 p-6 text-sm">
+        <Spinner className="mr-0 size-4" />
         Loading tool call logs...
       </div>
     );
   }
   if (error) {
     return (
-      <div className="text-destructive p-6 text-center">
-        Failed to load tool calls: {error.message}
+      <div className="p-6">
+        <InlineEmptyState
+          title="Failed to load tool calls"
+          description={error.message}
+        />
       </div>
     );
   }
   if (toolLogs.length === 0) {
     return (
-      <div className="text-muted-foreground p-6 text-center">
-        No tool call logs found for this agent session.
-      </div>
+      <InlineEmptyState
+        icon={<Zap />}
+        title="No tool calls"
+        description="No tool call logs found for this agent session."
+      />
     );
   }
 
@@ -53,8 +62,7 @@ export function ToolCallsView({
                   isError ? "bg-destructive/10" : "bg-primary/10",
                 )}
               >
-                <Icon
-                  name="zap"
+                <Zap
                   className={cn(
                     "size-4",
                     isError ? "text-destructive" : "text-primary",

@@ -8,9 +8,12 @@ import { cn, getServerURL } from "@/lib/utils";
 import type { PulseMCPServer } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
 import type { ExternalMCPRemote } from "@gram/client/models/components/externalmcpremote.js";
-import { Button, Dialog, Input, Stack } from "@speakeasy-api/moonshine";
+import { Dialog } from "@/components/ui/dialog";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
+import { Alert } from "@/components/ui/alert";
+import { Input } from "@/components/ui/input";
 import {
-  AlertCircle,
   ArrowRight,
   Check,
   Circle,
@@ -492,12 +495,9 @@ export function AddServerDialog({
             </Dialog.Description>
           </Dialog.Header>
           <div className="py-4">
-            <div className="border-destructive/30 bg-destructive/5 flex items-start gap-3 rounded-lg border p-3">
-              <AlertCircle className="text-destructive mt-0.5 h-5 w-5 shrink-0" />
-              <Type small className="text-destructive/80">
-                {detailsError}
-              </Type>
-            </div>
+            <Alert variant="error" dismissible={false}>
+              <Type small>{detailsError}</Type>
+            </Alert>
           </div>
           <Dialog.Footer>
             <Button variant="tertiary" onClick={() => onOpenChange(false)}>
@@ -731,12 +731,12 @@ function SelectRemotesPhaseContent({
 
         {/* Server icon and info */}
         <div className="flex items-center gap-3">
-          <div className="bg-primary/10 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg">
+          <div className="bg-primary/10 flex h-10 w-10 shrink-0 items-center justify-center">
             {currentConfig.server.iconUrl ? (
               <img
                 src={currentConfig.server.iconUrl}
                 alt=""
-                className="h-6 w-6 rounded"
+                className="h-6 w-6"
               />
             ) : (
               <ServerIcon className="text-muted-foreground h-5 w-5" />
@@ -800,7 +800,7 @@ function SelectRemotesPhaseContent({
                 : "Select all"}
             </button>
           </div>
-          <div className="bg-muted/50 max-h-64 space-y-2 overflow-y-auto rounded-lg border p-4">
+          <div className="bg-muted/50 max-h-64 space-y-2 overflow-y-auto border p-4">
             {currentConfig.remotes.map((remote) => {
               const isSelected = currentConfig.selectedRemoteUrls.has(
                 remote.url,
@@ -810,7 +810,7 @@ function SelectRemotesPhaseContent({
                 <label
                   key={remote.url}
                   className={cn(
-                    "bg-background flex cursor-pointer items-start gap-3 rounded-md border p-3 transition-colors",
+                    "bg-background flex cursor-pointer items-start gap-3 border p-3 transition-colors",
                     isSelected
                       ? "border-primary/40"
                       : "border-border hover:border-muted-foreground/30",
@@ -1018,15 +1018,11 @@ function BatchServerConfig({
         return (
           <div
             key={config.server.registrySpecifier}
-            className="flex items-center gap-3 rounded-lg border p-3"
+            className="flex items-center gap-3 border p-3"
           >
-            <div className="bg-primary/10 flex h-6 w-6 shrink-0 items-center justify-center rounded">
+            <div className="bg-primary/10 flex h-6 w-6 shrink-0 items-center justify-center">
               {config.server.iconUrl ? (
-                <img
-                  src={config.server.iconUrl}
-                  alt=""
-                  className="h-4 w-4 rounded"
-                />
+                <img src={config.server.iconUrl} alt="" className="h-4 w-4" />
               ) : (
                 <ServerIcon className="text-muted-foreground h-3 w-3" />
               )}
@@ -1065,8 +1061,8 @@ function BulkInstallSummary({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-3 rounded-lg border p-4">
-        <div className="bg-primary/10 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg">
+      <div className="flex items-center gap-3 border p-4">
+        <div className="bg-primary/10 flex h-10 w-10 shrink-0 items-center justify-center">
           <ServerIcon className="text-muted-foreground h-5 w-5" />
         </div>
         <div>
@@ -1118,7 +1114,7 @@ function DeployingPhaseContent({
         </Type>
       </Stack>
       {releaseState.deploymentLogs.length > 0 && (
-        <div className="bg-muted/30 max-h-48 space-y-1 overflow-y-auto rounded-lg border p-3 font-mono text-xs">
+        <div className="bg-muted/30 max-h-48 space-y-1 overflow-y-auto border p-3 font-mono text-xs">
           {releaseState.deploymentLogs.map((log) => (
             <div
               key={log.id}
@@ -1158,18 +1154,13 @@ function CompletePhaseContent({
     <div className="space-y-4 pb-2">
       {/* Success header when all done */}
       {allDone && allSucceeded && (
-        <div className="flex items-center gap-3 rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/20">
-            <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-          </div>
-          <div>
-            <Type className="font-medium text-emerald-700 dark:text-emerald-300">
-              {successCount === 1
-                ? "Server added successfully"
-                : `${successCount} servers added successfully`}
-            </Type>
-          </div>
-        </div>
+        <Alert variant="success" dismissible={false}>
+          <Type className="font-medium">
+            {successCount === 1
+              ? "Server added successfully"
+              : `${successCount} servers added successfully`}
+          </Type>
+        </Alert>
       )}
 
       {/* Toolset creation progress - only show during creation or if there were failures */}
@@ -1228,7 +1219,7 @@ function ToolsetStatusRow({
   const isCompleted = status.status === "completed" && status.toolsetSlug;
 
   const content = (
-    <div className="flex items-center gap-3 rounded-lg border p-2">
+    <div className="flex items-center gap-3 border p-2">
       <div className="flex min-w-0 flex-1 items-center gap-2">
         <Type small className="truncate">
           {status.name}
@@ -1270,7 +1261,7 @@ function ToolsetStatusIcon({
         <Loader2 className="text-muted-foreground h-4 w-4 shrink-0 animate-spin" />
       );
     case "completed":
-      return <Check className="h-4 w-4 shrink-0 text-emerald-500" />;
+      return <Check className="text-success h-4 w-4 shrink-0" />;
     case "failed":
       return <X className="text-destructive h-4 w-4 shrink-0" />;
   }
@@ -1292,33 +1283,19 @@ function SingleServerNextSteps({
       <Type className="mb-2 font-medium">Next steps</Type>
       <div className="grid grid-cols-2 gap-2">
         <routes.sources.Link className="no-underline hover:no-underline">
-          <div className="group hover:border-foreground/20 hover:bg-muted/30 flex h-full items-center gap-3 rounded-lg border p-3 transition-all [&_*]:no-underline">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-blue-500/10 dark:bg-blue-500/20">
-              <Plus className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-            </div>
-            <div className="flex-1">
-              <Type className="text-sm font-medium no-underline">
-                Add more sources
-              </Type>
-            </div>
-            <ArrowRight className="text-muted-foreground h-4 w-4 opacity-0 transition-opacity group-hover:opacity-100" />
-          </div>
+          <NextStepTile
+            icon={<Plus className="h-4 w-4" />}
+            label="Add more sources"
+          />
         </routes.sources.Link>
         <routes.elements.Link
           className="no-underline hover:no-underline"
           queryParams={{ toolset: toolsetSlug }}
         >
-          <div className="group hover:border-foreground/20 hover:bg-muted/30 flex h-full items-center gap-3 rounded-lg border p-3 transition-all [&_*]:no-underline">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-violet-500/10 dark:bg-violet-500/20">
-              <MessageCircle className="h-4 w-4 text-violet-600 dark:text-violet-400" />
-            </div>
-            <div className="flex-1">
-              <Type className="text-sm font-medium no-underline">
-                Deploy as chat
-              </Type>
-            </div>
-            <ArrowRight className="text-muted-foreground h-4 w-4 opacity-0 transition-opacity group-hover:opacity-100" />
-          </div>
+          <NextStepTile
+            icon={<MessageCircle className="h-4 w-4" />}
+            label="Deploy as chat"
+          />
         </routes.elements.Link>
         <a
           href={`${getServerURL()}/mcp/${mcpSlug}/install`}
@@ -1326,35 +1303,41 @@ function SingleServerNextSteps({
           rel="noopener noreferrer"
           className="no-underline hover:no-underline"
         >
-          <div className="group hover:border-foreground/20 hover:bg-muted/30 flex h-full items-center gap-3 rounded-lg border p-3 transition-all [&_*]:no-underline">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-emerald-500/10 dark:bg-emerald-500/20">
-              <Plug className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-            </div>
-            <div className="flex-1">
-              <Type className="text-sm font-medium no-underline">
-                Connect via Claude, Cursor, Codex
-              </Type>
-            </div>
-            <ArrowRight className="text-muted-foreground h-4 w-4 opacity-0 transition-opacity group-hover:opacity-100" />
-          </div>
+          <NextStepTile
+            icon={<Plug className="h-4 w-4" />}
+            label="Connect via Claude, Cursor, Codex"
+          />
         </a>
         <routes.mcp.details.Link
           params={[toolsetSlug]}
           className="no-underline hover:no-underline"
         >
-          <div className="group hover:border-foreground/20 hover:bg-muted/30 flex h-full items-center gap-3 rounded-lg border p-3 transition-all [&_*]:no-underline">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-orange-500/10 dark:bg-orange-500/20">
-              <Settings className="h-4 w-4 text-orange-600 dark:text-orange-400" />
-            </div>
-            <div className="flex-1">
-              <Type className="text-sm font-medium no-underline">
-                Configure MCP settings
-              </Type>
-            </div>
-            <ArrowRight className="text-muted-foreground h-4 w-4 opacity-0 transition-opacity group-hover:opacity-100" />
-          </div>
+          <NextStepTile
+            icon={<Settings className="h-4 w-4" />}
+            label="Configure MCP settings"
+          />
         </routes.mcp.details.Link>
       </div>
+    </div>
+  );
+}
+
+function NextStepTile({
+  icon,
+  label,
+}: {
+  icon: React.ReactNode;
+  label: string;
+}) {
+  return (
+    <div className="group hover:border-foreground/20 hover:bg-muted/30 flex h-full items-center gap-3 border p-3 transition-all [&_*]:no-underline">
+      <div className="bg-muted text-muted-foreground flex h-8 w-8 shrink-0 items-center justify-center">
+        {icon}
+      </div>
+      <div className="flex-1">
+        <Type className="text-sm font-medium no-underline">{label}</Type>
+      </div>
+      <ArrowRight className="text-muted-foreground h-4 w-4 opacity-0 transition-opacity group-hover:opacity-100" />
     </div>
   );
 }
@@ -1372,19 +1355,16 @@ function ErrorPhaseContent({
 
   return (
     <div className="space-y-4 py-2">
-      <div className="border-destructive/30 bg-destructive/5 flex items-start gap-3 rounded-lg border p-3">
-        <AlertCircle className="text-destructive mt-0.5 h-5 w-5 shrink-0" />
+      <Alert variant="error" dismissible={false}>
         <div className="flex-1">
-          <Type className="text-destructive font-medium">
-            Deployment failed
-          </Type>
-          <Type small className="text-destructive/80 mt-1">
+          <Type className="font-medium">Deployment failed</Type>
+          <Type small className="mt-1">
             {releaseState.error}
           </Type>
         </div>
-      </div>
+      </Alert>
       {releaseState.deploymentLogs.length > 0 && (
-        <div className="bg-muted/30 max-h-48 space-y-1 overflow-y-auto rounded-lg border p-3 font-mono text-xs">
+        <div className="bg-muted/30 max-h-48 space-y-1 overflow-y-auto border p-3 font-mono text-xs">
           {releaseState.deploymentLogs.map((log) => (
             <div
               key={log.id}

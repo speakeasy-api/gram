@@ -55,7 +55,7 @@ vi.mock("@gram/client/react-query/resolveShadowMCPInventoryRequest.js", () => ({
     mocks.resolveInventoryRequestMutation,
 }));
 
-vi.mock("@speakeasy-api/moonshine", () => ({
+vi.mock("@/components/ui/badge", () => ({
   Badge: Object.assign(
     ({ children }: { children: ReactNode }) => <span>{children}</span>,
     {
@@ -65,6 +65,9 @@ vi.mock("@speakeasy-api/moonshine", () => ({
       Text: ({ children }: { children: ReactNode }) => <span>{children}</span>,
     },
   ),
+}));
+
+vi.mock("@/components/ui/button", () => ({
   Button: Object.assign(
     ({
       children,
@@ -93,6 +96,9 @@ vi.mock("@speakeasy-api/moonshine", () => ({
       Text: ({ children }: { children: ReactNode }) => <span>{children}</span>,
     },
   ),
+}));
+
+vi.mock("@/components/ui/dropdown-menu", () => ({
   DropdownMenu: ({
     children,
     modal,
@@ -146,9 +152,15 @@ vi.mock("@speakeasy-api/moonshine", () => ({
 
     return <>{children}</>;
   },
+}));
+
+vi.mock("@/components/ui/icon", () => ({
   Icon: ({ className }: { className?: string; name: string }) => (
     <span className={className} />
   ),
+}));
+
+vi.mock("@/components/ui/table", () => ({
   Table: Object.assign(
     ({ children }: { children: ReactNode }) => <table>{children}</table>,
     {
@@ -239,6 +251,9 @@ vi.mock("@speakeasy-api/moonshine", () => ({
       ),
     },
   ),
+}));
+
+vi.mock("@/components/ui/table/sorting", () => ({
   sortTableData: (
     data: ShadowMCPInventoryServer[],
     columns: Array<{

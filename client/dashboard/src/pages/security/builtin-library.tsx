@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import {
   Sheet,
   SheetContent,
@@ -38,7 +39,7 @@ export function BuiltinLibrary(): JSX.Element {
   const categories = data?.categories ?? [];
 
   return (
-    <section className="bg-background mb-6 rounded-xl border p-5">
+    <Card className="mb-6">
       <div className="flex items-center justify-between gap-4">
         <SimpleTooltip tooltip={LIBRARY_TOOLTIP}>
           <span className="flex cursor-default items-center gap-1.5">
@@ -57,7 +58,7 @@ export function BuiltinLibrary(): JSX.Element {
         />
       </div>
 
-      <div className="mt-4">
+      <div>
         <Button
           variant="secondary"
           size="sm"
@@ -93,7 +94,7 @@ export function BuiltinLibrary(): JSX.Element {
           </div>
         </SheetContent>
       </Sheet>
-    </section>
+    </Card>
   );
 }
 
@@ -103,7 +104,7 @@ function PresetEntryRow({
   entry: BuiltinExclusionEntry;
 }): JSX.Element {
   return (
-    <li className="bg-muted/30 space-y-1 rounded-lg border p-3">
+    <li className="bg-muted/30 space-y-1 border p-3">
       <Type small className="font-medium">
         {entry.reason}
       </Type>
@@ -115,7 +116,7 @@ function PresetEntryRow({
           {entry.samples.map((sample) => (
             <code
               key={sample}
-              className="bg-background rounded border px-1.5 py-0.5 font-mono text-xs break-all"
+              className="bg-background border px-1.5 py-0.5 font-mono text-xs break-all"
             >
               {sample}
             </code>

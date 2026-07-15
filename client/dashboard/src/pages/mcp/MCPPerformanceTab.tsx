@@ -6,7 +6,7 @@ import { Toolset } from "@/lib/toolTypes";
 import { cn } from "@/lib/utils";
 import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
 import { useUpdateToolsetMutation } from "@gram/client/react-query/updateToolset.js";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, ListOrdered, Search } from "lucide-react";
 import { toast } from "sonner";
@@ -35,7 +35,7 @@ function ModeCard({
       type="button"
       onClick={onSelect}
       className={cn(
-        "flex cursor-pointer flex-col gap-4 rounded-lg border p-5 text-left transition-colors",
+        "flex cursor-pointer flex-col gap-4 border p-5 text-left transition-colors",
         selected
           ? "border-primary bg-card ring-primary ring-1"
           : "border-border hover:border-muted-foreground/40 hover:bg-card/50",
@@ -44,7 +44,7 @@ function ModeCard({
       <div className="flex items-center gap-3">
         <div
           className={cn(
-            "flex h-9 w-9 items-center justify-center rounded-md",
+            "flex h-9 w-9 items-center justify-center",
             selected
               ? "bg-primary/10 text-primary"
               : "bg-muted text-muted-foreground",

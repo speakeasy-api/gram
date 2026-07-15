@@ -4,8 +4,9 @@ import {
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
 import { CardContextMenu } from "@/components/card-context-menu";
-import { DotCard } from "@/components/ui/dot-card";
+import { Card } from "@/components/ui/card";
 import { MoreActions } from "@/components/ui/more-actions";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { useRBAC } from "@/hooks/useRBAC";
 import {
@@ -17,7 +18,7 @@ import { useRoutes } from "@/routes";
 import { Asset } from "@gram/client/models/components/asset.js";
 import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import { HoverCardPortal } from "@radix-ui/react-hover-card";
-import { Badge } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/badge";
 import { ArrowRight, CircleAlertIcon, FileCode, Network } from "lucide-react";
 
 export type NamedAsset =
@@ -183,7 +184,7 @@ export function SourceCard({
         params={[sourceKind, asset.slug]}
         className="block h-full hover:no-underline"
       >
-        <DotCard icon={iconContent}>
+        <Card icon={iconContent}>
           {/* Header row with name and actions */}
           <div className="mb-2 flex items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
@@ -225,7 +226,7 @@ export function SourceCard({
               <ArrowRight className="h-3.5 w-3.5" />
             </div>
           </div>
-        </DotCard>
+        </Card>
       </routes.sources.source.Link>
     </CardContextMenu>
   );
@@ -233,19 +234,19 @@ export function SourceCard({
 
 export function SourceCardSkeleton(): JSX.Element {
   return (
-    <div className="bg-card text-card-foreground flex flex-row overflow-hidden rounded-xl border">
+    <div className="bg-card text-card-foreground flex flex-row overflow-hidden border">
       {/* Dot pattern sidebar placeholder */}
-      <div className="bg-muted/50 w-40 shrink-0 animate-pulse border-r" />
+      <Skeleton className="w-40 shrink-0 rounded-none border-r" />
 
       {/* Content area */}
       <div className="flex flex-1 flex-col p-4">
         {/* Name placeholder */}
-        <div className="bg-muted mb-2 h-5 w-2/3 animate-pulse rounded" />
+        <Skeleton className="mb-2 h-5 w-2/3" />
 
         {/* Footer row */}
         <div className="mt-auto flex items-center justify-between gap-2 pt-2">
-          <div className="bg-muted h-5 w-16 animate-pulse rounded-full" />
-          <div className="bg-muted h-4 w-24 animate-pulse rounded" />
+          <Skeleton className="h-5 w-16" />
+          <Skeleton className="h-4 w-24" />
         </div>
       </div>
     </div>

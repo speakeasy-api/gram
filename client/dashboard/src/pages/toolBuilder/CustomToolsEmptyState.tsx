@@ -1,5 +1,5 @@
 import { EmptyState } from "@/components/page-layout";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/button";
 import { ToolsetsGraphic } from "../toolsets/ToolsetsEmptyState";
 
 export function CustomToolsEmptyState({

@@ -1,5 +1,5 @@
 import { Dialog } from "@/components/ui/dialog";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/button";
 import { ExternalLink, ShieldAlert } from "lucide-react";
 
 interface PublicMcpWarningDialogProps {
@@ -26,18 +26,12 @@ export function PublicMcpWarningDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <Dialog.Content
-        className="max-w-md overflow-hidden p-0"
-        style={{
-          borderTop: "2px solid #C83228",
-        }}
-      >
+      <Dialog.Content className="border-t-destructive max-w-md overflow-hidden border-t-2 p-0">
         <div className="p-6">
           <Dialog.Header>
             <Dialog.Title className="flex items-center gap-2">
               <ShieldAlert
-                className="h-5 w-5 shrink-0"
-                style={{ color: "#C83228" }}
+                className="text-destructive h-5 w-5 shrink-0"
                 aria-hidden="true"
               />
               Share system secrets with public callers.
@@ -52,16 +46,10 @@ export function PublicMcpWarningDialog({
             </Dialog.Description>
 
             <div className="space-y-2">
-              <p
-                className="text-[11px] tracking-wider text-[#8B8684] uppercase"
-                style={{ fontFamily: '"Diatype Mono", monospace' }}
-              >
+              <p className="text-muted-foreground font-mono text-[11px] tracking-[0.08em] uppercase">
                 Used by every public caller
               </p>
-              <ul
-                className="border-border bg-muted/30 max-h-40 space-y-1 overflow-y-auto rounded border p-3"
-                style={{ fontFamily: '"Diatype Mono", monospace' }}
-              >
+              <ul className="border-border bg-muted/30 max-h-40 space-y-1 overflow-y-auto rounded border p-3 font-mono">
                 {variableNames.map((name) => (
                   <li key={name} className="text-sm font-light">
                     {name}

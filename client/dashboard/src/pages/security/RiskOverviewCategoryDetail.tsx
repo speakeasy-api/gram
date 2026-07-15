@@ -1,4 +1,6 @@
 import { MetricCard } from "@/components/chart/MetricCard";
+import { RankedBar, type RankedBarItem } from "@/components/chart/RankedBar";
+import { DetailLayout } from "@/components/layouts/detail-layout";
 import {
   formatDateRangeLabel,
   useDateRangeFilter,
@@ -9,10 +11,21 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
 import { type DateRangePreset } from "@gram-ai/elements";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Heading } from "@/components/ui/heading";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "@/components/ui/input-group";
+import { Type } from "@/components/ui/type";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
 import { useRiskRuleBreakdown } from "@gram/client/react-query/riskRuleBreakdown.js";
-import { Icon } from "@speakeasy-api/moonshine";
+import { ChevronRight, Inbox, LoaderCircle, Search, X } from "lucide-react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import {
   useCallback,
@@ -191,23 +204,28 @@ function RiskOverviewCategoryDetailContent() {
 
   return (
     <RevealAllProvider>
-      <Page.Section>
-        <Page.Section.Title stage="beta">{categoryLabel}</Page.Section.Title>
-        <Page.Section.Description>
-          {categoryMeta?.description ?? "Risk findings in this category"}
-          {rangeLabel && ` across ${rangeLabel}.`}
-        </Page.Section.Description>
-        <Page.Section.CTA>{controls}</Page.Section.CTA>
-        <Page.Section.Body>
-          <div className="space-y-6">
-            <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-              <MetricCard
-                title="Findings"
-                value={overviewCategory?.findings ?? totalCount}
-                format="compact"
-                icon="flag"
-              />
-            </div>
+      <DetailLayout>
+        <DetailLayout.Header
+          eyebrow="Category"
+          title={categoryLabel}
+          subtitle={`${
+            categoryMeta?.description ?? "Risk findings in this category"
+          }${rangeLabel ? ` across ${rangeLabel}.` : ""}`}
+          actions={controls}
+        />
+
+        <DetailLayout.Content>
+          <DetailLayout.Main>
+            <DetailLayout.Section>
+              <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+                <MetricCard
+                  title="Findings"
+                  value={overviewCategory?.findings ?? totalCount}
+                  format="compact"
+                  icon="flag"
+                />
+              </div>
+            </DetailLayout.Section>
             <RuleBreakdown
               rules={ruleBreakdownQuery.data?.rules ?? []}
               isLoading={ruleBreakdownQuery.isLoading}
@@ -230,9 +248,9 @@ function RiskOverviewCategoryDetailContent() {
               onScroll={handleScroll}
               onSelectChat={setSelectedChatId}
             />
-          </div>
-        </Page.Section.Body>
-      </Page.Section>
+          </DetailLayout.Main>
+        </DetailLayout.Content>
+      </DetailLayout>
 
       <ChatDetailSheet
         chatId={selectedChatId}
@@ -260,7 +278,7 @@ function ResultsTable({
   if (isLoading) {
     return (
       <div className="text-muted-foreground flex items-center justify-center gap-2 py-12">
-        <Icon name="loader-circle" className="size-5 animate-spin" />
+        <LoaderCircle className="size-5 animate-spin" />
         <span>Loading findings...</span>
       </div>
     );
@@ -268,14 +286,11 @@ function ResultsTable({
 
   if (results.length === 0) {
     return (
-      <div className="flex flex-col items-center gap-3 py-12 text-center">
-        <div className="bg-muted flex size-12 items-center justify-center rounded-full">
-          <Icon name="inbox" className="text-muted-foreground size-6" />
-        </div>
-        <span className="text-foreground font-medium">
-          No findings in this category for this time range
-        </span>
-      </div>
+      <InlineEmptyState
+        className="py-12"
+        icon={<Inbox />}
+        title="No findings in this category for this time range"
+      />
     );
   }
 
@@ -283,7 +298,7 @@ function ResultsTable({
     <div
       ref={scrollRef}
       onScroll={onScroll}
-      className="isolate max-h-[70vh] overflow-y-auto rounded-lg border"
+      className="isolate max-h-[70vh] overflow-y-auto border"
     >
       <table className="w-full table-fixed text-sm">
         <colgroup>
@@ -294,7 +309,7 @@ function ResultsTable({
           <col className="w-[280px]" />
           <col className="w-[48px]" />
         </colgroup>
-        <thead className="bg-muted text-muted-foreground sticky top-0 z-[1] text-xs font-medium tracking-wide uppercase shadow-[0_1px_0_0_var(--color-border)]">
+        <thead className="bg-muted text-muted-foreground sticky top-0 z-[1] border-b border-border font-mono text-xs tracking-[0.08em] uppercase">
           <tr>
             <th className="px-4 py-2 text-left">Time</th>
             <th className="px-4 py-2 text-left">Rule</th>
@@ -354,10 +369,7 @@ function ResultsTable({
               </td>
               <td className="px-4 py-3 text-right">
                 {result.chatId && (
-                  <Icon
-                    name="chevron-right"
-                    className="text-muted-foreground size-4"
-                  />
+                  <ChevronRight className="text-muted-foreground size-4" />
                 )}
               </td>
             </tr>
@@ -381,72 +393,35 @@ function RuleBreakdown({
 }) {
   if (isLoading && rules.length === 0) {
     return (
-      <div className="text-muted-foreground rounded-lg border p-4 text-sm">
-        Loading rule breakdown...
-      </div>
+      <Card size="sm">
+        <Type muted className="text-sm">
+          Loading rule breakdown...
+        </Type>
+      </Card>
     );
   }
   if (rules.length === 0) return null;
-  const max = rules[0]?.findings || 1;
+
+  const items: RankedBarItem[] = rules.map((rule) => ({
+    label: rule.ruleId ? getRuleTitleFallback(rule.ruleId) : "(no rule_id)",
+    value: rule.findings,
+    active: activeRuleId === rule.ruleId,
+    onSelect: () =>
+      onSelectRule(activeRuleId === rule.ruleId ? "" : rule.ruleId),
+  }));
 
   return (
-    <div className="space-y-3 rounded-lg border p-4">
+    <Card size="sm" className="gap-3">
       <div className="flex items-center justify-between">
-        <h4 className="text-sm font-medium">Findings by rule</h4>
+        <Heading variant="h6">Findings by rule</Heading>
         {activeRuleId && (
-          <button
-            type="button"
-            onClick={() => onSelectRule("")}
-            className="text-muted-foreground hover:text-foreground text-xs"
-          >
-            Clear filter
-          </button>
+          <Button variant="tertiary" size="xs" onClick={() => onSelectRule("")}>
+            <Button.Text>Clear filter</Button.Text>
+          </Button>
         )}
       </div>
-      <ul className="space-y-2">
-        {rules.map((rule, i) => {
-          const isActive = activeRuleId === rule.ruleId;
-          const label = rule.ruleId
-            ? getRuleTitleFallback(rule.ruleId)
-            : "(no rule_id)";
-          return (
-            <li key={rule.ruleId || `__none_${i}`}>
-              <button
-                type="button"
-                onClick={() => onSelectRule(isActive ? "" : rule.ruleId)}
-                aria-pressed={isActive}
-                className={`hover:bg-muted/40 -mx-2 flex w-full items-center gap-3 rounded px-2 py-1.5 transition-colors ${
-                  isActive ? "bg-muted" : ""
-                }`}
-              >
-                <span className="text-muted-foreground w-4 shrink-0 text-right text-xs">
-                  {i + 1}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="mb-1 flex items-center justify-between gap-2">
-                    <span
-                      className="truncate text-left text-sm"
-                      title={rule.ruleId}
-                    >
-                      {label}
-                    </span>
-                    <span className="text-muted-foreground shrink-0 text-xs">
-                      {rule.findings.toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="bg-muted h-1 w-full rounded-full">
-                    <div
-                      className="h-1 rounded-full bg-blue-700 dark:bg-blue-500"
-                      style={{ width: `${(rule.findings / max) * 100}%` }}
-                    />
-                  </div>
-                </div>
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
+      <RankedBar items={items} />
+    </Card>
   );
 }
 
@@ -476,14 +451,14 @@ function RuleIdFilter({
   );
 
   return (
-    <div className="border-border focus-within:border-ring inline-flex h-9 items-center gap-2 rounded-md border px-2">
-      <Icon name="search" className="text-muted-foreground size-4 shrink-0" />
-      <input
-        type="text"
+    <InputGroup className="w-64">
+      <InputGroupAddon>
+        <Search className="size-4" />
+      </InputGroupAddon>
+      <InputGroupInput
         value={local}
         onChange={(e) => setLocal(e.target.value)}
         placeholder="Rule ID contains..."
-        className="placeholder:text-muted-foreground w-[240px] bg-transparent text-sm outline-none"
         aria-label="Filter by rule ID"
         list={options.length > 0 ? listId : undefined}
         autoComplete="off"
@@ -496,15 +471,16 @@ function RuleIdFilter({
         </datalist>
       )}
       {local && (
-        <button
-          type="button"
-          onClick={() => setLocal("")}
-          className="text-muted-foreground hover:text-foreground"
-          aria-label="Clear rule filter"
-        >
-          <Icon name="x" className="size-3.5" />
-        </button>
+        <InputGroupAddon align="inline-end">
+          <InputGroupButton
+            size="icon-xs"
+            aria-label="Clear rule filter"
+            onClick={() => setLocal("")}
+          >
+            <X className="size-3.5" />
+          </InputGroupButton>
+        </InputGroupAddon>
       )}
-    </div>
+    </InputGroup>
   );
 }

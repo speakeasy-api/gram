@@ -1,19 +1,20 @@
 import { MetricCard } from "@/components/chart/MetricCard";
-import { RankedBarList } from "@/components/chart/RankedBarList";
+import { RankedBar } from "@/components/chart/RankedBar";
 import { ToolCallsTimeSeriesChart } from "@/components/chart/ToolCallsTimeSeriesChart";
 import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
+import { Card } from "@/components/ui/card";
 import { useDateRangeFilter } from "@/components/observe/useDateRangeFilter";
 import { Heading } from "@/components/ui/heading";
+import { InlineEmptyState } from "@/components/ui/inline-empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
 import type { GetObservabilityOverviewResult } from "@gram/client/models/components/getobservabilityoverviewresult.js";
 import type { ObservabilitySummary } from "@gram/client/models/components/observabilitysummary.js";
 import { useGramContext } from "@gram/client/react-query/_context";
 import { unwrapAsync } from "@gram/client/types/fp";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/stack";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { PluginStatusBanner } from "./PluginStatusBanner";
@@ -105,7 +106,6 @@ export function MCPOverviewTab({
           key: tool.gramUrn,
           label: toolLabelFromUrn(tool.gramUrn),
           value: tool.failureRate * 100,
-          valueLabel: `${(tool.failureRate * 100).toFixed(1)}%`,
         })),
     [data],
   );
@@ -126,20 +126,16 @@ export function MCPOverviewTab({
       </div>
 
       {isLogsDisabled ? (
-        <div className="flex flex-col items-center justify-center rounded-lg border p-12 text-center">
-          <Type muted className="mb-1 block">
-            Observability is not enabled
-          </Type>
-          <Type muted small>
-            Enable logs for this organization to see usage for this MCP server.
-          </Type>
-        </div>
+        <InlineEmptyState
+          title="Observability is not enabled"
+          description="Enable logs for this organization to see usage for this MCP server."
+        />
       ) : (
         <>
           <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
             {isLoading && !summary ? (
               Array.from({ length: 4 }).map((_, i) => (
-                <Skeleton key={i} className="h-[116px] w-full rounded-lg" />
+                <Skeleton key={i} className="h-[116px] w-full" />
               ))
             ) : (
               <>
@@ -189,26 +185,29 @@ export function MCPOverviewTab({
           />
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <div className="rounded-lg border p-5">
+            <Card>
               <Heading variant="h5" className="mb-3">
                 Top tools by call count
               </Heading>
               {topByCount.length > 0 ? (
-                <RankedBarList items={topByCount} />
+                <RankedBar items={topByCount} />
               ) : (
                 <WidgetEmptyState message="No tool calls in the selected range." />
               )}
-            </div>
-            <div className="rounded-lg border p-5">
+            </Card>
+            <Card>
               <Heading variant="h5" className="mb-3">
                 Top tools by failure rate
               </Heading>
               {topByFailureRate.length > 0 ? (
-                <RankedBarList items={topByFailureRate} />
+                <RankedBar
+                  items={topByFailureRate}
+                  formatValue={(value) => `${value.toFixed(1)}%`}
+                />
               ) : (
                 <WidgetEmptyState message="No failed tool calls in the selected range." />
               )}
-            </div>
+            </Card>
           </div>
 
           <TopUsersTable toolsetSlug={server.slug} from={from} to={to} />

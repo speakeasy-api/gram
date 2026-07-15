@@ -1,6 +1,12 @@
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Card } from "@/components/ui/card";
+import { DetailList } from "@/components/ui/detail-list";
+import { Type } from "@/components/ui/type";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
+import { toastError } from "@/lib/toast-error";
 import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
 import { useDisableRBACMutation } from "@gram/client/react-query/disableRBAC.js";
 import { useEnableRBACMutation } from "@gram/client/react-query/enableRBAC.js";
@@ -34,14 +40,10 @@ import { toast } from "sonner";
 // sees graceful error states.
 
 function StatusPill({ enabled }: { enabled: boolean }): ReactElement {
-  return enabled ? (
-    <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-500">
-      Enabled
-    </span>
-  ) : (
-    <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium">
-      Disabled
-    </span>
+  return (
+    <Badge variant={enabled ? "success" : "neutral"} size="sm">
+      {enabled ? "Enabled" : "Disabled"}
+    </Badge>
   );
 }
 
@@ -59,19 +61,20 @@ function ActionButton({
   destructive?: boolean;
 }): ReactElement {
   return (
-    <button
+    <Button
       type="button"
+      variant={destructive ? "destructive-secondary" : "primary"}
+      size="xs"
       onClick={onClick}
       disabled={disabled || pending}
-      className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors disabled:opacity-50 ${
-        destructive
-          ? "bg-red-500/10 text-red-600 hover:bg-red-500/20 dark:text-red-400"
-          : "bg-foreground text-background hover:opacity-90"
-      }`}
     >
-      {pending && <Loader2 className="h-3 w-3 animate-spin" />}
-      {children}
-    </button>
+      {pending && (
+        <Button.LeftIcon>
+          <Loader2 className="animate-spin" />
+        </Button.LeftIcon>
+      )}
+      <Button.Text>{children}</Button.Text>
+    </Button>
   );
 }
 
@@ -87,18 +90,20 @@ function Section({
   children: React.ReactNode;
 }): ReactElement {
   return (
-    <div className="border-border bg-card rounded-lg border p-3">
-      <div className="mb-1 flex items-center gap-1.5">
+    <Card size="sm" className="gap-2 p-3">
+      <div className="flex items-center gap-1.5">
         <Icon className="text-muted-foreground h-3.5 w-3.5" />
-        <span className="text-foreground text-xs font-medium">{title}</span>
+        <Type small className="font-medium">
+          {title}
+        </Type>
       </div>
       {description && (
-        <p className="text-muted-foreground mb-2.5 text-[11px] leading-snug">
+        <Type muted small className="leading-snug">
           {description}
-        </p>
+        </Type>
       )}
       {children}
-    </div>
+    </Card>
   );
 }
 
@@ -133,7 +138,11 @@ function FeatureToggle({
           {enabled ? "Disable" : "Enable"}
         </ActionButton>
       </div>
-      {error && <p className="text-destructive mt-2 text-[11px]">{error}</p>}
+      {error && (
+        <Type destructive small className="mt-2">
+          {error}
+        </Type>
+      )}
     </Section>
   );
 }
@@ -167,16 +176,18 @@ function RBACManagementSection(): ReactElement {
     return (
       <div className="flex items-center gap-2 py-1">
         <Loader2 className="text-muted-foreground h-3.5 w-3.5 animate-spin" />
-        <span className="text-muted-foreground text-[11px]">Loading…</span>
+        <Type muted small>
+          Loading…
+        </Type>
       </div>
     );
   }
 
   if (error || !status) {
     return (
-      <p className="text-destructive text-[11px]">
+      <Type destructive small>
         Failed to load RBAC status: {error?.message ?? "unknown error"}
-      </p>
+      </Type>
     );
   }
 
@@ -199,12 +210,12 @@ function RBACManagementSection(): ReactElement {
       {confirmAction !== null && (
         // Inline confirmation instead of a modal: the platform-admin-toolbar collapses on
         // outside clicks, which would tear down a portalled dialog mid-flow.
-        <div className="border-border bg-muted/40 rounded-md border p-2">
-          <p className="text-foreground mb-2 text-[11px] leading-snug">
+        <Card size="sm" className="gap-2 bg-muted/40 p-2">
+          <Type small className="leading-snug">
             {confirmAction === "enable"
               ? "Seed default grants for system roles and enforce access control for this organization?"
               : "Disable access control enforcement? All members will have unrestricted access."}
-          </p>
+          </Type>
           <div className="flex items-center gap-2">
             <ActionButton
               onClick={() => toggleMutation.mutate({})}
@@ -213,21 +224,22 @@ function RBACManagementSection(): ReactElement {
             >
               {confirmAction === "enable" ? "Enable" : "Disable"}
             </ActionButton>
-            <button
+            <Button
               type="button"
+              variant="tertiary"
+              size="xs"
               onClick={() => setConfirmAction(null)}
-              className="text-muted-foreground hover:text-foreground text-[11px]"
             >
-              Cancel
-            </button>
+              <Button.Text>Cancel</Button.Text>
+            </Button>
           </div>
-        </div>
+        </Card>
       )}
 
       {toggleMutation.error && (
-        <p className="text-destructive text-[11px]">
+        <Type destructive small>
           {toggleMutation.error.message}
-        </p>
+        </Type>
       )}
     </div>
   );
@@ -252,16 +264,18 @@ function ProductFeaturesSection(): ReactElement {
     return (
       <div className="flex items-center gap-2 py-1">
         <Loader2 className="text-muted-foreground h-3.5 w-3.5 animate-spin" />
-        <span className="text-muted-foreground text-[11px]">Loading…</span>
+        <Type muted small>
+          Loading…
+        </Type>
       </div>
     );
   }
 
   if (error || !features) {
     return (
-      <p className="text-destructive text-[11px]">
+      <Type destructive small>
         Failed to load feature flags: {error?.message ?? "unknown error"}
-      </p>
+      </Type>
     );
   }
 
@@ -371,9 +385,7 @@ function OnboardingSection(): ReactElement {
       setEmailsInput("");
     },
     onError: (err) => {
-      toast.error(
-        err instanceof Error ? err.message : "Failed to send onboarding email",
-      );
+      toastError(err, "Failed to send onboarding email");
     },
   });
 
@@ -402,7 +414,7 @@ function OnboardingSection(): ReactElement {
           name="onboarding_emails"
           placeholder="alice@example.com, bob@example.com"
           value={emailsInput}
-          onChange={setEmailsInput}
+          onChange={(e) => setEmailsInput(e.target.value)}
           disabled={sendEmail.isPending}
         />
         <div className="flex items-center justify-end">
@@ -419,12 +431,12 @@ function OnboardingSection(): ReactElement {
         </div>
 
         {sendEmail.data?.setupLink && (
-          <p className="text-muted-foreground pt-1 text-[11px] break-all">
+          <Type muted small className="pt-1 break-all">
             Setup link:{" "}
-            <code className="bg-muted rounded px-1 py-0.5 font-mono text-[10px]">
+            <code className="bg-muted px-1 py-0.5 font-mono text-[10px]">
               {sendEmail.data.setupLink}
             </code>
-          </p>
+          </Type>
         )}
       </div>
     </Section>
@@ -463,8 +475,10 @@ function OrgOverrideSection(): ReactElement {
           required
         />
         <div className="flex items-center justify-end gap-2">
-          <button
+          <Button
             type="button"
+            variant="tertiary"
+            size="xs"
             onClick={() => {
               void (async () => {
                 document.cookie = `gram_admin_override=; path=/; max-age=0;`;
@@ -472,16 +486,12 @@ function OrgOverrideSection(): ReactElement {
                 window.location.href = "/login";
               })();
             }}
-            className="text-muted-foreground hover:text-foreground text-[11px]"
           >
-            Clear override
-          </button>
-          <button
-            type="submit"
-            className="bg-foreground text-background inline-flex items-center rounded-md px-2.5 py-1 text-[11px] font-medium hover:opacity-90"
-          >
-            Go to org
-          </button>
+            <Button.Text>Clear override</Button.Text>
+          </Button>
+          <Button type="submit" variant="primary" size="xs">
+            <Button.Text>Go to org</Button.Text>
+          </Button>
         </div>
       </form>
     </Section>
@@ -492,16 +502,18 @@ function OrgInfoSection(): ReactElement {
   const organization = useOrganization();
   return (
     <Section icon={Building2} title="Organization">
-      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[11px]">
-        <dt className="text-muted-foreground">Slug</dt>
-        <dd className="text-foreground truncate font-mono">
-          {organization.slug}
-        </dd>
-        <dt className="text-muted-foreground">ID</dt>
-        <dd className="text-foreground truncate font-mono">
-          {organization.id}
-        </dd>
-      </dl>
+      <DetailList orientation="inline" className="gap-y-1 text-[11px]">
+        <DetailList.Item
+          label="Slug"
+          value={
+            <span className="truncate font-mono">{organization.slug}</span>
+          }
+        />
+        <DetailList.Item
+          label="ID"
+          value={<span className="truncate font-mono">{organization.id}</span>}
+        />
+      </DetailList>
     </Section>
   );
 }

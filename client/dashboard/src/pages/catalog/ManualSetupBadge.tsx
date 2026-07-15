@@ -1,10 +1,9 @@
+import { Badge } from "@/components/ui/badge";
 import {
-  Badge,
   Tooltip,
   TooltipContent,
-  TooltipPortal,
   TooltipTrigger,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/tooltip";
 import type { PulseMCPServer } from "./hooks";
 import { requiresManualSetup } from "./hooks/serverMetadata";
 
@@ -33,11 +32,9 @@ export function ManualSetupBadge({
           <Badge.Text>Manual Setup</Badge.Text>
         </Badge>
       </TooltipTrigger>
-      <TooltipPortal>
-        <TooltipContent className="max-w-sm">
-          {MANUAL_SETUP_TOOLTIP}
-        </TooltipContent>
-      </TooltipPortal>
+      <TooltipContent className="max-w-sm">
+        {MANUAL_SETUP_TOOLTIP}
+      </TooltipContent>
     </Tooltip>
   );
 }

@@ -3,7 +3,16 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { TextArea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 import { ChevronRight } from "lucide-react";
 import { useEffect, useMemo, useState, type JSX, type ReactNode } from "react";
 import type { CelEngine, CelMessage, CelSpan } from "./cel-wasm";
@@ -63,10 +72,7 @@ function highlight(text: string, spans: CelSpan[]): ReactNode[] {
     const start = Math.max(r.start, cursor);
     if (start > cursor) nodes.push(dec.decode(bytes.slice(cursor, start)));
     nodes.push(
-      <mark
-        key={key++}
-        className="bg-warning/30 text-foreground rounded-sm px-0.5"
-      >
+      <mark key={key++} className="bg-warning/30 text-foreground px-0.5">
         {dec.decode(bytes.slice(start, r.end))}
       </mark>,
     );
@@ -161,30 +167,33 @@ export function CelMatchPreview({
       </CollapsibleTrigger>
       <CollapsibleContent className="mt-2 space-y-3">
         <div className="flex flex-col gap-2">
-          <select
-            value={kind}
-            onChange={(e) => setKind(e.target.value)}
-            aria-label="Sample message type"
-            className="border-input bg-background w-fit rounded-md border px-2 py-1 text-xs"
-          >
-            {KINDS.map((k) => (
-              <option key={k.value} value={k.value}>
-                {k.label}
-              </option>
-            ))}
-          </select>
+          <Select value={kind} onValueChange={setKind}>
+            <SelectTrigger
+              size="sm"
+              aria-label="Sample message type"
+              className="w-fit text-xs"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {KINDS.map((k) => (
+                <SelectItem key={k.value} value={k.value}>
+                  {k.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
           {isToolRequest ? (
             <label className="space-y-1">
               <span className="text-muted-foreground text-xs">
                 Tool calls (JSON)
               </span>
-              <textarea
+              <TextArea
                 value={toolsJson}
-                onChange={(e) => setToolsJson(e.target.value)}
+                onChange={setToolsJson}
                 rows={6}
-                spellCheck={false}
-                className="border-input bg-input/30 w-full rounded-md border px-2 py-1 font-mono text-xs"
+                className="font-mono text-xs"
               />
             </label>
           ) : (
@@ -192,12 +201,7 @@ export function CelMatchPreview({
               <span className="text-muted-foreground text-xs">
                 {kindMeta.bodyLabel}
               </span>
-              <textarea
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                rows={3}
-                className="border-input bg-input/30 w-full rounded-md border px-2 py-1 text-xs"
-              />
+              <TextArea value={content} onChange={setContent} rows={3} />
             </label>
           )}
         </div>
@@ -234,19 +238,12 @@ function VerdictView({
   const matched = verdict.kind === "match";
   return (
     <div className="space-y-2">
-      <span
-        className={cn(
-          "inline-flex w-fit items-center rounded-full px-2 py-0.5 text-xs font-medium",
-          matched
-            ? "bg-success/15 text-success-foreground"
-            : "bg-muted text-muted-foreground",
-        )}
-      >
+      <Badge variant={matched ? "success" : "neutral"}>
         {matched ? "Matches" : "No match"}
-      </span>
+      </Badge>
 
       {body && (
-        <pre className="bg-input/30 overflow-x-auto rounded-md p-2 text-xs whitespace-pre-wrap">
+        <pre className="bg-input/30 overflow-x-auto p-2 text-xs whitespace-pre-wrap">
           {highlight(body, bodySpans)}
         </pre>
       )}
@@ -254,16 +251,15 @@ function VerdictView({
       {matched && verdict.spans.length > 0 && (
         <ul className="flex flex-wrap gap-1.5">
           {verdict.spans.map((s, i) => (
-            <li
-              key={`${s.Target}-${s.Start}-${i}`}
-              className="border-border text-muted-foreground rounded-full border px-2 py-0.5 text-xs"
-            >
-              <span className="text-foreground">
-                {humanizeTarget(s.Target)}
-              </span>
-              {s.Path && <span className="opacity-70">.{s.Path}</span>}
-              {": "}
-              <code className="font-mono">{s.Value}</code>
+            <li key={`${s.Target}-${s.Start}-${i}`}>
+              <Badge variant="neutral" background={false}>
+                <Badge.Text>
+                  {humanizeTarget(s.Target)}
+                  {s.Path && <span className="opacity-70">.{s.Path}</span>}
+                  {": "}
+                  <code className="font-mono">{s.Value}</code>
+                </Badge.Text>
+              </Badge>
             </li>
           ))}
         </ul>

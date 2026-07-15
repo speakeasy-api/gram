@@ -1,7 +1,6 @@
-import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import { Kbd } from "@/components/ui/kbd";
 import { MoreActions } from "@/components/ui/more-actions";
 import { TextArea } from "@/components/ui/textarea";
 import { TagsVariationEditor } from "@/components/tool-variation-tags-editor";
@@ -13,11 +12,14 @@ import { Tool, Toolset, isHttpTool } from "@/lib/toolTypes";
 import { cn } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Icon, Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   ChevronDown,
   FileCode,
   Layers,
+  Layers2,
   PencilRuler,
   SquareFunction,
 } from "lucide-react";
@@ -468,20 +470,20 @@ function ToolRow({
           )}
           <div className="flex min-w-0 flex-1 flex-col">
             <Stack direction="horizontal" gap={2} align="center">
-              <p className="text-foreground truncate text-sm leading-6">
+              <Type className="truncate text-sm leading-6">
                 {toolPrefix && (
-                  <Type small muted className="inline">
+                  <Type as="span" small muted className="inline">
                     {toolPrefix}
                   </Type>
                 )}
                 {toolNameNoPrefix}
-              </p>
+              </Type>
               <ToolVariationBadge tool={tool} />
               <AnnotationBadges tool={tool} />
             </Stack>
-            <p className="text-muted-foreground truncate text-sm leading-6">
+            <Type muted className="truncate text-sm leading-6">
               {tool.description || "No description"}
-            </p>
+            </Type>
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-4">
@@ -527,7 +529,7 @@ function ToolRow({
                   <Label className="text-sm font-medium">Title</Label>
                   <Input
                     value={annotTitle}
-                    onChange={setAnnotTitle}
+                    onChange={(e) => setAnnotTitle(e.target.value)}
                     placeholder="Display name override"
                   />
                 </div>
@@ -536,10 +538,10 @@ function ToolRow({
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm">Read-only</p>
-                        <p className="text-muted-foreground text-xs">
+                        <Type small>Read-only</Type>
+                        <Type muted className="text-xs">
                           Tool does not modify its environment
-                        </p>
+                        </Type>
                       </div>
                       <Switch
                         checked={annotReadOnly}
@@ -549,10 +551,10 @@ function ToolRow({
                     </div>
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm">Destructive</p>
-                        <p className="text-muted-foreground text-xs">
+                        <Type small>Destructive</Type>
+                        <Type muted className="text-xs">
                           Tool may perform destructive updates
-                        </p>
+                        </Type>
                       </div>
                       <Switch
                         checked={annotDestructive}
@@ -562,11 +564,11 @@ function ToolRow({
                     </div>
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm">Idempotent</p>
-                        <p className="text-muted-foreground text-xs">
+                        <Type small>Idempotent</Type>
+                        <Type muted className="text-xs">
                           Repeated calls with same arguments have no additional
                           effect
-                        </p>
+                        </Type>
                       </div>
                       <Switch
                         checked={annotIdempotent}
@@ -576,10 +578,10 @@ function ToolRow({
                     </div>
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm">Open-world</p>
-                        <p className="text-muted-foreground text-xs">
+                        <Type small>Open-world</Type>
+                        <Type muted className="text-xs">
                           Tool interacts with external entities
-                        </p>
+                        </Type>
                       </div>
                       <Switch
                         checked={annotOpenWorld}
@@ -600,17 +602,13 @@ function ToolRow({
               <Stack gap={2}>
                 <Input
                   value={editValue}
-                  onChange={setEditValue}
+                  onChange={(e) => setEditValue(e.target.value)}
                   placeholder="Tool name"
                 />
                 {tool.variation?.name &&
                   tool.variation?.name !== tool.canonical?.name && (
                     <Stack direction="horizontal" gap={2} align="center">
-                      <Icon
-                        name="layers-2"
-                        size="small"
-                        className="text-muted-foreground/70"
-                      />
+                      <Layers2 className="text-muted-foreground/70 size-4" />
                       <Type small muted>
                         Original name:
                       </Type>
@@ -631,13 +629,9 @@ function ToolRow({
                 {tool.variation?.description &&
                   tool.variation?.description !==
                     tool.canonical?.description && (
-                    <Stack className="border-border/70 rounded-md border p-2">
+                    <Stack className="border-border/70 border p-2">
                       <Type small muted className="inline font-medium">
-                        <Icon
-                          name="layers-2"
-                          size="small"
-                          className="text-muted-foreground/70 inline align-text-bottom"
-                        />{" "}
+                        <Layers2 className="text-muted-foreground/70 inline size-4 align-text-bottom" />{" "}
                         Original Description
                       </Type>
                       <Type small muted>
@@ -647,18 +641,22 @@ function ToolRow({
                   )}
               </Stack>
             )}
-            {error && <p className="text-destructive text-sm">{error}</p>}
+            {error && (
+              <Type destructive small>
+                {error}
+              </Type>
+            )}
           </div>
           <Dialog.Footer>
             <Button
-              variant="ghost"
+              variant="tertiary"
               onClick={() => setEditDialogOpen(false)}
               disabled={isUpdating}
             >
-              Cancel
+              <Button.Text>Cancel</Button.Text>
             </Button>
             <Button onClick={() => void handleSave()} disabled={isUpdating}>
-              Save
+              <Button.Text>Save</Button.Text>
             </Button>
           </Dialog.Footer>
         </Dialog.Content>
@@ -726,7 +724,9 @@ function ToolGroupHeader({
             </SimpleTooltip>
           )}
         </div>
-        <p className="text-foreground text-sm leading-6">{group.title}</p>
+        <Type as="span" className="text-sm leading-6">
+          {group.title}
+        </Type>
       </button>
       <button
         onClick={onToggle}
@@ -1072,7 +1072,7 @@ export function ToolList({
     <div className="relative w-full">
       <div
         className={cn(
-          "border-neutral-softest w-full overflow-hidden rounded-lg border",
+          "border-neutral-softest w-full overflow-hidden border",
           className,
         )}
       >
@@ -1144,18 +1144,18 @@ export function ToolList({
 
       {hasChanges && !selectionMode && (
         <div className="sticky right-0 bottom-0 left-0 mt-4 flex justify-center">
-          <div className="border-neutral-softest bg-background flex items-center gap-4 rounded-lg border px-4 py-3 shadow-lg">
-            <p className="text-foreground text-sm">
+          <div className="border-neutral-softest bg-background flex items-center gap-4 border px-4 py-3">
+            <Type className="text-sm">
               {selectedForRemoval.size} tool(s) selected
-            </p>
+            </Type>
             <div className="flex items-center gap-2">
-              <kbd className="border-neutral-softest bg-muted text-muted-foreground pointer-events-none inline-flex h-5 items-center gap-1 rounded border px-1.5 font-mono text-[10px] font-medium opacity-100 select-none">
+              <Kbd className="pointer-events-none gap-1 px-1.5 select-none">
                 <span className="text-xs">⌘</span>K
-              </kbd>
+              </Kbd>
               <span className="text-muted-foreground text-sm">for actions</span>
             </div>
-            <Button variant="outline" onClick={handleCancel}>
-              Cancel
+            <Button variant="secondary" onClick={handleCancel}>
+              <Button.Text>Cancel</Button.Text>
             </Button>
           </div>
         </div>

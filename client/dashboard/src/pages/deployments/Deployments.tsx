@@ -1,19 +1,28 @@
 import { Page } from "@/components/page-layout";
+import { ListLayout } from "@/components/layouts/list-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Heading } from "@/components/ui/heading";
+import { SkeletonTable } from "@/components/ui/skeleton";
+import { Type } from "@/components/ui/type";
 import { useRoutes } from "@/routes";
 import { useListDeploymentsSuspense } from "@gram/client/react-query/listDeployments.js";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Alert } from "@/components/ui/alert";
+import { Table, type TableProps } from "@/components/ui/table";
 import {
-  Badge,
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Icon,
-  Table,
-  TableProps,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/dropdown-menu";
+import {
+  Check,
+  CircleDashed,
+  Ellipsis,
+  Radio,
+  RefreshCw,
+  X,
+} from "lucide-react";
 import { Suspense, useState } from "react";
 import { Outlet } from "react-router";
 import { DeploymentsEmptyState } from "./DeploymentsEmptyState";
@@ -28,7 +37,7 @@ export default function DeploymentsPage(): JSX.Element {
       </Page.Header>
       <Page.Body>
         <RequireScope scope={["project:read", "project:write"]} level="page">
-          <Suspense fallback={<div>Loading...</div>}>
+          <Suspense fallback={<SkeletonTable />}>
             <DeploymentsTable />
           </Suspense>
         </RequireScope>
@@ -102,7 +111,7 @@ function DeploymentActionsDropdown({
         <DropdownMenuTrigger asChild>
           <Button variant="tertiary" size="sm" className="h-8 w-8 p-0">
             <Button.LeftIcon>
-              <Icon name="ellipsis" className="size-4" />
+              <Ellipsis className="size-4" />
             </Button.LeftIcon>
             <Button.Text className="sr-only">Open menu</Button.Text>
           </Button>
@@ -113,7 +122,7 @@ function DeploymentActionsDropdown({
             disabled={redeployMutation.isPending}
             className="cursor-pointer"
           >
-            <Icon name="refresh-cw" className="mr-2 size-4" />
+            <RefreshCw className="mr-2 size-4" />
             {buttonText}
           </DropdownMenuItem>
         </DropdownMenuContent>
@@ -145,22 +154,19 @@ function DeploymentsTable({
           case "completed":
             return (
               <div className="bg-success flex items-center justify-center rounded-full p-1">
-                <Icon name="check" className="text-success-foreground" />
+                <Check className="size-4 text-success-foreground" />
               </div>
             );
           case "failed":
             return (
               <div className="bg-destructive/20 flex items-center justify-center rounded-full p-1">
-                <Icon name="x" className="text-destructive-foreground" />
+                <X className="size-4 text-destructive-foreground" />
               </div>
             );
           default:
             return (
               <div className="bg-warning flex items-center justify-center rounded-full p-1">
-                <Icon
-                  name="circle-dashed"
-                  className="text-warning-foreground"
-                />
+                <CircleDashed className="size-4 text-warning-foreground" />
               </div>
             );
         }
@@ -176,7 +182,9 @@ function DeploymentsTable({
           <div>
             <DeploymentLink id={row.id} />
             <div className="flex gap-2">
-              <p className="text-muted-foreground text-sm">{createdAt}</p>
+              <Type muted small>
+                {createdAt}
+              </Type>
               {activeDeployment === row && (
                 <Badge variant="success" className="px-1.5 py-0.25">
                   Active
@@ -220,46 +228,52 @@ function DeploymentsTable({
     },
   ];
 
-  return (
-    <>
-      {showHeader && (
-        <>
-          <div className="mb-2 flex items-center justify-between">
-            <Heading variant="h2">Recent Deployments</Heading>
-            {activeDeployment && (
-              <routes.deployments.deployment.Link
-                params={[activeDeployment.id]}
-              >
-                <Button variant="secondary" size="sm">
-                  <Button.LeftIcon>
-                    <Icon name="radio" className="size-4" />
-                  </Button.LeftIcon>
-                  <Button.Text>View Active Deployment</Button.Text>
-                </Button>
-              </routes.deployments.deployment.Link>
-            )}
-          </div>
+  const table = (
+    <Table<DeploymentSummary>
+      columns={columnsWithData}
+      rowKey={(row) => row.id}
+      data={deployments}
+      className="mb-8 overflow-auto"
+    />
+  );
 
-          <div className="bg-secondary mb-6 space-y-2 rounded-lg p-6">
-            <p className="text-muted-foreground text-sm">
+  if (!showHeader) {
+    return table;
+  }
+
+  return (
+    <ListLayout>
+      <ListLayout.Header
+        title="Recent Deployments"
+        actions={
+          activeDeployment && (
+            <routes.deployments.deployment.Link params={[activeDeployment.id]}>
+              <Button variant="secondary" size="sm">
+                <Button.LeftIcon>
+                  <Radio className="size-4" />
+                </Button.LeftIcon>
+                <Button.Text>View Active Deployment</Button.Text>
+              </Button>
+            </routes.deployments.deployment.Link>
+          )
+        }
+      />
+      <ListLayout.List>
+        <Alert variant="info" dismissible={false} className="mb-6">
+          <div className="space-y-2">
+            <Type small>
               Each time you add a new source or update an existing source a new
               deployment is created.
-            </p>
-            <p className="text-muted-foreground text-sm">
+            </Type>
+            <Type small>
               For each deployment all sources are analyzed in the project to
               generate or update the corresponding tool definitions.
-            </p>
+            </Type>
           </div>
-        </>
-      )}
-
-      <Table<DeploymentSummary>
-        columns={columnsWithData}
-        rowKey={(row) => row.id}
-        data={deployments}
-        className="mb-8 overflow-auto"
-      />
-    </>
+        </Alert>
+        {table}
+      </ListLayout.List>
+    </ListLayout>
   );
 }
 

@@ -8,7 +8,7 @@ import {
   sourceTypeToUrnKind,
 } from "@/lib/sources";
 import { useRoutes } from "@/routes";
-import { Badge } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/badge";
 import { CircleAlertIcon, FileCode, Network } from "lucide-react";
 import type { NamedAsset } from "./SourceCard";
 

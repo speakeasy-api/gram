@@ -10,7 +10,9 @@ import type { OpenAPIv3DeploymentAsset } from "@gram/client/models/components/op
 import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import { useListAssets } from "@gram/client/react-query/listAssets.js";
 import { RequireScope } from "@/components/require-scope";
-import { Button, Dialog, Stack } from "@speakeasy-api/moonshine";
+import { Dialog } from "@/components/ui/dialog";
+import { Stack } from "@/components/ui/stack";
+import { Button } from "@/components/ui/button";
 import { Download, Eye, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router";
@@ -120,7 +122,7 @@ export function SourceSettingsTab({
           </Stack>
         </div>
 
-        <div className="border-destructive/30 rounded-lg border p-6">
+        <div className="border-destructive/30 border p-6">
           <Type variant="subheading" className="text-destructive mb-1">
             Danger Zone
           </Type>

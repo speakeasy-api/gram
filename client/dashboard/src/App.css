@@ -5,7 +5,10 @@
  * compiled components use (e.g. the dark slate JSON viewer) — they live in
  * node_modules and aren't picked up by the default dashboard-src scan. */
 @source "../node_modules/@gram-ai/elements/dist";
-@reference "../node_modules/@speakeasy-api/moonshine/src/global.css";
+/* Vendored moonshine design system: tokens, custom utilities, responsive
+ * @source whitelist, and font @theme mapping. Replaces the former
+ * node_modules @reference + precompiled moonshine.css import pair. */
+@import "./components/ui/styles/global.css";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
@@ -52,18 +55,7 @@
   font-display: swap;
 }
 
-:root {
-  --optional-label: "optional";
-
-  --radius: 0.625rem;
-}
-
 @theme inline {
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-
   --header-height: 3rem;
   --sidebar-width: 16rem;
 
