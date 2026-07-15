@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"unicode/utf8"
 
 	access "github.com/speakeasy-api/gram/server/gen/access"
 	goa "goa.design/goa/v3/pkg"
@@ -694,6 +695,41 @@ func BuildGetShadowMCPInventoryServerPayload(accessGetShadowMCPInventoryServerPr
 	v := &access.GetShadowMCPInventoryServerPayload{}
 	v.ProjectID = projectID
 	v.ServerSlug = serverSlug
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildUpdateShadowMCPInventoryServerNamePayload builds the payload for the
+// access updateShadowMCPInventoryServerName endpoint from CLI flags.
+func BuildUpdateShadowMCPInventoryServerNamePayload(accessUpdateShadowMCPInventoryServerNameBody string, accessUpdateShadowMCPInventoryServerNameSessionToken string) (*access.UpdateShadowMCPInventoryServerNamePayload, error) {
+	var err error
+	var body UpdateShadowMCPInventoryServerNameRequestBody
+	{
+		err = json.Unmarshal([]byte(accessUpdateShadowMCPInventoryServerNameBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"aaa\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"server_url\": \"https://example.com/foo\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", body.ProjectID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.server_url", body.ServerURL, goa.FormatURI))
+		if utf8.RuneCountInString(body.Name) > 255 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 255, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if accessUpdateShadowMCPInventoryServerNameSessionToken != "" {
+			sessionToken = &accessUpdateShadowMCPInventoryServerNameSessionToken
+		}
+	}
+	v := &access.UpdateShadowMCPInventoryServerNamePayload{
+		ProjectID: body.ProjectID,
+		ServerURL: body.ServerURL,
+		Name:      body.Name,
+	}
 	v.SessionToken = sessionToken
 
 	return v, nil

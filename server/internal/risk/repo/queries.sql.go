@@ -2618,7 +2618,16 @@ FROM (
     AND ($5::timestamptz IS NULL OR cm.created_at < $5::timestamptz)
     AND ($6::text = '' OR rr.rule_id ILIKE '%' || $6::text || '%')
     AND ($7::text = '' OR c.external_user_id ILIKE '%' || $7::text || '%')
-    AND ($8::text = '' OR (
+    AND (NOT $8::boolean OR NOT EXISTS (
+      SELECT 1 FROM assistant_threads at
+      WHERE at.chat_id = cm.chat_id AND at.deleted IS FALSE
+    ))
+    AND ($9::uuid IS NULL OR EXISTS (
+      SELECT 1 FROM assistant_threads at
+      WHERE at.chat_id = cm.chat_id AND at.deleted IS FALSE
+        AND at.assistant_id = $9::uuid
+    ))
+    AND ($10::text = '' OR (
     CASE
       WHEN rr.source = 'llm_judge' THEN 'prompt_policy'
       WHEN rr.source IN ('shadow_mcp', 'destructive_tool', 'cli_destructive', 'prompt_injection') THEN rr.source
@@ -2664,15 +2673,15 @@ FROM (
       WHEN rr.source = 'presidio' THEN 'pii'
       ELSE 'custom'
     END
-  ) = $8::text)
+  ) = $10::text)
 ) sub
 WHERE sub.dedup_rank = 1
   AND (
-    $9::timestamptz IS NULL
-    OR (sub.message_created_at, sub.id) < ($9::timestamptz, $10::uuid)
+    $11::timestamptz IS NULL
+    OR (sub.message_created_at, sub.id) < ($11::timestamptz, $12::uuid)
   )
 ORDER BY sub.message_created_at DESC, sub.id DESC
-LIMIT $11
+LIMIT $13
 `
 
 type ListRiskResultsByProjectFoundParams struct {
@@ -2683,6 +2692,8 @@ type ListRiskResultsByProjectFoundParams struct {
 	ToTime                 pgtype.Timestamptz
 	RuleID                 string
 	UserID                 string
+	NonAssistant           bool
+	AssistantID            uuid.NullUUID
 	Category               string
 	CursorMessageCreatedAt pgtype.Timestamptz
 	CursorID               uuid.NullUUID
@@ -2734,6 +2745,10 @@ type ListRiskResultsByProjectFoundRow struct {
 // default project-wide view). When set the results are scoped to that policy
 // AND disabled-but-not-deleted policies are included, so explicitly filtering
 // to a policy still surfaces its historical findings after it was turned off.
+//
+// @assistant_id scopes results to chats linked to that assistant (live
+// assistant_threads row); @non_assistant instead restricts to chats with no
+// assistant link at all.
 func (q *Queries) ListRiskResultsByProjectFound(ctx context.Context, arg ListRiskResultsByProjectFoundParams) ([]ListRiskResultsByProjectFoundRow, error) {
 	rows, err := q.db.Query(ctx, listRiskResultsByProjectFound,
 		arg.UniqueMatch,
@@ -2743,6 +2758,8 @@ func (q *Queries) ListRiskResultsByProjectFound(ctx context.Context, arg ListRis
 		arg.ToTime,
 		arg.RuleID,
 		arg.UserID,
+		arg.NonAssistant,
+		arg.AssistantID,
 		arg.Category,
 		arg.CursorMessageCreatedAt,
 		arg.CursorID,

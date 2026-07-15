@@ -1,12 +1,13 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import type { Chat } from "@gram/client/models/components/chat.js";
 import type { ChatMessage } from "@gram/client/models/components/chatmessage.js";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { useSdkClient } from "@/contexts/Sdk";
+import { FULL_LOAD_PAGE_SIZE } from "./transcriptFull";
 
 // Page size for keyset pagination. Kept under the server's max (200) so the
-// initial paint is cheap on long chats; older pages stream in on scroll.
+// initial paint is cheap on long chats; further pages stream in on scroll.
 export const TRANSCRIPT_PAGE_SIZE = 50;
 
 // Cursor encodes which keyset edge to fetch. "start" requests the oldest page
@@ -34,13 +35,16 @@ export interface ChatTranscript {
   fetchNewer: () => void;
   isFetchingOlder: boolean;
   isFetchingNewer: boolean;
+  /** Load every remaining message below the loaded window (the from-start
+   * transcript's only missing range, so this completes the conversation). */
+  loadRest: () => void;
+  isLoadingRest: boolean;
 }
 
 // useChatTranscript paginates a chat's latest generation by seq keyset. The
-// initial page is the newest slice; scrolling up fetches older pages (mapped to
-// React Query's "previous" direction) and the rare scroll-down tail fetches
-// newer pages ("next"). Pages are stored oldest-first so flattening yields a
-// single ascending transcript.
+// initial page is the start of the thread; scrolling streams further pages in,
+// and loadRest drains every remaining message on demand (the transcript never
+// auto-loads the whole history).
 export function useChatTranscript(
   chatId: string,
   enabled: boolean,
@@ -61,7 +65,12 @@ export function useChatTranscript(
       } = { id: chatId, limit: TRANSCRIPT_PAGE_SIZE };
       if (pageParam.dir === "start") request.fromStart = true;
       if (pageParam.dir === "before") request.beforeSeq = pageParam.seq;
-      if (pageParam.dir === "after") request.afterSeq = pageParam.seq;
+      if (pageParam.dir === "after") {
+        request.afterSeq = pageParam.seq;
+        // Forward pages also serve the load-the-rest drain, so use the server's
+        // max page to finish in as few round trips as possible.
+        request.limit = FULL_LOAD_PAGE_SIZE;
+      }
       return client.chat.load(request);
     },
     // "previous" = older. firstPage is the oldest page currently held.
@@ -86,6 +95,22 @@ export function useChatTranscript(
         (error.statusCode === 404 || error.statusCode === 403)
       ),
   });
+
+  // On-demand drain: while set, keep pulling forward pages until the server
+  // reports nothing newer. Only ever started by loadRest (a user action), so
+  // the transcript stays lazily paginated by default. Errors stop the drain
+  // (the transcript's break divider stays as a manual retry).
+  const [draining, setDraining] = useState(false);
+  useEffect(() => setDraining(false), [chatId]);
+  const { hasNextPage, isFetchingNextPage, isError, fetchNextPage } = query;
+  useEffect(() => {
+    if (!draining) return;
+    if (isError || !hasNextPage) {
+      setDraining(false);
+      return;
+    }
+    if (!isFetchingNextPage) void fetchNextPage();
+  }, [draining, hasNextPage, isFetchingNextPage, isError, fetchNextPage]);
 
   const messages = useMemo(
     () => (query.data?.pages ?? []).flatMap((p) => p.messages),
@@ -124,5 +149,7 @@ export function useChatTranscript(
     },
     isFetchingOlder: query.isFetchingPreviousPage,
     isFetchingNewer: query.isFetchingNextPage,
+    loadRest: () => setDraining(true),
+    isLoadingRest: draining,
   };
 }

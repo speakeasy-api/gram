@@ -1,4 +1,4 @@
-import type { LinkResolver, ResolvedLink } from "@gram-ai/elements";
+import type { LinkResolver, ResolvedLink } from "@/elements";
 import { useCallback } from "react";
 
 import { useProjectSlugForRequests, useSlugs } from "@/contexts/Sdk";

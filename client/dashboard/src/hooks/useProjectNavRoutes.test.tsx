@@ -3,6 +3,14 @@ import { describe, expect, it, vi } from "vitest";
 import type { AppRoute } from "@/routes";
 import { useProjectNavRoutes } from "./useProjectNavRoutes";
 
+const testState = vi.hoisted(() => ({
+  productFeatureOptions: undefined as
+    | { staleTime?: number; throwOnError?: boolean }
+    | undefined,
+  projectId: "project_a",
+  skillsEnabled: false,
+}));
+
 function route(title: string, url: string): AppRoute {
   return {
     Icon: () => null,
@@ -52,6 +60,21 @@ vi.mock("@/contexts/Telemetry", () => ({
   }),
 }));
 
+vi.mock("@/contexts/Auth", () => ({
+  useProject: () => ({ id: testState.projectId }),
+}));
+
+vi.mock("@gram/client/react-query/productFeatures.js", () => ({
+  useProductFeatures: (
+    _request: unknown,
+    _security: unknown,
+    options: { staleTime?: number; throwOnError?: boolean } | undefined,
+  ) => {
+    testState.productFeatureOptions = options;
+    return { data: { skillsEnabled: testState.skillsEnabled } };
+  },
+}));
+
 describe("useProjectNavRoutes", () => {
   it("uses Shadow MCP as the sidebar destination while leaving Approval Requests out of nav", () => {
     const { result } = renderHook(() => useProjectNavRoutes());
@@ -60,5 +83,27 @@ describe("useProjectNavRoutes", () => {
 
     expect(navTitles).toContain("Shadow MCP");
     expect(navTitles).not.toContain("Approval Requests");
+  });
+
+  it("uses project read for Skills when the product feature is disabled", () => {
+    testState.skillsEnabled = false;
+
+    const { result } = renderHook(() => useProjectNavRoutes());
+    const skills = result.current.find((entry) => entry.route === routes.clis);
+
+    expect(skills?.scope).toEqual(["project:read"]);
+    expect(skills?.resourceId).toBeUndefined();
+  });
+
+  it("uses skill read for Skills when the product feature is enabled", () => {
+    testState.skillsEnabled = true;
+
+    const { result } = renderHook(() => useProjectNavRoutes());
+    const skills = result.current.find((entry) => entry.route === routes.clis);
+
+    expect(skills?.scope).toEqual(["skill:read"]);
+    expect(skills?.resourceId).toBe("project_a");
+    expect(testState.productFeatureOptions?.staleTime).toBe(30_000);
+    expect(testState.productFeatureOptions?.throwOnError).toBe(false);
   });
 });

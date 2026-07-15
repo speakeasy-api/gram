@@ -270,9 +270,12 @@ type CursorPayload struct {
 // Feature-specific payloads. Hooks populate only the blocks needed for the
 // event.
 type HookIngestData struct {
-	Prompt       *HookPromptData
-	ToolCall     *HookToolCallData
-	Mcp          *HookMCPData
+	Prompt   *HookPromptData
+	ToolCall *HookToolCallData
+	Mcp      *HookMCPData
+	// Configured MCP server snapshot captured at session start or configuration
+	// change. Transport credentials must be redacted by the sender.
+	McpInventory []*HookMCPData
 	Usage        *HookUsageData
 	Message      *HookMessageData
 	Skill        *HookSkillData
@@ -438,6 +441,9 @@ type IngestPayload struct {
 	ApikeyToken *string
 	// Optional project slug for plugin-driven attribution.
 	ProjectSlugInput *string
+	// Set when the event is redelivered from a device's offline spool after
+	// control-plane downtime, under its original Idempotency-Key and occurred_at.
+	Replayed *bool
 	// Contract version. The current version is hook.ingest.v1.
 	SchemaVersion string
 	// Optional per-invocation token reused across retries so the server stores a

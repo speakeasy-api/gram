@@ -27,7 +27,7 @@ import { DEFAULT_MODEL } from "@/lib/models";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { extractStreamError } from "@/lib/chat-error";
 import { CustomChatTransport } from "@/lib/CustomChatTransport";
-import { describeStreamError } from "@gram-ai/elements";
+import { describeStreamError } from "@/elements";
 import {
   asTools,
   filterFunctionTools,

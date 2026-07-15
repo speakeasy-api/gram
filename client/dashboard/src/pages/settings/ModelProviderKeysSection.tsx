@@ -1,8 +1,6 @@
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
-import { Button } from "@/components/ui/button";
 import { Heading } from "@/components/ui/heading";
 import { SkeletonTable } from "@/components/ui/skeleton";
-import { Switch } from "@/components/ui/switch";
 import { Type } from "@/components/ui/type";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { HumanizeDateTime } from "@/lib/dates";
@@ -12,20 +10,32 @@ import {
   invalidateAllModelProviderKeys,
   useModelProviderKeys,
 } from "@gram/client/react-query/modelProviderKeys.js";
-import { useSetModelProviderKeyEnabledMutation } from "@gram/client/react-query/setModelProviderKeyEnabled.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
+import { useSetModelProviderKeyEnabledMutation } from "@gram/client/react-query/setModelProviderKeyEnabled.js";
+import { useUpsertModelProviderKeyMutation } from "@gram/client/react-query/upsertModelProviderKey.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { Badge, Column, Stack, Table } from "@speakeasy-api/moonshine";
-import { Trash2 } from "lucide-react";
+import {
+  Badge,
+  Button,
+  Column,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  Input,
+  Stack,
+  Table,
+} from "@speakeasy-api/moonshine";
+import { Check, MoreHorizontal } from "lucide-react";
 import { type ComponentProps, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   keySourceForSlot,
+  MODEL_KEY_PROVIDER,
   MODEL_KEY_SLOTS,
   type KeySource,
   type ModelKeySlot,
 } from "./model-key-slots";
-import { ModelProviderKeyDialog } from "./ModelProviderKeyDialog";
 
 export function ModelProviderKeysSection(): JSX.Element | null {
   const { data: features } = useProductFeatures();
@@ -53,7 +63,7 @@ function ModelProviderKeysTable({
     undefined,
     { throwOnError: false },
   );
-  const [dialogSlot, setDialogSlot] = useState<ModelKeySlot | null>(null);
+  const [draftValues, setDraftValues] = useState<Record<string, string>>({});
 
   const keysBySlot = useMemo(
     () => new Map((data?.keys ?? []).map((key) => [key.slot, key] as const)),
@@ -71,11 +81,22 @@ function ModelProviderKeysTable({
       },
     });
 
+  const { mutate: upsertKey, isPending: isSaving } =
+    useUpsertModelProviderKeyMutation({
+      onSuccess: () => {
+        toast.success("Provider key saved");
+        void invalidateAllModelProviderKeys(queryClient);
+      },
+      onError: (err) => {
+        toast.error(`Failed to save key: ${err.message}`);
+      },
+    });
+
   const { mutate: setKeyEnabled, isPending: isSettingEnabled } =
     useSetModelProviderKeyEnabledMutation({
       onSuccess: (key) => {
         toast.success(`Provider key ${key.enabled ? "enabled" : "disabled"}`);
-        return invalidateAllModelProviderKeys(queryClient);
+        void invalidateAllModelProviderKeys(queryClient);
       },
       onError: (err) => {
         toast.error(`Failed to update key: ${err.message}`);
@@ -84,30 +105,55 @@ function ModelProviderKeysTable({
 
   const handleRemove = (slot: ModelKeySlot, key: ModelProviderKey) => {
     if (!window.confirm(`Remove the ${slot.name} provider key?`)) return;
-    deleteKey({ request: { id: key.id } });
+    deleteKey(
+      { request: { id: key.id } },
+      {
+        onSuccess: () => {
+          setDraftValues((values) => ({ ...values, [slot.slot]: "" }));
+        },
+      },
+    );
   };
 
-  const handleSetEnabled = (key: ModelProviderKey, enabled: boolean) => {
+  const handleSave = (slot: ModelKeySlot, key?: ModelProviderKey) => {
+    const apiKey = draftValues[slot.slot]?.trim();
+    if (!apiKey || isSaving) return;
+
+    upsertKey(
+      {
+        request: {
+          upsertKeyRequestBody: {
+            slot: slot.slot,
+            provider: MODEL_KEY_PROVIDER,
+            apiKey,
+            enabled: key?.enabled ?? true,
+          },
+        },
+      },
+      {
+        onSuccess: () => {
+          setDraftValues((values) => ({ ...values, [slot.slot]: "" }));
+        },
+      },
+    );
+  };
+
+  const handleValueChange = (slot: ModelKeySlot, value: string) => {
+    setDraftValues((values) => ({ ...values, [slot.slot]: value }));
+  };
+
+  const handleSetEnabled = (key: ModelProviderKey) => {
     setKeyEnabled({
       request: {
         setKeyEnabledRequestBody: {
           id: key.id,
-          enabled,
+          enabled: !key.enabled,
         },
       },
     });
   };
 
-  const isMutating = isDeleting || isSettingEnabled;
-
-  if (
-    !customModelKeysEnabled &&
-    !isLoading &&
-    !isError &&
-    (data?.keys.length ?? 0) === 0
-  ) {
-    return null;
-  }
+  const isMutating = isDeleting || isSaving || isSettingEnabled;
 
   const columns: Column<ModelKeySlot>[] = [
     {
@@ -127,25 +173,63 @@ function ModelProviderKeysTable({
     {
       key: "key",
       header: "Key",
+      width: "160px",
+      render: (slot) => (
+        <KeySourceBadge source={keySourceForSlot(slot.slot, keysBySlot)} />
+      ),
+    },
+    {
+      key: "value",
+      header: "Value",
       width: "260px",
       render: (slot) => {
         const key = keysBySlot.get(slot.slot);
+        const draftValue = draftValues[slot.slot] ?? "";
+        const isDirty = draftValue.length > 0;
         return (
-          <Stack direction="horizontal" gap={2} align="center">
-            <KeySourceBadge source={keySourceForSlot(slot.slot, keysBySlot)} />
-            {key && !key.enabled ? (
-              <Badge variant="warning" background className="shrink-0">
-                <Badge.Text>Disabled</Badge.Text>
-              </Badge>
+          <div className="relative">
+            <Input
+              type="password"
+              value={draftValue}
+              placeholder={key ? "••••••••••••" : "Enter key"}
+              className="h-9 py-0 pr-10"
+              onChange={(event) => handleValueChange(slot, event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter") return;
+                event.preventDefault();
+                handleSave(slot, key);
+              }}
+              disabled={isMutating || !customModelKeysEnabled}
+              aria-label={`${slot.name} key value`}
+            />
+            {isDirty ? (
+              <Button
+                type="button"
+                variant="tertiary"
+                size="sm"
+                className="border-input bg-muted hover:bg-muted/80 absolute top-0 right-0 h-9 rounded-l-none border shadow-none"
+                onClick={() => handleSave(slot, key)}
+                disabled={
+                  isMutating ||
+                  !customModelKeysEnabled ||
+                  draftValue.trim() === ""
+                }
+                aria-label={`Save ${slot.name} key`}
+                title="Save key"
+              >
+                <Button.Icon>
+                  <Check className="stroke-success-default size-4" />
+                </Button.Icon>
+              </Button>
             ) : null}
-          </Stack>
+          </div>
         );
       },
     },
     {
       key: "updated",
       header: "Updated",
-      width: "170px",
+      width: "160px",
       render: (slot) => {
         const key = keysBySlot.get(slot.slot);
         if (!key) {
@@ -165,50 +249,55 @@ function ModelProviderKeysTable({
     {
       key: "actions",
       header: "",
-      width: "220px",
+      width: "64px",
       render: (slot) => {
         const key = keysBySlot.get(slot.slot);
+        if (!key) return null;
+
         return (
-          <Stack direction="horizontal" gap={2} align="center" justify="end">
-            <Button
-              variant="secondary"
-              size="sm"
-              className="w-28"
-              onClick={() => setDialogSlot(slot)}
-              disabled={isMutating || !customModelKeysEnabled}
-            >
-              {key ? "Replace key" : "Set key"}
-            </Button>
-            <div className="flex w-9 shrink-0 justify-center">
-              {key ? (
-                <Switch
-                  checked={key.enabled}
-                  onCheckedChange={(enabled) => handleSetEnabled(key, enabled)}
-                  disabled={
-                    isMutating || (!key.enabled && !customModelKeysEnabled)
-                  }
-                  aria-label={`${slot.name} key enabled`}
-                />
-              ) : null}
-            </div>
-            <div className="flex w-9 shrink-0 justify-center">
-              {key ? (
+          <div className="flex justify-end">
+            <DropdownMenu modal={false}>
+              <DropdownMenuTrigger asChild>
                 <Button
-                  variant="destructiveGhost"
+                  variant="tertiary"
                   size="sm"
-                  onClick={() => handleRemove(slot, key)}
                   disabled={isMutating}
-                  aria-label={`Remove ${slot.name} key`}
+                  aria-label={`${slot.name} key actions`}
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
+                  <Button.Icon>
+                    <MoreHorizontal className="size-4" />
+                  </Button.Icon>
                 </Button>
-              ) : null}
-            </div>
-          </Stack>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onSelect={() => handleSetEnabled(key)}
+                  disabled={!key.enabled && !customModelKeysEnabled}
+                >
+                  {key.enabled ? "Disable" : "Enable"}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive cursor-pointer"
+                  onSelect={() => handleRemove(slot, key)}
+                >
+                  Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         );
       },
     },
   ];
+
+  if (
+    !customModelKeysEnabled &&
+    !isLoading &&
+    !isError &&
+    (data?.keys.length ?? 0) === 0
+  ) {
+    return null;
+  }
 
   let keyList: JSX.Element;
   if (isLoading) {
@@ -234,8 +323,6 @@ function ModelProviderKeysTable({
     );
   }
 
-  const dialogKey = dialogSlot ? keysBySlot.get(dialogSlot.slot) : undefined;
-
   return (
     <Stack gap={4}>
       <div>
@@ -251,14 +338,6 @@ function ModelProviderKeysTable({
       </div>
 
       {keyList}
-
-      {dialogSlot ? (
-        <ModelProviderKeyDialog
-          slot={dialogSlot}
-          existingEnabled={dialogKey?.enabled}
-          onClose={() => setDialogSlot(null)}
-        />
-      ) : null}
     </Stack>
   );
 }
@@ -269,7 +348,7 @@ const KEY_SOURCE_BADGE: Record<
 > = {
   custom: { variant: "success", label: "Custom key" },
   inherited: { variant: "information", label: "Project default" },
-  platform: { variant: "neutral", label: "Platform key" },
+  platform: { variant: "neutral", label: "Platform issued" },
 };
 
 function KeySourceBadge({ source }: { source: KeySource }): JSX.Element {

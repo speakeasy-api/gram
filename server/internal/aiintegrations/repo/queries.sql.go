@@ -12,6 +12,23 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const advanceUsagePollCursor = `-- name: AdvanceUsagePollCursor :exec
+UPDATE ai_integration_syncs
+SET last_cursor_id = $1,
+    updated_at = clock_timestamp()
+WHERE ai_integration_config_id = $2
+`
+
+type AdvanceUsagePollCursorParams struct {
+	LastCursorID          pgtype.Text
+	AiIntegrationConfigID uuid.UUID
+}
+
+func (q *Queries) AdvanceUsagePollCursor(ctx context.Context, arg AdvanceUsagePollCursorParams) error {
+	_, err := q.db.Exec(ctx, advanceUsagePollCursor, arg.LastCursorID, arg.AiIntegrationConfigID)
+	return err
+}
+
 const countConfigsByOrganization = `-- name: CountConfigsByOrganization :one
 SELECT count(*)
 FROM ai_integration_configs

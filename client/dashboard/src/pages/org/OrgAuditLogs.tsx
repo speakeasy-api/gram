@@ -1,6 +1,6 @@
 import { useQueryState } from "nuqs";
-import type { MCPServerEntry } from "@gram-ai/elements";
-import { recommended } from "@gram-ai/elements/plugins";
+import type { MCPServerEntry } from "@/elements";
+import { recommended } from "@/elements/plugins";
 import { RequireScope } from "@/components/require-scope";
 import { InsightsConfig, InsightsProvider } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";

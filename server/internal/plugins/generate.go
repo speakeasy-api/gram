@@ -81,12 +81,6 @@ type GenerateConfig struct {
 	// (e.g. `<plugin>@<marketplace>`) and the `name` field in the generated
 	// marketplace.json. Empty falls back to DefaultMarketplaceName.
 	MarketplaceName string
-	// ObservabilityMode makes the generated hook plugin fully non-blocking when
-	// set: every Claude hook event is emitted async so the plugin can only
-	// observe and report, never deny or delay a tool call. It is the low-risk
-	// path for POC rollouts in orgs that cannot tolerate hook errors or brief
-	// server unavailability disrupting the user.
-	ObservabilityMode bool
 	// BrowserLogin lets the generated plugin mint per-user hooks keys via the
 	// interactive dashboard browser flow (localhost callback token exchange).
 	// Off by default: the runtime authenticates only through explicit
@@ -112,8 +106,8 @@ type GenerateConfig struct {
 
 // PublishedHooksFiles renders the complete hooks (observability) subtree the
 // publish path rolls out — the Claude, Cursor, and Codex plugins with their
-// manifests — under a pinned configuration, across every hook-mode and
-// browser-login combination a publish can emit. CI compares
+// manifests — under a pinned configuration, across every
+// browser-login and install-failure-policy combination a publish can emit. CI compares
 // this output between a PR's merge base and head to decide whether a
 // hooksGeneratorVersion bump is required, so it must cover everything a
 // publish emits: a Codex-only or manifest-only generator change has to
@@ -121,35 +115,30 @@ type GenerateConfig struct {
 // fields are fixed sentinels so only generator changes register, never data.
 func PublishedHooksFiles() (map[string][]byte, error) {
 	cfg := GenerateConfig{
-		OrgName:           "Hooks Check",
-		OrgEmail:          "hooks-check@example.com",
-		OrgID:             "org-hooks-check",
-		ServerURL:         "https://app.getgram.ai",
-		APIKey:            fingerprintAPIKeySentinel,
-		HooksAPIKey:       fingerprintHooksKeySentinel,
-		ProjectSlug:       "hooks-check",
-		IsDefaultProject:  true,
-		Version:           "",
-		MarketplaceName:   "",
-		HooksOrgName:      "",
-		ObservabilityMode: false,
-		BrowserLogin:      false,
-		InstallFailOpen:   false,
+		OrgName:          "Hooks Check",
+		OrgEmail:         "hooks-check@example.com",
+		OrgID:            "org-hooks-check",
+		ServerURL:        "https://app.getgram.ai",
+		APIKey:           fingerprintAPIKeySentinel,
+		HooksAPIKey:      fingerprintHooksKeySentinel,
+		ProjectSlug:      "hooks-check",
+		IsDefaultProject: true,
+		Version:          "",
+		MarketplaceName:  "",
+		HooksOrgName:     "",
+		BrowserLogin:     false,
+		InstallFailOpen:  false,
 	}
 	out := make(map[string][]byte)
 	for _, mode := range []struct {
 		prefix          string
-		observability   bool
 		browserLogin    bool
 		installFailOpen bool
 	}{
-		{"default", false, false, false},
-		{"observability-mode", true, false, false},
-		{"browser-login", false, true, false},
-		{"observability-mode-browser-login", true, true, false},
-		{"install-fail-open", false, false, true},
+		{"default", false, false},
+		{"browser-login", true, false},
+		{"install-fail-open", false, true},
 	} {
-		cfg.ObservabilityMode = mode.observability
 		cfg.BrowserLogin = mode.browserLogin
 		cfg.InstallFailOpen = mode.installFailOpen
 		files, err := generateHooksFiles(cfg)
@@ -176,18 +165,17 @@ func PublishedHooksFiles() (map[string][]byte, error) {
 // directories on demand.
 func DogfoodPluginFiles() (map[string][]byte, error) {
 	cfg := GenerateConfig{
-		OrgName:           "",
-		OrgEmail:          "",
-		OrgID:             "",
-		ServerURL:         "https://app.getgram.ai",
-		APIKey:            "",
-		HooksAPIKey:       "",
-		ProjectSlug:       "",
-		IsDefaultProject:  true,
-		Version:           "",
-		MarketplaceName:   "",
-		HooksOrgName:      "",
-		ObservabilityMode: false,
+		OrgName:          "",
+		OrgEmail:         "",
+		OrgID:            "",
+		ServerURL:        "https://app.getgram.ai",
+		APIKey:           "",
+		HooksAPIKey:      "",
+		ProjectSlug:      "",
+		IsDefaultProject: true,
+		Version:          "",
+		MarketplaceName:  "",
+		HooksOrgName:     "",
 		// The dogfood harness is how the browser flow itself gets exercised
 		// locally, so it stays on here regardless of the publish default.
 		BrowserLogin:    true,
@@ -276,16 +264,15 @@ type HooksConfig struct {
 	MarketplaceName string `json:"marketplace_name"`
 	// OrgName's tag is also read by naming.PublishedHooksOrgName, which every
 	// surface uses to name the published observability plugin after a rename.
-	OrgName           string                       `json:"org_name"`
-	OrgEmail          string                       `json:"org_email"`
-	ProjectSlug       string                       `json:"project_slug"`
-	ServerURL         string                       `json:"server_url"`
-	OrgID             string                       `json:"org_id"`
-	ObservabilityMode bool                         `json:"observability_mode"`
-	BrowserLogin      bool                         `json:"browser_login"`
-	InstallFailOpen   bool                         `json:"install_fail_open"`
-	BinaryVersion     string                       `json:"binary_version"`
-	BinaryTargets     map[string]hooksBinaryTarget `json:"binary_targets"`
+	OrgName         string                       `json:"org_name"`
+	OrgEmail        string                       `json:"org_email"`
+	ProjectSlug     string                       `json:"project_slug"`
+	ServerURL       string                       `json:"server_url"`
+	OrgID           string                       `json:"org_id"`
+	BrowserLogin    bool                         `json:"browser_login"`
+	InstallFailOpen bool                         `json:"install_fail_open"`
+	BinaryVersion   string                       `json:"binary_version"`
+	BinaryTargets   map[string]hooksBinaryTarget `json:"binary_targets"`
 }
 
 // hooksConfigSnapshot extracts the hook-output-affecting config from cfg. The
@@ -293,17 +280,16 @@ type HooksConfig struct {
 // exactly what was baked into the generated hooks.
 func hooksConfigSnapshot(cfg GenerateConfig) HooksConfig {
 	return HooksConfig{
-		MarketplaceName:   resolveMarketplaceName(cfg),
-		OrgName:           cfg.OrgName,
-		OrgEmail:          cfg.OrgEmail,
-		ProjectSlug:       cfg.ProjectSlug,
-		ServerURL:         cfg.ServerURL,
-		OrgID:             cfg.OrgID,
-		ObservabilityMode: cfg.ObservabilityMode,
-		BrowserLogin:      cfg.BrowserLogin,
-		InstallFailOpen:   cfg.InstallFailOpen,
-		BinaryVersion:     hooksBinaryVersion,
-		BinaryTargets:     hooksServedTargets(cfg.ServerURL),
+		MarketplaceName: resolveMarketplaceName(cfg),
+		OrgName:         cfg.OrgName,
+		OrgEmail:        cfg.OrgEmail,
+		ProjectSlug:     cfg.ProjectSlug,
+		ServerURL:       cfg.ServerURL,
+		OrgID:           cfg.OrgID,
+		BrowserLogin:    cfg.BrowserLogin,
+		InstallFailOpen: cfg.InstallFailOpen,
+		BinaryVersion:   hooksBinaryVersion,
+		BinaryTargets:   hooksServedTargets(cfg.ServerURL),
 	}
 }
 
@@ -354,12 +340,11 @@ const mcpGeneratorVersion = "9"
 // hooksManifestVersion) rather than folded into a content hash, so bumping it is
 // the only thing that publishes a new hooks plugin to connected repos — an
 // MCP-only publish leaves the existing hooks subtree untouched. Bump it for ANY
-// change to hooks generation, including behaviour a fingerprint couldn't observe
-// (e.g. the observability_mode toggle's effect on emitted hooks).
+// change to hooks generation, including behaviour a fingerprint couldn't observe.
 //
 // The Plugin Generate Check CI workflow requires the relevant one of these two
 // constants to change whenever generate.go does.
-const hooksGeneratorVersion = "15"
+const hooksGeneratorVersion = "16"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -451,18 +436,7 @@ func hashFiles(salt string, files map[string][]byte) string {
 // SessionStart is also blocking so a cold install completes while the
 // session-start payload waits on stdin, and the plugin's first event is
 // never lost.
-//
-// When observabilityMode is set, every event is forced async so the plugin
-// can only observe and report — no hook can deny or delay a tool call, and a
-// cold binary install happens in the background of the same invocation. This
-// is the low-risk path for orgs that cannot tolerate hook errors or brief
-// server unavailability disrupting the user, and it accepts the async-Stop
-// dispatch gap above as part of that trade.
-func claudeHookAsyncFlag(event string, observabilityMode bool) *bool {
-	if observabilityMode {
-		t := true
-		return &t
-	}
+func claudeHookAsyncFlag(event string) *bool {
 	switch event {
 	case "UserPromptSubmit", "PreToolUse", "Stop", "SessionStart":
 		f := false
@@ -1057,7 +1031,7 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 			timeoutSeconds = 300
 			timeout = &timeoutSeconds
 		}
-		hooks := []claudeHookCommand{{Type: "command", Command: hooksBootstrapCommand(`$CLAUDE_PLUGIN_ROOT`, "claude-code", timeoutSeconds, false), Async: claudeHookAsyncFlag(event, cfg.ObservabilityMode), Timeout: timeout}}
+		hooks := []claudeHookCommand{{Type: "command", Command: hooksBootstrapCommand(`$CLAUDE_PLUGIN_ROOT`, "claude-code", timeoutSeconds, false), Async: claudeHookAsyncFlag(event), Timeout: timeout}}
 		hookEvents[event] = []claudeHookMatcher{
 			{Matcher: "", Hooks: hooks},
 		}
@@ -1111,13 +1085,10 @@ func generateCursorObservabilityPluginInDir(files map[string][]byte, subdir, nam
 	// events must not silently allow when the sender exits 2 (established
 	// machine with broken auth, unreachable server). The never-authenticated
 	// ratchet is unaffected — that path exits 0 with a pass-through body.
-	// ObservabilityMode is documented as fully non-blocking, so no entry
-	// (preflight included) may fail closed there.
-	var hookFailClosed *bool
-	if !cfg.ObservabilityMode {
-		enforced := true
-		hookFailClosed = &enforced
-	}
+	// Outage tolerance is the binary's job (the cached hooks_fail_open
+	// posture), not the hook registration's.
+	enforced := true
+	hookFailClosed := &enforced
 	hookEvents := make(map[string][]cursorHookCommand, len(CursorObservabilityHookEvents)+1)
 	hookEvents["sessionStart"] = []cursorHookCommand{
 		{
@@ -1228,7 +1199,7 @@ func generateCodexObservabilityPluginInDir(files map[string][]byte, subdir strin
 
 	hookEvents := make(map[string][]codexMatcherGroup, len(CodexObservabilityHookEvents))
 	for _, event := range CodexObservabilityHookEvents {
-		timeoutSeconds, async := codexHookParams(event, cfg.ObservabilityMode)
+		timeoutSeconds, async := codexHookParams(event)
 		hooks := []codexHookCommand{{
 			Type:           "command",
 			Command:        codexHookCommandString(timeoutSeconds, async),
@@ -1354,10 +1325,9 @@ func computeCodexHookHash(event, command string) (string, error) {
 // codexHookParams returns the timeout and relay --async flag for a Codex hook
 // event. The command string embeds both, and Codex trust-hashes the command,
 // so the hooks.json generator and the precomputed approvals must derive them
-// from this single source. In observability mode every event runs async so no
-// hook (or cold binary install) can delay the agent.
-func codexHookParams(event string, observabilityMode bool) (timeoutSeconds int, async bool) {
-	async = observabilityMode || event == "PostToolUse" || event == "Stop"
+// from this single source.
+func codexHookParams(event string) (timeoutSeconds int, async bool) {
+	async = event == "PostToolUse" || event == "Stop"
 	timeoutSeconds = 60
 	if event == "SessionStart" {
 		timeoutSeconds = 330
@@ -1367,11 +1337,11 @@ func codexHookParams(event string, observabilityMode bool) (timeoutSeconds int, 
 
 // computeCodexHookApprovals returns pre-computed [hooks.state] entries for all
 // Codex observability hook events for a given marketplace and plugin name.
-func computeCodexHookApprovals(marketplace, plugin string, observabilityMode bool) ([]codexHookApproval, error) {
+func computeCodexHookApprovals(marketplace, plugin string) ([]codexHookApproval, error) {
 	approvals := make([]codexHookApproval, 0, len(CodexObservabilityHookEvents))
 	for _, event := range CodexObservabilityHookEvents {
 		snake := codexEventSnakeCase(event)
-		timeoutSeconds, async := codexHookParams(event, observabilityMode)
+		timeoutSeconds, async := codexHookParams(event)
 		hash, err := computeCodexHookHash(event, codexHookCommandString(timeoutSeconds, async))
 		if err != nil {
 			return nil, fmt.Errorf("compute hash for %s hook: %w", event, err)
@@ -1414,7 +1384,7 @@ func GenerateCodexInstallScript(marketplaceURL string, cfg GenerateConfig) ([]by
 	marketplace := resolveMarketplaceName(cfg)
 	plugin := CodexObservabilitySlug(cfg)
 
-	approvals, err := computeCodexHookApprovals(marketplace, plugin, cfg.ObservabilityMode)
+	approvals, err := computeCodexHookApprovals(marketplace, plugin)
 	if err != nil {
 		return nil, fmt.Errorf("compute hook approvals: %w", err)
 	}

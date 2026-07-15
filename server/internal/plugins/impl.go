@@ -189,7 +189,7 @@ func NewService(
 		serverURL: serverURL,
 		keyPrefix: auth.APIKeyPrefix(env),
 		// features gates human/dashboard-initiated hook-output changes (marketplace
-		// rename via UpdateMarketplaceSettings, observability-mode toggle via
+		// rename via UpdateMarketplaceSettings, browser-login toggle via
 		// productfeatures) on the phased hooks rollout, mirroring the automated
 		// publisher. Fail-closed when nil: non-canary orgs defer those changes.
 		features: features,
@@ -1342,20 +1342,19 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 			// directories when a rename happened while the rollout gate carried
 			// the hooks subtree.
 			slugCfg := GenerateConfig{
-				OrgName:           s.resolveOrganizationName(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug),
-				OrgEmail:          "",
-				OrgID:             "",
-				ServerURL:         "",
-				APIKey:            "",
-				HooksAPIKey:       "",
-				ProjectSlug:       "",
-				IsDefaultProject:  false,
-				Version:           "",
-				MarketplaceName:   "",
-				HooksOrgName:      naming.PublishedHooksOrgName(conn.PublishedHooksConfig),
-				ObservabilityMode: false,
-				BrowserLogin:      false,
-				InstallFailOpen:   false,
+				OrgName:          s.resolveOrganizationName(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug),
+				OrgEmail:         "",
+				OrgID:            "",
+				ServerURL:        "",
+				APIKey:           "",
+				HooksAPIKey:      "",
+				ProjectSlug:      "",
+				IsDefaultProject: false,
+				Version:          "",
+				MarketplaceName:  "",
+				HooksOrgName:     naming.PublishedHooksOrgName(conn.PublishedHooksConfig),
+				BrowserLogin:     false,
+				InstallFailOpen:  false,
 			}
 			result.ClaudeObservabilityPlugin = conv.PtrEmpty(ClaudeObservabilitySlug(slugCfg))
 			result.CodexObservabilityPlugin = conv.PtrEmpty(CodexObservabilitySlug(slugCfg))
@@ -1475,7 +1474,7 @@ func (s *Service) publishUpToDate(ctx context.Context, ac *contextvalues.AuthCon
 
 	// Up to date only when both components match what was last published: the MCP
 	// per-plugin fingerprints, the hooks generator version, and the hook-affecting
-	// config (so a marketplace rename or observability-mode toggle that hasn't
+	// config (so a marketplace rename or browser-login toggle that hasn't
 	// propagated to the hooks subtree yet reads as stale rather than current).
 	upToDate := maps.Equal(mcpFingerprints, decodeMCPFingerprints(conn.PublishedMcpFingerprints)) &&
 		conv.FromPGTextOrEmpty[string](conn.PublishedHooksVersion) == hooksGeneratorVersion &&
@@ -1612,48 +1611,6 @@ func (s *Service) PublishProject(ctx context.Context, input PublishProjectInput)
 	return &PublishProjectResult{RepoURL: result.RepoURL, Skipped: result.Skipped}, nil
 }
 
-// HooksRolloutEligible reports whether the organization is cleared to receive the
-// current observability (hooks) generator version. Exposed for other services
-// (e.g. productfeatures) that must decide, before persisting an org-level setting
-// that changes generated hook output, whether that change can actually be
-// published to the hooks subtree. Fails closed — see hooksRolloutEligible.
-func (s *Service) HooksRolloutEligible(ctx context.Context, orgID, orgSlug string) bool {
-	return s.hooksRolloutEligible(ctx, orgID, orgSlug)
-}
-
-// RepublishOrganizationProjects republishes every project in the organization
-// that has a plugin GitHub connection. It is used when an org-level setting that
-// affects generated output (e.g. observability mode) changes and must propagate
-// to all of the org's published marketplaces. SkipIfUnchanged is set so only the
-// components that actually changed are regenerated (the config-hash signal picks
-// up the setting change for the hooks component without rotating MCP keys), and
-// the hooks component stays phase-gated. Callers that require the hooks to update
-// synchronously should verify HooksRolloutEligible first; this method never fails
-// the caller for an ineligible org — the change is carried and the automated
-// rollout applies it once the org is eligible. Returns the joined errors of any
-// per-project publishes that failed.
-func (s *Service) RepublishOrganizationProjects(ctx context.Context, orgID string) error {
-	if s.github == nil {
-		return nil
-	}
-	targets, err := s.repo.ListOrgPluginPublishTargets(ctx, orgID)
-	if err != nil {
-		return fmt.Errorf("list org plugin publish targets: %w", err)
-	}
-	var errs []error
-	for _, t := range targets {
-		if _, err := s.PublishProject(ctx, PublishProjectInput{
-			ProjectID:       t.ProjectID,
-			CreatedByUserID: t.CreatedByUserID,
-			CommitMessage:   "Update observability settings",
-			SkipIfUnchanged: true,
-		}); err != nil {
-			errs = append(errs, fmt.Errorf("republish project %s: %w", t.ProjectID, err))
-		}
-	}
-	return errors.Join(errs...)
-}
-
 type publishActor struct {
 	Principal       urn.Principal
 	DisplayName     *string
@@ -1742,7 +1699,7 @@ type publishOutcome struct {
 	RepoURL string
 	Skipped bool
 	// HooksConfigDeferred is true when hook-output-affecting config changed (a
-	// marketplace rename or observability-mode toggle) but the org isn't cleared
+	// marketplace rename or browser-login toggle) but the org isn't cleared
 	// for the current hooks version, so the hooks subtree was carried unchanged
 	// rather than regenerated (which would advance the org past the rollout gate).
 	// The change applies automatically once the org becomes eligible. MCP and the
@@ -1802,7 +1759,7 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		!maps.Equal(mcpFingerprints, decodeMCPFingerprints(existing.PublishedMcpFingerprints))
 
 	// Snapshot the hook-output-affecting config (resolved marketplace name,
-	// observability mode, server URL, etc.). A rename or observability-mode toggle
+	// browser login, server URL, etc.). A rename or browser-login toggle
 	// changes generated hook content while leaving hooksGeneratorVersion untouched,
 	// so this snapshot is the only signal that catches those; without it the hooks
 	// subtree would be carried stale. The version and this config together decide
@@ -1818,7 +1775,7 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	// The hooks version + config this org should converge to. This gate is
 	// UNCONDITIONAL — it is not an opt-in per call site — so no publish path (the
 	// automated rollout, a dashboard publish, a marketplace rename, an
-	// observability-mode toggle) can force a hooks change onto an org that the
+	// browser-login toggle) can force a hooks change onto an org that the
 	// rollout hasn't cleared. The single lever to advance an org is the
 	// FlagHooksRollout payload pin in PostHog (plus the hardcoded canary); see
 	// hooksRolloutEligible. When an org isn't eligible we carry its already-
@@ -2607,13 +2564,12 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlu
 		// settings flip right after a publish) still mint distinct manifest
 		// versions; the 13-digit patch also sorts numerically above the
 		// 10-digit second epochs already in installed caches.
-		Version:           fmt.Sprintf("%d", time.Now().UnixMilli()),
-		MarketplaceName:   "",
-		HooksOrgName:      "",
-		IsDefaultProject:  s.isDefaultProject(ctx, projectID),
-		ObservabilityMode: false,
-		BrowserLogin:      false,
-		InstallFailOpen:   false,
+		Version:          fmt.Sprintf("%d", time.Now().UnixMilli()),
+		MarketplaceName:  "",
+		HooksOrgName:     "",
+		IsDefaultProject: s.isDefaultProject(ctx, projectID),
+		BrowserLogin:     false,
+		InstallFailOpen:  false,
 	}
 	orgName, err := s.repo.GetOrganizationName(ctx, orgID)
 	switch {
@@ -2635,22 +2591,6 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlu
 			attr.SlogError(err),
 		)
 	}
-	// observability_mode is the org-level non-blocking switch managed by the
-	// productfeatures service against organization_features. When on, the
-	// generated plugin emits async for every hook event. The read is an EXISTS
-	// check so it never returns pgx.ErrNoRows; any error leaves the flag off,
-	// keeping hooks blocking.
-	observabilityMode, err := s.repo.IsOrganizationFeatureEnabled(ctx, repo.IsOrganizationFeatureEnabledParams{
-		OrganizationID: orgID,
-		FeatureName:    string(productfeatures.FeatureObservabilityMode),
-	})
-	if err != nil {
-		s.logger.WarnContext(ctx, "failed to read observability mode flag, defaulting to blocking hooks",
-			attr.SlogOrganizationID(orgID),
-			attr.SlogError(err),
-		)
-	}
-	cfg.ObservabilityMode = observabilityMode
 	// hooks_browser_login is the org-level opt-in for the interactive browser
 	// token exchange. Off (or unreadable), the generated plugin never opens a
 	// browser: senders authenticate through env credentials, a previously
@@ -2666,15 +2606,19 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlu
 		)
 	}
 	cfg.BrowserLogin = browserLogin
-	// hooks_install_fail_open is the org-level install-failure policy for the
-	// hooks binary bootstrap. Off (or unreadable), a distribution failure fails
-	// closed — the same posture as every other hook failure in enforcement mode.
+	// The bootstrap install-failure policy is the publish-time snapshot of the
+	// org's hooks_fail_open posture: a cold install has no binary (and no
+	// cached org settings) to consult, so only the baked exit code can honor
+	// the org's outage tolerance. It refreshes on the next publish after a
+	// toggle; the installed binary tracks the live value via ingest effects.
+	// Off (or unreadable), a distribution failure fails closed — the same
+	// posture as every other unobtainable verdict.
 	installFailOpen, err := s.repo.IsOrganizationFeatureEnabled(ctx, repo.IsOrganizationFeatureEnabledParams{
 		OrganizationID: orgID,
-		FeatureName:    string(productfeatures.FeatureHooksInstallFailOpen),
+		FeatureName:    string(productfeatures.FeatureHooksFailOpen),
 	})
 	if err != nil {
-		s.logger.WarnContext(ctx, "failed to read hooks install-fail-open flag, defaulting to fail closed",
+		s.logger.WarnContext(ctx, "failed to read hooks fail-open flag, defaulting to fail closed",
 			attr.SlogOrganizationID(orgID),
 			attr.SlogError(err),
 		)

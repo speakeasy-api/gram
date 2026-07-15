@@ -268,7 +268,7 @@ SELECT name FROM organization_metadata WHERE id = @id;
 -- name: IsOrganizationFeatureEnabled :one
 -- Reports whether an organization feature flag is enabled. Mirrors the
 -- productfeatures service's read against organization_features so the generator
--- can honour org-level toggles (e.g. observability_mode) at generation time.
+-- can honour org-level toggles (e.g. hooks_fail_open) at generation time.
 SELECT EXISTS (
   SELECT 1
   FROM organization_features
@@ -328,7 +328,7 @@ LIMIT @result_limit;
 -- name: ListOrgPluginPublishTargets :many
 -- Lists every project in one organization that has a GitHub plugin connection,
 -- with the actor user for each (the creator of the project's most recent
--- plugins-mcp API key), so an org-level setting change (e.g. observability mode)
+-- plugins-mcp API key), so an org-level setting change (e.g. browser login)
 -- can be republished to all of the org's marketplaces. Like
 -- ListPluginPublishCandidates this is a deliberate cross-project sweep, but it is
 -- constrained to a single organization rather than scanning globally.
@@ -367,7 +367,7 @@ WHERE marketplace_token = @marketplace_token;
 -- config just published; all are always overwritten so subsequent rollout runs
 -- can detect independently whether the MCP or hooks component changed (including
 -- hooks config drift a version bump can't capture, e.g. a marketplace rename or
--- observability-mode toggle).
+-- browser-login toggle).
 INSERT INTO plugin_github_connections (project_id, installation_id, repo_owner, repo_name, marketplace_token, published_mcp_fingerprints, published_hooks_version, published_hooks_config)
 VALUES (@project_id, @installation_id, @repo_owner, @repo_name, @marketplace_token, @published_mcp_fingerprints, @published_hooks_version, @published_hooks_config)
 ON CONFLICT (project_id) DO UPDATE

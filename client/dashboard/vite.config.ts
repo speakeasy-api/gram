@@ -156,6 +156,9 @@ export default defineConfig(({ command }) => {
       __GRAM_SERVER_URL__: JSON.stringify(serverUrl),
       __PLAYGROUND_PROXY_URL__: JSON.stringify(isDev ? siteUrl : undefined),
       __GRAM_GIT_SHA__: JSON.stringify(process.env["GRAM_GIT_SHA"] || ""),
+      // Default Gram API URL baked into the inlined elements code
+      // (src/elements/lib/api.ts); config.api.url overrides it at runtime.
+      __GRAM_API_URL__: JSON.stringify(process.env["GRAM_API_URL"] || ""),
     },
     build: {
       sourcemap: true,

@@ -2610,8 +2610,9 @@ func DecodeGetToolsetEnvironmentResponse(decoder func(*http.Response) goahttp.De
 // type *environments.EnvironmentEntryInput.
 func marshalEnvironmentsEnvironmentEntryInputToEnvironmentEntryInputRequestBody(v *environments.EnvironmentEntryInput) *EnvironmentEntryInputRequestBody {
 	res := &EnvironmentEntryInputRequestBody{
-		Name:  v.Name,
-		Value: v.Value,
+		Name:     v.Name,
+		Value:    v.Value,
+		IsSecret: v.IsSecret,
 	}
 
 	return res
@@ -2622,8 +2623,9 @@ func marshalEnvironmentsEnvironmentEntryInputToEnvironmentEntryInputRequestBody(
 // type *EnvironmentEntryInputRequestBody.
 func marshalEnvironmentEntryInputRequestBodyToEnvironmentsEnvironmentEntryInput(v *EnvironmentEntryInputRequestBody) *environments.EnvironmentEntryInput {
 	res := &environments.EnvironmentEntryInput{
-		Name:  v.Name,
-		Value: v.Value,
+		Name:     v.Name,
+		Value:    v.Value,
+		IsSecret: v.IsSecret,
 	}
 
 	return res
@@ -2636,6 +2638,7 @@ func unmarshalEnvironmentEntryResponseBodyToTypesEnvironmentEntry(v *Environment
 	res := &types.EnvironmentEntry{
 		Name:      *v.Name,
 		Value:     *v.Value,
+		IsSecret:  *v.IsSecret,
 		CreatedAt: *v.CreatedAt,
 		UpdatedAt: *v.UpdatedAt,
 	}

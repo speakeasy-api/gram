@@ -3415,6 +3415,90 @@ paths:
             x-speakeasy-name-override: updateRole
             x-speakeasy-react-hook:
                 name: UpdateRole
+    /rpc/access.updateShadowMCPInventoryServerName:
+        post:
+            description: Update or clear the administrator-defined display name for one project-scoped Shadow MCP inventory server URL.
+            operationId: updateShadowMCPInventoryServerName
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateShadowMCPInventoryServerNameForm'
+                required: true
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: updateShadowMCPInventoryServerName access
+            tags:
+                - access
+            x-speakeasy-name-override: updateShadowMCPInventoryServerName
+            x-speakeasy-react-hook:
+                name: UpdateShadowMCPInventoryServerName
+                type: mutation
     /rpc/access.updateShadowMcpRule:
         put:
             description: Update a managed Shadow MCP access rule.
@@ -13842,6 +13926,13 @@ paths:
                   schema:
                     description: Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.
                     type: string
+                - allowEmptyValue: true
+                  description: Set when the event is redelivered from a device's offline spool after control-plane downtime, under its original Idempotency-Key and occurred_at.
+                  in: header
+                  name: X-Gram-Replayed
+                  schema:
+                    description: Set when the event is redelivered from a device's offline spool after control-plane downtime, under its original Idempotency-Key and occurred_at.
+                    type: boolean
             requestBody:
                 content:
                     application/json:
@@ -29884,6 +29975,21 @@ paths:
                     description: If true, collapse results to one row per (policy_id, rule_id, match), keeping the most recent occurrence. Useful when the same secret is detected many times within a single message body.
                     type: boolean
                 - allowEmptyValue: true
+                  description: If true, only return findings from chats that are not linked to an assistant. Useful for surfacing events that are missing user attribution.
+                  in: query
+                  name: non_assistant
+                  schema:
+                    description: If true, only return findings from chats that are not linked to an assistant. Useful for surfacing events that are missing user attribution.
+                    type: boolean
+                - allowEmptyValue: true
+                  description: Optional assistant ID; only return findings from chats linked to this assistant.
+                  in: query
+                  name: assistant_id
+                  schema:
+                    description: Optional assistant ID; only return findings from chats linked to this assistant.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
                   description: Filter results to messages created at or after this timestamp (ISO 8601).
                   in: query
                   name: from
@@ -30175,6 +30281,21 @@ paths:
                   schema:
                     description: If true, collapse results to one row per (policy_id, rule_id, match), keeping the most recent occurrence. Useful when the same secret is detected many times within a single message body.
                     type: boolean
+                - allowEmptyValue: true
+                  description: If true, only return findings from chats that are not linked to an assistant. Useful for surfacing events that are missing user attribution.
+                  in: query
+                  name: non_assistant
+                  schema:
+                    description: If true, only return findings from chats that are not linked to an assistant. Useful for surfacing events that are missing user attribution.
+                    type: boolean
+                - allowEmptyValue: true
+                  description: Optional assistant ID; only return findings from chats linked to this assistant.
+                  in: query
+                  name: assistant_id
+                  schema:
+                    description: Optional assistant ID; only return findings from chats linked to this assistant.
+                    format: uuid
+                    type: string
                 - allowEmptyValue: true
                   description: Filter results to messages created at or after this timestamp (ISO 8601).
                   in: query
@@ -44734,6 +44855,9 @@ components:
                     type: string
                     description: The creation date of the environment entry
                     format: date-time
+                is_secret:
+                    type: boolean
+                    description: Whether the value is a secret. Secret values are redacted in reads; non-secret values are returned in cleartext.
                 name:
                     type: string
                     description: The name of the environment variable
@@ -44743,26 +44867,29 @@ components:
                     format: date-time
                 value:
                     type: string
-                    description: Redacted values of the environment variable
+                    description: The value of the environment variable. Cleartext when is_secret is false, redacted otherwise.
             description: A single environment entry
             required:
                 - name
                 - value
+                - is_secret
                 - created_at
                 - updated_at
         EnvironmentEntryInput:
             type: object
             properties:
+                is_secret:
+                    type: boolean
+                    description: Whether the value is a secret. Secret values are encrypted at rest and redacted in reads; non-secret values are readable after save. When omitted, new entries default to secret and existing entries keep their current secrecy.
                 name:
                     type: string
                     description: The name of the environment variable
                 value:
                     type: string
-                    description: The value of the environment variable
+                    description: The value of the environment variable. Omit on an existing secret entry to preserve its stored value. Required when creating an entry or when changing is_secret from true to false.
             description: A single environment entry
             required:
                 - name
-                - value
         Error:
             type: object
             properties:
@@ -46125,21 +46252,21 @@ components:
                 hooks_browser_login_enabled:
                     type: boolean
                     description: Whether generated hook plugins may mint per-user keys via the interactive browser login
-                hooks_install_fail_open_enabled:
+                hooks_fail_open_enabled:
                     type: boolean
-                    description: Whether a hooks binary installation failure lets the hook pass instead of failing closed
+                    description: Whether hooks fail open when the Speakeasy control plane is unreachable or erroring — blocking policies are not enforced for the duration of the outage
                 logs_enabled:
                     type: boolean
                     description: Whether logging is enabled
-                observability_mode_enabled:
-                    type: boolean
-                    description: Whether observability mode is enabled, making generated hook plugins fully non-blocking
                 scim_enabled:
                     type: boolean
                     description: Whether SCIM/directory sync setup is enabled for the organization
                 session_capture_enabled:
                     type: boolean
                     description: Whether Claude Code session capture is enabled
+                skills_enabled:
+                    type: boolean
+                    description: Whether the Skills page is enabled for the organization
                 sso_enabled:
                     type: boolean
                     description: Whether SSO setup is enabled for the organization
@@ -46157,10 +46284,10 @@ components:
                 - webhooks
                 - sso_enabled
                 - scim_enabled
-                - observability_mode_enabled
                 - hooks_browser_login_enabled
-                - hooks_install_fail_open_enabled
+                - hooks_fail_open_enabled
                 - custom_model_keys_enabled
+                - skills_enabled
         GetProjectForm:
             type: object
             properties:
@@ -46578,6 +46705,11 @@ components:
                     items:
                         $ref: '#/components/schemas/HookMCPAttributionEntry'
                     description: Transcript-derived per-request MCP attribution (Claude Stop/SubagentStop).
+                mcp_inventory:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/HookMCPData'
+                    description: Configured MCP server snapshot captured at session start or configuration change. Transport credentials must be redacted by the sender.
                 message:
                     $ref: '#/components/schemas/HookMessageData'
                 notification:
@@ -47979,6 +48111,10 @@ components:
                         - environment:blocked_read
                         - environment:write
                         - environment:blocked_write
+                        - skill:read
+                        - skill:blocked_read
+                        - skill:write
+                        - skill:blocked_write
                         - risk_policy:evaluate
                         - risk_policy:bypass
                         - chat:read
@@ -48010,6 +48146,10 @@ components:
                             - environment:blocked_read
                             - environment:write
                             - environment:blocked_write
+                            - skill:read
+                            - skill:blocked_read
+                            - skill:write
+                            - skill:blocked_write
                             - risk_policy:evaluate
                             - risk_policy:bypass
                             - chat:read
@@ -52666,6 +52806,10 @@ components:
                         - environment:blocked_read
                         - environment:write
                         - environment:blocked_write
+                        - skill:read
+                        - skill:blocked_read
+                        - skill:write
+                        - skill:blocked_write
                         - risk_policy:evaluate
                         - risk_policy:bypass
                         - chat:read
@@ -52787,6 +52931,8 @@ components:
                         - mcp:blocked_connect
                         - environment:blocked_read
                         - environment:blocked_write
+                        - skill:blocked_read
+                        - skill:blocked_write
                         - risk_policy:bypass
                 resource_type:
                     type: string
@@ -52796,6 +52942,7 @@ components:
                         - project
                         - mcp
                         - environment
+                        - skill
                         - risk_policy
                         - chat
                 slug:
@@ -52820,6 +52967,10 @@ components:
                         - environment:blocked_read
                         - environment:write
                         - environment:blocked_write
+                        - skill:read
+                        - skill:blocked_read
+                        - skill:write
+                        - skill:blocked_write
                         - risk_policy:evaluate
                         - risk_policy:bypass
                         - chat:read
@@ -53256,6 +53407,7 @@ components:
                         - mcp
                         - org
                         - environment
+                        - skill
                         - risk_policy
                         - chat
                         - '*'
@@ -53744,10 +53896,10 @@ components:
                         - webhooks
                         - sso
                         - scim
-                        - observability_mode
                         - hooks_browser_login
-                        - hooks_install_fail_open
+                        - hooks_fail_open
                         - custom_model_keys
+                        - skills
                     maxLength: 60
             required:
                 - feature_name
@@ -57211,6 +57363,22 @@ components:
                 - match_value
                 - display_name
                 - access_scope
+        UpdateShadowMCPInventoryServerNameForm:
+            type: object
+            properties:
+                name:
+                    type: string
+                    maxLength: 255
+                project_id:
+                    type: string
+                    format: uuid
+                server_url:
+                    type: string
+                    format: uri
+            required:
+                - project_id
+                - server_url
+                - name
         UpdateToolsetForm:
             type: object
             properties:

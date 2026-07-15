@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/speakeasy-api/agenthooks"
+	"github.com/speakeasy-api/gram/hooks/sdk/models/components"
 )
 
 // authState classifies the machine's credential posture for the ratchet.
@@ -129,9 +130,9 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 		r.debugf("event=%s config-error path=%s err=%s", agenthooks.EventOf(typed).NativeName, r.cfg.ConfigPath, r.cfg.ConfigError)
 		if authEstablished() {
 			msg := fmt.Sprintf("Speakeasy hooks cannot read the plugin config at %q. Reinstall the Speakeasy hooks plugin.", r.cfg.ConfigPath)
-			return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: msg}, authRejected: false}, stateBroken
+			return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: msg}, authRejected: false, failOpen: nil}, stateBroken
 		}
-		return ingestResult{statusCode: 0, decision: decision{}, authRejected: false}, stateNeverAuthed
+		return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil}, stateNeverAuthed
 	}
 
 	// Refuse to send credentials over plaintext HTTP before resolving them,
@@ -141,31 +142,41 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 		r.debugf("event=%s insecure-server-url server=%s", agenthooks.EventOf(typed).NativeName, r.cfg.ServerURL)
 		if authEstablished() {
 			msg := fmt.Sprintf("Speakeasy hooks refused insecure Gram server URL %q; use https:// (or an http://localhost dev server).", r.cfg.ServerURL)
-			return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: msg}, authRejected: false}, stateBroken
+			return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: msg}, authRejected: false, failOpen: nil}, stateBroken
 		}
-		return ingestResult{statusCode: 0, decision: decision{}, authRejected: false}, stateNeverAuthed
+		return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil}, stateNeverAuthed
 	}
 
 	c, ok := resolveAuth(r.cfg)
 	if !ok {
 		if reauthNeeded() {
 			r.debugf("event=%s no-creds state=reauth-needed authfile=%s", agenthooks.EventOf(typed).NativeName, authFilePath())
-			return ingestResult{statusCode: 0, decision: decision{}, authRejected: false}, stateReauthNeeded
+			return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil}, stateReauthNeeded
 		}
 		if authEstablished() {
 			r.debugf("event=%s no-creds state=broken authfile=%s", agenthooks.EventOf(typed).NativeName, authFilePath())
-			return ingestResult{statusCode: 0, decision: decision{}, authRejected: false}, stateBroken
+			return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil}, stateBroken
 		}
 		r.debugf("event=%s no-creds state=never-authed authfile=%s", agenthooks.EventOf(typed).NativeName, authFilePath())
-		return ingestResult{statusCode: 0, decision: decision{}, authRejected: false}, stateNeverAuthed
+		return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil}, stateNeverAuthed
 	}
 
 	payload := buildEnvelope(typed, hostname())
+	base := agenthooks.EventOf(typed)
+	if base.Provider == agenthooks.ProviderClaudeCode &&
+		(base.Kind == agenthooks.KindSessionStart || base.NativeName == "ConfigChange") {
+		attachMCPInventory(&payload, collectClaudeMCPInventory(ctx, base.Session.CWD))
+	}
 	if email := resolveUserEmail(ctx, typed); email != "" {
 		payload.Source.UserEmail = new(email)
 	}
 	r.correlateCodexToolID(typed, &payload)
-	res := r.client.send(ctx, c, payload)
+	// One idempotency key covers this event end to end: the send's internal
+	// replays, the org-key retry below, and — if the control plane is down —
+	// the spooled copy a later drain replays. The server stores at most one
+	// event per key, so every redelivery path is safe.
+	idemKey := newIdempotencyToken()
+	res := r.send(ctx, c, payload, idemKey)
 	r.debugf("event=%s type=%s server=%s authfile=%s status=%d denied=%t", agenthooks.EventOf(typed).NativeName, payload.Event.Type, r.cfg.ServerURL, authFilePath(), res.statusCode, res.decision.denied())
 	if res.authRejected && c.Source == credEnv {
 		// The configured key is authoritative and a re-login can never replace
@@ -195,17 +206,35 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 				Org:       r.cfg.OrgID,
 				Source:    credOrg,
 			}
-			res = r.client.send(ctx, orgCreds, payload)
+			res = r.send(ctx, orgCreds, payload, idemKey)
 			r.debugf("event=%s auth-retry=org status=%d denied=%t", agenthooks.EventOf(typed).NativeName, res.statusCode, res.decision.denied())
+			r.finishExchange(idemKey, payload, res)
 			return res, stateReady
 		}
 		return res, stateReauthNeeded
 	}
+	// The exchange is final: an unsent payload (unreachable/5xx/429/408) is
+	// kept for replay, a healthy exchange flushes any backlog, and a
+	// definitive 4xx does neither — the server answered, and would reject a
+	// replay identically.
+	r.finishExchange(idemKey, payload, res)
 	return res, stateReady
 }
 
+// send posts one envelope through the ingest client and mirrors any
+// org-settings effects the server returned into the local cache. Every
+// successful exchange — gating or fire-and-forget — refreshes the offline
+// copy failOpenAllowed consults during control-plane downtime.
+func (r *Relay) send(ctx context.Context, c creds, payload components.IngestRequestBody, idemKey string) ingestResult {
+	res := r.client.send(ctx, c, payload, idemKey)
+	if res.statusCode >= 200 && res.statusCode < 300 && res.failOpen != nil {
+		writeOrgSettings(r.cfg, *res.failOpen)
+	}
+	return res
+}
+
 // evaluate delivers a gating event and resolves the block decision under the
-// ratchet and observability mode.
+// ratchet and the org's fail-open posture.
 func (r *Relay) evaluate(ctx context.Context, typed any) verdict {
 	res, state := r.deliver(ctx, typed)
 	switch state {
@@ -214,18 +243,12 @@ func (r *Relay) evaluate(ctx context.Context, typed any) verdict {
 		// unknown deployment identity, only a reinstall can.
 		return verdict{block: false, message: "", nudge: r.cfg.ConfigError == ""}
 	case stateBroken:
-		if r.cfg.Nonblocking {
-			return verdict{block: false, message: "", nudge: false}
-		}
 		msg := res.decision.Message
 		if msg == "" {
 			msg = brokenAuthMessage
 		}
 		return verdict{block: true, message: msg, nudge: false}
 	case stateReauthNeeded:
-		if r.cfg.Nonblocking {
-			return verdict{block: false, message: "", nudge: false}
-		}
 		// Tool events fail closed on the rejection (or its memory); prompt
 		// handlers honor nudge and fail open instead.
 		msg := reauthNeededMessage
@@ -235,11 +258,9 @@ func (r *Relay) evaluate(ctx context.Context, typed any) verdict {
 		return verdict{block: true, message: msg, nudge: true}
 	}
 
-	if res.statusCode >= 200 && res.statusCode < 300 {
+	if res.accepted() {
 		switch {
 		case strings.EqualFold(res.decision.Decision, "allow"):
-			return verdict{block: false, message: "", nudge: false}
-		case r.cfg.Nonblocking:
 			return verdict{block: false, message: "", nudge: false}
 		case res.decision.denied():
 			return verdict{block: true, message: res.decision.Message, nudge: false}
@@ -254,8 +275,17 @@ func (r *Relay) evaluate(ctx context.Context, typed any) verdict {
 		}
 	}
 	// Non-2xx or unreachable: the server could not confirm the action is
-	// allowed, so block unless observability mode says otherwise.
-	if r.cfg.Nonblocking {
+	// allowed, so block unless the org chose to fail open.
+	//
+	// The org's fail-open choice covers only the no-verdict-obtainable cases:
+	// the server was never definitively reached (statusCode 0, which includes
+	// an unparseable 2xx — a mangled response is operationally the same as an
+	// unreachable control plane) or it failed outright (5xx). Definitive 4xx
+	// stays fail closed — in particular a 401/403 on an env- or org-sourced
+	// key lands here as stateReady, and honoring fail-open for it would turn
+	// a broken credential into an enforcement bypass.
+	if (res.statusCode == 0 || res.statusCode >= 500) && failOpenAllowed(r.cfg) {
+		r.debugf("event=%s fail-open engaged status=%d", agenthooks.EventOf(typed).NativeName, res.statusCode)
 		return verdict{block: false, message: "", nudge: false}
 	}
 	return verdict{block: true, message: httpMessage(res), nudge: false}

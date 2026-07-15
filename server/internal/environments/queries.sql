@@ -49,6 +49,20 @@ WHERE
     ee.environment_id = @environment_id
 ORDER BY ee.name ASC;
 
+-- name: ListEnvironmentEntriesForUpdate :many
+-- Same as ListEnvironmentEntries, but holds a row lock on every entry until the
+-- transaction ends. An update that omits a value preserves the stored one by
+-- reading it and writing it back, so a concurrent rotation landing between the
+-- read and the write would otherwise be reverted.
+SELECT ee.*
+FROM environment_entries ee
+INNER JOIN environments e ON ee.environment_id = e.id
+WHERE
+    e.project_id = @project_id AND
+    ee.environment_id = @environment_id
+ORDER BY ee.name ASC
+FOR UPDATE OF ee;
+
 -- name: DeleteEnvironment :one
 WITH deleted_env AS (
     UPDATE environments
@@ -69,28 +83,32 @@ FROM deleted_env;
 INSERT INTO environment_entries (
     environment_id,
     name,
-    value
+    value,
+    is_secret
 )
 /*
  Parameters:
  - environment_id: uuid
  - names: text[]
  - values: text[]
+ - is_secrets: boolean[]
 */
 VALUES (
     @environment_id::uuid,
     unnest(@names::text[]),
-    unnest(@values::text[])
+    unnest(@values::text[]),
+    unnest(@is_secrets::boolean[])
 )
 RETURNING *;
 
 -- name: CloneEnvironmentEntriesWithValues :exec
--- Copy (name, encrypted-value) pairs from a source environment to a new environment.
--- The encrypted value bytes flow row-to-row inside Postgres and are never decrypted by
--- the application during the clone. Same plaintext + same nonce + same key produces the
--- same ciphertext under AES-GCM, which is cryptographically permissible.
-INSERT INTO environment_entries (environment_id, name, value)
-SELECT @new_environment_id::uuid, ee.name, ee.value
+-- Copy (name, value, is_secret) triples from a source environment to a new environment.
+-- Secret values are ciphertext and flow row-to-row inside Postgres without the
+-- application decrypting them. Same plaintext + same nonce + same key produces the
+-- same ciphertext under AES-GCM, which is cryptographically permissible. Non-secret
+-- values are plaintext and copy verbatim.
+INSERT INTO environment_entries (environment_id, name, value, is_secret)
+SELECT @new_environment_id::uuid, ee.name, ee.value, ee.is_secret
 FROM environment_entries ee
 INNER JOIN environments e ON ee.environment_id = e.id
 WHERE ee.environment_id = @source_environment_id::uuid
@@ -99,20 +117,24 @@ WHERE ee.environment_id = @source_environment_id::uuid
 -- name: CloneEnvironmentEntryNames :exec
 -- Copy only the variable names from a source environment, using a caller-supplied
 -- placeholder ciphertext as the value for every new entry. Used when the user wants
--- the structure of the source environment but not its secrets.
-INSERT INTO environment_entries (environment_id, name, value)
-SELECT @new_environment_id::uuid, ee.name, @placeholder_value::text
+-- the structure of the source environment but not its secrets. Every placeholder row
+-- is marked secret regardless of the source flag: the placeholder is ciphertext, and
+-- the is_secret ⇔ ciphertext invariant must hold. Users flip the flag when they fill
+-- in the real value.
+INSERT INTO environment_entries (environment_id, name, value, is_secret)
+SELECT @new_environment_id::uuid, ee.name, @placeholder_value::text, TRUE
 FROM environment_entries ee
 INNER JOIN environments e ON ee.environment_id = e.id
 WHERE ee.environment_id = @source_environment_id::uuid
   AND e.project_id = @project_id::uuid;
 
 -- name: UpsertEnvironmentEntry :one
-INSERT INTO environment_entries (environment_id, name, value, updated_at)
-VALUES ($1, $2, $3, now())
+INSERT INTO environment_entries (environment_id, name, value, is_secret, updated_at)
+VALUES ($1, $2, $3, $4, now())
 ON CONFLICT (environment_id, name)
 DO UPDATE SET
     value = EXCLUDED.value,
+    is_secret = EXCLUDED.is_secret,
     updated_at = now()
 RETURNING *;
 

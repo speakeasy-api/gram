@@ -32,7 +32,7 @@ import {
   DropdownMenuTrigger,
   Icon,
 } from "@speakeasy-api/moonshine";
-import { MessageContent, type SectionMatch, ToolUI } from "@gram-ai/elements";
+import { MessageContent, type SectionMatch, ToolUI } from "@/elements";
 import type { ClaudeToolUsage } from "@gram/client/models/components/claudetoolusage.js";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import {
@@ -780,10 +780,16 @@ function SegmentDivider({ generation }: { generation: number }) {
 export interface TranscriptPagination {
   hasMoreBefore: boolean;
   hasMoreAfter: boolean;
+  /** Single-page loads driven by scrolling near an edge. */
   onLoadOlder: () => void;
   onLoadNewer: () => void;
   isFetchingOlder: boolean;
   isFetchingNewer: boolean;
+  /** Break-button loads: everything missing in the break's range (all earlier
+   * messages / all remaining messages), not just one page. */
+  onLoadAllOlder: () => void;
+  onLoadAllNewer: () => void;
+  /** Loads the entire un-loaded span after `afterSeq` (windowed views). */
   onLoadGap?: (afterSeq: number) => void;
   isLoadingGap?: (afterSeq: number) => boolean;
   /** Display-item index to bring to the top on first paint, or null to stay at
@@ -811,7 +817,8 @@ export interface TranscriptPagination {
   } | null;
 }
 
-/** Edge "load older/newer" affordance + the risk-gap "load in-between" marker. */
+/** A break in the transcript — messages are missing here. Renders a prominent
+ * button that loads every missing message in the break's range. */
 function LoadDivider({
   icon,
   label,
@@ -826,20 +833,20 @@ function LoadDivider({
   const Glyph =
     icon === "up" ? ChevronUp : icon === "down" ? ChevronDown : Ellipsis;
   return (
-    <div className="flex items-center justify-center gap-2 px-4 py-2">
+    <div className="flex items-center justify-center gap-3 px-4 py-3">
       <div className="bg-border h-px flex-1" />
       <button
         type="button"
         disabled={loading}
         onClick={onClick}
-        className="text-muted-foreground hover:text-foreground hover:bg-muted/50 inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition-colors disabled:opacity-60"
+        className="bg-background text-foreground hover:bg-muted inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium shadow-xs transition-colors disabled:cursor-default disabled:opacity-60"
       >
         {loading ? (
-          <Loader2 className="size-3 animate-spin" />
+          <Loader2 className="size-3.5 animate-spin" />
         ) : (
-          <Glyph className="size-3" />
+          <Glyph className="size-3.5" />
         )}
-        {label}
+        {loading ? "Loading messages…" : label}
       </button>
       <div className="bg-border h-px flex-1" />
     </div>
@@ -931,23 +938,23 @@ function DisplayItemView({
       return item.dir === "older" ? (
         <LoadDivider
           icon="up"
-          label="Load older messages"
+          label="Load earlier messages"
           loading={pagination.isFetchingOlder}
-          onClick={pagination.onLoadOlder}
+          onClick={pagination.onLoadAllOlder}
         />
       ) : (
         <LoadDivider
           icon="down"
-          label="Load newer messages"
+          label="Load remaining messages"
           loading={pagination.isFetchingNewer}
-          onClick={pagination.onLoadNewer}
+          onClick={pagination.onLoadAllNewer}
         />
       );
     case "serverGap":
       return (
         <LoadDivider
           icon="ellipsis"
-          label="Load messages in between"
+          label="Load missing messages"
           loading={pagination.isLoadingGap?.(item.afterSeq) ?? false}
           onClick={() => pagination.onLoadGap?.(item.afterSeq)}
         />

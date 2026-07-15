@@ -11,7 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
-const hooksBinaryVersion = "0.1.0"
+const hooksBinaryVersion = "0.1.1"
 
 type hooksBinaryTarget struct {
 	URL    string `json:"url"`
@@ -38,12 +38,12 @@ func hooksReleaseTargets(version string, sha256s map[string]string) map[string]h
 // sandbox) often cannot reach GitHub while the Gram domain is already
 // allowlisted for ingest.
 var hooksBinaryTargets = hooksReleaseTargets(hooksBinaryVersion, map[string]string{
-	"darwin-amd64":  "db80bb7d5ccd42e44db76822765bf9838c1b6b9ea8e4a799f99d990a9e625775",
-	"darwin-arm64":  "1eeef8fc011e09ea2d7b14e332ffc809f64cac885ab4aa22b4199d3828d80fc9",
-	"linux-amd64":   "32cae9b4bca253e0056a479460a5804c36f3087432a71ff33a7ad143833547c1",
-	"linux-arm64":   "e7706abf84d86f0e524eb395f0657eec459cc1597bc48c6fc18bd7b7f6896c06",
-	"windows-amd64": "ba8a1952f31c43e9e00d3bb35fc12c008980a0a8d2b2c38b6facd8b24f4e15a8",
-	"windows-arm64": "2cb9d69dd082ffcd96ebe289ac7d7f818d3c93482e8e30fb487ca56708d5f465",
+	"darwin-amd64":  "ff5fda9b48e9ff33a789bf92563f1f93822e17411e9de36584198eaa704cb5c0",
+	"darwin-arm64":  "a61c5cc2721f1637262c91a710299941b0cd1316882c7338916c1349b56cccc5",
+	"linux-amd64":   "4127504a2d01d3e07dc4f6852e8e1551f404a98bf14f60a766d8dae110d361d3",
+	"linux-arm64":   "1f791adf002c71ac8fef7e6cd086f875a957115669c1d991a45f6a7a0a935311",
+	"windows-amd64": "c2f8b4ee64ad9a22f13c59bfdf7ac39339dd124431f7b0d659acce9cf4c6989e",
+	"windows-arm64": "b4e4f18a01ed531e840e1d4b5a4b7afc92e07d7401a390c0a4d61fc50bb818d1",
 })
 
 func renderHooksConfig(cfg GenerateConfig) ([]byte, error) {
@@ -53,7 +53,10 @@ func renderHooksConfig(cfg GenerateConfig) ([]byte, error) {
 		Org:          cfg.OrgID,
 		HooksAPIKey:  cfg.HooksAPIKey,
 		BrowserLogin: cfg.BrowserLogin,
-		Nonblocking:  cfg.ObservabilityMode,
+		// Legacy observability-mode flag; new plugins never set it. Outage
+		// tolerance flows to the binary at run time via ingest effects
+		// (hooks_fail_open), not through baked configuration.
+		Nonblocking: false,
 	}, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("marshal speakeasy.json: %w", err)
@@ -87,16 +90,7 @@ func hooksDownloadHost(serverURL string) string {
 }
 
 func renderHooksBootstrap(cfg GenerateConfig) []byte {
-	return renderHooksBootstrapForRelease(hooksBinaryVersion, hooksServedTargets(cfg.ServerURL), hooksInstallFailOpen(cfg), hooksDownloadHost(cfg.ServerURL))
-}
-
-// hooksInstallFailOpen resolves the install-failure policy baked into the
-// bootstrap scripts. Observability mode always fails open: its contract is
-// that no hook can delay or block the agent, and a cold-install failure
-// happens before the hooks binary exists to apply nonblocking behavior, so
-// only the bootstrap exit code can honor that guarantee.
-func hooksInstallFailOpen(cfg GenerateConfig) bool {
-	return cfg.InstallFailOpen || cfg.ObservabilityMode
+	return renderHooksBootstrapForRelease(hooksBinaryVersion, hooksServedTargets(cfg.ServerURL), cfg.InstallFailOpen, hooksDownloadHost(cfg.ServerURL))
 }
 
 // renderHooksBootstrapForRelease renders the Unix bootstrap script. failOpen
@@ -404,7 +398,7 @@ try {
 
 & $Binary @ForwardArgs
 exit $LASTEXITCODE
-`, hooksBinaryVersion, conv.Ternary(hooksInstallFailOpen(cfg), 0, 1), hooksDownloadHost(cfg.ServerURL), cases.String())
+`, hooksBinaryVersion, conv.Ternary(cfg.InstallFailOpen, 0, 1), hooksDownloadHost(cfg.ServerURL), cases.String())
 }
 
 func hooksBootstrapCommand(root, provider string, timeoutSeconds int, async bool) string {

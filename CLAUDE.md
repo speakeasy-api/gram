@@ -15,13 +15,12 @@ If you've just cloned this repository, then consider running `./zero --agent` to
   - `mise.local.toml`: Local environment variable overrides for development. This file is ignored by git and should not be committed.
   - `.mise-tasks/**/*.{mts,sh}`: Useful tasks for working with the project
   - `go.mod`: Go module definition for the entire project
-  - `mprocs.yaml`: Process manager config for `madprocs` — runs all local services (mock-idp, server, worker, dashboard, elements) in a single terminal with a tabbed UI. Run `madprocs` to start the TUI, or use `madprocs status|logs|start|stop|restart <proc>` from the CLI. Use `/madprocs` slash command for agent-assisted process control.
+  - `mprocs.yaml`: Process manager config for `madprocs` — runs all local services (mock-idp, server, worker, dashboard) in a single terminal with a tabbed UI. Run `madprocs` to start the TUI, or use `madprocs status|logs|start|stop|restart <proc>` from the CLI. Use `/madprocs` slash command for agent-assisted process control.
   - `server/`: Main backend service codebase
   - `cli/`: Command-line interface for Gram that users use to interact with the Gram service
   - `functions/`: Serverless function runner powering the Gram Functions feature
   - `ts-framework/functions/`: TypeScript SDK for function authors (`Gram.tool()` API, manifest generation, MCP passthrough)
-  - `client/`: Frontend React application for Gram
-  - `elements/`: Frontend React application for Gram Elements, a chat interface that integrates with Gram MCP servers.
+  - `client/`: Frontend React application for Gram. Gram Elements — a chat interface that integrates with Gram MCP servers — lives inside it at `client/dashboard/src/elements/`.
 
 </structure>
 
@@ -111,7 +110,7 @@ Activate a skill when your task falls within its scope.
 | `golang`                          | Writing or editing Go code                                                      |
 | `postgresql`                      | Creating migrations, writing SQLc queries, or changing the database schema      |
 | `clickhouse`                      | Working with ClickHouse queries, schema, or migrations in the `server/` package |
-| `frontend`                        | Working on the React frontends in `client/` or `elements/`                      |
+| `frontend`                        | Working on the React frontend in `client/`                                      |
 | `vercel-react-best-practices`     | Optimizing React performance, reviewing components for best practices           |
 | `gram-functions`                  | Understanding or modifying the Gram Functions serverless execution feature      |
 | `gram-management-api`             | Designing or modifying management API endpoints (Goa design, impl)              |
@@ -137,3 +136,14 @@ Activate a skill when your task falls within its scope.
 - Make the plan extremely concise. Sacrifice grammar for the sake of concision.
 - Identify any of the skills above that are relevant to the task so you can activate when implementing.
 - At the end of each plan, give me a list of unresolved questions to answer, if any.
+
+## Cursor Cloud specific instructions
+
+Full environment setup is handled by `./zero --agent` (idempotent — re-run any time to reconcile): it installs tools/deps, generates keys/TLS + the dev-idp RSA key, starts the Docker infra, and runs the Postgres + ClickHouse migrations. Run it per session after starting the Docker daemon. It is deliberately NOT the startup update script — that stays minimal (`mise install` / `mise run install`), because starting infra and running migrations are too heavy and failure-prone for pod boot. Non-obvious caveats:
+
+- **Docker daemon must be running first.** There is no systemd auto-start, so run `sudo service docker start` before `./zero --agent`. Docker is configured with the `fuse-overlayfs` storage driver and `iptables-legacy`.
+- **`mise` provides all tooling** (`~/.local/bin/mise`). Resolution is automatic inside `mise run` / `mise exec` and mise tasks (including `.mts` Node scripts) — no PATH hacks needed. For bare tool calls, shims are on `PATH` via `mise activate` in `~/.bashrc` (interactive) and via `~/.bash_env` referenced by `BASH_ENV` (non-interactive _script_ shells). Bash does NOT source `BASH_ENV` for `bash -c`, so in that context prefer `mise exec` / `mise run` (or `export PATH="$HOME/.local/bin:$PATH"`).
+- **App services are not started by `./zero --agent`** (agent mode never execs the start task). Start them yourself (each long-running, e.g. in tmux): `mise run start:dev-idp` (auth, :35291), `mise run start:server --dev-single-process` (API :8080 + Temporal worker), `mise run start:dashboard` (Vite https://localhost:5173). `madprocs` runs the full set as a TUI.
+- **Login is credential-less** (`GRAM_IDP_MODE=mock-workos`): click "Login", no username/password.
+- **URLs / health.** Dashboard `https://localhost:5173`; server API `https://localhost:8080` (`/healthz`; control port `8081` has `/healthz` + `/livez`). Local mkcert TLS.
+- **Seed sample data:** `mise seed` (needs the server + dev-idp running).

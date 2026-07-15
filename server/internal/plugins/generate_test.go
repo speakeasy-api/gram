@@ -832,13 +832,12 @@ func TestGenerateMarketplaceManifestScopesNonDefaultProject(t *testing.T) {
 func TestGenerateObservabilityPluginsIncludeBootstrapLayout(t *testing.T) {
 	t.Parallel()
 	cfg := GenerateConfig{
-		OrgName:           "Acme",
-		OrgID:             "org_123",
-		ServerURL:         "https://app.getgram.ai",
-		HooksAPIKey:       "gram_local_secret_xyz",
-		ProjectSlug:       "acme-prod",
-		BrowserLogin:      true,
-		ObservabilityMode: true,
+		OrgName:      "Acme",
+		OrgID:        "org_123",
+		ServerURL:    "https://app.getgram.ai",
+		HooksAPIKey:  "gram_local_secret_xyz",
+		ProjectSlug:  "acme-prod",
+		BrowserLogin: true,
 	}
 	files, err := GeneratePluginPackages(nil, cfg)
 	require.NoError(t, err)
@@ -853,8 +852,7 @@ func TestGenerateObservabilityPluginsIncludeBootstrapLayout(t *testing.T) {
   "project": "acme-prod",
   "org": "org_123",
   "hooks_api_key": "gram_local_secret_xyz",
-  "browser_login": true,
-  "nonblocking": true
+  "browser_login": true
 }`, string(files[root+"/speakeasy.json"]), "%s/speakeasy.json", root)
 		require.NotEmpty(t, files[root+"/hooks/bootstrap.sh"], "%s/hooks/bootstrap.sh", root)
 		require.NotContains(t, string(files[root+"/hooks/bootstrap.sh"]), cfg.HooksAPIKey)
@@ -881,10 +879,9 @@ func TestClaudeObservabilityHookEventsRegistersToolFailureEvent(t *testing.T) {
 func TestGenerateClaudeObservabilityPluginHooksJSONIncludesAllRegisteredEvents(t *testing.T) {
 	t.Parallel()
 	cfg := GenerateConfig{
-		OrgName:           "Acme",
-		ServerURL:         "https://app.getgram.ai",
-		HooksAPIKey:       "gram_local_secret_xyz",
-		ObservabilityMode: true,
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
 	}
 	files, err := GeneratePluginPackages(nil, cfg)
 	require.NoError(t, err)
@@ -914,9 +911,10 @@ func TestGenerateClaudeObservabilityPluginHooksJSONIncludesAllRegisteredEvents(t
 			fmt.Sprintf(`bash "$CLAUDE_PLUGIN_ROOT/hooks/bootstrap.sh" --config="$CLAUDE_PLUGIN_ROOT/speakeasy.json" agenthooks run --provider=claude-code --timeout=%ds`, timeoutSeconds),
 			matchers[0].Hooks[0].Command,
 		)
+		blocking := event == "UserPromptSubmit" || event == "PreToolUse" || event == "Stop" || event == "SessionStart"
 		require.NotNil(t, matchers[0].Hooks[0].Async)
-		require.True(t, *matchers[0].Hooks[0].Async,
-			"observability mode forces every event async so no hook can delay the session")
+		require.Equal(t, !blocking, *matchers[0].Hooks[0].Async,
+			"decision-capable and dispatch-fragile events block; the rest are fire-and-forget")
 	}
 }
 
@@ -962,32 +960,6 @@ func TestGenerateCursorObservabilityPluginRegistersBootstrapCommands(t *testing.
 			require.True(t, *parsed.Hooks[event][0].FailClosed, "blocking event %q must fail closed", event)
 		} else {
 			require.Nil(t, parsed.Hooks[event][0].FailClosed, "observational event %q must not fail closed", event)
-		}
-	}
-}
-
-// TestGenerateCursorObservabilityModeNeverFailsClosed verifies that
-// ObservabilityMode — documented as fully non-blocking — disables failClosed
-// on every cursor hook entry, preflight included.
-func TestGenerateCursorObservabilityModeNeverFailsClosed(t *testing.T) {
-	t.Parallel()
-	cfg := GenerateConfig{
-		OrgName:           "Acme",
-		ServerURL:         "https://app.getgram.ai",
-		HooksAPIKey:       "gram_local_secret_xyz",
-		ProjectSlug:       "acme-prod",
-		ObservabilityMode: true,
-	}
-	files, err := GeneratePluginPackages(nil, cfg)
-	require.NoError(t, err)
-
-	slug := "cursor-plugins/" + CursorObservabilitySlug(cfg)
-	var parsed cursorHooksConfig
-	require.NoError(t, json.Unmarshal(files[slug+"/hooks/hooks.json"], &parsed))
-
-	for event, commands := range parsed.Hooks {
-		for i, command := range commands {
-			require.Nil(t, command.FailClosed, "observability mode must not fail closed: event %q entry %d", event, i)
 		}
 	}
 }
@@ -1038,7 +1010,7 @@ func TestComputeCodexHookApprovalsIncludesSingleSessionStartCommand(t *testing.T
 	marketplace := conv.ToSlug(cfg.OrgName) + "-speakeasy"
 	plugin := CodexObservabilitySlug(cfg)
 
-	approvals, err := computeCodexHookApprovals(marketplace, plugin, false)
+	approvals, err := computeCodexHookApprovals(marketplace, plugin)
 	require.NoError(t, err)
 
 	sessionStartPrefix := plugin + "@" + marketplace + ":hooks/hooks.json:session_start:0:"
@@ -1247,14 +1219,13 @@ func TestHooksBootstrapInstallFailOpenExitsZeroWithoutExecuting(t *testing.T) {
 	require.NoFileExists(t, marker)
 }
 
-func TestHooksBootstrapObservabilityModeAlwaysFailsOpen(t *testing.T) {
+func TestHooksBootstrapBakesInstallFailurePolicy(t *testing.T) {
 	t.Parallel()
-	// Observability mode guarantees no hook can block the agent; a cold-install
-	// failure happens before the binary exists to enforce that, so the
-	// bootstrap exit policy must fail open regardless of the org's
-	// install-failure setting.
-	require.Contains(t, string(renderHooksBootstrap(GenerateConfig{ObservabilityMode: true})), "install_failure_exit=0")
-	require.Contains(t, string(renderHooksPowerShellBootstrap(GenerateConfig{ObservabilityMode: true})), "$InstallFailureExit = 0")
+	// The baked exit code is the publish-time snapshot of hooks_fail_open: a
+	// cold install has no binary (and no cached org settings) to consult, so
+	// only the bootstrap exit code can honor the org's outage tolerance.
+	require.Contains(t, string(renderHooksBootstrap(GenerateConfig{InstallFailOpen: true})), "install_failure_exit=0")
+	require.Contains(t, string(renderHooksPowerShellBootstrap(GenerateConfig{InstallFailOpen: true})), "$InstallFailureExit = 0")
 	require.Contains(t, string(renderHooksBootstrap(GenerateConfig{})), "install_failure_exit=1")
 	require.Contains(t, string(renderHooksPowerShellBootstrap(GenerateConfig{})), "$InstallFailureExit = 1")
 }
@@ -1468,7 +1439,7 @@ func TestGenerateCodexInstallScriptRefreshesStaleTrustedHashes(t *testing.T) {
 	marketplace := conv.ToSlug(cfg.OrgName) + "-speakeasy"
 	plugin := CodexObservabilitySlug(cfg)
 
-	approvals, err := computeCodexHookApprovals(marketplace, plugin, false)
+	approvals, err := computeCodexHookApprovals(marketplace, plugin)
 	require.NoError(t, err)
 	require.NotEmpty(t, approvals)
 	target := approvals[0]
@@ -1563,7 +1534,7 @@ func TestGenerateCodexInstallScriptIsIdempotent(t *testing.T) {
 	marketplace := conv.ToSlug(cfg.OrgName) + "-speakeasy"
 	plugin := CodexObservabilitySlug(cfg)
 
-	approvals, err := computeCodexHookApprovals(marketplace, plugin, false)
+	approvals, err := computeCodexHookApprovals(marketplace, plugin)
 	require.NoError(t, err)
 	require.NotEmpty(t, approvals)
 
