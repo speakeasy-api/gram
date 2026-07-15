@@ -359,8 +359,8 @@ export function EventMatchDialog({
           className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs"
           onClick={(e) => e.stopPropagation()}
         >
-          <Eye className="h-3 w-3" />
-          <span>View event</span>
+          <EyeOff className="h-3 w-3" />
+          <span>Click to reveal</span>
         </button>
       </Dialog.Trigger>
       <Dialog.Content className="sm:max-w-2xl">
