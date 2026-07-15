@@ -1,3 +1,9 @@
+-- name: LockOrganizationMetadata :one
+SELECT id
+FROM organization_metadata
+WHERE id = @organization_id
+FOR UPDATE;
+
 -- name: IsFeatureEnabled :one
 SELECT EXISTS (
         SELECT 1

@@ -35,6 +35,7 @@ type Server struct {
 	ListShadowMCPAccessRules             http.Handler
 	ListShadowMCPInventory               http.Handler
 	GetShadowMCPInventoryServer          http.Handler
+	UpdateShadowMCPInventoryServerName   http.Handler
 	ListShadowMCPInventoryUsers          http.Handler
 	UpsertShadowMCPInventoryPolicyBypass http.Handler
 	DeleteShadowMCPInventoryPolicyBypass http.Handler
@@ -93,6 +94,7 @@ func New(
 			{"ListShadowMCPAccessRules", "GET", "/rpc/access.listShadowMcpRules"},
 			{"ListShadowMCPInventory", "GET", "/rpc/access.listShadowMCPInventory"},
 			{"GetShadowMCPInventoryServer", "GET", "/rpc/access.getShadowMCPInventoryServer"},
+			{"UpdateShadowMCPInventoryServerName", "POST", "/rpc/access.updateShadowMCPInventoryServerName"},
 			{"ListShadowMCPInventoryUsers", "GET", "/rpc/access.listShadowMCPInventoryUsers"},
 			{"UpsertShadowMCPInventoryPolicyBypass", "POST", "/rpc/access.upsertShadowMCPInventoryPolicyBypass"},
 			{"DeleteShadowMCPInventoryPolicyBypass", "DELETE", "/rpc/access.deleteShadowMCPInventoryPolicyBypass"},
@@ -123,6 +125,7 @@ func New(
 		ListShadowMCPAccessRules:             NewListShadowMCPAccessRulesHandler(e.ListShadowMCPAccessRules, mux, decoder, encoder, errhandler, formatter),
 		ListShadowMCPInventory:               NewListShadowMCPInventoryHandler(e.ListShadowMCPInventory, mux, decoder, encoder, errhandler, formatter),
 		GetShadowMCPInventoryServer:          NewGetShadowMCPInventoryServerHandler(e.GetShadowMCPInventoryServer, mux, decoder, encoder, errhandler, formatter),
+		UpdateShadowMCPInventoryServerName:   NewUpdateShadowMCPInventoryServerNameHandler(e.UpdateShadowMCPInventoryServerName, mux, decoder, encoder, errhandler, formatter),
 		ListShadowMCPInventoryUsers:          NewListShadowMCPInventoryUsersHandler(e.ListShadowMCPInventoryUsers, mux, decoder, encoder, errhandler, formatter),
 		UpsertShadowMCPInventoryPolicyBypass: NewUpsertShadowMCPInventoryPolicyBypassHandler(e.UpsertShadowMCPInventoryPolicyBypass, mux, decoder, encoder, errhandler, formatter),
 		DeleteShadowMCPInventoryPolicyBypass: NewDeleteShadowMCPInventoryPolicyBypassHandler(e.DeleteShadowMCPInventoryPolicyBypass, mux, decoder, encoder, errhandler, formatter),
@@ -160,6 +163,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListShadowMCPAccessRules = m(s.ListShadowMCPAccessRules)
 	s.ListShadowMCPInventory = m(s.ListShadowMCPInventory)
 	s.GetShadowMCPInventoryServer = m(s.GetShadowMCPInventoryServer)
+	s.UpdateShadowMCPInventoryServerName = m(s.UpdateShadowMCPInventoryServerName)
 	s.ListShadowMCPInventoryUsers = m(s.ListShadowMCPInventoryUsers)
 	s.UpsertShadowMCPInventoryPolicyBypass = m(s.UpsertShadowMCPInventoryPolicyBypass)
 	s.DeleteShadowMCPInventoryPolicyBypass = m(s.DeleteShadowMCPInventoryPolicyBypass)
@@ -196,6 +200,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListShadowMCPAccessRulesHandler(mux, h.ListShadowMCPAccessRules)
 	MountListShadowMCPInventoryHandler(mux, h.ListShadowMCPInventory)
 	MountGetShadowMCPInventoryServerHandler(mux, h.GetShadowMCPInventoryServer)
+	MountUpdateShadowMCPInventoryServerNameHandler(mux, h.UpdateShadowMCPInventoryServerName)
 	MountListShadowMCPInventoryUsersHandler(mux, h.ListShadowMCPInventoryUsers)
 	MountUpsertShadowMCPInventoryPolicyBypassHandler(mux, h.UpsertShadowMCPInventoryPolicyBypass)
 	MountDeleteShadowMCPInventoryPolicyBypassHandler(mux, h.DeleteShadowMCPInventoryPolicyBypass)
@@ -1047,6 +1052,60 @@ func NewGetShadowMCPInventoryServerHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getShadowMCPInventoryServer")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountUpdateShadowMCPInventoryServerNameHandler configures the mux to serve
+// the "access" service "updateShadowMCPInventoryServerName" endpoint.
+func MountUpdateShadowMCPInventoryServerNameHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/access.updateShadowMCPInventoryServerName", f)
+}
+
+// NewUpdateShadowMCPInventoryServerNameHandler creates a HTTP handler which
+// loads the HTTP request and calls the "access" service
+// "updateShadowMCPInventoryServerName" endpoint.
+func NewUpdateShadowMCPInventoryServerNameHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeUpdateShadowMCPInventoryServerNameRequest(mux, decoder)
+		encodeResponse = EncodeUpdateShadowMCPInventoryServerNameResponse(encoder)
+		encodeError    = EncodeUpdateShadowMCPInventoryServerNameError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "updateShadowMCPInventoryServerName")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
 		payload, err := decodeRequest(r)
 		if err != nil {

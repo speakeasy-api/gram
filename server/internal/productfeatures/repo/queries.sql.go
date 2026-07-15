@@ -85,3 +85,17 @@ func (q *Queries) IsFeatureEnabled(ctx context.Context, arg IsFeatureEnabledPara
 	err := row.Scan(&enabled)
 	return enabled, err
 }
+
+const lockOrganizationMetadata = `-- name: LockOrganizationMetadata :one
+SELECT id
+FROM organization_metadata
+WHERE id = $1
+FOR UPDATE
+`
+
+func (q *Queries) LockOrganizationMetadata(ctx context.Context, organizationID string) (string, error) {
+	row := q.db.QueryRow(ctx, lockOrganizationMetadata, organizationID)
+	var id string
+	err := row.Scan(&id)
+	return id, err
+}

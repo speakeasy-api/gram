@@ -75,6 +75,8 @@ type GetProductFeaturesResult struct {
 	HooksFailOpenEnabled bool
 	// Whether the organization can supply its own model provider API keys (BYOK)
 	CustomModelKeysEnabled bool
+	// Whether the Skills page is enabled for the organization
+	SkillsEnabled bool
 }
 
 // SetProductFeaturePayload is the payload type of the features service

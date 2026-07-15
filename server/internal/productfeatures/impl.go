@@ -100,7 +100,13 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 	// commit, immune to read-then-write races.
 	q := repo.New(dbtx)
 	changed := false
-	if payload.Enabled {
+	if payload.Enabled && payload.FeatureName == string(FeatureSkills) {
+		// Skills enablement also provisions the built-in RBAC grants, so it
+		// goes through its dedicated transactional path.
+		if err := EnableSkillsTx(ctx, dbtx, orgID); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "enable Skills feature").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
+		}
+	} else if payload.Enabled {
 		inserted, err := q.EnableFeature(ctx, repo.EnableFeatureParams{
 			OrganizationID: orgID,
 			FeatureName:    payload.FeatureName,
@@ -230,6 +236,7 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 		HooksBrowserLoginEnabled:     isEnabled(FeatureHooksBrowserLogin),
 		HooksFailOpenEnabled:         isEnabled(FeatureHooksFailOpen),
 		CustomModelKeysEnabled:       isEnabled(FeatureCustomModelKeys),
+		SkillsEnabled:                isEnabled(FeatureSkills),
 	}, nil
 }
 
