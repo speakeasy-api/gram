@@ -32,7 +32,7 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.PromptInjectionAnalysis,
 		return fmt.Errorf("scan prompt injection: %w", err)
 	}
 
-	published, ruleIDs := scanners.PublishFindings(ctx, h.logger, h.findingsPub, scanners.FindingMetadata{
+	published, ruleIDs, err := scanners.PublishFindings(ctx, h.logger, h.findingsPub, scanners.FindingMetadata{
 		RequestID:         m.GetRequestId(),
 		ChatMessageID:     m.GetChatMessageId(),
 		ProjectID:         m.GetProjectId(),
@@ -40,6 +40,9 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.PromptInjectionAnalysis,
 		RiskPolicyID:      m.GetRiskPolicyId(),
 		RiskPolicyVersion: m.GetRiskPolicyVersion(),
 	}, findings, "prompt injection")
+	if err != nil {
+		return fmt.Errorf("publish prompt injection findings: %w", err)
+	}
 
 	h.logger.InfoContext(ctx, "prompt injection scan complete", attr.SlogValueAny(map[string]any{
 		"request_id":      m.GetRequestId(),

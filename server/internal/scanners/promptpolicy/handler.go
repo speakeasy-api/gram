@@ -2,6 +2,7 @@ package promptpolicy
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
@@ -29,7 +30,7 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.PromptPolicyAnalysis, _ 
 	cfg := ParseConfig(m.GetModelConfig())
 	findings := h.scanner.Scan(ctx, m.GetOrganizationId(), m.GetProjectId(), m.GetUserId(), m.GetPrompt(), cfg, promptPolicyJudgeMessage(m))
 
-	published, ruleIDs := scanners.PublishFindings(ctx, h.logger, h.findingsPub, scanners.FindingMetadata{
+	published, ruleIDs, err := scanners.PublishFindings(ctx, h.logger, h.findingsPub, scanners.FindingMetadata{
 		RequestID:         m.GetRequestId(),
 		ChatMessageID:     m.GetChatMessageId(),
 		ProjectID:         m.GetProjectId(),
@@ -37,6 +38,9 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.PromptPolicyAnalysis, _ 
 		RiskPolicyID:      m.GetRiskPolicyId(),
 		RiskPolicyVersion: m.GetRiskPolicyVersion(),
 	}, findings, "prompt policy")
+	if err != nil {
+		return fmt.Errorf("publish prompt policy findings: %w", err)
+	}
 
 	h.logger.InfoContext(ctx, "prompt policy scan complete", attr.SlogValueAny(map[string]any{
 		"request_id":      m.GetRequestId(),

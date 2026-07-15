@@ -2,7 +2,11 @@ package scanners
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,18 +26,13 @@ type FindingMetadata struct {
 	RiskPolicyVersion int64
 }
 
-func PublishFindings(ctx context.Context, logger *slog.Logger, pub gcp.Publisher[*riskv1.Finding], meta FindingMetadata, findings []Finding, logPrefix string) (int, []string) {
+func PublishFindings(ctx context.Context, logger *slog.Logger, pub gcp.Publisher[*riskv1.Finding], meta FindingMetadata, findings []Finding, logPrefix string) (int, []string, error) {
 	createdAt := time.Now().UTC().Format(time.RFC3339)
 	results := make([]gcp.PublishResult, 0, len(findings))
 	ruleIDs := make([]string, 0, len(findings))
 
 	for _, finding := range findings {
-		id, err := uuid.NewV7()
-		if err != nil {
-			logger.WarnContext(ctx, "failed to generate finding id", attr.SlogError(err))
-			continue
-		}
-
+		id := deterministicFindingID(meta, finding)
 		startPos := conv.SafeInt32(finding.StartPos)
 		endPos := conv.SafeInt32(finding.EndPos)
 		msg := riskv1.Finding_builder{
@@ -60,13 +59,35 @@ func PublishFindings(ctx context.Context, logger *slog.Logger, pub gcp.Publisher
 	}
 
 	published := 0
+	var publishErr error
 	for _, res := range results {
 		if _, err := res.Get(ctx); err != nil {
 			logger.WarnContext(ctx, "failed to publish "+logPrefix+" finding", attr.SlogError(err))
+			publishErr = errors.Join(publishErr, err)
 			continue
 		}
 		published++
 	}
+	if publishErr != nil {
+		return published, ruleIDs, fmt.Errorf("publish %s findings: %w", logPrefix, publishErr)
+	}
 
-	return published, ruleIDs
+	return published, ruleIDs, nil
+}
+
+func deterministicFindingID(meta FindingMetadata, finding Finding) uuid.UUID {
+	parts := []string{
+		meta.RequestID,
+		meta.ChatMessageID,
+		meta.ProjectID,
+		meta.OrganizationID,
+		meta.RiskPolicyID,
+		strconv.FormatInt(meta.RiskPolicyVersion, 10),
+		finding.Source,
+		finding.RuleID,
+		strconv.Itoa(finding.StartPos),
+		strconv.Itoa(finding.EndPos),
+		finding.Match,
+	}
+	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("gram:risk:finding:"+strings.Join(parts, "\x00")))
 }
