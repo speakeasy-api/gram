@@ -48094,6 +48094,10 @@ components:
                         - environment:blocked_read
                         - environment:write
                         - environment:blocked_write
+                        - skill:read
+                        - skill:blocked_read
+                        - skill:write
+                        - skill:blocked_write
                         - risk_policy:evaluate
                         - risk_policy:bypass
                         - chat:read
@@ -48125,6 +48129,10 @@ components:
                             - environment:blocked_read
                             - environment:write
                             - environment:blocked_write
+                            - skill:read
+                            - skill:blocked_read
+                            - skill:write
+                            - skill:blocked_write
                             - risk_policy:evaluate
                             - risk_policy:bypass
                             - chat:read
@@ -52781,6 +52789,10 @@ components:
                         - environment:blocked_read
                         - environment:write
                         - environment:blocked_write
+                        - skill:read
+                        - skill:blocked_read
+                        - skill:write
+                        - skill:blocked_write
                         - risk_policy:evaluate
                         - risk_policy:bypass
                         - chat:read
@@ -52902,6 +52914,8 @@ components:
                         - mcp:blocked_connect
                         - environment:blocked_read
                         - environment:blocked_write
+                        - skill:blocked_read
+                        - skill:blocked_write
                         - risk_policy:bypass
                 resource_type:
                     type: string
@@ -52911,6 +52925,7 @@ components:
                         - project
                         - mcp
                         - environment
+                        - skill
                         - risk_policy
                         - chat
                 slug:
@@ -52935,6 +52950,10 @@ components:
                         - environment:blocked_read
                         - environment:write
                         - environment:blocked_write
+                        - skill:read
+                        - skill:blocked_read
+                        - skill:write
+                        - skill:blocked_write
                         - risk_policy:evaluate
                         - risk_policy:bypass
                         - chat:read
@@ -53371,6 +53390,7 @@ components:
                         - mcp
                         - org
                         - environment
+                        - skill
                         - risk_policy
                         - chat
                         - '*'

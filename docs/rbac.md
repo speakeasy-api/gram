@@ -78,6 +78,8 @@ const (
 	ScopeMCPConnect         Scope = "mcp:connect"
 	ScopeEnvironmentRead    Scope = "environment:read"
 	ScopeEnvironmentWrite   Scope = "environment:write"
+	ScopeSkillRead          Scope = "skill:read"
+	ScopeSkillWrite         Scope = "skill:write"
 	ScopeRiskPolicyEvaluate Scope = "risk_policy:evaluate"
 	ScopeRiskPolicyBypass   Scope = "risk_policy:bypass"
 	ScopeChatRead           Scope = "chat:read"
@@ -106,13 +108,15 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeMCPConnect:         {ScopeMCPRead, ScopeMCPWrite},
 	ScopeEnvironmentRead:    {ScopeEnvironmentWrite},
 	ScopeEnvironmentWrite:   nil,
+	ScopeSkillRead:          {ScopeSkillWrite},
+	ScopeSkillWrite:         nil,
 	ScopeRiskPolicyEvaluate: nil,
 	ScopeRiskPolicyBypass:   nil,
 	ScopeChatRead:           nil,
 }
 ```
 
-Read this map as "if a handler requires the key scope, any scope in the value list also satisfies the check." A `project:write` grant satisfies a `project:read` check. An `mcp:write` grant satisfies `mcp:read`, and both `mcp:read` and `mcp:write` satisfy `mcp:connect`. `environment:write` satisfies `environment:read`. `org:admin` satisfies `org:read`, and `root` satisfies every check.
+Read this map as "if a handler requires the key scope, any scope in the value list also satisfies the check." A `project:write` grant satisfies a `project:read` check. An `mcp:write` grant satisfies `mcp:read`, and both `mcp:read` and `mcp:write` satisfy `mcp:connect`. `environment:write` satisfies `environment:read`, and `skill:write` satisfies `skill:read`. `org:admin` satisfies `org:read`, and `root` satisfies every check.
 
 Expansion happens when the engine evaluates a check. If code asks for `project:read`, the engine checks for `root`, `project:read`, and `project:write` against the same resource selector. The API also exposes the inverse relationship as `sub_scopes` so role UIs can show what a broader grant implies; those sub-scopes are derived from code and are not additional database rows.
 
@@ -164,6 +168,7 @@ A selector narrows a grant to the resource it applies to. Every persisted select
 - `project:*` -> `project`
 - `mcp:*` -> `mcp`
 - `mcp:*` -> `external_mcp` (differentiator between MCPs hosted by us and external ones)
+- `skill:*` -> `skill` (the `resource_id` is the project UUID)
 - `root` -> `*`
 
 `resource_id` is the concrete resource ID, or `*` for unrestricted access within the scope.
@@ -477,6 +482,8 @@ mcp:write
 mcp:connect
 environment:read
 environment:write
+skill:read
+skill:write
 ```
 
 `member` receives read and connect access by default:
@@ -486,15 +493,16 @@ org:read
 project:read
 mcp:read
 mcp:connect
+skill:read
 ```
 
-`member` intentionally does not receive `environment:read` (environment values include secrets, so viewing them must be granted explicitly through a custom role; admins keep `environment:read`/`environment:write`). The Observe dashboard surface is not member-visible either: it is gated on `org:admin` at the page level, so only org admins can open Observe pages.
+`member` intentionally does not receive `environment:read` (environment values include secrets, so viewing them must be granted explicitly through a custom role; admins keep `environment:read`/`environment:write`). Skills use an independent project-selectable scope family: members receive `skill:read`, while admins receive both `skill:read` and `skill:write`; `project:*` does not imply either skill scope. The Observe dashboard surface is not member-visible either: it is gated on `org:admin` at the page level, so only org admins can open Observe pages.
 
 System roles are seeded when RBAC is enabled for an organization. They are not meant to be edited like custom roles. Changing the default grants of a system role is a product behavior change and should be treated carefully, especially for existing organizations.
 
 ## Dashboard Grant Reference
 
-Use this table when answering "what grant is required to use this dashboard feature?" It records the dashboard's page and action gates, but server-side checks remain authoritative. When a row lists multiple scopes separated by `OR`, any one of those grants can open the surface. Scope expansion still applies: `org:admin` implies `org:read`, `project:write` implies `project:read`, `mcp:write` implies `mcp:read` and `mcp:connect`, and `environment:write` implies `environment:read`.
+Use this table when answering "what grant is required to use this dashboard feature?" It records the dashboard's page and action gates, but server-side checks remain authoritative. When a row lists multiple scopes separated by `OR`, any one of those grants can open the surface. Scope expansion still applies: `org:admin` implies `org:read`, `project:write` implies `project:read`, `mcp:write` implies `mcp:read` and `mcp:connect`, `environment:write` implies `environment:read`, and `skill:write` implies `skill:read`.
 
 Selectors matter. A project-scoped feature needs the grant selector to match the active project. An MCP feature needs the selector to match the target MCP server or toolset. An unrestricted selector for the scope family covers every resource in that family.
 
@@ -518,7 +526,7 @@ Selectors matter. A project-scoped feature needs the grant selector to match the
 | Create a custom remote MCP server                                                                     | `mcp:write`                                 | MCP selector, usually unrestricted or target server ID after creation | The create route is page-gated on `mcp:write`.                                                                                                                                                                                                                                                                                                                                                              |
 | Open Deployments                                                                                      | `project:read` OR `project:write`           | Project ID                                                            | Deployment-triggering and failed-source retry actions require `project:write`.                                                                                                                                                                                                                                                                                                                              |
 | Open Assistants                                                                                       | `project:read`                              | Project ID                                                            | Creating or editing assistants is gated by `project:write` OR `mcp:write`; admin-only assistant management sections are `org:admin`.                                                                                                                                                                                                                                                                        |
-| Open Skills / CLIs                                                                                    | `project:read`                              | Project ID                                                            | This is a read-only project surface.                                                                                                                                                                                                                                                                                                                                                                        |
+| Open Skills / CLIs                                                                                    | `project:read`                              | Project ID                                                            | The existing page gate remains project-based until the skills API activates its handlers. Skills registry reads and mutations will require project-selected `skill:read` and `skill:write`, respectively; handler wiring is intentionally outside this scope-only change.                                                                                                                                   |
 | Open Plugins                                                                                          | `project:read` OR `project:write`           | Project ID                                                            | Plugin install, update, delete, or configuration actions require `project:write`.                                                                                                                                                                                                                                                                                                                           |
 | Open Environments list                                                                                | `project:read` OR `project:write`           | Project ID                                                            | Creating an environment requires `environment:write` (project-scoped); environment card clone actions are `environment:write`.                                                                                                                                                                                                                                                                              |
 | Open an Environment detail page                                                                       | `project:read`                              | Project ID                                                            | Adding, editing, or deleting variables requires `environment:write` (the environment scope family is independent from `project:*` because env values include secrets). The "Fill for MCP Server" action remains `project:write` because it links the environment to a toolset. Environment-specific clone checks use `environment:read` for the source and `environment:write` for the destination.         |
