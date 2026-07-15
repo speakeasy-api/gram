@@ -40,7 +40,9 @@ export function visiblePermissionCount(
 ): number {
   return grants.filter(
     (grant) =>
-      grant.scope !== undefined && !grant.scope.startsWith("risk_policy:"),
+      grant.scope !== undefined &&
+      !grant.scope.startsWith("risk_policy:") &&
+      !grant.scope.includes(":blocked_"),
   ).length;
 }
 

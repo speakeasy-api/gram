@@ -24,7 +24,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueries } from "@tanstack/react-query";
 import type { Selector } from "@gram/client/models/components/selector.js";
 import type { ActivePanel, AnnotationHint, ResourceType } from "./types";
-import { ANNOTATION_TO_DISPOSITION } from "./types";
+import {
+  ANNOTATION_TO_DISPOSITION,
+  isProjectSelectableResourceType,
+} from "./types";
 import { computePanelState, type CollectionGroup } from "./computePanelState";
 import {
   Tooltip,
@@ -154,8 +157,7 @@ export function GrantRuleDrawerContent({
   }, []);
 
   const isMcpConnect = scope === "mcp:connect";
-  const projectSelectable =
-    resourceType === "project" || resourceType === "skill";
+  const projectSelectable = isProjectSelectableResourceType(resourceType);
   const collectionGroups = useCollectionGroups(mcpServers, isMcpConnect);
 
   const panelState = computePanelState(

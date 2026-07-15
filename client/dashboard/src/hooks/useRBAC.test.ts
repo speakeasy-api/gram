@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { resourceKindForScope, selectorMatches } from "./useRBAC";
+import {
+  exclusionScopesForScope,
+  hasScopeInGrants,
+  resourceKindForScope,
+  selectorMatches,
+  selectorMatchesStrict,
+} from "./useRBAC";
 
 describe("resourceKindForScope", () => {
   it("returns 'project' for project scopes", () => {
@@ -162,5 +168,109 @@ describe("selectorMatches", () => {
         disposition: "destructive",
       }),
     ).toBe(false);
+  });
+});
+
+describe("selectorMatchesStrict", () => {
+  it("requires every exclusion dimension in the check", () => {
+    const exclusion = {
+      resourceKind: "mcp",
+      resourceId: "server_a",
+      tool: "removeUser",
+    };
+    expect(
+      selectorMatchesStrict(exclusion, {
+        resourceKind: "mcp",
+        resourceId: "server_a",
+      }),
+    ).toBe(false);
+    expect(
+      selectorMatchesStrict(exclusion, {
+        resourceKind: "mcp",
+        resourceId: "server_a",
+        tool: "removeUser",
+      }),
+    ).toBe(true);
+  });
+});
+
+describe("exclusionScopesForScope", () => {
+  it("matches project and MCP exclusion expansions", () => {
+    expect(exclusionScopesForScope("project:read")).toEqual([
+      "project:blocked_read",
+    ]);
+    expect(exclusionScopesForScope("project:write")).toEqual([
+      "project:blocked_write",
+      "project:blocked_read",
+    ]);
+    expect(exclusionScopesForScope("mcp:read")).toEqual([
+      "mcp:blocked_read",
+      "mcp:blocked_connect",
+    ]);
+    expect(exclusionScopesForScope("mcp:write")).toEqual([
+      "mcp:blocked_write",
+      "mcp:blocked_read",
+      "mcp:blocked_connect",
+    ]);
+    expect(exclusionScopesForScope("mcp:connect")).toEqual([
+      "mcp:blocked_connect",
+    ]);
+  });
+});
+
+describe("hasScopeInGrants", () => {
+  const skillWildcard = {
+    scope: "skill:write",
+    selectors: [{ resourceKind: "skill", resourceId: "*" }],
+    subScopes: ["skill:read"],
+  };
+
+  it("subtracts a project-specific skill write exclusion", () => {
+    const grants = [
+      skillWildcard,
+      {
+        scope: "skill:blocked_write",
+        selectors: [{ resourceKind: "skill", resourceId: "project_a" }],
+      },
+    ];
+
+    expect(hasScopeInGrants(grants, "skill:write", "project_a")).toBe(false);
+    expect(hasScopeInGrants(grants, "skill:write", "project_b")).toBe(true);
+    expect(hasScopeInGrants(grants, "skill:read", "project_a")).toBe(true);
+  });
+
+  it("applies skill read exclusions to read and write", () => {
+    const grants = [
+      skillWildcard,
+      {
+        scope: "skill:blocked_read",
+        selectors: [{ resourceKind: "skill", resourceId: "project_a" }],
+      },
+    ];
+
+    expect(hasScopeInGrants(grants, "skill:read", "project_a")).toBe(false);
+    expect(hasScopeInGrants(grants, "skill:write", "project_a")).toBe(false);
+    expect(hasScopeInGrants(grants, "skill:read", "project_b")).toBe(true);
+  });
+
+  it("does not broaden a dimension-specific exclusion", () => {
+    const grants = [
+      {
+        scope: "mcp:connect",
+        selectors: [{ resourceKind: "mcp", resourceId: "server_a" }],
+      },
+      {
+        scope: "mcp:blocked_connect",
+        selectors: [
+          {
+            resourceKind: "mcp",
+            resourceId: "server_a",
+            tool: "removeUser",
+          },
+        ],
+      },
+    ];
+
+    expect(hasScopeInGrants(grants, "mcp:connect", "server_a")).toBe(true);
   });
 });

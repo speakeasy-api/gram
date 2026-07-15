@@ -53,6 +53,7 @@ import { GrantRuleDrawerContent } from "./GrantRuleDrawerContent";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import type { Selector } from "@gram/client/models/components/selector.js";
 import type { ActivePanel, RoleGrant, ScopeRule } from "./types";
+import { isProjectSelectableResourceType } from "./types";
 import {
   isSaveDisabled,
   effectiveGrantCount,
@@ -557,8 +558,9 @@ export function CreateRoleDialog({
   const allowLevel = getAllowLevel(editingGrantRules);
   const denyAllowedPanels = getDenyPanels(
     allowLevel,
-    editingScopeDef?.resourceType === "project" ||
-      editingScopeDef?.resourceType === "skill",
+    editingScopeDef
+      ? isProjectSelectableResourceType(editingScopeDef.resourceType)
+      : false,
   );
   const stepOffset =
     dialogStep === "form" ? "translate-x-0" : "-translate-x-full";
@@ -833,9 +835,9 @@ export function CreateRoleDialog({
                                         ) &&
                                           getDenyPanels(
                                             getAllowLevel(grant.rules),
-                                            scopeDef.resourceType ===
-                                              "project" ||
-                                              scopeDef.resourceType === "skill",
+                                            isProjectSelectableResourceType(
+                                              scopeDef.resourceType,
+                                            ),
                                           ).length > 0 && (
                                             <LocalButton
                                               type="button"

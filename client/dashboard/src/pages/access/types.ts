@@ -28,6 +28,12 @@ export type ResourceType =
   | "risk_policy"
   | "chat";
 
+export function isProjectSelectableResourceType(
+  resourceType: ResourceType,
+): boolean {
+  return resourceType === "project" || resourceType === "skill";
+}
+
 /** The 4 MCP tool annotation hint keys. */
 export type AnnotationHint =
   | "readOnlyHint"
