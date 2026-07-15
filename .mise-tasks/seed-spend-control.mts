@@ -296,12 +296,6 @@ function usageRows(
 
 async function main(): Promise<void> {
   intro("Seeding spend-control test data...");
-  let success = false;
-  using _ = {
-    [Symbol.dispose]() {
-      outro(success ? "Done." : "Seeding failed.");
-    },
-  };
 
   const serverURL = process.env.GRAM_SERVER_URL;
   if (!serverURL) {
@@ -499,7 +493,10 @@ async function main(): Promise<void> {
       `  email == "${selfMembers[0]?.email ?? "you@example.com"}"        (block yourself to test the Claude hook gate)`,
     ].join("\n"),
   );
-  success = true;
+  outro("Done.");
 }
 
-await main();
+await main().catch((error: unknown) => {
+  outro("Seeding failed.");
+  throw error;
+});
