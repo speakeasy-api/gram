@@ -343,6 +343,12 @@ trackedFiles:
   src/funcs/riskResultsListForAgent.ts: {}
   src/funcs/riskResultsUnmask.ts: {}
   src/funcs/riskRulesTest.ts: {}
+  src/funcs/skillsAddVersion.ts: {}
+  src/funcs/skillsArchive.ts: {}
+  src/funcs/skillsCreate.ts: {}
+  src/funcs/skillsGet.ts: {}
+  src/funcs/skillsList.ts: {}
+  src/funcs/skillsListVersions.ts: {}
   src/funcs/telemetryCaptureEvent.ts: {}
   src/funcs/telemetryGetEmployeeDataFlowGraph.ts: {}
   src/funcs/telemetryGetHooksSummary.ts: {}
@@ -456,12 +462,14 @@ trackedFiles:
   src/models/components/addopenapiv3deploymentassetform.ts: {}
   src/models/components/addpackageform.ts: {}
   src/models/components/addpluginserverform.ts: {}
+  src/models/components/addskillversionrequestbody.ts: {}
   src/models/components/agentmarketplace.ts: {}
   src/models/components/agentplugin.ts: {}
   src/models/components/agentusage.ts: {}
   src/models/components/aiintegrationconfig.ts: {}
   src/models/components/allowedorigin.ts: {}
   src/models/components/approveshadowmcpapprovalrequestform.ts: {}
+  src/models/components/archiveskillrequestbody.ts: {}
   src/models/components/asset.ts: {}
   src/models/components/assistant.ts: {}
   src/models/components/assistantmcpserverref.ts: {}
@@ -535,6 +543,7 @@ trackedFiles:
   src/models/components/createshadowmcpapprovalrequestform.ts: {}
   src/models/components/createsignedchatattachmenturlform2.ts: {}
   src/models/components/createsignedchatattachmenturlresult.ts: {}
+  src/models/components/createskillrequestbody.ts: {}
   src/models/components/createtoolsetrequestbody.ts: {}
   src/models/components/createtriggerinstanceform.ts: {}
   src/models/components/createtunneledmcpserverform.ts: {}
@@ -612,6 +621,7 @@ trackedFiles:
   src/models/components/getprompttemplateresult.ts: {}
   src/models/components/getriskpolicychallengeresponsebody.ts: {}
   src/models/components/getsignedasseturlform.ts: {}
+  src/models/components/getskillresult.ts: {}
   src/models/components/gettoolusagefilteroptionspayload.ts: {}
   src/models/components/gettoolusagefilteroptionsresult.ts: {}
   src/models/components/gettoolusagesummarypayload.ts: {}
@@ -706,6 +716,8 @@ trackedFiles:
   src/models/components/listshadowmcpapprovalrequestsresult.ts: {}
   src/models/components/listshadowmcpinventoryresult.ts: {}
   src/models/components/listshadowmcpinventoryusersresult.ts: {}
+  src/models/components/listskillsresult.ts: {}
+  src/models/components/listskillversionsresult.ts: {}
   src/models/components/listsourcesresult.ts: {}
   src/models/components/listsyncedusersresult.ts: {}
   src/models/components/listtoolfiltersresult.ts: {}
@@ -818,6 +830,7 @@ trackedFiles:
   src/models/components/queryrow.ts: {}
   src/models/components/queryseries.ts: {}
   src/models/components/rbacstatus.ts: {}
+  src/models/components/recordskillresult.ts: {}
   src/models/components/redeemrequestbody.ts: {}
   src/models/components/redeemresponsebody.ts: {}
   src/models/components/redeployrequestbody.ts: {}
@@ -917,9 +930,12 @@ trackedFiles:
   src/models/components/shadowmcpinventoryserver.ts: {}
   src/models/components/shadowmcpinventoryurlstate.ts: {}
   src/models/components/shadowmcpinventoryuser.ts: {}
+  src/models/components/skill.ts: {}
   src/models/components/skillbreakdownrow.ts: {}
   src/models/components/skillsummary.ts: {}
   src/models/components/skilltimeseriespoint.ts: {}
+  src/models/components/skillvalidationerror.ts: {}
+  src/models/components/skillversion.ts: {}
   src/models/components/sourceenvironmentlink.ts: {}
   src/models/components/submitfeedbackrequestbody.ts: {}
   src/models/components/submitriskblockfeedbackrequestbody.ts: {}
@@ -1053,8 +1069,10 @@ trackedFiles:
   src/models/operations/addexternaloauthserver.ts: {}
   src/models/operations/addoauthproxyserver.ts: {}
   src/models/operations/addpluginserver.ts: {}
+  src/models/operations/addskillversion.ts: {}
   src/models/operations/approveriskpolicybypassrequest.ts: {}
   src/models/operations/approveshadowmcpapprovalrequest.ts: {}
+  src/models/operations/archiveskill.ts: {}
   src/models/operations/attachservertocollection.ts: {}
   src/models/operations/attachusersessionissuer.ts: {}
   src/models/operations/authcallback.ts: {}
@@ -1103,6 +1121,7 @@ trackedFiles:
   src/models/operations/createshadowmcpaccessrule.ts: {}
   src/models/operations/createshadowmcpapprovalrequest.ts: {}
   src/models/operations/createsignedchatattachmenturl.ts: {}
+  src/models/operations/createskill.ts: {}
   src/models/operations/createtemplate.ts: {}
   src/models/operations/createtoolset.ts: {}
   src/models/operations/createtopupcheckout.ts: {}
@@ -1222,6 +1241,7 @@ trackedFiles:
   src/models/operations/getriskuserbreakdown.ts: {}
   src/models/operations/getrole.ts: {}
   src/models/operations/getshadowmcpinventoryserver.ts: {}
+  src/models/operations/getskill.ts: {}
   src/models/operations/getsourceenvironment.ts: {}
   src/models/operations/gettemplate.ts: {}
   src/models/operations/gettokensundermanagement.ts: {}
@@ -1309,6 +1329,8 @@ trackedFiles:
   src/models/operations/listshadowmcpapprovalrequests.ts: {}
   src/models/operations/listshadowmcpinventory.ts: {}
   src/models/operations/listshadowmcpinventoryusers.ts: {}
+  src/models/operations/listskills.ts: {}
+  src/models/operations/listskillversions.ts: {}
   src/models/operations/listsyncedagentusers.ts: {}
   src/models/operations/listtemplates.ts: {}
   src/models/operations/listtools.ts: {}
@@ -1451,11 +1473,13 @@ trackedFiles:
   src/react-query/addExternalOAuthServer.ts: {}
   src/react-query/addOAuthProxyServer.ts: {}
   src/react-query/addPluginServer.ts: {}
+  src/react-query/addSkillVersion.ts: {}
   src/react-query/agentPlugins.core.ts: {}
   src/react-query/agentPlugins.ts: {}
   src/react-query/aiIntegrationConfig.core.ts: {}
   src/react-query/aiIntegrationConfig.ts: {}
   src/react-query/approveShadowMCPApprovalRequest.ts: {}
+  src/react-query/archiveSkill.ts: {}
   src/react-query/assistantMemoriesDelete.ts: {}
   src/react-query/assistantsCreate.ts: {}
   src/react-query/assistantsDelete.ts: {}
@@ -1527,6 +1551,7 @@ trackedFiles:
   src/react-query/createShadowMCPAccessRule.ts: {}
   src/react-query/createShadowMCPApprovalRequest.ts: {}
   src/react-query/createSignedChatAttachmentURL.ts: {}
+  src/react-query/createSkill.ts: {}
   src/react-query/createTemplate.ts: {}
   src/react-query/createToolset.ts: {}
   src/react-query/createTopUpCheckout.ts: {}
@@ -1935,6 +1960,12 @@ trackedFiles:
   src/react-query/shadowMCPInventoryServer.ts: {}
   src/react-query/shadowMCPInventoryUsers.core.ts: {}
   src/react-query/shadowMCPInventoryUsers.ts: {}
+  src/react-query/skill.core.ts: {}
+  src/react-query/skill.ts: {}
+  src/react-query/skillVersions.core.ts: {}
+  src/react-query/skillVersions.ts: {}
+  src/react-query/skills.core.ts: {}
+  src/react-query/skills.ts: {}
   src/react-query/switchScopes.ts: {}
   src/react-query/syncedAgentUsers.core.ts: {}
   src/react-query/syncedAgentUsers.ts: {}
@@ -2073,6 +2104,7 @@ trackedFiles:
   src/sdk/risk.ts: {}
   src/sdk/rules.ts: {}
   src/sdk/sdk.ts: {}
+  src/sdk/skills.ts: {}
   src/sdk/telemetry.ts: {}
   src/sdk/templates.ts: {}
   src/sdk/tools.ts: {}
@@ -2145,6 +2177,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  addSkillVersion:
+    speakeasy-default-add-skill-version:
+      requestBody:
+        application/json: {"content": "<value>", "id": "104f5927-f9aa-409a-86bf-44c0840df1ef"}
+      responses:
+        "200":
+          application/json: {"created_skill": true, "created_version": true, "skill": {"classification": "<value>", "created_at": "2024-08-08T21:51:24.554Z", "display_name": "Haven.Morar32", "id": "8efe7fe2-2883-4364-ac53-724a85f9e654", "latest_version_id": "ada141f3-3b94-405d-8400-ce98f0762b7c", "name": "<value>", "project_id": "3905e984-9fa4-4329-b718-85f9ba073020", "source_kind": "<value>", "updated_at": "2025-12-03T10:35:10.200Z", "version_count": 945826}, "version": {"canonical_sha256": "<value>", "content": "<value>", "created_at": "2026-09-24T06:04:07.980Z", "created_by_user_id": "<id>", "id": "b0ac1a92-6523-4258-ae53-fed55482cfaf", "metadata": {"key": "<value>", "key1": "<value>"}, "raw_sha256": "<value>", "skill_id": "506b16a6-9645-4f91-923e-6eb8af1756c7", "spec_valid": false, "validation_errors": [{"code": "<value>", "field": "<value>", "message": "<value>"}]}}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   approveRiskPolicyBypassRequest:
     speakeasy-default-approve-risk-policy-bypass-request:
       requestBody:
@@ -2178,6 +2221,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  archiveSkill:
+    speakeasy-default-archive-skill:
+      requestBody:
+        application/json: {"id": "078bd37c-af13-453f-98d6-3b2b263c8bb2"}
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   attachServerToCollection:
     speakeasy-default-attach-server-to-collection:
       requestBody:
@@ -2724,6 +2776,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  createSkill:
+    speakeasy-default-create-skill:
+      requestBody:
+        application/json: {"content": "<value>"}
+      responses:
+        "200":
+          application/json: {"created_skill": true, "created_version": false, "skill": {"classification": "<value>", "created_at": "2024-01-13T21:05:53.029Z", "display_name": "Rogelio69", "id": "2e459553-2788-40d9-9e7f-cb880cd0af9b", "latest_version_id": "7a086c59-5736-4ed9-be8e-5d72f84a4698", "name": "<value>", "project_id": "ed4b5d13-e447-4362-b38c-56e022bbde92", "source_kind": "<value>", "updated_at": "2024-03-04T07:12:28.139Z", "version_count": 10884}, "version": {"canonical_sha256": "<value>", "content": "<value>", "created_at": "2024-02-08T17:49:00.730Z", "created_by_user_id": "<id>", "id": "6cc0e78a-6a20-4ed4-bfe0-3715423123bb", "metadata": {}, "raw_sha256": "<value>", "skill_id": "230cdb0e-343f-4b0b-b323-5520def4b85d", "spec_valid": false, "validation_errors": [{"code": "<value>", "field": "<value>", "message": "<value>"}]}}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   createSlackApp:
     speakeasy-default-create-slack-app:
       requestBody:
@@ -3994,6 +4057,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getSkill:
+    speakeasy-default-get-skill:
+      parameters:
+        query:
+          id: "3600ba92-a629-4238-b118-2374ee531ccc"
+      responses:
+        "200":
+          application/json: {"latest_version": {"canonical_sha256": "<value>", "content": "<value>", "created_at": "2026-06-02T20:33:21.780Z", "created_by_user_id": "<id>", "id": "2e6966fd-4684-47b1-ac07-ab29fb52e761", "metadata": {"key": "<value>"}, "raw_sha256": "<value>", "skill_id": "e5e1156e-4514-4c59-bdac-f9b2b6d2b1e8", "spec_valid": true, "validation_errors": [{"code": "<value>", "field": "<value>", "message": "<value>"}]}, "skill": {"classification": "<value>", "created_at": "2026-06-16T05:42:51.497Z", "display_name": "Adan_Parisian83", "id": "2f844f68-8ade-4021-927e-ce44754f24fc", "latest_version_id": "6f25054d-4dc5-4073-a06c-bfeec492294d", "name": "<value>", "project_id": "cb362ec4-4029-48dd-8e7d-90248980a327", "source_kind": "<value>", "updated_at": "2024-08-06T14:28:41.275Z", "version_count": 278392}}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   getSlackApp:
     speakeasy-default-get-slack-app:
       parameters:
@@ -4921,6 +4996,31 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  listSkillVersions:
+    speakeasy-default-list-skill-versions:
+      parameters:
+        query:
+          id: "d945ef05-b07a-4954-a807-03d5d2b8627b"
+          limit: 20
+      responses:
+        "200":
+          application/json: {"versions": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  listSkills:
+    speakeasy-default-list-skills:
+      parameters:
+        query:
+          limit: 50
+      responses:
+        "200":
+          application/json: {"skills": [{"classification": "<value>", "created_at": "2025-12-01T14:04:14.090Z", "display_name": "Ted_Medhurst44", "id": "a629e09f-919e-4d88-8c05-cebb47ad66a9", "latest_version_id": "77214f80-c570-4870-b5c3-21f19e9fee9e", "name": "<value>", "project_id": "e35c924f-8388-4d55-a06c-1f5093920091", "source_kind": "<value>", "updated_at": "2025-12-29T20:39:39.995Z", "version_count": 665804}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   listSlackApps:
     speakeasy-default-list-slack-apps:
       responses:
