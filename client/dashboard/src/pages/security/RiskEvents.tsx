@@ -549,6 +549,11 @@ function RiskEventsRow({
         }
       }}
       onKeyDown={(e) => {
+        // Only the row itself activates on Enter/Space. Key events bubbling up
+        // from a focused child control (match reveal, the event dialog trigger,
+        // copy-link) must reach that control instead — preventing them here
+        // would swallow the control's own activation and wrongly open the chat.
+        if (e.target !== e.currentTarget) return;
         if (!result.chatId) return;
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
