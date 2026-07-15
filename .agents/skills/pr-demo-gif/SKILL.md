@@ -51,11 +51,11 @@ mkdir -p .playwright-cli/pr-demos /tmp/pr-demo
 Prepare the exact frame, then capture a viewport or element screenshot:
 
 ```bash
-mise run playwright -s=pr-demo screenshot --filename=.playwright-cli/pr-demos/demo.png
-mise run playwright -s=pr-demo screenshot <element-ref> --filename=.playwright-cli/pr-demos/demo-detail.png
+mise run playwright -s=pr-demo screenshot --hires --filename=.playwright-cli/pr-demos/demo.png
+mise run playwright -s=pr-demo screenshot <element-ref> --hires --filename=.playwright-cli/pr-demos/demo-detail.png
 ```
 
-Use `--full-page` only when the changed layout cannot fit in the configured 1440×900 viewport.
+The shared config keeps the CSS viewport at 1440×900 and uses a 2× device scale factor, so `--hires` produces a crisp 2880×1800 viewport image. Use `--full-page` only when the changed layout cannot fit in the viewport.
 
 ### Interaction change
 
