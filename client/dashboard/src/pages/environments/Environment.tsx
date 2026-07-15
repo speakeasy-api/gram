@@ -16,9 +16,11 @@ import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useToolset } from "@gram/client/react-query/toolset.js";
 import { useUpdateEnvironmentMutation } from "@gram/client/react-query/updateEnvironment.js";
 import { Badge, Button } from "@speakeasy-api/moonshine";
-import { AlertCircle, Eye, EyeOff, Plus } from "lucide-react";
+import { AlertCircle, CodeXml, Eye, EyeOff, Lock, Plus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
+import { DotRow } from "@/components/ui/dot-row";
+import { DotTable } from "@/components/ui/dot-table";
 import { type Action, MoreActions } from "@/components/ui/more-actions";
 import { useEnvironment } from "./useEnvironment";
 
@@ -110,25 +112,13 @@ function ToolsetDialog({ open, onOpenChange, onSubmit }: ToolsetDialogProps) {
   );
 }
 
-interface EnvironmentVariableRowProps {
-  entry: EnvironmentVariableDraft;
-  canWrite: boolean;
-  revealed: boolean;
-  disabled: boolean;
-  onToggleReveal: () => void;
-  onEdit: () => void;
-  onDelete: () => void;
-}
-
-function EnvironmentVariableRow({
-  entry,
-  canWrite,
-  revealed,
-  disabled,
-  onToggleReveal,
-  onEdit,
-  onDelete,
-}: EnvironmentVariableRowProps) {
+function entryActions(
+  entry: EnvironmentVariableDraft,
+  canWrite: boolean,
+  disabled: boolean,
+  onEdit: () => void,
+  onDelete: () => void,
+): Action[] {
   const actions: Action[] = [];
   if (canWrite) {
     actions.push({
@@ -158,48 +148,7 @@ function EnvironmentVariableRow({
       disabled: disabled,
     });
   }
-
-  return (
-    <div className="flex items-center gap-3 rounded-md border px-3 py-2">
-      <div className="grid flex-1 grid-cols-2 items-center gap-4">
-        <div className="flex">
-          <span className="text-foreground font-mono text-sm font-medium">
-            {entry.name}
-          </span>
-          {entry.isSecret && (
-            <Badge
-              variant="neutral"
-              size="sm"
-              className="ml-2 h-4 px-1 text-xs"
-            >
-              Sensitive
-            </Badge>
-          )}
-        </div>
-        <div className="flex w-full items-center justify-end gap-2">
-          <span className="text-muted-foreground flex-1 truncate font-mono text-sm">
-            {revealed ? entry.value : MASK}
-          </span>
-          <Button
-            variant="tertiary"
-            size="sm"
-            className="h-8 w-8 flex-shrink-0"
-            onClick={onToggleReveal}
-            aria-label={revealed ? `Hide ${entry.name}` : `View ${entry.name}`}
-          >
-            <Button.LeftIcon>
-              {revealed ? (
-                <EyeOff className="h-4 w-4" />
-              ) : (
-                <Eye className="h-4 w-4" />
-              )}
-            </Button.LeftIcon>
-          </Button>
-        </div>
-      </div>
-      <MoreActions actions={actions} />
-    </div>
-  );
+  return actions;
 }
 
 export default function EnvironmentPage(): JSX.Element {
@@ -403,34 +352,97 @@ function EnvironmentPageInner() {
                 </div>
               )}
 
-              <div className="space-y-2">
-                {entries.map((entry) => (
-                  <EnvironmentVariableRow
-                    key={entry.name}
-                    entry={entry}
-                    canWrite={canWrite}
-                    revealed={revealedFields.has(entry.name)}
-                    disabled={isMutating}
-                    onToggleReveal={() => handleToggleReveal(entry.name)}
-                    onEdit={() =>
-                      setVariableDialog({
-                        open: true,
-                        entry: {
-                          name: entry.name,
-                          value: entry.value,
-                          isSecret: entry.isSecret,
-                        },
-                      })
-                    }
-                    onDelete={() =>
-                      setDeleteConfirmDialog({
-                        open: true,
-                        varName: entry.name,
-                      })
-                    }
-                  />
-                ))}
-              </div>
+              {entries.length > 0 && (
+                <DotTable
+                  headers={[
+                    { label: "Key" },
+                    { label: "Value" },
+                    { label: "", className: "w-24" },
+                  ]}
+                >
+                  {entries.map((entry) => {
+                    const revealed = revealedFields.has(entry.name);
+                    return (
+                      <DotRow
+                        key={entry.name}
+                        icon={
+                          entry.isSecret ? (
+                            <Lock className="text-muted-foreground h-5 w-5" />
+                          ) : (
+                            <CodeXml className="text-muted-foreground h-5 w-5" />
+                          )
+                        }
+                      >
+                        <td className="px-3 py-3">
+                          <div className="flex items-center">
+                            <span className="text-foreground font-mono text-sm font-medium">
+                              {entry.name}
+                            </span>
+                            {entry.isSecret && (
+                              <Badge
+                                variant="neutral"
+                                size="sm"
+                                className="ml-2 h-4 px-1 text-xs"
+                              >
+                                Sensitive
+                              </Badge>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-3 py-3">
+                          <span className="text-muted-foreground block truncate font-mono text-sm">
+                            {revealed ? entry.value : MASK}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              variant="tertiary"
+                              size="sm"
+                              className="h-8 w-8 flex-shrink-0"
+                              onClick={() => handleToggleReveal(entry.name)}
+                              aria-label={
+                                revealed
+                                  ? `Hide ${entry.name}`
+                                  : `View ${entry.name}`
+                              }
+                            >
+                              <Button.LeftIcon>
+                                {revealed ? (
+                                  <EyeOff className="h-4 w-4" />
+                                ) : (
+                                  <Eye className="h-4 w-4" />
+                                )}
+                              </Button.LeftIcon>
+                            </Button>
+                            <MoreActions
+                              actions={entryActions(
+                                entry,
+                                canWrite,
+                                isMutating,
+                                () =>
+                                  setVariableDialog({
+                                    open: true,
+                                    entry: {
+                                      name: entry.name,
+                                      value: entry.value,
+                                      isSecret: entry.isSecret,
+                                    },
+                                  }),
+                                () =>
+                                  setDeleteConfirmDialog({
+                                    open: true,
+                                    varName: entry.name,
+                                  }),
+                              )}
+                            />
+                          </div>
+                        </td>
+                      </DotRow>
+                    );
+                  })}
+                </DotTable>
+              )}
 
               {entries.length === 0 && (
                 <div className="py-8 text-center">
