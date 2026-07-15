@@ -142,6 +142,38 @@ redis.call('PEXPIRE', KEYS[2], ARGV[3])
 return value
 `)
 
+// commitScript stores the mapping ONLY if the reservation's live-set member
+// still exists — a concurrent Purge (consent withdrawn) removes the member,
+// so a lost reservation means "purged mid-initialize" and the commit is
+// refused (returns 0). On success it writes the mapping and re-aligns the
+// live-set score to the mapping's fresh expiry in one atomic step, closing
+// the drift where a delayed commit leaves the member expiring before the
+// mapping (mapping resolvable but uncounted/unpurgeable). ZADD XX only
+// updates an existing member, never resurrecting a purged one.
+var commitScript = redis.NewScript(`
+if redis.call('ZSCORE', KEYS[2], ARGV[1]) == false then
+  return 0
+end
+redis.call('SET', KEYS[1], ARGV[2], 'PX', ARGV[4])
+redis.call('ZADD', KEYS[2], 'XX', ARGV[3], ARGV[1])
+redis.call('PEXPIRE', KEYS[2], ARGV[4])
+return 1
+`)
+
+// purgeScript atomically drops every tracked session for a tunnel: each
+// member's mapping key plus the live-set itself. Single Lua so it cannot
+// interleave with a concurrent commit (which checks the member under the
+// same Redis single-threaded execution). ARGV[1] is the mapping-key prefix
+// (`tunnelsess:map:<tunnel>:`) that a member name is appended to.
+var purgeScript = redis.NewScript(`
+local members = redis.call('ZRANGE', KEYS[1], 0, -1)
+for i = 1, #members do
+  redis.call('DEL', ARGV[1] .. members[i])
+end
+redis.call('DEL', KEYS[1])
+return #members
+`)
+
 // Reserve admits sid into the tunnel's live-session set ahead of the
 // initialize forward, enforcing the per-tunnel cap atomically. The
 // reservation holds a capacity slot only; the mapping is written by Commit
@@ -170,15 +202,34 @@ func (s *Store) Reserve(ctx context.Context, tunnelID, mcpServerID, sid string) 
 	return &CapacityError{RetryAfter: retryAfter}
 }
 
-// Commit stores the session mapping after a successful initialize. The
-// live-set member was already admitted by Reserve.
+// ErrReservationLost is returned by Commit when the reservation's live-set
+// member is gone — a concurrent Purge (consent withdrawn) removed it. The
+// caller must fail the initialize closed rather than hand the client a
+// session id that is untracked and would be unusable the moment consent
+// stays off.
+var ErrReservationLost = errors.New("tunnel session reservation lost")
+
+// Commit stores the session mapping after a successful initialize, but only
+// if the reservation admitted by Reserve still exists (see commitScript).
+// Returns ErrReservationLost when a concurrent Purge won the race.
 func (s *Store) Commit(ctx context.Context, tunnelID, mcpServerID, sid string, session Session) error {
 	payload, err := json.Marshal(session)
 	if err != nil {
 		return fmt.Errorf("encode tunnel session mapping: %w", err)
 	}
-	if err := s.redis.Set(ctx, mappingKey(tunnelID, mcpServerID, sid), payload, s.ttl).Err(); err != nil {
+	now := time.Now()
+	res, err := commitScript.Run(ctx, s.redis,
+		[]string{mappingKey(tunnelID, mcpServerID, sid), liveSetKey(tunnelID)},
+		liveMember(mcpServerID, sid),
+		payload,
+		now.Add(s.ttl).UnixMilli(),
+		s.ttl.Milliseconds(),
+	).Int64()
+	if err != nil {
 		return fmt.Errorf("store tunnel session mapping: %w", err)
+	}
+	if res == 0 {
+		return ErrReservationLost
 	}
 	return nil
 }
@@ -256,20 +307,12 @@ func (s *Store) Purge(ctx context.Context, tunnelID string) error {
 
 // Purge is the package-level variant of [Store.Purge] for callers (e.g. the
 // tunneledmcp management service) that only revoke sessions and have no use
-// for a fully configured store.
+// for a fully configured store. Atomic (single Lua) so it cannot interleave
+// with a concurrent Commit.
 func Purge(ctx context.Context, redisClient *redis.Client, tunnelID string) error {
-	members, err := redisClient.ZRange(ctx, liveSetKey(tunnelID), 0, -1).Result()
-	if err != nil {
-		return fmt.Errorf("list tunnel sessions for purge: %w", err)
-	}
-	pipe := redisClient.Pipeline()
-	for _, member := range members {
-		// member is "<mcp_server_id>:<sid>"; the mapping key appends it to
-		// the tunnel prefix verbatim.
-		pipe.Del(ctx, "tunnelsess:map:"+tunnelID+":"+member)
-	}
-	pipe.Del(ctx, liveSetKey(tunnelID))
-	if _, err := pipe.Exec(ctx); err != nil {
+	// mappingKey prefix a member is appended to: keep in sync with mappingKey.
+	prefix := "tunnelsess:map:" + tunnelID + ":"
+	if err := purgeScript.Run(ctx, redisClient, []string{liveSetKey(tunnelID)}, prefix).Err(); err != nil {
 		return fmt.Errorf("purge tunnel sessions: %w", err)
 	}
 	return nil

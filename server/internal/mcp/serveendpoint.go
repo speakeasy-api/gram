@@ -435,8 +435,8 @@ func (s *Service) serveTunneledBackend(
 	logger = logger.With(attr.SlogTunneledMCPServerID(mcpServer.TunneledMcpServerID.UUID.String()))
 
 	// Public visibility dispatches to the anonymous serving path, which
-	// fail-closed re-checks the kill switch, rollout flag, and the owner's
-	// allow_public consent before forwarding anything into the tunnel.
+	// fail-closed re-checks the owner's allow_public consent before
+	// forwarding anything into the tunnel.
 	if mcpServer.Visibility == mcpservers.VisibilityPublic {
 		return s.serveTunneledPublicBackend(w, r, logger, endpoint, mcpServer)
 	}

@@ -7,17 +7,22 @@
 // session id plus the exact tunnel target (gateway address + agent session)
 // that owns it. Session-bearing requests resolve that mapping and are pinned
 // to the recorded target — never rendezvous-spilled to a sibling agent whose
-// backend does not know the session. Access is triple-gated: an env kill
-// switch, a per-org PostHog rollout flag, and the tunnel owner's durable
-// allow_public consent (double opt-in with mcp_servers.visibility=public).
+// backend does not know the session. Stateless / draft-protocol backends that
+// return no Mcp-Session-Id are served too, without a mapping — the path has no
+// hard dependency on stateful sessions. Access is gated solely on the tunnel
+// owner's durable allow_public consent (double opt-in with
+// mcp_servers.visibility=public), enforced at validation and at serve time.
 package mcp
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -174,9 +179,8 @@ func (s *Service) serveTunneledPublicBackend(
 	}
 	rt := s.tunnelPublic
 
-	// Hard-bound the whole exchange, including SSE streams: idle timeouts
-	// alone let an active stream outlive its session slot and survive the
-	// kill switch.
+	// Hard-bound the whole exchange, including SSE streams: the proxy's idle
+	// timeout alone would let an active stream outlive its session slot.
 	ctx, cancel := context.WithTimeout(ctx, rt.cfg.MaxRequestLifetime)
 	defer cancel()
 	r = r.WithContext(ctx)
@@ -185,9 +189,10 @@ func (s *Service) serveTunneledPublicBackend(
 
 	res, err := rt.requestLimiter.Allow(ctx, tunnelID)
 	if err != nil {
-		// Limiter store outage: fail closed — an anonymous surface without
+		// Limiter store outage is an availability failure (503), not an
+		// upstream/tunnel fault: fail closed — an anonymous surface without
 		// its abuse controls must not serve.
-		return oops.E(oops.CodeGatewayError, err, "service temporarily unavailable").LogError(ctx, logger)
+		return oops.E(oops.CodeUnavailable, err, "service temporarily unavailable").LogError(ctx, logger)
 	}
 	if !res.Allowed {
 		w.Header().Set("Retry-After", strconv.Itoa(int(res.RetryAfter.Seconds())+1))
@@ -219,14 +224,19 @@ func stripPublicResponseHeaders(resp *http.Response) {
 	resp.Header.Del("WWW-Authenticate")
 }
 
-// serveTunneledPublicInit serves anonymous requests that carry no session id:
-// initialize plus all traffic to sessionless backends. Routing uses the
-// existing candidate selection with cross-gateway failover (safe — no session
-// exists yet). An initialize is admitted through the per-tunnel initialize
-// rate limit and a capacity reservation before it is forwarded; on a
-// successful session-bearing response the reservation is committed with the
-// exact target that served it and the backend's session header is rewritten
-// to the Gram-owned id.
+// reservationCleanupTimeout bounds the detached Redis cleanup for an
+// uncommitted reservation so a Redis stall cannot pin the request goroutine.
+const reservationCleanupTimeout = 5 * time.Second
+
+// serveTunneledPublicInit serves anonymous requests that carry no Gram
+// session id: initialize plus all traffic to stateless/draft-protocol
+// backends. Admission (initialize rate limit + capacity reservation) runs as
+// plain pre-proxy code so availability failures surface as real HTTP status
+// codes (503/429 + Retry-After) rather than a JSON-RPC 200 envelope. Only a
+// positively-identified initialize reserves a slot; every other POST
+// (stateless follow-up traffic, notifications) proxies straight through,
+// bounded by the all-request limiter already applied by the caller — so the
+// path has no hard dependency on stateful sessions.
 func (s *Service) serveTunneledPublicInit(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -237,34 +247,69 @@ func (s *Service) serveTunneledPublicInit(
 ) error {
 	ctx := r.Context()
 	rt := s.tunnelPublic
+	mcpServerID := mcpServer.ID.String()
+
+	// Peek the JSON-RPC method, restoring the body for the proxy. A parse
+	// failure or non-initialize method simply skips reservation; the proxy
+	// then handles the request (or rejects a malformed/batch body) itself.
+	isInit := r.Method == http.MethodPost && peekIsInitialize(r)
+
+	var sid string
+	reserved := false
+	if isInit {
+		res, err := rt.initializeLimiter.Allow(ctx, tunnelID)
+		if err != nil {
+			return oops.E(oops.CodeUnavailable, err, "service temporarily unavailable").LogError(ctx, logger)
+		}
+		if !res.Allowed {
+			w.Header().Set("Retry-After", strconv.Itoa(int(res.RetryAfter.Seconds())+1))
+			return oops.E(oops.CodeRateLimitExceeded, nil, "too many initialize requests to this MCP server").LogWarn(ctx, logger)
+		}
+
+		sid, err = tunnelsessions.MintSessionID()
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "mint anonymous tunnel session id").LogError(ctx, logger)
+		}
+
+		if err := rt.sessions.Reserve(ctx, tunnelID, mcpServerID, sid); err != nil {
+			var capErr *tunnelsessions.CapacityError
+			if errors.As(err, &capErr) {
+				w.Header().Set("Retry-After", strconv.Itoa(int(capErr.RetryAfter.Seconds())+1))
+				return oops.E(oops.CodeRateLimitExceeded, nil, "this MCP server is at its anonymous session capacity").LogWarn(ctx, logger)
+			}
+			return oops.E(oops.CodeUnavailable, err, "service temporarily unavailable").LogError(ctx, logger)
+		}
+		reserved = true
+	}
 
 	p, err := s.tunnelManager.buildProxy(ctx, r, logger, endpoint, mcpServer, "", "")
 	if err != nil {
+		if reserved {
+			s.rollbackReservation(ctx, logger, tunnelID, mcpServerID, sid)
+		}
 		return err
 	}
 
-	adapter := &tunnelPublicInitAdapter{
-		runtime:     rt,
-		limiter:     rt.initializeLimiter,
-		logger:      logger,
-		tunnelID:    tunnelID,
-		mcpServerID: mcpServer.ID.String(),
-		proxy:       p,
-		sid:         "",
-		reserved:    false,
-		committed:   false,
+	committed := false
+	p.UpstreamResponseInterceptor = func(ctx context.Context, resp *http.Response) error {
+		stripPublicResponseHeaders(resp)
+		if !reserved {
+			return nil
+		}
+		ok, err := s.commitAnonymousSession(ctx, logger, endpoint, mcpServer, p, tunnelID, mcpServerID, sid, resp)
+		if err != nil {
+			return err
+		}
+		committed = ok
+		return nil
 	}
-	p.InitializeRequestInterceptors = append(p.InitializeRequestInterceptors, adapter)
-	p.UpstreamResponseInterceptor = adapter.interceptUpstreamResponse
 
 	err = serveProxyBackend(w, r, p)
-	// Any reservation that did not commit — forward error, interceptor
-	// rejection after reserve, stream death — must release its capacity
-	// slot rather than leak it until TTL.
-	if adapter.reserved && !adapter.committed {
-		if rbErr := rt.sessions.Rollback(context.WithoutCancel(ctx), tunnelID, adapter.mcpServerID, adapter.sid); rbErr != nil {
-			logger.ErrorContext(ctx, "release anonymous tunnel session reservation", attr.SlogError(rbErr))
-		}
+	// A reservation that never committed — forward error, non-2xx response,
+	// stateless (no session header) response, or a stream that died before
+	// commit — must release its capacity slot rather than leak it until TTL.
+	if reserved && !committed {
+		s.rollbackReservation(ctx, logger, tunnelID, mcpServerID, sid)
 	}
 	if err != nil {
 		return fmt.Errorf("serve public tunneled backend: %w", err)
@@ -272,134 +317,111 @@ func (s *Service) serveTunneledPublicInit(
 	return nil
 }
 
-// tunnelPublicInitAdapter carries the per-request state between the
-// initialize request interceptor (rate limit + capacity reservation, before
-// the forward) and the upstream response interceptor (commit + header
-// rewrite, before the relay). A proxy instance serves exactly one request, so
-// no synchronization is needed.
-type tunnelPublicInitAdapter struct {
-	runtime     *tunnelPublicRuntime
-	limiter     *ratelimit.Limiter
-	logger      *slog.Logger
-	tunnelID    string
-	mcpServerID string
-	// proxy is consulted for the FINAL upstream target: the retryer may fail
-	// the initialize over to a different gateway, and the committed mapping
-	// must record the gateway that actually served it.
-	proxy     *proxy.Proxy
-	sid       string
-	reserved  bool
-	committed bool
-}
-
-var _ proxy.InitializeRequestInterceptor = (*tunnelPublicInitAdapter)(nil)
-
-func (a *tunnelPublicInitAdapter) Name() string { return "tunnel-public-session" }
-
-// InterceptInitializeRequest admits an anonymous initialize: per-tunnel
-// initialize rate limit, then session id pre-mint, then atomic capacity
-// reservation. Runs before the forward; a rejection here becomes a JSON-RPC
-// error envelope without ever touching the customer's backend.
-func (a *tunnelPublicInitAdapter) InterceptInitializeRequest(ctx context.Context, _ *proxy.InitializeRequest) error {
-	res, err := a.limiter.Allow(ctx, a.tunnelID)
-	if err != nil {
-		a.logger.ErrorContext(ctx, "anonymous initialize rate limiter unavailable", attr.SlogError(err))
-		return &proxy.RejectError{
-			Code:    proxy.RejectCodeInternalError,
-			Message: "service temporarily unavailable",
-			Data:    nil,
-		}
-	}
-	if !res.Allowed {
-		return &proxy.RejectError{
-			Code:    proxy.RejectCodeServerError,
-			Message: "too many initialize requests to this MCP server",
-			Data:    map[string]any{"retry_after_seconds": int(res.RetryAfter.Seconds()) + 1},
-		}
-	}
-
-	sid, err := tunnelsessions.MintSessionID()
-	if err != nil {
-		a.logger.ErrorContext(ctx, "mint anonymous tunnel session id", attr.SlogError(err))
-		return &proxy.RejectError{Code: proxy.RejectCodeInternalError, Message: "service temporarily unavailable", Data: nil}
-	}
-	a.sid = sid
-
-	if err := a.runtime.sessions.Reserve(ctx, a.tunnelID, a.mcpServerID, sid); err != nil {
-		var capErr *tunnelsessions.CapacityError
-		if errors.As(err, &capErr) {
-			return &proxy.RejectError{
-				Code:    proxy.RejectCodeServerError,
-				Message: "this MCP server is at its anonymous session capacity",
-				Data:    map[string]any{"retry_after_seconds": int(capErr.RetryAfter.Seconds()) + 1},
-			}
-		}
-		a.logger.ErrorContext(ctx, "reserve anonymous tunnel session slot", attr.SlogError(err))
-		return &proxy.RejectError{Code: proxy.RejectCodeInternalError, Message: "service temporarily unavailable", Data: nil}
-	}
-	a.reserved = true
-	return nil
-}
-
-// interceptUpstreamResponse commits or rolls back the initialize reservation
-// against the final upstream response, before anything is relayed. Fails
-// closed: a session-bearing initialize whose state cannot be recorded (Redis
-// write failure, gateway too old to report its agent session) is aborted
-// rather than exposed with untracked routing.
-func (a *tunnelPublicInitAdapter) interceptUpstreamResponse(ctx context.Context, resp *http.Response) error {
-	stripPublicResponseHeaders(resp)
-
-	if !a.reserved {
-		// Not an initialize (sessionless backend traffic) or rejected before
-		// reservation: nothing to commit.
-		return nil
-	}
-
-	logger := a.logger.With(attr.SlogTunnelAnonymousSessionHash(hashSessionID(a.sid)))
+// commitAnonymousSession records the Redis mapping for a successful,
+// session-bearing anonymous initialize and rewrites the response's
+// Mcp-Session-Id to the Gram-owned id. Returns (committed, err): committed is
+// false with a nil error for the paths that legitimately mint no session
+// (non-2xx initialize, stateless backend that returned no session header) so
+// the caller releases the reservation. A non-nil error aborts the relay
+// pre-flush — the fail-closed contract for a session-bearing initialize whose
+// state cannot be recorded.
+func (s *Service) commitAnonymousSession(
+	ctx context.Context,
+	logger *slog.Logger,
+	endpoint *mcpendpointsrepo.McpEndpoint,
+	mcpServer *mcpserversrepo.McpServer,
+	p *proxy.Proxy,
+	tunnelID, mcpServerID, sid string,
+	resp *http.Response,
+) (bool, error) {
+	logger = logger.With(attr.SlogTunnelAnonymousSessionHash(hashSessionID(sid)))
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		// Failed initialize: the deferred rollback in serveTunneledPublicInit
-		// releases the slot; relay the backend's error as-is.
-		return nil
+		return false, nil
 	}
 
 	backendSids := resp.Header.Values(proxy.McpSessionIDHeader)
 	if len(backendSids) == 0 {
-		// Sessionless backend: no session to track, release the slot and
-		// relay unchanged. Gram never synthesizes a session header the
-		// backend did not produce.
-		return nil
+		// Stateless / draft-protocol backend: no session to track. Gram never
+		// synthesizes a session header the backend did not produce.
+		return false, nil
 	}
 	if len(backendSids) > 1 {
-		return oops.E(oops.CodeGatewayError, nil, "MCP server returned an invalid session").LogError(ctx, logger.With(attr.SlogErrorMessage("multiple Mcp-Session-Id response headers")))
+		return false, oops.E(oops.CodeGatewayError, nil, "MCP server returned an invalid session").LogError(ctx, logger.With(attr.SlogErrorMessage("multiple Mcp-Session-Id response headers")))
 	}
 	backendSid := backendSids[0]
 	if !isValidBackendSessionID(backendSid) {
-		return oops.E(oops.CodeGatewayError, nil, "MCP server returned an invalid session").LogError(ctx, logger.With(attr.SlogErrorMessage("malformed Mcp-Session-Id response header")))
+		return false, oops.E(oops.CodeGatewayError, nil, "MCP server returned an invalid session").LogError(ctx, logger.With(attr.SlogErrorMessage("malformed Mcp-Session-Id response header")))
 	}
 
 	agentSession := strings.TrimSpace(resp.Header.Get(wire.HeaderTunnelAgentSession))
 	if agentSession == "" {
 		// The serving gateway predates exact-target support. Fail closed:
-		// without the agent session the mapping cannot pin the session to
-		// the agent that owns it, and a later rendezvous re-pin would hand
-		// the session id to a sibling backend.
-		return oops.E(oops.CodeGatewayError, nil, "service temporarily unavailable").LogError(ctx, logger.With(attr.SlogErrorMessage("tunnel gateway did not report an agent session")))
+		// without the agent session the mapping cannot pin the session to the
+		// agent that owns it, and a later rendezvous re-pin would hand the
+		// session id to a sibling backend.
+		return false, oops.E(oops.CodeUnavailable, nil, "service temporarily unavailable").LogError(ctx, logger.With(attr.SlogErrorMessage("tunnel gateway did not report an agent session")))
+	}
+
+	// Recheck consent immediately before recording the session: a Purge
+	// (consent withdrawn) may have run after this request's Reserve, in which
+	// case the mapping must not be created. Commit additionally refuses if the
+	// reservation's live-set member is gone (ErrReservationLost).
+	if err := s.requireTunneledPublicConsent(ctx, logger, endpoint, mcpServer); err != nil {
+		return false, err
 	}
 
 	session := tunnelsessions.Session{
 		BackendSessionID: backendSid,
-		GatewayAddr:      a.proxy.RemoteURL,
+		GatewayAddr:      p.RemoteURL,
 		AgentSessionID:   agentSession,
 	}
-	if err := a.runtime.sessions.Commit(ctx, a.tunnelID, a.mcpServerID, a.sid, session); err != nil {
-		return oops.E(oops.CodeGatewayError, err, "service temporarily unavailable").LogError(ctx, logger)
+	err := s.tunnelPublic.sessions.Commit(ctx, tunnelID, mcpServerID, sid, session)
+	switch {
+	case errors.Is(err, tunnelsessions.ErrReservationLost):
+		return false, oops.E(oops.CodeNotFound, nil, "session not found").LogWarn(ctx, logger.With(attr.SlogErrorMessage("reservation purged mid-initialize")))
+	case err != nil:
+		return false, oops.E(oops.CodeUnavailable, err, "service temporarily unavailable").LogError(ctx, logger)
 	}
-	a.committed = true
 
-	resp.Header.Set(proxy.McpSessionIDHeader, a.sid)
+	resp.Header.Set(proxy.McpSessionIDHeader, sid)
 	logger.InfoContext(ctx, "anonymous tunnel session established")
-	return nil
+	return true, nil
+}
+
+// rollbackReservation releases an uncommitted capacity slot on a bounded,
+// detached context so a Redis stall cannot pin the request goroutine.
+func (s *Service) rollbackReservation(ctx context.Context, logger *slog.Logger, tunnelID, mcpServerID, sid string) {
+	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), reservationCleanupTimeout)
+	defer cancel()
+	if err := s.tunnelPublic.sessions.Rollback(cleanupCtx, tunnelID, mcpServerID, sid); err != nil {
+		logger.ErrorContext(ctx, "release anonymous tunnel session reservation", attr.SlogError(err))
+	}
+}
+
+// peekIsInitialize reads the request body (bounded), restores it for the
+// proxy, and reports whether it is a single JSON-RPC "initialize" request.
+// Malformed, batched, or oversized bodies read as not-initialize; the proxy
+// then applies its own parsing and rejection semantics.
+func peekIsInitialize(r *http.Request) bool {
+	if r.Body == nil {
+		return false
+	}
+	body, err := io.ReadAll(io.LimitReader(r.Body, proxy.DefaultMaxBufferedBodyBytes))
+	_ = r.Body.Close()
+	if err != nil {
+		r.Body = io.NopCloser(bytes.NewReader(body))
+		return false
+	}
+	r.Body = io.NopCloser(bytes.NewReader(body))
+
+	var probe struct {
+		Method string `json:"method"`
+	}
+	if err := json.Unmarshal(body, &probe); err != nil {
+		return false
+	}
+	return probe.Method == "initialize"
 }
 
 // isValidBackendSessionID enforces the MCP spec's constraint that a session

@@ -647,10 +647,18 @@ function SettingsTab({
   tunneledMcpServer: TunneledMcpServer;
   linkedMcpServers: McpServer[];
 }) {
+  // One mutation shared across the sections that write the same record. Its
+  // pending state serializes name and public-access edits so a concurrent
+  // update can't submit a stale display name and clobber the other change.
+  const update = useUpdateTunneledMcpServerMutation();
+
   return (
     <div className="mx-auto w-full max-w-[1270px] space-y-8 px-8 py-8">
-      <NameSection tunneledMcpServer={tunneledMcpServer} />
-      <PublicAccessSection tunneledMcpServer={tunneledMcpServer} />
+      <NameSection tunneledMcpServer={tunneledMcpServer} update={update} />
+      <PublicAccessSection
+        tunneledMcpServer={tunneledMcpServer}
+        update={update}
+      />
       <TunnelKeySection tunneledMcpServer={tunneledMcpServer} />
       <DangerZoneSection
         tunneledMcpServer={tunneledMcpServer}
@@ -660,20 +668,29 @@ function SettingsTab({
   );
 }
 
+type UpdateTunneledMcpMutation = ReturnType<
+  typeof useUpdateTunneledMcpServerMutation
+>;
+
 const PUBLIC_ACCESS_CONFIRM_PHRASE = "ALLOW PUBLIC ACCESS";
 
 function PublicAccessSection({
   tunneledMcpServer,
+  update,
 }: {
   tunneledMcpServer: TunneledMcpServer;
+  update: UpdateTunneledMcpMutation;
 }) {
   const queryClient = useQueryClient();
-  const update = useUpdateTunneledMcpServerMutation();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmPhrase, setConfirmPhrase] = useState("");
 
   const allowPublic = tunneledMcpServer.allowPublic;
 
+  // Rethrows on failure so callers can keep a confirmation dialog open; a
+  // toast still surfaces the error. The shared mutation (see SettingsTab)
+  // serializes this with the display-name edit so neither submits a stale
+  // name over the other.
   const applyAllowPublic = async (next: boolean) => {
     try {
       await update.mutateAsync({
@@ -700,11 +717,18 @@ function PublicAccessSection({
           ? error.message
           : "Failed to update public access";
       toast.error(message);
+      throw error instanceof Error ? error : new Error(message);
     }
   };
 
   const handleConfirmEnable = async () => {
-    await applyAllowPublic(true);
+    try {
+      await applyAllowPublic(true);
+    } catch {
+      // Keep the dialog open on failure so the user can retry; the error
+      // Alert inside it and the toast already surface the reason.
+      return;
+    }
     setConfirmOpen(false);
     setConfirmPhrase("");
   };
@@ -834,8 +858,10 @@ function PublicAccessSection({
 
 function NameSection({
   tunneledMcpServer,
+  update,
 }: {
   tunneledMcpServer: TunneledMcpServer;
+  update: UpdateTunneledMcpMutation;
 }) {
   const [draft, setDraft] = useState(tunneledMcpServer.name);
 
@@ -844,7 +870,6 @@ function NameSection({
   }, [tunneledMcpServer.name]);
 
   const queryClient = useQueryClient();
-  const update = useUpdateTunneledMcpServerMutation();
 
   const dirty = draft.trim() !== tunneledMcpServer.name.trim();
   const saveDisabled = !dirty || draft.trim() === "" || update.isPending;
