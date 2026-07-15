@@ -273,16 +273,6 @@ func newStartCommand() *cli.Command {
 			Usage:   "CIDR blocks the tunnel gateway advertise addresses live in (cluster pod range). Allowlisted past the guardian egress policy for tunnel forwards only; unset means tunnels to private addresses fail closed",
 			EnvVars: []string{"GRAM_TUNNEL_GATEWAY_CIDR_BLOCKS"},
 		},
-		&cli.BoolFlag{
-			Name:    "public-tunnels-disable",
-			Usage:   "Emergency kill switch: disable anonymous public serving of tunneled MCP servers regardless of flags or owner consent",
-			EnvVars: []string{"GRAM_PUBLIC_TUNNELS_DISABLE"},
-		},
-		&cli.BoolFlag{
-			Name:    "public-tunnels-force-enable",
-			Usage:   "Bypass the per-org rollout flag for public tunneled MCP serving. Local development and preview validation only — never production",
-			EnvVars: []string{"GRAM_PUBLIC_TUNNELS_FORCE_ENABLE"},
-		},
 		&cli.IntFlag{
 			Name:    "public-tunnels-live-session-cap",
 			Usage:   "Maximum concurrently tracked anonymous MCP sessions per tunnel (0 uses the built-in default)",
@@ -874,8 +864,6 @@ func newStartCommand() *cli.Command {
 				tunnelGatewayCIDRs,
 				redisClient,
 				mcp.TunnelPublicConfig{
-					Disabled:           c.Bool("public-tunnels-disable"),
-					ForceEnabled:       c.Bool("public-tunnels-force-enable"),
 					SessionTTL:         0,
 					LiveSessionCap:     c.Int("public-tunnels-live-session-cap"),
 					InitializeRate:     ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
