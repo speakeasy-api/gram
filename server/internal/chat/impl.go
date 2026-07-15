@@ -2033,6 +2033,7 @@ func storeMessages(ctx context.Context, logger *slog.Logger, tx repo.DBTX, asset
 		}
 
 		dbrows[i] = repo.CreateChatMessageParams{
+			Replayed:         false,
 			ChatID:           row.chatID,
 			ProjectID:        row.projectID,
 			Role:             row.role,
