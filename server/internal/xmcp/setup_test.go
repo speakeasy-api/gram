@@ -46,6 +46,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/rag"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
@@ -156,7 +157,15 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	userSessionSigner := usersessions.NewSigner("test-jwt-secret")
 	remoteChallengeMgr := remotesessions.NewChallengeManager(logger, conn, enc, guardianPolicy, cacheAdapter, serverURL)
 	remoteProxyManager := remotemcp.NewProxyManager(logger, tracerProvider, meterProvider, guardianPolicy, authzEngine, shadowMCPClient, posthogClient, telemLogger, billingClient, billingClient)
-	mcpService := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthogClient, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingClient, billingClient, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger, nil, nil, nil, nil, userSessionSigner, remoteChallengeMgr, remoteProxyManager, route.NewRouteTable(), "", nil)
+	mcpService := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthogClient, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingClient, billingClient, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger, nil, nil, nil, nil, userSessionSigner, remoteChallengeMgr, remoteProxyManager, route.NewRouteTable(), "", nil, nil, mcp.TunnelPublicConfig{
+		Disabled:           true,
+		ForceEnabled:       false,
+		SessionTTL:         0,
+		LiveSessionCap:     0,
+		InitializeRate:     ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
+		RequestRate:        ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
+		MaxRequestLifetime: 0,
+	})
 
 	svc := xmcp.NewService(logger, conn, enc, mcpService)
 

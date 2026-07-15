@@ -3,11 +3,16 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 
 /**
  * Form for updating a tunneled MCP server source
  */
 export type UpdateTunneledMcpServerForm = {
+  /**
+   * Consent to serve this source through a public, anonymous MCP endpoint. Disabling revokes all live anonymous sessions. Omit to leave unchanged.
+   */
+  allowPublic?: boolean | undefined;
   /**
    * The ID of the tunneled MCP server to update
    */
@@ -20,6 +25,7 @@ export type UpdateTunneledMcpServerForm = {
 
 /** @internal */
 export type UpdateTunneledMcpServerForm$Outbound = {
+  allow_public?: boolean | undefined;
   id: string;
   name: string;
 };
@@ -28,10 +34,18 @@ export type UpdateTunneledMcpServerForm$Outbound = {
 export const UpdateTunneledMcpServerForm$outboundSchema: z.ZodMiniType<
   UpdateTunneledMcpServerForm$Outbound,
   UpdateTunneledMcpServerForm
-> = z.object({
-  id: z.string(),
-  name: z.string(),
-});
+> = z.pipe(
+  z.object({
+    allowPublic: z.optional(z.boolean()),
+    id: z.string(),
+    name: z.string(),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      allowPublic: "allow_public",
+    });
+  }),
+);
 
 export function updateTunneledMcpServerFormToJSON(
   updateTunneledMcpServerForm: UpdateTunneledMcpServerForm,

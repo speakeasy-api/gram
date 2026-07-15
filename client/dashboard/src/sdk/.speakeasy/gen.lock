@@ -2783,7 +2783,7 @@ examples:
         application/json: {"name": "<value>"}
       responses:
         "200":
-          application/json: {"server": {"active_connection_count": 654054, "active_consumer_session_count": 837635, "connection_status": "never_connected", "created_at": "2026-02-10T10:39:09.807Z", "id": "272444c1-a34f-46a6-99b4-9ccfca8b7743", "key_prefix": "<value>", "name": "<value>", "project_id": "e1360fd1-8d07-44ad-b994-673e65524ac5", "status": "created", "updated_at": "2024-06-19T14:50:23.774Z"}, "tunnel_key": "<value>"}
+          application/json: {"server": {"active_connection_count": 654054, "active_consumer_session_count": 837635, "allow_public": false, "connection_status": "never_connected", "created_at": "2026-02-10T10:39:09.807Z", "id": "272444c1-a34f-46a6-99b4-9ccfca8b7743", "key_prefix": "<value>", "name": "<value>", "project_id": "e1360fd1-8d07-44ad-b994-673e65524ac5", "status": "created", "updated_at": "2024-06-19T14:50:23.774Z"}, "tunnel_key": "<value>"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -4102,7 +4102,7 @@ examples:
           id: "2da0a4eb-6dad-49df-8e77-e695c1ced630"
       responses:
         "200":
-          application/json: {"active_connection_count": 391492, "active_consumer_session_count": 232927, "connection_status": "inactive", "created_at": "2025-07-31T14:10:01.737Z", "id": "af931b3e-297a-4d3c-8822-405f67a3e831", "key_prefix": "<value>", "name": "<value>", "project_id": "5a9bc58c-5585-415f-9c1f-27ef24b485ac", "status": "created", "updated_at": "2026-01-15T22:46:21.316Z"}
+          application/json: {"active_connection_count": 391492, "active_consumer_session_count": 232927, "allow_public": true, "connection_status": "inactive", "created_at": "2025-07-31T14:10:01.737Z", "id": "af931b3e-297a-4d3c-8822-405f67a3e831", "key_prefix": "<value>", "name": "<value>", "project_id": "5a9bc58c-5585-415f-9c1f-27ef24b485ac", "status": "created", "updated_at": "2026-01-15T22:46:21.316Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -5041,7 +5041,7 @@ examples:
     speakeasy-default-list-tunneled-mcp-servers:
       responses:
         "200":
-          application/json: {"tunneled_mcp_servers": [{"active_connection_count": 394924, "active_consumer_session_count": 517799, "connection_status": "inactive", "created_at": "2025-03-13T14:21:51.961Z", "id": "9bf38405-daa1-4ca6-8caa-29a17f23666a", "key_prefix": "<value>", "name": "<value>", "project_id": "7d962e11-27f3-472f-8f59-3f11bf110668", "status": "created", "updated_at": "2024-04-13T11:16:25.561Z"}]}
+          application/json: {"tunneled_mcp_servers": [{"active_connection_count": 394924, "active_consumer_session_count": 517799, "allow_public": false, "connection_status": "inactive", "created_at": "2025-03-13T14:21:51.961Z", "id": "9bf38405-daa1-4ca6-8caa-29a17f23666a", "key_prefix": "<value>", "name": "<value>", "project_id": "7d962e11-27f3-472f-8f59-3f11bf110668", "status": "created", "updated_at": "2024-04-13T11:16:25.561Z"}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -5505,7 +5505,7 @@ examples:
         application/json: {"id": "f96d4fee-57e8-4a2b-bebc-49247a9a44e1"}
       responses:
         "200":
-          application/json: {"server": {"active_connection_count": 506636, "active_consumer_session_count": 889982, "connection_status": "connected", "created_at": "2025-08-03T20:17:08.741Z", "id": "c03178ad-622c-4ba3-9680-6fa0b1bb3df9", "key_prefix": "<value>", "name": "<value>", "project_id": "39631f63-820f-4cbb-bcb2-a13049a7bfcc", "status": "active", "updated_at": "2024-11-30T10:21:00.362Z"}, "tunnel_key": "<value>"}
+          application/json: {"server": {"active_connection_count": 506636, "active_consumer_session_count": 889982, "allow_public": false, "connection_status": "connected", "created_at": "2025-08-03T20:17:08.741Z", "id": "c03178ad-622c-4ba3-9680-6fa0b1bb3df9", "key_prefix": "<value>", "name": "<value>", "project_id": "39631f63-820f-4cbb-bcb2-a13049a7bfcc", "status": "active", "updated_at": "2024-11-30T10:21:00.362Z"}, "tunnel_key": "<value>"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -6265,7 +6265,7 @@ examples:
         application/json: {"id": "e1429b32-4d75-43a3-aa46-02f1af57cf85", "name": "<value>"}
       responses:
         "200":
-          application/json: {"active_connection_count": 408126, "active_consumer_session_count": 923001, "connection_status": "connected", "created_at": "2025-03-07T12:23:20.151Z", "id": "1bf5c61a-7401-4732-9a1c-7572bf19031e", "key_prefix": "<value>", "name": "<value>", "project_id": "f095b93d-e0ba-430e-a940-6ea2b3b7de5d", "status": "revoked", "updated_at": "2025-02-19T20:11:46.920Z"}
+          application/json: {"active_connection_count": 408126, "active_consumer_session_count": 923001, "allow_public": false, "connection_status": "connected", "created_at": "2025-03-07T12:23:20.151Z", "id": "1bf5c61a-7401-4732-9a1c-7572bf19031e", "key_prefix": "<value>", "name": "<value>", "project_id": "f095b93d-e0ba-430e-a940-6ea2b3b7de5d", "status": "revoked", "updated_at": "2025-02-19T20:11:46.920Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

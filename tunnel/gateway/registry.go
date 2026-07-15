@@ -113,7 +113,13 @@ const (
 )
 
 // beginForward reserves one live session and updates snapshot counters.
-func (r *registry) beginForward(tunnelID, consumerSession string, now time.Time, maxStreamsPerSession int) (*sessEntry, forwardFailure) {
+//
+// exactSessionID, when non-empty, restricts the reservation to that one agent
+// session: session-bearing anonymous MCP traffic must land on the exact agent
+// whose backend minted the MCP session, so a missing or closed match is
+// forwardNoSession (never a spill to a sibling agent) and a match at its
+// substream cap is forwardBusy.
+func (r *registry) beginForward(tunnelID, consumerSession, exactSessionID string, now time.Time, maxStreamsPerSession int) (*sessEntry, forwardFailure) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -144,6 +150,19 @@ func (r *registry) beginForward(tunnelID, consumerSession string, now time.Time,
 			return forwardBusy
 		}
 		return forwardNoSession
+	}
+
+	if exactSessionID != "" {
+		for _, entry := range list {
+			if entry.id != exactSessionID {
+				continue
+			}
+			if reserved, ok := reserve(entry); ok {
+				return reserved, forwardReserved
+			}
+			return nil, failure()
+		}
+		return nil, forwardNoSession
 	}
 
 	if consumerSession != "" {

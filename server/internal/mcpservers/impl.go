@@ -127,9 +127,6 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 	if err := validateServerBackendExclusivity(ids.RemoteMcpServerID, ids.TunneledMcpServerID, ids.ToolsetID); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
 	}
-	if err := validateTunneledMCPVisibility(ids, payload.Visibility); err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogWarn(ctx, logger)
-	}
 
 	// Generate the server ID up front so the slug can include its suffix and
 	// the row can be inserted in a single statement (no insert-then-update).
@@ -153,6 +150,10 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 
 	if err := verifyServerReferenceOwnership(ctx, dbtx, *authCtx.ProjectID, ids); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
+	}
+
+	if err := verifyTunneledPublicConsent(ctx, dbtx, *authCtx.ProjectID, ids.TunneledMcpServerID, string(payload.Visibility)); err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogWarn(ctx, logger)
 	}
 
 	// Remote- and tunneled-backed servers carry a user_session_issuer for
@@ -439,9 +440,6 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	if err := validateServerBackendExclusivity(ids.RemoteMcpServerID, ids.TunneledMcpServerID, ids.ToolsetID); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
 	}
-	if err := validateTunneledMCPVisibility(ids, payload.Visibility); err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogWarn(ctx, logger)
-	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -509,6 +507,13 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 			return nil, oops.E(oops.CodeNotFound, err, "mcp server not found").LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update mcp server").LogError(ctx, logger)
+	}
+
+	// Check against the post-update row (not the payload): the update query
+	// COALESCEs unset backend references, so this is the only state that
+	// reliably says whether the server is now tunneled + public.
+	if err := verifyTunneledPublicConsent(ctx, dbtx, *authCtx.ProjectID, updated.TunneledMcpServerID, updated.Visibility); err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogWarn(ctx, logger)
 	}
 
 	afterView := mv.BuildMcpServerView(updated)
@@ -811,9 +816,27 @@ func validateServerBackendExclusivity(remoteMcpServerID, tunneledMcpServerID, to
 	return nil
 }
 
-func validateTunneledMCPVisibility(ids serverIDs, visibility types.McpServerVisibility) error {
-	if ids.TunneledMcpServerID.Valid && string(visibility) == VisibilityPublic {
-		return fmt.Errorf("tunneled MCP servers cannot be public")
+// verifyTunneledPublicConsent enforces the double opt-in for anonymous public
+// serving of tunneled backends: an mcp_server may only take public visibility
+// when the tunneled source's owner has set allow_public. Runs inside the
+// create/update transaction against the authoritative post-write state so no
+// payload permutation can slip a public tunneled server past the check.
+func verifyTunneledPublicConsent(ctx context.Context, dbtx pgx.Tx, projectID uuid.UUID, tunneledMcpServerID uuid.NullUUID, visibility string) error {
+	if !tunneledMcpServerID.Valid || visibility != VisibilityPublic {
+		return nil
+	}
+	source, err := tunneledmcprepo.New(dbtx).GetServerByID(ctx, tunneledmcprepo.GetServerByIDParams{
+		ID:        tunneledMcpServerID.UUID,
+		ProjectID: projectID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("tunneled_mcp_server_id does not reference a resource in this project")
+	}
+	if err != nil {
+		return fmt.Errorf("check tunneled mcp server public consent: %w", err)
+	}
+	if !source.AllowPublic {
+		return fmt.Errorf("tunneled MCP servers cannot be public until the tunnel source enables public serving")
 	}
 	return nil
 }

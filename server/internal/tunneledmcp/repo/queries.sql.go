@@ -31,7 +31,7 @@ func (q *Queries) CountActiveServersByOrganizationID(ctx context.Context, organi
 const createServer = `-- name: CreateServer :one
 INSERT INTO tunneled_mcp_servers (id, project_id, name, key_hash, key_prefix)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, project_id, name, key_hash, key_prefix, status, agent_version, last_seen_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, name, key_hash, key_prefix, status, allow_public, agent_version, last_seen_at, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateServerParams struct {
@@ -58,6 +58,7 @@ func (q *Queries) CreateServer(ctx context.Context, arg CreateServerParams) (Tun
 		&i.KeyHash,
 		&i.KeyPrefix,
 		&i.Status,
+		&i.AllowPublic,
 		&i.AgentVersion,
 		&i.LastSeenAt,
 		&i.CreatedAt,
@@ -75,7 +76,7 @@ SET
     deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
 WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
-RETURNING id, project_id, name, key_hash, key_prefix, status, agent_version, last_seen_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, name, key_hash, key_prefix, status, allow_public, agent_version, last_seen_at, created_at, updated_at, deleted_at, deleted
 `
 
 type DeleteServerParams struct {
@@ -93,6 +94,7 @@ func (q *Queries) DeleteServer(ctx context.Context, arg DeleteServerParams) (Tun
 		&i.KeyHash,
 		&i.KeyPrefix,
 		&i.Status,
+		&i.AllowPublic,
 		&i.AgentVersion,
 		&i.LastSeenAt,
 		&i.CreatedAt,
@@ -104,7 +106,7 @@ func (q *Queries) DeleteServer(ctx context.Context, arg DeleteServerParams) (Tun
 }
 
 const getServerByID = `-- name: GetServerByID :one
-SELECT id, project_id, name, key_hash, key_prefix, status, agent_version, last_seen_at, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, name, key_hash, key_prefix, status, allow_public, agent_version, last_seen_at, created_at, updated_at, deleted_at, deleted
 FROM tunneled_mcp_servers
 WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
 `
@@ -124,6 +126,7 @@ func (q *Queries) GetServerByID(ctx context.Context, arg GetServerByIDParams) (T
 		&i.KeyHash,
 		&i.KeyPrefix,
 		&i.Status,
+		&i.AllowPublic,
 		&i.AgentVersion,
 		&i.LastSeenAt,
 		&i.CreatedAt,
@@ -149,7 +152,7 @@ func (q *Queries) GetTunneledMcpServerLimitByOrganizationID(ctx context.Context,
 }
 
 const listServersByProjectID = `-- name: ListServersByProjectID :many
-SELECT id, project_id, name, key_hash, key_prefix, status, agent_version, last_seen_at, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, name, key_hash, key_prefix, status, allow_public, agent_version, last_seen_at, created_at, updated_at, deleted_at, deleted
 FROM tunneled_mcp_servers
 WHERE project_id = $1 AND deleted IS FALSE
 ORDER BY created_at DESC
@@ -171,6 +174,7 @@ func (q *Queries) ListServersByProjectID(ctx context.Context, projectID uuid.UUI
 			&i.KeyHash,
 			&i.KeyPrefix,
 			&i.Status,
+			&i.AllowPublic,
 			&i.AgentVersion,
 			&i.LastSeenAt,
 			&i.CreatedAt,
@@ -210,7 +214,7 @@ SET
     last_seen_at = NULL,
     updated_at = clock_timestamp()
 WHERE id = $3 AND project_id = $4 AND deleted IS FALSE
-RETURNING id, project_id, name, key_hash, key_prefix, status, agent_version, last_seen_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, name, key_hash, key_prefix, status, allow_public, agent_version, last_seen_at, created_at, updated_at, deleted_at, deleted
 `
 
 type RotateServerKeyParams struct {
@@ -235,6 +239,7 @@ func (q *Queries) RotateServerKey(ctx context.Context, arg RotateServerKeyParams
 		&i.KeyHash,
 		&i.KeyPrefix,
 		&i.Status,
+		&i.AllowPublic,
 		&i.AgentVersion,
 		&i.LastSeenAt,
 		&i.CreatedAt,
@@ -249,19 +254,26 @@ const updateServer = `-- name: UpdateServer :one
 UPDATE tunneled_mcp_servers
 SET
     name = $1,
+    allow_public = COALESCE($2, allow_public),
     updated_at = clock_timestamp()
-WHERE id = $2 AND project_id = $3 AND deleted IS FALSE
-RETURNING id, project_id, name, key_hash, key_prefix, status, agent_version, last_seen_at, created_at, updated_at, deleted_at, deleted
+WHERE id = $3 AND project_id = $4 AND deleted IS FALSE
+RETURNING id, project_id, name, key_hash, key_prefix, status, allow_public, agent_version, last_seen_at, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateServerParams struct {
-	Name      string
-	ID        uuid.UUID
-	ProjectID uuid.UUID
+	Name        string
+	AllowPublic pgtype.Bool
+	ID          uuid.UUID
+	ProjectID   uuid.UUID
 }
 
 func (q *Queries) UpdateServer(ctx context.Context, arg UpdateServerParams) (TunneledMcpServer, error) {
-	row := q.db.QueryRow(ctx, updateServer, arg.Name, arg.ID, arg.ProjectID)
+	row := q.db.QueryRow(ctx, updateServer,
+		arg.Name,
+		arg.AllowPublic,
+		arg.ID,
+		arg.ProjectID,
+	)
 	var i TunneledMcpServer
 	err := row.Scan(
 		&i.ID,
@@ -270,6 +282,7 @@ func (q *Queries) UpdateServer(ctx context.Context, arg UpdateServerParams) (Tun
 		&i.KeyHash,
 		&i.KeyPrefix,
 		&i.Status,
+		&i.AllowPublic,
 		&i.AgentVersion,
 		&i.LastSeenAt,
 		&i.CreatedAt,

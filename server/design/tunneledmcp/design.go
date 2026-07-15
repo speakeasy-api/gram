@@ -221,6 +221,7 @@ var TunneledMcpUpdateServerForm = Type("UpdateTunneledMcpServerForm", func() {
 		Format(FormatUUID)
 	})
 	Attribute("name", String, "Human-readable display name for the tunneled MCP server")
+	Attribute("allow_public", Boolean, "Consent to serve this source through a public, anonymous MCP endpoint. Disabling revokes all live anonymous sessions. Omit to leave unchanged.")
 
 	Required("id", "name")
 })
@@ -286,6 +287,7 @@ var TunneledMcpServer = Type("TunneledMcpServer", func() {
 	Attribute("key_prefix", String, "Non-secret prefix of the tunnel key")
 	Attribute("status", TunneledMcpLifecycleStatus, "Stored lifecycle status")
 	Attribute("connection_status", TunneledMcpConnectionStatus, "Derived connection status")
+	Attribute("allow_public", Boolean, "Whether the owner has consented to serving this source through a public, anonymous MCP endpoint")
 	Attribute("agent_version", String, "Most recent agent version reported by the tunnel")
 	Attribute("last_seen_at", String, func() {
 		Description("Most recent persisted heartbeat timestamp")
@@ -302,7 +304,7 @@ var TunneledMcpServer = Type("TunneledMcpServer", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "project_id", "name", "key_prefix", "status", "connection_status", "active_connection_count", "active_consumer_session_count", "created_at", "updated_at")
+	Required("id", "project_id", "name", "key_prefix", "status", "connection_status", "allow_public", "active_connection_count", "active_consumer_session_count", "created_at", "updated_at")
 })
 
 var TunneledMcpServerConnections = Type("TunneledMcpServerConnections", func() {

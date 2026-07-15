@@ -631,3 +631,45 @@ func TestUpdateMcpServer_AlreadyEnabledUpdateDoesNotAttach(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, servers)
 }
+
+// TestUpdateMcpServer_TunneledMcpPublicAllowedWithConsent: flipping a private
+// tunneled server to public succeeds once the source owner has consented.
+func TestUpdateMcpServer_TunneledMcpPublicAllowedWithConsent(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	tunneledServerID := seedTunneledMcpServer(t, ctx, ti.conn, *authCtx.ProjectID)
+	tunneledServerIDStr := tunneledServerID.String()
+
+	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		Name:                "private tunneled mcp server pending consent",
+		EnvironmentID:       nil,
+		TunneledMcpServerID: &tunneledServerIDStr,
+		ToolsetID:           nil,
+		Visibility:          types.McpServerVisibility("private"),
+	})
+	require.NoError(t, err)
+
+	enableTunneledPublicConsent(t, ctx, ti.conn, *authCtx.ProjectID, tunneledServerID)
+
+	updated, err := ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		ID:                  created.ID,
+		Name:                nil,
+		EnvironmentID:       nil,
+		TunneledMcpServerID: &tunneledServerIDStr,
+		ToolsetID:           nil,
+		Visibility:          types.McpServerVisibility("public"),
+	})
+	require.NoError(t, err)
+	require.Equal(t, types.McpServerVisibility("public"), updated.Visibility)
+}

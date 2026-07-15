@@ -14,6 +14,13 @@ const (
 
 	FlagRiskFindingAnalytics Flag = "risk-finding-analytics"
 
+	// FlagPublicTunnels gates anonymous public serving of tunneled MCP
+	// servers during its preview rollout. Checked per organization at serve
+	// time; fails closed (PostHog unavailable or flag unset means the org is
+	// not enabled). Removed once the capability ships GA — the durable owner
+	// consent lives in tunneled_mcp_servers.allow_public, not here.
+	FlagPublicTunnels Flag = "gram-public-tunnels"
+
 	// FlagHooksRollout gates the phased rollout of new observability (hooks)
 	// plugin generator versions. Unlike the other flags it is consulted via its
 	// PAYLOAD, not its boolean state: the flag carries a JSON payload

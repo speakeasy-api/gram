@@ -430,6 +430,10 @@ const (
 	RemoteMCPServerIDKey               = attribute.Key("gram.remote_mcp_server.id")
 	RemoteMCPServerURLKey              = attribute.Key("gram.remote_mcp_server.url")
 	TunneledMCPServerIDKey             = attribute.Key("gram.tunneled_mcp_server.id")
+	// TunnelAnonymousSessionHashKey carries a sha256 prefix of a Gram-minted
+	// anonymous tunnel session id. The raw id is bearer-like and must never
+	// be logged.
+	TunnelAnonymousSessionHashKey = attribute.Key("gram.tunneled_mcp_server.anonymous_session_hash")
 
 	WorkOSEventIDKey             = attribute.Key("gram.workos_event.id")
 	WorkOSEventTypeKey           = attribute.Key("gram.workos_event.type")
@@ -1272,6 +1276,13 @@ func SlogRemoteMCPServerURL(v string) slog.Attr {
 func TunneledMCPServerID(v string) attribute.KeyValue { return TunneledMCPServerIDKey.String(v) }
 func SlogTunneledMCPServerID(v string) slog.Attr {
 	return slog.String(string(TunneledMCPServerIDKey), v)
+}
+
+func TunnelAnonymousSessionHash(v string) attribute.KeyValue {
+	return TunnelAnonymousSessionHashKey.String(v)
+}
+func SlogTunnelAnonymousSessionHash(v string) slog.Attr {
+	return slog.String(string(TunnelAnonymousSessionHashKey), v)
 }
 
 func RemoteMCPProxyInterceptor(v string) attribute.KeyValue {

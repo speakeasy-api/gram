@@ -19,6 +19,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -138,6 +139,10 @@ type Service struct {
 	// helpers but never serves a runtime request).
 	remoteProxyManager *remotemcp.ProxyManager
 	tunnelManager      *tunnelManager
+	// tunnelPublic backs anonymous public serving of tunneled MCP servers.
+	// Nil when no Redis client was wired (e.g. contexts that never serve
+	// runtime requests); every public tunneled request then fails closed.
+	tunnelPublic *tunnelPublicRuntime
 }
 
 // oauthTokenInputs is one upstream OAuth access token collected during MCP
@@ -263,6 +268,8 @@ func NewService(
 	tunnelRoutes route.Store,
 	tunnelForwardToken string,
 	tunnelGatewayCIDRs []string,
+	redisClient *redis.Client,
+	tunnelPublicConfig TunnelPublicConfig,
 ) *Service {
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
@@ -339,6 +346,7 @@ func NewService(
 		remoteChallengeMgr: remoteChallengeMgr,
 		remoteProxyManager: remoteProxyManager,
 		tunnelManager:      newTunnelManager(tunnelRoutes, tunnelForwardToken, remoteProxyManager, tunnelGatewayCIDRs),
+		tunnelPublic:       newTunnelPublicRuntime(redisClient, tunnelPublicConfig),
 	}
 }
 
