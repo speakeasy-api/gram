@@ -1,8 +1,10 @@
+import {
+  EnvironmentVariableDialog,
+  type EnvironmentVariableDraft,
+} from "@/components/environments/EnvironmentVariableDialog";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Button } from "@speakeasy-api/moonshine";
 import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Type } from "@/components/ui/type";
 import {
   useRegisterEnvironmentTelemetry,
@@ -13,64 +15,14 @@ import { useDeleteEnvironmentMutation } from "@gram/client/react-query/deleteEnv
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useToolset } from "@gram/client/react-query/toolset.js";
 import { useUpdateEnvironmentMutation } from "@gram/client/react-query/updateEnvironment.js";
-import { AlertCircle, Eye, EyeOff, Plus, Trash2, X } from "lucide-react";
+import { Badge, Button } from "@speakeasy-api/moonshine";
+import { AlertCircle, Eye, EyeOff, Plus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
+import { type Action, MoreActions } from "@/components/ui/more-actions";
 import { useEnvironment } from "./useEnvironment";
-import { MoreActions } from "@/components/ui/more-actions";
 
-interface SaveActionBarProps {
-  saveError: string | null;
-  isSaving: boolean;
-  onSave: () => void;
-  onCancel: () => void;
-}
-
-function SaveActionBar({
-  saveError,
-  isSaving,
-  onSave,
-  onCancel,
-}: SaveActionBarProps) {
-  return (
-    <div className="flex items-center justify-between border-t pt-4">
-      {saveError && (
-        <div
-          className="text-destructive flex items-center gap-2 text-sm"
-          role="alert"
-        >
-          <AlertCircle className="h-4 w-4" aria-hidden="true" />
-          {saveError}
-        </div>
-      )}
-      <div className="ml-auto flex items-center gap-3">
-        <Button
-          type="button"
-          variant="tertiary"
-          size="sm"
-          onClick={onCancel}
-          disabled={isSaving}
-          aria-label="Cancel changes"
-        >
-          Cancel
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          onClick={onSave}
-          disabled={isSaving}
-          aria-label={
-            isSaving
-              ? "Saving environment variables"
-              : "Save environment variables"
-          }
-        >
-          {isSaving ? "Saving..." : "Save"}
-        </Button>
-      </div>
-    </div>
-  );
-}
+const MASK = "••••••••••••";
 
 interface ToolsetDialogProps {
   open: boolean;
@@ -158,6 +110,98 @@ function ToolsetDialog({ open, onOpenChange, onSubmit }: ToolsetDialogProps) {
   );
 }
 
+interface EnvironmentVariableRowProps {
+  entry: EnvironmentVariableDraft;
+  canWrite: boolean;
+  revealed: boolean;
+  disabled: boolean;
+  onToggleReveal: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}
+
+function EnvironmentVariableRow({
+  entry,
+  canWrite,
+  revealed,
+  disabled,
+  onToggleReveal,
+  onEdit,
+  onDelete,
+}: EnvironmentVariableRowProps) {
+  const actions: Action[] = [];
+  if (canWrite) {
+    actions.push({
+      label: "Edit",
+      onClick: onEdit,
+      icon: "pencil",
+      disabled: disabled,
+    });
+  }
+  // A secret only ever hands back its redacted preview, so copying one would
+  // put a useless string on the clipboard. Keep the row shape steady by
+  // showing the action locked rather than dropping it.
+  actions.push({
+    label: "Copy to Clipboard",
+    onClick: () => {
+      void navigator.clipboard.writeText(entry.value);
+    },
+    icon: entry.isSecret ? "lock" : "copy",
+    disabled: entry.isSecret,
+  });
+  if (canWrite) {
+    actions.push({
+      label: "Delete",
+      onClick: onDelete,
+      icon: "trash",
+      destructive: true,
+      disabled: disabled,
+    });
+  }
+
+  return (
+    <div className="flex items-center gap-3 rounded-md border px-3 py-2">
+      <div className="grid flex-1 grid-cols-2 items-center gap-4">
+        <div className="flex">
+          <span className="text-foreground font-mono text-sm font-medium">
+            {entry.name}
+          </span>
+          {entry.isSecret && (
+            <Badge
+              variant="neutral"
+              size="sm"
+              className="ml-2 h-4 px-1 text-xs"
+            >
+              Sensitive
+            </Badge>
+          )}
+        </div>
+        <div className="flex w-full items-center justify-end gap-2">
+          <span className="text-muted-foreground flex-1 truncate font-mono text-sm">
+            {revealed ? entry.value : MASK}
+          </span>
+          <Button
+            variant="tertiary"
+            size="sm"
+            className="h-8 w-8 flex-shrink-0"
+            onClick={onToggleReveal}
+            aria-label={revealed ? `Hide ${entry.name}` : `View ${entry.name}`}
+          >
+            <Button.LeftIcon>
+              {revealed ? (
+                <EyeOff className="h-4 w-4" />
+              ) : (
+                <Eye className="h-4 w-4" />
+              )}
+            </Button.LeftIcon>
+          </Button>
+        </div>
+      </div>
+      <MoreActions actions={actions} />
+    </div>
+  );
+}
+
 export default function EnvironmentPage(): JSX.Element {
   return (
     <RequireScope scope="project:read" level="page">
@@ -177,21 +221,16 @@ function EnvironmentPageInner() {
 
   const [toolsetDialogOpen, setToolsetDialogOpen] = useState(false);
   const [selectedToolsetSlug, setSelectedToolsetSlug] = useState<string>("");
-  const [envValues, setEnvValues] = useState<Record<string, string>>({});
-  const [hasChanges, setHasChanges] = useState(false);
-  const [editedFields, setEditedFields] = useState<Set<string>>(new Set());
-  const [deletedFields, setDeletedFields] = useState<Set<string>>(new Set());
-  const [focusedField, setFocusedField] = useState<string | null>(null);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [isAddingNew, setIsAddingNew] = useState(false);
-  const [newEntryName, setNewEntryName] = useState("");
-  const [newEntryValue, setNewEntryValue] = useState("");
-  const [newEntryVisible, setNewEntryVisible] = useState(false);
+  const [revealedFields, setRevealedFields] = useState<Set<string>>(new Set());
+  const [pageError, setPageError] = useState<string | null>(null);
+  const [variableDialog, setVariableDialog] = useState<{
+    open: boolean;
+    entry?: EnvironmentVariableDraft;
+  }>({ open: false });
   const [deleteConfirmDialog, setDeleteConfirmDialog] = useState<{
     open: boolean;
     varName: string;
   }>({ open: false, varName: "" });
-  const [visibleFields, setVisibleFields] = useState<Set<string>>(new Set());
 
   useRegisterEnvironmentTelemetry({
     environmentSlug: environment?.slug ?? "",
@@ -207,39 +246,27 @@ function EnvironmentPageInner() {
     },
   });
 
-  const updateEnvironmentMutation = useUpdateEnvironmentMutation({
-    onSuccess: () => {
-      telemetry.capture("environment_event", {
-        action: "environment_updated",
-      });
-      void environment!.refetch();
-      setHasChanges(false);
-      setSaveError(null);
-      setEnvValues({});
-      setEditedFields(new Set());
-      setDeletedFields(new Set());
-    },
-    onError: (error) => {
-      console.error(
-        "Environment variable save failed:",
-        error?.message || error,
-      );
-      setSaveError("Failed to save environment variables. Please try again.");
-    },
-  });
+  const { mutate: updateEnvironment, isPending: isMutating } =
+    useUpdateEnvironmentMutation({
+      onSuccess: () => {
+        telemetry.capture("environment_event", {
+          action: "environment_updated",
+        });
+        void environment!.refetch();
+        setPageError(null);
+      },
+      onError: (error) => {
+        console.error(
+          "Environment variable save failed:",
+          error?.message || error,
+        );
+        setPageError("Failed to save environment variables. Please try again.");
+      },
+    });
 
-  const { mutate: updateEnvironment, isPending: isSaving } =
-    updateEnvironmentMutation;
-
-  // Reset state when environment changes (like ToolsetAuth)
   useEffect(() => {
-    setEnvValues({});
-    setEditedFields(new Set());
-    setDeletedFields(new Set());
-    setHasChanges(false);
-    setSaveError(null);
-    setFocusedField(null);
-    setVisibleFields(new Set());
+    setRevealedFields(new Set());
+    setPageError(null);
   }, [environment?.slug]);
 
   const { data: selectedToolset } = useToolset(
@@ -248,92 +275,47 @@ function EnvironmentPageInner() {
     { enabled: !!selectedToolsetSlug },
   );
 
+  // "Fill for MCP Server" writes empty placeholder entries straight through.
+  // They are created secret because the column rejects an empty plaintext
+  // value, while a secret entry stores ciphertext that is never empty.
   useEffect(() => {
-    if (
-      selectedToolset &&
-      (selectedToolset.securityVariables ||
-        selectedToolset.serverVariables ||
-        selectedToolset.functionEnvironmentVariables ||
-        selectedToolset.externalMcpHeaderDefinitions)
-    ) {
-      const newValues = { ...envValues };
-      const newEdited = new Set(editedFields);
+    if (!selectedToolset || !environment) return;
 
-      // Process security variables
-      selectedToolset.securityVariables?.forEach((entry) => {
-        entry.envVariables.forEach((varName) => {
-          const existingEntry = environment?.entries?.find(
-            (e) => e.name === varName,
-          );
-          if (!existingEntry) {
-            newValues[varName] = "";
-            newEdited.add(varName);
-          }
-        });
+    const names = new Set<string>();
+    selectedToolset.securityVariables?.forEach((entry) => {
+      entry.envVariables.forEach((varName) => {
+        names.add(varName);
       });
-
-      // Process function environment variables
-      selectedToolset.functionEnvironmentVariables?.forEach((entry) => {
-        const existingEntry = environment?.entries?.find(
-          (e) => e.name === entry.name,
-        );
-        if (!existingEntry) {
-          newValues[entry.name] = "";
-          newEdited.add(entry.name);
-        }
+    });
+    selectedToolset.serverVariables?.forEach((entry) => {
+      entry.envVariables.forEach((varName) => {
+        names.add(varName);
       });
+    });
+    selectedToolset.functionEnvironmentVariables?.forEach((entry) => {
+      names.add(entry.name);
+    });
+    selectedToolset.externalMcpHeaderDefinitions?.forEach((entry) => {
+      names.add(entry.name);
+    });
 
-      // Process server variables
-      selectedToolset.serverVariables?.forEach((entry) => {
-        entry.envVariables.forEach((varName) => {
-          const existingEntry = environment?.entries?.find(
-            (e) => e.name === varName,
-          );
-          if (!existingEntry) {
-            newValues[varName] = "";
-            newEdited.add(varName);
-          }
-        });
-      });
+    const entriesToUpdate = Array.from(names)
+      .filter((name) => !environment.entries?.some((e) => e.name === name))
+      .map((name) => ({ name, value: "", isSecret: true }));
 
-      // Process external MCP header definitions
-      selectedToolset.externalMcpHeaderDefinitions?.forEach((entry) => {
-        const existingEntry = environment?.entries?.find(
-          (e) => e.name === entry.name,
-        );
-        if (!existingEntry) {
-          newValues[entry.name] = "";
-          newEdited.add(entry.name);
-        }
-      });
+    setSelectedToolsetSlug("");
+    if (entriesToUpdate.length === 0) return;
 
-      setEnvValues(newValues);
-      setEditedFields(newEdited);
-      setHasChanges(true);
-      setSelectedToolsetSlug("");
-    }
-  }, [selectedToolset, environment?.entries, envValues, editedFields]);
+    updateEnvironment({
+      request: {
+        slug: environment.slug,
+        updateEnvironmentRequestBody: { entriesToUpdate, entriesToRemove: [] },
+      },
+    });
+  }, [selectedToolset, environment, updateEnvironment]);
 
-  const handleValueChange = useCallback(
-    (varName: string, value: string) => {
-      setEnvValues((prev) => ({ ...prev, [varName]: value }));
-      setEditedFields((prev) => new Set(prev).add(varName));
-      setHasChanges(true);
-      if (saveError) setSaveError(null);
-    },
-    [saveError],
-  );
-
-  const handleFieldFocus = useCallback((varName: string) => {
-    setFocusedField(varName);
-  }, []);
-
-  const handleFieldBlur = useCallback(() => {
-    setFocusedField(null);
-  }, []);
-
-  const handleToggleVisibility = useCallback((varName: string) => {
-    setVisibleFields((prev) => {
+  const handleToggleReveal = useCallback((varName: string) => {
+    setRevealedFields((prev) => {
       const next = new Set(prev);
       if (next.has(varName)) {
         next.delete(varName);
@@ -344,122 +326,32 @@ function EnvironmentPageInner() {
     });
   }, []);
 
-  const handleCancel = useCallback(() => {
-    setEnvValues({});
-    setEditedFields(new Set());
-    setDeletedFields(new Set());
-    setHasChanges(false);
-    setSaveError(null);
-    setFocusedField(null);
-    setVisibleFields(new Set());
-    setIsAddingNew(false);
-    setNewEntryName("");
-    setNewEntryValue("");
-  }, []);
-
-  const handleRemoveVariable = useCallback((varName: string) => {
-    setDeleteConfirmDialog({ open: true, varName });
-  }, []);
-
   const confirmDelete = useCallback(
     (varName: string) => {
-      setDeletedFields((prev) => new Set(prev).add(varName));
-      setHasChanges(true);
-      if (saveError) setSaveError(null);
+      if (!environment) return;
+      updateEnvironment({
+        request: {
+          slug: environment.slug,
+          updateEnvironmentRequestBody: {
+            entriesToUpdate: [],
+            entriesToRemove: [varName],
+          },
+        },
+      });
       setDeleteConfirmDialog({ open: false, varName: "" });
     },
-    [saveError],
+    [environment, updateEnvironment],
   );
 
-  const validateEntryName = useCallback(
-    (name: string) => {
-      return (
-        name.length > 0 &&
-        !environment?.entries.some((entry) => entry.name === name) &&
-        !Object.keys(envValues).includes(name) &&
-        /^[-_.a-zA-Z][-_.a-zA-Z0-9]*$/.test(name)
-      );
-    },
-    [environment?.entries, envValues],
-  );
-
-  const handleSave = useCallback(() => {
-    if (!environment) return;
-
-    const { slug: environmentSlug } = environment;
-
-    // Include new entry if adding one (even with empty value)
-    const allValues = { ...envValues };
-    if (isAddingNew && validateEntryName(newEntryName)) {
-      allValues[newEntryName.trim()] = newEntryValue.trim();
-    }
-
-    const entriesToUpdate = Object.entries(allValues)
-      .filter(([name]) => !deletedFields.has(name))
-      .map(([name, value]) => ({ name, value }));
-
-    const entriesToRemove: string[] = Array.from(deletedFields);
-
-    updateEnvironment({
-      request: {
-        slug: environmentSlug,
-        updateEnvironmentRequestBody: {
-          entriesToUpdate,
-          entriesToRemove,
-        },
-      },
-    });
-
-    // Reset new entry state
-    setIsAddingNew(false);
-    setNewEntryName("");
-    setNewEntryValue("");
-    setNewEntryVisible(false);
-    setDeletedFields(new Set());
-  }, [
-    environment,
-    envValues,
-    isAddingNew,
-    newEntryName,
-    newEntryValue,
-    deletedFields,
-    updateEnvironment,
-    validateEntryName,
-  ]);
-
-  const handleAddNewEntry = useCallback(() => {
-    setIsAddingNew(true);
-  }, []);
-
-  const handleCancelNewEntry = useCallback(() => {
-    setIsAddingNew(false);
-    setNewEntryName("");
-    setNewEntryValue("");
-    setNewEntryVisible(false);
-  }, []);
-
-  const handleToolsetSubmit = (toolsetSlug: string) => {
-    setSelectedToolsetSlug(toolsetSlug);
-  };
+  const handleSaved = useCallback(() => {
+    void environment?.refetch();
+  }, [environment]);
 
   if (!environment) {
     return <div>Environment not found</div>;
   }
 
-  const allEntries = [
-    ...(environment.entries || []),
-    ...Object.keys(envValues)
-      .filter((name) => !environment.entries?.find((e) => e.name === name))
-      .map((name) => ({
-        name,
-        value: "",
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })),
-  ].filter((entry) => !deletedFields.has(entry.name));
-
-  const hasChangesOrNewEntry =
-    hasChanges || (isAddingNew && validateEntryName(newEntryName));
+  const entries = environment.entries ?? [];
 
   return (
     <Page>
@@ -472,8 +364,8 @@ function EnvironmentPageInner() {
           <Page.Section.CTA>
             <RequireScope scope="environment:write" level="component">
               <Button
-                onClick={handleAddNewEntry}
-                disabled={isSaving || isAddingNew}
+                onClick={() => setVariableDialog({ open: true })}
+                disabled={isMutating}
               >
                 Add Variable
               </Button>
@@ -501,200 +393,53 @@ function EnvironmentPageInner() {
           />
           <Page.Section.Body>
             <div className="space-y-6">
-              <div className="space-y-4">
-                {allEntries.map((entry) => {
-                  const isEdited = editedFields.has(entry.name);
-                  const originalEntry = environment.entries?.find(
-                    (e) => e.name === entry.name,
-                  );
-                  const isNew = !originalEntry;
-                  const isFocused = focusedField === entry.name;
-                  const hasExistingValue =
-                    originalEntry?.value != null &&
-                    originalEntry.value.trim() !== "";
-
-                  // Display logic matching ToolsetAuth:
-                  // - If edited, show the edited value
-                  // - If not focused and has existing value, show the original value
-                  // - If focused, show empty (to allow typing replacement)
-                  let displayValue = "";
-                  if (isEdited) {
-                    displayValue = envValues[entry.name] ?? "";
-                  } else if (
-                    !isFocused &&
-                    hasExistingValue &&
-                    originalEntry?.value
-                  ) {
-                    displayValue = originalEntry.value;
-                  }
-
-                  return (
-                    <div
-                      key={entry.name}
-                      className="mb-2 grid grid-cols-2 items-center gap-4"
-                    >
-                      <label className="text-foreground text-sm font-medium">
-                        {entry.name}
-                        {isNew && (
-                          <span className="ml-2 text-xs font-normal text-blue-600">
-                            (new)
-                          </span>
-                        )}
-                      </label>
-                      <div className="flex w-full items-center gap-2">
-                        <div className="flex-1">
-                          <Input
-                            value={displayValue}
-                            onChange={(value) =>
-                              handleValueChange(entry.name, value)
-                            }
-                            onFocus={() => handleFieldFocus(entry.name)}
-                            onBlur={handleFieldBlur}
-                            placeholder={
-                              hasExistingValue
-                                ? "Replace existing value"
-                                : "Enter value"
-                            }
-                            type={
-                              canWrite && visibleFields.has(entry.name)
-                                ? "text"
-                                : "password"
-                            }
-                            className={`w-full font-mono text-sm ${isEdited ? "ring-1 ring-blue-500" : ""}`}
-                            disabled={isSaving || !canWrite}
-                          />
-                        </div>
-                        {canWrite && (
-                          <>
-                            <Button
-                              variant="tertiary"
-                              size="sm"
-                              className="mt-[1px] h-8 w-8 flex-shrink-0 self-start"
-                              onClick={() => handleToggleVisibility(entry.name)}
-                              disabled={isSaving}
-                              aria-label={
-                                visibleFields.has(entry.name)
-                                  ? `Hide ${entry.name}`
-                                  : `Show ${entry.name}`
-                              }
-                            >
-                              <Button.LeftIcon>
-                                {visibleFields.has(entry.name) ? (
-                                  <EyeOff className="h-4 w-4" />
-                                ) : (
-                                  <Eye className="h-4 w-4" />
-                                )}
-                              </Button.LeftIcon>
-                            </Button>
-                            <Button
-                              variant="tertiary"
-                              size="sm"
-                              className="mt-[1px] h-8 w-8 flex-shrink-0 self-start"
-                              onClick={() => handleRemoveVariable(entry.name)}
-                              disabled={isSaving}
-                              aria-label={`Remove ${entry.name}`}
-                            >
-                              <Button.LeftIcon>
-                                <Trash2 className="h-4 w-4" />
-                              </Button.LeftIcon>
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-
-                {isAddingNew && (
-                  <div className="space-y-2">
-                    <div className="mb-2 grid grid-cols-2 items-center gap-4">
-                      <Input
-                        value={newEntryName}
-                        onChange={(value) =>
-                          setNewEntryName(value.toUpperCase())
-                        }
-                        onKeyDown={(e) => {
-                          if (e.key === "Escape") {
-                            handleCancelNewEntry();
-                          }
-                        }}
-                        placeholder="NAME"
-                        className="w-full font-mono text-sm"
-                        disabled={isSaving}
-                        autoFocus
-                      />
-                      <div className="flex w-full items-center gap-2">
-                        <div className="flex-1">
-                          <Input
-                            value={newEntryValue}
-                            onChange={setNewEntryValue}
-                            placeholder="Value"
-                            type={newEntryVisible ? "text" : "password"}
-                            className="w-full font-mono text-sm"
-                            disabled={isSaving}
-                          />
-                        </div>
-                        <Button
-                          variant="tertiary"
-                          size="sm"
-                          className="mt-[1px] h-8 w-8 flex-shrink-0 self-start"
-                          onClick={() => setNewEntryVisible(!newEntryVisible)}
-                          disabled={isSaving}
-                          aria-label={
-                            newEntryVisible ? "Hide value" : "Show value"
-                          }
-                        >
-                          <Button.LeftIcon>
-                            {newEntryVisible ? (
-                              <EyeOff className="h-4 w-4" />
-                            ) : (
-                              <Eye className="h-4 w-4" />
-                            )}
-                          </Button.LeftIcon>
-                        </Button>
-                        <Button
-                          variant="tertiary"
-                          size="sm"
-                          className="mt-[1px] h-8 w-8 flex-shrink-0 self-start"
-                          onClick={handleCancelNewEntry}
-                          disabled={isSaving}
-                          aria-label="Cancel new entry"
-                        >
-                          <Button.LeftIcon>
-                            <X className="h-4 w-4" />
-                          </Button.LeftIcon>
-                        </Button>
-                      </div>
-                    </div>
-                    {!validateEntryName(newEntryName) &&
-                      newEntryName.length > 0 && (
-                        <p className="text-destructive text-xs">
-                          Variable name must start with a letter, underscore,
-                          dash, or period and contain only alphanumeric
-                          characters, underscores, dashes, or periods
-                        </p>
-                      )}
-                  </div>
-                )}
-              </div>
-
-              {hasChangesOrNewEntry && (
-                <SaveActionBar
-                  saveError={saveError}
-                  isSaving={isSaving}
-                  onSave={handleSave}
-                  onCancel={handleCancel}
-                />
+              {pageError && (
+                <div
+                  className="text-destructive flex items-center gap-2 text-sm"
+                  role="alert"
+                >
+                  <AlertCircle className="h-4 w-4" aria-hidden="true" />
+                  {pageError}
+                </div>
               )}
 
-              {allEntries.length === 0 && !isAddingNew && (
+              <div className="space-y-2">
+                {entries.map((entry) => (
+                  <EnvironmentVariableRow
+                    key={entry.name}
+                    entry={entry}
+                    canWrite={canWrite}
+                    revealed={revealedFields.has(entry.name)}
+                    disabled={isMutating}
+                    onToggleReveal={() => handleToggleReveal(entry.name)}
+                    onEdit={() =>
+                      setVariableDialog({
+                        open: true,
+                        entry: {
+                          name: entry.name,
+                          value: entry.value,
+                          isSecret: entry.isSecret,
+                        },
+                      })
+                    }
+                    onDelete={() =>
+                      setDeleteConfirmDialog({
+                        open: true,
+                        varName: entry.name,
+                      })
+                    }
+                  />
+                ))}
+              </div>
+
+              {entries.length === 0 && (
                 <div className="py-8 text-center">
                   <p className="text-muted-foreground text-sm">
                     No environment variables defined
                   </p>
                   {canWrite && (
                     <div className="mt-4 flex flex-col items-center gap-2">
-                      <Button onClick={handleAddNewEntry}>
+                      <Button onClick={() => setVariableDialog({ open: true })}>
                         <Plus className="mr-2 h-4 w-4" />
                         ADD YOUR FIRST VARIABLE
                       </Button>
@@ -710,10 +455,21 @@ function EnvironmentPageInner() {
               )}
             </div>
 
+            <EnvironmentVariableDialog
+              open={variableDialog.open}
+              onOpenChange={(open) =>
+                setVariableDialog((prev) => (open ? prev : { open: false }))
+              }
+              environmentSlug={environment.slug}
+              entry={variableDialog.entry}
+              existingNames={entries.map((entry) => entry.name)}
+              onSaved={handleSaved}
+            />
+
             <ToolsetDialog
               open={toolsetDialogOpen}
               onOpenChange={setToolsetDialogOpen}
-              onSubmit={handleToolsetSubmit}
+              onSubmit={setSelectedToolsetSlug}
             />
 
             <Dialog
@@ -730,7 +486,7 @@ function EnvironmentPageInner() {
                   <Dialog.Description>
                     Are you sure you want to delete{" "}
                     <strong>{deleteConfirmDialog.varName}</strong>? This action
-                    will be permanent once you save your changes.
+                    is permanent.
                   </Dialog.Description>
                 </Dialog.Header>
                 <Dialog.Footer>
