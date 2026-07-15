@@ -46,6 +46,31 @@ func TestClaudeSessionStartUpsertsShadowMCPInventoryURLs(t *testing.T) {
 	require.Equal(t, "speakeasy", rows[0].ServerName)
 }
 
+func TestCanonicalClaudeSessionStartUpsertsShadowMCPInventoryURLs(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	chClient := enableHookTelemetryLogger(t, ctx, ti)
+	authCtx := hookAuthContext(t, ctx)
+
+	payload := canonicalIngestPayload("claude", "session.started", uuid.NewString())
+	payload.Data = &gen.HookIngestData{
+		McpInventory: []*gen.HookMCPData{
+			{ServerName: new("external"), URL: new("https://external.example.com/mcp?token=redacted")},
+			{ServerName: new("gram"), URL: new("https://app.getgram.ai/mcp/hosted")},
+			{ServerName: new("local"), Command: new("local-mcp --token ***")},
+		},
+	}
+
+	result, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", result.Decision)
+
+	rows := requireShadowMCPInventoryURLsFromHooks(ctx, t, ti, chClient, authCtx.ProjectID.String(), 1)
+	require.Equal(t, "https://external.example.com/mcp", rows[0].CanonicalServerURL)
+	require.Equal(t, "external.example.com", rows[0].URLHost)
+	require.Equal(t, "external", rows[0].ServerName)
+}
+
 func TestClaudeSessionStartSkipsHostedMCPInventoryURLs(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)

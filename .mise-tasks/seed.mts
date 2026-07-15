@@ -74,6 +74,12 @@ const log = {
   error: (message: string) => clackLog.error(`${message} ${lap()}`),
 };
 
+async function runClickHouseSQL(sql: string): Promise<void> {
+  await $({
+    input: sql,
+  })`docker compose exec -T clickhouse clickhouse-client --multiquery`.quiet();
+}
+
 type Asset = {
   slug: string;
 } & (
@@ -540,14 +546,7 @@ async function seedShadowMCPInventoryData(init: {
   `;
 
   try {
-    const tmpFile = path.join(process.cwd(), ".seed-shadow-mcp.sql");
-    await fs.writeFile(tmpFile, sql, "utf-8");
-    try {
-      await $`docker cp ${tmpFile} gram-clickhouse-1:/tmp/seed-shadow-mcp.sql`.quiet();
-      await $`docker exec gram-clickhouse-1 clickhouse-client --multiquery --queries-file /tmp/seed-shadow-mcp.sql`.quiet();
-    } finally {
-      await fs.unlink(tmpFile).catch(() => {});
-    }
+    await runClickHouseSQL(sql);
     log.info(
       `Seeded ${servers.length} Shadow MCP servers with ${telemetryRows.length} calls into '${SEED_PROJECTS[0].slug}'.`,
     );
@@ -2812,14 +2811,7 @@ async function seedPersonalAccounts(init: {
   `;
 
   try {
-    const tmpFile = path.join(process.cwd(), ".seed-personal-accounts-ch.sql");
-    await fs.writeFile(tmpFile, chSQL, "utf-8");
-    try {
-      await $`docker cp ${tmpFile} gram-clickhouse-1:/tmp/seed-personal-accounts-ch.sql`.quiet();
-      await $`docker exec gram-clickhouse-1 clickhouse-client --multiquery --queries-file /tmp/seed-personal-accounts-ch.sql`.quiet();
-    } finally {
-      await fs.unlink(tmpFile).catch(() => {});
-    }
+    await runClickHouseSQL(chSQL);
     log.info(
       `Seeded ${chRows.length} usage rows + ${toolRows.length / 2} tool-call traces (team/personal) into ClickHouse.`,
     );
@@ -4337,15 +4329,7 @@ async function seedObservabilityData(init: {
   `;
 
   try {
-    // Write to temp file and execute via docker
-    const tmpFile = `/tmp/seed_clickhouse_${Date.now()}.sql`;
-    await fs.writeFile(tmpFile, chSQL);
-
-    // Use docker exec to run clickhouse-client inside the container
-    // Copy the file into the container, then execute using --queries-file
-    await $`docker cp ${tmpFile} gram-clickhouse-1:/tmp/seed.sql`.quiet();
-    await $`docker exec gram-clickhouse-1 clickhouse-client --multiquery --queries-file /tmp/seed.sql`.quiet();
-    await fs.unlink(tmpFile);
+    await runClickHouseSQL(chSQL);
     log.info(`Inserted ${chInserts.length} telemetry events into ClickHouse`);
   } catch (e) {
     log.warn(`Failed to seed ClickHouse: ${e}`);

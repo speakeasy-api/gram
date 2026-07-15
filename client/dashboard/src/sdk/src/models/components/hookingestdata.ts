@@ -58,6 +58,10 @@ export type HookIngestData = {
    */
   mcpAttribution?: Array<HookMCPAttributionEntry> | undefined;
   /**
+   * Configured MCP server snapshot captured at session start or configuration change. Transport credentials must be redacted by the sender.
+   */
+  mcpInventory?: Array<HookMCPData> | undefined;
+  /**
    * Assistant/user message payload.
    */
   message?: HookMessageData | undefined;
@@ -87,6 +91,7 @@ export type HookIngestData = {
 export type HookIngestData$Outbound = {
   mcp?: HookMCPData$Outbound | undefined;
   mcp_attribution?: Array<HookMCPAttributionEntry$Outbound> | undefined;
+  mcp_inventory?: Array<HookMCPData$Outbound> | undefined;
   message?: HookMessageData$Outbound | undefined;
   notification?: HookNotificationData$Outbound | undefined;
   prompt?: HookPromptData$Outbound | undefined;
@@ -103,6 +108,7 @@ export const HookIngestData$outboundSchema: z.ZodMiniType<
   z.object({
     mcp: z.optional(HookMCPData$outboundSchema),
     mcpAttribution: z.optional(z.array(HookMCPAttributionEntry$outboundSchema)),
+    mcpInventory: z.optional(z.array(HookMCPData$outboundSchema)),
     message: z.optional(HookMessageData$outboundSchema),
     notification: z.optional(HookNotificationData$outboundSchema),
     prompt: z.optional(HookPromptData$outboundSchema),
@@ -113,6 +119,7 @@ export const HookIngestData$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       mcpAttribution: "mcp_attribution",
+      mcpInventory: "mcp_inventory",
       toolCall: "tool_call",
     });
   }),

@@ -1628,6 +1628,33 @@ type RiskResult struct {
 	CreatedAt           pgtype.Timestamptz
 }
 
+type Skill struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	Name           string
+	DisplayName    string
+	Summary        pgtype.Text
+	SourceKind     string
+	Classification string
+	ArchivedAt     pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+type SkillVersion struct {
+	ID               uuid.UUID
+	SkillID          uuid.UUID
+	Content          string
+	CanonicalSha256  string
+	RawSha256        string
+	Description      pgtype.Text
+	Metadata         []byte
+	SpecValid        bool
+	ValidationErrors []byte
+	CreatedAt        pgtype.Timestamptz
+	CreatedByUserID  string
+}
+
 type SlackApp struct {
 	CreatedAt          pgtype.Timestamptz
 	DeletedAt          pgtype.Timestamptz

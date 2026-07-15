@@ -34,11 +34,14 @@ type fakeServer struct {
 	requests []components.IngestRequestBody
 	headers  []http.Header
 	respond  func(components.IngestRequestBody) (int, decision)
+	// effects, when set, is merged into the response body alongside the
+	// decision, mirroring the server's org_settings side channel.
+	effects func(components.IngestRequestBody) map[string]any
 }
 
 func newFakeServer(t *testing.T, respond func(components.IngestRequestBody) (int, decision)) *fakeServer {
 	t.Helper()
-	fs := &fakeServer{Server: nil, mu: sync.Mutex{}, requests: nil, headers: nil, respond: respond}
+	fs := &fakeServer{Server: nil, mu: sync.Mutex{}, requests: nil, headers: nil, respond: respond, effects: nil}
 	fs.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		var p components.IngestRequestBody
@@ -52,9 +55,16 @@ func newFakeServer(t *testing.T, respond func(components.IngestRequestBody) (int
 		if fs.respond != nil {
 			status, dec = fs.respond(p)
 		}
+		out := struct {
+			decision
+			Effects map[string]any `json:"effects,omitempty"`
+		}{decision: dec, Effects: nil}
+		if fs.effects != nil {
+			out.Effects = fs.effects(p)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
-		_ = json.NewEncoder(w).Encode(dec)
+		_ = json.NewEncoder(w).Encode(out)
 	}))
 	t.Cleanup(fs.Close)
 	return fs
@@ -292,16 +302,19 @@ func TestTelemetryEventIsFireAndForget(t *testing.T) {
 	require.NotEmpty(t, fs.last().Data.ToolCall.Output)
 }
 
-func TestNonBlockingSwallowsDeny(t *testing.T) {
+// TestLegacyNonblockingEnforcesDeny pins the observability-mode removal: a
+// plugin config still carrying the legacy nonblocking flag no longer swallows
+// explicit deny decisions — only the fail-open (outage) posture survives.
+func TestLegacyNonblockingEnforcesDeny(t *testing.T) {
 	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
-		return http.StatusOK, decision{Decision: "deny", Reason: "policy_denied", Message: "would block"}
+		return http.StatusOK, decision{Decision: "deny", Reason: "policy_denied", Message: "blocked by policy"}
 	})
 	cfg := authedConfig(t, fs.URL)
 	cfg.Nonblocking = true
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 
-	require.Equal(t, 0, res.ExitCode)
-	require.Equal(t, "{}", string(bytes.TrimSpace(res.Stdout)))
+	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`, "legacy nonblocking must not swallow explicit denies")
+	require.Contains(t, string(res.Stdout), "blocked by policy")
 }
 
 func TestRatchetNeverAuthedFailsOpen(t *testing.T) {
@@ -411,9 +424,25 @@ func TestServerErrorBlocksToolCall(t *testing.T) {
 	require.Contains(t, string(res.Stdout), "HTTP 400")
 }
 
-// TestServerErrorPassesWhenNonblocking mirrors TestServerErrorBlocksToolCall
-// under observability mode: transport failures must not block the agent.
-func TestServerErrorPassesWhenNonblocking(t *testing.T) {
+// TestLegacyNonblockingFailsOpenOnOutage pins the legacy flag's surviving
+// half: a plugin config still carrying nonblocking behaves as fail-open, so an
+// unreachable server lets the gating event through — while a definitive 4xx
+// (TestLegacyNonblockingKeepsClientErrorsClosed) still blocks.
+func TestLegacyNonblockingFailsOpenOnOutage(t *testing.T) {
+	fs := newFakeServer(t, nil)
+	cfg := authedConfig(t, fs.URL)
+	cfg.Nonblocking = true
+	fs.Close()
+
+	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+
+	require.Equal(t, 0, res.ExitCode)
+	require.Equal(t, "{}", string(bytes.TrimSpace(res.Stdout)))
+}
+
+// TestLegacyNonblockingKeepsClientErrorsClosed: the legacy flag maps to
+// fail-open, not never-block — a definitive 4xx still fails closed.
+func TestLegacyNonblockingKeepsClientErrorsClosed(t *testing.T) {
 	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
 		return http.StatusBadRequest, decision{Decision: "", Reason: "", Message: ""}
 	})
@@ -421,8 +450,8 @@ func TestServerErrorPassesWhenNonblocking(t *testing.T) {
 	cfg.Nonblocking = true
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 
-	require.Equal(t, 0, res.ExitCode)
-	require.Equal(t, "{}", string(bytes.TrimSpace(res.Stdout)))
+	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`)
+	require.Contains(t, string(res.Stdout), "HTTP 400")
 }
 
 // TestCachedAuthUsesConfigProject pins that the plugin's configured project
@@ -519,7 +548,6 @@ func TestWritePluginMatchesPublishedEventSets(t *testing.T) {
 				OrgID:        "org-1",
 				HooksAPIKey:  "shared-key",
 				BrowserLogin: false,
-				Nonblocking:  false,
 				BinaryPath:   "/tmp/speakeasy-hooks",
 			})
 			require.NoError(t, err)
@@ -544,6 +572,7 @@ func TestClaudeConfigChangeIsRelayed(t *testing.T) {
 	fs := newFakeServer(t, nil)
 	cfg := authedConfig(t, fs.URL)
 	t.Setenv("GRAM_DEVICE_AGENT_COMMANDS", "speakeasy-hooks-test-missing-device-agent")
+	t.Setenv("PATH", t.TempDir())
 	payload := []byte(`{"session_id":"session-1","hook_event_name":"ConfigChange","source":"project_settings"}`)
 
 	res := agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderClaudeCode, payload, "--variant=cli")
@@ -552,6 +581,90 @@ func TestClaudeConfigChangeIsRelayed(t *testing.T) {
 	require.Equal(t, 1, fs.count())
 	require.Equal(t, components.TypeSessionUpdated, fs.last().Event.Type)
 	require.Equal(t, "ConfigChange", *fs.last().Source.RawEventName)
+	require.Nil(t, fs.last().Data, "a missing Claude CLI must fail open without inventory")
+}
+
+func TestParseClaudeMCPInventory(t *testing.T) {
+	entries := parseClaudeMCPInventory(strings.Join([]string{
+		"Checking MCP server health...",
+		"remote: https://user:password@mcp.example.com/sse?api_key=secret&workspace=acme (SSE) - connected",
+		"plugin:linear:issues: npx -y mcp-remote https://linear.example.com/mcp?token=secret (STDIO) - connected",
+		"claude.ai Notion (Acme): https://mcp.notion.com/mcp (HTTP) - needs authentication",
+	}, "\n"))
+
+	require.Len(t, entries, 3)
+	require.Equal(t, "remote", entries[0].Name)
+	require.Equal(t, "https://user:password@mcp.example.com/sse?api_key=secret&workspace=acme", entries[0].URL)
+	require.Empty(t, entries[0].Command)
+	require.Equal(t, "issues", entries[1].Name)
+	require.Equal(t, "npx -y mcp-remote https://linear.example.com/mcp?token=secret", entries[1].Command)
+	require.Equal(t, "Notion (Acme)", entries[2].Name)
+}
+
+func TestClaudeSessionStartRelaysRedactedMCPInventory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake claude executable uses a POSIX shell")
+	}
+
+	binDir := t.TempDir()
+	claudePath := filepath.Join(binDir, "claude")
+	require.NoError(t, os.WriteFile(claudePath, []byte("#!/bin/sh\npwd > \"$FAKE_CLAUDE_CWD_FILE\"\nprintf '%s\\n' \"$FAKE_CLAUDE_MCP_LIST\"\n"), 0o700))
+	t.Setenv("PATH", binDir)
+	cwdFile := filepath.Join(t.TempDir(), "cwd")
+	t.Setenv("FAKE_CLAUDE_CWD_FILE", cwdFile)
+	t.Setenv("FAKE_CLAUDE_MCP_LIST", strings.Join([]string{
+		"remote: https://user:password@mcp.example.com/sse?api_key=secret&workspace=acme (SSE) - connected",
+		"local: env GITHUB_TOKEN=ghp_secret local-mcp --auth token (STDIO) - connected",
+		"malformed: https://user:leaked@example.com/%zz?token=leaked (HTTP) - connected",
+	}, "\n"))
+
+	fs := newFakeServer(t, nil)
+	cfg := authedConfig(t, fs.URL)
+	cwd := t.TempDir()
+	payload := []byte(`{"session_id":"session-inventory","cwd":"` + cwd + `","hook_event_name":"SessionStart","source":"startup"}`)
+
+	res := agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderClaudeCode, payload, "--variant=cli")
+
+	require.Equal(t, 0, res.ExitCode)
+	require.Equal(t, 1, fs.count())
+	require.NotNil(t, fs.last().Data)
+	require.Len(t, fs.last().Data.McpInventory, 2)
+	require.Equal(t, "remote", *fs.last().Data.McpInventory[0].ServerName)
+	require.Equal(t, "https://mcp.example.com/sse?api_key=%2A%2A%2A&workspace=acme", *fs.last().Data.McpInventory[0].URL)
+	require.NotContains(t, *fs.last().Data.McpInventory[0].URL, "password")
+	require.Equal(t, "env GITHUB_TOKEN=*** local-mcp --auth ***", *fs.last().Data.McpInventory[1].Command)
+	invocationCWD, err := os.ReadFile(cwdFile)
+	require.NoError(t, err)
+	require.Equal(t, cwd, strings.TrimSpace(string(invocationCWD)))
+}
+
+func TestClaudeConfigChangeCollectsFreshMCPInventory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake claude executable uses a POSIX shell")
+	}
+
+	binDir := t.TempDir()
+	claudePath := filepath.Join(binDir, "claude")
+	require.NoError(t, os.WriteFile(claudePath, []byte("#!/bin/sh\nprintf '%s\\n' \"$FAKE_CLAUDE_MCP_LIST\"\n"), 0o700))
+	t.Setenv("PATH", binDir)
+
+	fs := newFakeServer(t, nil)
+	cfg := authedConfig(t, fs.URL)
+	runner := NewRunner(cfg)
+	cwd := t.TempDir()
+	payload := []byte(`{"session_id":"session-inventory-refresh","cwd":"` + cwd + `","hook_event_name":"ConfigChange","source":"project_settings"}`)
+
+	t.Setenv("FAKE_CLAUDE_MCP_LIST", "first: https://first.example.com/mcp (HTTP) - connected")
+	first := agenthookstest.Invoke(t, runner, agenthooks.ProviderClaudeCode, payload, "--variant=cli")
+	require.Equal(t, 0, first.ExitCode)
+
+	t.Setenv("FAKE_CLAUDE_MCP_LIST", "second: https://second.example.com/mcp (HTTP) - connected")
+	second := agenthookstest.Invoke(t, runner, agenthooks.ProviderClaudeCode, payload, "--variant=cli")
+	require.Equal(t, 0, second.ExitCode)
+
+	require.Equal(t, 2, fs.count())
+	require.Equal(t, "https://first.example.com/mcp", *fs.requests[0].Data.McpInventory[0].URL)
+	require.Equal(t, "https://second.example.com/mcp", *fs.requests[1].Data.McpInventory[0].URL)
 }
 
 // TestLoginCommandQuotesUnsafePaths ensures the nudge command survives shell
@@ -1059,6 +1172,19 @@ func TestRedactCommandMasksURLQuerySecrets(t *testing.T) {
 	require.NotContains(t, got, "hunter9")
 	require.NotContains(t, got, "user:")
 	require.Contains(t, got, "mcp.example.com/mcp", "userinfo URLs keep host and path, matching the structured MCP URL")
+}
+
+func TestMCPInventoryRedactionMasksSignedURLCredentials(t *testing.T) {
+	got, ok := redactMCPInventoryURL("https://mcp.example.com/sse?sig=short&X-Amz-Signature=aws-secret&X-Amz-Credential=aws-credential&channel=eng")
+	require.True(t, ok)
+	require.NotContains(t, got, "short")
+	require.NotContains(t, got, "aws-secret")
+	require.NotContains(t, got, "aws-credential")
+	require.Contains(t, got, "channel=eng", "non-secret query parameters must survive")
+
+	command := redactCommand("npx -y mcp-remote https://mcp.example.com/sse?X-Goog-Signature=goog-secret&channel=eng")
+	require.NotContains(t, command, "goog-secret")
+	require.Contains(t, command, "channel=eng", "command URL redaction must preserve benign parameters")
 }
 
 // TestBackfilledPromptDenyGatesTriggeringToolEvent pins the Cursor recovery

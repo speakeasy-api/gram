@@ -261,6 +261,10 @@ var _ = Service("risk", func() {
 			Attribute("rule_id", String, "Optional rule identifier substring to filter by (case-insensitive, e.g. 'secret' matches all 'secret.*' rules).")
 			Attribute("user_id", String, "Optional user identifier substring to filter by (case-insensitive, matched against the chat's external user id).")
 			Attribute("unique_match", Boolean, "If true, collapse results to one row per (policy_id, rule_id, match), keeping the most recent occurrence. Useful when the same secret is detected many times within a single message body.")
+			Attribute("non_assistant", Boolean, "If true, only return findings from chats that are not linked to an assistant. Useful for surfacing events that are missing user attribution.")
+			Attribute("assistant_id", String, "Optional assistant ID; only return findings from chats linked to this assistant.", func() {
+				Format(FormatUUID)
+			})
 			Attribute("from", String, "Filter results to messages created at or after this timestamp (ISO 8601).", func() {
 				Format(FormatDateTime)
 			})
@@ -287,6 +291,8 @@ var _ = Service("risk", func() {
 			Param("rule_id")
 			Param("user_id")
 			Param("unique_match")
+			Param("non_assistant")
+			Param("assistant_id")
 			Param("from")
 			Param("to")
 			Param("cursor")
@@ -317,6 +323,10 @@ var _ = Service("risk", func() {
 			Attribute("rule_id", String, "Optional rule identifier substring to filter by (case-insensitive, e.g. 'secret' matches all 'secret.*' rules).")
 			Attribute("user_id", String, "Optional user identifier substring to filter by (case-insensitive, matched against the chat's external user id).")
 			Attribute("unique_match", Boolean, "If true, collapse results to one row per (policy_id, rule_id, match), keeping the most recent occurrence. Useful when the same secret is detected many times within a single message body.")
+			Attribute("non_assistant", Boolean, "If true, only return findings from chats that are not linked to an assistant. Useful for surfacing events that are missing user attribution.")
+			Attribute("assistant_id", String, "Optional assistant ID; only return findings from chats linked to this assistant.", func() {
+				Format(FormatUUID)
+			})
 			Attribute("from", String, "Filter results to messages created at or after this timestamp (ISO 8601).", func() {
 				Format(FormatDateTime)
 			})
@@ -343,6 +353,8 @@ var _ = Service("risk", func() {
 			Param("rule_id")
 			Param("user_id")
 			Param("unique_match")
+			Param("non_assistant")
+			Param("assistant_id")
 			Param("from")
 			Param("to")
 			Param("cursor")

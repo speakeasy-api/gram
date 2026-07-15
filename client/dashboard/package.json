@@ -1,7 +1,7 @@
 {
   "name": "dashboard",
   "private": true,
-  "version": "0.88.0",
+  "version": "0.89.0",
   "type": "module",
   "scripts": {
     "dev": "vite --port ${GRAM_SITE_PORT:-5173}",
@@ -101,7 +101,7 @@
     "uuid": "^13.0.2",
     "vega": "^6.2.0",
     "vega-interpreter": "^1.0.5",
-    "xstate": "^5.32.3",
+    "xstate": "^5.32.4",
     "zod": "^4",
     "zustand": "^5.0.14"
   },

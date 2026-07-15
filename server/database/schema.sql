@@ -262,6 +262,50 @@ CREATE TABLE IF NOT EXISTS assets (
   CONSTRAINT assets_project_id_sha256_key UNIQUE (project_id, sha256)
 );
 
+CREATE TABLE IF NOT EXISTS skills (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+
+  name TEXT NOT NULL,
+  display_name TEXT NOT NULL,
+  summary TEXT,
+  source_kind TEXT NOT NULL DEFAULT 'manual',
+  classification TEXT NOT NULL DEFAULT 'custom',
+
+  archived_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT skills_pkey PRIMARY KEY (id),
+  CONSTRAINT skills_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS skills_project_id_idx ON skills (project_id);
+CREATE UNIQUE INDEX IF NOT EXISTS skills_project_id_name_key ON skills (project_id, name) WHERE archived_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS skill_versions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  skill_id uuid NOT NULL,
+
+  content TEXT NOT NULL,
+  canonical_sha256 TEXT NOT NULL,
+  raw_sha256 TEXT NOT NULL,
+  description TEXT,
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+  spec_valid boolean NOT NULL,
+  validation_errors JSONB NOT NULL DEFAULT '[]'::jsonb,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  created_by_user_id TEXT NOT NULL,
+
+  CONSTRAINT skill_versions_pkey PRIMARY KEY (id),
+  CONSTRAINT skill_versions_skill_id_fkey FOREIGN KEY (skill_id) REFERENCES skills (id) ON DELETE CASCADE,
+  CONSTRAINT skill_versions_content_size_check CHECK (octet_length(content) <= 65536)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS skill_versions_skill_id_canonical_sha256_key ON skill_versions (skill_id, canonical_sha256);
+
 CREATE TABLE IF NOT EXISTS packages (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 100),
@@ -1590,6 +1634,18 @@ CREATE TABLE IF NOT EXISTS chat_messages (
 
 CREATE INDEX IF NOT EXISTS chat_messages_chat_id_idx ON chat_messages (chat_id);
 CREATE INDEX IF NOT EXISTS chat_messages_chat_id_generation_seq_idx ON chat_messages (chat_id, generation, seq);
+
+-- Chat listings derive each chat's message count and last-message time per
+-- request; this lets those be per-chat index-only probes instead of an
+-- aggregate over the chat's full message history.
+CREATE INDEX IF NOT EXISTS chat_messages_chat_id_created_at_idx
+ON chat_messages (chat_id, created_at);
+
+-- Latest non-empty source per chat as a single index-only probe (agent-type
+-- filter options via chats.listSources and the source filter on chats.list).
+CREATE INDEX IF NOT EXISTS chat_messages_chat_id_created_at_source_idx
+ON chat_messages (chat_id, created_at) INCLUDE (source)
+WHERE source IS NOT NULL AND source <> '';
 CREATE INDEX IF NOT EXISTS chat_messages_project_id_id_idx
 ON chat_messages (project_id, id)
 WHERE project_id IS NOT NULL;

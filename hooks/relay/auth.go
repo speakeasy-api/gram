@@ -155,24 +155,32 @@ func writeAuth(c creds) error {
 		}
 	}
 
-	path := authFilePath()
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return fmt.Errorf("create auth dir: %w", err)
-	}
-
-	tmp := fmt.Sprintf("%s.tmp.%d", path, os.Getpid())
 	body := fmt.Sprintf("server_url=%s\napi_key=%s\nproject=%s\nemail=%s\norg=%s\n",
 		c.ServerURL, c.APIKey, c.Project, c.Email, c.Org)
-	if err := os.WriteFile(tmp, []byte(body), 0o600); err != nil {
-		return fmt.Errorf("write auth cache: %w", err)
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		_ = os.Remove(tmp)
-		return fmt.Errorf("commit auth cache: %w", err)
+	if err := atomicWriteCacheFile(authFilePath(), []byte(body)); err != nil {
+		return err
 	}
 	markEstablished()
 	clearReauthNeeded()
+	return nil
+}
+
+// atomicWriteCacheFile commits a credential-adjacent cache file with the
+// tightened permissions (0700 dir, 0600 file) and temp+rename protocol both
+// the auth cache and the org-settings cache rely on, so hardening changes to
+// the commit sequence apply to every cache at once.
+func atomicWriteCacheFile(path string, body []byte) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return fmt.Errorf("create cache dir: %w", err)
+	}
+	tmp := fmt.Sprintf("%s.tmp.%d", path, os.Getpid())
+	if err := os.WriteFile(tmp, body, 0o600); err != nil {
+		return fmt.Errorf("write cache file: %w", err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return fmt.Errorf("commit cache file: %w", err)
+	}
 	return nil
 }
 

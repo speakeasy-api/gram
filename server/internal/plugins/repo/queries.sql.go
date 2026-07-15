@@ -553,7 +553,7 @@ type ListOrgPluginPublishTargetsRow struct {
 
 // Lists every project in one organization that has a GitHub plugin connection,
 // with the actor user for each (the creator of the project's most recent
-// plugins-mcp API key), so an org-level setting change (e.g. observability mode)
+// plugins-mcp API key), so an org-level setting change (e.g. browser login)
 // can be republished to all of the org's marketplaces. Like
 // ListPluginPublishCandidates this is a deliberate cross-project sweep, but it is
 // constrained to a single organization rather than scanning globally.
@@ -1242,7 +1242,7 @@ type UpsertGitHubConnectionParams struct {
 // config just published; all are always overwritten so subsequent rollout runs
 // can detect independently whether the MCP or hooks component changed (including
 // hooks config drift a version bump can't capture, e.g. a marketplace rename or
-// observability-mode toggle).
+// browser-login toggle).
 func (q *Queries) UpsertGitHubConnection(ctx context.Context, arg UpsertGitHubConnectionParams) (PluginGithubConnection, error) {
 	row := q.db.QueryRow(ctx, upsertGitHubConnection,
 		arg.ProjectID,

@@ -241,6 +241,7 @@ var HookIngestData = Type("HookIngestData", func() {
 	Attribute("prompt", HookPromptData)
 	Attribute("tool_call", HookToolCallData)
 	Attribute("mcp", HookMCPData)
+	Attribute("mcp_inventory", ArrayOf(HookMCPData), "Configured MCP server snapshot captured at session start or configuration change. Transport credentials must be redacted by the sender.")
 	Attribute("usage", HookUsageData)
 	Attribute("message", HookMessageData)
 	Attribute("skill", HookSkillData)

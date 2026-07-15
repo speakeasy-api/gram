@@ -1,5 +1,23 @@
 # server
 
+## 0.88.0
+
+### Minor Changes
+
+- e50ecd5: Add org-scoped `mcpServers.listForOrg` endpoint that lists MCP servers across all projects in the caller's organization, for organization-administrator flows like the RBAC connection-policy picker.
+- 24f54bb: Allow organization admins to rename Shadow MCP inventory servers without changing their canonical URL identity.
+- 8e3b7f2: Add a project-scoped API and dashboard detail page for individual Shadow MCP servers.
+- a1def6a: Allow projects to disable and re-enable custom model provider keys without deleting or re-entering them.
+
+### Patch Changes
+
+- 4dde5e0: Billing tokens-under-management reads over attribute_metrics_summaries now filter tombstoned rows (is_active = 1), matching the costs page reads, so generations soft-deleted by the backfill runbook are excluded from billed totals and breakdowns.
+- 5ac5f91: Employees list linked accounts now attach by directory ownership (summary email resolved to the org user, or the account's own email) instead of by the raw telemetry user_ids folded into a summary. Stray telemetry rows that pair one person's email with another person's user id could previously hand an account — and the role bucket in the by-role view — to the wrong employee (DNO-509).
+- 703a22b: feat(risk): add an assistant filter to risk events. The Risk Events page gains an "Assistant" select listing the project's assistants plus a "No assistant" option, so findings from chats not linked to an assistant (the ones most likely missing user attribution) can be surfaced on their own — or scoped to a single assistant. API: `assistant_id` and `non_assistant` params on `listRiskResults`/`listRiskResultsForAgent`.
+- efe608b: PI detection now uses the LLM judge for all orgs. The L0 heuristics layer and its feature flag are removed.
+- 6e7a771: Stop forwarding browser-only headers (`Origin`, `Referer`, `Cookie`) from the inbound request to remote MCP upstreams. When the dashboard drove a remote MCP server, its `Origin` was relayed verbatim and upstreams enforcing the MCP spec's DNS-rebinding protection (e.g. Langfuse) rejected the request with 403 "Access forbidden", surfacing as "Something went wrong loading tools" in the Tools tab. Dropping these headers makes dashboard-proxied requests match those from a headless MCP client and prevents the dashboard session cookie from leaking upstream.
+- 63008ae: Restore Claude MCP inventory capture in the Go hooks relay. Session start and configuration-change hooks now send a locally redacted inventory snapshot through canonical ingest so external MCP URLs appear in Shadow MCP inventory before a tool is called.
+
 ## 0.87.0
 
 ### Minor Changes

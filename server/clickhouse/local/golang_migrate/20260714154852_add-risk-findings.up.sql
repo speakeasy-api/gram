@@ -1,0 +1,28 @@
+-- create "risk_findings" table
+CREATE TABLE `risk_findings` (
+  `id` UUID COMMENT 'Finding UUIDv7, supplied by the scanner that produced it.',
+  `created_at` DateTime64(9) COMMENT 'Time the finding was produced.' CODEC(DoubleDelta, ZSTD(1)),
+  `organization_id` String COMMENT 'Organization the finding belongs to (HKDF salt for the tenant fingerprint).' CODEC(ZSTD(1)),
+  `project_id` String DEFAULT '' COMMENT 'Project the finding was scoped to. Empty string when unknown, kept non-nullable so it can sit in the primary key.' CODEC(ZSTD(1)),
+  `request_id` String DEFAULT '' COMMENT 'Internal request ID that produced the finding, when set.' CODEC(ZSTD(1)),
+  `chat_message_id` String DEFAULT '' COMMENT 'Chat message the finding was detected in.' CODEC(ZSTD(1)),
+  `risk_policy_id` String DEFAULT '' COMMENT 'Risk policy the message was scanned against.' CODEC(ZSTD(1)),
+  `risk_policy_version` Int64 DEFAULT '0' COMMENT 'Version of the risk policy at scan time.',
+  `rule_id` LowCardinality(String) COMMENT 'Rule that fired, e.g. pii.email_address.',
+  `description` String DEFAULT '' COMMENT 'Human-readable description of the rule that fired.' CODEC(ZSTD(1)),
+  `source` LowCardinality(String) COMMENT 'Detection source: gitleaks | presidio | shadow_mcp | prompt_injection | llm_judge | account_identity.',
+  `confidence` Float64 DEFAULT '0' COMMENT 'Detection confidence in the range 0.0 to 1.0.',
+  `tags` Array(LowCardinality(String)) COMMENT 'Category tags for the finding, e.g. [pii].',
+  `start_pos` Int32 DEFAULT '0' COMMENT 'Byte offset of the match start within the scanned field.',
+  `end_pos` Int32 DEFAULT '0' COMMENT 'Byte offset of the match end within the scanned field.',
+  `dead_letter_reason` String DEFAULT '' COMMENT 'Non-empty marks a synthetic could-not-analyze sentinel rather than a real finding.' CODEC(ZSTD(1)),
+  `match_len` UInt32 DEFAULT '0' COMMENT 'Byte length of the raw match, used to render the redacted display.',
+  `match_redacted` String DEFAULT '' COMMENT 'Precomputed display string in the form redacted len=N sha=XXXXXXXX. Every source is redacted here including shadow_mcp and account_identity so no plaintext or PII is ever stored in ClickHouse. The verbatim value stays in Postgres for the audited unmask path.' CODEC(ZSTD(1)),
+  `fingerprint_pepper_version` String DEFAULT '' COMMENT 'Pepper keyring version used to compute the fingerprints.',
+  `fingerprint_global_hs256` String DEFAULT '' COMMENT 'Global fingerprint: base64url HMAC-SHA256 of the match under the current pepper. Stable across tenants.' CODEC(ZSTD(1)),
+  `fingerprint_tenant_hs256` String DEFAULT '' COMMENT 'Tenant-qualified fingerprint: base64url HMAC-SHA256 under a per-org HKDF key. Used to dedupe unique matches within an org.' CODEC(ZSTD(1)),
+  INDEX `idx_risk_findings_chat_message_id` ((chat_message_id)) TYPE bloom_filter(0.01) GRANULARITY 1,
+  INDEX `idx_risk_findings_risk_policy_id` ((risk_policy_id)) TYPE bloom_filter(0.01) GRANULARITY 1,
+  INDEX `idx_risk_findings_rule_id` ((rule_id)) TYPE set(0) GRANULARITY 4
+) ENGINE = MergeTree
+PRIMARY KEY (`organization_id`, `project_id`, `created_at`, `id`) ORDER BY (`organization_id`, `project_id`, `created_at`, `id`) PARTITION BY (toYYYYMMDD(created_at)) TTL toDateTime(created_at) + toIntervalDay(90) SETTINGS index_granularity = 8192 COMMENT 'Risk findings event log: one row per detected secret or sensitive-data match, hashed not plaintext, powering the Risk Events page and analytics.';
