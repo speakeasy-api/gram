@@ -292,7 +292,7 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (res *
 	// token: the decision (scan) still re-runs so the user stays blocked, but
 	// tagging the context as a duplicate suppresses the duplicate writes
 	// (persistence, block-reason telemetry, shadow-MCP findings).
-	if !s.claimHookIdempotency(ctx, conv.PtrValOr(payload.IdempotencyKey, "")) {
+	if !s.claimHookIdempotency(ctx, conv.PtrValOr(payload.IdempotencyKey, ""), false) {
 		ctx = withHookDuplicate(ctx)
 	}
 

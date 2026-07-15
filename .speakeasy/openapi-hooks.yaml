@@ -32,6 +32,13 @@ paths:
           schema:
             description: Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.
             type: string
+        - allowEmptyValue: true
+          description: Set when the event is redelivered from a device's offline spool after control-plane downtime, under its original Idempotency-Key and occurred_at.
+          in: header
+          name: X-Gram-Replayed
+          schema:
+            description: Set when the event is redelivered from a device's offline spool after control-plane downtime, under its original Idempotency-Key and occurred_at.
+            type: boolean
       requestBody:
         content:
           application/json:
