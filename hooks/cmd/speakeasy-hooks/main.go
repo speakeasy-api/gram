@@ -39,6 +39,13 @@ func main() {
 			os.Exit(runLogin(relay.LoadConfig(flagCfg), rest))
 		case "install":
 			os.Exit(runInstall(os.Args[2:]))
+		case "drain":
+			// Replays the offline payload spool (see relay/drain.go). Takes
+			// no arguments — spool entries carry their own deployment
+			// identity. Invoked by hooks opportunistically after a
+			// successful send, and by the device agent when its downtime
+			// detector sees the control plane recover.
+			os.Exit(relay.RunDrain(context.Background(), os.Stdout))
 		}
 	}
 
