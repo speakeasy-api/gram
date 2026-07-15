@@ -284,7 +284,9 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
-	existing, err := txRepo.GetServerByID(ctx, repo.GetServerByIDParams{
+	// Row-lock so a concurrent update cannot race the allow_public
+	// before->after transition that drives session revocation.
+	existing, err := txRepo.GetServerByIDForUpdate(ctx, repo.GetServerByIDForUpdateParams{
 		ID:        serverID,
 		ProjectID: *authCtx.ProjectID,
 	})

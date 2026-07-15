@@ -387,7 +387,9 @@ func TestServePublic_Tunneled_LegacyGatewayFailsClosed(t *testing.T) {
 	require.Error(t, err)
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeGatewayError, oopsErr.Code)
+	// A gateway that cannot pin the session is a Gram-side availability
+	// failure (503), not an upstream fault.
+	require.Equal(t, oops.CodeUnavailable, oopsErr.Code)
 }
 
 // TestServePublic_Tunneled_StripsBackendChallenge: a WWW-Authenticate
@@ -426,10 +428,14 @@ func TestServePublic_Tunneled_LiveSessionCapRejectsInitialize(t *testing.T) {
 	initializeTunneledPublicSession(t, ti, fixture)
 	forwardsAfterFirst := gateway.forwardCount()
 
-	w, err := serveTunneledPublicRequest(t, ti, fixture.endpointSlug, http.MethodPost, makeInitializeBody(), "")
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, w.Code, "JSON-RPC rejection envelope rides an HTTP 200")
-	require.Contains(t, w.Body.String(), "anonymous session capacity")
+	// Admission runs pre-proxy, so a capacity rejection is a real HTTP 429
+	// with Retry-After — not a JSON-RPC 200 envelope — and never reaches the
+	// backend.
+	_, err := serveTunneledPublicRequest(t, ti, fixture.endpointSlug, http.MethodPost, makeInitializeBody(), "")
+	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeRateLimitExceeded, oopsErr.Code)
 	require.Equal(t, forwardsAfterFirst, gateway.forwardCount(), "capacity rejection must not reach the backend")
 }
 

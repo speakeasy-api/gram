@@ -205,3 +205,83 @@ func TestResolveWithoutRefreshDoesNotExtendSession(t *testing.T) {
 		assert.ErrorIs(c, resolveErr, ErrNotFound)
 	}, 5*time.Second, 20*time.Millisecond)
 }
+
+// TestCommitRequiresLiveReservation: a Commit after the reservation's live-set
+// member is gone (a concurrent Purge won) must fail with ErrReservationLost
+// and must not recreate the mapping.
+func TestCommitRequiresLiveReservation(t *testing.T) {
+	t.Parallel()
+
+	store := newTestStore(t, time.Hour, 10)
+	tunnelID := t.Name()
+	sid, err := MintSessionID()
+	require.NoError(t, err)
+
+	require.NoError(t, store.Reserve(t.Context(), tunnelID, "server-1", sid))
+	// Purge (consent withdrawn) removes the reservation before Commit.
+	require.NoError(t, store.Purge(t.Context(), tunnelID))
+
+	err = store.Commit(t.Context(), tunnelID, "server-1", sid, Session{BackendSessionID: "b", GatewayAddr: "a", AgentSessionID: "s"})
+	require.ErrorIs(t, err, ErrReservationLost)
+
+	_, err = store.Resolve(t.Context(), tunnelID, "server-1", sid, false)
+	require.ErrorIs(t, err, ErrNotFound)
+	count, err := store.ActiveCount(t.Context(), tunnelID)
+	require.NoError(t, err)
+	require.Zero(t, count)
+}
+
+// TestCommitRealignsLiveSetToMappingTTL: a delayed Commit must re-align the
+// live-set member's expiry to the mapping's fresh TTL, so a mapping cannot
+// outlive its live-set member (which would leave it uncounted and
+// unpurgeable). A refreshed session must never drift into resolvable-but-
+// uncounted.
+func TestCommitRealignsLiveSetToMappingTTL(t *testing.T) {
+	t.Parallel()
+
+	store := newTestStore(t, 400*time.Millisecond, 10)
+	tunnelID := t.Name()
+	sid, err := MintSessionID()
+	require.NoError(t, err)
+
+	require.NoError(t, store.Reserve(t.Context(), tunnelID, "server-1", sid))
+	require.NoError(t, store.Commit(t.Context(), tunnelID, "server-1", sid, Session{BackendSessionID: "b", GatewayAddr: "a", AgentSessionID: "s"}))
+
+	deadline := time.Now().Add(1200 * time.Millisecond)
+	require.Never(t, func() bool {
+		if time.Now().After(deadline) {
+			return false
+		}
+		_, resolveErr := store.Resolve(t.Context(), tunnelID, "server-1", sid, true)
+		count, countErr := store.ActiveCount(t.Context(), tunnelID)
+		// A drift bug shows as: mapping resolvable but count==0.
+		return resolveErr == nil && countErr == nil && count == 0
+	}, 800*time.Millisecond, 50*time.Millisecond)
+}
+
+// TestPurgeIsAtomicAcrossMembers: Purge drops every mapping AND the live set
+// in one shot, leaving nothing resolvable or counted.
+func TestPurgeIsAtomicAcrossMembers(t *testing.T) {
+	t.Parallel()
+
+	store := newTestStore(t, time.Hour, 10)
+	tunnelID := t.Name()
+	var sids []string
+	for range 4 {
+		sid, err := MintSessionID()
+		require.NoError(t, err)
+		require.NoError(t, store.Reserve(t.Context(), tunnelID, "server-1", sid))
+		require.NoError(t, store.Commit(t.Context(), tunnelID, "server-1", sid, Session{BackendSessionID: "b", GatewayAddr: "a", AgentSessionID: "s"}))
+		sids = append(sids, sid)
+	}
+
+	require.NoError(t, store.Purge(t.Context(), tunnelID))
+
+	for _, sid := range sids {
+		_, err := store.Resolve(t.Context(), tunnelID, "server-1", sid, false)
+		require.ErrorIs(t, err, ErrNotFound)
+	}
+	count, err := store.ActiveCount(t.Context(), tunnelID)
+	require.NoError(t, err)
+	require.Zero(t, count)
+}

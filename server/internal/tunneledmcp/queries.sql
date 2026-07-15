@@ -34,6 +34,15 @@ SELECT *
 FROM tunneled_mcp_servers
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
 
+-- name: GetServerByIDForUpdate :one
+-- Row-locking read used inside the update transaction so a concurrent
+-- enable/disable of allow_public cannot compute a stale before->after
+-- transition (which drives the anonymous-session revocation).
+SELECT *
+FROM tunneled_mcp_servers
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
+FOR UPDATE;
+
 -- name: UpdateServer :one
 UPDATE tunneled_mcp_servers
 SET
