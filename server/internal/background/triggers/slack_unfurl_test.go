@@ -19,8 +19,8 @@ func TestGramLinkTitleFromDashboardPaths(t *testing.T) {
 		{"https://app.getgram.ai/acme/projects/default/chat/6f1e0b6a-9f2c-4d3e-8a5b-0c1d2e3f4a5b", "Chat"},
 		{"https://app.getgram.ai/acme/projects/default/assistants/support_bot/settings", "Settings · Assistants"},
 		{"https://app.getgram.ai/acme/settings", "Settings"},
-		{"https://app.getgram.ai/acme", "Gram dashboard"},
-		{"https://app.getgram.ai/", "Gram dashboard"},
+		{"https://app.getgram.ai/acme", "Speakeasy dashboard"},
+		{"https://app.getgram.ai/", "Speakeasy dashboard"},
 		{"https://app.getgram.ai/acme/projects/default/logs/12345", "Logs"},
 	}
 

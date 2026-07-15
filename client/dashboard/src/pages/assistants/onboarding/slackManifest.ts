@@ -213,7 +213,7 @@ const SLACK_EVENT_BINDINGS: Record<string, SlackEventBinding> = {
     scopes: ["groups:read"],
   },
   // links:write lets the trigger webhook answer link_shared with chat.unfurl,
-  // attaching the Gram logo + title to dashboard links shared in Slack.
+  // attaching the Speakeasy logo + title to dashboard links shared in Slack.
   link_shared: {
     bot_events: ["link_shared"],
     scopes: ["links:read", "links:write"],
@@ -288,7 +288,7 @@ export type SlackManifestInput = {
    * Hostname of the Gram dashboard (e.g. app.getgram.ai). When set alongside
    * webhookUrl, it is registered as a Slack unfurl domain so link_shared
    * events fire for dashboard links and the webhook can unfurl them with the
-   * Gram logo. Hostnames without a dot (e.g. localhost) are skipped — Slack
+   * Speakeasy logo. Hostnames without a dot (e.g. localhost) are skipped — Slack
    * rejects them as unfurl domains.
    */
   unfurlDomain?: string | undefined;
