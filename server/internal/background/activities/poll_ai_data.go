@@ -22,10 +22,11 @@ import (
 )
 
 type PollAIData struct {
-	integrations       *aiintegrations.Store
-	cursorUsagePoller  *aiintegrations.UsagePollService
-	complianceImporter *aiintegrations.ComplianceImportService
-	analyticsPoller    *aiintegrations.AnalyticsPollService
+	integrations         *aiintegrations.Store
+	cursorUsagePoller    *aiintegrations.UsagePollService
+	complianceImporter   *aiintegrations.ComplianceImportService
+	analyticsUsagePoller *aiintegrations.AnthropicAnalyticsPoller
+	analyticsCostPoller  *aiintegrations.AnthropicAnalyticsPoller
 }
 
 func NewPollAIData(
@@ -37,6 +38,13 @@ func NewPollAIData(
 	chatWriter *chat.ChatMessageWriter,
 ) *PollAIData {
 	store := aiintegrations.NewStore(logger, db, encryptionClient)
+	anthropicHeartbeat := func(ctx context.Context, scope string, page int) {
+		activity.RecordHeartbeat(ctx, map[string]any{
+			"provider": aiintegrations.ProviderAnthropicCompliance,
+			"scope":    scope,
+			"page":     page,
+		})
+	}
 	return &PollAIData{
 		integrations: store,
 		cursorUsagePoller: aiintegrations.NewUsagePollService(store, telemetryLogger, guardianPolicy, func(ctx context.Context, page int) {
@@ -45,20 +53,9 @@ func NewPollAIData(
 				"page":     page,
 			})
 		}),
-		complianceImporter: aiintegrations.NewComplianceImportService(logger, db, guardianPolicy, chatWriter, func(ctx context.Context, scope string, page int) {
-			activity.RecordHeartbeat(ctx, map[string]any{
-				"provider": aiintegrations.ProviderAnthropicCompliance,
-				"scope":    scope,
-				"page":     page,
-			})
-		}),
-		analyticsPoller: aiintegrations.NewAnalyticsPollService(logger, store, guardianPolicy, telemetryLogger, func(ctx context.Context, scope string, page int) {
-			activity.RecordHeartbeat(ctx, map[string]any{
-				"provider": aiintegrations.ProviderAnthropicCompliance,
-				"scope":    scope,
-				"page":     page,
-			})
-		}),
+		complianceImporter:   aiintegrations.NewComplianceImportService(logger, db, guardianPolicy, chatWriter, anthropicHeartbeat),
+		analyticsUsagePoller: aiintegrations.NewAnthropicUsageAnalyticsPoller(logger, store, guardianPolicy, telemetryLogger, anthropicHeartbeat),
+		analyticsCostPoller:  aiintegrations.NewAnthropicCostAnalyticsPoller(logger, store, guardianPolicy, telemetryLogger, anthropicHeartbeat),
 	}
 }
 
@@ -116,10 +113,12 @@ func (p *PollAIData) Do(ctx context.Context, configID string) (err error) {
 		}
 		lastCursor = nextCursor
 
-		// Admin Analytics (usage/cost) ingestion rides on the compliance poll
-		// but keeps its own cadence and failure state; it records outcomes
-		// internally and never fails the activity.
-		p.analyticsPoller.MaybeSyncAnthropicAnalytics(ctx, cfg, endTime)
+		// Admin Analytics usage and cost ingestion ride on the compliance
+		// poll but run as independent schedules, each with its own cadence
+		// and failure state; they record outcomes internally and never fail
+		// the activity.
+		p.analyticsUsagePoller.MaybeSync(ctx, cfg, endTime)
+		p.analyticsCostPoller.MaybeSync(ctx, cfg, endTime)
 	default:
 		return oops.E(oops.CodeInvalid, nil, "unsupported ai integration provider for usage polling: %s", cfg.Provider)
 	}

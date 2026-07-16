@@ -53,88 +53,112 @@ const (
 	anthropicAnalyticsAccountType = "team"
 )
 
-// AnalyticsPollService ingests per-user Claude Chat token usage and cost from
-// the Anthropic Admin Analytics API into telemetry_logs, where the
+// anthropicAnalyticsSourceFactory builds the report-specific source for one
+// sync, bound to that sync's API client and config.
+type anthropicAnalyticsSourceFactory func(client *anthropicapi.Client, cfg Config, heartbeat func(ctx context.Context, scope string, page int)) timeWindowSource
+
+// AnthropicAnalyticsPoller ingests one Admin Analytics report — usage or
+// cost — from the Anthropic API into telemetry_logs, where the
 // attribute_metrics_summaries MV picks it up for tokens-under-management
-// billing. The usage and cost reports run as independent sync schedules on
-// the shared time-window poller, each tracking its own endpoint's
-// finalization watermark and failure state. Usage is ingested per
+// billing. Each report is its own service instance driving its own sync
+// schedule: construct one with NewAnthropicUsageAnalyticsPoller and one with
+// NewAnthropicCostAnalyticsPoller. Usage is ingested per
 // (user, minute, model) without any session linkage — the Compliance API
 // import owns session content.
-type AnalyticsPollService struct {
+type AnthropicAnalyticsPoller struct {
 	logger          *slog.Logger
 	store           *Store
 	guardianPolicy  *guardian.Policy
 	telemetryLogger *telemetry.Logger
 	heartbeat       func(ctx context.Context, scope string, page int)
+	schedule        string
+	newSource       anthropicAnalyticsSourceFactory
 	// baseURL overrides the Anthropic API base URL in tests; empty means the
 	// client default.
 	baseURL string
 }
 
-func NewAnalyticsPollService(
+// NewAnthropicUsageAnalyticsPoller ingests the user_usage_report (token
+// counts) as the anthropic_analytics_usage schedule.
+func NewAnthropicUsageAnalyticsPoller(
 	logger *slog.Logger,
 	store *Store,
 	guardianPolicy *guardian.Policy,
 	telemetryLogger *telemetry.Logger,
 	heartbeat func(ctx context.Context, scope string, page int),
-) *AnalyticsPollService {
+) *AnthropicAnalyticsPoller {
+	return newAnthropicAnalyticsPoller(logger, store, guardianPolicy, telemetryLogger, heartbeat, ScheduleAnthropicAnalyticsUsage,
+		func(client *anthropicapi.Client, cfg Config, heartbeat func(ctx context.Context, scope string, page int)) timeWindowSource {
+			return &anthropicUsageReportSource{client: client, cfg: cfg, heartbeat: heartbeat}
+		})
+}
+
+// NewAnthropicCostAnalyticsPoller ingests the user_cost_report (spend) as
+// the anthropic_analytics_cost schedule.
+func NewAnthropicCostAnalyticsPoller(
+	logger *slog.Logger,
+	store *Store,
+	guardianPolicy *guardian.Policy,
+	telemetryLogger *telemetry.Logger,
+	heartbeat func(ctx context.Context, scope string, page int),
+) *AnthropicAnalyticsPoller {
+	return newAnthropicAnalyticsPoller(logger, store, guardianPolicy, telemetryLogger, heartbeat, ScheduleAnthropicAnalyticsCost,
+		func(client *anthropicapi.Client, cfg Config, heartbeat func(ctx context.Context, scope string, page int)) timeWindowSource {
+			return &anthropicCostReportSource{client: client, cfg: cfg, heartbeat: heartbeat}
+		})
+}
+
+func newAnthropicAnalyticsPoller(
+	logger *slog.Logger,
+	store *Store,
+	guardianPolicy *guardian.Policy,
+	telemetryLogger *telemetry.Logger,
+	heartbeat func(ctx context.Context, scope string, page int),
+	schedule string,
+	newSource anthropicAnalyticsSourceFactory,
+) *AnthropicAnalyticsPoller {
 	if heartbeat == nil {
-		panic("ai integration analytics poll service requires heartbeat")
+		panic("ai integration analytics poller requires heartbeat")
 	}
-	return &AnalyticsPollService{
+	return &AnthropicAnalyticsPoller{
 		logger:          logger.With(attr.SlogComponent("aiintegrations.anthropic_analytics")),
 		store:           store,
 		guardianPolicy:  guardianPolicy,
 		telemetryLogger: telemetryLogger,
 		heartbeat:       heartbeat,
+		schedule:        schedule,
+		newSource:       newSource,
 		baseURL:         "",
 	}
 }
 
-// MaybeSyncAnthropicAnalytics runs the usage and cost analytics schedules
-// when due, each recording its outcome on its own sync row. Failures are
-// recorded and logged but never returned: analytics ingestion must not block
-// the compliance import sharing the poll activity, and a failure in one
-// report never blocks the other. Non-Enterprise organizations (or keys
-// without the read:analytics scope) get a 403 from the API and simply
-// accumulate failure state until access is granted.
-func (s *AnalyticsPollService) MaybeSyncAnthropicAnalytics(ctx context.Context, cfg Config, endTime time.Time) {
+// MaybeSync runs the report's schedule when due and records the outcome on
+// its own sync row. Failures are recorded and logged but never returned:
+// analytics ingestion must not block the compliance import sharing the poll
+// activity, and each report fails independently of the other. Non-Enterprise
+// organizations (or keys without the read:analytics scope) get a 403 from
+// the API and simply accumulate failure state until access is granted.
+func (p *AnthropicAnalyticsPoller) MaybeSync(ctx context.Context, cfg Config, endTime time.Time) {
 	if cfg.Provider != ProviderAnthropicCompliance {
 		return
 	}
 
-	logger := s.logger.With(
+	logger := p.logger.With(
 		attr.SlogOrganizationID(cfg.OrganizationID),
 		attr.SlogAIIntegrationConfigID(cfg.ID.String()),
 	)
-	client := anthropicapi.New(s.guardianPolicy, anthropicapi.WithAPIKey(cfg.APIKey), anthropicapi.WithBaseURL(s.baseURL))
+	client := anthropicapi.New(p.guardianPolicy, anthropicapi.WithAPIKey(cfg.APIKey), anthropicapi.WithBaseURL(p.baseURL))
 
-	usagePoller := s.newAnalyticsPoller(ScheduleAnthropicAnalyticsUsage)
-	usagePoller.maybeSync(ctx, logger, cfg, &anthropicUsageReportSource{
-		client:    client,
-		cfg:       cfg,
-		heartbeat: s.heartbeat,
-	}, endTime, classifyAnthropicAnalyticsErr)
-
-	costPoller := s.newAnalyticsPoller(ScheduleAnthropicAnalyticsCost)
-	costPoller.maybeSync(ctx, logger, cfg, &anthropicCostReportSource{
-		client:    client,
-		cfg:       cfg,
-		heartbeat: s.heartbeat,
-	}, endTime, classifyAnthropicAnalyticsErr)
-}
-
-func (s *AnalyticsPollService) newAnalyticsPoller(schedule string) *timeWindowPoller {
-	return &timeWindowPoller{
-		store:           s.store,
-		telemetryLogger: s.telemetryLogger,
-		schedule:        schedule,
+	runner := &timeWindowPoller{
+		store:           p.store,
+		telemetryLogger: p.telemetryLogger,
+		schedule:        p.schedule,
 		pollInterval:    anthropicAnalyticsPollInterval,
 		initialLookback: anthropicAnalyticsInitialLookback,
 		maxWindow:       anthropicAnalyticsMaxWindow,
 		granularity:     time.Minute,
 	}
+	runner.maybeSync(ctx, logger, cfg, p.newSource(client, cfg, p.heartbeat), endTime, classifyAnthropicAnalyticsErr)
 }
 
 // classifyAnthropicAnalyticsErr rewrites auth failures so the stored poll
