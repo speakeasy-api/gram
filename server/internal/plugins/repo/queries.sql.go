@@ -519,7 +519,7 @@ type IsOrganizationFeatureEnabledParams struct {
 
 // Reports whether an organization feature flag is enabled. Mirrors the
 // productfeatures service's read against organization_features so the generator
-// can honour org-level toggles (e.g. observability_mode) at generation time.
+// can honour org-level toggles (e.g. hooks_fail_open) at generation time.
 func (q *Queries) IsOrganizationFeatureEnabled(ctx context.Context, arg IsOrganizationFeatureEnabledParams) (bool, error) {
 	row := q.db.QueryRow(ctx, isOrganizationFeatureEnabled, arg.OrganizationID, arg.FeatureName)
 	var enabled bool

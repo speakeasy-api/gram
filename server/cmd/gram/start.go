@@ -958,6 +958,15 @@ func newStartCommand() *cli.Command {
 				logger.InfoContext(ctx, "marketplace proxy: disabled (no github app configured)")
 			}
 
+			// Hooks binary artifacts (checksum-verifying proxy in front of the
+			// pinned GitHub release). Served from this domain so bootstrap
+			// scripts never need GitHub egress; mounted like the marketplace
+			// proxy — dispatched ahead of the Goa mux with its own recovery
+			// wrap — but not gated on the GitHub App, since release assets are
+			// public.
+			hooksArtifactServer := plugins.NewHooksArtifactServer(logger, guardianPolicy.Client())
+			hooksArtifactRoutes := middleware.NewRecovery(logger)(hooksArtifactServer.Routes())
+
 			mux := goahttp.NewMuxer()
 			mux.Use(func(h http.Handler) http.Handler {
 				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -967,6 +976,10 @@ func newStartCommand() *cli.Command {
 					}
 					if marketplaceServer != nil && marketplaceServer.IsMarketplaceRoute(r) {
 						marketplaceRoutes.ServeHTTP(w, r)
+						return
+					}
+					if hooksArtifactServer.IsHooksReleaseRoute(r) {
+						hooksArtifactRoutes.ServeHTTP(w, r)
 						return
 					}
 

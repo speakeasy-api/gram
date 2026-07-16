@@ -49,6 +49,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -69,7 +70,7 @@ type GitHubPublisher interface {
 	HasDirectCollaborator(ctx context.Context, installationID int64, owner, repo string) (bool, error)
 	// GetRepoFiles returns the current published files so a publish can carry an
 	// unchanged plugin component (hooks or MCP) verbatim into a fresh push,
-	// leaving the other component's files and embedded key untouched. Returns
+	// leaving the other component's files and configuration untouched. Returns
 	// ghclient.ErrRepoNotFound when nothing has been published yet.
 	GetRepoFiles(ctx context.Context, installationID int64, owner, repo, branch string) (map[string][]byte, error)
 }
@@ -1126,7 +1127,7 @@ func (s *Service) DownloadPluginPackage(ctx context.Context, payload *gen.Downlo
 
 // DownloadObservabilityPlugin returns a ZIP of the per-org observability
 // plugin for direct installation. Mints a fresh hooks-scoped API key per
-// download and embeds it in the script — the org's API Keys page will
+// download and embeds it in speakeasy.json — the org's API Keys page will
 // accumulate one row per download, which admins can audit and revoke
 // independently of the publish-bundled key. The plugin contents are
 // otherwise identical to what PublishPlugins ships in the GitHub marketplace.
@@ -1205,6 +1206,10 @@ func (s *Service) DownloadCodexInstallScript(ctx context.Context, payload *gen.D
 	marketplaceURL := fmt.Sprintf("%s%s%s.git", s.serverURL, marketplace.RoutePrefix, conn.MarketplaceToken.String)
 
 	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, conv.PtrValOr(ac.ProjectSlug, ""), *ac.ProjectID)
+	// The script's plugin key and hook approvals must name the codex plugin as
+	// it exists in the published repo, which a rollout-gated carry may have
+	// pinned under a pre-rename org name.
+	cfg.HooksOrgName = naming.PublishedHooksOrgName(conn.PublishedHooksConfig)
 
 	script, err := GenerateCodexInstallScript(marketplaceURL, cfg)
 	if err != nil {
@@ -1217,11 +1222,10 @@ func (s *Service) DownloadCodexInstallScript(ctx context.Context, payload *gen.D
 	}, io.NopCloser(bytes.NewReader(script)), nil
 }
 
-// writePluginZip serializes the file map as a deterministic ZIP, marking
-// shell scripts executable so hook.sh / hook_async.sh run after extraction. The GitHub
+// writePluginZip serializes the file map as a deterministic ZIP, marking shell
+// scripts executable so the bootstrapper runs after extraction. The GitHub
 // publish path applies the same rule via Tree mode 100755 in
-// thirdparty/github/repo.go; keep them in sync — without the execute bit,
-// Claude Code, Cursor, and Codex silently fail on `./hook.sh: permission denied`.
+// thirdparty/github/repo.go; keep them in sync.
 func writePluginZip(w io.Writer, files map[string][]byte) error {
 	zw := zip.NewWriter(w)
 	paths := make([]string, 0, len(files))
@@ -1334,6 +1338,9 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 			result.RepoURL = &repoURL
 			// The observability plugin slugs are org-name-derived (see naming
 			// package); surface them so install UIs never re-derive the formula.
+			// HooksOrgName keeps the reported slugs pointing at the published
+			// directories when a rename happened while the rollout gate carried
+			// the hooks subtree.
 			slugCfg := GenerateConfig{
 				OrgName:          s.resolveOrganizationName(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug),
 				OrgEmail:         "",
@@ -1345,7 +1352,9 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 				IsDefaultProject: false,
 				Version:          "",
 				MarketplaceName:  "",
+				HooksOrgName:     naming.PublishedHooksOrgName(conn.PublishedHooksConfig),
 				BrowserLogin:     false,
+				InstallFailOpen:  false,
 			}
 			result.ClaudeObservabilityPlugin = conv.PtrEmpty(ClaudeObservabilitySlug(slugCfg))
 			result.CodexObservabilityPlugin = conv.PtrEmpty(CodexObservabilitySlug(slugCfg))
@@ -1862,15 +1871,16 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		candidates = append(candidates, mcpCandidate)
 	}
 
-	// Hooks component: carry when the generator version is unchanged, otherwise
-	// regenerate with a fresh hooks key.
+	// Hooks component: carry when the target version+config match what's
+	// published (including gated orgs pinned to an older version), otherwise
+	// regenerate with a fresh hooks key. The carry is prefix-based so it works
+	// across generator versions with different file layouts — enumerating the
+	// CURRENT generator's paths would fail against an older published layout
+	// and silently regenerate past the rollout gate.
 	carriedHooks := false
+	carriedHooksOrgName := ""
 	if !hooksChanged {
-		paths, err := hooksFilePaths(cfg)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "enumerate hooks files").LogError(ctx, s.logger)
-		}
-		carriedHooks = carry(files, paths)
+		carriedHooksOrgName, carriedHooks = carryHooksSubtree(files, existingFiles, targetHooksConfigJSON, cfg.OrgName)
 	}
 	if !carriedHooks {
 		hooksCandidate, err := s.buildPluginAPIKeyCandidate(auth.APIKeyScopeHooks, "hooks")
@@ -1884,6 +1894,20 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		}
 		maps.Copy(files, hooksFiles)
 		candidates = append(candidates, hooksCandidate)
+		// What lands in the repo is the CURRENT generator's output; persist that
+		// truthfully even when the rollout gate had pinned an older published
+		// version — recording the stale version would make every subsequent
+		// publish repeat this fallback and mint another hooks key. Reaching here
+		// past the gate is only possible when the published subtree is missing
+		// or unreadable, and regenerating is the one way to keep the repo
+		// installable.
+		if targetHooksVersion != hooksGeneratorVersion {
+			s.logger.WarnContext(ctx, "published hooks subtree not carriable; regenerating at current hooks version despite rollout gate",
+				attr.SlogOrganizationID(input.OrganizationID))
+		}
+		targetHooksVersion = hooksGeneratorVersion
+		targetHooksConfigJSON = currentHooksConfigJSON
+		hooksConfigDeferred = false
 	}
 
 	// Shared files (marketplace manifests + README) reference both components but
@@ -1895,6 +1919,11 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	sharedCfg := cfg
 	sharedCfg.APIKey = fingerprintAPIKeySentinel
 	sharedCfg.HooksAPIKey = fingerprintHooksKeySentinel
+	// A carried subtree keeps the directory names it was published under, which
+	// diverge from cfg.OrgName after an org rename; point the regenerated
+	// manifests' observability entries at the carried directories so they stay
+	// resolvable.
+	sharedCfg.HooksOrgName = carriedHooksOrgName
 	sharedFiles, err := generateSharedFiles(pluginInfos, sharedCfg)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "generate shared files").LogError(ctx, s.logger)
@@ -1955,6 +1984,36 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	}
 
 	return &publishOutcome{RepoURL: repoURL, Skipped: false, HooksConfigDeferred: hooksConfigDeferred}, nil
+}
+
+// carryHooksSubtree copies the published hooks (observability) subtree
+// verbatim into dst by directory prefix (see hooksSubtreePrefixes). The
+// prefixes derive from the published hooks config's org name — the org may
+// have been renamed since publish — falling back to the current org name when
+// the stored config predates the snapshot. Returns the org name the carried
+// directories derive from (for GenerateConfig.HooksOrgName) and whether the
+// carry succeeded; false means a platform's subtree is missing and the caller
+// must regenerate.
+func carryHooksSubtree(dst, existing map[string][]byte, publishedConfig []byte, currentOrgName string) (string, bool) {
+	if len(existing) == 0 {
+		return "", false
+	}
+	orgName := conv.Default(naming.PublishedHooksOrgName(publishedConfig), currentOrgName)
+	staged := make(map[string][]byte)
+	for _, prefix := range hooksSubtreePrefixes(orgName) {
+		found := false
+		for p, content := range existing {
+			if strings.HasPrefix(p, prefix) {
+				staged[p] = content
+				found = true
+			}
+		}
+		if !found {
+			return "", false
+		}
+	}
+	maps.Copy(dst, staged)
+	return orgName, true
 }
 
 // validMarketplaceName matches identifiers Claude Code, Cursor, and Codex
@@ -2507,8 +2566,10 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlu
 		// 10-digit second epochs already in installed caches.
 		Version:          fmt.Sprintf("%d", time.Now().UnixMilli()),
 		MarketplaceName:  "",
+		HooksOrgName:     "",
 		IsDefaultProject: s.isDefaultProject(ctx, projectID),
 		BrowserLogin:     false,
+		InstallFailOpen:  false,
 	}
 	orgName, err := s.repo.GetOrganizationName(ctx, orgID)
 	switch {
@@ -2545,6 +2606,24 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlu
 		)
 	}
 	cfg.BrowserLogin = browserLogin
+	// The bootstrap install-failure policy is the publish-time snapshot of the
+	// org's hooks_fail_open posture: a cold install has no binary (and no
+	// cached org settings) to consult, so only the baked exit code can honor
+	// the org's outage tolerance. It refreshes on the next publish after a
+	// toggle; the installed binary tracks the live value via ingest effects.
+	// Off (or unreadable), a distribution failure fails closed — the same
+	// posture as every other unobtainable verdict.
+	installFailOpen, err := s.repo.IsOrganizationFeatureEnabled(ctx, repo.IsOrganizationFeatureEnabledParams{
+		OrganizationID: orgID,
+		FeatureName:    string(productfeatures.FeatureHooksFailOpen),
+	})
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to read hooks fail-open flag, defaulting to fail closed",
+			attr.SlogOrganizationID(orgID),
+			attr.SlogError(err),
+		)
+	}
+	cfg.InstallFailOpen = installFailOpen
 	return cfg
 }
 

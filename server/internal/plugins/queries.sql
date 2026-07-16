@@ -268,7 +268,7 @@ SELECT name FROM organization_metadata WHERE id = @id;
 -- name: IsOrganizationFeatureEnabled :one
 -- Reports whether an organization feature flag is enabled. Mirrors the
 -- productfeatures service's read against organization_features so the generator
--- can honour org-level toggles (e.g. observability_mode) at generation time.
+-- can honour org-level toggles (e.g. hooks_fail_open) at generation time.
 SELECT EXISTS (
   SELECT 1
   FROM organization_features
