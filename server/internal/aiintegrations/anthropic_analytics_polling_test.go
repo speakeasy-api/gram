@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -69,8 +70,11 @@ func TestBuildClaudeChatMetricRowsEmitsUsageAndCostRows(t *testing.T) {
 		},
 	}
 
-	events, err := buildClaudeChatMetricRows(cfg, usageRows, costRows)
+	usageEvents, err := buildClaudeChatUsageRows(cfg, usageRows)
 	require.NoError(t, err)
+	costEvents, err := buildClaudeChatCostRows(cfg, costRows)
+	require.NoError(t, err)
+	events := slices.Concat(usageEvents, costEvents)
 	require.Len(t, events, 3, "one usage row plus two cost rows")
 
 	usage := events[0]
@@ -107,8 +111,11 @@ func TestBuildClaudeChatMetricRowsEmitsUsageAndCostRows(t *testing.T) {
 	}
 	require.Len(t, hashes, 3, "hashes are distinct across rows")
 
-	rebuilt, err := buildClaudeChatMetricRows(cfg, usageRows, costRows)
+	rebuiltUsage, err := buildClaudeChatUsageRows(cfg, usageRows)
 	require.NoError(t, err)
+	rebuiltCost, err := buildClaudeChatCostRows(cfg, costRows)
+	require.NoError(t, err)
+	rebuilt := slices.Concat(rebuiltUsage, rebuiltCost)
 	for i := range events {
 		require.Equal(t, events[i].Attributes[attr.ClaudeChatEventHashKey], rebuilt[i].Attributes[attr.ClaudeChatEventHashKey])
 	}
@@ -200,15 +207,19 @@ func TestMaybeSyncAnthropicAnalyticsFirstSyncAdvancesWatermark(t *testing.T) {
 	require.Equal(t, "1m", window.Get("bucket_width"))
 	require.Equal(t, []string{"chat"}, window["products[]"])
 
-	state, err := store.EnsureAnalyticsSync(ctx, cfg.ID)
-	require.NoError(t, err)
-	require.Equal(t, endTime.Truncate(time.Minute), state.WatermarkAt.UTC())
-	require.Empty(t, state.LastPollError)
-	require.Equal(t, endTime.Add(anthropicAnalyticsPollInterval), state.NextPollAfter.UTC())
+	// Both schedules advance independently to the same point.
+	for _, schedule := range []string{ScheduleAnthropicAnalyticsUsage, ScheduleAnthropicAnalyticsCost} {
+		state, err := store.EnsureTimeSyncSchedule(ctx, cfg.ID, schedule)
+		require.NoError(t, err)
+		require.Equal(t, endTime.Truncate(time.Minute), state.WatermarkAt.UTC())
+		require.Empty(t, state.LastPollError)
+		require.Equal(t, endTime.Add(anthropicAnalyticsPollInterval), state.NextPollAfter.UTC())
+	}
 
 	// Not due yet: a second invocation at the same time must not hit the API.
 	svc.MaybeSyncAnthropicAnalytics(ctx, cfg, endTime)
 	require.Equal(t, 2, api.usageRequests())
+	require.Equal(t, 2, api.costRequests())
 }
 
 func TestMaybeSyncAnthropicAnalyticsChunksBacklogIntoWindows(t *testing.T) {
@@ -222,23 +233,25 @@ func TestMaybeSyncAnthropicAnalyticsChunksBacklogIntoWindows(t *testing.T) {
 
 	cfg := createAnthropicComplianceConfig(t, ctx, conn, store, orgID)
 
-	// Seed a watermark 3 days back to simulate an outage backlog.
-	_, err := store.EnsureAnalyticsSync(ctx, cfg.ID)
+	// Seed a usage watermark 3 days back to simulate an outage backlog. The
+	// cost schedule stays fresh, so it only does its initial lookback.
+	_, err := store.EnsureTimeSyncSchedule(ctx, cfg.ID, ScheduleAnthropicAnalyticsUsage)
 	require.NoError(t, err)
 	backlogStart := endTime.Add(-72 * time.Hour).Truncate(time.Minute)
-	require.NoError(t, store.AdvanceAnalyticsPollWatermark(ctx, cfg.ID, backlogStart))
+	require.NoError(t, store.AdvanceSchedulePollWatermark(ctx, cfg.ID, ScheduleAnthropicAnalyticsUsage, backlogStart))
 
 	svc.MaybeSyncAnthropicAnalytics(ctx, cfg, endTime)
 
 	// 72h of backlog at a 24h-per-request cap is 3 usage windows, plus the
-	// finality probe.
+	// finality probe. The independent cost schedule does probe + one window.
 	require.Equal(t, 4, api.usageRequests())
+	require.Equal(t, 2, api.costRequests())
 	queries := api.usageQueries()
 	require.Equal(t, backlogStart.Format(time.RFC3339), queries[1].Get("starting_at"))
 	require.Equal(t, backlogStart.Add(24*time.Hour).Format(time.RFC3339), queries[1].Get("ending_at"))
 	require.Equal(t, backlogStart.Add(24*time.Hour).Format(time.RFC3339), queries[2].Get("starting_at"))
 
-	state, err := store.EnsureAnalyticsSync(ctx, cfg.ID)
+	state, err := store.EnsureTimeSyncSchedule(ctx, cfg.ID, ScheduleAnthropicAnalyticsUsage)
 	require.NoError(t, err)
 	require.Equal(t, endTime.Truncate(time.Minute), state.WatermarkAt.UTC())
 }
@@ -265,7 +278,7 @@ func TestMaybeSyncAnthropicAnalyticsPullsOnlyUpToDataRefreshedAt(t *testing.T) {
 	require.Equal(t, endTime.Add(-24*time.Hour).Truncate(time.Minute).Format(time.RFC3339), window.Get("starting_at"))
 	require.Equal(t, refreshedAt.Truncate(time.Minute).Format(time.RFC3339), window.Get("ending_at"))
 
-	state, err := store.EnsureAnalyticsSync(ctx, cfg.ID)
+	state, err := store.EnsureTimeSyncSchedule(ctx, cfg.ID, ScheduleAnthropicAnalyticsUsage)
 	require.NoError(t, err)
 	require.Equal(t, refreshedAt.Truncate(time.Minute), state.WatermarkAt.UTC())
 	require.Empty(t, state.LastPollError)
@@ -288,12 +301,55 @@ func TestMaybeSyncAnthropicAnalyticsRecordsForbiddenAsFailure(t *testing.T) {
 
 	svc.MaybeSyncAnthropicAnalytics(ctx, cfg, endTime)
 
-	state, err := store.EnsureAnalyticsSync(ctx, cfg.ID)
+	// Both schedules record their own failure state.
+	for _, schedule := range []string{ScheduleAnthropicAnalyticsUsage, ScheduleAnthropicAnalyticsCost} {
+		state, err := store.EnsureTimeSyncSchedule(ctx, cfg.ID, schedule)
+		require.NoError(t, err)
+		require.True(t, state.WatermarkAt.IsZero())
+		require.Contains(t, state.LastPollError, "read:analytics")
+		require.Equal(t, int32(1), state.ConsecutiveFailures)
+		require.Equal(t, endTime.Add(anthropicAnalyticsPollInterval), state.NextPollAfter.UTC())
+	}
+}
+
+func TestMaybeSyncAnthropicAnalyticsCostFailureDoesNotBlockUsage(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+
+	endTime := time.Now().UTC().Truncate(time.Second)
+
+	// Usage responds normally; cost is denied.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/organizations/analytics/user_cost_report" {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data":              []any{},
+			"data_refreshed_at": endTime.Format(time.RFC3339),
+			"has_more":          false,
+			"next_page":         "",
+			"organization_id":   "org_ext_1",
+		})
+	}))
+	t.Cleanup(server.Close)
+
+	svc := newTestAnalyticsPollService(t, store, server.URL)
+	cfg := createAnthropicComplianceConfig(t, ctx, conn, store, orgID)
+
+	svc.MaybeSyncAnthropicAnalytics(ctx, cfg, endTime)
+
+	usageState, err := store.EnsureTimeSyncSchedule(ctx, cfg.ID, ScheduleAnthropicAnalyticsUsage)
 	require.NoError(t, err)
-	require.True(t, state.WatermarkAt.IsZero())
-	require.Contains(t, state.LastPollError, "read:analytics")
-	require.Equal(t, int32(1), state.ConsecutiveFailures)
-	require.Equal(t, endTime.Add(anthropicAnalyticsPollInterval), state.NextPollAfter.UTC())
+	require.Equal(t, endTime.Truncate(time.Minute), usageState.WatermarkAt.UTC())
+	require.Empty(t, usageState.LastPollError)
+
+	costState, err := store.EnsureTimeSyncSchedule(ctx, cfg.ID, ScheduleAnthropicAnalyticsCost)
+	require.NoError(t, err)
+	require.True(t, costState.WatermarkAt.IsZero())
+	require.Contains(t, costState.LastPollError, "read:analytics")
+	require.Equal(t, int32(1), costState.ConsecutiveFailures)
 }
 
 func testAnalyticsConfig() Config {

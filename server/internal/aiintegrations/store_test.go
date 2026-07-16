@@ -72,8 +72,9 @@ func TestUpsertWithTxStartsAllProviderSchedules(t *testing.T) {
 	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderAnthropicCompliance, "anthropic-key", true, true, &extOrgID, nil)
 
 	require.Equal(t, map[string]string{
-		ScheduleAnthropicCompliance: SyncKindCursor,
-		ScheduleAnthropicAnalytics:  SyncKindTime,
+		ScheduleAnthropicCompliance:     SyncKindCursor,
+		ScheduleAnthropicAnalyticsUsage: SyncKindTime,
+		ScheduleAnthropicAnalyticsCost:  SyncKindTime,
 	}, listSyncSchedules(t, ctx, conn, created.Config.ID))
 }
 

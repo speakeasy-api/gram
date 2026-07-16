@@ -39,7 +39,7 @@ func NewPollAIData(
 	store := aiintegrations.NewStore(logger, db, encryptionClient)
 	return &PollAIData{
 		integrations: store,
-		cursorUsagePoller: aiintegrations.NewUsagePollService(telemetryLogger, guardianPolicy, func(ctx context.Context, page int) {
+		cursorUsagePoller: aiintegrations.NewUsagePollService(store, telemetryLogger, guardianPolicy, func(ctx context.Context, page int) {
 			activity.RecordHeartbeat(ctx, map[string]any{
 				"provider": aiintegrations.ProviderCursor,
 				"page":     page,

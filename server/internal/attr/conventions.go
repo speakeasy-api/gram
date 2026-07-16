@@ -439,6 +439,7 @@ const (
 	GitHubUsernameKey = attribute.Key("gram.github.username")
 
 	AIIntegrationConfigIDKey           = attribute.Key("gram.ai_integration.config_id")
+	AIIntegrationSyncScheduleKey       = attribute.Key("gram.ai_integration.sync_schedule")
 	AIIntegrationUsagePollNextAfterKey = attribute.Key("gram.ai_integration.usage_poll.next_after")
 
 	ResilienceBreakerStateKey           = attribute.Key("gram.circuit_breaker.state")
@@ -1796,6 +1797,13 @@ func SlogGitHubUsername(v string) slog.Attr      { return slog.String(string(Git
 func AIIntegrationConfigID(v string) attribute.KeyValue { return AIIntegrationConfigIDKey.String(v) }
 func SlogAIIntegrationConfigID(v string) slog.Attr {
 	return slog.String(string(AIIntegrationConfigIDKey), v)
+}
+
+func AIIntegrationSyncSchedule(v string) attribute.KeyValue {
+	return AIIntegrationSyncScheduleKey.String(v)
+}
+func SlogAIIntegrationSyncSchedule(v string) slog.Attr {
+	return slog.String(string(AIIntegrationSyncScheduleKey), v)
 }
 
 func AIIntegrationUsagePollNextAfter(v time.Time) attribute.KeyValue {
