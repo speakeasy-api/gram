@@ -1642,6 +1642,33 @@ type Skill struct {
 	UpdatedAt      pgtype.Timestamptz
 }
 
+type SkillDistribution struct {
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	SkillID         uuid.UUID
+	PinnedVersionID uuid.NullUUID
+	Audience        []string
+	Channel         string
+	CreatedByUserID string
+	RevokedAt       pgtype.Timestamptz
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+}
+
+type SkillSyncReceipt struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	SkillID        uuid.UUID
+	SkillVersionID uuid.NullUUID
+	UserID         string
+	Hostname       string
+	Provider       string
+	Status         string
+	SyncedAt       pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
 type SkillVersion struct {
 	ID               uuid.UUID
 	SkillID          uuid.UUID
