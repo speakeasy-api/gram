@@ -58,7 +58,7 @@ export default function Access(): JSX.Element {
       </Page.Header>
       <Page.Body>
         <RequireScope
-          scope={["org:read", "org:admin", "org:manage_roles"]}
+          scope={["org:read", "org:admin", "role:write"]}
           level="page"
         >
           <AccessInner />

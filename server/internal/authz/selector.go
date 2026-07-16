@@ -74,6 +74,8 @@ func ResourceKindForScope(scope Scope) string {
 		return ResourceKindMCP
 	case "org":
 		return ResourceKindOrg
+	case "role":
+		return ResourceKindRole
 	case "environment":
 		return ResourceKindEnvironment
 	case "skill":

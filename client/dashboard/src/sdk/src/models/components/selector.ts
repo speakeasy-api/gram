@@ -30,6 +30,7 @@ export const ResourceKind = {
   Project: "project",
   Mcp: "mcp",
   Org: "org",
+  Role: "role",
   Environment: "environment",
   Skill: "skill",
   RiskPolicy: "risk_policy",

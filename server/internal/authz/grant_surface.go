@@ -19,7 +19,7 @@ var scopeGrantSurfaces = map[Scope]GrantSurface{
 	ScopeOrgBlockedRead:          GrantSurfaceAccess,
 	ScopeOrgAdmin:                GrantSurfaceAccess,
 	ScopeOrgBlockedAdmin:         GrantSurfaceAccess,
-	ScopeOrgManageRoles:          GrantSurfaceAccess,
+	ScopeRoleWrite:               GrantSurfaceAccess,
 	ScopeProjectRead:             GrantSurfaceAccess,
 	ScopeProjectBlockedRead:      GrantSurfaceAccess,
 	ScopeProjectWrite:            GrantSurfaceAccess,

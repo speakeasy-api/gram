@@ -47,7 +47,7 @@ function RoleActionsMenu({
     // Render-prop form: the dropdown content is portaled to <body>, so it
     // escapes the pointer-events containment of the node form. Disabling the
     // Radix trigger directly is what actually prevents the menu from opening.
-    <RequireScope scope="org:manage_roles" level="component">
+    <RequireScope scope="role:write" level="component">
       {({ disabled }) => (
         <DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
           <DropdownMenuTrigger asChild disabled={disabled}>
@@ -162,9 +162,9 @@ function RoleRow({
 
 export function RolesTab(): JSX.Element {
   const { hasAnyScope } = useRBAC();
-  // Mirror the row-actions menu gate (org:manage_roles): without it, the row is
+  // Mirror the row-actions menu gate (role:write): without it, the row is
   // not clickable and shows no affordance.
-  const canManageRoles = hasAnyScope(["org:manage_roles"]);
+  const canManageRoles = hasAnyScope(["role:write"]);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<Role | null>(null);
   const [deletingRole, setDeletingRole] = useState<Role | null>(null);
@@ -219,7 +219,7 @@ export function RolesTab(): JSX.Element {
             Define roles and their associated permissions.
           </Type>
         </div>
-        <RequireScope scope="org:manage_roles" level="component">
+        <RequireScope scope="role:write" level="component">
           <Button onClick={() => setIsCreateOpen(true)}>
             <Button.LeftIcon>
               <Icon name="plus" className="h-4 w-4" />

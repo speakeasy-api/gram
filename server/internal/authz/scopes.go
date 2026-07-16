@@ -20,7 +20,7 @@ const (
 	ScopeOrgBlockedRead          Scope = "org:blocked_read"
 	ScopeOrgAdmin                Scope = "org:admin"
 	ScopeOrgBlockedAdmin         Scope = "org:blocked_admin"
-	ScopeOrgManageRoles          Scope = "org:manage_roles"
+	ScopeRoleWrite               Scope = "role:write"
 	ScopeProjectRead             Scope = "project:read"
 	ScopeProjectBlockedRead      Scope = "project:blocked_read"
 	ScopeProjectWrite            Scope = "project:write"
@@ -83,7 +83,7 @@ var scopeVisibilityByScope = map[Scope]scopeVisibility{
 	ScopeOrgBlockedRead:          scopeVisibilityInternal,
 	ScopeOrgAdmin:                scopeVisibilityUserVisible,
 	ScopeOrgBlockedAdmin:         scopeVisibilityInternal,
-	ScopeOrgManageRoles:          scopeVisibilityUserVisible,
+	ScopeRoleWrite:               scopeVisibilityUserVisible,
 	ScopeProjectRead:             scopeVisibilityUserVisible,
 	ScopeProjectBlockedRead:      scopeVisibilityInternal,
 	ScopeProjectWrite:            scopeVisibilityUserVisible,
@@ -169,11 +169,11 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeOrgBlockedRead:  nil,
 	ScopeOrgAdmin:        nil,
 	ScopeOrgBlockedAdmin: {ScopeOrgBlockedRead},
-	// org:admin also satisfies org:manage_roles, so full org admins keep the
-	// ability to manage roles and identity/SSO group mappings without a
-	// separate grant. Holding org:manage_roles alone does NOT satisfy org:read
-	// or org:admin, so the role stays confined to access management.
-	ScopeOrgManageRoles:          {ScopeOrgAdmin},
+	// org:admin also satisfies role:write, so full org admins keep the ability
+	// to manage roles and identity/SSO group mappings without a separate grant.
+	// Holding role:write alone does NOT satisfy org:read or org:admin, so the
+	// role stays confined to access management.
+	ScopeRoleWrite:               {ScopeOrgAdmin},
 	ScopeProjectRead:             {ScopeProjectWrite},
 	ScopeProjectBlockedRead:      nil,
 	ScopeProjectWrite:            nil,
@@ -227,7 +227,7 @@ var scopeExclusions = map[Scope]Scope{
 	ScopeRiskPolicyEvaluate:      ScopeRiskPolicyBypass,
 	ScopeRiskPolicyBypass:        "",
 	ScopeChatRead:                "",
-	ScopeOrgManageRoles:          "",
+	ScopeRoleWrite:               "",
 }
 
 // ExclusionScopeFor returns the scope that stores exception grants for the

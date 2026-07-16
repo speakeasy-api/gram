@@ -259,12 +259,12 @@ func TestService_UpdateMemberRole_AllowsOrgAdminGrant(t *testing.T) {
 	require.Equal(t, []string{builderID}, member.RoleIds)
 }
 
-func TestService_ListRoles_AllowsManageRolesGrant(t *testing.T) {
+func TestService_ListRoles_AllowsRoleWriteGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
 	authCtx := testAccessAuthContext(t, ctx)
-	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgManageRoles, Selector: authz.NewSelector(authz.ScopeOrgManageRoles, authCtx.ActiveOrganizationID)})
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeRoleWrite, Selector: authz.NewSelector(authz.ScopeRoleWrite, authCtx.ActiveOrganizationID)})
 	seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockSystemRole("role_admin", "Admin", "admin"))
 
 	result, err := ti.service.ListRoles(ctx, &gen.ListRolesPayload{})
@@ -272,11 +272,11 @@ func TestService_ListRoles_AllowsManageRolesGrant(t *testing.T) {
 	require.Len(t, result.Roles, 1)
 }
 
-func TestService_CreateRole_AllowsManageRolesGrant(t *testing.T) {
+func TestService_CreateRole_AllowsRoleWriteGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
-	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgManageRoles, Selector: authz.NewSelector(authz.ScopeOrgManageRoles, testAccessAuthContext(t, ctx).ActiveOrganizationID)})
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeRoleWrite, Selector: authz.NewSelector(authz.ScopeRoleWrite, testAccessAuthContext(t, ctx).ActiveOrganizationID)})
 
 	ti.roles.On("CreateRole", mock.Anything, mockidp.MockOrgID, thirdpartyworkos.CreateRoleOpts{
 		Name:        "Allowed",
@@ -297,7 +297,7 @@ func TestService_CreateRole_AllowsManageRolesGrant(t *testing.T) {
 }
 
 // org:read alone must NOT satisfy role mutations: managing roles requires the
-// dedicated org:manage_roles scope (or org:admin, which expands to it).
+// dedicated role:write scope (or org:admin, which expands to it).
 func TestService_CreateRole_ForbiddenWithOnlyOrgReadGrant(t *testing.T) {
 	t.Parallel()
 

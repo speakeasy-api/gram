@@ -47716,7 +47716,6 @@ components:
             - org:blocked_read
             - org:admin
             - org:blocked_admin
-            - org:manage_roles
             - project:read
             - project:blocked_read
             - project:write
@@ -47731,6 +47730,7 @@ components:
             - environment:blocked_read
             - environment:write
             - environment:blocked_write
+            - role:write
             - skill:read
             - skill:blocked_read
             - skill:write
@@ -47752,7 +47752,6 @@ components:
               - org:blocked_read
               - org:admin
               - org:blocked_admin
-              - org:manage_roles
               - project:read
               - project:blocked_read
               - project:write
@@ -47767,6 +47766,7 @@ components:
               - environment:blocked_read
               - environment:write
               - environment:blocked_write
+              - role:write
               - skill:read
               - skill:blocked_read
               - skill:write
@@ -52413,7 +52413,6 @@ components:
             - org:blocked_read
             - org:admin
             - org:blocked_admin
-            - org:manage_roles
             - project:read
             - project:blocked_read
             - project:write
@@ -52428,6 +52427,7 @@ components:
             - environment:blocked_read
             - environment:write
             - environment:blocked_write
+            - role:write
             - skill:read
             - skill:blocked_read
             - skill:write
@@ -52563,6 +52563,7 @@ components:
             - org
             - project
             - mcp
+            - role
             - environment
             - skill
             - risk_policy
@@ -52575,7 +52576,6 @@ components:
             - org:blocked_read
             - org:admin
             - org:blocked_admin
-            - org:manage_roles
             - project:read
             - project:blocked_read
             - project:write
@@ -52590,6 +52590,7 @@ components:
             - environment:blocked_read
             - environment:write
             - environment:blocked_write
+            - role:write
             - skill:read
             - skill:blocked_read
             - skill:write
@@ -53029,6 +53030,7 @@ components:
             - project
             - mcp
             - org
+            - role
             - environment
             - skill
             - risk_policy

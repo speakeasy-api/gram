@@ -14,6 +14,7 @@ export function resourceKindForScope(scope: string): string {
   if (scope.startsWith("project:")) return "project";
   if (scope.startsWith("remote-mcp:") || scope.startsWith("mcp:")) return "mcp";
   if (scope.startsWith("org:")) return "org";
+  if (scope.startsWith("role:")) return "role";
   if (scope.startsWith("environment:")) return "environment";
   if (scope.startsWith("skill:")) return "skill";
   if (scope.startsWith("risk_policy:")) return "risk_policy";

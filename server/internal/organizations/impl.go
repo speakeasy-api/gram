@@ -1173,11 +1173,11 @@ func (s *Service) GenerateWorkOSAdminPortalLink(ctx context.Context, payload *ge
 		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
 
-	// org:manage_roles is the dedicated access-management scope: it lets a role
+	// role:write is the dedicated access-management scope: it lets a role
 	// manager open the WorkOS admin portal (SSO / Directory Sync) to configure
 	// identity-provider group-to-role mappings. org:admin satisfies it via scope
 	// expansion, so full org admins are unaffected.
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgManageRoles, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeRoleWrite, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
 	}
 

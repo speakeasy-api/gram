@@ -158,7 +158,7 @@ func (s *Service) CreateRole(ctx context.Context, payload *gen.CreateRolePayload
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireManageRoles(ctx, ac.ActiveOrganizationID); err != nil {
+	if err := s.requireRoleWrite(ctx, ac.ActiveOrganizationID); err != nil {
 		return nil, err
 	}
 
@@ -183,7 +183,7 @@ func (s *Service) UpdateRole(ctx context.Context, payload *gen.UpdateRolePayload
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireManageRoles(ctx, ac.ActiveOrganizationID); err != nil {
+	if err := s.requireRoleWrite(ctx, ac.ActiveOrganizationID); err != nil {
 		return nil, err
 	}
 	trace.SpanFromContext(ctx).SetAttributes(
@@ -209,7 +209,7 @@ func (s *Service) DeleteRole(ctx context.Context, payload *gen.DeleteRolePayload
 	if err != nil {
 		return err
 	}
-	if err := s.requireManageRoles(ctx, ac.ActiveOrganizationID); err != nil {
+	if err := s.requireRoleWrite(ctx, ac.ActiveOrganizationID); err != nil {
 		return err
 	}
 	trace.SpanFromContext(ctx).SetAttributes(
@@ -251,7 +251,7 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 		{scope: authz.ScopeOrgBlockedRead, description: "Store exceptions for organization read access.", resourceType: "org"},
 		{scope: authz.ScopeOrgAdmin, description: "Manage organization access and settings.", resourceType: "org"},
 		{scope: authz.ScopeOrgBlockedAdmin, description: "Store exceptions for organization admin access.", resourceType: "org"},
-		{scope: authz.ScopeOrgManageRoles, description: "Create and edit roles, assign roles to members, and manage identity provider (SSO) group-to-role mappings, without access to other organization settings, Observe, or Secure data.", resourceType: "org"},
+		{scope: authz.ScopeRoleWrite, description: "Create and edit roles, assign roles to members, and manage identity provider (SSO) group-to-role mappings, without access to other organization settings, Observe, or Secure data.", resourceType: "role"},
 		{scope: authz.ScopeProjectRead, description: "View projects and project-related resources.", resourceType: "project"},
 		{scope: authz.ScopeProjectBlockedRead, description: "Store exceptions for project read access.", resourceType: "project"},
 		{scope: authz.ScopeProjectWrite, description: "Create and modify projects and project-related resources.", resourceType: "project"},
@@ -394,7 +394,7 @@ func (s *Service) UpdateMemberRoles(ctx context.Context, payload *gen.UpdateMemb
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireManageRoles(ctx, ac.ActiveOrganizationID); err != nil {
+	if err := s.requireRoleWrite(ctx, ac.ActiveOrganizationID); err != nil {
 		return nil, err
 	}
 	if len(payload.RoleIds) == 0 {
@@ -453,19 +453,19 @@ func (s *Service) roleOrgContext(ctx context.Context) (*contextvalues.AuthContex
 
 // requireAccessRead gates read-only access-management endpoints (roles,
 // members, scopes, authorization challenges). Either org:read (any org viewer)
-// or org:manage_roles (the dedicated access-management role) may read this data.
+// or role:write (the dedicated access-management role) may read this data.
 func (s *Service) requireAccessRead(ctx context.Context, orgID string) error {
 	return s.authz.RequireAny(ctx,
 		authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: orgID, Dimensions: nil},
-		authz.Check{Scope: authz.ScopeOrgManageRoles, ResourceKind: "", ResourceID: orgID, Dimensions: nil},
+		authz.Check{Scope: authz.ScopeRoleWrite, ResourceKind: "", ResourceID: orgID, Dimensions: nil},
 	)
 }
 
-// requireManageRoles gates access-management mutations (role CRUD, member role
-// assignment, challenge resolution). org:manage_roles is the dedicated scope;
+// requireRoleWrite gates access-management mutations (role CRUD, member role
+// assignment, challenge resolution). role:write is the dedicated scope;
 // org:admin satisfies it via scope expansion, so full org admins are unaffected.
-func (s *Service) requireManageRoles(ctx context.Context, orgID string) error {
-	return s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgManageRoles, ResourceKind: "", ResourceID: orgID, Dimensions: nil})
+func (s *Service) requireRoleWrite(ctx context.Context, orgID string) error {
+	return s.authz.Require(ctx, authz.Check{Scope: authz.ScopeRoleWrite, ResourceKind: "", ResourceID: orgID, Dimensions: nil})
 }
 
 func isSystemRole(roleSlug string) bool {
@@ -558,7 +558,7 @@ func userVisibleScopeGrants() []*gen.ListRoleGrant {
 	return []*gen.ListRoleGrant{
 		{Scope: string(authz.ScopeOrgRead), Selectors: nil},
 		{Scope: string(authz.ScopeOrgAdmin), Selectors: nil},
-		{Scope: string(authz.ScopeOrgManageRoles), Selectors: nil},
+		{Scope: string(authz.ScopeRoleWrite), Selectors: nil},
 		{Scope: string(authz.ScopeProjectRead), Selectors: nil},
 		{Scope: string(authz.ScopeProjectWrite), Selectors: nil},
 		{Scope: string(authz.ScopeMCPRead), Selectors: nil},
@@ -1158,7 +1158,7 @@ func (s *Service) ResolveChallenge(ctx context.Context, payload *gen.ResolveChal
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.requireManageRoles(ctx, authCtx.ActiveOrganizationID); err != nil {
+	if err := s.requireRoleWrite(ctx, authCtx.ActiveOrganizationID); err != nil {
 		return nil, err
 	}
 	trace.SpanFromContext(ctx).SetAttributes(

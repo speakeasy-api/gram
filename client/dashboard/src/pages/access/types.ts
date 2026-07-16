@@ -21,6 +21,7 @@ export function toRoleSlug(name: string): string {
 /** What kind of resource a scope protects. */
 export type ResourceType =
   | "org"
+  | "role"
   | "project"
   | "mcp"
   | "environment"
