@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -57,6 +58,7 @@ func TestMain(m *testing.M) {
 type testInstance struct {
 	service        *Service
 	conn           *pgxpool.Pool
+	chConn         clickhouse.Conn
 	redisClient    *redis.Client
 	accessStore    accesscontrol.Store
 	sessionManager *sessions.Manager
@@ -123,6 +125,7 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 	return ctx, &testInstance{
 		service:        svc,
 		conn:           conn,
+		chConn:         chConn,
 		redisClient:    redisClient,
 		accessStore:    accessStore,
 		sessionManager: sessionManager,

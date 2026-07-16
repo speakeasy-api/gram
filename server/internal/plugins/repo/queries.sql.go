@@ -527,12 +527,62 @@ type IsOrganizationFeatureEnabledParams struct {
 
 // Reports whether an organization feature flag is enabled. Mirrors the
 // productfeatures service's read against organization_features so the generator
-// can honour org-level toggles (e.g. observability_mode) at generation time.
+// can honour org-level toggles (e.g. hooks_fail_open) at generation time.
 func (q *Queries) IsOrganizationFeatureEnabled(ctx context.Context, arg IsOrganizationFeatureEnabledParams) (bool, error) {
 	row := q.db.QueryRow(ctx, isOrganizationFeatureEnabled, arg.OrganizationID, arg.FeatureName)
 	var enabled bool
 	err := row.Scan(&enabled)
 	return enabled, err
+}
+
+const listOrgPluginPublishTargets = `-- name: ListOrgPluginPublishTargets :many
+SELECT
+  c.project_id,
+  k.created_by_user_id
+FROM plugin_github_connections c
+JOIN projects p ON p.id = c.project_id AND p.deleted IS FALSE
+JOIN LATERAL (
+  SELECT created_by_user_id
+  FROM api_keys
+  WHERE project_id = c.project_id
+    AND deleted IS FALSE
+    AND name LIKE 'plugins-mcp-%'
+  ORDER BY created_at DESC
+  LIMIT 1
+) k ON TRUE
+WHERE p.organization_id = $1
+ORDER BY c.project_id ASC
+`
+
+type ListOrgPluginPublishTargetsRow struct {
+	ProjectID       uuid.UUID
+	CreatedByUserID string
+}
+
+// Lists every project in one organization that has a GitHub plugin connection,
+// with the actor user for each (the creator of the project's most recent
+// plugins-mcp API key), so an org-level setting change (e.g. browser login)
+// can be republished to all of the org's marketplaces. Like
+// ListPluginPublishCandidates this is a deliberate cross-project sweep, but it is
+// constrained to a single organization rather than scanning globally.
+func (q *Queries) ListOrgPluginPublishTargets(ctx context.Context, organizationID string) ([]ListOrgPluginPublishTargetsRow, error) {
+	rows, err := q.db.Query(ctx, listOrgPluginPublishTargets, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrgPluginPublishTargetsRow
+	for rows.Next() {
+		var i ListOrgPluginPublishTargetsRow
+		if err := rows.Scan(&i.ProjectID, &i.CreatedByUserID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listPluginAssignments = `-- name: ListPluginAssignments :many
@@ -1195,10 +1245,12 @@ type UpsertGitHubConnectionParams struct {
 // conflict the existing token is preserved via COALESCE so callers can pass a
 // freshly-generated token on every publish without overwriting prior state.
 // Token rotation goes through a separate query. published_mcp_fingerprints,
-// published_hooks_version, and published_hooks_config record the per-plugin
-// MCP content hashes, the hooks generator version, and the org-level hooks
-// settings just published; all are always overwritten so subsequent rollout
-// runs can detect independently whether the MCP or hooks component changed.
+// published_hooks_version, and published_hooks_config record the per-plugin MCP
+// content hashes, the hooks generator version, and the hook-output-affecting
+// config just published; all are always overwritten so subsequent rollout runs
+// can detect independently whether the MCP or hooks component changed (including
+// hooks config drift a version bump can't capture, e.g. a marketplace rename or
+// browser-login toggle).
 func (q *Queries) UpsertGitHubConnection(ctx context.Context, arg UpsertGitHubConnectionParams) (PluginGithubConnection, error) {
 	row := q.db.QueryRow(ctx, upsertGitHubConnection,
 		arg.ProjectID,

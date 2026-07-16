@@ -189,6 +189,42 @@ func TestProxy_Post_StripsAuthorizationHeader(t *testing.T) {
 	require.Empty(t, gotAuth, "Gram API key must never be forwarded to the remote MCP server")
 }
 
+func TestProxy_Post_StripsBrowserHeaders(t *testing.T) {
+	t.Parallel()
+
+	var gotOrigin, gotReferer, gotCookie, gotAccept string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotOrigin = r.Header.Get("Origin")
+		gotReferer = r.Header.Get("Referer")
+		gotCookie = r.Header.Get("Cookie")
+		gotAccept = r.Header.Get("Accept")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{}}`))
+	}))
+	t.Cleanup(upstream.Close)
+
+	p := newProxyForTest(t, upstream.URL)
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req.Header.Set("Content-Type", "application/json")
+	// Headers a browser attaches when the dashboard drives the proxy. Origin
+	// trips upstream DNS-rebinding checks and Cookie would leak the dashboard
+	// session, so neither may reach the upstream MCP server.
+	req.Header.Set("Origin", "https://app.getgram.ai")
+	req.Header.Set("Referer", "https://app.getgram.ai/mcp/x/some-server/tools")
+	req.Header.Set("Cookie", "gram_session=super-secret")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, req))
+
+	require.Empty(t, gotOrigin, "browser Origin must not be forwarded to the remote MCP server")
+	require.Empty(t, gotReferer, "browser Referer must not be forwarded to the remote MCP server")
+	require.Empty(t, gotCookie, "dashboard session cookie must not leak to the remote MCP server")
+	// Forward-safe headers still pass through untouched.
+	require.Equal(t, "application/json, text/event-stream", gotAccept)
+}
+
 func TestProxy_Post_AppliesStaticHeader(t *testing.T) {
 	t.Parallel()
 

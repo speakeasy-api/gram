@@ -138,17 +138,21 @@ func (s *Service) JWTAuth(ctx context.Context, token string, schema *security.JW
 }
 
 // directAuthorize performs authentication and authorization for chat requests.
-// It tries session auth first, then API key auth, then chat session token as fallback.
-// It also validates the project header and ensures ProjectID is present.
-func (s *Service) directAuthorize(ctx context.Context, r *http.Request) (context.Context, *contextvalues.AuthContext, error) {
+// It tries session auth first, then API key auth, then chat session token as
+// fallback. It also validates the project header and ensures ProjectID is
+// present. The returned key slot names the customer key slot the surface
+// bills to; it is derived from which credential authenticated the request —
+// like KeyType, never from client-claimed headers — so a caller cannot pick
+// another slot's customer key.
+func (s *Service) directAuthorize(ctx context.Context, r *http.Request) (context.Context, *contextvalues.AuthContext, billing.ModelUsageSource, error) {
 	if token := r.Header.Get("Authorization"); token != "" {
 		authorizedCtx, _, err := s.assistantTokens.Authorize(ctx, token)
 		if err == nil {
 			authCtx, ok := contextvalues.GetAuthContext(authorizedCtx)
 			if !ok || authCtx == nil || authCtx.ProjectID == nil {
-				return authorizedCtx, nil, oops.C(oops.CodeUnauthorized)
+				return authorizedCtx, nil, "", oops.C(oops.CodeUnauthorized)
 			}
-			return authorizedCtx, authCtx, nil
+			return authorizedCtx, authCtx, billing.ModelUsageSourceAssistants, nil
 		}
 	}
 
@@ -158,6 +162,11 @@ func (s *Service) directAuthorize(ctx context.Context, r *http.Request) (context
 		Scopes:         []string{},
 		RequiredScopes: []string{},
 	}
+
+	// Dashboard sessions and API-key clients bill the playground slot (the
+	// resolver falls back to the project default key); embedded chat (chat
+	// session tokens) bills the elements slot.
+	keySlot := billing.ModelUsageSourcePlayground
 
 	authorizedCtx, err := s.auth.Authorize(ctx, r.Header.Get(constants.SessionHeader), &sc)
 
@@ -176,8 +185,9 @@ func (s *Service) directAuthorize(ctx context.Context, r *http.Request) (context
 		token := r.Header.Get(constants.ChatSessionsTokenHeader)
 		authorizedCtx, err = s.chatSessions.Authorize(ctx, token)
 		if err != nil {
-			return authorizedCtx, nil, oops.E(oops.CodeUnauthorized, err, "unauthorized access")
+			return authorizedCtx, nil, "", oops.E(oops.CodeUnauthorized, err, "unauthorized access")
 		}
+		keySlot = billing.ModelUsageSourceElements
 	}
 
 	// Authorize with project
@@ -188,19 +198,19 @@ func (s *Service) directAuthorize(ctx context.Context, r *http.Request) (context
 	}
 	authorizedCtx, err = s.auth.Authorize(authorizedCtx, r.Header.Get(constants.ProjectHeader), &sc)
 	if err != nil {
-		return authorizedCtx, nil, oops.E(oops.CodeUnauthorized, err, "unauthorized access")
+		return authorizedCtx, nil, "", oops.E(oops.CodeUnauthorized, err, "unauthorized access")
 	}
 
 	authCtx, ok := contextvalues.GetAuthContext(authorizedCtx)
 	if !ok {
-		return authorizedCtx, nil, oops.C(oops.CodeUnauthorized)
+		return authorizedCtx, nil, "", oops.C(oops.CodeUnauthorized)
 	}
 
 	if authCtx.ProjectID == nil {
-		return authorizedCtx, nil, oops.E(oops.CodeUnauthorized, nil, "unauthorized: project id is required")
+		return authorizedCtx, nil, "", oops.E(oops.CodeUnauthorized, nil, "unauthorized: project id is required")
 	}
 
-	return authorizedCtx, authCtx, nil
+	return authorizedCtx, authCtx, keySlot, nil
 }
 
 func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) (*gen.ListChatsResult, error) {
@@ -247,7 +257,36 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		return nil, err
 	}
 
-	baseParams := repo.CountChatsParams{
+	pinned := conv.PtrValOr(payload.Pinned, "")
+	sources := parseSourceFilter(conv.PtrValOr(payload.Source, ""))
+	accountType := conv.PtrValOr(payload.AccountType, "")
+
+	// When the requested offset is past the end of the result set, the page
+	// query returns no rows to carry the window total, and the fallback count
+	// below runs as a second statement. Share one repeatable-read snapshot
+	// between the two so the total can't come from a different point in time
+	// than the empty page (e.g. an empty page whose total implies the page
+	// exists). Offset-zero requests can't hit the fallback, so they skip the
+	// transaction.
+	querier := s.repo
+	var listTx pgx.Tx
+	if payload.Offset > 0 {
+		tx, err := s.db.BeginTx(ctx, pgx.TxOptions{
+			IsoLevel:       pgx.RepeatableRead,
+			AccessMode:     pgx.ReadOnly,
+			DeferrableMode: "",
+			BeginQuery:     "",
+			CommitQuery:    "",
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list chats").LogError(ctx, s.logger)
+		}
+		defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+		listTx = tx
+		querier = s.repo.WithTx(tx)
+	}
+
+	rows, err := querier.ListChats(ctx, repo.ListChatsParams{
 		ProjectID:         *authCtx.ProjectID,
 		ExternalUserID:    externalUserID,
 		UserID:            userID,
@@ -259,31 +298,9 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		ExcludeSourceKind: excludeSourceKind,
 		HasRiskFilter:     hasRiskFilter,
 		MinRiskScore:      minRiskScore,
-		Pinned:            conv.PtrValOr(payload.Pinned, ""),
-		Sources:           parseSourceFilter(conv.PtrValOr(payload.Source, "")),
-		AccountType:       conv.PtrValOr(payload.AccountType, ""),
-	}
-
-	total, err := s.repo.CountChats(ctx, baseParams)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "count chats").LogError(ctx, s.logger)
-	}
-
-	rows, err := s.repo.ListChats(ctx, repo.ListChatsParams{
-		ProjectID:         baseParams.ProjectID,
-		ExternalUserID:    baseParams.ExternalUserID,
-		UserID:            baseParams.UserID,
-		FromTime:          baseParams.FromTime,
-		ToTime:            baseParams.ToTime,
-		Search:            baseParams.Search,
-		AssistantID:       baseParams.AssistantID,
-		SourceKind:        baseParams.SourceKind,
-		ExcludeSourceKind: baseParams.ExcludeSourceKind,
-		HasRiskFilter:     baseParams.HasRiskFilter,
-		MinRiskScore:      baseParams.MinRiskScore,
-		Pinned:            baseParams.Pinned,
-		Sources:           baseParams.Sources,
-		AccountType:       baseParams.AccountType,
+		Pinned:            pinned,
+		Sources:           sources,
+		AccountType:       accountType,
 		SortBy:            payload.SortBy,
 		SortOrder:         payload.SortOrder,
 		PageLimit:         conv.SafeInt32(payload.Limit),
@@ -291,6 +308,41 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list chats").LogError(ctx, s.logger)
+	}
+
+	// Every page row carries the pre-LIMIT total via a window count. A separate
+	// count query is only needed when the requested offset is past the end of
+	// the result set, so there are no rows to read it from.
+	var total int64
+	switch {
+	case len(rows) > 0:
+		total = rows[0].TotalCount
+	case payload.Offset > 0:
+		total, err = querier.CountChats(ctx, repo.CountChatsParams{
+			ProjectID:         *authCtx.ProjectID,
+			ExternalUserID:    externalUserID,
+			UserID:            userID,
+			FromTime:          fromTime,
+			ToTime:            toTime,
+			Search:            search,
+			AssistantID:       assistantID,
+			SourceKind:        sourceKind,
+			ExcludeSourceKind: excludeSourceKind,
+			HasRiskFilter:     hasRiskFilter,
+			MinRiskScore:      minRiskScore,
+			Pinned:            pinned,
+			Sources:           sources,
+			AccountType:       accountType,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "count chats").LogError(ctx, s.logger)
+		}
+	}
+
+	if listTx != nil {
+		if err := listTx.Commit(ctx); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list chats").LogError(ctx, s.logger)
+		}
 	}
 
 	result := make([]*gen.ChatOverview, 0, len(rows))
@@ -995,7 +1047,7 @@ func (s *Service) linkSetupAssistantThread(ctx context.Context, projectID *uuid.
 
 // HandleCompletion is a proxy to the OpenAI API that logs request and response data.
 func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error {
-	ctx, authCtx, err := s.directAuthorize(r.Context(), r)
+	ctx, authCtx, keySlot, err := s.directAuthorize(r.Context(), r)
 	if err != nil {
 		return err
 	}
@@ -1013,6 +1065,12 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	if source == "assistant" {
 		source = billing.ModelUsageSourceAssistants
 	}
+	// A caller holding an assistant runtime token IS the assistants surface;
+	// its telemetry tag follows the credential, not the header, so a runner
+	// request can never be tagged (and billed) as another surface.
+	if _, isAssistant := contextvalues.GetAssistantPrincipal(ctx); isAssistant {
+		source = billing.ModelUsageSourceAssistants
+	}
 	// risk-analysis is reserved for the platform's own scanning inference
 	// (risk judge, prompt-injection judge), which never enters through this
 	// proxy. A client claiming it would dodge Polar metering and mislabel its
@@ -1025,6 +1083,13 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	}
 	if source == "" {
 		source = billing.ModelUsageSourcePlayground
+	}
+	// Anything classified as the assistants surface — the runner's credential
+	// or the dashboard's setup/onboarding claim — must also resolve the
+	// assistants key slot, so it cannot be routed through another surface's
+	// customer key. No other slot value ever comes from the header.
+	if source == billing.ModelUsageSourceAssistants {
+		keySlot = billing.ModelUsageSourceAssistants
 	}
 	sourceName := string(source)
 
@@ -1172,6 +1237,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		Stream:         false,
 		UsageSource:    source,
 		KeyType:        openrouter.KeyTypeChat,
+		KeySlot:        keySlot,
 		ChatID:         completionChatID,
 		UserID:         userID,
 		ExternalUserID: authCtx.ExternalUserID,
@@ -1967,6 +2033,7 @@ func storeMessages(ctx context.Context, logger *slog.Logger, tx repo.DBTX, asset
 		}
 
 		dbrows[i] = repo.CreateChatMessageParams{
+			Replayed:         false,
 			ChatID:           row.chatID,
 			ProjectID:        row.projectID,
 			Role:             row.role,

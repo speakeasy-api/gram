@@ -2,6 +2,7 @@
 
 #MISE dir="{{ config_root }}/server"
 #MISE description="Start up the API server"
+#MISE hide=true
 
 GIT_SHA=$(git rev-parse HEAD)
 

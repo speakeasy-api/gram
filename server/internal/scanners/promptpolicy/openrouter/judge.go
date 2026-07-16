@@ -216,6 +216,7 @@ func (j *Judge) call(ctx context.Context, in promptpolicy.Input) (judgeCallResul
 		Temperature:    &temperature,
 		UsageSource:    billing.ModelUsageSourceRiskAnalysis,
 		KeyType:        openrouter.KeyTypeInternal,
+		KeySlot:        billing.ModelUsageSourceRiskPolicy,
 		UserID:         in.UserID,
 		ExternalUserID: "",
 		UserEmail:      "",

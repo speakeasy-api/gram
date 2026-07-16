@@ -14,7 +14,8 @@ import CatalogDetail, {
 } from "./pages/catalog/CatalogDetail";
 import ChatSessions from "./pages/chatLogs/ChatLogs";
 import { ChatConversation, ChatHome, ChatRoot } from "./pages/chat/Chat";
-import CLIs from "./pages/CLIs";
+import Skills from "./pages/Skills";
+import SkillsList from "./pages/skills/SkillsList";
 import Deployment from "./pages/deployments/deployment/Deployment";
 import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
 import UserSessions from "./pages/org/UserSessions";
@@ -78,6 +79,8 @@ import SecurityOverview, {
 } from "./pages/security/SecurityOverview";
 import RiskEventsPage from "./pages/security/RiskEventsPage";
 import ApprovalRequests from "./pages/security/ApprovalRequests";
+import ShadowMCP, { ShadowMCPRoot } from "./pages/shadow-mcp/ShadowMCP";
+import ShadowMCPServerDetail from "./pages/shadow-mcp/ShadowMCPServerDetail";
 import RiskOverviewCategoriesIndex from "./pages/security/RiskOverviewCategoriesIndex";
 import RiskOverviewCategoryDetail from "./pages/security/RiskOverviewCategoryDetail";
 import RiskOverviewRulesIndex from "./pages/security/RiskOverviewRulesIndex";
@@ -335,11 +338,12 @@ const ROUTE_STRUCTURE = {
       },
     },
   },
-  clis: {
+  skills: {
     title: "Skills",
-    url: "clis",
+    url: "skills",
     icon: "terminal",
-    component: CLIs,
+    component: Skills,
+    indexComponent: SkillsList,
   },
   mcp: {
     title: "MCP",
@@ -581,6 +585,20 @@ const ROUTE_STRUCTURE = {
     url: "risk-events",
     icon: "flag",
     component: RiskEventsPage,
+  },
+  shadowMCP: {
+    title: "Shadow MCP",
+    url: "shadow-mcp",
+    icon: "shield",
+    component: ShadowMCPRoot,
+    indexComponent: ShadowMCP,
+    subPages: {
+      detail: {
+        title: "Shadow MCP Server",
+        url: ":serverSlug",
+        component: ShadowMCPServerDetail,
+      },
+    },
   },
   sdks: {
     title: "SDKs",

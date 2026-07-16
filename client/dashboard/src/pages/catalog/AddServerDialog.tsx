@@ -16,7 +16,6 @@ import {
   Circle,
   ExternalLink,
   Loader2,
-  MessageCircle,
   Plug,
   Plus,
   Server as ServerIcon,
@@ -1304,22 +1303,6 @@ function SingleServerNextSteps({
             <ArrowRight className="text-muted-foreground h-4 w-4 opacity-0 transition-opacity group-hover:opacity-100" />
           </div>
         </routes.sources.Link>
-        <routes.elements.Link
-          className="no-underline hover:no-underline"
-          queryParams={{ toolset: toolsetSlug }}
-        >
-          <div className="group hover:border-foreground/20 hover:bg-muted/30 flex h-full items-center gap-3 rounded-lg border p-3 transition-all [&_*]:no-underline">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-violet-500/10 dark:bg-violet-500/20">
-              <MessageCircle className="h-4 w-4 text-violet-600 dark:text-violet-400" />
-            </div>
-            <div className="flex-1">
-              <Type className="text-sm font-medium no-underline">
-                Deploy as chat
-              </Type>
-            </div>
-            <ArrowRight className="text-muted-foreground h-4 w-4 opacity-0 transition-opacity group-hover:opacity-100" />
-          </div>
-        </routes.elements.Link>
         <a
           href={`${getServerURL()}/mcp/${mcpSlug}/install`}
           target="_blank"

@@ -84,8 +84,9 @@ func (s *Service) BackfillShadowMCPInventoryURLs(ctx context.Context, params Bac
 	}
 
 	usageRows, err := s.chRepo.ListShadowMCPInventoryUsage(ctx, repo.ListShadowMCPInventoryUsageParams{
-		GramProjectID: params.GramProjectID,
-		Limit:         params.Limit,
+		GramProjectID:       params.GramProjectID,
+		CanonicalServerURLs: nil,
+		Limit:               params.Limit,
 	})
 	if err != nil {
 		return BackfillShadowMCPInventoryURLsResult{InventoryURLCount: 0}, oops.E(oops.CodeUnexpected, err, "list shadow mcp inventory usage for backfill")

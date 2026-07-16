@@ -8,14 +8,12 @@ import { useMemo, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { isAttributionDim } from "@/pages/costs/taxonomy";
 import { type BillingPeriod, bucketDateKey } from "./billing-cycles";
 import {
   breakdownLabel,
+  breakdownValueLabel,
   CHART_COLORS,
-  COMPLETION_MODEL_DIM,
   OTHER_COLOR,
-  RISK_ANALYSIS_MODEL_DIM,
 } from "./breakdown-options";
 import { tumDetailsQuery } from "./tum-queries";
 
@@ -44,25 +42,26 @@ type DetailGroup = {
   rows: DetailRow[];
 };
 
-// The dimension sections, split so the headline model cuts sit directly
-// under Total and the rest follow the token-type group. Only dimensions
-// billed completion rows genuinely carry: the two model cuts (the platform's
-// risk-policy analysis inference vs user-facing completion surfaces), the
-// identity snapshot hydrated at emit time (division, roles — no per-user
-// section; that isn't exposed on the billing page yet), and the consuming
-// surface.
-const LEAD_DIMENSION_SECTIONS: string[] = [
-  RISK_ANALYSIS_MODEL_DIM,
-  COMPLETION_MODEL_DIM,
-];
+// The dimension sections, split so Model sits directly under Total and the
+// rest follow the token-type group, mirroring the chart's breakdown picker:
+// the observed session's model and agent surface, the AI account's provider
+// and team/personal classification, the project the traffic was recorded
+// under, and the emit-time identity snapshot (division, department, user,
+// roles).
+const LEAD_DIMENSION_SECTIONS: string[] = [Dimension.Model];
 const TAIL_DIMENSION_SECTIONS: string[] = [
-  Dimension.DivisionName,
-  Dimension.Role,
   Dimension.HookSource,
+  Dimension.Provider,
+  Dimension.AccountType,
+  Dimension.ProjectId,
+  Dimension.DivisionName,
+  Dimension.DepartmentName,
+  Dimension.Email,
+  Dimension.Role,
 ];
 
 // A measure carried by both the daily points and the whole-range totals.
-type MeasureField = "inputTokens" | "outputTokens";
+type MeasureField = "inputTokens" | "outputTokens" | "cacheCreationTokens";
 
 type MeasureRowSpec = {
   label: string;
@@ -70,10 +69,16 @@ type MeasureRowSpec = {
   field: MeasureField;
 };
 
-// Billed completions carry no cache attributes (input + output = total).
+// Input + output + cache writes sum to the TUM total; cache reads are
+// excluded from the population entirely.
 const TOKEN_TYPE_ROWS: MeasureRowSpec[] = [
   { label: "Input", color: CHART_COLORS[0]!, field: "inputTokens" },
   { label: "Output", color: CHART_COLORS[1]!, field: "outputTokens" },
+  {
+    label: "Cache write",
+    color: CHART_COLORS[2]!,
+    field: "cacheCreationTokens",
+  },
 ];
 
 // Row color for a dimension value — same palette walk as the chart's stacks,
@@ -84,10 +89,12 @@ function valueColor(value: string, index: number): string {
 }
 
 // The dimension sections of the details table, mirroring the chart's group
-// stacks: same value order, "(unset)" labeling, attribution "" rows dropped.
+// stacks: same value order, "(unset)" labeling for unattributed traffic,
+// project UUIDs mapped to names.
 function dimensionGroups(
   data: TumDetailsResult | undefined,
   keys: string[],
+  projectNames: Map<string, string>,
 ): DetailGroup[] {
   const byKey = new Map(
     (data?.breakdowns ?? []).map((b) => [b.key, b.rows] as const),
@@ -96,13 +103,9 @@ function dimensionGroups(
   for (const key of keys) {
     const rows = byKey.get(key);
     if (!rows) continue;
-    // Attribution "" rows are not-applicable spend (same rule as the chart);
-    // zero-token rows (e.g. groups with only tool calls) are noise.
-    const visible = rows.filter(
-      (r) =>
-        r.totalTokens > 0 &&
-        (!isAttributionDim(key as Dimension) || r.value !== ""),
-    );
+    // "" rows are real observed traffic that lacks the attribute — shown as
+    // "(unset)". Zero-token rows are noise.
+    const visible = rows.filter((r) => r.totalTokens > 0);
     if (visible.length === 0) continue;
     groups.push({
       heading: breakdownLabel(key),
@@ -114,7 +117,7 @@ function dimensionGroups(
           ? "Users can hold multiple roles; rows overlap and can sum to more than the total token usage for the selected time period."
           : undefined,
       rows: visible.map((r, i) => ({
-        label: r.value === "" ? "(unset)" : r.value,
+        label: breakdownValueLabel(key, r.value, projectNames),
         color: valueColor(r.value, i),
         series: r.series,
         total: r.totalTokens,
@@ -274,22 +277,22 @@ function DetailGroupSection({
  */
 export function TumDetailsTable({
   period,
-  projectId,
+  projectNames,
   limit,
 }: {
   period: BillingPeriod;
-  // Optional project scope, matching the page-level project filter.
-  projectId: string | null;
+  // Project id → name, for labeling the Project section's UUID values.
+  projectNames: Map<string, string>;
   // Contracted monthly allowance; drives the per-metric overage share.
   limit: number | null;
 }): JSX.Element {
   const client = useGramContext();
   const organization = useOrganization();
-  const scope = { client, orgId: organization.id, period, projectId };
+  const scope = { client, orgId: organization.id, period };
   const { data, isFetching, isError } = useQuery(tumDetailsQuery(scope));
 
   // Sections collapsed via their header band, keyed by heading so the state
-  // survives period/project switches.
+  // survives period switches.
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const toggleGroup = (heading: string): void => {
     setCollapsed((prev) => {
@@ -304,9 +307,9 @@ export function TumDetailsTable({
   };
 
   // Billed normalization and overage attribution are organization-cycle
-  // concepts (the TUM contract has no per-project or sub-cycle split), so
-  // both switch off when a project filter or a custom range narrows the data.
-  const billedCycle = projectId == null ? period.cycle : null;
+  // concepts (the TUM contract has no sub-cycle split), so both switch off
+  // when a custom range narrows the data.
+  const billedCycle = period.cycle;
 
   // The table presents BILLED tokens: the analytics aggregate supplies the
   // distribution across metrics (it has the dimensions; billing's per-session
@@ -317,7 +320,15 @@ export function TumDetailsTable({
   const billedScale = useMemo(() => {
     if (!billedCycle) return 1;
     const analyticsTotal = data?.totals?.totalTokens ?? 0;
-    if (analyticsTotal === 0 || billedCycle.tokens === 0) return 1;
+    if (analyticsTotal === 0) return 1;
+    // A CLOSED zero-token cycle is a known zero: scale everything to 0 so
+    // the Total row matches the card even when live analytics recomputed
+    // nonzero tokens after the seal. The active cycle is exempt — its card
+    // total is a live number that can trail the details query by a refetch,
+    // and a transient zero must not blank real traffic.
+    if (billedCycle.tokens === 0) {
+      return billedCycle.current ? 1 : 0;
+    }
     return billedCycle.tokens / analyticsTotal;
   }, [data, billedCycle]);
 
@@ -344,9 +355,9 @@ export function TumDetailsTable({
           },
         ],
       },
-      ...dimensionGroups(data, LEAD_DIMENSION_SECTIONS),
+      ...dimensionGroups(data, LEAD_DIMENSION_SECTIONS, projectNames),
       { heading: "Token type", rows: TOKEN_TYPE_ROWS.map(measureRow) },
-      ...dimensionGroups(data, TAIL_DIMENSION_SECTIONS),
+      ...dimensionGroups(data, TAIL_DIMENSION_SECTIONS, projectNames),
     ];
 
     // Convert every row into billed units (see billedScale).
@@ -358,31 +369,26 @@ export function TumDetailsTable({
         series: row.series.map((v) => v * billedScale),
       })),
     }));
-  }, [data, billedScale]);
+  }, [data, billedScale, projectNames]);
 
   // Time-based overage attribution: tokens count as overage from the moment
-  // the ORGANIZATION's cumulative usage crossed the included allowance. Days
+  // the organization's cumulative usage crossed the included allowance. Days
   // before the crossing weigh 0, days after weigh 1, and the crossing day is
   // prorated by how far into its tokens the allowance ran out (the data is
   // daily, so metrics are assumed to share the within-day distribution). The
-  // crossing point comes from the cycle's org-wide BILLED daily series — a
-  // project filter must not move it — so a project-scoped view shows that
-  // project's share of the overage: its tokens recorded after the org
-  // crossed.
+  // crossing point is walked on the cycle's BILLED daily series.
   //
   // Null when overage does not apply: no contracted allowance, or a custom
   // range (the allowance is an org-cycle number).
   const overageWeights = useMemo<number[] | null>(() => {
-    const cycle = period.cycle;
+    const cycle = billedCycle;
     if (limit == null || cycle == null) return null;
     const points = data?.points ?? [];
 
     // The daily series the crossing is walked on. Normally the cycle's
-    // org-wide billed days; when the TUM response didn't carry them (the
-    // synthesized active-cycle fallback has none), an all-zero walk would
-    // silently zero the whole column — instead org scope falls back to the
-    // billed-scaled analytics series, and project scope dashes out (its
-    // filtered series can't locate the org-wide crossing).
+    // billed days; when the TUM response didn't carry them (the synthesized
+    // active-cycle fallback has none), an all-zero walk would silently zero
+    // the whole column — fall back to the billed-scaled analytics series.
     let billed: number[];
     if (cycle.days.length > 0) {
       // The daily series is advisory: it recomputes live under the CURRENT
@@ -399,10 +405,8 @@ export function TumDetailsTable({
       billed = points.map(
         (p) => billedByDate.get(bucketDateKey(p.bucketTimeUnixNano)) ?? 0,
       );
-    } else if (billedCycle) {
-      billed = points.map((p) => p.totalTokens * billedScale);
     } else {
-      return null;
+      billed = points.map((p) => p.totalTokens * billedScale);
     }
 
     const weights = billed.map(() => 0);
@@ -414,14 +418,9 @@ export function TumDetailsTable({
       weights[i] =
         before >= limit ? 1 : (cumulative - limit) / (billed[i]! || 1);
     }
-    if (!billedCycle) {
-      // Project scope: the raw weights are exact against the billed series,
-      // and weighting the project's rows by them yields its true share.
-      return weights;
-    }
-    // Org scope: the rows are billed-scaled analytics, which track the billed
-    // series within a fraction of a percent but not to the token — pin the
-    // "Total tokens" row's overage to the usage card's number exactly.
+    // The rows are billed-scaled analytics, which track the billed series
+    // within a fraction of a percent but not to the token — pin the "Total
+    // tokens" row's overage to the usage card's number exactly.
     const billedOverage = Math.max(0, cycle.tokens - limit);
     const totals = points.map((p) => p.totalTokens * billedScale);
     const weightedTotal = totals.reduce(
@@ -431,25 +430,17 @@ export function TumDetailsTable({
     if (weightedTotal === 0) return weights.map(() => 0);
     const scale = billedOverage / weightedTotal;
     return weights.map((w) => w * scale);
-  }, [data, limit, period.cycle, billedCycle, billedScale]);
+  }, [data, limit, billedCycle, billedScale]);
 
   const loading = isFetching && !data;
   const failed = !loading && !data && isError;
 
   const totalTooltip = billedCycle
     ? "Billed tokens under management, attributed across metrics by the analytics distribution."
-    : "Tokens for the selected slice, from the analytics aggregates. Billed normalization applies to full organization billing cycles only.";
-  let overageTooltip: string;
-  if (billedCycle) {
-    overageTooltip =
-      "The billed overage (tokens beyond the included allowance), attributed to each metric by its tokens recorded after the allowance ran out. The crossing day is prorated.";
-  } else if (period.cycle) {
-    overageTooltip =
-      "This project's tokens recorded after the organization's usage crossed the included allowance (its share of the overage, measured in the project's analytics tokens). The crossing day is prorated.";
-  } else {
-    overageTooltip =
-      "The token allowance is an organization-per-cycle number; select a full billing cycle to see the overage.";
-  }
+    : "Tokens for the selected range, from the analytics aggregates. Billed normalization applies to full billing cycles only.";
+  const overageTooltip = billedCycle
+    ? "The billed overage (tokens beyond the included allowance), attributed to each metric by its tokens recorded after the allowance ran out. The crossing day is prorated."
+    : "The token allowance is an organization-per-cycle number; select a full billing cycle to see the overage.";
 
   return (
     <div className="border-border overflow-hidden rounded-lg border">

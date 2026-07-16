@@ -46,7 +46,7 @@ func TestEnvironmentsService_ListEnvironments(t *testing.T) {
 			Name:             "env-1",
 			Description:      new("First environment"),
 			Entries: []*gen.EnvironmentEntryInput{
-				{Name: "KEY1", Value: "value1"},
+				{Name: "KEY1", Value: new("value1"), IsSecret: new(true)},
 			},
 		})
 		require.NoError(t, err)

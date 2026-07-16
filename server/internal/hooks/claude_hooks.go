@@ -292,7 +292,7 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (res *
 	// token: the decision (scan) still re-runs so the user stays blocked, but
 	// tagging the context as a duplicate suppresses the duplicate writes
 	// (persistence, block-reason telemetry, shadow-MCP findings).
-	if !s.claimHookIdempotency(ctx, conv.PtrValOr(payload.IdempotencyKey, "")) {
+	if !s.claimHookIdempotency(ctx, conv.PtrValOr(payload.IdempotencyKey, ""), false) {
 		ctx = withHookDuplicate(ctx)
 	}
 
@@ -446,6 +446,18 @@ func (s *Service) captureMCPListSnapshot(ctx context.Context, payload *gen.Claud
 		return
 	}
 	s.cacheMCPListSnapshot(ctx, *payload.SessionID, entries, variant)
+	orgID := ""
+	projectID := ""
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ProjectID != nil {
+		orgID = authCtx.ActiveOrganizationID
+		projectID = authCtx.ProjectID.String()
+	} else if metadata, err := s.resolveClaudeSessionMetadata(ctx, *payload.SessionID, strings.TrimSpace(conv.PtrValOr(payload.UserEmail, ""))); err == nil {
+		orgID = metadata.GramOrgID
+		projectID = metadata.ProjectID
+	}
+	if projectID != "" {
+		s.upsertShadowMCPInventoryURLs(ctx, orgID, projectID, *payload.SessionID, entries)
+	}
 }
 
 // parseMCPInventoryFromPayload extracts the MCP inventory carried in the hook

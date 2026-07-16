@@ -38,12 +38,16 @@ type GetProductFeaturesResponseBody struct {
 	SsoEnabled *bool `form:"sso_enabled,omitempty" json:"sso_enabled,omitempty" xml:"sso_enabled,omitempty"`
 	// Whether SCIM/directory sync setup is enabled for the organization
 	ScimEnabled *bool `form:"scim_enabled,omitempty" json:"scim_enabled,omitempty" xml:"scim_enabled,omitempty"`
-	// Whether observability mode is enabled, making generated hook plugins fully
-	// non-blocking
-	ObservabilityModeEnabled *bool `form:"observability_mode_enabled,omitempty" json:"observability_mode_enabled,omitempty" xml:"observability_mode_enabled,omitempty"`
 	// Whether generated hook plugins may mint per-user keys via the interactive
 	// browser login
 	HooksBrowserLoginEnabled *bool `form:"hooks_browser_login_enabled,omitempty" json:"hooks_browser_login_enabled,omitempty" xml:"hooks_browser_login_enabled,omitempty"`
+	// Whether hooks fail open when the Speakeasy control plane is unreachable or
+	// erroring — blocking policies are not enforced for the duration of the outage
+	HooksFailOpenEnabled *bool `form:"hooks_fail_open_enabled,omitempty" json:"hooks_fail_open_enabled,omitempty" xml:"hooks_fail_open_enabled,omitempty"`
+	// Whether the organization can supply its own model provider API keys (BYOK)
+	CustomModelKeysEnabled *bool `form:"custom_model_keys_enabled,omitempty" json:"custom_model_keys_enabled,omitempty" xml:"custom_model_keys_enabled,omitempty"`
+	// Whether the Skills page is enabled for the organization
+	SkillsEnabled *bool `form:"skills_enabled,omitempty" json:"skills_enabled,omitempty" xml:"skills_enabled,omitempty"`
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -444,8 +448,10 @@ func NewGetProductFeaturesResultOK(body *GetProductFeaturesResponseBody) *featur
 		Webhooks:                     *body.Webhooks,
 		SsoEnabled:                   *body.SsoEnabled,
 		ScimEnabled:                  *body.ScimEnabled,
-		ObservabilityModeEnabled:     *body.ObservabilityModeEnabled,
 		HooksBrowserLoginEnabled:     *body.HooksBrowserLoginEnabled,
+		HooksFailOpenEnabled:         *body.HooksFailOpenEnabled,
+		CustomModelKeysEnabled:       *body.CustomModelKeysEnabled,
+		SkillsEnabled:                *body.SkillsEnabled,
 		DeviceAgent:                  *body.DeviceAgent,
 	}
 
@@ -776,11 +782,17 @@ func ValidateGetProductFeaturesResponseBody(body *GetProductFeaturesResponseBody
 	if body.ScimEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("scim_enabled", "body"))
 	}
-	if body.ObservabilityModeEnabled == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("observability_mode_enabled", "body"))
-	}
 	if body.HooksBrowserLoginEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("hooks_browser_login_enabled", "body"))
+	}
+	if body.HooksFailOpenEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("hooks_fail_open_enabled", "body"))
+	}
+	if body.CustomModelKeysEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("custom_model_keys_enabled", "body"))
+	}
+	if body.SkillsEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("skills_enabled", "body"))
 	}
 	if body.DeviceAgent == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("device_agent", "body"))

@@ -111,7 +111,7 @@ export function AdditionalAgentConfigStep({
         </div>
       }
       title="Additional agent configuration"
-      description="Optionally connect admin and compliance APIs so Gram can import usage, spend, and review data across the agent platforms your team uses."
+      description="Optionally connect admin and compliance APIs so Speakeasy can import usage, spend, and review data across the agent platforms your team uses."
       onContinue={onComplete}
       onSkip={onSkip}
       skipLabel="Skip for now"

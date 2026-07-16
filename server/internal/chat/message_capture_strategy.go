@@ -369,6 +369,7 @@ func buildAssistantRows(
 		content = ""
 	}
 	base := repo.CreateChatMessageParams{
+		Replayed:         false,
 		ChatID:           request.ChatID,
 		Role:             "assistant",
 		ProjectID:        projectID,

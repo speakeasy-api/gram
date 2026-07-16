@@ -33,7 +33,6 @@ jobs:
       hooks: ${{ steps.gates.outputs.hooks }}
       functions: ${{ steps.gates.outputs.functions }}
       tsframework: ${{ steps.gates.outputs.tsframework }}
-      elements: ${{ steps.gates.outputs.elements }}
       migrations: ${{ steps.gates.outputs.migrations }}
       plog: ${{ steps.gates.outputs.plog }}
       infra: ${{ steps.gates.outputs.infra }}
@@ -98,13 +97,6 @@ jobs:
             echo "TypeScript framework jobs will run."
           else
             echo "TypeScript framework jobs will be skipped."
-          fi
-
-          if [[ "${{ steps.filter.outputs.elements }}" == "true" || "${{ github.ref }}" ==  "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
-            echo "elements=true" >> $GITHUB_OUTPUT
-            echo "Elements jobs will run."
-          else
-            echo "Elements jobs will be skipped."
           fi
 
           if [[ "${{ steps.filter.outputs.migrations }}" == "true" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
@@ -743,6 +735,42 @@ jobs:
             --config otel-collector/fly.toml \
             --yes
 
+  golang-migrate-clickhouse:
+    name: Test ClickHouse golang-migrate migrations
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    needs: changes
+    if: needs.changes.outputs.migrations == 'true' && github.event_name == 'pull_request'
+    services:
+      clickhouse:
+        image: clickhouse/clickhouse-server:25.8.3
+        env:
+          CLICKHOUSE_USER: gram
+          CLICKHOUSE_PASSWORD: gram
+          CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+        ports:
+          - 9000:9000
+        options: >-
+          --health-cmd "clickhouse-client --user gram --password gram --query 'SELECT 1'"
+          --health-interval 10s
+          --health-start-period 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
+
+      - name: Setup Mise
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        with:
+          install: true
+          cache: true
+          env: false
+
+      - name: Run ClickHouse migrations with golang-migrate
+        env:
+          CH_URL: clickhouse://127.0.0.1:9000/default?username=gram&password=gram&secure=false&x-multi-statement=true
+        run: mise run clickhouse:migrate --engine golang-migrate --url ${CH_URL}
+
   atlas-lint:
     name: Lint migrations with Atlas
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -776,6 +804,13 @@ jobs:
         with:
           cloud-token: ${{ secrets.ATLAS_TOKEN }}
 
+      - name: Setup Mise
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        with:
+          install: true
+          cache: true
+          env: false
+
       - name: Run gram migration static checks
         shell: bash
         env:
@@ -803,6 +838,41 @@ jobs:
           git-base: origin/main
         env:
           GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Check migration state is clean
+        shell: bash
+        run: |
+          failed=0
+
+          mise run db:diff ci-drift-check
+          pg_status="$(git status --porcelain -- server/migrations)"
+          if [ -n "$pg_status" ]; then
+            failed=1
+            echo "::error::PostgreSQL migrations are out of sync with server/database/schema.sql"
+            echo "Regenerating PostgreSQL migrations produced uncommitted changes:"
+            echo "$pg_status"
+            git add -N -- server/migrations
+            git diff -- server/migrations
+            echo ""
+            echo "::error::Fix: run 'mise run db:diff <name>' locally and commit the generated migration and atlas.sum."
+          fi
+
+          mise run clickhouse:diff ci-drift-check
+          ch_status="$(git status --porcelain -- server/clickhouse server/internal/telemetry/repo)"
+          if [ -n "$ch_status" ]; then
+            failed=1
+            echo "::error::ClickHouse migrations are out of sync with server/clickhouse/schema.sql"
+            echo "Regenerating ClickHouse migrations produced uncommitted changes."
+            echo "This covers the Atlas dir (server/clickhouse/migrations), the golang-migrate dir"
+            echo "(server/clickhouse/local/golang_migrate), and the generated materialized columns Go file:"
+            echo "$ch_status"
+            git add -N -- server/clickhouse server/internal/telemetry/repo
+            git diff -- server/clickhouse server/internal/telemetry/repo
+            echo ""
+            echo "::error::Fix: run 'mise run clickhouse:diff <name>' locally and commit the generated files in both migration dirs."
+          fi
+
+          exit "$failed"
 
   atlas-push:
     name: Push migrations to Atlas Registry
@@ -1480,6 +1550,48 @@ jobs:
         if: success()
         run: pnpm store prune
 
+  client-test:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    needs: [changes, sdk-gen-check]
+    if: |
+      !cancelled() &&
+      needs.sdk-gen-check.result != 'failure' &&
+      needs.changes.outputs.client == 'true'
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
+
+      - name: Setup Mise
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        with:
+          install: true
+          cache: true
+          env: false
+
+      - name: Prepare GitHub Actions environment
+        run: mise run github
+
+      - name: Cache PNPM
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: ${{ env.GH_CACHE_PNPM_KEY }}
+          restore-keys: |
+            ${{ env.GH_CACHE_PNPM_KEY }}
+            ${{ env.GH_CACHE_PNPM_KEY_PARTIAL }}
+          path: |
+            ${{ env.PNPM_STORE_PATH }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Test
+        run: pnpm test
+        working-directory: client/dashboard
+
+      - name: Prune PNPM store
+        if: success()
+        run: pnpm store prune
+
   sdk-gen-check:
     name: Check SDK is up-to-date
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -1815,94 +1927,6 @@ jobs:
         if: success()
         run: pnpm store prune
 
-  elements-build-lint:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
-    needs: changes
-    if: needs.changes.outputs.elements == 'true'
-    env:
-      GRAM_GIT_SHA: "${{ github.sha }}"
-    steps:
-      - name: Checkout
-        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
-
-      - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
-        with:
-          install: true
-          cache: true
-          env: false
-
-      - name: Prepare GitHub Actions environment
-        run: mise run github
-
-      - name: Cache PNPM
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          key: ${{ env.GH_CACHE_PNPM_KEY }}
-          restore-keys: |
-            ${{ env.GH_CACHE_PNPM_KEY }}
-            ${{ env.GH_CACHE_PNPM_KEY_PARTIAL }}
-          path: |
-            ${{ env.PNPM_STORE_PATH }}
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build
-        run: pnpm build
-        working-directory: elements
-
-      - name: Lint
-        run: pnpm lint
-        working-directory: elements
-
-      - name: Type check
-        run: pnpm type-check
-        working-directory: elements
-
-      - name: Prune PNPM store
-        if: success()
-        run: pnpm store prune
-
-  elements-test:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
-    needs: changes
-    if: needs.changes.outputs.elements == 'true'
-    steps:
-      - name: Checkout
-        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
-
-      - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
-        with:
-          install: true
-          cache: true
-          env: false
-
-      - name: Prepare GitHub Actions environment
-        run: mise run github
-
-      - name: Cache PNPM
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          key: ${{ env.GH_CACHE_PNPM_KEY }}
-          restore-keys: |
-            ${{ env.GH_CACHE_PNPM_KEY }}
-            ${{ env.GH_CACHE_PNPM_KEY_PARTIAL }}
-          path: |
-            ${{ env.PNPM_STORE_PATH }}
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Test
-        run: pnpm test
-        working-directory: elements
-
-      - name: Prune PNPM store
-        if: success()
-        run: pnpm store prune
-
   # Gate job: aggregates all check results into a single required status check.
   # This allows domain-specific jobs to skip (via job-level `if`) without blocking
   # merge, since skipped jobs don't report a status to rulesets.
@@ -1919,6 +1943,7 @@ jobs:
       - docker-build-client
       - docker-build-pystreams
       - client-build-lint
+      - client-test
       - sdk-gen-check
       - cli-build-lint
       - hooks-build-test
@@ -1930,8 +1955,7 @@ jobs:
       - assistant-runtime-image
       - otel-collector
       - ts-framework-test
-      - elements-build-lint
-      - elements-test
+      - golang-migrate-clickhouse
       - atlas-lint
       - atlas-push
       - webhooks-catalog-breaking-changes

@@ -108,6 +108,39 @@ func (p *Posthog) IsFlagEnabled(ctx context.Context, flag feature.Flag, distinct
 	return string(j) == "true", nil
 }
 
+func (p *Posthog) FlagPayload(ctx context.Context, flag feature.Flag, distinctID string, groups map[string]string) ([]byte, error) {
+	// When posthog is disabled we have no clearance data. Return nil so callers
+	// fall back to their fail-closed default (e.g. carry the current version).
+	if p.disabled {
+		return nil, nil
+	}
+
+	var phGroups posthog.Groups
+	if len(groups) > 0 {
+		phGroups = posthog.NewGroups()
+		for groupType, groupKey := range groups {
+			phGroups.Set(groupType, groupKey)
+		}
+	}
+
+	// GetFeatureFlagPayload returns the JSON payload attached to the matched
+	// release as a string, or "" when the flag is off / has no payload / does
+	// not exist. Treat "" as "no clearance".
+	payload, err := p.client.GetFeatureFlagPayload(posthog.FeatureFlagPayload{
+		Key:        string(flag),
+		DistinctId: distinctID,
+		Groups:     phGroups,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get feature flag payload: %w", err)
+	}
+	if payload == "" {
+		return nil, nil
+	}
+
+	return []byte(payload), nil
+}
+
 func (p *Posthog) IdentifyUser(ctx context.Context, distinctID string, personProperties map[string]any) error {
 	if p.disabled {
 		p.logger.InfoContext(ctx, "posthog is disabled, dropping identify")

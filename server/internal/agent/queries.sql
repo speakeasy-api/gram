@@ -27,6 +27,10 @@ SELECT
   om.name AS organization_name,
   pgc.marketplace_token,
   pgc.updated_at AS marketplace_updated_at,
+  -- The hooks subtree may be pinned by the rollout gate under a pre-rename org
+  -- name; the view derives the observability slug from this snapshot so devices
+  -- install the plugin that actually exists in the published repo.
+  pgc.published_hooks_config,
   pms.marketplace_name AS marketplace_name_override,
   -- The org's default project (oldest, by id ASC over ALL non-deleted projects,
   -- not just published ones) keeps the bare org-derived marketplace name; others

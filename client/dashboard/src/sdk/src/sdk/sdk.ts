@@ -31,6 +31,7 @@ import { McpEndpoints } from "./mcpendpoints.js";
 import { McpMetadata } from "./mcpmetadata.js";
 import { McpRegistries } from "./mcpregistries.js";
 import { McpServers } from "./mcpservers.js";
+import { ModelKeys } from "./modelkeys.js";
 import { OrganizationRemoteSessionClients } from "./organizationremotesessionclients.js";
 import { OrganizationRemoteSessionIssuers } from "./organizationremotesessionissuers.js";
 import { OrganizationRemoteSessions } from "./organizationremotesessions.js";
@@ -45,6 +46,7 @@ import { RemoteSessionIssuers } from "./remotesessionissuers.js";
 import { RemoteSessions } from "./remotesessions.js";
 import { Resources } from "./resources.js";
 import { Risk } from "./risk.js";
+import { Skills } from "./skills.js";
 import { Telemetry } from "./telemetry.js";
 import { Templates } from "./templates.js";
 import { Tools } from "./tools.js";
@@ -198,6 +200,11 @@ export class Gram extends ClientSDK {
     return (this._mcpServers ??= new McpServers(this._options));
   }
 
+  private _modelKeys?: ModelKeys;
+  get modelKeys(): ModelKeys {
+    return (this._modelKeys ??= new ModelKeys(this._options));
+  }
+
   private _organizationRemoteSessionClients?: OrganizationRemoteSessionClients;
   get organizationRemoteSessionClients(): OrganizationRemoteSessionClients {
     return (this._organizationRemoteSessionClients ??=
@@ -279,6 +286,11 @@ export class Gram extends ClientSDK {
   private _risk?: Risk;
   get risk(): Risk {
     return (this._risk ??= new Risk(this._options));
+  }
+
+  private _skills?: Skills;
+  get skills(): Skills {
+    return (this._skills ??= new Skills(this._options));
   }
 
   private _telemetry?: Telemetry;

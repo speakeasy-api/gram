@@ -1,0 +1,7 @@
+---
+"server": minor
+---
+
+Add the org-level `hooks_fail_open` product feature and remove `observability_mode` (DNO-497): org admins choose whether agent hooks fail open or fail closed (the default) when the Speakeasy control plane is unreachable or erroring and no policy verdict can be obtained. The setting is delivered to hook senders as an `org_settings` entry in every authenticated `hooks.ingest` response's effects map, and toggling it records an `organization:hooks_fail_open_enabled|disabled` audit event. The speakeasy-hooks binary caches the last server-confirmed value next to its credential cache and consults it only on the unreachable/5xx branch of verdict resolution — explicit denies, 4xx responses, and the 401/403 credential ratchet keep failing closed regardless. The cached posture expires after 14 days without server confirmation (reverting to fail closed), and successful exchanges re-stamp an unchanged value daily so actively syncing machines never age out.
+
+Observability mode is removed outright — fail-open supersedes it (observability mode was equivalent to fail-open plus not creating blocking policies, while also swallowing explicit denies). Generated hook plugins no longer carry a nonblocking variant (`hooksGeneratorVersion` bumped, so connected repos republish), and the binary treats a legacy baked `nonblocking` flag as the fail-open posture so stale plugins keep outage tolerance without bypassing deny decisions.

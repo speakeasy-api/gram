@@ -75,10 +75,6 @@ jobs:
           setupGitUser: false
         env:
           GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
-          # Datadog RUM credentials for @gram-ai/elements error tracking
-          VITE_DATADOG_APPLICATION_ID: ${{ secrets.VITE_DATADOG_APPLICATION_ID }}
-          VITE_DATADOG_CLIENT_TOKEN: ${{ secrets.VITE_DATADOG_CLIENT_TOKEN }}
-          VITE_DATADOG_SITE: ${{ secrets.VITE_DATADOG_SITE }}
 
       - name: Prune PNPM store
         run: pnpm store prune
@@ -124,7 +120,7 @@ jobs:
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
           distribution: goreleaser-pro
-          version: "~> v2.14"
+          version: "~> v2.17"
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
@@ -220,7 +216,7 @@ jobs:
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
           distribution: goreleaser-pro
-          version: "~> v2.14"
+          version: "~> v2.17"
           args: release --clean --config .goreleaser.hooks.yaml
         env:
           GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}

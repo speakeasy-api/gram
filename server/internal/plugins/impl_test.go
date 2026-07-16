@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	mcpmetarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
@@ -1407,8 +1408,7 @@ func TestPluginsService_PublishPlugins_PublicToolsetWithoutMetadata(t *testing.T
 }
 
 // PublishPlugins always emits a per-org observability plugin containing
-// Gram hooks. The hook script bakes in the hooks-scoped API key so team
-// members don't need to configure credentials per-machine.
+// the bootstrapper, relay config, and provider hook manifest.
 func TestPluginsService_PublishPlugins_EmitsObservabilityPlugin(t *testing.T) {
 	t.Parallel()
 
@@ -1438,11 +1438,13 @@ func TestPluginsService_PublishPlugins_EmitsObservabilityPlugin(t *testing.T) {
 	// at the plugin root register the plugin but never wire the hooks up.
 	require.NotNil(t, mock.lastPushedFiles[claudeObservability+"/.claude-plugin/plugin.json"], "claude observability plugin.json missing")
 	require.NotNil(t, mock.lastPushedFiles[claudeObservability+"/hooks/hooks.json"], "claude observability hooks/hooks.json missing")
-	require.NotNil(t, mock.lastPushedFiles[claudeObservability+"/hooks/hook.sh"], "claude observability hooks/hook.sh missing")
+	require.NotNil(t, mock.lastPushedFiles[claudeObservability+"/hooks/bootstrap.sh"], "claude observability bootstrap.sh missing")
+	require.NotNil(t, mock.lastPushedFiles[claudeObservability+"/speakeasy.json"], "claude observability speakeasy.json missing")
 
 	require.NotNil(t, mock.lastPushedFiles["cursor-plugins/"+cursorObservability+"/.cursor-plugin/plugin.json"], "cursor observability plugin.json missing")
 	require.NotNil(t, mock.lastPushedFiles["cursor-plugins/"+cursorObservability+"/hooks/hooks.json"], "cursor observability hooks/hooks.json missing")
-	require.NotNil(t, mock.lastPushedFiles["cursor-plugins/"+cursorObservability+"/hooks/hook.sh"], "cursor observability hooks/hook.sh missing")
+	require.NotNil(t, mock.lastPushedFiles["cursor-plugins/"+cursorObservability+"/hooks/bootstrap.sh"], "cursor observability bootstrap.sh missing")
+	require.NotNil(t, mock.lastPushedFiles["cursor-plugins/"+cursorObservability+"/speakeasy.json"], "cursor observability speakeasy.json missing")
 }
 
 // PublishPlugins must succeed when the org has no custom plugins — the
@@ -1459,8 +1461,8 @@ func TestPluginsService_PublishPlugins_ObservabilityOnly(t *testing.T) {
 
 	claudeObservability, cursorObservability := orgObservabilitySlugs(t, ctx, ti)
 
-	require.NotNil(t, mock.lastPushedFiles[claudeObservability+"/hooks/hook.sh"], "claude observability hooks/hook.sh missing")
-	require.NotNil(t, mock.lastPushedFiles["cursor-plugins/"+cursorObservability+"/hooks/hook.sh"], "cursor observability hooks/hook.sh missing")
+	require.NotNil(t, mock.lastPushedFiles[claudeObservability+"/hooks/bootstrap.sh"], "claude observability bootstrap.sh missing")
+	require.NotNil(t, mock.lastPushedFiles["cursor-plugins/"+cursorObservability+"/hooks/bootstrap.sh"], "cursor observability bootstrap.sh missing")
 
 	for _, p := range []struct {
 		path     string
@@ -1482,10 +1484,9 @@ func TestPluginsService_PublishPlugins_ObservabilityOnly(t *testing.T) {
 	}
 }
 
-// The observability hook script must contain the freshly-minted hooks-scoped
-// API key (Bearer-token form) so team members can install the plugin without
-// any per-machine credential configuration.
-func TestPluginsService_PublishPlugins_ObservabilityHookScriptContainsAPIKey(t *testing.T) {
+// The observability config contains the freshly-minted hooks-scoped API key,
+// while provider commands and bootstrappers remain secret-free.
+func TestPluginsService_PublishPlugins_ObservabilityConfigContainsAPIKey(t *testing.T) {
 	t.Parallel()
 
 	mock := &mockGitHubPublisher{}
@@ -1520,20 +1521,18 @@ func TestPluginsService_PublishPlugins_ObservabilityHookScriptContainsAPIKey(t *
 	require.NotEmpty(t, hooksKeyPrefix, "expected a plugins-hooks-* API key")
 
 	claudeObservability, cursorObservability := orgObservabilitySlugs(t, ctx, ti)
-	// Hook senders embed the publish-time hooks key as the org-wide fallback:
+	// Relay configs embed the publish-time hooks key as the org-wide fallback:
 	// per-user browser login still takes precedence when cached, but a machine
 	// with no personal credentials sends through the baked key instead of
 	// degrading to the unauthenticated pass-through.
-	for _, path := range []string{claudeObservability + "/hooks/hook.sh", "cursor-plugins/" + cursorObservability + "/hooks/hook.sh"} {
-		script := string(mock.lastPushedFiles[path])
-		require.NotEmpty(t, script, path+" missing")
-		require.Contains(t, script, "gram_hooks_post_authenticated", "%s does not use local hook auth", path)
-		require.Contains(t, script, hooksKeyPrefix, "%s must embed the org-wide hooks key fallback", path)
-		// Must NOT contain the MCP key — separate scope, separate concerns.
-		require.NotContains(t, script, "plugins-mcp-", "%s leaked the MCP key", path)
+	for _, root := range []string{claudeObservability, "cursor-plugins/" + cursorObservability} {
+		config := string(mock.lastPushedFiles[root+"/speakeasy.json"])
+		require.NotEmpty(t, config, root+"/speakeasy.json missing")
+		require.Contains(t, config, hooksKeyPrefix)
+		require.NotContains(t, config, "plugins-mcp-", "%s leaked the MCP key", root)
+		require.NotContains(t, string(mock.lastPushedFiles[root+"/hooks/bootstrap.sh"]), hooksKeyPrefix)
+		require.NotContains(t, string(mock.lastPushedFiles[root+"/hooks/hooks.json"]), hooksKeyPrefix)
 	}
-	authScript := string(mock.lastPushedFiles[claudeObservability+"/hooks/auth.sh"])
-	require.Contains(t, authScript, `printf 'header = "Gram-Key: %s"\n'`, "auth.sh must write Gram-Key to curl config")
 }
 
 // The observability plugin must appear FIRST in each platform's marketplace
@@ -1861,13 +1860,12 @@ func TestPluginsService_PublishProject_SkipsWhenUnchanged(t *testing.T) {
 }
 
 // hooksFilesOf returns the observability (hooks) plugin files from a pushed file
-// map, identified by the hooks/ subdirectory that only the observability plugins
-// use. These files embed the hooks API key, so comparing them across publishes
-// detects whether the hooks component was regenerated (fresh key) or carried.
+// map. The root speakeasy.json carries settings and the hooks/ directory carries
+// provider commands and bootstrappers, so both are needed to detect regeneration.
 func hooksFilesOf(files map[string][]byte) map[string]string {
 	out := make(map[string]string)
 	for p, c := range files {
-		if strings.Contains(p, "/hooks/") {
+		if strings.Contains(p, "/hooks/") || (strings.Contains(p, "observability") && strings.HasSuffix(p, "/speakeasy.json")) {
 			out[p] = string(c)
 		}
 	}
@@ -1952,18 +1950,180 @@ func TestPluginsService_PublishProject_MCPChangeCarriesHooksVerbatim(t *testing.
 	require.Equal(t, hooksBefore, hooksAfter, "hooks subtree must be carried verbatim across an MCP-only publish")
 }
 
-// Flipping an org-level hooks setting must regenerate the hooks subtree on the
-// next publish even though hooksGeneratorVersion is unchanged: the rendered
-// scripts bake the setting in, so carrying them verbatim would leave the old
-// behavior live until an unrelated generator bump. The persisted
-// published_hooks_config is what detects the flip.
-func TestPluginsService_PublishProject_RegeneratesHooksOnBrowserLoginFlip(t *testing.T) {
+// phasedRolloutFixture creates a published project and rewinds its stored hooks
+// version to "0", leaving a pending hooks bump for the phased rollout to gate.
+// It returns the baseline hooks files so callers can assert carry-vs-regenerate.
+func phasedRolloutFixture(t *testing.T, ctx context.Context, ti *testInstance, mock *mockGitHubPublisher, name string) (pluginID string, hooksBaseline map[string]string) {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: name})
+	require.NoError(t, err)
+
+	toolset := createTestToolset(t, ctx, ti.conn, name+"-toolset")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   conv.PtrEmpty(toolset.ID.String()),
+		DisplayName: conv.PtrEmpty(name + " Server"),
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	// Baseline publish (non-phased) records the current hooks version + MCP
+	// fingerprints, then we rewind the stored hooks version so a bump is pending.
+	_, err = ti.service.PublishProject(ctx, plugins.PublishProjectInput{
+		ProjectID:       *authCtx.ProjectID,
+		CreatedByUserID: authCtx.UserID,
+		CommitMessage:   "baseline",
+		SkipIfUnchanged: true,
+	})
+	require.NoError(t, err)
+
+	hooksBaseline = hooksFilesOf(mock.lastPushedFiles)
+	require.NotEmpty(t, hooksBaseline, "baseline publish must emit hooks files")
+
+	rewindPublishedHooksVersion(t, ctx, ti.conn, *authCtx.ProjectID, "0")
+
+	return plugin.ID, hooksBaseline
+}
+
+// A phase-gated org that is NOT in the rollout must not receive a pending hooks
+// bump: with no MCP change, the publish skips entirely and the stored hooks
+// version is left untouched (the org stays on what it already has).
+func TestPluginsService_PublishProject_PhasedRollout_NonEligibleBlocksHooksBump(t *testing.T) {
 	t.Parallel()
 
 	mock := &mockGitHubPublisher{}
 	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
+
+	phasedRolloutFixture(t, ctx, ti, mock, "Phased NonEligible")
+
+	// Empty provider → no clearance payload → org is not in the rollout phase.
+	pub := newTestPluginPublisher(t, ti, mock, &feature.InMemory{})
+
+	mock.pushFilesCalled = false
+	mock.getRepoFilesCalled = false
+	res, err := pub.PublishProject(ctx, plugins.PublishProjectInput{
+		ProjectID:       *authCtx.ProjectID,
+		CreatedByUserID: authCtx.UserID,
+		CommitMessage:   "phased",
+		SkipIfUnchanged: true,
+	})
+	require.NoError(t, err)
+	require.True(t, res.Skipped, "non-eligible org with a pending hooks bump and no content change must skip")
+	require.False(t, mock.pushFilesCalled, "a gated hooks bump must not push to GitHub")
+	require.Equal(t, "0", publishedHooksVersion(t, ctx, ti.conn, *authCtx.ProjectID), "gated org keeps its old hooks version")
+}
+
+// An org cleared by the FlagHooksRollout payload rolls the pending hooks bump
+// forward: hooks are regenerated (fresh key, so the subtree differs) and the
+// stored version advances off the rewound value.
+func TestPluginsService_PublishProject_PhasedRollout_EligibleGetsHooksBump(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	phasedRolloutFixture(t, ctx, ti, mock, "Phased Eligible")
+
+	orgID := publishOrgID(t, ctx, ti.conn, *authCtx.ProjectID)
+	hooksKeysBefore := countPluginHooksKeys(t, ctx, ti.conn, orgID)
+
+	// A pin above any plausible generator version clears this org for the bump.
+	features := &feature.InMemory{}
+	features.SetFlagPayload(feature.FlagHooksRollout, orgID, []byte(`{"version": 9999}`))
+	pub := newTestPluginPublisher(t, ti, mock, features)
+
+	mock.pushFilesCalled = false
+	res, err := pub.PublishProject(ctx, plugins.PublishProjectInput{
+		ProjectID:       *authCtx.ProjectID,
+		CreatedByUserID: authCtx.UserID,
+		CommitMessage:   "phased",
+		SkipIfUnchanged: true,
+	})
+	require.NoError(t, err)
+	require.False(t, res.Skipped, "eligible org must roll the pending hooks bump forward")
+	require.True(t, mock.pushFilesCalled)
+
+	// A regenerated hooks component mints a fresh hooks-scoped key (the hook
+	// scripts themselves no longer embed the key, so their bytes are stable).
+	require.Equal(t, hooksKeysBefore+1, countPluginHooksKeys(t, ctx, ti.conn, orgID), "eligible org regenerates the hooks subtree with a fresh key")
+	require.NotEqual(t, "0", publishedHooksVersion(t, ctx, ti.conn, *authCtx.ProjectID), "eligible org advances its stored hooks version")
+}
+
+// MCP content changes must publish regardless of the hooks rollout phase: a
+// gated org still gets its MCP update, and its hooks are carried verbatim rather
+// than rolled forward.
+func TestPluginsService_PublishProject_PhasedRollout_MCPPublishesRegardlessOfPhase(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	pluginID, hooksBefore := phasedRolloutFixture(t, ctx, ti, mock, "Phased MCP")
+	orgID := publishOrgID(t, ctx, ti.conn, *authCtx.ProjectID)
+	hooksKeysBefore := countPluginHooksKeys(t, ctx, ti.conn, orgID)
+
+	// An MCP content change (new server) while the org remains phase-gated.
+	toolset2 := createTestToolset(t, ctx, ti.conn, "phased-mcp-2")
+	_, err := ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    pluginID,
+		ToolsetID:   conv.PtrEmpty(toolset2.ID.String()),
+		DisplayName: conv.PtrEmpty("Phased MCP Server 2"),
+		Policy:      "optional",
+		SortOrder:   1,
+	})
+	require.NoError(t, err)
+
+	pub := newTestPluginPublisher(t, ti, mock, &feature.InMemory{})
+
+	mock.pushFilesCalled = false
+	mock.getRepoFilesCalled = false
+	res, err := pub.PublishProject(ctx, plugins.PublishProjectInput{
+		ProjectID:       *authCtx.ProjectID,
+		CreatedByUserID: authCtx.UserID,
+		CommitMessage:   "phased",
+		SkipIfUnchanged: true,
+	})
+	require.NoError(t, err)
+	require.False(t, res.Skipped, "MCP content change must publish even for a phase-gated org")
+	require.True(t, mock.pushFilesCalled)
+	require.True(t, mock.getRepoFilesCalled, "carrying hooks requires fetching the existing repo")
+
+	hooksAfter := hooksFilesOf(mock.lastPushedFiles)
+	require.Equal(t, hooksBefore, hooksAfter, "phase-gated org carries hooks verbatim while MCP publishes")
+	require.Equal(t, hooksKeysBefore, countPluginHooksKeys(t, ctx, ti.conn, orgID), "carrying hooks must not mint a new hooks key")
+	require.Equal(t, "0", publishedHooksVersion(t, ctx, ti.conn, *authCtx.ProjectID), "an MCP publish must not advance a gated org's hooks version")
+}
+
+// Flipping an org-level hooks setting must regenerate the hooks subtree on the
+// next publish even though hooksGeneratorVersion is unchanged: the rendered
+// scripts bake the setting in, so carrying them verbatim would leave the old
+// behavior live until an unrelated generator bump. The persisted
+// published_hooks_config is what detects the flip. The org is cleared for the
+// current hooks version up front — a non-eligible org would defer the flip
+// instead (see hooks_config_test.go for the deferral path).
+func TestPluginsService_PublishProject_RegeneratesHooksOnBrowserLoginFlip(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	features := &feature.InMemory{}
+	ctx, ti := newTestPluginsServiceWithGitHubAndFeatures(t, mock, features)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	// Pin above any real generator version so the flip regenerates rather than
+	// defers under the rollout gate.
+	features.SetFlagPayload(feature.FlagHooksRollout, authCtx.ActiveOrganizationID, []byte(`{"version": 9999}`))
 
 	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Flip Hooks"})
 	require.NoError(t, err)
@@ -1992,10 +2152,11 @@ func TestPluginsService_PublishProject_RegeneratesHooksOnBrowserLoginFlip(t *tes
 	require.NotEmpty(t, hooksBefore)
 	versionBefore := observabilityManifestVersion(t, mock.lastPushedFiles)
 
-	require.NoError(t, productfeaturesrepo.New(ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{
+	_, pfErr := productfeaturesrepo.New(ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		FeatureName:    string(productfeatures.FeatureHooksBrowserLogin),
-	}))
+	})
+	require.NoError(t, pfErr)
 
 	second, err := ti.service.PublishProject(ctx, input)
 	require.NoError(t, err)

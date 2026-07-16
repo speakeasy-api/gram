@@ -147,6 +147,13 @@ linters:
         linters:
           - forbidigo
         text: GG001|GG002|GG011|GG012
+      # GG006/GG009 redirect tests to the testenv helpers; production code may
+      # legitimately construct discard loggers and noop meter providers, so
+      # they are only enforced in test files.
+      - path-except: _test\.go
+        linters:
+          - forbidigo
+        text: GG006|GG009
       # The testenv package is the canonical provider of the helpers that
       # GG006/GG008/GG009 redirect tests to. It necessarily constructs the
       # underlying primitives directly.

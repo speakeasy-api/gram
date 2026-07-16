@@ -25,6 +25,15 @@ const (
 // that fails JSON-RPC decode and bypasses response interception. Letting the
 // transport add and unwind its own encoding keeps the buffered body decodable.
 //
+// Origin, Referer, and Cookie are browser-only headers that carry the
+// dashboard's own origin and session, not the caller's intent toward the
+// upstream. They are meaningless upstream and actively harmful: MCP servers
+// that implement the spec's DNS-rebinding protection validate Origin and
+// reject a request whose Origin isn't their own (e.g. Langfuse 403s a
+// forwarded "Origin: https://<dashboard>"), and forwarding Cookie would leak
+// the gram_session to an arbitrary upstream. Drop them so requests proxied
+// from the dashboard match those from a headless MCP client.
+//
 // Authorization is end-to-end and is handled separately by
 // [Proxy.applyRequestHeaders] based on [Proxy.AuthorizationOverride].
 func isSkippedRequestHeader(name string) bool {
@@ -34,10 +43,13 @@ func isSkippedRequestHeader(name string) bool {
 		"authorization",
 		"connection",
 		"content-length",
+		"cookie",
 		"host",
 		"keep-alive",
+		"origin",
 		"proxy-authenticate",
 		"proxy-authorization",
+		"referer",
 		"te",
 		"trailer",
 		"transfer-encoding",

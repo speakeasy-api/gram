@@ -228,15 +228,25 @@ var HookNotificationData = Type("HookNotificationData", func() {
 	Attribute("message", String, "Notification message.")
 })
 
+var HookMCPAttributionEntry = Type("HookMCPAttributionEntry", func() {
+	Description("Transcript-derived MCP attribution for one model API request. Claude redacts user-configured MCP server names to 'custom' on its OTEL telemetry, but records the real names in the local session transcript; hooks ship them here so ingest can restore the redacted names.")
+	Required("request_id")
+	Attribute("request_id", String, "Provider API request identifier (e.g. Claude's req_*) the attribution applies to.")
+	Attribute("mcp_server", String, "Unredacted MCP server name from the transcript.")
+	Attribute("mcp_tool", String, "Unredacted MCP tool name from the transcript.")
+})
+
 var HookIngestData = Type("HookIngestData", func() {
 	Description("Feature-specific payloads. Hooks populate only the blocks needed for the event.")
 	Attribute("prompt", HookPromptData)
 	Attribute("tool_call", HookToolCallData)
 	Attribute("mcp", HookMCPData)
+	Attribute("mcp_inventory", ArrayOf(HookMCPData), "Configured MCP server snapshot captured at session start or configuration change. Transport credentials must be redacted by the sender.")
 	Attribute("usage", HookUsageData)
 	Attribute("message", HookMessageData)
 	Attribute("skill", HookSkillData)
 	Attribute("notification", HookNotificationData)
+	Attribute("mcp_attribution", ArrayOf(HookMCPAttributionEntry), "Transcript-derived per-request MCP attribution (Claude Stop/SubagentStop).")
 })
 
 var IngestHookPayload = Type("IngestHookPayload", func() {
@@ -368,6 +378,7 @@ var _ = Service("hooks", func() {
 			Extend(IngestHookPayload)
 			Attribute("apikey_token", String, "Optional API key for plugin-driven attribution.")
 			Attribute("project_slug_input", String, "Optional project slug for plugin-driven attribution.")
+			Attribute("replayed", Boolean, "Set when the event is redelivered from a device's offline spool after control-plane downtime, under its original Idempotency-Key and occurred_at.")
 		})
 
 		Result(IngestHookResult)
@@ -377,6 +388,7 @@ var _ = Service("hooks", func() {
 			Header("apikey_token:Gram-Key")
 			Header("project_slug_input:Gram-Project")
 			Header("idempotency_key:Idempotency-Key")
+			Header("replayed:X-Gram-Replayed")
 		})
 
 		Meta("openapi:operationId", "ingestHookEvent")

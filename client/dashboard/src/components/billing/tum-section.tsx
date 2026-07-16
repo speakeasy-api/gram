@@ -4,15 +4,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useOrganization } from "@/contexts/Auth";
-import { isAttributionDim } from "@/pages/costs/taxonomy";
 import { Dimension } from "@gram/client/models/components/queryfilter.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import {
@@ -39,7 +31,7 @@ import {
 } from "./billing-cycles";
 import {
   BREAKDOWN_TOTAL,
-  scopeNoteFor,
+  breakdownValueLabel,
   stackModeFor,
 } from "./breakdown-options";
 import { BreakdownPicker } from "./breakdown-picker";
@@ -49,23 +41,23 @@ import { tumDetailsQuery } from "./tum-queries";
 import { TumUsageCard } from "./tum-usage-card";
 
 // Org-wide token breakdown for one billing cycle: stacked daily tokens by a
-// selectable dimension, by token type, or by risk involvement — one unified
-// picker drives all three. Everything renders from the billing details
-// request shared with the details table (the server scopes it to the billed
-// completion population), except the headline total, which prefers the
-// billed per-day series the usage endpoint returns — the exact numbers on
-// the usage card. No data-availability pruning of the dimension list:
+// selectable dimension or by token type — one unified picker drives both.
+// Everything renders from the billing details request shared with the
+// details table (the server scopes it to the observed agent traffic, cache
+// reads excluded), except the headline total, which prefers the billed
+// per-day series the usage endpoint returns — the exact numbers on the
+// usage card. No data-availability pruning of the dimension list:
 // dimensions without data simply chart as "(unset)".
 function TumTokenBreakdown({
   period,
-  projectId,
+  projectNames,
   billedDays,
   onSelectRange,
 }: {
   period: BillingPeriod;
-  projectId: string | null;
+  // Project id → name, for labeling the Project breakdown's UUID values.
+  projectNames: Map<string, string>;
   // The billed per-day series and the cycle windows it fully describes.
-  // Org-wide — unusable under a project filter.
   billedDays: BilledDays;
   // Bar-click drill-down: narrows the page's period to the clicked bucket.
   onSelectRange: (start: Date, end: Date) => void;
@@ -79,24 +71,21 @@ function TumTokenBreakdown({
   const [dimension, setDimension] = useState<string>(Dimension.DivisionName);
   const stackBy = stackModeFor(breakdown);
 
-  const scope = { client, orgId: organization.id, period, projectId };
+  const scope = { client, orgId: organization.id, period };
   // Shared with the details table (same key — one request).
   const { data, isFetching } = useQuery(tumDetailsQuery(scope));
 
   const points = useMemo(() => data?.points ?? [], [data]);
 
-  // The selected dimension's rows. Attribution cuts hide the ""
-  // (not-applicable) row, same as the details table below.
+  // The selected dimension's rows. "" rows are real observed traffic that
+  // lacks the attribute — charted as "(unset)", same as the details table.
   const groups = useMemo<GroupSeries[]>(() => {
     const rows = data?.breakdowns.find((b) => b.key === dimension)?.rows ?? [];
-    const visible = isAttributionDim(dimension as Dimension)
-      ? rows.filter((r) => r.value !== "")
-      : rows;
-    return visible.map((r) => ({
-      label: r.value === "" ? "(unset)" : r.value,
+    return rows.map((r) => ({
+      label: breakdownValueLabel(dimension, r.value, projectNames),
       series: r.series,
     }));
-  }, [data, dimension]);
+  }, [data, dimension, projectNames]);
 
   // The billed series aligned to the points grid, used only when the billed
   // data COVERS every charted day — coverage, not positivity: a sealed
@@ -105,7 +94,7 @@ function TumTokenBreakdown({
   // synthesized active cycle without history) makes the whole view fall
   // back to the details totals rather than charting misleading zeros.
   const billedSeries = useMemo(() => {
-    if (projectId != null || points.length === 0) return null;
+    if (points.length === 0) return null;
     const series: number[] = [];
     for (const p of points) {
       const key = bucketDateKey(p.bucketTimeUnixNano);
@@ -119,7 +108,7 @@ function TumTokenBreakdown({
       series.push(billedDays.byDate.get(key) ?? 0);
     }
     return series;
-  }, [points, billedDays, projectId]);
+  }, [points, billedDays]);
 
   const breakdownPicker = (
     <BreakdownPicker
@@ -141,16 +130,12 @@ function TumTokenBreakdown({
       groups={groups}
       billedSeries={billedSeries}
       stackBy={stackBy}
-      scopeNote={scopeNoteFor(breakdown)}
       breakdownPicker={breakdownPicker}
       loading={isFetching && !data}
       onSelectRange={onSelectRange}
     />
   );
 }
-
-// All-projects sentinel for the project filter (Radix Select rejects "").
-const ALL_PROJECTS = "__all__";
 
 // The range picker's calendar hands back local midnights for both ends. The
 // page's data is bucketed by UTC day (matching the billing-cycle boundaries),
@@ -181,12 +166,19 @@ function customRangeFromPicker(
 export const TumUsageSection = (): JSX.Element => {
   const { data: tum } = useGetTokensUnderManagement();
   const organization = useOrganization();
+  // Projects are fetched only to label the Project breakdown's UUID values.
   const { data: projectsData } = useListProjects(
     { organizationId: organization.id },
     undefined,
     { throwOnError: false },
   );
-  const projects = projectsData?.projects ?? [];
+  const projectNames = useMemo(
+    () =>
+      new Map(
+        (projectsData?.projects ?? []).map((p) => [p.id, p.name] as const),
+      ),
+    [projectsData],
+  );
 
   // The selected billing cycle scopes the usage bar and the breakdown chart.
   // Derived (not synced) so the current cycle is the default once TUM loads.
@@ -206,17 +198,12 @@ export const TumUsageSection = (): JSX.Element => {
     label?: string;
   } | null>(null);
 
-  // Optional project scope for the chart and details table. The usage card
-  // stays org-wide — the TUM contract is an organization-level number.
-  const [projectId, setProjectId] = useState<string | null>(null);
-
   // Bumped by the Reset button; remounting the breakdown clears its internal
   // view state too (breakdown pick, granularity, cumulative, hidden series).
   const [viewNonce, setViewNonce] = useState(0);
   const handleReset = (): void => {
     setSelectedKey(null);
     setCustomRange(null);
-    setProjectId(null);
     setViewNonce((n) => n + 1);
   };
 
@@ -310,8 +297,9 @@ export const TumUsageSection = (): JSX.Element => {
     <Page.Section>
       <Page.Section.Title>Billing</Page.Section.Title>
       <Page.Section.Description>
-        The volume of agent traffic the platform has processed, stored, and run
-        security analysis on each billing cycle, measured in tokens.
+        The volume of agent traffic the platform observes from your users'
+        sessions each billing cycle, measured in tokens. Cache reads are
+        excluded, as is inference the platform runs itself.
       </Page.Section.Description>
       <Page.Section.Body>
         {tum && period ? (
@@ -320,28 +308,10 @@ export const TumUsageSection = (): JSX.Element => {
               <Type variant="body" className="font-medium">
                 Tokens Under Management
               </Type>
-              <SimpleTooltip tooltip="Counts tokens from agent sessions the platform has stored chats or tool calls for during the selected billing cycle. Compared against your contracted monthly allowance.">
+              <SimpleTooltip tooltip="Counts the tokens observed in your users' agent sessions (input, output, and cache writes; cache reads excluded) during the selected billing cycle. Compared against your contracted monthly allowance.">
                 <Info className="text-muted-foreground h-4 w-4" />
               </SimpleTooltip>
               <div className="ml-auto flex items-center gap-2">
-                <Select
-                  value={projectId ?? ALL_PROJECTS}
-                  onValueChange={(value) =>
-                    setProjectId(value === ALL_PROJECTS ? null : value)
-                  }
-                >
-                  <SelectTrigger className="bg-background h-auto w-auto gap-1.5 py-1.5 text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={ALL_PROJECTS}>All projects</SelectItem>
-                    {projects.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
                 <BillingCyclePicker
                   cycles={cycles}
                   selected={customRange ? null : selectedCycle}
@@ -381,7 +351,7 @@ export const TumUsageSection = (): JSX.Element => {
             </Stack>
             {cardCycle && (
               <TumUsageCard
-                tokens={cardCycle.tokens}
+                cycle={cardCycle}
                 limit={monthlyLimit}
                 // On a custom range the card still shows the WHOLE containing
                 // cycle's billing position — larger than the range's totals
@@ -397,7 +367,7 @@ export const TumUsageSection = (): JSX.Element => {
               <TumTokenBreakdown
                 key={viewNonce}
                 period={period}
-                projectId={projectId}
+                projectNames={projectNames}
                 billedDays={billedDays}
                 onSelectRange={handleBarSelect}
               />
@@ -406,7 +376,7 @@ export const TumUsageSection = (): JSX.Element => {
               <TumDetailsTable
                 key={viewNonce}
                 period={period}
-                projectId={projectId}
+                projectNames={projectNames}
                 limit={monthlyLimit}
               />
             </div>

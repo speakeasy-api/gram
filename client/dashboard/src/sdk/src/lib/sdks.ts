@@ -22,9 +22,9 @@ import {
   isConnectionError,
   isTimeoutError,
   matchContentType,
+  matchStatusCode,
 } from "./http.js";
 import { Logger } from "./logger.js";
-import { combineSignals } from "./primitives.js";
 import { retry, RetryConfig } from "./retries.js";
 import { SecurityState } from "./security.js";
 
@@ -132,55 +132,27 @@ export class ClientSDK {
     if (path) {
       baseURL.pathname = baseURL.pathname.replace(/\/+$/, "") + "/";
       reqURL = new URL(path, baseURL);
-      if (!reqURL.search && baseURL.search) {
-        reqURL.search = baseURL.search;
-      }
     } else {
       reqURL = baseURL;
     }
     reqURL.hash = "";
 
-    // Appends already-encoded query pairs to a query string, replacing any
-    // existing pairs with the same key so later sources take precedence.
-    const mergeQuery = (current: string, additions: string): string => {
-      if (!additions) {
-        return current;
+    let finalQuery = query || "";
+
+    const secQuery: string[] = [];
+    for (const [k, v] of Object.entries(security?.queryParams || {})) {
+      const q = encodeForm(k, v, { charEncoding: "percent" });
+      if (typeof q !== "undefined") {
+        secQuery.push(q);
       }
-      const additionKeys = new Set(
-        additions
-          .split("&")
-          .filter((pair) => pair !== "")
-          .map((pair) => pair.split("=")[0] ?? ""),
-      );
-      const kept = current.split("&").filter((pair) => {
-        return pair !== "" && !additionKeys.has(pair.split("=")[0] ?? "");
-      });
-      return [...kept, additions].join("&");
-    };
-
-    const encodeQueryRecord = (record: Record<string, unknown>): string => {
-      return Object.entries(record)
-        .map(([k, v]) => {
-          if (v == null) {
-            return undefined;
-          }
-          const value = v;
-          return encodeForm(k, value, {
-            explode: Array.isArray(value),
-            charEncoding: "percent",
-          });
-        })
-        .filter((pair): pair is string => typeof pair !== "undefined")
-        .join("&");
-    };
-
-    const finalQuery = [
-      query || "",
-      encodeQueryRecord(security?.queryParams || {}),
-    ].reduce(mergeQuery, reqURL.search.slice(1));
+    }
+    if (secQuery.length) {
+      finalQuery += `&${secQuery.join("&")}`;
+    }
 
     if (finalQuery) {
-      reqURL.search = `?${finalQuery}`;
+      const q = finalQuery.startsWith("&") ? finalQuery.slice(1) : finalQuery;
+      reqURL.search = `?${q}`;
     }
 
     const headers = new Headers(opHeaders);
@@ -226,8 +198,9 @@ export class ClientSDK {
       ...options?.fetchOptions,
       ...options,
     };
-    if (!fetchOptions?.signal && conf.timeoutMs != null && conf.timeoutMs > 0) {
-      context.timeoutMs = conf.timeoutMs;
+    if (!fetchOptions?.signal && conf.timeoutMs && conf.timeoutMs > 0) {
+      const timeoutSignal = AbortSignal.timeout(conf.timeoutMs);
+      fetchOptions.signal = timeoutSignal;
     }
 
     if (conf.body instanceof ReadableStream) {
@@ -260,7 +233,7 @@ export class ClientSDK {
     request: Request,
     options: {
       context: HookContext;
-      isErrorStatusCode: (statusCode: number) => boolean;
+      errorCodes: number | string | (number | string)[];
       retryConfig: RetryConfig;
       retryCodes: string[];
     },
@@ -273,20 +246,11 @@ export class ClientSDK {
       | UnexpectedClientError
     >
   > {
-    const { context, isErrorStatusCode } = options;
-    const timeoutMs = context.timeoutMs;
+    const { context, errorCodes } = options;
 
     return retry(
       async () => {
-        const cloned = request.clone();
-        let attempt = cloned;
-        if (timeoutMs != null && timeoutMs > 0) {
-          const timeoutSignal = AbortSignal.timeout(timeoutMs);
-          const combined = combineSignals(cloned.signal, timeoutSignal)
-            ?? timeoutSignal;
-          attempt = new Request(cloned, { signal: combined });
-        }
-        const req = await this.#hooks.beforeRequest(context, attempt);
+        const req = await this.#hooks.beforeRequest(context, request.clone());
         await logRequest(this.#logger, req).catch((e) =>
           this.#logger?.log("Failed to log request:", e)
         );
@@ -294,7 +258,7 @@ export class ClientSDK {
         let response = await this.#httpClient.request(req);
 
         try {
-          if (isErrorStatusCode(response.status)) {
+          if (matchStatusCode(response, errorCodes)) {
             const result = await this.#hooks.afterError(
               context,
               response,
@@ -418,6 +382,8 @@ async function logResponse(
       break;
     case matchContentType(res, "application/jsonl")
       || jsonlLikeContentTypeRE.test(ct):
+      logger.log(await res.clone().text());
+      break;
     case matchContentType(res, "text/event-stream"):
       logger.log(`<${contentType}>`);
       break;

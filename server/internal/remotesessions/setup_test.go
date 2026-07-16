@@ -560,14 +560,17 @@ func seedEnvironmentWithEntries(t *testing.T, ctx context.Context, ti *testInsta
 
 	names := make([]string, 0, len(entries))
 	values := make([]string, 0, len(entries))
+	isSecrets := make([]bool, 0, len(entries))
 	for name, value := range entries {
 		names = append(names, name)
 		values = append(values, value)
+		isSecrets = append(isSecrets, true)
 	}
 	_, err = ti.envEntries.CreateEnvironmentEntries(ctx, environmentsrepo.CreateEnvironmentEntriesParams{
 		EnvironmentID: envRow.ID,
 		Names:         names,
 		Values:        values,
+		IsSecrets:     isSecrets,
 	})
 	require.NoError(t, err)
 	return envRow.Slug

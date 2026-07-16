@@ -347,6 +347,7 @@ type ChatMessage struct {
 	ToolOutcomeNotes  pgtype.Text
 	ContentHash       []byte
 	Generation        int32
+	Replayed          bool
 	CreatedAt         pgtype.Timestamptz
 	RiskAnalyzedAt    pgtype.Timestamptz
 }
@@ -568,6 +569,7 @@ type Environment struct {
 type EnvironmentEntry struct {
 	Name          string
 	Value         string
+	IsSecret      bool
 	EnvironmentID uuid.UUID
 	CreatedAt     pgtype.Timestamptz
 	UpdatedAt     pgtype.Timestamptz
@@ -949,6 +951,36 @@ type McpServer struct {
 	UpdatedAt             pgtype.Timestamptz
 	DeletedAt             pgtype.Timestamptz
 	Deleted               bool
+}
+
+type McpServerToolMetadatum struct {
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	McpServerID     uuid.UUID
+	ToolName        string
+	Title           pgtype.Text
+	ReadOnlyHint    pgtype.Bool
+	DestructiveHint pgtype.Bool
+	IdempotentHint  pgtype.Bool
+	OpenWorldHint   pgtype.Bool
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
+}
+
+type ModelProviderKey struct {
+	ID              uuid.UUID
+	OrganizationID  string
+	ProjectID       uuid.UUID
+	Slot            string
+	Provider        string
+	ApiKeyEncrypted string
+	Enabled         bool
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
 }
 
 type OauthProxyClientInfo struct {
@@ -1595,6 +1627,33 @@ type RiskResult struct {
 	FalsePositiveAt     pgtype.Timestamptz
 	FalsePositiveReason pgtype.Text
 	CreatedAt           pgtype.Timestamptz
+}
+
+type Skill struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	Name           string
+	DisplayName    string
+	Summary        pgtype.Text
+	SourceKind     string
+	Classification string
+	ArchivedAt     pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+type SkillVersion struct {
+	ID               uuid.UUID
+	SkillID          uuid.UUID
+	Content          string
+	CanonicalSha256  string
+	RawSha256        string
+	Description      pgtype.Text
+	Metadata         []byte
+	SpecValid        bool
+	ValidationErrors []byte
+	CreatedAt        pgtype.Timestamptz
+	CreatedByUserID  string
 }
 
 type SlackApp struct {

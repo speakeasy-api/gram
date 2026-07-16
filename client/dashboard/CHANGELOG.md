@@ -1,5 +1,53 @@
 # dashboard
 
+## 0.89.0
+
+### Minor Changes
+
+- e50ecd5: The Roles & Permissions "Specific Servers" picker for `mcp:connect` now lists remote and tunneled MCP servers alongside toolset-backed ones, storing the id each backend's enforcement actually checks (mcp_servers id for remote/tunneled, toolset id otherwise). The challenge view resolves mcp_servers ids to server names, and the "Specific tools" panel explains that remote/tunneled servers resolve tools dynamically and cannot be tool-permissioned.
+- 24f54bb: Allow organization admins to rename Shadow MCP inventory servers without changing their canonical URL identity.
+- 8e3b7f2: Add a project-scoped API and dashboard detail page for individual Shadow MCP servers.
+- a1def6a: Allow projects to disable and re-enable custom model provider keys without deleting or re-entering them.
+
+### Patch Changes
+
+- b92d93d: Improve model provider key table alignment and make disabled keys easier to identify.
+- 079ec92: Replace the remaining user-visible "Gram" product mentions in dashboard UI copy with "Speakeasy" (auth descriptions, onboarding steps, insights tooltips, detection rule description, tunneled MCP setup). Add an accessible `aria-label` to the brand logo so screen readers announce it.
+- 16c8fa3: Improve model provider key editing and row actions.
+- 703a22b: feat(risk): add an assistant filter to risk events. The Risk Events page gains an "Assistant" select listing the project's assistants plus a "No assistant" option, so findings from chats not linked to an assistant (the ones most likely missing user attribution) can be surfaced on their own — or scoped to a single assistant. API: `assistant_id` and `non_assistant` params on `listRiskResults`/`listRiskResultsForAgent`.
+- c06dab9: The risk policies table now shows Created and Updated columns with compact relative dates; hovering either reveals the exact timestamp.
+- Updated dependencies [b931eb5]
+  - @gram-ai/elements@1.42.2
+
+## 0.88.0
+
+### Minor Changes
+
+- bbdd764: Manage bring-your-own model provider keys from project settings: set a project default OpenRouter key, override individual surfaces, and see which surfaces run on your key versus the platform key.
+- 15618be: Add the project-scoped API for listing users and usage for a Shadow MCP server, with generated dashboard SDK support.
+- 7cef3fe: Redefine tokens under management as observed agent traffic: the billing page now counts the tokens the platform observes coming from users' agent sessions (input, output, and cache writes — cache reads excluded), never inference the platform spends itself (risk-policy analysis, hosted chat). Breakdowns now offer model, agent, provider, account type, project, user, division, department, and role; the project filter dropdown is replaced by the Project breakdown section.
+
+### Patch Changes
+
+- 60653f7: The billing cycle panel gains an average tokens-under-management stat with a per hour / day / week unit toggle (defaulting to per day, computed over the elapsed window for the active cycle), and its headline stat is now labeled "Tokens Managed" instead of "Tokens consumed".
+- e33b788: Model provider key settings list the risk policy judge and prompt injection classifier slots.
+- d50a779: Fix the MCP server Authentication tab persisting the server-redacted placeholder (e.g. `sup*****`) as the real environment variable value. Saving now only writes a value the user actually typed, removes on an intentional clear, and otherwise leaves the stored secret untouched — covering both the state-toggle path and untouched saves that swept in unmapped required variables.
+- 22111d5: Show actionable guidance with a Configure authentication deep link when MCP tools fail to load on a server with no authentication configured, instead of a generic error.
+- 124b3eb: Assistant onboarding now finds integrations that are already set up in your project instead of telling you they aren't available yet. It checks your existing toolsets first, and its tool search now includes tools proxied from external MCP servers.
+- b270dc9: Remove the dormant telemetry.queryRiskTokens endpoint (no consumers; it computed the pre-DNO-491 billed population and no longer matched any billing surface)
+- 9023fd1: Fix the environment variables table on the MCP server page reordering its rows on every page refresh and tab focus change. The toolset API now returns security, server, and function environment variables in a stable sorted order.
+
+## 0.87.0
+
+### Minor Changes
+
+- 4d22067: Add "Suggest with AI" to the exclusion create/edit form, backed by a new dedicated `risk.suggestExclusion` endpoint (separate from `risk.suggestCustomRules`). It returns structured match fields (match type, match value, rule id/source filters) that the dashboard serializes into the exclusion criteria expression — regex suggestions are validated (RE2 compile, length cap) server-side before they reach the form.
+- f3ea11b: Add the project-scoped Shadow MCP inventory listing API and generated client SDK support.
+
+### Patch Changes
+
+- 00ac3b8: Fix deletion of organization-level remote session clients, derive tunnel gateway URLs from the active environment, and detach remote identity providers without deleting shared clients.
+
 ## 0.86.0
 
 ### Minor Changes

@@ -1082,9 +1082,88 @@ func TestPrepareContext_adminImpersonationGrantsAllScopes(t *testing.T) {
 		ScopeProjectRead, ScopeProjectWrite,
 		ScopeMCPRead, ScopeMCPWrite, ScopeMCPConnect,
 		ScopeEnvironmentRead, ScopeEnvironmentWrite,
+		ScopeSkillRead, ScopeSkillWrite,
 	} {
 		err := engine.Require(ctx, Check{Scope: scope, ResourceID: "org_customer"})
 		require.NoError(t, err, "admin impersonation should satisfy scope %s", scope)
+	}
+}
+
+func TestEngineRequire_skillReadIsProjectScoped(t *testing.T) {
+	t.Parallel()
+
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeSkillRead, "project_a")})
+
+	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeSkillRead, ResourceKind: "", ResourceID: "project_a", Dimensions: nil}))
+	err = engine.Require(ctx, Check{Scope: ScopeSkillRead, ResourceKind: "", ResourceID: "project_b", Dimensions: nil})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+func TestEngineRequire_skillWriteImpliesReadButReadDoesNotImplyWrite(t *testing.T) {
+	t.Parallel()
+
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
+	writeCtx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeSkillWrite, "project_a")})
+	require.NoError(t, engine.Require(writeCtx, Check{Scope: ScopeSkillRead, ResourceKind: "", ResourceID: "project_a", Dimensions: nil}))
+
+	readCtx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeSkillRead, "project_a")})
+	err = engine.Require(readCtx, Check{Scope: ScopeSkillWrite, ResourceKind: "", ResourceID: "project_a", Dimensions: nil})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+func TestEngineRequire_projectScopesDoNotImplySkillScopes(t *testing.T) {
+	t.Parallel()
+
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
+		NewGrant(ScopeProjectRead, "project_a"),
+		NewGrant(ScopeProjectWrite, "project_a"),
+	})
+
+	err = engine.Require(ctx, Check{Scope: ScopeSkillRead, ResourceKind: "", ResourceID: "project_a", Dimensions: nil})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+func TestEngineRequire_skillBlocklistExpansion(t *testing.T) {
+	t.Parallel()
+
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
+	blockedWriteCtx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
+		NewGrant(ScopeSkillWrite, WildcardResource),
+		NewGrant(ScopeSkillBlockedWrite, "project_a"),
+	})
+
+	require.NoError(t, engine.Require(blockedWriteCtx, Check{Scope: ScopeSkillWrite, ResourceKind: "", ResourceID: "project_b", Dimensions: nil}))
+	require.NoError(t, engine.Require(blockedWriteCtx, Check{Scope: ScopeSkillRead, ResourceKind: "", ResourceID: "project_a", Dimensions: nil}))
+	err = engine.Require(blockedWriteCtx, Check{Scope: ScopeSkillWrite, ResourceKind: "", ResourceID: "project_a", Dimensions: nil})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+
+	blockedReadCtx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
+		NewGrant(ScopeSkillWrite, WildcardResource),
+		NewGrant(ScopeSkillBlockedRead, "project_a"),
+	})
+	for _, scope := range []Scope{ScopeSkillRead, ScopeSkillWrite} {
+		err = engine.Require(blockedReadCtx, Check{Scope: scope, ResourceKind: "", ResourceID: "project_a", Dimensions: nil})
+		var oopsErr *oops.ShareableError
+		require.ErrorAs(t, err, &oopsErr)
+		require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 	}
 }
 

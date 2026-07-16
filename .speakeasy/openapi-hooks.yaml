@@ -32,6 +32,13 @@ paths:
           schema:
             description: Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.
             type: string
+        - allowEmptyValue: true
+          description: Set when the event is redelivered from a device's offline spool after control-plane downtime, under its original Idempotency-Key and occurred_at.
+          in: header
+          name: X-Gram-Replayed
+          schema:
+            description: Set when the event is redelivered from a device's offline spool after control-plane downtime, under its original Idempotency-Key and occurred_at.
+            type: boolean
       requestBody:
         content:
           application/json:
@@ -145,6 +152,16 @@ components:
       properties:
         mcp:
           $ref: '#/components/schemas/HookMCPData'
+        mcp_attribution:
+          type: array
+          items:
+            $ref: '#/components/schemas/HookMCPAttributionEntry'
+          description: Transcript-derived per-request MCP attribution (Claude Stop/SubagentStop).
+        mcp_inventory:
+          type: array
+          items:
+            $ref: '#/components/schemas/HookMCPData'
+          description: Configured MCP server snapshot captured at session start or configuration change. Transport credentials must be redacted by the sender.
         message:
           $ref: '#/components/schemas/HookMessageData'
         notification:
@@ -221,6 +238,21 @@ components:
       description: Metadata about the local hook adapter that translated a provider event into the Gram hook contract.
       required:
         - adapter
+    HookMCPAttributionEntry:
+      type: object
+      properties:
+        mcp_server:
+          type: string
+          description: Unredacted MCP server name from the transcript.
+        mcp_tool:
+          type: string
+          description: Unredacted MCP tool name from the transcript.
+        request_id:
+          type: string
+          description: Provider API request identifier (e.g. Claude's req_*) the attribution applies to.
+      description: Transcript-derived MCP attribution for one model API request. Claude redacts user-configured MCP server names to 'custom' on its OTEL telemetry, but records the real names in the local session transcript; hooks ship them here so ingest can restore the redacted names.
+      required:
+        - request_id
     HookMCPData:
       type: object
       properties:
@@ -477,6 +509,8 @@ tags:
     description: Manages metadata for the MCP install page shown to users.
   - name: mcpServers
     description: Managing MCP servers, which configure authentication, environment, and backend selection for an MCP server.
+  - name: modelKeys
+    description: Manage customer-supplied model provider API keys, scoped per project and responsibility slot.
   - name: organizations
     description: Organization membership, invitations, and directory.
   - name: otelForwarding
@@ -509,6 +543,8 @@ tags:
     description: Dashboard API for interacting with resources.
   - name: risk
     description: Manage risk analysis policies and view scan results.
+  - name: skills
+    description: Manage project skills and their immutable versions. Methods are gated by the skills product feature and skill read or write scopes.
   - name: telemetry
     description: Fetch telemetry data for tools in Gram.
   - name: templates

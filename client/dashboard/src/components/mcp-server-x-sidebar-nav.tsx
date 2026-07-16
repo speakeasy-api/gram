@@ -10,7 +10,11 @@ import {
 import { CopyButton } from "@/components/ui/copy-button";
 import { Type } from "@/components/ui/type";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { getMcpServerArgs, remoteMcpRouteParam } from "@/lib/sources";
+import {
+  getMcpServerArgs,
+  remoteMcpRouteParam,
+  tunneledMcpRouteParam,
+} from "@/lib/sources";
 import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
 import { MCPServerStatusDropdown } from "@/pages/mcp/x/MCPServerDetails";
 import {
@@ -61,12 +65,8 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
   );
 
   const userSessionIssuerId = mcpServer?.userSessionIssuerId;
-  // Mirrors AuthenticationSection's "associated" definition: at least one
-  // remote_session_client row exists for this server's issuer. The issuer
-  // itself only gates Speakeasy-side sessions — a remote identity provider
-  // isn't actually attached (and users can't reach the upstream service)
-  // until a client pairing exists, which is what the "No remote identity
-  // providers" empty state on the Authentication tab is keyed off too.
+  // A remote identity provider is attached when this server's issuer has at
+  // least one remote session client pairing.
   const { items: remoteSessionClients } = useAllRemoteSessionClients(
     { userSessionIssuerId },
     { enabled: !!userSessionIssuerId },
@@ -91,6 +91,34 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
 
   const activeTab = activeTabFromPath(location.pathname, idOrSlug);
   const isRemoteBacked = !!mcpServer?.remoteMcpServerId;
+  const isTunneledBacked = !!mcpServer?.tunneledMcpServerId;
+  const isSourceBacked = isRemoteBacked || isTunneledBacked;
+
+  let authenticationDescription =
+    "Attach a remote identity provider so users can access the upstream service.";
+  if (hasRemoteIdentityProvider) {
+    authenticationDescription =
+      "A remote identity provider is attached to this server.";
+  } else if (isTunneledBacked) {
+    authenticationDescription =
+      "Speakeasy authentication is configured; upstream identity providers are optional.";
+  }
+
+  let sourceDescription = "Connect an MCP server as this server's source.";
+  let sourceHref = routes.sources.href();
+  if (mcpServer?.remoteMcpServerId) {
+    sourceDescription = "Backed by a remote MCP server.";
+    sourceHref = routes.sources.source.href(
+      "remotemcp",
+      remoteMcpRouteParam({ id: mcpServer.remoteMcpServerId }),
+    );
+  } else if (mcpServer?.tunneledMcpServerId) {
+    sourceDescription = "Backed by a tunneled MCP server.";
+    sourceHref = routes.sources.source.href(
+      "tunneledmcp",
+      tunneledMcpRouteParam({ id: mcpServer.tunneledMcpServerId }),
+    );
+  }
 
   const readinessChecks: ReadinessCheck[] = mcpServer
     ? [
@@ -106,25 +134,18 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
         {
           key: "authentication",
           label: "Authentication",
-          description: hasRemoteIdentityProvider
-            ? "A remote identity provider is attached to this server."
-            : "Attach a remote identity provider so users can access the upstream service.",
-          ready: hasRemoteIdentityProvider,
+          description: authenticationDescription,
+          ready:
+            hasRemoteIdentityProvider ||
+            (isTunneledBacked && !!userSessionIssuerId),
           href: `${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AUTHENTICATION_SECTION_ID}`,
         },
         {
           key: "source",
           label: "Source",
-          description: isRemoteBacked
-            ? "Backed by a remote MCP server."
-            : "Connect a remote MCP server as this server's source.",
-          ready: isRemoteBacked,
-          href: mcpServer?.remoteMcpServerId
-            ? routes.sources.source.href(
-                "remotemcp",
-                remoteMcpRouteParam({ id: mcpServer.remoteMcpServerId }),
-              )
-            : routes.sources.href(),
+          description: sourceDescription,
+          ready: isSourceBacked,
+          href: sourceHref,
         },
         {
           key: "plugin",
@@ -184,6 +205,9 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
         {isRemoteBacked && (
           <McpSidebarInfoLabel>Remote MCP</McpSidebarInfoLabel>
         )}
+        {isTunneledBacked && (
+          <McpSidebarInfoLabel>Tunneled MCP</McpSidebarInfoLabel>
+        )}
       </div>
 
       <div className="flex flex-col gap-1.5">
@@ -235,7 +259,10 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
           </span>
         )}
         <div className="bg-border w-px self-stretch" />
-        <routes.playground.Link className="flex flex-1 items-center justify-center hover:no-underline">
+        <routes.playground.Link
+          queryParams={isRemoteBacked ? { mcpServer: mcpServer.id } : undefined}
+          className="flex flex-1 items-center justify-center hover:no-underline"
+        >
           <span className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs font-semibold transition-colors">
             Test in Playground
             <ArrowRight className="h-3 w-3" />

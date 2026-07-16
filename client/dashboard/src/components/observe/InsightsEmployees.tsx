@@ -39,12 +39,12 @@ import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import { useSyncedAgentUsers } from "@gram/client/react-query/syncedAgentUsers.js";
 import { unwrapAsync } from "@gram/client/types/fp";
-import { type DateRangePreset, getPresetRange } from "@gram-ai/elements";
+import { type DateRangePreset, getPresetRange } from "@/elements";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Info } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
-import { useRoutes } from "@/routes";
+import { useOrgRoutes, useRoutes } from "@/routes";
 import { useSlugs } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { dateTimeFormatters } from "@/lib/dates";
@@ -696,7 +696,14 @@ function EmployeeTable({
         : []),
       {
         key: "accounts",
-        header: "Accounts",
+        header: (
+          <span className="flex items-center gap-1">
+            Accounts
+            <SimpleTooltip tooltip="The AI provider accounts (Claude, Codex, Cursor) each employee has been seen using, labelled team or personal. Accounts are linked automatically from tool activity, so this stays blank until an employee is seen using a recognized account.">
+              <Info className="text-muted-foreground size-3 shrink-0" />
+            </SimpleTooltip>
+          </span>
+        ),
         sortable: true,
         sortLabel: "Accounts",
         // Personal-holders first (ascending), then more accounts before fewer,
@@ -846,6 +853,9 @@ function routeSegmentForEmployee(employee: Employee) {
 function EnrollmentLegend() {
   const [showSetupDialog, setShowSetupDialog] = useState(false);
   const routes = useRoutes();
+  const orgRoutes = useOrgRoutes();
+  const deviceAgentEnabled =
+    useTelemetry().isFeatureEnabled("gram-device-agent") ?? false;
 
   return (
     <>
@@ -860,18 +870,34 @@ function EnrollmentLegend() {
             >
               Observability plugin
             </Link>{" "}
-            is installed in their AI agent and sends activity to this project.
-            Not enrolled yet? Install the observability plugin to start tracking
-            their usage.
+            is installed in their AI agent and sends activity to this project
+            {deviceAgentEnabled ? (
+              <>
+                , or once the{" "}
+                <Link
+                  to={orgRoutes.deviceAgent.href()}
+                  className="hover:text-foreground underline underline-offset-2"
+                >
+                  Speakeasy device agent
+                </Link>{" "}
+                is running on their machine
+              </>
+            ) : null}
+            . Not enrolled yet? Install the observability plugin
+            {deviceAgentEnabled ? " or deploy the device agent" : ""} to start
+            tracking their usage.
           </p>
         </div>
-        <Button
-          size="sm"
-          className="shrink-0 md:self-center"
-          onClick={() => setShowSetupDialog(true)}
-        >
-          Set up hooks
-        </Button>
+        <div className="flex shrink-0 flex-wrap gap-2 md:self-center">
+          {deviceAgentEnabled && (
+            <Button size="sm" variant="secondary" asChild>
+              <Link to={orgRoutes.deviceAgent.href()}>Set up device agent</Link>
+            </Button>
+          )}
+          <Button size="sm" onClick={() => setShowSetupDialog(true)}>
+            Set up hooks
+          </Button>
+        </div>
       </section>
       <HooksSetupDialog
         open={showSetupDialog}

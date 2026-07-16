@@ -262,6 +262,51 @@ CREATE TABLE IF NOT EXISTS assets (
   CONSTRAINT assets_project_id_sha256_key UNIQUE (project_id, sha256)
 );
 
+CREATE TABLE IF NOT EXISTS skills (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+
+  name TEXT NOT NULL,
+  display_name TEXT NOT NULL,
+  summary TEXT,
+  source_kind TEXT NOT NULL DEFAULT 'manual',
+  classification TEXT NOT NULL DEFAULT 'custom',
+
+  archived_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT skills_pkey PRIMARY KEY (id),
+  CONSTRAINT skills_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS skills_project_id_idx ON skills (project_id);
+CREATE UNIQUE INDEX IF NOT EXISTS skills_project_id_name_key ON skills (project_id, name) WHERE archived_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS skill_versions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  skill_id uuid NOT NULL,
+
+  content TEXT NOT NULL,
+  canonical_sha256 TEXT NOT NULL,
+  raw_sha256 TEXT NOT NULL,
+  description TEXT,
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+  spec_valid boolean NOT NULL,
+  validation_errors JSONB NOT NULL DEFAULT '[]'::jsonb,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  created_by_user_id TEXT NOT NULL,
+
+  CONSTRAINT skill_versions_pkey PRIMARY KEY (id),
+  CONSTRAINT skill_versions_skill_id_fkey FOREIGN KEY (skill_id) REFERENCES skills (id) ON DELETE CASCADE,
+  CONSTRAINT skill_versions_content_size_check CHECK (octet_length(content) <= 65536)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS skill_versions_skill_id_canonical_sha256_key ON skill_versions (skill_id, canonical_sha256);
+CREATE INDEX IF NOT EXISTS skill_versions_skill_id_created_at_id_idx ON skill_versions (skill_id, created_at DESC, id DESC);
+
 CREATE TABLE IF NOT EXISTS packages (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 100),
@@ -672,6 +717,7 @@ WHERE definition_slug = 'dashboard' AND status = 'active' AND deleted IS FALSE;
 CREATE TABLE IF NOT EXISTS environment_entries (
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 60),
   value TEXT NOT NULL CHECK (value <> '' AND CHAR_LENGTH(value) <= 4000),
+  is_secret BOOLEAN NOT NULL DEFAULT TRUE,
   environment_id uuid NOT NULL,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1575,6 +1621,12 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   -- same logical conversation view share a generation.
   generation INTEGER NOT NULL DEFAULT 0,
 
+  -- True when the message arrived as a replay from a device's offline spool
+  -- after control-plane downtime (X-Gram-Replayed on hooks.ingest), so
+  -- downtime backlog — and findings produced by retroactively scanning it —
+  -- stays distinguishable from live traffic.
+  replayed BOOLEAN NOT NULL DEFAULT false,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   -- Set when all active risk policies have analyzed this message.
@@ -1589,6 +1641,18 @@ CREATE TABLE IF NOT EXISTS chat_messages (
 
 CREATE INDEX IF NOT EXISTS chat_messages_chat_id_idx ON chat_messages (chat_id);
 CREATE INDEX IF NOT EXISTS chat_messages_chat_id_generation_seq_idx ON chat_messages (chat_id, generation, seq);
+
+-- Chat listings derive each chat's message count and last-message time per
+-- request; this lets those be per-chat index-only probes instead of an
+-- aggregate over the chat's full message history.
+CREATE INDEX IF NOT EXISTS chat_messages_chat_id_created_at_idx
+ON chat_messages (chat_id, created_at);
+
+-- Latest non-empty source per chat as a single index-only probe (agent-type
+-- filter options via chats.listSources and the source filter on chats.list).
+CREATE INDEX IF NOT EXISTS chat_messages_chat_id_created_at_source_idx
+ON chat_messages (chat_id, created_at) INCLUDE (source)
+WHERE source IS NOT NULL AND source <> '';
 CREATE INDEX IF NOT EXISTS chat_messages_project_id_id_idx
 ON chat_messages (project_id, id)
 WHERE project_id IS NOT NULL;
@@ -3161,6 +3225,39 @@ CREATE TABLE IF NOT EXISTS assistant_mcp_servers (
 CREATE INDEX IF NOT EXISTS assistant_mcp_servers_mcp_server_id_idx ON assistant_mcp_servers (mcp_server_id);
 CREATE INDEX IF NOT EXISTS assistant_mcp_servers_project_id_idx ON assistant_mcp_servers (project_id);
 
+-- Admin-authoritative per-tool annotation metadata for an MCP server, read by
+-- the runtime proxy to fill the disposition dimension of RBAC checks.
+CREATE TABLE IF NOT EXISTS mcp_server_tool_metadata (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  mcp_server_id uuid NOT NULL,
+  tool_name TEXT NOT NULL,
+
+  -- MCP tool annotations (admin-set behavioral hints)
+  title TEXT,
+  read_only_hint boolean,
+  destructive_hint boolean,
+  idempotent_hint boolean,
+  open_world_hint boolean,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT mcp_server_tool_metadata_pkey PRIMARY KEY (id),
+  CONSTRAINT mcp_server_tool_metadata_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT mcp_server_tool_metadata_mcp_server_id_fkey FOREIGN KEY (mcp_server_id) REFERENCES mcp_servers (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS mcp_server_tool_metadata_project_id_idx
+ON mcp_server_tool_metadata (project_id)
+WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_server_tool_metadata_mcp_server_id_tool_name_key
+ON mcp_server_tool_metadata (mcp_server_id, tool_name)
+WHERE deleted IS FALSE;
+
 -- Plugin definitions: project-scoped distributable bundles of MCP servers.
 -- Admins create plugins and assign them to roles for distribution.
 CREATE TABLE IF NOT EXISTS plugins (
@@ -4071,3 +4168,37 @@ WHERE deleted IS FALSE;
 -- rows that the partial unique indexes above exclude.
 CREATE INDEX IF NOT EXISTS json_web_keys_set_tenant_idx
 ON json_web_keys (organization_id, json_web_key_set_id);
+
+-- Customer-supplied model provider API keys (BYOK), scoped per project and
+-- responsibility slot (completion surface). The 'default' slot applies to
+-- every surface that has no dedicated override row. Key material is
+-- AES-256-GCM encrypted at rest and never returned by the API.
+CREATE TABLE IF NOT EXISTS model_provider_keys (
+  id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  slot TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  api_key_encrypted TEXT NOT NULL,
+  enabled boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT model_provider_keys_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT model_provider_keys_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS model_provider_keys_project_id_slot_key
+  ON model_provider_keys (project_id, slot)
+  WHERE deleted IS FALSE;
+
+-- Non-partial indexes backing the cascade FKs: keep org/project cascade
+-- deletes off a seq scan, including soft-deleted rows that the partial
+-- unique index above excludes.
+CREATE INDEX IF NOT EXISTS model_provider_keys_project_id_idx
+  ON model_provider_keys (project_id);
+
+CREATE INDEX IF NOT EXISTS model_provider_keys_organization_id_idx
+  ON model_provider_keys (organization_id);

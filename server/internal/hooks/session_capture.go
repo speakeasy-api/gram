@@ -57,14 +57,7 @@ func isConversationEvent(eventName string) bool {
 // assuming claude-code — the title generator will replace it with a real
 // one once enough conversation is on file.
 func (s *Service) defaultChatTitleForSession(ctx context.Context, sessionID string) string {
-	if sessionID == "" {
-		return activities.DefaultClaudeAmbiguous
-	}
-	var variant string
-	if err := s.cache.Get(ctx, sessionAgentVariantCacheKey(sessionID), &variant); err != nil {
-		return activities.DefaultClaudeAmbiguous
-	}
-	switch variant {
+	switch s.sessionAgentVariant(ctx, sessionID) {
 	case agentVariantCowork:
 		return activities.DefaultCoworkChatTitle
 	case agentVariantClaudeCode:
@@ -72,6 +65,21 @@ func (s *Service) defaultChatTitleForSession(ctx context.Context, sessionID stri
 	default:
 		return activities.DefaultClaudeAmbiguous
 	}
+}
+
+// sessionAgentVariant returns the agent variant ("cowork" or "claude-code")
+// stamped into the cache by SessionStart, or "" when none is cached (no
+// SessionStart processed yet, or a cache miss). Callers should treat "" as an
+// ambiguous Claude session rather than assuming claude-code.
+func (s *Service) sessionAgentVariant(ctx context.Context, sessionID string) string {
+	if sessionID == "" {
+		return ""
+	}
+	var variant string
+	if err := s.cache.Get(ctx, sessionAgentVariantCacheKey(sessionID), &variant); err != nil {
+		return ""
+	}
+	return variant
 }
 
 // sessionIDToUUID converts a Claude Code session_id string to a UUID.
@@ -324,6 +332,7 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 	}
 
 	msgParams := chatRepo.CreateChatMessageParams{
+		Replayed:         false,
 		ChatID:           chatID,
 		ProjectID:        projectID,
 		Role:             role,
@@ -420,6 +429,7 @@ func (s *Service) writeToolCallRequestToPG(ctx context.Context, payload *gen.Cla
 	}
 
 	msgParams := chatRepo.CreateChatMessageParams{
+		Replayed:         false,
 		ChatID:           chatID,
 		ProjectID:        projectID,
 		Role:             "assistant",
@@ -471,6 +481,7 @@ func (s *Service) writeToolCallResultToPG(ctx context.Context, payload *gen.Clau
 	}
 
 	msgParams := chatRepo.CreateChatMessageParams{
+		Replayed:         false,
 		ChatID:           chatID,
 		ProjectID:        projectID,
 		Role:             "tool",

@@ -369,12 +369,9 @@ func TestExtractSessionMetadataCapturesDeviceAndAccountIdentity(t *testing.T) {
 func enableHookTelemetryLogger(t *testing.T, ctx context.Context, ti *testInstance) *telemetryrepo.Queries {
 	t.Helper()
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
 	enabled := func(context.Context, string) (bool, error) { return true, nil }
-	ti.service.telemetryLogger = telemetry.NewLogger(ctx, testenv.NewLogger(t), chConn, enabled, enabled, nil)
-	return telemetryrepo.New(chConn)
+	ti.service.telemetryLogger = telemetry.NewLogger(ctx, testenv.NewLogger(t), ti.chConn, enabled, enabled, nil)
+	return telemetryrepo.New(ti.chConn)
 }
 
 func hookAuthContext(t *testing.T, ctx context.Context) *contextvalues.AuthContext {

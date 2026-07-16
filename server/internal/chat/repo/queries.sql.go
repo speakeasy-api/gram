@@ -83,7 +83,8 @@ WITH risk_counts AS (
   -- disabling/deleting a policy retires its findings everywhere (keeps this
   -- count in sync with the risk.results.list detail view).
   JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
-  WHERE rr.project_id = $3
+  WHERE ($3::text <> '' OR $4::int >= 0)
+    AND rr.project_id = $5
     AND rr.found IS TRUE
     AND rr.excluded_at IS NULL
     AND rr.false_positive_at IS NULL
@@ -94,55 +95,55 @@ candidate_chats AS (
   FROM chats c
   LEFT JOIN risk_counts rc ON rc.chat_id = c.id
   LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id AND ua.deleted_at IS NULL
-  WHERE c.project_id = $3
+  WHERE c.project_id = $5
     AND c.deleted IS FALSE
-    AND ($4 = '' OR c.external_user_id = $4)
-    AND ($5 = '' OR c.user_id = $5)
+    AND ($6 = '' OR c.external_user_id = $6)
+    AND ($7 = '' OR c.user_id = $7)
     AND (
-      $6::text = ''
-      OR ($6::text = 'true' AND c.pinned_at IS NOT NULL)
-      OR ($6::text = 'false' AND c.pinned_at IS NULL)
+      $8::text = ''
+      OR ($8::text = 'true' AND c.pinned_at IS NOT NULL)
+      OR ($8::text = 'false' AND c.pinned_at IS NULL)
     )
     AND (
-      $7 = ''
-      OR c.id::text ILIKE '%' || $7 || '%'
-      OR c.external_user_id ILIKE '%' || $7 || '%'
-      OR c.title ILIKE '%' || $7 || '%'
+      $9 = ''
+      OR c.id::text ILIKE '%' || $9 || '%'
+      OR c.external_user_id ILIKE '%' || $9 || '%'
+      OR c.title ILIKE '%' || $9 || '%'
     )
     AND (
-      $8 = ''
+      $10 = ''
       OR EXISTS (
         SELECT 1 FROM assistant_threads at
         WHERE at.chat_id = c.id
-          AND at.assistant_id = $8::uuid
+          AND at.assistant_id = $10::uuid
           AND at.deleted IS FALSE
           -- Optional source-kind dimension so setup/onboarding and runtime
           -- threads for the same assistant don't pollute each other's listing.
           -- @source_kind keeps only threads of that kind (onboarding passes
           -- 'setup'); @exclude_source_kind drops threads of that kind (runtime
           -- views pass 'setup'). Empty string on either disables that side.
-          AND ($9::text = '' OR at.source_kind = $9::text)
-          AND ($10::text = '' OR at.source_kind <> $10::text)
+          AND ($11::text = '' OR at.source_kind = $11::text)
+          AND ($12::text = '' OR at.source_kind <> $12::text)
       )
     )
     AND (
-      $11::text = ''
-      OR ($11::text = 'true' AND COALESCE(rc.cnt, 0) > 0)
-      OR ($11::text = 'false' AND COALESCE(rc.cnt, 0) = 0)
+      $3::text = ''
+      OR ($3::text = 'true' AND COALESCE(rc.cnt, 0) > 0)
+      OR ($3::text = 'false' AND COALESCE(rc.cnt, 0) = 0)
     )
     AND (
-      $12::text = ''
-      OR ua.account_type = $12::text
+      $13::text = ''
+      OR ua.account_type = $13::text
       -- Rows without a classified account type are treated as 'team' so the
       -- team filter stays backwards-compatible with pre-classification chats.
       OR (
-        $12::text = 'team'
+        $13::text = 'team'
         AND (ua.account_type IS NULL OR ua.account_type = '')
       )
     )
     AND (
-      $13::int < 0
-      OR COALESCE(rc.cnt, 0) >= $13::int
+      $4::int < 0
+      OR COALESCE(rc.cnt, 0) >= $4::int
     )
     AND (
       coalesce(cardinality($14::text[]), 0) = 0
@@ -158,12 +159,17 @@ candidate_chats AS (
     )
 ),
 chat_activity AS (
+  -- Per-chat backward probe on chat_messages_chat_id_created_at_idx instead of
+  -- aggregating every candidate chat's full message history.
   SELECT
     cc.id,
-    COALESCE(MAX(cm.created_at), cc.created_at) AS last_message_timestamp
+    COALESCE(last_msg.ts, cc.created_at) AS last_message_timestamp
   FROM candidate_chats cc
-  LEFT JOIN chat_messages cm ON cm.chat_id = cc.id
-  GROUP BY cc.id, cc.created_at
+  CROSS JOIN LATERAL (
+    SELECT MAX(cm.created_at) AS ts
+    FROM chat_messages cm
+    WHERE cm.chat_id = cc.id
+  ) last_msg
 )
 SELECT COUNT(*) AS total
 FROM chat_activity ca
@@ -174,6 +180,8 @@ WHERE ($1::timestamptz IS NULL OR ca.last_message_timestamp >= $1)
 type CountChatsParams struct {
 	FromTime          pgtype.Timestamptz
 	ToTime            pgtype.Timestamptz
+	HasRiskFilter     string
+	MinRiskScore      int32
 	ProjectID         uuid.UUID
 	ExternalUserID    interface{}
 	UserID            interface{}
@@ -182,19 +190,27 @@ type CountChatsParams struct {
 	AssistantID       interface{}
 	SourceKind        string
 	ExcludeSourceKind string
-	HasRiskFilter     string
 	AccountType       string
-	MinRiskScore      int32
 	Sources           []string
 }
 
+// Fallback for chats.list pagination: ListChats returns the total alongside
+// each page via a window count, so this only runs when a requested page is
+// past the end of the result set (no rows to carry the total). The handler
+// runs it in the same repeatable-read transaction as the ListChats page read,
+// so the total reflects the same snapshot the empty page came from.
+//
 // risk_counts pre-aggregates active findings per chat once for the whole
 // project (one pass over risk_results), so the risk presence + threshold
-// filters become a cheap join instead of a correlated subquery per chat.
+// filters become a cheap join instead of a correlated subquery per chat. The
+// parameter-only gate makes it a one-time filter that skips the scan entirely
+// when neither risk filter is active.
 func (q *Queries) CountChats(ctx context.Context, arg CountChatsParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countChats,
 		arg.FromTime,
 		arg.ToTime,
+		arg.HasRiskFilter,
+		arg.MinRiskScore,
 		arg.ProjectID,
 		arg.ExternalUserID,
 		arg.UserID,
@@ -203,9 +219,7 @@ func (q *Queries) CountChats(ctx context.Context, arg CountChatsParams) (int64, 
 		arg.AssistantID,
 		arg.SourceKind,
 		arg.ExcludeSourceKind,
-		arg.HasRiskFilter,
 		arg.AccountType,
-		arg.MinRiskScore,
 		arg.Sources,
 	)
 	var total int64
@@ -333,6 +347,7 @@ type CreateChatMessageParams struct {
 	Source           pgtype.Text
 	ContentHash      []byte
 	Generation       int32
+	Replayed         bool
 }
 
 const createChatMessageWithToolCalls = `-- name: CreateChatMessageWithToolCalls :exec
@@ -926,7 +941,7 @@ func (q *Queries) GetMaxGenerationForChat(ctx context.Context, chatID uuid.UUID)
 }
 
 const getToolCallMessages = `-- name: GetToolCallMessages :many
-SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, external_message_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, content_hash, generation, created_at, risk_analyzed_at FROM chat_messages
+SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, external_message_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, content_hash, generation, replayed, created_at, risk_analyzed_at FROM chat_messages
 WHERE chat_id = $1
   AND role = 'tool'
 ORDER BY created_at ASC
@@ -971,6 +986,7 @@ func (q *Queries) GetToolCallMessages(ctx context.Context, chatID uuid.UUID) ([]
 			&i.ToolOutcomeNotes,
 			&i.ContentHash,
 			&i.Generation,
+			&i.Replayed,
 			&i.CreatedAt,
 			&i.RiskAnalyzedAt,
 		); err != nil {
@@ -1174,7 +1190,7 @@ func (q *Queries) LinkAIIntegrationConfigChat(ctx context.Context, arg LinkAIInt
 }
 
 const listChatMessages = `-- name: ListChatMessages :many
-SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, external_message_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, content_hash, generation, created_at, risk_analyzed_at FROM chat_messages 
+SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, external_message_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, content_hash, generation, replayed, created_at, risk_analyzed_at FROM chat_messages 
 WHERE chat_id = $1 AND (project_id IS NULL OR project_id = $2::uuid) 
 ORDER BY seq ASC
 `
@@ -1223,6 +1239,7 @@ func (q *Queries) ListChatMessages(ctx context.Context, arg ListChatMessagesPara
 			&i.ToolOutcomeNotes,
 			&i.ContentHash,
 			&i.Generation,
+			&i.Replayed,
 			&i.CreatedAt,
 			&i.RiskAnalyzedAt,
 		); err != nil {
@@ -1237,7 +1254,7 @@ func (q *Queries) ListChatMessages(ctx context.Context, arg ListChatMessagesPara
 }
 
 const listChatMessagesAfterPage = `-- name: ListChatMessagesAfterPage :many
-SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.content_hash, cm.generation, cm.created_at, cm.risk_analyzed_at FROM chat_messages cm
+SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.content_hash, cm.generation, cm.replayed, cm.created_at, cm.risk_analyzed_at FROM chat_messages cm
 WHERE cm.chat_id = $1
   AND (cm.project_id IS NULL OR cm.project_id = $2::uuid)
   AND cm.generation = $3::integer
@@ -1303,6 +1320,7 @@ func (q *Queries) ListChatMessagesAfterPage(ctx context.Context, arg ListChatMes
 			&i.ToolOutcomeNotes,
 			&i.ContentHash,
 			&i.Generation,
+			&i.Replayed,
 			&i.CreatedAt,
 			&i.RiskAnalyzedAt,
 		); err != nil {
@@ -1317,7 +1335,7 @@ func (q *Queries) ListChatMessagesAfterPage(ctx context.Context, arg ListChatMes
 }
 
 const listChatMessagesBeforePage = `-- name: ListChatMessagesBeforePage :many
-SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.content_hash, cm.generation, cm.created_at, cm.risk_analyzed_at FROM chat_messages cm
+SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.content_hash, cm.generation, cm.replayed, cm.created_at, cm.risk_analyzed_at FROM chat_messages cm
 WHERE cm.chat_id = $1
   AND (cm.project_id IS NULL OR cm.project_id = $2::uuid)
   AND cm.generation = $3::integer
@@ -1384,6 +1402,7 @@ func (q *Queries) ListChatMessagesBeforePage(ctx context.Context, arg ListChatMe
 			&i.ToolOutcomeNotes,
 			&i.ContentHash,
 			&i.Generation,
+			&i.Replayed,
 			&i.CreatedAt,
 			&i.RiskAnalyzedAt,
 		); err != nil {
@@ -1398,7 +1417,7 @@ func (q *Queries) ListChatMessagesBeforePage(ctx context.Context, arg ListChatMe
 }
 
 const listChatMessagesByGeneration = `-- name: ListChatMessagesByGeneration :many
-SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.content_hash, cm.generation, cm.created_at, cm.risk_analyzed_at FROM chat_messages cm
+SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.content_hash, cm.generation, cm.replayed, cm.created_at, cm.risk_analyzed_at FROM chat_messages cm
 WHERE cm.chat_id = $1
   AND (cm.project_id IS NULL OR cm.project_id = $2::uuid)
   AND cm.generation = $3::integer
@@ -1453,6 +1472,7 @@ func (q *Queries) ListChatMessagesByGeneration(ctx context.Context, arg ListChat
 			&i.ToolOutcomeNotes,
 			&i.ContentHash,
 			&i.Generation,
+			&i.Replayed,
 			&i.CreatedAt,
 			&i.RiskAnalyzedAt,
 		); err != nil {
@@ -1548,22 +1568,22 @@ func (q *Queries) ListChatResolutions(ctx context.Context, chatID uuid.UUID) ([]
 }
 
 const listChatSources = `-- name: ListChatSources :many
-WITH latest_sources AS (
-  SELECT DISTINCT ON (cm.chat_id) cm.source AS source
-  FROM chats c
-  JOIN chat_messages cm ON cm.chat_id = c.id
-  WHERE c.project_id = $1
-    AND c.deleted IS FALSE
-    AND ($2::text = '' OR c.external_user_id = $2::text)
-    AND ($3::text = '' OR c.user_id = $3::text)
+SELECT DISTINCT latest.source
+FROM chats c
+CROSS JOIN LATERAL (
+  SELECT cm.source
+  FROM chat_messages cm
+  WHERE cm.chat_id = c.id
     AND cm.source IS NOT NULL
     AND cm.source <> ''
-  ORDER BY cm.chat_id, cm.created_at DESC
-)
-SELECT DISTINCT source
-FROM latest_sources
-WHERE source IS NOT NULL
-ORDER BY source
+  ORDER BY cm.created_at DESC
+  LIMIT 1
+) latest
+WHERE c.project_id = $1
+  AND c.deleted IS FALSE
+  AND ($2::text = '' OR c.external_user_id = $2::text)
+  AND ($3::text = '' OR c.user_id = $3::text)
+ORDER BY latest.source
 `
 
 type ListChatSourcesParams struct {
@@ -1576,6 +1596,11 @@ type ListChatSourcesParams struct {
 // project's chats, honoring the same visibility scoping as ListChats. Feeds the
 // agent-type filter options on the Agent Sessions page so the list reflects the
 // sources actually present in the data rather than a hardcoded catalog.
+// Driven from chats with a per-chat probe on
+// chat_messages_chat_id_created_at_source_idx for the latest non-empty source,
+// instead of sorting the project's entire message history. The lateral join
+// drops chats with no sourced messages, matching the previous inner-join
+// semantics.
 func (q *Queries) ListChatSources(ctx context.Context, arg ListChatSourcesParams) ([]pgtype.Text, error) {
 	rows, err := q.db.Query(ctx, listChatSources, arg.ProjectID, arg.ExternalUserID, arg.UserID)
 	if err != nil {
@@ -1605,7 +1630,8 @@ WITH risk_counts AS (
   -- disabling/deleting a policy retires its findings everywhere (keeps this
   -- count in sync with the risk.results.list detail view).
   JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
-  WHERE rr.project_id = $1
+  WHERE ($2::text <> '' OR $3::int >= 0)
+    AND rr.project_id = $1
     AND rr.found IS TRUE
     AND rr.excluded_at IS NULL
     AND rr.false_positive_at IS NULL
@@ -1619,7 +1645,6 @@ candidate_chats AS (
     c.external_user_id,
     c.created_at,
     c.updated_at,
-    COALESCE(rc.cnt, 0) AS risk_findings_count,
     COALESCE(ua.account_type, '')::text AS account_type,
     COALESCE(ua.email, '')::text AS account_email
   FROM chats c
@@ -1629,53 +1654,53 @@ candidate_chats AS (
   LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id AND ua.deleted_at IS NULL
   WHERE c.project_id = $1
     AND c.deleted IS FALSE
-    AND ($2 = '' OR c.external_user_id = $2)
-    AND ($3 = '' OR c.user_id = $3)
+    AND ($4 = '' OR c.external_user_id = $4)
+    AND ($5 = '' OR c.user_id = $5)
     AND (
-      $4::text = ''
-      OR ($4::text = 'true' AND c.pinned_at IS NOT NULL)
-      OR ($4::text = 'false' AND c.pinned_at IS NULL)
+      $6::text = ''
+      OR ($6::text = 'true' AND c.pinned_at IS NOT NULL)
+      OR ($6::text = 'false' AND c.pinned_at IS NULL)
     )
     AND (
-      $5 = ''
-      OR c.id::text ILIKE '%' || $5 || '%'
-      OR c.external_user_id ILIKE '%' || $5 || '%'
-      OR c.title ILIKE '%' || $5 || '%'
+      $7 = ''
+      OR c.id::text ILIKE '%' || $7 || '%'
+      OR c.external_user_id ILIKE '%' || $7 || '%'
+      OR c.title ILIKE '%' || $7 || '%'
     )
     AND (
-      $6 = ''
+      $8 = ''
       OR EXISTS (
         SELECT 1 FROM assistant_threads at
         WHERE at.chat_id = c.id
-          AND at.assistant_id = $6::uuid
+          AND at.assistant_id = $8::uuid
           AND at.deleted IS FALSE
           -- Optional source-kind dimension so setup/onboarding and runtime
           -- threads for the same assistant don't pollute each other's listing.
           -- @source_kind keeps only threads of that kind (onboarding passes
           -- 'setup'); @exclude_source_kind drops threads of that kind (runtime
           -- views pass 'setup'). Empty string on either disables that side.
-          AND ($7::text = '' OR at.source_kind = $7::text)
-          AND ($8::text = '' OR at.source_kind <> $8::text)
+          AND ($9::text = '' OR at.source_kind = $9::text)
+          AND ($10::text = '' OR at.source_kind <> $10::text)
       )
     )
     AND (
-      $9::text = ''
-      OR ($9::text = 'true' AND COALESCE(rc.cnt, 0) > 0)
-      OR ($9::text = 'false' AND COALESCE(rc.cnt, 0) = 0)
+      $2::text = ''
+      OR ($2::text = 'true' AND COALESCE(rc.cnt, 0) > 0)
+      OR ($2::text = 'false' AND COALESCE(rc.cnt, 0) = 0)
     )
     AND (
-      $10::text = ''
-      OR ua.account_type = $10::text
+      $11::text = ''
+      OR ua.account_type = $11::text
       -- Rows without a classified account type are treated as 'team' so the
       -- team filter stays backwards-compatible with pre-classification chats.
       OR (
-        $10::text = 'team'
+        $11::text = 'team'
         AND (ua.account_type IS NULL OR ua.account_type = '')
       )
     )
     AND (
-      $11::int < 0
-      OR COALESCE(rc.cnt, 0) >= $11::int
+      $3::int < 0
+      OR COALESCE(rc.cnt, 0) >= $3::int
     )
     AND (
       coalesce(cardinality($12::text[]), 0) = 0
@@ -1691,13 +1716,21 @@ candidate_chats AS (
     )
 ),
 chat_stats AS (
+  -- Per-chat probe on chat_messages_chat_id_created_at_idx (index-only count +
+  -- max) instead of aggregating every candidate chat's full message history.
   SELECT
     cc.id,
-    COUNT(cm.id)::integer AS num_messages,
-    COALESCE(MAX(cm.created_at), cc.created_at) AS last_message_timestamp
+    stats.num_messages,
+    COALESCE(stats.max_created_at, cc.created_at)::timestamptz AS last_message_timestamp
   FROM candidate_chats cc
-  LEFT JOIN chat_messages cm ON cm.chat_id = cc.id
-  GROUP BY cc.id, cc.created_at
+  CROSS JOIN LATERAL (
+    -- COUNT(*) rather than COUNT(cm.id) so the probe stays index-only.
+    SELECT
+      COUNT(*)::integer AS num_messages,
+      MAX(cm.created_at) AS max_created_at
+    FROM chat_messages cm
+    WHERE cm.chat_id = cc.id
+  ) stats
 ),
 filtered_chats AS (
   SELECT
@@ -1709,7 +1742,6 @@ filtered_chats AS (
     cc.updated_at,
     cs.num_messages,
     cs.last_message_timestamp,
-    cc.risk_findings_count,
     cc.account_type,
     cc.account_email
   FROM candidate_chats cc
@@ -1728,9 +1760,11 @@ limited_chats AS (
     fc.num_messages,
     (SELECT source FROM chat_messages WHERE chat_id = fc.id AND source IS NOT NULL AND source <> '' ORDER BY created_at DESC LIMIT 1) AS source,
     fc.last_message_timestamp,
-    fc.risk_findings_count,
     fc.account_type,
-    fc.account_email
+    fc.account_email,
+    -- Window count runs before LIMIT/OFFSET, so every returned row carries the
+    -- total number of filtered chats.
+    COUNT(*) OVER ()::bigint AS total_count
   FROM filtered_chats fc
   ORDER BY
     CASE WHEN $15 = 'last_message_timestamp' AND $16 = 'desc' THEN fc.last_message_timestamp END DESC NULLS LAST,
@@ -1752,14 +1786,29 @@ SELECT
   lc.updated_at,
   lc.num_messages,
   lc.last_message_timestamp,
-  lc.risk_findings_count,
+  -- Active findings for the returned page rows only; must stay in sync with
+  -- the risk_counts predicate above (and the risk.results.list detail view).
+  (
+    SELECT COUNT(*)::integer
+    FROM risk_results rr
+    JOIN chat_messages cm ON cm.id = rr.chat_message_id
+    JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+    WHERE rr.project_id = $1
+      AND cm.chat_id = lc.id
+      AND rr.found IS TRUE
+      AND rr.excluded_at IS NULL
+      AND rr.false_positive_at IS NULL
+  ) AS risk_findings_count,
   lc.account_type,
-  lc.account_email
+  lc.account_email,
+  lc.total_count
 FROM limited_chats lc
 `
 
 type ListChatsParams struct {
 	ProjectID         uuid.UUID
+	HasRiskFilter     string
+	MinRiskScore      int32
 	ExternalUserID    interface{}
 	UserID            interface{}
 	Pinned            string
@@ -1767,9 +1816,7 @@ type ListChatsParams struct {
 	AssistantID       interface{}
 	SourceKind        string
 	ExcludeSourceKind string
-	HasRiskFilter     string
 	AccountType       string
-	MinRiskScore      int32
 	Sources           []string
 	FromTime          pgtype.Timestamptz
 	ToTime            pgtype.Timestamptz
@@ -1792,15 +1839,23 @@ type ListChatsRow struct {
 	RiskFindingsCount    int32
 	AccountType          string
 	AccountEmail         string
+	TotalCount           int64
 }
 
+// Returns the page plus the pre-LIMIT total (total_count window column), so the
+// handler only needs a separate CountChats round trip when the requested page
+// is past the end of the result set.
+//
 // risk_counts pre-aggregates active findings per chat once for the whole
-// project (one pass over risk_results). It feeds both the risk presence +
-// threshold filters and the risk_findings_count column below, replacing what
-// were two correlated subqueries per candidate chat.
+// project (one pass over risk_results) to serve the risk presence + threshold
+// filters. The parameter-only gate makes it a one-time filter that skips the
+// scan entirely when neither risk filter is active; the displayed
+// risk_findings_count is computed per returned page row in the final SELECT.
 func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ListChatsRow, error) {
 	rows, err := q.db.Query(ctx, listChats,
 		arg.ProjectID,
+		arg.HasRiskFilter,
+		arg.MinRiskScore,
 		arg.ExternalUserID,
 		arg.UserID,
 		arg.Pinned,
@@ -1808,9 +1863,7 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ListCha
 		arg.AssistantID,
 		arg.SourceKind,
 		arg.ExcludeSourceKind,
-		arg.HasRiskFilter,
 		arg.AccountType,
-		arg.MinRiskScore,
 		arg.Sources,
 		arg.FromTime,
 		arg.ToTime,
@@ -1839,6 +1892,7 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ListCha
 			&i.RiskFindingsCount,
 			&i.AccountType,
 			&i.AccountEmail,
+			&i.TotalCount,
 		); err != nil {
 			return nil, err
 		}
@@ -1851,7 +1905,7 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ListCha
 }
 
 const listLatestGenerationChatMessages = `-- name: ListLatestGenerationChatMessages :many
-SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.content_hash, cm.generation, cm.created_at, cm.risk_analyzed_at FROM chat_messages cm
+SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.content_hash, cm.generation, cm.replayed, cm.created_at, cm.risk_analyzed_at FROM chat_messages cm
 WHERE cm.chat_id = $1
   AND (cm.project_id IS NULL OR cm.project_id = $2::uuid)
   AND cm.generation = (SELECT MAX(generation) FROM chat_messages WHERE chat_id = $1)
@@ -1903,6 +1957,7 @@ func (q *Queries) ListLatestGenerationChatMessages(ctx context.Context, arg List
 			&i.ToolOutcomeNotes,
 			&i.ContentHash,
 			&i.Generation,
+			&i.Replayed,
 			&i.CreatedAt,
 			&i.RiskAnalyzedAt,
 		); err != nil {
@@ -1919,7 +1974,7 @@ func (q *Queries) ListLatestGenerationChatMessages(ctx context.Context, arg List
 const listRiskWindowedMessages = `-- name: ListRiskWindowedMessages :many
 WITH ordered AS (
   SELECT
-    cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.content_hash, cm.generation, cm.created_at, cm.risk_analyzed_at,
+    cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.content_hash, cm.generation, cm.replayed, cm.created_at, cm.risk_analyzed_at,
     row_number() OVER (ORDER BY cm.seq) AS rn,
     count(*) OVER () AS total
   FROM chat_messages cm
@@ -1943,7 +1998,7 @@ risk_rns AS (
   )
 )
 SELECT
-  o.id, o.seq, o.chat_id, o.project_id, o.role, o.content, o.content_raw, o.content_asset_url, o.model, o.message_id, o.finish_reason, o.tool_calls, o.prompt_tokens, o.completion_tokens, o.total_tokens, o.storage_error, o.user_id, o.external_user_id, o.external_message_id, o.origin, o.user_agent, o.ip_address, o.source, o.tool_call_id, o.tool_urn, o.tool_outcome, o.tool_outcome_notes, o.content_hash, o.generation, o.created_at, o.risk_analyzed_at, o.rn, o.total,
+  o.id, o.seq, o.chat_id, o.project_id, o.role, o.content, o.content_raw, o.content_asset_url, o.model, o.message_id, o.finish_reason, o.tool_calls, o.prompt_tokens, o.completion_tokens, o.total_tokens, o.storage_error, o.user_id, o.external_user_id, o.external_message_id, o.origin, o.user_agent, o.ip_address, o.source, o.tool_call_id, o.tool_urn, o.tool_outcome, o.tool_outcome_notes, o.content_hash, o.generation, o.replayed, o.created_at, o.risk_analyzed_at, o.rn, o.total,
   EXISTS (SELECT 1 FROM risk_rns r WHERE r.rn = o.rn) AS is_risk
 FROM ordered o
 WHERE EXISTS (
@@ -1990,6 +2045,7 @@ type ListRiskWindowedMessagesRow struct {
 	ToolOutcomeNotes  pgtype.Text
 	ContentHash       []byte
 	Generation        int32
+	Replayed          bool
 	CreatedAt         pgtype.Timestamptz
 	RiskAnalyzedAt    pgtype.Timestamptz
 	Rn                int64
@@ -2050,6 +2106,7 @@ func (q *Queries) ListRiskWindowedMessages(ctx context.Context, arg ListRiskWind
 			&i.ToolOutcomeNotes,
 			&i.ContentHash,
 			&i.Generation,
+			&i.Replayed,
 			&i.CreatedAt,
 			&i.RiskAnalyzedAt,
 			&i.Rn,
@@ -2066,54 +2123,10 @@ func (q *Queries) ListRiskWindowedMessages(ctx context.Context, arg ListRiskWind
 	return items, nil
 }
 
-const listRiskyChatIDs = `-- name: ListRiskyChatIDs :many
-SELECT DISTINCT cm.chat_id
-FROM risk_results rr
-JOIN chat_messages cm ON cm.id = rr.chat_message_id
-JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
-WHERE rr.project_id = ANY($1::uuid[])
-  AND rr.found IS TRUE
-  AND rr.excluded_at IS NULL
-  AND rr.false_positive_at IS NULL
-  AND rr.created_at >= $2
-  AND rr.created_at < $3
-`
-
-type ListRiskyChatIDsParams struct {
-	ProjectIds []uuid.UUID
-	FromTime   pgtype.Timestamptz
-	ToTime     pgtype.Timestamptz
-}
-
-// Distinct chats with at least one active risk finding created in the window,
-// for the token-by-risk breakdown (telemetry.queryRiskTokens). Mirrors the
-// risk_counts semantics used by ListChats: a finding counts only while found,
-// not excluded, not marked false-positive, and its policy is enabled and not
-// deleted.
-func (q *Queries) ListRiskyChatIDs(ctx context.Context, arg ListRiskyChatIDsParams) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, listRiskyChatIDs, arg.ProjectIds, arg.FromTime, arg.ToTime)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []uuid.UUID
-	for rows.Next() {
-		var chat_id uuid.UUID
-		if err := rows.Scan(&chat_id); err != nil {
-			return nil, err
-		}
-		items = append(items, chat_id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listSearchWindowedMessages = `-- name: ListSearchWindowedMessages :many
 WITH ordered AS (
   SELECT
-    cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.content_hash, cm.generation, cm.created_at, cm.risk_analyzed_at,
+    cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.content_hash, cm.generation, cm.replayed, cm.created_at, cm.risk_analyzed_at,
     row_number() OVER (ORDER BY cm.seq) AS rn,
     count(*) OVER () AS total
   FROM chat_messages cm
@@ -2130,7 +2143,7 @@ match_rns AS (
   LIMIT $6::integer
 )
 SELECT
-  o.id, o.seq, o.chat_id, o.project_id, o.role, o.content, o.content_raw, o.content_asset_url, o.model, o.message_id, o.finish_reason, o.tool_calls, o.prompt_tokens, o.completion_tokens, o.total_tokens, o.storage_error, o.user_id, o.external_user_id, o.external_message_id, o.origin, o.user_agent, o.ip_address, o.source, o.tool_call_id, o.tool_urn, o.tool_outcome, o.tool_outcome_notes, o.content_hash, o.generation, o.created_at, o.risk_analyzed_at, o.rn, o.total,
+  o.id, o.seq, o.chat_id, o.project_id, o.role, o.content, o.content_raw, o.content_asset_url, o.model, o.message_id, o.finish_reason, o.tool_calls, o.prompt_tokens, o.completion_tokens, o.total_tokens, o.storage_error, o.user_id, o.external_user_id, o.external_message_id, o.origin, o.user_agent, o.ip_address, o.source, o.tool_call_id, o.tool_urn, o.tool_outcome, o.tool_outcome_notes, o.content_hash, o.generation, o.replayed, o.created_at, o.risk_analyzed_at, o.rn, o.total,
   EXISTS (SELECT 1 FROM match_rns m WHERE m.rn = o.rn) AS is_match
 FROM ordered o
 WHERE EXISTS (
@@ -2179,6 +2192,7 @@ type ListSearchWindowedMessagesRow struct {
 	ToolOutcomeNotes  pgtype.Text
 	ContentHash       []byte
 	Generation        int32
+	Replayed          bool
 	CreatedAt         pgtype.Timestamptz
 	RiskAnalyzedAt    pgtype.Timestamptz
 	Rn                int64
@@ -2242,6 +2256,7 @@ func (q *Queries) ListSearchWindowedMessages(ctx context.Context, arg ListSearch
 			&i.ToolOutcomeNotes,
 			&i.ContentHash,
 			&i.Generation,
+			&i.Replayed,
 			&i.CreatedAt,
 			&i.RiskAnalyzedAt,
 			&i.Rn,

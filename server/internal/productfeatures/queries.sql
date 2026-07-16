@@ -1,3 +1,9 @@
+-- name: LockOrganizationMetadata :one
+SELECT id
+FROM organization_metadata
+WHERE id = @organization_id
+FOR UPDATE;
+
 -- name: IsFeatureEnabled :one
 SELECT EXISTS (
         SELECT 1
@@ -17,7 +23,7 @@ SELECT EXISTS (
         WHERE organization_id = @organization_id
 ) AS has_sync;
 
--- name: EnableFeature :exec
+-- name: EnableFeature :execrows
 INSERT INTO organization_features (
     organization_id,
     feature_name

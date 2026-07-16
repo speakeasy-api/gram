@@ -1362,13 +1362,18 @@ type HookIngestEventRequestBody struct {
 
 // HookIngestDataRequestBody is used to define fields on request body types.
 type HookIngestDataRequestBody struct {
-	Prompt       *HookPromptDataRequestBody       `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
-	ToolCall     *HookToolCallDataRequestBody     `form:"tool_call,omitempty" json:"tool_call,omitempty" xml:"tool_call,omitempty"`
-	Mcp          *HookMCPDataRequestBody          `form:"mcp,omitempty" json:"mcp,omitempty" xml:"mcp,omitempty"`
+	Prompt   *HookPromptDataRequestBody   `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
+	ToolCall *HookToolCallDataRequestBody `form:"tool_call,omitempty" json:"tool_call,omitempty" xml:"tool_call,omitempty"`
+	Mcp      *HookMCPDataRequestBody      `form:"mcp,omitempty" json:"mcp,omitempty" xml:"mcp,omitempty"`
+	// Configured MCP server snapshot captured at session start or configuration
+	// change. Transport credentials must be redacted by the sender.
+	McpInventory []*HookMCPDataRequestBody        `form:"mcp_inventory,omitempty" json:"mcp_inventory,omitempty" xml:"mcp_inventory,omitempty"`
 	Usage        *HookUsageDataRequestBody        `form:"usage,omitempty" json:"usage,omitempty" xml:"usage,omitempty"`
 	Message      *HookMessageDataRequestBody      `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
 	Skill        *HookSkillDataRequestBody        `form:"skill,omitempty" json:"skill,omitempty" xml:"skill,omitempty"`
 	Notification *HookNotificationDataRequestBody `form:"notification,omitempty" json:"notification,omitempty" xml:"notification,omitempty"`
+	// Transcript-derived per-request MCP attribution (Claude Stop/SubagentStop).
+	McpAttribution []*HookMCPAttributionEntryRequestBody `form:"mcp_attribution,omitempty" json:"mcp_attribution,omitempty" xml:"mcp_attribution,omitempty"`
 }
 
 // HookPromptDataRequestBody is used to define fields on request body types.
@@ -1458,6 +1463,18 @@ type HookNotificationDataRequestBody struct {
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// Notification message.
 	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+}
+
+// HookMCPAttributionEntryRequestBody is used to define fields on request body
+// types.
+type HookMCPAttributionEntryRequestBody struct {
+	// Provider API request identifier (e.g. Claude's req_*) the attribution
+	// applies to.
+	RequestID *string `form:"request_id,omitempty" json:"request_id,omitempty" xml:"request_id,omitempty"`
+	// Unredacted MCP server name from the transcript.
+	McpServer *string `form:"mcp_server,omitempty" json:"mcp_server,omitempty" xml:"mcp_server,omitempty"`
+	// Unredacted MCP tool name from the transcript.
+	McpTool *string `form:"mcp_tool,omitempty" json:"mcp_tool,omitempty" xml:"mcp_tool,omitempty"`
 }
 
 // OTELResourceLogRequestBody is used to define fields on request body types.
@@ -2630,7 +2647,7 @@ func NewCodexPayload(body *CodexRequestBody, apikeyToken *string, projectSlugInp
 }
 
 // NewIngestPayload builds a hooks service ingest endpoint payload.
-func NewIngestPayload(body *IngestRequestBody, apikeyToken *string, projectSlugInput *string, idempotencyKey *string) *hooks.IngestPayload {
+func NewIngestPayload(body *IngestRequestBody, apikeyToken *string, projectSlugInput *string, idempotencyKey *string, replayed *bool) *hooks.IngestPayload {
 	v := &hooks.IngestPayload{
 		SchemaVersion: *body.SchemaVersion,
 		Raw:           body.Raw,
@@ -2646,6 +2663,7 @@ func NewIngestPayload(body *IngestRequestBody, apikeyToken *string, projectSlugI
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 	v.IdempotencyKey = idempotencyKey
+	v.Replayed = replayed
 
 	return v
 }
@@ -2809,6 +2827,13 @@ func ValidateHookIngestDataRequestBody(body *HookIngestDataRequestBody) (err err
 			err = goa.MergeErrors(err, err2)
 		}
 	}
+	for _, e := range body.McpAttribution {
+		if e != nil {
+			if err2 := ValidateHookMCPAttributionEntryRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	return
 }
 
@@ -2817,6 +2842,15 @@ func ValidateHookIngestDataRequestBody(body *HookIngestDataRequestBody) (err err
 func ValidateHookSkillDataRequestBody(body *HookSkillDataRequestBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	return
+}
+
+// ValidateHookMCPAttributionEntryRequestBody runs the validations defined on
+// HookMCPAttributionEntryRequestBody
+func ValidateHookMCPAttributionEntryRequestBody(body *HookMCPAttributionEntryRequestBody) (err error) {
+	if body.RequestID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("request_id", "body"))
 	}
 	return
 }

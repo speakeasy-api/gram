@@ -30,6 +30,7 @@ import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { SidebarNavSkeleton } from "./sidebar-nav-skeleton";
 import { useProductTier } from "@/hooks/useProductTier";
 import { useProjectNavRoutes } from "@/hooks/useProjectNavRoutes";
+import type { ProjectNavRoute } from "@/hooks/useProjectNavRoutes";
 import { AppRoute, useOrgRoutes, useRoutes } from "@/routes";
 import { useGetPeriodUsage } from "@gram/client/react-query/getPeriodUsage.js";
 import { cn, Icon, Stack } from "@speakeasy-api/moonshine";
@@ -45,12 +46,14 @@ import { Type } from "./ui/type";
 function ScopeGatedNavItem({
   item,
   scope,
+  resourceId,
 }: {
   item: AppRoute;
   scope: Scope | Scope[];
+  resourceId?: string;
 }) {
   return (
-    <RequireScope scope={scope} level="section">
+    <RequireScope scope={scope} resourceId={resourceId} level="section">
       <CollapsibleNavItem item={item} />
     </RequireScope>
   );
@@ -59,12 +62,14 @@ function ScopeGatedNavItem({
 function ScopeGatedTopLevelItem({
   item,
   scope,
+  resourceId,
 }: {
   item: AppRoute;
   scope: Scope | Scope[];
+  resourceId?: string;
 }) {
   return (
-    <RequireScope scope={scope} level="section">
+    <RequireScope scope={scope} resourceId={resourceId} level="section">
       <SidebarMenuItem>
         <NavButton
           title={item.title}
@@ -104,7 +109,7 @@ export function AppSidebar({
 
   const distributeActive = [
     routes.mcp,
-    routes.clis,
+    routes.skills,
     routes.plugins,
     routes.environments,
     ...(isAssistantsEnabled ? [routes.assistants] : []),
@@ -122,6 +127,7 @@ export function AppSidebar({
     routes.riskOverview,
     routes.policyCenter,
     routes.riskEvents,
+    routes.shadowMCP,
     routes.approvalRequests,
     routes.detectionRules,
   ].some((r) => r.active);
@@ -143,13 +149,19 @@ export function AppSidebar({
   const activeRoute = allNavRoutes.find((entry) => entry.route.active)?.route;
   // Single source of truth for per-page scopes, shared with the command palette
   // via useProjectNavRoutes so nav visibility and palette visibility can't drift.
-  const navScopes = useMemo(() => {
-    const map = new Map<string, Scope[]>();
-    for (const { route, scope } of allNavRoutes) map.set(route.url, scope);
+  const navAccess = useMemo(() => {
+    const map = new Map<string, ProjectNavRoute>();
+    for (const entry of allNavRoutes) map.set(entry.route.url, entry);
     return map;
   }, [allNavRoutes]);
-  const scopeFor = (route: AppRoute): Scope | Scope[] =>
-    navScopes.get(route.url) ?? "project:read";
+  const accessFor = (
+    route: AppRoute,
+  ): Pick<ProjectNavRoute, "scope" | "resourceId"> => {
+    const entry = navAccess.get(route.url);
+    return entry
+      ? { scope: entry.scope, resourceId: entry.resourceId }
+      : { scope: ["project:read"] };
+  };
   // In collapsed mode, sub-items are hidden — fall back to group highlight.
   // Top-level items (Home, Settings) have no activeGroup, so keep activeItem for those.
   const activeItem =
@@ -184,14 +196,14 @@ export function AppSidebar({
           {/* Home — top-level, no group */}
           <ScopeGatedTopLevelItem
             item={routes.home}
-            scope={scopeFor(routes.home)}
+            {...accessFor(routes.home)}
           />
 
           {/* Chat — top-level, no group; a full-page entry to the
                   Project Assistant alongside the docked composer */}
           <ScopeGatedTopLevelItem
             item={routes.chat}
-            scope={scopeFor(routes.chat)}
+            {...accessFor(routes.chat)}
           />
 
           {/* Divider: sets Home + Chat apart from the grouped nav below */}
@@ -207,23 +219,20 @@ export function AppSidebar({
           >
             <ScopeGatedNavItem
               item={routes.costs}
-              scope={scopeFor(routes.costs)}
+              {...accessFor(routes.costs)}
             />
             <ScopeGatedNavItem
               item={routes.insights}
-              scope={scopeFor(routes.insights)}
+              {...accessFor(routes.insights)}
             />
             <ScopeGatedNavItem
               item={routes.agentSessions}
-              scope={scopeFor(routes.agentSessions)}
+              {...accessFor(routes.agentSessions)}
             />
-            <ScopeGatedNavItem
-              item={routes.logs}
-              scope={scopeFor(routes.logs)}
-            />
+            <ScopeGatedNavItem item={routes.logs} {...accessFor(routes.logs)} />
             <ScopeGatedNavItem
               item={routes.employees}
-              scope={scopeFor(routes.employees)}
+              {...accessFor(routes.employees)}
             />
           </CollapsibleNavGroup>
 
@@ -236,23 +245,23 @@ export function AppSidebar({
           >
             <ScopeGatedNavItem
               item={routes.riskOverview}
-              scope={scopeFor(routes.riskOverview)}
+              {...accessFor(routes.riskOverview)}
             />
             <ScopeGatedNavItem
               item={routes.policyCenter}
-              scope={scopeFor(routes.policyCenter)}
+              {...accessFor(routes.policyCenter)}
             />
             <ScopeGatedNavItem
               item={routes.riskEvents}
-              scope={scopeFor(routes.riskEvents)}
+              {...accessFor(routes.riskEvents)}
             />
             <ScopeGatedNavItem
-              item={routes.approvalRequests}
-              scope={scopeFor(routes.approvalRequests)}
+              item={routes.shadowMCP}
+              {...accessFor(routes.shadowMCP)}
             />
             <ScopeGatedNavItem
               item={routes.detectionRules}
-              scope={scopeFor(routes.detectionRules)}
+              {...accessFor(routes.detectionRules)}
             />
           </CollapsibleNavGroup>
 
@@ -264,20 +273,20 @@ export function AppSidebar({
           >
             <ScopeGatedNavItem
               item={routes.sources}
-              scope={scopeFor(routes.sources)}
+              {...accessFor(routes.sources)}
             />
             <ScopeGatedNavItem
               item={routes.catalog}
-              scope={scopeFor(routes.catalog)}
+              {...accessFor(routes.catalog)}
             />
             <ScopeGatedNavItem
               item={routes.playground}
-              scope={scopeFor(routes.playground)}
+              {...accessFor(routes.playground)}
             />
             {isDeploymentsPageEnabled && (
               <ScopeGatedNavItem
                 item={routes.deployments}
-                scope={scopeFor(routes.deployments)}
+                {...accessFor(routes.deployments)}
               />
             )}
           </CollapsibleNavGroup>
@@ -288,31 +297,31 @@ export function AppSidebar({
             Icon={(p) => <Icon {...p} name="hammer" />}
             defaultHref={routes.mcp.href()}
           >
-            <ScopeGatedNavItem item={routes.mcp} scope={scopeFor(routes.mcp)} />
+            <ScopeGatedNavItem item={routes.mcp} {...accessFor(routes.mcp)} />
             {isAssistantsEnabled && (
               <ScopeGatedNavItem
                 item={routes.assistants}
-                scope={scopeFor(routes.assistants)}
+                {...accessFor(routes.assistants)}
               />
             )}
             <ScopeGatedNavItem
-              item={routes.clis}
-              scope={scopeFor(routes.clis)}
+              item={routes.skills}
+              {...accessFor(routes.skills)}
             />
             <ScopeGatedNavItem
               item={routes.plugins}
-              scope={scopeFor(routes.plugins)}
+              {...accessFor(routes.plugins)}
             />
             <ScopeGatedNavItem
               item={routes.environments}
-              scope={scopeFor(routes.environments)}
+              {...accessFor(routes.environments)}
             />
           </CollapsibleNavGroup>
 
           {/* Settings — top-level, no group */}
           <ScopeGatedTopLevelItem
             item={routes.settings}
-            scope={scopeFor(routes.settings)}
+            {...accessFor(routes.settings)}
           />
         </SidebarMenu>
       </NavGroupProvider>

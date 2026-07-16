@@ -336,6 +336,13 @@ const (
 	HookServerNameOverrideIDKey = attribute.Key("gram.hook.server_name_override_id")
 	HookHasPluginAuthKey        = attribute.Key("gram.hook.has_plugin_auth")
 	HookHostnameKey             = attribute.Key("gram.hook.hostname")
+	// HookReplayedKey is set (true) on telemetry rows for events redelivered
+	// from a device's offline spool after control-plane downtime, so
+	// dashboards can separate downtime backlog from live traffic. The row's
+	// timestamp is the event's original occurred_at when the envelope
+	// carried one; envelopes without it fall back to arrival time
+	// (canonicalEventTime), so a replayed row can also be now-stamped.
+	HookReplayedKey = attribute.Key("gram.hook.replayed")
 	// HookBlockReasonKey is set on hook telemetry entries when the Gram hook
 	// denied the tool call (e.g. shadow-MCP guard). Its presence (non-empty)
 	// signals the trace should render as "blocked" in dashboards.
@@ -435,6 +442,13 @@ const (
 
 	AIIntegrationConfigIDKey           = attribute.Key("gram.ai_integration.config_id")
 	AIIntegrationUsagePollNextAfterKey = attribute.Key("gram.ai_integration.usage_poll.next_after")
+
+	ResilienceBreakerStateKey           = attribute.Key("gram.circuit_breaker.state")
+	ResilienceBreakerPreviousStateKey   = attribute.Key("gram.circuit_breaker.previous_state")
+	ResilienceBreakerTransitionCauseKey = attribute.Key("gram.circuit_breaker.transition_cause")
+	ResilienceNamespaceKey              = attribute.Key("gram.resilience.namespace")
+	ResiliencePartitionKey              = attribute.Key("gram.resilience.partition")
+	ResilienceSubsetKey                 = attribute.Key("gram.resilience.subset")
 )
 
 const (
@@ -580,6 +594,9 @@ func SlogHookHasPluginAuth(v bool) slog.Attr      { return slog.Bool(string(Hook
 
 func HookHostname(v string) attribute.KeyValue { return HookHostnameKey.String(v) }
 func SlogHookHostname(v string) slog.Attr      { return slog.String(string(HookHostnameKey), v) }
+
+func HookReplayed(v bool) attribute.KeyValue { return HookReplayedKey.Bool(v) }
+func SlogHookReplayed(v bool) slog.Attr      { return slog.Bool(string(HookReplayedKey), v) }
 
 func ServerAddress(v string) attribute.KeyValue { return ServerAddressKey.String(v) }
 func SlogServerAddress(v string) slog.Attr      { return slog.String(string(ServerAddressKey), v) }
@@ -1792,4 +1809,38 @@ func AIIntegrationUsagePollNextAfter(v time.Time) attribute.KeyValue {
 
 func SlogAIIntegrationUsagePollNextAfter(v time.Time) slog.Attr {
 	return slog.Time(string(AIIntegrationUsagePollNextAfterKey), v)
+}
+
+func ResilienceBreakerState(v string) attribute.KeyValue { return ResilienceBreakerStateKey.String(v) }
+func SlogResilienceBreakerState(v string) slog.Attr {
+	return slog.String(string(ResilienceBreakerStateKey), v)
+}
+
+func ResilienceBreakerPreviousState(v string) attribute.KeyValue {
+	return ResilienceBreakerPreviousStateKey.String(v)
+}
+func SlogResilienceBreakerPreviousState(v string) slog.Attr {
+	return slog.String(string(ResilienceBreakerPreviousStateKey), v)
+}
+
+func ResilienceBreakerTransitionCause(v string) attribute.KeyValue {
+	return ResilienceBreakerTransitionCauseKey.String(v)
+}
+func SlogResilienceBreakerTransitionCause(v string) slog.Attr {
+	return slog.String(string(ResilienceBreakerTransitionCauseKey), v)
+}
+
+func ResilienceNamespace(v string) attribute.KeyValue { return ResilienceNamespaceKey.String(v) }
+func SlogResilienceNamespace(v string) slog.Attr {
+	return slog.String(string(ResilienceNamespaceKey), v)
+}
+
+func ResiliencePartition(v string) attribute.KeyValue { return ResiliencePartitionKey.String(v) }
+func SlogResiliencePartition(v string) slog.Attr {
+	return slog.String(string(ResiliencePartitionKey), v)
+}
+
+func ResilienceSubset(v string) attribute.KeyValue { return ResilienceSubsetKey.String(v) }
+func SlogResilienceSubset(v string) slog.Attr {
+	return slog.String(string(ResilienceSubsetKey), v)
 }

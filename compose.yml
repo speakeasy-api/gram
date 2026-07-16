@@ -99,8 +99,6 @@ services:
       CLICKHOUSE_USER: gram
       CLICKHOUSE_PASSWORD: gram
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
-    mem_limit: 2g
-    memswap_limit: 2g
     volumes:
       - clickhouse_data:/var/lib/clickhouse
     ulimits:
@@ -179,7 +177,7 @@ services:
 
   tunnel-agent:
     profiles: [tunnel]
-    image: golang:1.26.3-bookworm
+    image: golang:1.26.4-bookworm
     restart: unless-stopped
     network_mode: "service:tunnel-postgres-mcp"
     working_dir: /workspace
