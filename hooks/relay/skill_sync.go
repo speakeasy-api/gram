@@ -14,6 +14,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 	"unicode/utf8"
 
@@ -32,7 +33,9 @@ const (
 	skillBodyMax             = 8 << 10
 	skillReadonlyContextMax  = 24 << 10
 	skillInstallPrefix       = ".gram-install-"
-	skillRemovalPrefix       = ".gram-remove-"
+	skillUpdateStagedPrefix  = ".gram-update-new-"
+	skillUpdateBackupPrefix  = ".gram-update-old-"
+	skillRemovalBackupPrefix = ".gram-remove-old-"
 	skillContextOmittedSpace = 80
 )
 
@@ -42,12 +45,32 @@ type skillDeployment struct {
 	Project   string `json:"project"`
 }
 
+type skillUpdatePhase string
+
+const (
+	skillUpdatePlanned     skillUpdatePhase = "planned"
+	skillUpdateStaged      skillUpdatePhase = "staged"
+	skillUpdateBackupMoved skillUpdatePhase = "backup_moved"
+	skillUpdateInstalled   skillUpdatePhase = "installed"
+)
+
 type pendingSkillUpdate struct {
-	RawSHA256 string `json:"raw_sha256"`
+	Phase     skillUpdatePhase `json:"phase"`
+	NewSHA256 string           `json:"new_sha256"`
+	Staged    string           `json:"staged"`
+	Backup    string           `json:"backup"`
 }
 
+type skillRemovalPhase string
+
+const (
+	skillRemovalPlanned skillRemovalPhase = "planned"
+	skillRemovalMoved   skillRemovalPhase = "moved"
+)
+
 type pendingSkillRemoval struct {
-	Tombstone string `json:"tombstone"`
+	Phase  skillRemovalPhase `json:"phase"`
+	Backup string            `json:"backup"`
 }
 
 type managedSkill struct {
@@ -67,14 +90,6 @@ type pendingSkillInstall struct {
 	Temporary  string          `json:"temporary"`
 }
 
-type skillRemovalTombstone struct {
-	Deployment skillDeployment `json:"deployment"`
-	Name       string          `json:"name"`
-	Files      []string        `json:"files"`
-	RawSHA256  string          `json:"raw_sha256"`
-	Tombstone  string          `json:"tombstone"`
-}
-
 type managedSkillException struct {
 	Deployment skillDeployment `json:"deployment"`
 	Name       string          `json:"name"`
@@ -86,7 +101,6 @@ type skillManifest struct {
 	Version         int                     `json:"version"`
 	Entries         []managedSkill          `json:"entries"`
 	PendingInstalls []pendingSkillInstall   `json:"pending_installs,omitempty"`
-	Tombstones      []skillRemovalTombstone `json:"removal_tombstones,omitempty"`
 	Exceptions      []managedSkillException `json:"exceptions,omitempty"`
 }
 
@@ -173,14 +187,14 @@ func (r *Relay) syncSkills(ctx context.Context, skipContended bool) string {
 
 	result, status := r.requestSkillSync(ctx, c, snapshotForDeployment(manifest, deployment))
 	if status == http.StatusUnauthorized || status == http.StatusForbidden {
-		_, _ = removeAuthorizedSkills(ctx, root, manifestPath, deployment, &manifest)
+		_, _ = removeAuthorizedSkills(ctx, root, manifestPath, deployment, &manifest, r.skillSyncTransition)
 		return ""
 	}
 	if result == nil {
 		return ""
 	}
 
-	outcome := applySkillSyncResult(ctx, root, manifestPath, deployment, &manifest, result)
+	outcome := applySkillSyncResult(ctx, root, manifestPath, deployment, &manifest, result, r.skillSyncTransition)
 	if outcome.DurableChanged && !outcome.PersistenceError && ctx.Err() == nil {
 		_, _ = r.requestSkillSync(ctx, c, snapshotForDeployment(manifest, deployment))
 	}
@@ -276,7 +290,6 @@ func emptySkillManifest() skillManifest {
 		Version:         skillManifestVersion,
 		Entries:         []managedSkill{},
 		PendingInstalls: []pendingSkillInstall{},
-		Tombstones:      []skillRemovalTombstone{},
 		Exceptions:      []managedSkillException{},
 	}
 }
@@ -322,17 +335,27 @@ func validSkillManifest(manifest skillManifest) bool {
 		if !validOwnedSkill(entry.Name, entry.Files, entry.RawSHA256) || (entry.PendingUpdate != nil && entry.PendingRemove != nil) {
 			return false
 		}
-		if entry.PendingUpdate != nil && !validSkillHash(entry.PendingUpdate.RawSHA256) {
-			return false
-		}
-		if entry.PendingRemove != nil && !validStateName(entry.PendingRemove.Tombstone, skillRemovalPrefix) {
-			return false
-		}
-		if entry.PendingRemove != nil {
-			if _, exists := stateNames[entry.PendingRemove.Tombstone]; exists {
+		if entry.PendingUpdate != nil {
+			pending := entry.PendingUpdate
+			if !validSkillUpdatePhase(pending.Phase) || !validSkillHash(pending.NewSHA256) || !validStateName(pending.Staged, skillUpdateStagedPrefix) || !validStateName(pending.Backup, skillUpdateBackupPrefix) {
 				return false
 			}
-			stateNames[entry.PendingRemove.Tombstone] = struct{}{}
+			for _, stateName := range []string{pending.Staged, pending.Backup} {
+				if _, exists := stateNames[stateName]; exists {
+					return false
+				}
+				stateNames[stateName] = struct{}{}
+			}
+		}
+		if entry.PendingRemove != nil {
+			pending := entry.PendingRemove
+			if !validSkillRemovalPhase(pending.Phase) || !validStateName(pending.Backup, skillRemovalBackupPrefix) {
+				return false
+			}
+			if _, exists := stateNames[pending.Backup]; exists {
+				return false
+			}
+			stateNames[pending.Backup] = struct{}{}
 		}
 		if _, exists := names[entry.Name]; exists {
 			return false
@@ -352,15 +375,6 @@ func validSkillManifest(manifest skillManifest) bool {
 		}
 		stateNames[install.Temporary] = struct{}{}
 	}
-	for _, tombstone := range manifest.Tombstones {
-		if !validOwnedSkill(tombstone.Name, tombstone.Files, tombstone.RawSHA256) || !validStateName(tombstone.Tombstone, skillRemovalPrefix) {
-			return false
-		}
-		if _, exists := stateNames[tombstone.Tombstone]; exists {
-			return false
-		}
-		stateNames[tombstone.Tombstone] = struct{}{}
-	}
 	exceptions := map[string]struct{}{}
 	for _, exception := range manifest.Exceptions {
 		if !validSkillName(exception.Name) || (exception.Status != string(components.StatusConflictSkipped) && exception.Status != string(components.StatusFsReadonly)) {
@@ -373,6 +387,14 @@ func validSkillManifest(manifest skillManifest) bool {
 		exceptions[key] = struct{}{}
 	}
 	return true
+}
+
+func validSkillUpdatePhase(phase skillUpdatePhase) bool {
+	return phase == skillUpdatePlanned || phase == skillUpdateStaged || phase == skillUpdateBackupMoved || phase == skillUpdateInstalled
+}
+
+func validSkillRemovalPhase(phase skillRemovalPhase) bool {
+	return phase == skillRemovalPlanned || phase == skillRemovalMoved
 }
 
 func validOwnedSkill(name string, files []string, hash string) bool {
@@ -393,7 +415,6 @@ func writeSkillManifest(path string, manifest skillManifest) error {
 	sort.Slice(manifest.PendingInstalls, func(i, j int) bool {
 		return deploymentKey(manifest.PendingInstalls[i].Deployment)+"\x00"+manifest.PendingInstalls[i].Name < deploymentKey(manifest.PendingInstalls[j].Deployment)+"\x00"+manifest.PendingInstalls[j].Name
 	})
-	sort.Slice(manifest.Tombstones, func(i, j int) bool { return manifest.Tombstones[i].Tombstone < manifest.Tombstones[j].Tombstone })
 	sort.Slice(manifest.Exceptions, func(i, j int) bool {
 		return deploymentKey(manifest.Exceptions[i].Deployment)+"\x00"+manifest.Exceptions[i].Name < deploymentKey(manifest.Exceptions[j].Deployment)+"\x00"+manifest.Exceptions[j].Name
 	})
@@ -456,7 +477,7 @@ func recoverSkillManifest(root, manifestPath string, manifest *skillManifest) (b
 		case finalExact && !tempExists:
 			manifest.Entries = append(manifest.Entries, managedSkill{Deployment: install.Deployment, Name: install.Name, Files: slices.Clone(install.Files), RawSHA256: install.RawSHA256, PendingUpdate: nil, PendingRemove: nil})
 		case tempExact && !finalExists:
-			if err := renameDirNoReplace(tempPath, finalPath); err != nil {
+			if err := renameNoReplace(tempPath, finalPath); err != nil {
 				if pathExists(finalPath) {
 					setSkillException(manifest, install.Deployment, install.Name, string(components.StatusConflictSkipped), false)
 					break
@@ -477,21 +498,20 @@ func recoverSkillManifest(root, manifestPath string, manifest *skillManifest) (b
 		changed = true
 	}
 
+	if changed {
+		if err := writeSkillManifest(manifestPath, *manifest); err != nil {
+			return changed, &manifestPersistenceError{err: err}
+		}
+	}
+
 	for i := len(manifest.Entries) - 1; i >= 0; i-- {
 		entry := manifest.Entries[i]
 		if entry.PendingUpdate != nil {
-			diskHash, ok := managedSkillHash(root, entry)
-			switch {
-			case ok && diskHash == entry.PendingUpdate.RawSHA256:
-				entry.RawSHA256 = entry.PendingUpdate.RawSHA256
-				entry.PendingUpdate = nil
-				manifest.Entries[i] = entry
-			case ok && diskHash == entry.RawSHA256:
-				entry.PendingUpdate = nil
-				manifest.Entries[i] = entry
-			default:
-				manifest.Entries = append(manifest.Entries[:i], manifest.Entries[i+1:]...)
-				setSkillException(manifest, entry.Deployment, entry.Name, string(components.StatusConflictSkipped), true)
+			if _, err := resumePendingUpdate(root, manifestPath, manifest, i, nil, nil); err != nil {
+				var conflictErr *skillConflictError
+				if !errors.As(err, &conflictErr) {
+					return changed, err
+				}
 			}
 			changed = true
 			continue
@@ -499,75 +519,12 @@ func recoverSkillManifest(root, manifestPath string, manifest *skillManifest) (b
 		if entry.PendingRemove == nil {
 			continue
 		}
-		finalPath := filepath.Join(root, entry.Name)
-		tombPath := filepath.Join(root, entry.PendingRemove.Tombstone)
-		finalExists, finalExact := exactSkillDirectory(finalPath, entry.RawSHA256)
-		tombExists, tombExact := exactSkillDirectory(tombPath, entry.RawSHA256)
-		switch {
-		case finalExact && !tombExists:
-			if err := os.Rename(finalPath, tombPath); err != nil {
-				return changed, err
-			}
-			if err := syncDirectory(root); err != nil {
-				return changed, &manifestPersistenceError{err: &filesystemDurabilityError{err: err}}
-			}
-			manifest.Tombstones = append(manifest.Tombstones, tombstoneFromEntry(entry))
-		case !finalExists && tombExact:
-			manifest.Tombstones = append(manifest.Tombstones, tombstoneFromEntry(entry))
-		case !finalExists && !tombExists:
-		case finalExists:
-			if tombExact {
-				manifest.Tombstones = append(manifest.Tombstones, tombstoneFromEntry(entry))
-			}
-			setSkillException(manifest, entry.Deployment, entry.Name, string(components.StatusConflictSkipped), true)
-		default:
-			// An irregular tombstone is preserved and no longer owned.
+		if _, err := resumePendingRemoval(root, manifestPath, manifest, i, nil, nil); err != nil {
+			return changed, err
 		}
-		manifest.Entries = append(manifest.Entries[:i], manifest.Entries[i+1:]...)
 		changed = true
 	}
-	if changed {
-		if err := writeSkillManifest(manifestPath, *manifest); err != nil {
-			return changed, &manifestPersistenceError{err: err}
-		}
-	}
-
-	cleanupBefore := cloneManifest(*manifest)
-	cleanupChanged := false
-	for i := len(manifest.Tombstones) - 1; i >= 0; i-- {
-		tombstone := manifest.Tombstones[i]
-		path := filepath.Join(root, tombstone.Tombstone)
-		exists, exact := exactSkillDirectory(path, tombstone.RawSHA256)
-		empty := emptyRegularDirectory(path)
-		if exists && !exact && !empty {
-			continue
-		}
-		if exact {
-			if err := removeExactSkillDirectory(path, tombstone.RawSHA256); err != nil {
-				var durabilityErr *filesystemDurabilityError
-				if errors.As(err, &durabilityErr) {
-					return changed || cleanupChanged, &manifestPersistenceError{err: err}
-				}
-				continue
-			}
-		} else if empty {
-			if err := os.Remove(path); err != nil {
-				continue
-			}
-			if err := syncDirectory(root); err != nil {
-				return changed || cleanupChanged, &manifestPersistenceError{err: &filesystemDurabilityError{err: err}}
-			}
-		}
-		manifest.Tombstones = append(manifest.Tombstones[:i], manifest.Tombstones[i+1:]...)
-		cleanupChanged = true
-	}
-	if cleanupChanged {
-		if err := writeSkillManifest(manifestPath, *manifest); err != nil {
-			*manifest = cleanupBefore
-			return true, &manifestPersistenceError{err: err}
-		}
-	}
-	return changed || cleanupChanged, nil
+	return changed, nil
 }
 
 func reconcileOwnedSkills(root string, deployment skillDeployment, manifest *skillManifest) bool {
@@ -627,32 +584,28 @@ func managedSkillHash(root string, entry managedSkill) (string, bool) {
 }
 
 func exactSkillDirectory(path, hash string) (bool, bool) {
-	info, err := os.Lstat(path)
+	exists, exact, _ := exactSkillDirectoryState(path, hash)
+	return exists, exact
+}
+
+func exactSkillDirectoryState(path, hash string) (bool, bool, os.FileInfo) {
+	dirInfo, err := os.Lstat(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return false, false
+		return false, false, nil
 	}
-	if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
-		return true, false
+	if err != nil || dirInfo.Mode()&os.ModeSymlink != 0 || !dirInfo.IsDir() {
+		return true, false, nil
 	}
 	entries, err := os.ReadDir(path)
 	if err != nil || len(entries) != 1 || entries[0].Name() != "SKILL.md" || entries[0].Type()&os.ModeSymlink != 0 {
-		return true, false
+		return true, false, dirInfo
 	}
-	skillInfo, err := os.Lstat(filepath.Join(path, "SKILL.md"))
-	if err != nil || !skillInfo.Mode().IsRegular() {
-		return true, false
+	skillHash, skillRegular := regularSkillFileHash(filepath.Join(path, "SKILL.md"))
+	currentDirInfo, err := os.Lstat(path)
+	if err != nil || currentDirInfo.Mode()&os.ModeSymlink != 0 || !os.SameFile(dirInfo, currentDirInfo) {
+		return true, false, nil
 	}
-	body, err := os.ReadFile(filepath.Join(path, "SKILL.md"))
-	return true, err == nil && rawSkillHash(body) == hash
-}
-
-func emptyRegularDirectory(path string) bool {
-	info, err := os.Lstat(path)
-	if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
-		return false
-	}
-	entries, err := os.ReadDir(path)
-	return err == nil && len(entries) == 0
+	return true, skillRegular && skillHash == hash, currentDirInfo
 }
 
 func removeExactSkillDirectory(path, hash string) error {
@@ -758,7 +711,7 @@ func (r *Relay) syncSkillsWithoutManifest(ctx context.Context, c creds, root str
 	return skillSyncContext(skillSyncOutcome{InstalledNew: nil, Readonly: notices, DurableChanged: false, PersistenceError: true})
 }
 
-func applySkillSyncResult(ctx context.Context, root, manifestPath string, deployment skillDeployment, manifest *skillManifest, result *components.SyncSkillsResult) skillSyncOutcome {
+func applySkillSyncResult(ctx context.Context, root, manifestPath string, deployment skillDeployment, manifest *skillManifest, result *components.SyncSkillsResult, transition func(string, string)) skillSyncOutcome {
 	outcome := skillSyncOutcome{InstalledNew: []installedSkillNotice{}, Readonly: []readonlySkillNotice{}, DurableChanged: false, PersistenceError: false}
 	updates := make(map[string]components.SyncSkillUpdate, len(result.Updates))
 	invalidNames := map[string]struct{}{}
@@ -777,6 +730,7 @@ func applySkillSyncResult(ctx context.Context, root, manifestPath string, deploy
 	}
 
 	removals := slices.Compact(slices.Sorted(slices.Values(result.Removals)))
+	removalConflicts := make(map[string]struct{})
 	for _, name := range removals {
 		if ctx.Err() != nil {
 			break
@@ -791,7 +745,7 @@ func applySkillSyncResult(ctx context.Context, root, manifestPath string, deploy
 		if entryIndex < 0 {
 			continue
 		}
-		removed, err := removeManagedSkill(root, manifestPath, manifest, entryIndex)
+		removed, err := removeManagedSkill(root, manifestPath, manifest, entryIndex, transition)
 		if err != nil {
 			var persistenceErr *manifestPersistenceError
 			if errors.As(err, &persistenceErr) {
@@ -801,6 +755,9 @@ func applySkillSyncResult(ctx context.Context, root, manifestPath string, deploy
 			continue
 		}
 		outcome.DurableChanged = outcome.DurableChanged || removed
+		if permanentSkillConflict(*manifest, deployment, name) {
+			removalConflicts[name] = struct{}{}
+		}
 	}
 
 	names := make([]string, 0, len(updates))
@@ -837,6 +794,9 @@ func applySkillSyncResult(ctx context.Context, root, manifestPath string, deploy
 		exception := manifest.Exceptions[i]
 		if exception.Deployment == deployment {
 			if _, stillDesired := desired[exception.Name]; !stillDesired {
+				if _, removalConflict := removalConflicts[exception.Name]; removalConflict {
+					continue
+				}
 				manifest.Exceptions = append(manifest.Exceptions[:i], manifest.Exceptions[i+1:]...)
 				metadataChanged = true
 			}
@@ -883,7 +843,7 @@ func applySkillSyncResult(ctx context.Context, root, manifestPath string, deploy
 				continue
 			}
 		} else {
-			updated, err := updateManagedSkill(root, manifestPath, manifest, entryIndex, update)
+			updated, err := updateManagedSkill(root, manifestPath, manifest, entryIndex, update, transition)
 			if err == nil && updated {
 				outcome.DurableChanged = true
 				continue
@@ -941,7 +901,7 @@ func installManagedSkill(root, manifestPath string, deployment skillDeployment, 
 	}
 	cleanup = false
 	finalPath := filepath.Join(root, update.Name)
-	if err := renameDirNoReplace(tempPath, finalPath); err != nil {
+	if err := renameNoReplace(tempPath, finalPath); err != nil {
 		manifest.PendingInstalls = manifest.PendingInstalls[:len(manifest.PendingInstalls)-1]
 		if writeErr := writeSkillManifest(manifestPath, *manifest); writeErr != nil {
 			return false, &manifestPersistenceError{err: writeErr}
@@ -966,109 +926,573 @@ func installManagedSkill(root, manifestPath string, deployment skillDeployment, 
 	return true, nil
 }
 
-func updateManagedSkill(root, manifestPath string, manifest *skillManifest, entryIndex int, update components.SyncSkillUpdate) (bool, error) {
-	entry := manifest.Entries[entryIndex]
-	entry.PendingUpdate = &pendingSkillUpdate{RawSHA256: update.RawSha256}
-	manifest.Entries[entryIndex] = entry
-	if err := writeSkillManifest(manifestPath, *manifest); err != nil {
-		entry.PendingUpdate = nil
-		manifest.Entries[entryIndex] = entry
-		return false, &manifestPersistenceError{err: err}
-	}
-	dirInfo, err := os.Lstat(filepath.Join(root, entry.Name))
-	if err != nil || dirInfo.Mode()&os.ModeSymlink != 0 || !dirInfo.IsDir() {
-		return clearPendingUpdate(manifestPath, manifest, entryIndex, &skillConflictError{err: fmt.Errorf("managed skill directory changed")})
-	}
-	diskHash, intact := managedSkillHash(root, entry)
-	if !intact || diskHash != entry.RawSHA256 {
-		return clearPendingUpdate(manifestPath, manifest, entryIndex, &skillConflictError{err: fmt.Errorf("managed skill content changed")})
-	}
-	if err := atomicWriteFile(filepath.Join(root, entry.Files[0]), []byte(update.Content), 0o644); err != nil {
-		var durabilityErr *filesystemDurabilityError
-		if errors.As(err, &durabilityErr) {
-			return false, &manifestPersistenceError{err: err}
-		}
-		if !managedSkillPathRegular(root, entry) {
-			return clearPendingUpdate(manifestPath, manifest, entryIndex, &skillConflictError{err: err})
-		}
-		return clearPendingUpdate(manifestPath, manifest, entryIndex, err)
-	}
-	pendingState := cloneManifest(*manifest)
-	entry.RawSHA256 = update.RawSha256
-	entry.PendingUpdate = nil
-	manifest.Entries[entryIndex] = entry
-	clearSkillException(manifest, entry.Deployment, entry.Name)
-	if err := writeSkillManifest(manifestPath, *manifest); err != nil {
-		*manifest = pendingState
-		return false, &manifestPersistenceError{err: err}
-	}
-	return true, nil
+type skillUpdateIdentity struct {
+	final  os.FileInfo
+	staged os.FileInfo
 }
 
-func clearPendingUpdate(manifestPath string, manifest *skillManifest, entryIndex int, cause error) (bool, error) {
+func updateManagedSkill(root, manifestPath string, manifest *skillManifest, entryIndex int, update components.SyncSkillUpdate, transition func(string, string)) (bool, error) {
 	entry := manifest.Entries[entryIndex]
-	entry.PendingUpdate = nil
-	manifest.Entries[entryIndex] = entry
-	if err := writeSkillManifest(manifestPath, *manifest); err != nil {
-		return false, &manifestPersistenceError{err: err}
+	if entry.RawSHA256 == update.RawSha256 {
+		return false, nil
 	}
-	return false, cause
-}
-
-func removeManagedSkill(root, manifestPath string, manifest *skillManifest, entryIndex int) (bool, error) {
-	entry := manifest.Entries[entryIndex]
-	finalPath := filepath.Join(root, entry.Name)
-	_, exact := exactSkillDirectory(finalPath, entry.RawSHA256)
-	if !exact {
-		return false, fmt.Errorf("managed skill directory contains unowned content")
+	dir := filepath.Join(root, entry.Name)
+	finalPath := filepath.Join(root, entry.Files[0])
+	oldHash, finalInfo, finalExact := regularSkillFileState(finalPath)
+	if !finalExact || oldHash != entry.RawSHA256 {
+		return false, &skillConflictError{err: fmt.Errorf("managed skill changed before update")}
 	}
-	tombstoneName := skillRemovalPrefix + newIdempotencyToken()
-	tombstonePath := filepath.Join(root, tombstoneName)
-	if _, err := os.Lstat(tombstonePath); !errors.Is(err, os.ErrNotExist) {
-		return false, fmt.Errorf("removal tombstone already exists")
+	token := newIdempotencyToken()
+	pending := &pendingSkillUpdate{
+		Phase:     skillUpdatePlanned,
+		NewSHA256: update.RawSha256,
+		Staged:    skillUpdateStagedPrefix + token,
+		Backup:    skillUpdateBackupPrefix + token,
 	}
-	entry.PendingRemove = &pendingSkillRemoval{Tombstone: tombstoneName}
-	manifest.Entries[entryIndex] = entry
-	if err := writeSkillManifest(manifestPath, *manifest); err != nil {
-		entry.PendingRemove = nil
-		manifest.Entries[entryIndex] = entry
-		return false, &manifestPersistenceError{err: err}
+	stagedPath := filepath.Join(dir, pending.Staged)
+	backupPath := filepath.Join(dir, pending.Backup)
+	if pathExists(stagedPath) || pathExists(backupPath) {
+		return false, fmt.Errorf("update state path already exists")
 	}
-	if err := os.Rename(finalPath, tombstonePath); err != nil {
-		entry.PendingRemove = nil
-		manifest.Entries[entryIndex] = entry
-		if writeErr := writeSkillManifest(manifestPath, *manifest); writeErr != nil {
-			return false, &manifestPersistenceError{err: writeErr}
-		}
+	entry.PendingUpdate = pending
+	if err := persistSkillEntry(manifestPath, manifest, entryIndex, entry); err != nil {
 		return false, err
 	}
-	if err := syncDirectory(root); err != nil {
-		return false, &manifestPersistenceError{err: &filesystemDurabilityError{err: err}}
-	}
-	pendingState := cloneManifest(*manifest)
-	manifest.Entries = append(manifest.Entries[:entryIndex], manifest.Entries[entryIndex+1:]...)
-	clearSkillException(manifest, entry.Deployment, entry.Name)
-	manifest.Tombstones = append(manifest.Tombstones, tombstoneFromEntry(entry))
-	if err := writeSkillManifest(manifestPath, *manifest); err != nil {
-		*manifest = pendingState
+	if err := writeNewSkillFile(stagedPath, []byte(update.Content), 0o644); err != nil {
 		return false, &manifestPersistenceError{err: err}
 	}
-	if err := removeExactSkillDirectory(tombstonePath, entry.RawSHA256); err == nil {
-		cleanupState := cloneManifest(*manifest)
-		removeTombstone(manifest, tombstoneName)
-		if err := writeSkillManifest(manifestPath, *manifest); err != nil {
-			*manifest = cleanupState
+	stagedHash, stagedInfo, stagedExact := regularSkillFileState(stagedPath)
+	if !stagedExact || stagedHash != update.RawSha256 {
+		return false, &manifestPersistenceError{err: fmt.Errorf("staged update changed after write")}
+	}
+	entry = manifest.Entries[entryIndex]
+	entry = withSkillUpdatePhase(entry, skillUpdateStaged)
+	if err := persistSkillEntry(manifestPath, manifest, entryIndex, entry); err != nil {
+		return false, err
+	}
+	return resumePendingUpdate(root, manifestPath, manifest, entryIndex, &skillUpdateIdentity{final: finalInfo, staged: stagedInfo}, transition)
+}
+
+func resumePendingUpdate(root, manifestPath string, manifest *skillManifest, entryIndex int, identity *skillUpdateIdentity, transition func(string, string)) (bool, error) {
+	for {
+		entry := manifest.Entries[entryIndex]
+		pending := entry.PendingUpdate
+		if pending == nil {
+			return true, nil
 		}
-	} else {
-		var durabilityErr *filesystemDurabilityError
-		if errors.As(err, &durabilityErr) {
+		dir := filepath.Join(root, entry.Name)
+		finalPath := filepath.Join(root, entry.Files[0])
+		stagedPath := filepath.Join(dir, pending.Staged)
+		backupPath := filepath.Join(dir, pending.Backup)
+		finalExists, finalOld, finalInfo := exactSkillFile(finalPath, entry.RawSHA256)
+		_, finalNew, _ := exactSkillFile(finalPath, pending.NewSHA256)
+		stagedExists, stagedExact, stagedInfo := exactSkillFile(stagedPath, pending.NewSHA256)
+		backupExists, backupExact, _ := exactSkillFile(backupPath, entry.RawSHA256)
+		if identity == nil && (pending.Phase == skillUpdatePlanned || pending.Phase == skillUpdateStaged) {
+			if backupExists && !backupExact {
+				return false, irregularSkillStateError(backupPath)
+			}
+			if !backupExact {
+				if finalOld {
+					if stagedExists && !stagedExact {
+						return false, irregularSkillStateError(stagedPath)
+					}
+					if stagedExact {
+						if err := removeExactSkillFile(stagedPath, pending.NewSHA256); err != nil {
+							return false, &manifestPersistenceError{err: err}
+						}
+					}
+					if err := syncSkillStateDirectory(root, dir); err != nil {
+						return false, &manifestPersistenceError{err: &filesystemDurabilityError{err: err}}
+					}
+					entry.PendingUpdate = nil
+					if err := persistSkillEntry(manifestPath, manifest, entryIndex, entry); err != nil {
+						return false, err
+					}
+					return true, nil
+				}
+				return resolveUpdateConflict(root, manifestPath, manifest, entryIndex)
+			}
+			if finalExists {
+				return resolveUpdateConflict(root, manifestPath, manifest, entryIndex)
+			}
+			if stagedExists && !stagedExact {
+				return false, irregularSkillStateError(stagedPath)
+			}
+			if !stagedExact {
+				return resolveUpdateConflict(root, manifestPath, manifest, entryIndex)
+			}
+			entry = withSkillUpdatePhase(entry, skillUpdateBackupMoved)
+			if err := persistSkillEntry(manifestPath, manifest, entryIndex, entry); err != nil {
+				return false, err
+			}
+			continue
+		}
+
+		switch pending.Phase {
+		case skillUpdatePlanned:
+			if finalNew {
+				return resolveUpdateConflict(root, manifestPath, manifest, entryIndex)
+			}
+			if finalOld && stagedExact && !backupExists {
+				entry = withSkillUpdatePhase(entry, skillUpdateStaged)
+				if err := persistSkillEntry(manifestPath, manifest, entryIndex, entry); err != nil {
+					return false, err
+				}
+				continue
+			}
+			if finalOld && !stagedExists && !backupExists {
+				entry.PendingUpdate = nil
+				if err := persistSkillEntry(manifestPath, manifest, entryIndex, entry); err != nil {
+					return false, err
+				}
+				return true, nil
+			}
+			return resolveUpdateConflict(root, manifestPath, manifest, entryIndex)
+
+		case skillUpdateStaged:
+			if finalNew {
+				return resolveUpdateConflict(root, manifestPath, manifest, entryIndex)
+			}
+			if !finalExists && backupExact && stagedExact {
+				entry = withSkillUpdatePhase(entry, skillUpdateBackupMoved)
+				if err := persistSkillEntry(manifestPath, manifest, entryIndex, entry); err != nil {
+					return false, err
+				}
+				continue
+			}
+			if !finalOld || !stagedExact || backupExists || identity != nil && (!os.SameFile(identity.final, finalInfo) || !os.SameFile(identity.staged, stagedInfo)) {
+				return resolveUpdateConflict(root, manifestPath, manifest, entryIndex)
+			}
+			if transition != nil {
+				transition("update-before-backup", entry.Name)
+				finalExists, finalOld, finalInfo = exactSkillFile(finalPath, entry.RawSHA256)
+				_, finalNew, _ = exactSkillFile(finalPath, pending.NewSHA256)
+				stagedExists, stagedExact, stagedInfo = exactSkillFile(stagedPath, pending.NewSHA256)
+				if finalNew || !finalOld || !stagedExact || pathExists(backupPath) || identity != nil && (!os.SameFile(identity.final, finalInfo) || !os.SameFile(identity.staged, stagedInfo)) {
+					return resolveUpdateConflict(root, manifestPath, manifest, entryIndex)
+				}
+			}
+			if err := renameNoReplace(finalPath, backupPath); err != nil {
+				return false, &manifestPersistenceError{err: err}
+			}
+			if err := syncSkillStateDirectory(root, dir); err != nil {
+				return false, &manifestPersistenceError{err: &filesystemDurabilityError{err: err}}
+			}
+			backupHash, backupInfo, backupRegular := regularSkillFileState(backupPath)
+			if !backupRegular || backupHash != entry.RawSHA256 || !os.SameFile(finalInfo, backupInfo) {
+				return resolveUpdateConflict(root, manifestPath, manifest, entryIndex)
+			}
+			entry = withSkillUpdatePhase(entry, skillUpdateBackupMoved)
+			if err := persistSkillEntry(manifestPath, manifest, entryIndex, entry); err != nil {
+				return false, err
+			}
+
+		case skillUpdateBackupMoved:
+			if finalNew && !stagedExists && backupExact {
+				entry = withSkillUpdatePhase(entry, skillUpdateInstalled)
+				if err := persistSkillEntry(manifestPath, manifest, entryIndex, entry); err != nil {
+					return false, err
+				}
+				continue
+			}
+			if finalExists || !backupExact || !stagedExact {
+				return resolveUpdateConflict(root, manifestPath, manifest, entryIndex)
+			}
+			if transition != nil {
+				transition("update-before-install", entry.Name)
+				finalExists, _, _ = exactSkillFile(finalPath, pending.NewSHA256)
+				stagedExists, stagedExact, stagedInfo = exactSkillFile(stagedPath, pending.NewSHA256)
+				_, backupExact, _ = exactSkillFile(backupPath, entry.RawSHA256)
+				if finalExists || !backupExact || !stagedExact || identity != nil && !os.SameFile(identity.staged, stagedInfo) {
+					return resolveUpdateConflict(root, manifestPath, manifest, entryIndex)
+				}
+			}
+			if err := renameNoReplace(stagedPath, finalPath); err != nil {
+				return false, &manifestPersistenceError{err: err}
+			}
+			if err := syncSkillStateDirectory(root, dir); err != nil {
+				return false, &manifestPersistenceError{err: &filesystemDurabilityError{err: err}}
+			}
+			installedHash, installedInfo, installedRegular := regularSkillFileState(finalPath)
+			if !installedRegular || installedHash != pending.NewSHA256 || !os.SameFile(stagedInfo, installedInfo) {
+				return resolveUpdateConflict(root, manifestPath, manifest, entryIndex)
+			}
+			entry = withSkillUpdatePhase(entry, skillUpdateInstalled)
+			if err := persistSkillEntry(manifestPath, manifest, entryIndex, entry); err != nil {
+				return false, err
+			}
+
+		case skillUpdateInstalled:
+			if !finalNew || stagedExists || backupExists && !backupExact {
+				return resolveUpdateConflict(root, manifestPath, manifest, entryIndex)
+			}
+			if backupExact {
+				if err := removeExactSkillFile(backupPath, entry.RawSHA256); err != nil {
+					return false, &manifestPersistenceError{err: err}
+				}
+			}
+			if err := syncSkillStateDirectory(root, dir); err != nil {
+				return false, &manifestPersistenceError{err: &filesystemDurabilityError{err: err}}
+			}
+			if transition != nil {
+				transition("update-before-finalize", entry.Name)
+			}
+			finalHash, finalInfo, finalRegular := regularSkillFileState(finalPath)
+			if !finalRegular || finalHash != pending.NewSHA256 || identity != nil && !os.SameFile(identity.staged, finalInfo) {
+				return resolveUpdateConflict(root, manifestPath, manifest, entryIndex)
+			}
+			before := cloneManifest(*manifest)
+			entry.RawSHA256 = pending.NewSHA256
+			entry.PendingUpdate = nil
+			manifest.Entries[entryIndex] = entry
+			clearSkillException(manifest, entry.Deployment, entry.Name)
+			if err := writeSkillManifest(manifestPath, *manifest); err != nil {
+				*manifest = before
+				return false, &manifestPersistenceError{err: err}
+			}
+			return true, nil
+		}
+	}
+}
+
+func resolveUpdateConflict(root, manifestPath string, manifest *skillManifest, entryIndex int) (bool, error) {
+	entry := manifest.Entries[entryIndex]
+	pending := entry.PendingUpdate
+	dir := filepath.Join(root, entry.Name)
+	finalPath := filepath.Join(root, entry.Files[0])
+	stagedPath := filepath.Join(dir, pending.Staged)
+	backupPath := filepath.Join(dir, pending.Backup)
+	stagedExists, stagedExact, _ := exactSkillFile(stagedPath, pending.NewSHA256)
+	backupExists, backupExact, _ := exactSkillFile(backupPath, entry.RawSHA256)
+	if stagedExists && !stagedExact {
+		return false, irregularSkillStateError(stagedPath)
+	}
+	if backupExists && !backupExact {
+		return false, irregularSkillStateError(backupPath)
+	}
+	if !pathExists(finalPath) && backupExact {
+		if err := renameNoReplace(backupPath, finalPath); err != nil {
 			return false, &manifestPersistenceError{err: err}
 		}
+		if err := syncDirectory(dir); err != nil {
+			return false, &manifestPersistenceError{err: &filesystemDurabilityError{err: err}}
+		}
+	}
+	if stagedExact {
+		if err := removeExactSkillFile(stagedPath, pending.NewSHA256); err != nil {
+			return false, &manifestPersistenceError{err: err}
+		}
+	}
+	if backupExact && pathExists(backupPath) {
+		if err := removeExactSkillFile(backupPath, entry.RawSHA256); err != nil {
+			return false, &manifestPersistenceError{err: err}
+		}
+	}
+	if err := syncSkillStateDirectory(root, dir); err != nil {
+		return false, &manifestPersistenceError{err: &filesystemDurabilityError{err: err}}
+	}
+	if err := relinquishManagedSkill(manifestPath, manifest, entryIndex, true); err != nil {
+		return false, err
+	}
+	return true, &skillConflictError{err: fmt.Errorf("managed skill changed during update")}
+}
+
+func irregularSkillStateError(path string) error {
+	return &manifestPersistenceError{err: fmt.Errorf("transaction state path is not exact: %s", filepath.Base(path))}
+}
+
+func exactSkillFile(path, hash string) (bool, bool, os.FileInfo) {
+	actual, info, regular := regularSkillFileState(path)
+	if regular {
+		return true, actual == hash, info
+	}
+	return pathExists(path), false, nil
+}
+
+func persistSkillEntry(manifestPath string, manifest *skillManifest, entryIndex int, entry managedSkill) error {
+	previous := cloneManifest(*manifest)
+	manifest.Entries[entryIndex] = entry
+	if err := writeSkillManifest(manifestPath, *manifest); err != nil {
+		*manifest = previous
+		return &manifestPersistenceError{err: err}
+	}
+	return nil
+}
+
+func withSkillUpdatePhase(entry managedSkill, phase skillUpdatePhase) managedSkill {
+	pending := *entry.PendingUpdate
+	pending.Phase = phase
+	entry.PendingUpdate = &pending
+	return entry
+}
+
+func withSkillRemovalPhase(entry managedSkill, phase skillRemovalPhase) managedSkill {
+	pending := *entry.PendingRemove
+	pending.Phase = phase
+	entry.PendingRemove = &pending
+	return entry
+}
+
+func writeNewSkillFile(path string, body []byte, mode os.FileMode) error {
+	dir := filepath.Dir(path)
+	info, err := os.Lstat(dir)
+	if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+		return fmt.Errorf("write directory is irregular")
+	}
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, mode)
+	if err != nil {
+		return err
+	}
+	if _, err := file.Write(body); err != nil {
+		_ = file.Close()
+		return err
+	}
+	if err := file.Sync(); err != nil {
+		_ = file.Close()
+		return err
+	}
+	if err := file.Close(); err != nil {
+		return err
+	}
+	if err := syncDirectory(dir); err != nil {
+		return &filesystemDurabilityError{err: err}
+	}
+	return nil
+}
+
+func regularSkillFileHash(path string) (string, bool) {
+	hash, _, ok := regularSkillFileState(path)
+	return hash, ok
+}
+
+func regularSkillFileState(path string) (string, os.FileInfo, bool) {
+	pathInfo, err := os.Lstat(path)
+	if err != nil || pathInfo.Mode()&os.ModeSymlink != 0 || !pathInfo.Mode().IsRegular() {
+		return "", nil, false
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return "", nil, false
+	}
+	defer func() { _ = file.Close() }()
+	openInfo, err := file.Stat()
+	if err != nil || !openInfo.Mode().IsRegular() || !os.SameFile(pathInfo, openInfo) {
+		return "", nil, false
+	}
+	body, err := io.ReadAll(file)
+	if err != nil {
+		return "", nil, false
+	}
+	currentInfo, err := os.Lstat(path)
+	if err != nil || currentInfo.Mode()&os.ModeSymlink != 0 || !os.SameFile(openInfo, currentInfo) {
+		return "", nil, false
+	}
+	return rawSkillHash(body), openInfo, true
+}
+
+func removeExactSkillFile(path, hash string) error {
+	actual, ok := regularSkillFileHash(path)
+	if !ok || actual != hash {
+		return fmt.Errorf("file is not exactly owned")
+	}
+	if err := os.Remove(path); err != nil {
+		return err
+	}
+	if err := syncDirectory(filepath.Dir(path)); err != nil {
+		return &filesystemDurabilityError{err: err}
+	}
+	return nil
+}
+
+type skillRemovalIdentity struct {
+	dir   os.FileInfo
+	final os.FileInfo
+}
+
+func removeManagedSkill(root, manifestPath string, manifest *skillManifest, entryIndex int, transition func(string, string)) (bool, error) {
+	entry := manifest.Entries[entryIndex]
+	dir := filepath.Join(root, entry.Name)
+	_, exact, dirInfo := exactSkillDirectoryState(dir, entry.RawSHA256)
+	finalHash, finalInfo, finalRegular := regularSkillFileState(filepath.Join(root, entry.Files[0]))
+	if !exact || !finalRegular || finalHash != entry.RawSHA256 {
+		return resolveRemovalConflict(root, manifestPath, manifest, entryIndex)
+	}
+	backup := skillRemovalBackupPrefix + newIdempotencyToken()
+	if pathExists(filepath.Join(dir, backup)) {
+		return false, fmt.Errorf("removal backup already exists")
+	}
+	entry.PendingRemove = &pendingSkillRemoval{Phase: skillRemovalPlanned, Backup: backup}
+	if err := persistSkillEntry(manifestPath, manifest, entryIndex, entry); err != nil {
+		return false, err
+	}
+	return resumePendingRemoval(root, manifestPath, manifest, entryIndex, &skillRemovalIdentity{dir: dirInfo, final: finalInfo}, transition)
+}
+
+func resumePendingRemoval(root, manifestPath string, manifest *skillManifest, entryIndex int, identity *skillRemovalIdentity, transition func(string, string)) (bool, error) {
+	for {
+		entry := manifest.Entries[entryIndex]
+		pending := entry.PendingRemove
+		dir := filepath.Join(root, entry.Name)
+		finalPath := filepath.Join(root, entry.Files[0])
+		backupPath := filepath.Join(dir, pending.Backup)
+		finalExists, finalExact, finalInfo := exactSkillFile(finalPath, entry.RawSHA256)
+		backupExists, backupExact, _ := exactSkillFile(backupPath, entry.RawSHA256)
+		if identity == nil && pending.Phase == skillRemovalPlanned {
+			if backupExists && !backupExact {
+				return false, irregularSkillStateError(backupPath)
+			}
+			if !backupExact {
+				entry.PendingRemove = nil
+				if err := persistSkillEntry(manifestPath, manifest, entryIndex, entry); err != nil {
+					return false, err
+				}
+				return true, nil
+			}
+			if finalExists {
+				return resolveRemovalConflict(root, manifestPath, manifest, entryIndex)
+			}
+			entry = withSkillRemovalPhase(entry, skillRemovalMoved)
+			if err := persistSkillEntry(manifestPath, manifest, entryIndex, entry); err != nil {
+				return false, err
+			}
+			continue
+		}
+
+		switch pending.Phase {
+		case skillRemovalPlanned:
+			if !finalExists && backupExact {
+				entry = withSkillRemovalPhase(entry, skillRemovalMoved)
+				if err := persistSkillEntry(manifestPath, manifest, entryIndex, entry); err != nil {
+					return false, err
+				}
+				continue
+			}
+			dirInfo, err := os.Lstat(dir)
+			if err != nil || dirInfo.Mode()&os.ModeSymlink != 0 || !dirInfo.IsDir() || !finalExact || backupExists || identity != nil && (!os.SameFile(identity.dir, dirInfo) || !os.SameFile(identity.final, finalInfo)) {
+				return resolveRemovalConflict(root, manifestPath, manifest, entryIndex)
+			}
+			if transition != nil {
+				transition("remove-before-move", entry.Name)
+				dirInfo, err = os.Lstat(dir)
+				finalExists, finalExact, finalInfo = exactSkillFile(finalPath, entry.RawSHA256)
+				if err != nil || dirInfo.Mode()&os.ModeSymlink != 0 || !dirInfo.IsDir() || !finalExact || pathExists(backupPath) || identity != nil && (!os.SameFile(identity.dir, dirInfo) || !os.SameFile(identity.final, finalInfo)) {
+					return resolveRemovalConflict(root, manifestPath, manifest, entryIndex)
+				}
+			}
+			if err := renameNoReplace(finalPath, backupPath); err != nil {
+				return false, &manifestPersistenceError{err: err}
+			}
+			if err := syncSkillStateDirectory(root, dir); err != nil {
+				return false, &manifestPersistenceError{err: &filesystemDurabilityError{err: err}}
+			}
+			backupHash, backupInfo, backupRegular := regularSkillFileState(backupPath)
+			if !backupRegular || backupHash != entry.RawSHA256 || !os.SameFile(finalInfo, backupInfo) {
+				return resolveRemovalConflict(root, manifestPath, manifest, entryIndex)
+			}
+			entry = withSkillRemovalPhase(entry, skillRemovalMoved)
+			if err := persistSkillEntry(manifestPath, manifest, entryIndex, entry); err != nil {
+				return false, err
+			}
+
+		case skillRemovalMoved:
+			if transition != nil {
+				transition("remove-after-move", entry.Name)
+				finalExists, _, _ = exactSkillFile(finalPath, entry.RawSHA256)
+				backupExists, backupExact, _ = exactSkillFile(backupPath, entry.RawSHA256)
+			}
+			if backupExists && !backupExact {
+				return resolveRemovalConflict(root, manifestPath, manifest, entryIndex)
+			}
+			if backupExact {
+				if err := removeExactSkillFile(backupPath, entry.RawSHA256); err != nil {
+					return false, &manifestPersistenceError{err: err}
+				}
+			}
+			if err := syncSkillStateDirectory(root, dir); err != nil {
+				return false, &manifestPersistenceError{err: &filesystemDurabilityError{err: err}}
+			}
+			if finalExists {
+				return resolveRemovalConflict(root, manifestPath, manifest, entryIndex)
+			}
+			if info, err := os.Lstat(dir); err == nil && info.Mode()&os.ModeSymlink == 0 && info.IsDir() {
+				if err := os.Remove(dir); err != nil && !errors.Is(err, os.ErrNotExist) && !errors.Is(err, syscall.ENOTEMPTY) && !errors.Is(err, syscall.EEXIST) {
+					return false, &manifestPersistenceError{err: err}
+				}
+			} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+				return false, &manifestPersistenceError{err: err}
+			}
+			if err := syncDirectory(root); err != nil {
+				return false, &manifestPersistenceError{err: &filesystemDurabilityError{err: err}}
+			}
+			if transition != nil {
+				transition("remove-after-directory", entry.Name)
+			}
+			if err := relinquishManagedSkill(manifestPath, manifest, entryIndex, false); err != nil {
+				return false, err
+			}
+			return true, nil
+		}
+	}
+}
+
+func resolveRemovalConflict(root, manifestPath string, manifest *skillManifest, entryIndex int) (bool, error) {
+	entry := manifest.Entries[entryIndex]
+	if entry.PendingRemove != nil {
+		dir := filepath.Join(root, entry.Name)
+		finalPath := filepath.Join(root, entry.Files[0])
+		backupPath := filepath.Join(dir, entry.PendingRemove.Backup)
+		backupExists, backupExact, _ := exactSkillFile(backupPath, entry.RawSHA256)
+		if backupExists && !backupExact {
+			return false, irregularSkillStateError(backupPath)
+		}
+		if !pathExists(finalPath) && backupExact {
+			if err := renameNoReplace(backupPath, finalPath); err != nil {
+				return false, &manifestPersistenceError{err: err}
+			}
+			if err := syncDirectory(dir); err != nil {
+				return false, &manifestPersistenceError{err: &filesystemDurabilityError{err: err}}
+			}
+		}
+		if backupExact && pathExists(backupPath) {
+			if err := removeExactSkillFile(backupPath, entry.RawSHA256); err != nil {
+				return false, &manifestPersistenceError{err: err}
+			}
+		}
+		if err := syncSkillStateDirectory(root, dir); err != nil {
+			return false, &manifestPersistenceError{err: &filesystemDurabilityError{err: err}}
+		}
+	}
+	if err := relinquishManagedSkill(manifestPath, manifest, entryIndex, true); err != nil {
+		return false, err
 	}
 	return true, nil
 }
 
-func removeAuthorizedSkills(ctx context.Context, root, manifestPath string, deployment skillDeployment, manifest *skillManifest) (bool, error) {
+func relinquishManagedSkill(manifestPath string, manifest *skillManifest, entryIndex int, conflict bool) error {
+	before := cloneManifest(*manifest)
+	entry := manifest.Entries[entryIndex]
+	manifest.Entries = append(manifest.Entries[:entryIndex], manifest.Entries[entryIndex+1:]...)
+	if conflict {
+		setSkillException(manifest, entry.Deployment, entry.Name, string(components.StatusConflictSkipped), true)
+	} else {
+		clearSkillException(manifest, entry.Deployment, entry.Name)
+	}
+	if err := writeSkillManifest(manifestPath, *manifest); err != nil {
+		*manifest = before
+		return &manifestPersistenceError{err: err}
+	}
+	return nil
+}
+
+func syncSkillStateDirectory(root, dir string) error {
+	if pathExists(dir) {
+		return syncDirectory(dir)
+	}
+	return syncDirectory(root)
+}
+
+func removeAuthorizedSkills(ctx context.Context, root, manifestPath string, deployment skillDeployment, manifest *skillManifest, transition func(string, string)) (bool, error) {
 	changed := false
 	names := make([]string, 0)
 	for _, entry := range manifest.Entries {
@@ -1084,7 +1508,7 @@ func removeAuthorizedSkills(ctx context.Context, root, manifestPath string, depl
 		if entryIndex < 0 {
 			continue
 		}
-		removed, err := removeManagedSkill(root, manifestPath, manifest, entryIndex)
+		removed, err := removeManagedSkill(root, manifestPath, manifest, entryIndex, transition)
 		if err != nil {
 			var persistenceErr *manifestPersistenceError
 			if errors.As(err, &persistenceErr) {
@@ -1097,23 +1521,10 @@ func removeAuthorizedSkills(ctx context.Context, root, manifestPath string, depl
 	return changed, nil
 }
 
-func tombstoneFromEntry(entry managedSkill) skillRemovalTombstone {
-	return skillRemovalTombstone{Deployment: entry.Deployment, Name: entry.Name, Files: slices.Clone(entry.Files), RawSHA256: entry.RawSHA256, Tombstone: entry.PendingRemove.Tombstone}
-}
-
 func removePendingInstall(manifest *skillManifest, deployment skillDeployment, name string) {
 	for i, install := range manifest.PendingInstalls {
 		if install.Deployment == deployment && install.Name == name {
 			manifest.PendingInstalls = append(manifest.PendingInstalls[:i], manifest.PendingInstalls[i+1:]...)
-			return
-		}
-	}
-}
-
-func removeTombstone(manifest *skillManifest, name string) {
-	for i, tombstone := range manifest.Tombstones {
-		if tombstone.Tombstone == name {
-			manifest.Tombstones = append(manifest.Tombstones[:i], manifest.Tombstones[i+1:]...)
 			return
 		}
 	}
@@ -1304,7 +1715,6 @@ func cloneManifest(manifest skillManifest) skillManifest {
 		Version:         manifest.Version,
 		Entries:         entries,
 		PendingInstalls: slices.Clone(manifest.PendingInstalls),
-		Tombstones:      slices.Clone(manifest.Tombstones),
 		Exceptions:      slices.Clone(manifest.Exceptions),
 	}
 }
@@ -1323,13 +1733,4 @@ func truncateUTF8(value string, maxBytes int) string {
 func pathExists(path string) bool {
 	_, err := os.Lstat(path)
 	return err == nil || !errors.Is(err, os.ErrNotExist)
-}
-
-func managedSkillPathRegular(root string, entry managedSkill) bool {
-	dirInfo, err := os.Lstat(filepath.Join(root, entry.Name))
-	if err != nil || dirInfo.Mode()&os.ModeSymlink != 0 || !dirInfo.IsDir() {
-		return false
-	}
-	fileInfo, err := os.Lstat(filepath.Join(root, entry.Files[0]))
-	return err == nil && fileInfo.Mode()&os.ModeSymlink == 0 && fileInfo.Mode().IsRegular()
 }

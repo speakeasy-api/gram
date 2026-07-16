@@ -168,14 +168,14 @@ func TestSkillSyncDestinationAppearingDuringRequestIsConflict(t *testing.T) {
 	require.Equal(t, components.StatusConflictSkipped, requests[1].Exceptions[0].Status)
 }
 
-func TestRenameDirNoReplacePreservesEmptyDestination(t *testing.T) {
+func TestRenameNoReplacePreservesEmptyDestination(t *testing.T) {
 	root := t.TempDir()
 	oldPath := filepath.Join(root, "staged")
 	newPath := filepath.Join(root, "destination")
 	require.NoError(t, os.Mkdir(oldPath, 0o755))
 	require.NoError(t, os.Mkdir(newPath, 0o755))
 
-	require.Error(t, renameDirNoReplace(oldPath, newPath))
+	require.Error(t, renameNoReplace(oldPath, newPath))
 	oldInfo, err := os.Lstat(oldPath)
 	require.NoError(t, err)
 	require.True(t, oldInfo.IsDir())
@@ -199,7 +199,7 @@ func TestSkillSyncPreservesOtherDeploymentOwnership(t *testing.T) {
 		RawSHA256:     rawSkillHash([]byte("first-deployment")),
 		PendingUpdate: nil,
 		PendingRemove: nil,
-	}}, PendingInstalls: []pendingSkillInstall{}, Tombstones: []skillRemovalTombstone{}, Exceptions: []managedSkillException{}}
+	}}, PendingInstalls: []pendingSkillInstall{}, Exceptions: []managedSkillException{}}
 	require.NoError(t, writeSkillManifest(filepath.Join(root, skillManifestFilename), manifest))
 
 	require.Empty(t, relay.syncSkills(t.Context(), false))
@@ -237,6 +237,11 @@ func TestSkillSyncDropsMissingOtherDeploymentOwnership(t *testing.T) {
 	body, err := os.ReadFile(filepath.Join(root, "shared-name", "SKILL.md"))
 	require.NoError(t, err)
 	require.Equal(t, "current-deployment", string(body))
+	stored, err := readSkillManifest(filepath.Join(root, skillManifestFilename))
+	require.NoError(t, err)
+	require.Len(t, stored.Entries, 1)
+	require.Equal(t, "shared-name", stored.Entries[0].Name)
+	require.Equal(t, skillDeployment{ServerURL: server.URL, Org: "org", Project: "project"}, stored.Entries[0].Deployment)
 }
 
 func TestSkillSyncModifiedManagedSkillBecomesPermanentConflict(t *testing.T) {
@@ -296,6 +301,120 @@ func TestSkillSyncOwnedPathChangingDuringRequestIsConflict(t *testing.T) {
 	requests, _ := server.captured()
 	require.Len(t, requests, 4)
 	require.Equal(t, components.StatusConflictSkipped, requests[3].Exceptions[0].Status)
+}
+
+func TestSkillSyncUpdateRejectsSameHashReplacementBeforeBackup(t *testing.T) {
+	phase := "install"
+	server := newSkillSyncServer(t, func(_ int, _ components.SyncSkillsRequestBody) (int, components.SyncSkillsResult) {
+		content := "old"
+		if phase == "update" {
+			content = "new"
+		}
+		return http.StatusOK, components.SyncSkillsResult{Removals: []string{}, Updates: []components.SyncSkillUpdate{skillUpdate("raced-update", content, "")}}
+	})
+	relay, root := configuredSkillRelay(t, server.URL)
+	require.NotEmpty(t, relay.syncSkills(t.Context(), false))
+	phase = "update"
+	var replacementInfo os.FileInfo
+	relay.skillSyncTransition = func(transition, name string) {
+		if transition != "update-before-backup" || name != "raced-update" {
+			return
+		}
+		manifest, err := readSkillManifest(filepath.Join(root, skillManifestFilename))
+		require.NoError(t, err)
+		require.Equal(t, skillUpdateStaged, manifest.Entries[0].PendingUpdate.Phase)
+		path := filepath.Join(root, name, "SKILL.md")
+		require.NoError(t, os.Remove(path))
+		require.NoError(t, os.WriteFile(path, []byte("new"), 0o644))
+		replacementInfo, err = os.Lstat(path)
+		require.NoError(t, err)
+	}
+
+	require.Empty(t, relay.syncSkills(t.Context(), false))
+	path := filepath.Join(root, "raced-update", "SKILL.md")
+	body, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, "new", string(body))
+	currentInfo, err := os.Lstat(path)
+	require.NoError(t, err)
+	require.True(t, os.SameFile(replacementInfo, currentInfo))
+	manifest, err := readSkillManifest(filepath.Join(root, skillManifestFilename))
+	require.NoError(t, err)
+	require.Empty(t, manifest.Entries)
+	require.Len(t, manifest.Exceptions, 1)
+	require.True(t, manifest.Exceptions[0].Permanent)
+}
+
+func TestSkillSyncUpdatePreservesReplacementBeforeInstall(t *testing.T) {
+	phase := "install"
+	server := newSkillSyncServer(t, func(_ int, _ components.SyncSkillsRequestBody) (int, components.SyncSkillsResult) {
+		content := "old"
+		if phase == "update" {
+			content = "new"
+		}
+		return http.StatusOK, components.SyncSkillsResult{Removals: []string{}, Updates: []components.SyncSkillUpdate{skillUpdate("raced-gap", content, "")}}
+	})
+	relay, root := configuredSkillRelay(t, server.URL)
+	require.NotEmpty(t, relay.syncSkills(t.Context(), false))
+	phase = "update"
+	relay.skillSyncTransition = func(transition, name string) {
+		if transition == "update-before-install" && name == "raced-gap" {
+			manifest, err := readSkillManifest(filepath.Join(root, skillManifestFilename))
+			require.NoError(t, err)
+			require.Equal(t, skillUpdateBackupMoved, manifest.Entries[0].PendingUpdate.Phase)
+			require.NoError(t, os.WriteFile(filepath.Join(root, name, "SKILL.md"), []byte("user-replacement"), 0o644))
+		}
+	}
+
+	require.Empty(t, relay.syncSkills(t.Context(), false))
+	body, err := os.ReadFile(filepath.Join(root, "raced-gap", "SKILL.md"))
+	require.NoError(t, err)
+	require.Equal(t, "user-replacement", string(body))
+	manifest, err := readSkillManifest(filepath.Join(root, skillManifestFilename))
+	require.NoError(t, err)
+	require.Empty(t, manifest.Entries)
+	require.Len(t, manifest.Exceptions, 1)
+	require.True(t, manifest.Exceptions[0].Permanent)
+}
+
+func TestSkillSyncUpdatePreservesReplacementBeforeFinalize(t *testing.T) {
+	phase := "install"
+	server := newSkillSyncServer(t, func(_ int, _ components.SyncSkillsRequestBody) (int, components.SyncSkillsResult) {
+		content := "old"
+		if phase == "update" {
+			content = "new"
+		}
+		return http.StatusOK, components.SyncSkillsResult{Removals: []string{}, Updates: []components.SyncSkillUpdate{skillUpdate("raced-finalize", content, "")}}
+	})
+	relay, root := configuredSkillRelay(t, server.URL)
+	require.NotEmpty(t, relay.syncSkills(t.Context(), false))
+	phase = "update"
+	var replacementInfo os.FileInfo
+	relay.skillSyncTransition = func(transition, name string) {
+		if transition != "update-before-finalize" || name != "raced-finalize" {
+			return
+		}
+		path := filepath.Join(root, name, "SKILL.md")
+		require.NoError(t, os.Remove(path))
+		require.NoError(t, os.WriteFile(path, []byte("new"), 0o644))
+		var err error
+		replacementInfo, err = os.Lstat(path)
+		require.NoError(t, err)
+	}
+
+	require.Empty(t, relay.syncSkills(t.Context(), false))
+	path := filepath.Join(root, "raced-finalize", "SKILL.md")
+	body, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, "new", string(body))
+	currentInfo, err := os.Lstat(path)
+	require.NoError(t, err)
+	require.True(t, os.SameFile(replacementInfo, currentInfo))
+	manifest, err := readSkillManifest(filepath.Join(root, skillManifestFilename))
+	require.NoError(t, err)
+	require.Empty(t, manifest.Entries)
+	require.Len(t, manifest.Exceptions, 1)
+	require.True(t, manifest.Exceptions[0].Permanent)
 }
 
 func TestSkillSyncRejectsSymlinkAndUnsafeNames(t *testing.T) {
@@ -372,82 +491,305 @@ func TestSkillManifestRejectsTrailingData(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestSkillManifestRecoversPendingUpdateHashes(t *testing.T) {
+func TestSkillManifestRejectsInvalidTransactionPhase(t *testing.T) {
+	root := t.TempDir()
+	name := "invalid-phase"
+	require.NoError(t, os.Mkdir(filepath.Join(root, name), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, name, "SKILL.md"), []byte("old"), 0o644))
+	manifest := emptySkillManifest()
+	manifest.Entries = []managedSkill{{Deployment: skillDeployment{ServerURL: "https://gram.test", Org: "org", Project: "project"}, Name: name, Files: []string{filepath.Join(name, "SKILL.md")}, RawSHA256: rawSkillHash([]byte("old")), PendingUpdate: &pendingSkillUpdate{Phase: skillUpdatePhase("invalid"), NewSHA256: rawSkillHash([]byte("new")), Staged: skillUpdateStagedPrefix + "invalid", Backup: skillUpdateBackupPrefix + "invalid"}, PendingRemove: nil}}
+	manifestPath := filepath.Join(root, skillManifestFilename)
+	require.NoError(t, writeSkillManifest(manifestPath, manifest))
+
+	_, err := readSkillManifest(manifestPath)
+	require.Error(t, err)
+}
+
+func recoverPendingUpdateState(t *testing.T, phase skillUpdatePhase, finalBody, stagedBody, backupBody []byte) (string, skillManifest) {
+	t.Helper()
 	root := t.TempDir()
 	deployment := skillDeployment{ServerURL: "https://gram.test", Org: "org", Project: "project"}
 	oldBody := []byte("old")
 	newBody := []byte("new")
-	for _, name := range []string{"disk-old", "disk-new"} {
-		require.NoError(t, os.Mkdir(filepath.Join(root, name), 0o755))
+	name := "recover-update"
+	dir := filepath.Join(root, name)
+	require.NoError(t, os.Mkdir(dir, 0o755))
+	staged := skillUpdateStagedPrefix + "recovery"
+	backup := skillUpdateBackupPrefix + "recovery"
+	if finalBody != nil {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "SKILL.md"), finalBody, 0o644))
 	}
-	require.NoError(t, os.WriteFile(filepath.Join(root, "disk-old", "SKILL.md"), oldBody, 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "disk-new", "SKILL.md"), newBody, 0o644))
+	if stagedBody != nil {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, staged), stagedBody, 0o644))
+	}
+	if backupBody != nil {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, backup), backupBody, 0o644))
+	}
 	manifest := emptySkillManifest()
-	manifest.Entries = []managedSkill{
-		{Deployment: deployment, Name: "disk-old", Files: []string{filepath.Join("disk-old", "SKILL.md")}, RawSHA256: rawSkillHash(oldBody), PendingUpdate: &pendingSkillUpdate{RawSHA256: rawSkillHash(newBody)}, PendingRemove: nil},
-		{Deployment: deployment, Name: "disk-new", Files: []string{filepath.Join("disk-new", "SKILL.md")}, RawSHA256: rawSkillHash(oldBody), PendingUpdate: &pendingSkillUpdate{RawSHA256: rawSkillHash(newBody)}, PendingRemove: nil},
-	}
+	manifest.Entries = []managedSkill{{Deployment: deployment, Name: name, Files: []string{filepath.Join(name, "SKILL.md")}, RawSHA256: rawSkillHash(oldBody), PendingUpdate: &pendingSkillUpdate{Phase: phase, NewSHA256: rawSkillHash(newBody), Staged: staged, Backup: backup}, PendingRemove: nil}}
 	manifestPath := filepath.Join(root, skillManifestFilename)
 	require.NoError(t, writeSkillManifest(manifestPath, manifest))
 
 	changed, err := recoverSkillManifest(root, manifestPath, &manifest)
 	require.NoError(t, err)
 	require.True(t, changed)
-	entries := map[string]managedSkill{}
-	for _, entry := range manifest.Entries {
-		entries[entry.Name] = entry
-	}
-	require.Nil(t, entries["disk-old"].PendingUpdate)
-	require.Equal(t, rawSkillHash(oldBody), entries["disk-old"].RawSHA256)
-	require.Nil(t, entries["disk-new"].PendingUpdate)
-	require.Equal(t, rawSkillHash(newBody), entries["disk-new"].RawSHA256)
+	return root, manifest
 }
 
-func TestSkillManifestRecoversPendingRemovalStates(t *testing.T) {
-	root := t.TempDir()
-	deployment := skillDeployment{ServerURL: "https://gram.test", Org: "org", Project: "project"}
-	body := []byte("managed")
-	finalName := "before-rename"
-	tombName := skillRemovalPrefix + "after-rename"
-	require.NoError(t, os.Mkdir(filepath.Join(root, finalName), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(root, finalName, "SKILL.md"), body, 0o644))
-	require.NoError(t, os.Mkdir(filepath.Join(root, tombName), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(root, tombName, "SKILL.md"), body, 0o644))
-	manifest := emptySkillManifest()
-	manifest.Entries = []managedSkill{
-		{Deployment: deployment, Name: finalName, Files: []string{filepath.Join(finalName, "SKILL.md")}, RawSHA256: rawSkillHash(body), PendingUpdate: nil, PendingRemove: &pendingSkillRemoval{Tombstone: skillRemovalPrefix + "before-rename"}},
-		{Deployment: deployment, Name: "after-rename", Files: []string{filepath.Join("after-rename", "SKILL.md")}, RawSHA256: rawSkillHash(body), PendingUpdate: nil, PendingRemove: &pendingSkillRemoval{Tombstone: tombName}},
-	}
-	manifestPath := filepath.Join(root, skillManifestFilename)
-	require.NoError(t, writeSkillManifest(manifestPath, manifest))
-
-	changed, err := recoverSkillManifest(root, manifestPath, &manifest)
+func TestSkillManifestRecoversPlannedUpdate(t *testing.T) {
+	oldBody := []byte("old")
+	root, manifest := recoverPendingUpdateState(t, skillUpdatePlanned, oldBody, nil, nil)
+	require.Len(t, manifest.Entries, 1)
+	require.Nil(t, manifest.Entries[0].PendingUpdate)
+	require.Equal(t, rawSkillHash(oldBody), manifest.Entries[0].RawSHA256)
+	body, err := os.ReadFile(filepath.Join(root, "recover-update", "SKILL.md"))
 	require.NoError(t, err)
-	require.True(t, changed)
+	require.Equal(t, oldBody, body)
+}
+
+func TestSkillManifestRecoversStagedUpdate(t *testing.T) {
+	oldBody := []byte("old")
+	root, manifest := recoverPendingUpdateState(t, skillUpdateStaged, oldBody, []byte("new"), nil)
+	require.Len(t, manifest.Entries, 1)
+	require.Nil(t, manifest.Entries[0].PendingUpdate)
+	require.Equal(t, rawSkillHash(oldBody), manifest.Entries[0].RawSHA256)
+	body, err := os.ReadFile(filepath.Join(root, "recover-update", "SKILL.md"))
+	require.NoError(t, err)
+	require.Equal(t, oldBody, body)
+	_, err = os.Lstat(filepath.Join(root, "recover-update", skillUpdateStagedPrefix+"recovery"))
+	require.ErrorIs(t, err, os.ErrNotExist)
+}
+
+func TestSkillManifestPlannedUpdateDoesNotAdoptByteIdenticalReplacement(t *testing.T) {
+	newBody := []byte("new")
+	root, manifest := recoverPendingUpdateState(t, skillUpdatePlanned, newBody, newBody, nil)
 	require.Empty(t, manifest.Entries)
-	require.Empty(t, manifest.Tombstones)
-	_, err = os.Lstat(filepath.Join(root, finalName))
-	require.ErrorIs(t, err, os.ErrNotExist)
-	_, err = os.Lstat(filepath.Join(root, tombName))
+	require.Len(t, manifest.Exceptions, 1)
+	body, err := os.ReadFile(filepath.Join(root, "recover-update", "SKILL.md"))
+	require.NoError(t, err)
+	require.Equal(t, newBody, body)
+}
+
+func TestSkillManifestRecoversBackupMovedUpdate(t *testing.T) {
+	newBody := []byte("new")
+	root, manifest := recoverPendingUpdateState(t, skillUpdateBackupMoved, nil, newBody, []byte("old"))
+	require.Len(t, manifest.Entries, 1)
+	require.Nil(t, manifest.Entries[0].PendingUpdate)
+	require.Equal(t, rawSkillHash(newBody), manifest.Entries[0].RawSHA256)
+	body, err := os.ReadFile(filepath.Join(root, "recover-update", "SKILL.md"))
+	require.NoError(t, err)
+	require.Equal(t, newBody, body)
+}
+
+func TestSkillManifestRecoversInstalledUpdate(t *testing.T) {
+	newBody := []byte("new")
+	root, manifest := recoverPendingUpdateState(t, skillUpdateInstalled, newBody, nil, []byte("old"))
+	require.Len(t, manifest.Entries, 1)
+	require.Nil(t, manifest.Entries[0].PendingUpdate)
+	require.Equal(t, rawSkillHash(newBody), manifest.Entries[0].RawSHA256)
+	_, err := os.Lstat(filepath.Join(root, "recover-update", skillUpdateBackupPrefix+"recovery"))
 	require.ErrorIs(t, err, os.ErrNotExist)
 }
 
-func TestSkillManifestRecoversEmptyRemovalTombstone(t *testing.T) {
+func TestSkillManifestRetainsStagedUpdateWhenConflictCleanupFails(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("directory mode bits do not reliably block removal on Windows")
+	}
 	root := t.TempDir()
-	deployment := skillDeployment{ServerURL: "https://gram.test", Org: "org", Project: "project"}
-	tombstoneName := skillRemovalPrefix + "empty"
-	require.NoError(t, os.Mkdir(filepath.Join(root, tombstoneName), 0o755))
+	dir := filepath.Join(root, "cleanup-update")
+	require.NoError(t, os.Mkdir(dir, 0o755))
+	oldBody := []byte("old")
+	newBody := []byte("new")
+	staged := skillUpdateStagedPrefix + "cleanup"
+	backup := skillUpdateBackupPrefix + "cleanup"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "SKILL.md"), newBody, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, staged), newBody, 0o644))
 	manifest := emptySkillManifest()
-	manifest.Tombstones = []skillRemovalTombstone{{Deployment: deployment, Name: "removed", Files: []string{filepath.Join("removed", "SKILL.md")}, RawSHA256: rawSkillHash([]byte("managed")), Tombstone: tombstoneName}}
+	manifest.Entries = []managedSkill{{Deployment: skillDeployment{ServerURL: "https://gram.test", Org: "org", Project: "project"}, Name: "cleanup-update", Files: []string{filepath.Join("cleanup-update", "SKILL.md")}, RawSHA256: rawSkillHash(oldBody), PendingUpdate: &pendingSkillUpdate{Phase: skillUpdateStaged, NewSHA256: rawSkillHash(newBody), Staged: staged, Backup: backup}, PendingRemove: nil}}
 	manifestPath := filepath.Join(root, skillManifestFilename)
 	require.NoError(t, writeSkillManifest(manifestPath, manifest))
+	require.NoError(t, os.Chmod(dir, 0o555))
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
+
+	_, err := recoverSkillManifest(root, manifestPath, &manifest)
+	require.Error(t, err)
+	stored, readErr := readSkillManifest(manifestPath)
+	require.NoError(t, readErr)
+	require.Len(t, stored.Entries, 1)
+	require.Equal(t, skillUpdateStaged, stored.Entries[0].PendingUpdate.Phase)
+}
+
+func TestSkillManifestRetainsUpdateWithUnknownStateFile(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "unknown-update-state")
+	staged := skillUpdateStagedPrefix + "unknown"
+	backup := skillUpdateBackupPrefix + "unknown"
+	oldBody := []byte("old")
+	require.NoError(t, os.Mkdir(dir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "SKILL.md"), oldBody, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, staged), []byte("user-state"), 0o644))
+	manifest := emptySkillManifest()
+	manifest.Entries = []managedSkill{{Deployment: skillDeployment{ServerURL: "https://gram.test", Org: "org", Project: "project"}, Name: "unknown-update-state", Files: []string{filepath.Join("unknown-update-state", "SKILL.md")}, RawSHA256: rawSkillHash(oldBody), PendingUpdate: &pendingSkillUpdate{Phase: skillUpdatePlanned, NewSHA256: rawSkillHash([]byte("new")), Staged: staged, Backup: backup}, PendingRemove: nil}}
+	manifestPath := filepath.Join(root, skillManifestFilename)
+	require.NoError(t, writeSkillManifest(manifestPath, manifest))
+
+	_, err := recoverSkillManifest(root, manifestPath, &manifest)
+	require.Error(t, err)
+	stored, err := readSkillManifest(manifestPath)
+	require.NoError(t, err)
+	require.Len(t, stored.Entries, 1)
+	require.Equal(t, skillUpdatePlanned, stored.Entries[0].PendingUpdate.Phase)
+	body, err := os.ReadFile(filepath.Join(dir, staged))
+	require.NoError(t, err)
+	require.Equal(t, []byte("user-state"), body)
+}
+
+func recoverPendingRemovalState(t *testing.T, phase skillRemovalPhase, finalBody, backupBody []byte) (string, skillManifest) {
+	t.Helper()
+	root := t.TempDir()
+	deployment := skillDeployment{ServerURL: "https://gram.test", Org: "org", Project: "project"}
+	name := "recover-removal"
+	dir := filepath.Join(root, name)
+	backup := skillRemovalBackupPrefix + "recovery"
+	require.NoError(t, os.Mkdir(dir, 0o755))
+	if finalBody != nil {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "SKILL.md"), finalBody, 0o644))
+	}
+	if backupBody != nil {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, backup), backupBody, 0o644))
+	}
+	manifest := emptySkillManifest()
+	manifest.Entries = []managedSkill{{Deployment: deployment, Name: name, Files: []string{filepath.Join(name, "SKILL.md")}, RawSHA256: rawSkillHash([]byte("managed")), PendingUpdate: nil, PendingRemove: &pendingSkillRemoval{Phase: phase, Backup: backup}}}
+	manifestPath := filepath.Join(root, skillManifestFilename)
+	require.NoError(t, writeSkillManifest(manifestPath, manifest))
+	changed, err := recoverSkillManifest(root, manifestPath, &manifest)
+	require.NoError(t, err)
+	require.True(t, changed)
+	return root, manifest
+}
+
+func TestSkillManifestRecoversPlannedRemoval(t *testing.T) {
+	root, manifest := recoverPendingRemovalState(t, skillRemovalPlanned, []byte("managed"), nil)
+	require.Len(t, manifest.Entries, 1)
+	require.Nil(t, manifest.Entries[0].PendingRemove)
+	body, err := os.ReadFile(filepath.Join(root, "recover-removal", "SKILL.md"))
+	require.NoError(t, err)
+	require.Equal(t, []byte("managed"), body)
+}
+
+func TestSkillManifestRecoversMovedRemoval(t *testing.T) {
+	root, manifest := recoverPendingRemovalState(t, skillRemovalMoved, nil, []byte("managed"))
+	require.Empty(t, manifest.Entries)
+	_, err := os.Lstat(filepath.Join(root, "recover-removal"))
+	require.ErrorIs(t, err, os.ErrNotExist)
+}
+
+func TestSkillManifestRetainsMovedRemovalWhenCleanupFails(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("directory mode bits do not reliably block removal on Windows")
+	}
+	root := t.TempDir()
+	dir := filepath.Join(root, "cleanup-removal")
+	backup := skillRemovalBackupPrefix + "cleanup"
+	body := []byte("managed")
+	require.NoError(t, os.Mkdir(dir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, backup), body, 0o644))
+	manifest := emptySkillManifest()
+	manifest.Entries = []managedSkill{{Deployment: skillDeployment{ServerURL: "https://gram.test", Org: "org", Project: "project"}, Name: "cleanup-removal", Files: []string{filepath.Join("cleanup-removal", "SKILL.md")}, RawSHA256: rawSkillHash(body), PendingUpdate: nil, PendingRemove: &pendingSkillRemoval{Phase: skillRemovalMoved, Backup: backup}}}
+	manifestPath := filepath.Join(root, skillManifestFilename)
+	require.NoError(t, writeSkillManifest(manifestPath, manifest))
+	require.NoError(t, os.Chmod(dir, 0o555))
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
+
+	_, err := recoverSkillManifest(root, manifestPath, &manifest)
+	require.Error(t, err)
+	stored, readErr := readSkillManifest(manifestPath)
+	require.NoError(t, readErr)
+	require.Len(t, stored.Entries, 1)
+	require.Equal(t, skillRemovalMoved, stored.Entries[0].PendingRemove.Phase)
+}
+
+func TestSkillManifestRetainsRemovalWithUnknownBackup(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "unknown-removal-state")
+	backup := skillRemovalBackupPrefix + "unknown"
+	body := []byte("managed")
+	require.NoError(t, os.Mkdir(dir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "SKILL.md"), body, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, backup), []byte("user-backup"), 0o644))
+	manifest := emptySkillManifest()
+	manifest.Entries = []managedSkill{{Deployment: skillDeployment{ServerURL: "https://gram.test", Org: "org", Project: "project"}, Name: "unknown-removal-state", Files: []string{filepath.Join("unknown-removal-state", "SKILL.md")}, RawSHA256: rawSkillHash(body), PendingUpdate: nil, PendingRemove: &pendingSkillRemoval{Phase: skillRemovalPlanned, Backup: backup}}}
+	manifestPath := filepath.Join(root, skillManifestFilename)
+	require.NoError(t, writeSkillManifest(manifestPath, manifest))
+
+	_, err := recoverSkillManifest(root, manifestPath, &manifest)
+	require.Error(t, err)
+	stored, err := readSkillManifest(manifestPath)
+	require.NoError(t, err)
+	require.Len(t, stored.Entries, 1)
+	require.Equal(t, skillRemovalPlanned, stored.Entries[0].PendingRemove.Phase)
+	backupBody, err := os.ReadFile(filepath.Join(dir, backup))
+	require.NoError(t, err)
+	require.Equal(t, []byte("user-backup"), backupBody)
+}
+
+func TestSkillManifestPlannedRemovalPreservesByteIdenticalReplacement(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "planned-replacement")
+	body := []byte("managed")
+	backup := skillRemovalBackupPrefix + "planned"
+	require.NoError(t, os.Mkdir(dir, 0o755))
+	finalPath := filepath.Join(dir, "SKILL.md")
+	require.NoError(t, os.WriteFile(finalPath, body, 0o644))
+	manifest := emptySkillManifest()
+	manifest.Entries = []managedSkill{{Deployment: skillDeployment{ServerURL: "https://gram.test", Org: "org", Project: "project"}, Name: "planned-replacement", Files: []string{filepath.Join("planned-replacement", "SKILL.md")}, RawSHA256: rawSkillHash(body), PendingUpdate: nil, PendingRemove: &pendingSkillRemoval{Phase: skillRemovalPlanned, Backup: backup}}}
+	manifestPath := filepath.Join(root, skillManifestFilename)
+	require.NoError(t, writeSkillManifest(manifestPath, manifest))
+	require.NoError(t, os.Remove(finalPath))
+	require.NoError(t, os.WriteFile(finalPath, body, 0o644))
+	replacementInfo, err := os.Lstat(finalPath)
+	require.NoError(t, err)
 
 	changed, err := recoverSkillManifest(root, manifestPath, &manifest)
 	require.NoError(t, err)
 	require.True(t, changed)
-	require.Empty(t, manifest.Tombstones)
-	_, err = os.Lstat(filepath.Join(root, tombstoneName))
+	require.Len(t, manifest.Entries, 1)
+	require.Nil(t, manifest.Entries[0].PendingRemove)
+	currentInfo, err := os.Lstat(finalPath)
+	require.NoError(t, err)
+	require.True(t, os.SameFile(replacementInfo, currentInfo))
+}
+
+func TestSkillManifestRecoversMissingDirectoryAfterManifestWriteFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("directory mode bits do not reliably block manifest writes on Windows")
+	}
+	root := t.TempDir()
+	dir := filepath.Join(root, "missing-directory")
+	require.NoError(t, os.Mkdir(dir, 0o755))
+	manifest := emptySkillManifest()
+	manifest.Entries = []managedSkill{{Deployment: skillDeployment{ServerURL: "https://gram.test", Org: "org", Project: "project"}, Name: "missing-directory", Files: []string{filepath.Join("missing-directory", "SKILL.md")}, RawSHA256: rawSkillHash([]byte("managed")), PendingUpdate: nil, PendingRemove: &pendingSkillRemoval{Phase: skillRemovalMoved, Backup: skillRemovalBackupPrefix + "missing"}}}
+	manifestPath := filepath.Join(root, skillManifestFilename)
+	require.NoError(t, writeSkillManifest(manifestPath, manifest))
+
+	_, err := resumePendingRemoval(root, manifestPath, &manifest, 0, nil, func(transition, _ string) {
+		if transition == "remove-after-directory" {
+			require.NoError(t, os.Chmod(root, 0o555))
+		}
+	})
+	require.Error(t, err)
+	require.NoError(t, os.Chmod(root, 0o755))
+	_, err = os.Lstat(dir)
 	require.ErrorIs(t, err, os.ErrNotExist)
+	stored, err := readSkillManifest(manifestPath)
+	require.NoError(t, err)
+	require.Len(t, stored.Entries, 1)
+	require.Equal(t, skillRemovalMoved, stored.Entries[0].PendingRemove.Phase)
+
+	changed, err := recoverSkillManifest(root, manifestPath, &stored)
+	require.NoError(t, err)
+	require.True(t, changed)
+	require.Empty(t, stored.Entries)
 }
 
 func TestSkillManifestRecoversStagedInstall(t *testing.T) {
@@ -492,6 +834,70 @@ func TestSkillSyncRemovalPreservesDirectoryWithUnownedFiles(t *testing.T) {
 	userFile, err := os.ReadFile(filepath.Join(root, "mixed", "notes.txt"))
 	require.NoError(t, err)
 	require.Equal(t, "user-file", string(userFile))
+}
+
+func TestSkillSyncRemovalPreservesFileAddedAfterIntent(t *testing.T) {
+	remove := false
+	server := newSkillSyncServer(t, func(_ int, _ components.SyncSkillsRequestBody) (int, components.SyncSkillsResult) {
+		if remove {
+			return http.StatusOK, components.SyncSkillsResult{Removals: []string{"raced-remove"}, Updates: []components.SyncSkillUpdate{}}
+		}
+		return http.StatusOK, components.SyncSkillsResult{Removals: []string{}, Updates: []components.SyncSkillUpdate{skillUpdate("raced-remove", "managed", "")}}
+	})
+	relay, root := configuredSkillRelay(t, server.URL)
+	require.NotEmpty(t, relay.syncSkills(t.Context(), false))
+	remove = true
+	relay.skillSyncTransition = func(transition, name string) {
+		if transition == "remove-before-move" && name == "raced-remove" {
+			manifest, err := readSkillManifest(filepath.Join(root, skillManifestFilename))
+			require.NoError(t, err)
+			require.Equal(t, skillRemovalPlanned, manifest.Entries[0].PendingRemove.Phase)
+			require.NoError(t, os.WriteFile(filepath.Join(root, name, "notes.txt"), []byte("user-file"), 0o644))
+		}
+	}
+
+	require.Empty(t, relay.syncSkills(t.Context(), false))
+	userFile, err := os.ReadFile(filepath.Join(root, "raced-remove", "notes.txt"))
+	require.NoError(t, err)
+	require.Equal(t, "user-file", string(userFile))
+	manifest, err := readSkillManifest(filepath.Join(root, skillManifestFilename))
+	require.NoError(t, err)
+	require.Empty(t, manifest.Entries)
+	require.Empty(t, manifest.Exceptions)
+	_, err = os.Lstat(filepath.Join(root, "raced-remove", "SKILL.md"))
+	require.ErrorIs(t, err, os.ErrNotExist)
+}
+
+func TestSkillSyncRemovalPreservesSkillAddedAfterMove(t *testing.T) {
+	remove := false
+	server := newSkillSyncServer(t, func(_ int, _ components.SyncSkillsRequestBody) (int, components.SyncSkillsResult) {
+		if remove {
+			return http.StatusOK, components.SyncSkillsResult{Removals: []string{"raced-tombstone"}, Updates: []components.SyncSkillUpdate{}}
+		}
+		return http.StatusOK, components.SyncSkillsResult{Removals: []string{}, Updates: []components.SyncSkillUpdate{skillUpdate("raced-tombstone", "managed", "")}}
+	})
+	relay, root := configuredSkillRelay(t, server.URL)
+	require.NotEmpty(t, relay.syncSkills(t.Context(), false))
+	remove = true
+	relay.skillSyncTransition = func(transition, name string) {
+		if transition != "remove-after-move" || name != "raced-tombstone" {
+			return
+		}
+		manifest, err := readSkillManifest(filepath.Join(root, skillManifestFilename))
+		require.NoError(t, err)
+		require.Equal(t, skillRemovalMoved, manifest.Entries[0].PendingRemove.Phase)
+		require.NoError(t, os.WriteFile(filepath.Join(root, name, "SKILL.md"), []byte("user-skill"), 0o644))
+	}
+
+	require.Empty(t, relay.syncSkills(t.Context(), false))
+	managed, err := os.ReadFile(filepath.Join(root, "raced-tombstone", "SKILL.md"))
+	require.NoError(t, err)
+	require.Equal(t, "user-skill", string(managed))
+	manifest, err := readSkillManifest(filepath.Join(root, skillManifestFilename))
+	require.NoError(t, err)
+	require.Empty(t, manifest.Entries)
+	require.Len(t, manifest.Exceptions, 1)
+	require.True(t, manifest.Exceptions[0].Permanent)
 }
 
 func TestSkillSyncUsesClaudeConfigDir(t *testing.T) {

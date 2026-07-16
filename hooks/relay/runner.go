@@ -34,9 +34,10 @@ const (
 // Relay translates coding-agent hook events into Gram ingest requests and
 // enforces the server's verdict.
 type Relay struct {
-	cfg    Config
-	client *client
-	login  *loginFlow
+	cfg                 Config
+	client              *client
+	login               *loginFlow
+	skillSyncTransition func(string, string)
 	// backfillDeny carries a blocked verdict from a reporting-only backfilled
 	// prompt (agenthooks discards its decision) to the decision-capable event
 	// that triggered the backfill in this same process. It was the turn's
@@ -47,10 +48,11 @@ type Relay struct {
 // NewRelay builds a Relay from the resolved config.
 func NewRelay(cfg Config) *Relay {
 	return &Relay{
-		cfg:          cfg,
-		client:       newClient(cfg.ServerURL),
-		login:        newLoginFlow(cfg),
-		backfillDeny: "",
+		cfg:                 cfg,
+		client:              newClient(cfg.ServerURL),
+		login:               newLoginFlow(cfg),
+		skillSyncTransition: nil,
+		backfillDeny:        "",
 	}
 }
 

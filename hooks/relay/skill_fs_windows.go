@@ -4,7 +4,7 @@ package relay
 
 import "golang.org/x/sys/windows"
 
-func renameDirNoReplace(oldPath, newPath string) error {
+func renameNoReplace(oldPath, newPath string) error {
 	oldPathPtr, err := windows.UTF16PtrFromString(oldPath)
 	if err != nil {
 		return err
