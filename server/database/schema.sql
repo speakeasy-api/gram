@@ -4166,7 +4166,8 @@ CREATE TABLE IF NOT EXISTS spend_rules (
   -- URL-safe identifier derived from the name at creation time. Unique per
   -- organization and immutable thereafter: the rule URN
   -- ('spend_rule:<slug>:v<version>') embeds it, so renames must not change it
-  -- or historical events would detach from their rule.
+  -- or historical events would detach from their rule. A slug is never reused,
+  -- even after a rule is archived (see spend_rules_organization_id_slug_key).
   slug TEXT NOT NULL,
   description TEXT NOT NULL DEFAULT '',
   -- CEL boolean expression over actor attributes (see
@@ -4191,6 +4192,9 @@ CREATE TABLE IF NOT EXISTS spend_rules (
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  -- Archival is a soft delete: the row (and its slug reservation, version
+  -- history, and events) is retained permanently so historical URNs stay
+  -- resolvable. There is no hard delete.
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
 
@@ -4203,15 +4207,20 @@ CREATE TABLE IF NOT EXISTS spend_rules (
   CONSTRAINT spend_rules_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS spend_rules_organization_id_idx
-ON spend_rules (organization_id)
-WHERE deleted IS FALSE;
+-- Tenancy-pinning key: child tables (versions, events) composite-FK
+-- (organization_id, id) here so a child row can never reference a rule owned by
+-- another organization. Non-partial, so it also backs the ON DELETE CASCADE
+-- from organization_metadata (the RI cascade trigger scans without a
+-- `deleted IS FALSE` predicate and so cannot use a partial index).
+CREATE UNIQUE INDEX IF NOT EXISTS spend_rules_organization_id_id_key
+ON spend_rules (organization_id, id);
 
--- Slugs identify rules inside URNs, so two live rules in one org can never
--- share one. Partial so a deleted rule frees its slug for reuse.
+-- Slugs identify rules inside URNs, so they must never be reused. Non-partial
+-- (spans archived rows): an archived rule keeps its slug reserved forever, so a
+-- replacement rule's v1 URN can never collide with the archived rule's
+-- historical URN.
 CREATE UNIQUE INDEX IF NOT EXISTS spend_rules_organization_id_slug_key
-ON spend_rules (organization_id, slug)
-WHERE deleted IS FALSE;
+ON spend_rules (organization_id, slug);
 
 -- Immutable snapshot of a spend rule's config at each version. Written on
 -- create and on every material change so historical events (which carry a
@@ -4236,9 +4245,19 @@ CREATE TABLE IF NOT EXISTS spend_rule_versions (
   CONSTRAINT spend_rule_versions_spend_rule_id_version_key UNIQUE (spend_rule_id, version),
   CONSTRAINT spend_rule_versions_window_kind_check CHECK (window_kind IN ('daily', 'weekly', 'monthly')),
   CONSTRAINT spend_rule_versions_action_check CHECK (action IN ('flag', 'block')),
+  -- Mirror the live rule's numeric guards so a snapshot can never store an
+  -- out-of-range limit or warning percentage.
+  CONSTRAINT spend_rule_versions_limit_usd_check CHECK (limit_usd > 0),
+  CONSTRAINT spend_rule_versions_warn_at_pct_check CHECK (warn_at_pct BETWEEN 1 AND 100),
   CONSTRAINT spend_rule_versions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT spend_rule_versions_spend_rule_id_fkey FOREIGN KEY (spend_rule_id) REFERENCES spend_rules (id) ON DELETE CASCADE
+  CONSTRAINT spend_rule_versions_organization_id_spend_rule_id_fkey FOREIGN KEY (organization_id, spend_rule_id) REFERENCES spend_rules (organization_id, id) ON DELETE CASCADE
 );
+
+-- Non-partial index backing the ON DELETE CASCADE foreign keys on
+-- organization_id (from organization_metadata) and the composite tenancy FK to
+-- spend_rules; without it a parent delete degrades to a sequential scan.
+CREATE INDEX IF NOT EXISTS spend_rule_versions_organization_id_idx
+ON spend_rule_versions (organization_id);
 
 -- Warning/breach events emitted by the spend rule evaluator. One row per
 -- (rule version, actor, window, event type) — the unique index makes evaluator
@@ -4249,7 +4268,11 @@ CREATE TABLE IF NOT EXISTS spend_rule_events (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
   spend_rule_id uuid NOT NULL,
--- Versioned rule URN, e.g. 'spend_rule:eng-monthly-cap:v3'.
+  -- Rule version that produced this event. Foreign-keyed to the immutable
+  -- spend_rule_versions snapshot so every event resolves to the exact config
+  -- that fired it. rule_urn carries the same version in human-readable form.
+  rule_version BIGINT NOT NULL,
+  -- Versioned rule URN, e.g. 'spend_rule:eng-monthly-cap:v3'.
   rule_urn TEXT NOT NULL,
   event_type TEXT NOT NULL,
 
@@ -4269,7 +4292,8 @@ CREATE TABLE IF NOT EXISTS spend_rule_events (
   CONSTRAINT spend_rule_events_pkey PRIMARY KEY (id),
   CONSTRAINT spend_rule_events_event_type_check CHECK (event_type IN ('warning', 'breach')),
   CONSTRAINT spend_rule_events_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT spend_rule_events_spend_rule_id_fkey FOREIGN KEY (spend_rule_id) REFERENCES spend_rules (id) ON DELETE CASCADE
+  CONSTRAINT spend_rule_events_organization_id_spend_rule_id_fkey FOREIGN KEY (organization_id, spend_rule_id) REFERENCES spend_rules (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT spend_rule_events_spend_rule_id_rule_version_fkey FOREIGN KEY (spend_rule_id, rule_version) REFERENCES spend_rule_versions (spend_rule_id, version) ON DELETE CASCADE
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS spend_rule_events_dedupe_key

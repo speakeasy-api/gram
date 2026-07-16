@@ -1,4 +1,4 @@
-h1:cTKQQ7VtMbAPh/9idLV1gHCMU+wDJDs9M/mB65GxyNs=
+h1:lplv4uoCXXt53v6Wvu64/c2XCvJDnwNdJevMwGsk1mA=
 20251127155815_initial_golang_migrate.up.sql h1:fkATa14aucJEoldFi1VgW7TRT8gyC6NGe1Hq/OzXVuI=
 20251208142630_add-tool-logs-table.up.sql h1:cGJCiWBvLPFwOlpx0jYYLgdPZD21+gKSF/x4mVksBcI=
 20251209104438_add-id-col-to-tool-logs-table.up.sql h1:+Ubsl1ZKfeCZL9dBhohUnkBksKZj6nwdZSXm7WwowaE=
@@ -63,4 +63,4 @@ h1:cTKQQ7VtMbAPh/9idLV1gHCMU+wDJDs9M/mB65GxyNs=
 20260714154852_add-risk-findings.up.sql h1:y/IJ76f9XsFM9JD5dIKfmVRAOAvhdNradDR/5+dsbYM=
 20260714173525_drop-tum-breakdown-summaries.up.sql h1:uEIxECzsEQ0FI4IkqPmapSeUb1zSxF7kZ4sP/xdcRhs=
 20260714200951_shadow-mcp-server-name-override.up.sql h1:NKOZGs7YuPaIOtCeQzn67rgdSQtbzLwyxRqVGykd6zk=
-20260715145047_add-spend-rule-usage-summaries.up.sql h1:YFuTAv8CxGlMcGr56x2NRbiAgMsZVWM1YDA8+zS3ezQ=
+20260716175814_add-spend-rule-usage-summaries.up.sql h1:IzJ6+EBczPetUucEZFeas7DeDpyoWJdI9T8/qFy7ldI=
