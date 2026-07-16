@@ -22,11 +22,19 @@ import {
 
 export type ShadowMCPPolicyServerSelectorProps = {
   servers: ShadowMCPInventoryServer[];
+  originalURLs: ReadonlySet<string>;
   selectedURLs: ReadonlySet<string>;
   onSelectionChange: (next: Set<string>) => void;
   isLoading: boolean;
   error: Error | null;
   onRetry: () => void;
+};
+
+type PolicyServerAction = "add" | "remove" | "no-change";
+
+type PolicyServerChange = {
+  action: PolicyServerAction;
+  server: ShadowMCPInventoryServer;
 };
 
 function countLabel(count: number, singular: string, plural: string): string {
@@ -52,6 +60,16 @@ function inventoryAccessStatus(
 
 function serverLabel(server: ShadowMCPInventoryServer): string {
   return server.serverName || server.urlHost;
+}
+
+function policyServerAction(
+  url: string,
+  originalURLs: ReadonlySet<string>,
+  selectedURLs: ReadonlySet<string>,
+): PolicyServerAction {
+  if (!originalURLs.has(url)) return "add";
+  if (!selectedURLs.has(url)) return "remove";
+  return "no-change";
 }
 
 function ServerCell({ server }: { server: ShadowMCPInventoryServer }) {
@@ -103,29 +121,6 @@ function StatusCell({ server }: { server: ShadowMCPInventoryServer }) {
   );
 }
 
-function AppliedServerRow({ server }: { server: ShadowMCPInventoryServer }) {
-  const label = serverLabel(server);
-
-  return (
-    <li
-      data-testid="applied-shadow-mcp-server"
-      className="grid h-9 grid-cols-[minmax(7rem,0.35fr)_minmax(0,1fr)] items-center gap-3 px-3"
-    >
-      <Type variant="small" className="truncate font-medium" title={label}>
-        {label}
-      </Type>
-      <Type
-        muted
-        small
-        className="truncate font-mono text-xs"
-        title={server.canonicalServerUrl}
-      >
-        {server.canonicalServerUrl}
-      </Type>
-    </li>
-  );
-}
-
 function EmptyServerSelection({ onSelect }: { onSelect: () => void }) {
   return (
     <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-10 text-center">
@@ -150,35 +145,71 @@ function EmptyServerSelection({ onSelect }: { onSelect: () => void }) {
   );
 }
 
-function AppliedServerList({
-  servers,
-}: {
-  servers: ShadowMCPInventoryServer[];
-}) {
-  if (servers.length === 0) {
-    return (
-      <Type muted small>
-        No servers selected
-      </Type>
-    );
+function PolicyServerActionBadge({ action }: { action: PolicyServerAction }) {
+  switch (action) {
+    case "add":
+      return <Badge variant="success">Add</Badge>;
+    case "remove":
+      return <Badge variant="destructive">Remove</Badge>;
+    case "no-change":
+      return <Badge variant="neutral">No change</Badge>;
   }
+}
+
+function AppliedServerTable({ rows }: { rows: PolicyServerChange[] }) {
+  const columns: Column<PolicyServerChange>[] = [
+    {
+      key: "action",
+      header: "Action",
+      width: "112px",
+      render: (row) => <PolicyServerActionBadge action={row.action} />,
+    },
+    {
+      key: "server",
+      header: "Server",
+      width: "0.35fr",
+      render: ({ server }) => {
+        const label = serverLabel(server);
+        return (
+          <Type variant="small" className="truncate font-medium" title={label}>
+            {label}
+          </Type>
+        );
+      },
+    },
+    {
+      key: "url",
+      header: "URL",
+      width: "1fr",
+      render: ({ server }) => (
+        <Type
+          muted
+          small
+          className="truncate font-mono text-xs"
+          title={server.canonicalServerUrl}
+        >
+          {server.canonicalServerUrl}
+        </Type>
+      ),
+    },
+  ];
 
   return (
-    <ul
-      aria-label="Selected Shadow MCP servers"
-      tabIndex={0}
-      data-testid="applied-shadow-mcp-servers"
-      className="border-border divide-border focus-visible:ring-ring max-h-[200px] divide-y overflow-y-auto rounded-md border focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
-    >
-      {servers.map((server) => (
-        <AppliedServerRow key={server.canonicalServerUrl} server={server} />
-      ))}
-    </ul>
+    <Table columns={columns} className="grid-rows-[auto_minmax(0,1fr)]">
+      <Table.Header columns={columns} />
+      <Table.Body
+        columns={columns}
+        data={rows}
+        rowKey={({ server }) => server.canonicalServerUrl}
+        className="max-h-[200px] content-start overflow-y-auto"
+      />
+    </Table>
   );
 }
 
 export function ShadowMCPPolicyServerSelector({
   servers,
+  originalURLs,
   selectedURLs,
   onSelectionChange,
   isLoading,
@@ -196,10 +227,22 @@ export function ShadowMCPPolicyServerSelector({
     direction: "desc",
   });
 
-  const appliedServers = useMemo(
+  const appliedRows = useMemo(
     () =>
-      servers.filter((server) => selectedURLs.has(server.canonicalServerUrl)),
-    [selectedURLs, servers],
+      servers
+        .filter((server) => {
+          const url = server.canonicalServerUrl;
+          return originalURLs.has(url) || selectedURLs.has(url);
+        })
+        .map((server) => ({
+          action: policyServerAction(
+            server.canonicalServerUrl,
+            originalURLs,
+            selectedURLs,
+          ),
+          server,
+        })),
+    [originalURLs, selectedURLs, servers],
   );
 
   const filteredServers = useMemo(() => {
@@ -306,9 +349,11 @@ export function ShadowMCPPolicyServerSelector({
     setOpen(false);
   };
 
-  const showHeaderAction = selectedURLs.size > 0 || isLoading || error !== null;
-  const headerActionLabel =
-    selectedURLs.size > 0 ? "Manage servers" : "Select servers";
+  const hasAppliedRows = appliedRows.length > 0;
+  const showHeaderAction = hasAppliedRows || isLoading || error !== null;
+  const headerActionLabel = hasAppliedRows
+    ? "Manage servers"
+    : "Select servers";
 
   let selectionContent: JSX.Element;
   if (isLoading) {
@@ -328,12 +373,12 @@ export function ShadowMCPPolicyServerSelector({
         </Button>
       </div>
     );
-  } else if (selectedURLs.size === 0) {
+  } else if (!hasAppliedRows) {
     selectionContent = (
       <EmptyServerSelection onSelect={() => handleOpenChange(true)} />
     );
   } else {
-    selectionContent = <AppliedServerList servers={appliedServers} />;
+    selectionContent = <AppliedServerTable rows={appliedRows} />;
   }
 
   return (
@@ -370,7 +415,7 @@ export function ShadowMCPPolicyServerSelector({
 
       {selectionContent}
 
-      {selectedURLs.size > 0 && (
+      {hasAppliedRows && (
         <Type muted small>
           {selectedCountLabel(selectedURLs.size)}
         </Type>

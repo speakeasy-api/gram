@@ -55,18 +55,22 @@ const linearServer = inventoryServer("https://linear.example.com/sse", {
 
 function ControlledSelector({
   initialSelection = [],
+  originalSelection = [],
   servers = [githubServer, linearServer],
 }: {
   initialSelection?: string[];
+  originalSelection?: string[];
   servers?: ShadowMCPInventoryServer[];
 }) {
   const [selectedURLs, setSelectedURLs] = useState(
     () => new Set(initialSelection),
   );
+  const [originalURLs] = useState(() => new Set(originalSelection));
 
   return (
     <ShadowMCPPolicyServerSelector
       servers={servers}
+      originalURLs={originalURLs}
       selectedURLs={selectedURLs}
       onSelectionChange={setSelectedURLs}
       isLoading={false}
@@ -136,7 +140,36 @@ describe("ShadowMCPPolicyServerSelector", () => {
     expect(within(section).queryByText("0 servers selected")).toBeNull();
   });
 
-  it("renders a compact scrollable applied summary with only names and URLs", () => {
+  it("shows an action-first table for a new policy selection", () => {
+    render(
+      <ControlledSelector
+        initialSelection={[githubServer.canonicalServerUrl]}
+      />,
+    );
+
+    const section = screen.getByRole("region", {
+      name: "Servers allowed by this policy",
+    });
+    const table = within(section).getByRole("table");
+
+    expect(
+      within(table)
+        .getAllByRole("columnheader")
+        .map((header) => header.textContent?.trim()),
+    ).toEqual(["Action", "Server", "URL"]);
+    const row = within(table).getByRole("row", { name: /GitHub MCP/ });
+    expect(within(row).getByText("Add")).toBeTruthy();
+    expect(within(row).getByText("GitHub MCP")).toBeTruthy();
+    expect(within(row).getByText(githubServer.canonicalServerUrl)).toBeTruthy();
+
+    const rowGroups = within(table).getAllByRole("rowgroup");
+    const body = rowGroups[1];
+    if (!body) throw new Error("Expected a table body");
+    expect(body.className).toContain("max-h-[200px]");
+    expect(body.className).toContain("overflow-y-auto");
+  });
+
+  it("keeps complete server values accessible in the applied table", () => {
     const longServerName =
       "Server 0 with a deliberately long display name that must truncate";
     const longServerURL =
@@ -167,38 +200,74 @@ describe("ShadowMCPPolicyServerSelector", () => {
     expect(
       within(section).queryByRole("button", { name: "Select servers" }),
     ).toBeNull();
-    const list = within(section).getByRole("list", {
-      name: "Selected Shadow MCP servers",
+    const table = within(section).getByRole("table");
+    const row = within(table).getByRole("row", {
+      name: new RegExp(longServerName),
     });
-
-    expect(list.getAttribute("tabindex")).toBe("0");
-    expect(list.className).toContain("max-h-[200px]");
-    expect(list.className).toContain("overflow-y-auto");
-    expect(list.className).toContain("focus-visible:ring-ring");
-    expect(list.className).toContain("focus-visible:ring-2");
-    expect(list.className).toContain("focus-visible:outline-none");
-
-    const rows = within(list).getAllByRole("listitem");
-    expect(rows).toHaveLength(6);
-
-    const firstRow = rows[0];
-    if (!firstRow) throw new Error("Expected an applied server row");
-
-    expect(firstRow.className).toContain("h-9");
-    expect(firstRow.className).toContain(
-      "grid-cols-[minmax(7rem,0.35fr)_minmax(0,1fr)]",
-    );
-
-    const name = within(firstRow).getByText(longServerName);
+    const name = within(row).getByText(longServerName);
     expect(name.getAttribute("title")).toBe(longServerName);
     expect(name.className).toContain("truncate");
 
-    const url = within(firstRow).getByText(longServerURL);
+    const url = within(row).getByText(longServerURL);
     expect(url.getAttribute("title")).toBe(longServerURL);
     expect(url.className).toContain("truncate");
     expect(url.className).toContain("font-mono");
-    expect(url.className).toContain("text-muted-foreground");
-    expect(within(section).queryByText("Allowed", { exact: true })).toBeNull();
+  });
+
+  it("shows add, remove, and no-change actions while editing", () => {
+    const notionServer = inventoryServer("https://notion.example.com/mcp", {
+      serverName: "Notion MCP",
+    });
+    render(
+      <ControlledSelector
+        servers={[githubServer, linearServer, notionServer]}
+        originalSelection={[
+          githubServer.canonicalServerUrl,
+          linearServer.canonicalServerUrl,
+        ]}
+        initialSelection={[
+          githubServer.canonicalServerUrl,
+          notionServer.canonicalServerUrl,
+        ]}
+      />,
+    );
+
+    const table = within(
+      screen.getByRole("region", { name: "Servers allowed by this policy" }),
+    ).getByRole("table");
+    expect(
+      within(within(table).getByRole("row", { name: /GitHub MCP/ })).getByText(
+        "No change",
+      ),
+    ).toBeTruthy();
+    expect(
+      within(
+        within(table).getByRole("row", { name: /linear\.example\.com/ }),
+      ).getByText("Remove"),
+    ).toBeTruthy();
+    expect(
+      within(within(table).getByRole("row", { name: /Notion MCP/ })).getByText(
+        "Add",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("keeps pending removals visible when every saved server is deselected", () => {
+    render(
+      <ControlledSelector
+        originalSelection={[githubServer.canonicalServerUrl]}
+      />,
+    );
+
+    const section = screen.getByRole("region", {
+      name: "Servers allowed by this policy",
+    });
+    expect(within(section).getByText("Remove")).toBeTruthy();
+    expect(within(section).getByText("0 servers selected")).toBeTruthy();
+    expect(
+      within(section).getByRole("button", { name: "Manage servers" }),
+    ).toBeTruthy();
+    expect(within(section).queryByText("No servers allowed yet")).toBeNull();
   });
 
   it("matches inventory columns and request badge presentation", () => {
@@ -422,6 +491,7 @@ describe("ShadowMCPPolicyServerSelector", () => {
     render(
       <ShadowMCPPolicyServerSelector
         servers={[githubServer, linearServer]}
+        originalURLs={new Set([githubServer.canonicalServerUrl])}
         selectedURLs={new Set([githubServer.canonicalServerUrl])}
         onSelectionChange={onSelectionChange}
         isLoading={false}
@@ -456,6 +526,7 @@ describe("ShadowMCPPolicyServerSelector", () => {
     const { rerender } = render(
       <ShadowMCPPolicyServerSelector
         servers={[]}
+        originalURLs={new Set()}
         selectedURLs={new Set()}
         onSelectionChange={() => {}}
         isLoading
@@ -475,6 +546,7 @@ describe("ShadowMCPPolicyServerSelector", () => {
     rerender(
       <ShadowMCPPolicyServerSelector
         servers={[]}
+        originalURLs={new Set()}
         selectedURLs={new Set()}
         onSelectionChange={() => {}}
         isLoading={false}

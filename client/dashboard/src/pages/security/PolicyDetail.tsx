@@ -1843,6 +1843,7 @@ const PRESIDIO_THRESHOLD_MAX = 1;
 const PRESIDIO_THRESHOLD_STEP = 0.05;
 const PRESIDIO_THRESHOLD_TICKS = [0, 0.25, 0.5, 0.75, 1];
 const DEFAULT_PRESIDIO_THRESHOLD = 0.5;
+const EMPTY_SHADOW_MCP_URLS: ReadonlySet<string> = new Set<string>();
 
 function SensitivityStep({
   active,
@@ -3895,6 +3896,7 @@ export function StandardPolicyEditor({
               targetIsShadowMCPBlock ? (
                 <ShadowMCPPolicyServerSelector
                   servers={inventoryQuery.data ?? []}
+                  originalURLs={originalShadowMCPURLs ?? EMPTY_SHADOW_MCP_URLS}
                   selectedURLs={selectedShadowMCPURLs}
                   onSelectionChange={setSelectedShadowMCPURLs}
                   isLoading={inventoryQuery.isPending}
