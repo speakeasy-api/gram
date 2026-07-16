@@ -12,63 +12,48 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 )
 
-// figmaMCPHost is the host of Figma's hosted remote MCP server
-// (https://mcp.figma.com/mcp). Figma only supports the MCP clients listed in
-// its client catalog, so proxies targeting this host enforce a User-Agent
-// allowlist derived from that catalog.
 const figmaMCPHost = "mcp.figma.com"
 
-// figmaMCPCatalogURL is surfaced in rejection messages so blocked callers can
-// see which clients are supported.
 const figmaMCPCatalogURL = "https://www.figma.com/mcp-catalog/"
 
 // figmaAllowedUserAgents holds case-insensitive User-Agent substrings, one or
-// more per agent in Figma's MCP client catalog (https://www.figma.com/mcp-catalog/
-// as of 2026-07-15: Claude, Claude Code, Codex, Cursor, Xcode, VS Code, Kiro,
-// Grok, Google Antigravity, GitHub Copilot CLI, Notion, Slack, ChatGPT,
-// Windsurf, Replit, Warp, Factory, Augment, Rovo Studio, Android Studio,
-// Amazon Q, OpenHands, Zed, ServiceNow Build Agent, Devin).
-//
-// The first group is verified against real client traffic observed on
-// Gram-hosted MCP servers. The second group is inferred from product names —
-// those clients have not been observed in Gram traffic yet, so the tokens are
-// a best guess at the product identifier their User-Agent would carry.
+// more per agent in Figma's MCP client catalog (figmaMCPCatalogURL, as of
+// 2026-07-15). The first group is verified against real client traffic on
+// Gram-hosted MCP servers; the second group has not been observed yet, so the
+// tokens are a best guess at the product identifier each User-Agent carries.
 var figmaAllowedUserAgents = []string{
-	"claude-user",         // Claude — claude.ai remote connectors
-	"claude-code/",        // Claude Code — cli, sdk, desktop, vscode, and slack surfaces
-	"cursor/",             // Cursor
-	"visual studio code/", // VS Code
-	"copilot/",            // GitHub Copilot CLI
-	"codex_cli_rs/",       // Codex CLI
-	"openai-mcp/",         // ChatGPT and OpenAI Agent Builder MCP client
-	"chatgpt-user/",       // ChatGPT server-side fetches
-	"zed/",                // Zed
-	"kiro/",               // Kiro — Electron-style UA with an embedded Kiro/<version> token
-	"replit",              // Replit — e.g. Replit-Agent-MCP-Client/1.0
-	"notion-mcp-client/",  // Notion
+	"claude-user", // Claude via claude.ai remote connectors
+	"claude-code/",
+	"cursor/",
+	"visual studio code/",
+	"copilot/",      // GitHub Copilot CLI
+	"codex_cli_rs/", // Codex CLI
+	"openai-mcp/",   // ChatGPT and OpenAI Agent Builder
+	"chatgpt-user/", // ChatGPT server-side fetches
+	"zed/",
+	"kiro/",
+	"replit", // e.g. Replit-Agent-MCP-Client/1.0
+	"notion-mcp-client/",
 
-	"xcode",          // Xcode (beta) — inferred
-	"grok",           // Grok — inferred
-	"antigravity",    // Google Antigravity — inferred
-	"slack",          // Slack — inferred
-	"windsurf",       // Windsurf — inferred
-	"warp/",          // Warp — inferred
-	"factory",        // Factory — inferred
-	"droid/",         // Factory's droid CLI — inferred
-	"augment",        // Augment — inferred
-	"rovo",           // Rovo Studio — inferred
-	"android studio", // Android Studio — inferred
-	"androidstudio",  // Android Studio, no-space variant — inferred
-	"amazon-q",       // Amazon Q — inferred
-	"amazonq",        // Amazon Q, no-dash variant — inferred
-	"openhands",      // OpenHands — inferred
-	"servicenow",     // ServiceNow Build Agent — inferred
-	"devin",          // Devin — inferred
+	"xcode",
+	"grok",
+	"antigravity",
+	"slack",
+	"windsurf",
+	"warp/",
+	"factory",
+	"droid/", // Factory's droid CLI
+	"augment",
+	"rovo",
+	"android studio",
+	"androidstudio",
+	"amazon-q",
+	"amazonq",
+	"openhands",
+	"servicenow",
+	"devin",
 }
 
-// isFigmaUpstream reports whether upstreamURL points at Figma's hosted MCP
-// server. Unparseable URLs are treated as non-Figma; the proxy rejects them
-// downstream for its own reasons.
 func isFigmaUpstream(upstreamURL string) bool {
 	u, err := url.Parse(upstreamURL)
 	if err != nil {
@@ -78,16 +63,11 @@ func isFigmaUpstream(upstreamURL string) bool {
 }
 
 // UserAgentAllowlistInterceptor rejects inbound MCP requests whose User-Agent
-// header does not match any allowed client pattern. It is a
-// [proxy.UserRequestInterceptor], so it runs on every POSTed JSON-RPC message
-// (including initialize) before the request is forwarded upstream. Rejections
-// surface to the caller as a JSON-RPC error envelope.
-//
-// This is a policy gate, not a security boundary: User-Agent is
-// client-asserted and trivially spoofable. Upstream servers such as Figma's
-// only support a fixed catalog of MCP clients, and the proxy replaces the
-// client's transport with its own — enforcing the allowlist here preserves
-// the upstream's client policy for proxied traffic.
+// does not match any allowed client token. Upstreams like Figma's only support
+// a fixed catalog of MCP clients, and the proxy replaces the client's
+// transport with its own — enforcing the allowlist here preserves the
+// upstream's client policy for proxied traffic. It is a policy gate, not a
+// security boundary: User-Agent is client-asserted and trivially spoofable.
 type UserAgentAllowlistInterceptor struct {
 	allowed    []string
 	catalogURL string
@@ -97,9 +77,8 @@ type UserAgentAllowlistInterceptor struct {
 var _ proxy.UserRequestInterceptor = (*UserAgentAllowlistInterceptor)(nil)
 
 // NewUserAgentAllowlistInterceptor constructs the interceptor. allowed holds
-// lowercase substrings matched case-insensitively against the inbound
-// User-Agent header; catalogURL is included in the rejection message so
-// blocked callers can discover which clients are supported.
+// lowercase substrings matched case-insensitively against the User-Agent
+// header; catalogURL is surfaced in rejection messages.
 func NewUserAgentAllowlistInterceptor(allowed []string, catalogURL string, logger *slog.Logger) *UserAgentAllowlistInterceptor {
 	return &UserAgentAllowlistInterceptor{
 		allowed:    allowed,
@@ -114,8 +93,8 @@ func (i *UserAgentAllowlistInterceptor) Name() string {
 }
 
 // InterceptUserRequest implements [proxy.UserRequestInterceptor]. A missing
-// User-Agent header is rejected like an unlisted one: the allowlist encodes
-// "only these clients", and anonymous callers cannot be one of them.
+// User-Agent is rejected like an unlisted one: anonymous callers cannot be
+// one of the allowed clients.
 func (i *UserAgentAllowlistInterceptor) InterceptUserRequest(ctx context.Context, req *proxy.UserRequest) error {
 	var userAgent string
 	if req != nil && req.UserHTTPRequest != nil {

@@ -142,9 +142,8 @@ func (f *ProxyManager) BuildTarget(
 ) *proxy.Proxy {
 	backendID := identity.SourceID()
 
-	// Figma's hosted MCP server only supports the clients in its catalog, and
-	// proxied traffic reaches Figma with Gram's transport rather than the
-	// client's — enforce their client policy on our side of the proxy.
+	// Figma only supports its cataloged MCP clients; enforce that on our side
+	// since proxied traffic reaches Figma with Gram's transport, not the client's.
 	var userRequestInterceptors []proxy.UserRequestInterceptor
 	if isFigmaUpstream(upstreamURL) {
 		userRequestInterceptors = append(userRequestInterceptors,
