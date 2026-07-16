@@ -1271,3 +1271,94 @@ func TestIngest_ReplayedFlagPersistsOnChatMessage(t *testing.T) {
 	require.True(t, replayedByContent[replayedPrompt], "a replayed delivery must persist replayed=true")
 	require.False(t, replayedByContent[livePrompt], "a live delivery must persist replayed=false")
 }
+
+// TestIngest_ReplayedMessageSortsByOccurredAt pins the DNO-536 contract: rows
+// persist with the event's original occurred_at as created_at, so downtime
+// backlog replayed AFTER a live event still sorts BEFORE it in transcript
+// order — arrival order must not decide conversation order. A future
+// occurred_at (skewed device clock) is clamped to arrival time so it cannot
+// sort past rows that come after it.
+func TestIngest_ReplayedMessageSortsByOccurredAt(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := "occurred-at-order-" + uuid.NewString()
+	chatID := sessionIDToUUID(sessionID)
+
+	// The live event arrives FIRST but occurred later — the recovery case:
+	// the send that proves the control plane is back precedes the drain.
+	livePrompt := "i need you"
+	liveAt := time.Now().UTC().Format(time.RFC3339Nano)
+	livePayload := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
+	livePayload.Data = &gen.HookIngestData{
+		Prompt: &gen.HookPromptData{Text: &livePrompt},
+	}
+	livePayload.Event.OccurredAt = &liveAt
+	res, err := ti.service.Ingest(ctx, livePayload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", res.Decision)
+
+	// The backlog event arrives SECOND but occurred five minutes earlier.
+	backlogPrompt := "nothing, just chilling"
+	backlogAt := time.Now().UTC().Add(-5 * time.Minute).Format(time.RFC3339Nano)
+	replayed := true
+	backlogPayload := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
+	backlogPayload.Data = &gen.HookIngestData{
+		Prompt: &gen.HookPromptData{Text: &backlogPrompt},
+	}
+	backlogPayload.Event.OccurredAt = &backlogAt
+	backlogPayload.Replayed = &replayed
+	res, err = ti.service.Ingest(ctx, backlogPayload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", res.Decision)
+
+	// A skewed clock cannot push a row into the future.
+	skewedPrompt := "from the future"
+	skewedAt := time.Now().UTC().Add(time.Hour).Format(time.RFC3339Nano)
+	skewedPayload := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
+	skewedPayload.Data = &gen.HookIngestData{
+		Prompt: &gen.HookPromptData{Text: &skewedPrompt},
+	}
+	skewedPayload.Event.OccurredAt = &skewedAt
+	res, err = ti.service.Ingest(ctx, skewedPayload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", res.Decision)
+
+	// Nor arbitrarily far into the past: occurred_at is client-controlled,
+	// and without a floor one hostile/broken clock would pin a row to the
+	// head of the transcript forever. The floor mirrors the client spool's
+	// 14-day expiry — no legitimate replay is older.
+	ancientPrompt := "from the distant past"
+	ancientAt := time.Now().UTC().Add(-30 * 24 * time.Hour).Format(time.RFC3339Nano)
+	ancientPayload := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
+	ancientPayload.Data = &gen.HookIngestData{
+		Prompt: &gen.HookPromptData{Text: &ancientPrompt},
+	}
+	ancientPayload.Event.OccurredAt = &ancientAt
+	res, err = ti.service.Ingest(ctx, ancientPayload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", res.Decision)
+
+	msgs, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
+		ChatID:    chatID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, msgs, 4)
+	require.Equal(t, ancientPrompt, msgs[0].Content, "a floored past event still sorts oldest")
+	require.Equal(t, backlogPrompt, msgs[1].Content, "the older backlog message must sort before the live event despite arriving second")
+	require.Equal(t, livePrompt, msgs[2].Content)
+	require.Equal(t, skewedPrompt, msgs[3].Content)
+
+	wantBacklogAt, err := time.Parse(time.RFC3339Nano, backlogAt)
+	require.NoError(t, err)
+	require.WithinDuration(t, wantBacklogAt, msgs[1].CreatedAt.Time, time.Second, "created_at must carry the event's occurred_at")
+	require.WithinDuration(t, time.Now(), msgs[3].CreatedAt.Time, 30*time.Second, "a future occurred_at must be clamped to arrival time")
+	require.WithinDuration(t, time.Now().Add(-14*24*time.Hour), msgs[0].CreatedAt.Time, 30*time.Second, "a far-past occurred_at must be floored to the 14-day backdate bound")
+}

@@ -1,3 +1,4 @@
+import { TableRowContextMenu } from "@/components/table-row-context-menu";
 import { DotRow } from "@/components/ui/dot-row";
 import { MoreActions } from "@/components/ui/more-actions";
 import { Type } from "@/components/ui/type";
@@ -125,71 +126,74 @@ export function SourceTableRow({
         : asset.name;
 
   return (
-    <DotRow
-      icon={iconContent}
-      onClick={() => routes.sources.source.goTo(sourceKind, asset.slug)}
-    >
-      {/* Name */}
-      <td className="px-3 py-3">
-        <Type
-          variant="subheading"
-          as="div"
-          className="group-hover:text-primary truncate text-sm transition-colors"
-          title={displayName}
-        >
-          {displayName}
-        </Type>
-      </td>
-
-      {/* Type */}
-      <td className="px-3 py-3">
-        <Badge variant="neutral">{sourceTypeLabel}</Badge>
-      </td>
-
-      {/* Tools */}
-      <td className="px-3 py-3">
-        <Type small muted>
-          {toolCount}
-        </Type>
-      </td>
-
-      {/* Created */}
-      <td className="px-3 py-3">
-        <Type small muted>
-          {formatDate(createdAt)}
-        </Type>
-      </td>
-
-      {/* Updated */}
-      <td className="px-3 py-3">
-        <Type small muted>
-          {formatDate(updatedAt)}
-        </Type>
-      </td>
-
-      {/* Health */}
-      <td className="px-3 py-3">
-        {causingFailure && (
-          <div className="text-destructive flex items-center gap-1.5">
-            <CircleAlertIcon className="size-3.5" />
-            <Type small className="text-destructive">
-              Error
-            </Type>
-          </div>
-        )}
-      </td>
-
-      {/* Actions */}
-      <td className="px-3 py-3">
-        {actions.length > 0 && (
-          <div
-            className="flex items-center justify-end"
-            onClick={(e) => e.stopPropagation()}
+    <TableRowContextMenu actions={actions}>
+      <DotRow
+        icon={iconContent}
+        href={routes.sources.source.href(sourceKind, asset.slug)}
+        ariaLabel={`View source ${displayName}`}
+      >
+        {/* Name */}
+        <td className="px-3 py-3">
+          <Type
+            variant="subheading"
+            as="div"
+            className="group-hover:text-primary truncate text-sm transition-colors"
+            title={displayName}
           >
-            <MoreActions actions={actions} />
-          </div>
-        )}
-      </td>
-    </DotRow>
+            {displayName}
+          </Type>
+        </td>
+
+        {/* Type */}
+        <td className="px-3 py-3">
+          <Badge variant="neutral">{sourceTypeLabel}</Badge>
+        </td>
+
+        {/* Tools */}
+        <td className="px-3 py-3">
+          <Type small muted>
+            {toolCount}
+          </Type>
+        </td>
+
+        {/* Created */}
+        <td className="px-3 py-3">
+          <Type small muted>
+            {formatDate(createdAt)}
+          </Type>
+        </td>
+
+        {/* Updated */}
+        <td className="px-3 py-3">
+          <Type small muted>
+            {formatDate(updatedAt)}
+          </Type>
+        </td>
+
+        {/* Health */}
+        <td className="px-3 py-3">
+          {causingFailure && (
+            <div className="text-destructive flex items-center gap-1.5">
+              <CircleAlertIcon className="size-3.5" />
+              <Type small className="text-destructive">
+                Error
+              </Type>
+            </div>
+          )}
+        </td>
+
+        {/* Actions */}
+        <td className="px-3 py-3">
+          {actions.length > 0 && (
+            <div
+              className="relative z-20 flex items-center justify-end"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <MoreActions actions={actions} />
+            </div>
+          )}
+        </td>
+      </DotRow>
+    </TableRowContextMenu>
   );
 }

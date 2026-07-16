@@ -1,5 +1,6 @@
 import { AccountTypeIcon } from "@/components/account-type-icon";
 import { personalAccountEmail } from "@/components/observe/account-display-utils";
+import { TableRowContextMenu } from "@/components/table-row-context-menu";
 import { Dialog } from "@/components/ui/dialog";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -212,115 +213,125 @@ export function ChatLogsTable({
             chat.lastMessageTimestamp ?? chat.createdAt;
 
           return (
-            <button
+            <TableRowContextMenu
               key={chat.id}
-              onClick={() => onSelectChat(chat)}
-              className={cn(
-                "group w-full px-5 py-4 text-left transition-all duration-150",
-                "hover:bg-muted/50",
-                "focus-visible:bg-muted/50 focus:outline-none",
-                isSelected && "bg-primary/3 hover:bg-primary/5",
-              )}
+              actions={[
+                {
+                  label: "Delete chat",
+                  destructive: true,
+                  onClick: () => setDeleteConfirmId(chat.id),
+                },
+              ]}
             >
-              <div className="flex items-center gap-5">
-                {/* Left: Risk findings indicator */}
-                <div className="shrink-0">
-                  <RiskIndicator count={riskCount} size={44} />
-                </div>
-
-                {/* Center: Main content */}
-                <div className="min-w-0 flex-1">
-                  {/* Header row */}
-                  <div className="mb-1.5 flex items-center gap-2">
-                    <span className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
-                      {getTraceId(chat.id)}
-                    </span>
-                    <CopyButton value={chat.id} label="Chat ID" />
-                    <span className="text-muted-foreground/40">·</span>
-                    <span className="text-muted-foreground text-sm">
-                      Created {format(chat.createdAt, "MMM d, HH:mm")}
-                    </span>
-                    <span className="text-muted-foreground/40">·</span>
-                    <span className="text-muted-foreground text-sm">
-                      Last activity{" "}
-                      {format(lastActivityTimestamp, "MMM d, HH:mm")}
-                    </span>
+              <button
+                onClick={() => onSelectChat(chat)}
+                className={cn(
+                  "group w-full px-5 py-4 text-left transition-all duration-150",
+                  "hover:bg-muted/50",
+                  "focus-visible:bg-muted/50 focus:outline-none",
+                  isSelected && "bg-primary/3 hover:bg-primary/5",
+                )}
+              >
+                <div className="flex items-center gap-5">
+                  {/* Left: Risk findings indicator */}
+                  <div className="shrink-0">
+                    <RiskIndicator count={riskCount} size={44} />
                   </div>
 
-                  {/* Title */}
-                  <h3 className="text-foreground mb-2 line-clamp-2 text-sm leading-snug font-medium">
-                    {chat.title}
-                  </h3>
+                  {/* Center: Main content */}
+                  <div className="min-w-0 flex-1">
+                    {/* Header row */}
+                    <div className="mb-1.5 flex items-center gap-2">
+                      <span className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+                        {getTraceId(chat.id)}
+                      </span>
+                      <CopyButton value={chat.id} label="Chat ID" />
+                      <span className="text-muted-foreground/40">·</span>
+                      <span className="text-muted-foreground text-sm">
+                        Created {format(chat.createdAt, "MMM d, HH:mm")}
+                      </span>
+                      <span className="text-muted-foreground/40">·</span>
+                      <span className="text-muted-foreground text-sm">
+                        Last activity{" "}
+                        {format(lastActivityTimestamp, "MMM d, HH:mm")}
+                      </span>
+                    </div>
 
-                  {/* Metadata row */}
-                  <div className="text-muted-foreground flex items-center gap-4 text-sm">
-                    <span className="flex items-center gap-1.5">
-                      <AccountTypeIcon accountType={chat.accountType} />
-                      <span className="max-w-[120px] truncate">
-                        {ownerLabel(chat, user)}
-                      </span>
-                    </span>
-                    {source && (
+                    {/* Title */}
+                    <h3 className="text-foreground mb-2 line-clamp-2 text-sm leading-snug font-medium">
+                      {chat.title}
+                    </h3>
+
+                    {/* Metadata row */}
+                    <div className="text-muted-foreground flex items-center gap-4 text-sm">
                       <span className="flex items-center gap-1.5">
-                        <HookSourceIcon source={source} className="size-4" />
-                        {source}
+                        <AccountTypeIcon accountType={chat.accountType} />
+                        <span className="max-w-[120px] truncate">
+                          {ownerLabel(chat, user)}
+                        </span>
                       </span>
-                    )}
-                    <span className="flex items-center gap-1.5">
-                      <Icon name="timer" className="size-4 opacity-60" />
-                      {formatDuration(chat)}
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <Icon
-                        name="message-square"
-                        className="size-4 opacity-60"
-                      />
-                      {chat.numMessages} messages
-                    </span>
-                    {chat.totalCost !== undefined && chat.totalCost > 0 && (
-                      <span className="flex items-center gap-0">
+                      {source && (
+                        <span className="flex items-center gap-1.5">
+                          <HookSourceIcon source={source} className="size-4" />
+                          {source}
+                        </span>
+                      )}
+                      <span className="flex items-center gap-1.5">
+                        <Icon name="timer" className="size-4 opacity-60" />
+                        {formatDuration(chat)}
+                      </span>
+                      <span className="flex items-center gap-1.5">
                         <Icon
-                          name="dollar-sign"
+                          name="message-square"
                           className="size-4 opacity-60"
                         />
-                        {chat.totalCost.toFixed(4)}
+                        {chat.numMessages} messages
                       </span>
-                    )}
+                      {chat.totalCost !== undefined && chat.totalCost > 0 && (
+                        <span className="flex items-center gap-0">
+                          <Icon
+                            name="dollar-sign"
+                            className="size-4 opacity-60"
+                          />
+                          {chat.totalCost.toFixed(4)}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                </div>
 
-                {/* Right: Delete + Chevron */}
-                <div className="flex shrink-0 items-center gap-1 pt-2">
-                  <span
-                    role="button"
-                    tabIndex={0}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setDeleteConfirmId(chat.id);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
+                  {/* Right: Delete + Chevron */}
+                  <div className="flex shrink-0 items-center gap-1 pt-2">
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      onClick={(e) => {
                         e.stopPropagation();
                         setDeleteConfirmId(chat.id);
-                      }
-                    }}
-                    className="hover:bg-destructive/10 text-muted-foreground hover:text-destructive rounded-md p-1 opacity-0 transition-all group-hover:opacity-100"
-                    aria-label="Delete chat"
-                  >
-                    <Icon name="trash-2" className="size-4" />
-                  </span>
-                  <Icon
-                    name="chevron-right"
-                    className={cn(
-                      "size-4 transition-colors",
-                      isSelected
-                        ? "text-foreground/60"
-                        : "text-muted-foreground/40",
-                    )}
-                  />
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.stopPropagation();
+                          setDeleteConfirmId(chat.id);
+                        }
+                      }}
+                      className="hover:bg-destructive/10 text-muted-foreground hover:text-destructive rounded-md p-1 opacity-0 transition-all group-hover:opacity-100"
+                      aria-label="Delete chat"
+                    >
+                      <Icon name="trash-2" className="size-4" />
+                    </span>
+                    <Icon
+                      name="chevron-right"
+                      className={cn(
+                        "size-4 transition-colors",
+                        isSelected
+                          ? "text-foreground/60"
+                          : "text-muted-foreground/40",
+                      )}
+                    />
+                  </div>
                 </div>
-              </div>
-            </button>
+              </button>
+            </TableRowContextMenu>
           );
         })}
       </div>

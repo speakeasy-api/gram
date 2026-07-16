@@ -14,20 +14,28 @@ import (
 
 const addPluginAssignment = `-- name: AddPluginAssignment :one
 INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn)
-VALUES ($1, $2, $3)
+SELECT p.id, $1, $2
+FROM plugins p
+WHERE p.id = $3
+  AND p.organization_id = $1
+  AND p.deleted IS FALSE
 ON CONFLICT (plugin_id, principal_urn) DO UPDATE
   SET principal_urn = EXCLUDED.principal_urn
 RETURNING id, plugin_id, organization_id, principal_urn, created_at, updated_at
 `
 
 type AddPluginAssignmentParams struct {
-	PluginID       uuid.UUID
 	OrganizationID string
 	PrincipalUrn   string
+	PluginID       uuid.UUID
 }
 
+// Scoped to the org: the row is inserted only when @plugin_id resolves to a
+// non-deleted plugin in @organization_id, so a mismatched (plugin, org) pair
+// can never create a cross-tenant assignment. Returns no row (ErrNoRows) when
+// the plugin does not belong to the org.
 func (q *Queries) AddPluginAssignment(ctx context.Context, arg AddPluginAssignmentParams) (PluginAssignment, error) {
-	row := q.db.QueryRow(ctx, addPluginAssignment, arg.PluginID, arg.OrganizationID, arg.PrincipalUrn)
+	row := q.db.QueryRow(ctx, addPluginAssignment, arg.OrganizationID, arg.PrincipalUrn, arg.PluginID)
 	var i PluginAssignment
 	err := row.Scan(
 		&i.ID,
@@ -500,6 +508,35 @@ func (q *Queries) GetProjectMarketplaceNameContext(ctx context.Context, projectI
 	var i GetProjectMarketplaceNameContextRow
 	err := row.Scan(&i.ProjectSlug, &i.IsDefaultProject)
 	return i, err
+}
+
+const isDefaultProject = `-- name: IsDefaultProject :one
+SELECT (
+  SELECT p.id
+  FROM projects p
+  WHERE p.organization_id = $1
+    AND p.deleted IS FALSE
+  ORDER BY p.id ASC
+  LIMIT 1
+) = $2 AS is_default
+`
+
+type IsDefaultProjectParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+// Whether @project_id is the org's default project — the oldest (first by id
+// ASC) non-deleted project, created at org setup. Mirrors the default-project
+// definition the agent's getPlugins read path uses, so the audience the seeding
+// side grants matches the project the delivery side treats as default. Used to
+// decide whether a new plugin defaults to the org-wide audience: only plugins in
+// the default project do; plugins in other projects default to no assignments.
+func (q *Queries) IsDefaultProject(ctx context.Context, arg IsDefaultProjectParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isDefaultProject, arg.OrganizationID, arg.ProjectID)
+	var is_default bool
+	err := row.Scan(&is_default)
+	return is_default, err
 }
 
 const isOrganizationFeatureEnabled = `-- name: IsOrganizationFeatureEnabled :one

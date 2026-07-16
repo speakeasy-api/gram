@@ -435,6 +435,30 @@ func (s *Service) CreatePlugin(ctx context.Context, payload *gen.CreatePluginPay
 		return nil, oops.E(oops.CodeUnexpected, err, "create plugin").LogError(ctx, s.logger)
 	}
 
+	// Default a new plugin in the org's default project to the org wildcard so it
+	// delivers to every member — that project is the org-wide baseline. Plugins in
+	// other projects default to no assignments (they reach no one until an admin
+	// assigns an audience), so a separate project's servers aren't auto-broadcast
+	// org-wide. agent.getPlugins scopes delivery by assignment; "*" (all org
+	// members) is the closest "everyone" primitive Gram has, since there's no
+	// project-scoped membership.
+	isDefaultProject, err := s.repo.WithTx(tx).IsDefaultProject(ctx, repo.IsDefaultProjectParams{
+		OrganizationID: ac.ActiveOrganizationID,
+		ProjectID:      *ac.ProjectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "check default project").LogError(ctx, s.logger)
+	}
+	if isDefaultProject {
+		if _, err := s.repo.WithTx(tx).AddPluginAssignment(ctx, repo.AddPluginAssignmentParams{
+			PluginID:       plugin.ID,
+			OrganizationID: ac.ActiveOrganizationID,
+			PrincipalUrn:   urn.PrincipalWildcard,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "assign new plugin to org").LogError(ctx, s.logger)
+		}
+	}
+
 	if err := s.audit.LogPluginCreate(ctx, tx, audit.LogPluginCreateEvent{
 		OrganizationID:   ac.ActiveOrganizationID,
 		ProjectID:        *ac.ProjectID,

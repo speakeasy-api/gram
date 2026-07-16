@@ -98,6 +98,25 @@ func TestPluginsService_CreatePlugin(t *testing.T) {
 	require.Equal(t, "engineering-tools", result.Slug)
 }
 
+// A new plugin defaults to the org wildcard so it delivers to every member
+// (agent.getPlugins scopes delivery by assignment; without a default an
+// unassigned plugin would reach no one).
+func TestPluginsService_CreatePlugin_DefaultsToWildcardAssignment(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	created, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{
+		Name: "Defaulted Plugin",
+	})
+	require.NoError(t, err)
+
+	fetched, err := ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: created.ID})
+	require.NoError(t, err)
+	require.Len(t, fetched.Assignments, 1)
+	require.Equal(t, "*", fetched.Assignments[0].PrincipalUrn)
+}
+
 func TestPluginsService_CreatePlugin_DuplicateSlugReturnsConflict(t *testing.T) {
 	t.Parallel()
 
@@ -872,6 +891,46 @@ func TestPluginsService_PublishPlugins_ReclaimsStaleConnectionFromDeletedProject
 	conn, err := pluginsrepo.New(ti.conn).GetGitHubConnection(ctx, projectB.ID)
 	require.NoError(t, err)
 	require.Equal(t, projectB.ID, conn.ProjectID)
+}
+
+// TestCreatePlugin_DefaultsToOrgWildcardOnlyInDefaultProject pins the audience
+// default: a plugin created in the org's default project is seeded with the org
+// wildcard ("*"), while a plugin created in a non-default project starts with no
+// assignments and reaches no one until an admin assigns an audience.
+func TestCreatePlugin_DefaultsToOrgWildcardOnlyInDefaultProject(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	orgID := authCtx.ActiveOrganizationID
+
+	// The test's original project is the org's only (and thus oldest) project —
+	// the default — so a plugin created here is seeded with the org wildcard.
+	inDefault, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "In Default"})
+	require.NoError(t, err)
+	defaultAssignments, err := pluginsrepo.New(ti.conn).ListPluginAssignments(ctx, uuid.MustParse(inDefault.ID))
+	require.NoError(t, err)
+	require.Len(t, defaultAssignments, 1)
+	require.Equal(t, "*", defaultAssignments[0].PrincipalUrn)
+
+	// A second project, created after the first, is not the default project.
+	other, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           "second-project",
+		Slug:           "second-project",
+		OrganizationID: orgID,
+	})
+	require.NoError(t, err)
+	authCtx.ProjectID = &other.ID
+	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+
+	inOther, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "In Other"})
+	require.NoError(t, err)
+	otherAssignments, err := pluginsrepo.New(ti.conn).ListPluginAssignments(ctx, uuid.MustParse(inOther.ID))
+	require.NoError(t, err)
+	require.Empty(t, otherAssignments,
+		"a plugin in a non-default project starts with no audience")
 }
 
 // After a publish, mutating the plugin set (here: adding another server) must

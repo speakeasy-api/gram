@@ -23,6 +23,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { formatShortDate } from "@/components/access/shadow-mcp-utils";
+import { TableRowContextMenu } from "@/components/table-row-context-menu";
 import { cn } from "@/lib/utils";
 import {
   type ActiveInventoryAction,
@@ -31,6 +32,7 @@ import {
   ShadowMCPInventoryActionSheet,
   type ShadowMCPPolicy,
 } from "./ShadowMCPInventoryActions";
+import { shadowMCPInventoryActions } from "./shadowMCPInventoryActionItems";
 import {
   shadowMCPInventoryStatus,
   shadowMCPInventoryStatusBadgeVariant,
@@ -492,6 +494,18 @@ export function ShadowMCPInventoryTable({
           onRowClick={onOpenServer}
           rowKey={(row) => row.canonicalServerUrl}
           className="min-h-0 content-start overflow-y-auto"
+          renderRow={(row, rowElement) => (
+            <TableRowContextMenu
+              key={row.canonicalServerUrl}
+              actions={shadowMCPInventoryActions(row, {
+                disabled: isActionPending,
+                onOpenAction: (mode, selectedServer) =>
+                  setActiveAction({ mode, server: selectedServer }),
+              })}
+            >
+              {rowElement}
+            </TableRowContextMenu>
+          )}
         />
       </Table>
     </div>

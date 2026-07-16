@@ -18,6 +18,10 @@ export type GetProductFeaturesResponseBody = {
    */
   customModelKeysEnabled: boolean;
   /**
+   * Whether the organization uses the device agent (any device has polled agent.getPlugins). Derived from device-agent syncs, not an admin-settable feature.
+   */
+  deviceAgent: boolean;
+  /**
    * Whether generated hook plugins may mint per-user keys via the interactive browser login
    */
   hooksBrowserLoginEnabled: boolean;
@@ -63,6 +67,7 @@ export const GetProductFeaturesResponseBody$inboundSchema: z.ZodMiniType<
   z.object({
     authz_challenge_logging_enabled: z.boolean(),
     custom_model_keys_enabled: z.boolean(),
+    device_agent: z.boolean(),
     hooks_browser_login_enabled: z.boolean(),
     hooks_fail_open_enabled: z.boolean(),
     logs_enabled: z.boolean(),
@@ -77,6 +82,7 @@ export const GetProductFeaturesResponseBody$inboundSchema: z.ZodMiniType<
     return remap$(v, {
       "authz_challenge_logging_enabled": "authzChallengeLoggingEnabled",
       "custom_model_keys_enabled": "customModelKeysEnabled",
+      "device_agent": "deviceAgent",
       "hooks_browser_login_enabled": "hooksBrowserLoginEnabled",
       "hooks_fail_open_enabled": "hooksFailOpenEnabled",
       "logs_enabled": "logsEnabled",

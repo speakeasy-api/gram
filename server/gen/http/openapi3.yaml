@@ -46951,6 +46951,9 @@ components:
                 custom_model_keys_enabled:
                     type: boolean
                     description: Whether the organization can supply its own model provider API keys (BYOK)
+                device_agent:
+                    type: boolean
+                    description: Whether the organization uses the device agent (any device has polled agent.getPlugins). Derived from device-agent syncs, not an admin-settable feature.
                 hooks_browser_login_enabled:
                     type: boolean
                     description: Whether generated hook plugins may mint per-user keys via the interactive browser login
@@ -46990,6 +46993,7 @@ components:
                 - hooks_fail_open_enabled
                 - custom_model_keys_enabled
                 - skills_enabled
+                - device_agent
         GetProjectForm:
             type: object
             properties:

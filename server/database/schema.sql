@@ -1739,6 +1739,13 @@ CREATE TABLE IF NOT EXISTS chat_messages (
 CREATE INDEX IF NOT EXISTS chat_messages_chat_id_idx ON chat_messages (chat_id);
 CREATE INDEX IF NOT EXISTS chat_messages_chat_id_generation_seq_idx ON chat_messages (chat_id, generation, seq);
 
+-- Transcript readers and keyset pages order by (created_at, seq) within a
+-- generation (DNO-536: hook rows carry the event's occurred_at, so seq alone
+-- no longer matches display order). This index serves that filter+sort with
+-- an ordered scan and restores keyset LIMIT early-stop.
+CREATE INDEX IF NOT EXISTS chat_messages_chat_id_generation_created_at_seq_idx
+ON chat_messages (chat_id, generation, created_at, seq);
+
 -- Chat listings derive each chat's message count and last-message time per
 -- request; this lets those be per-chat index-only probes instead of an
 -- aggregate over the chat's full message history.
