@@ -16,7 +16,9 @@ import (
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/orgslug"
+	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/database"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -53,13 +55,19 @@ type ProcessWorkOSOrganizationEvents struct {
 	db           *pgxpool.Pool
 	logger       *slog.Logger
 	workosClient WorkOSClient
+	// userInfoCache mirrors the identity resolver's cached user info (same
+	// key shape and suffix as the resolver wiring in cmd/gram) so that
+	// deprovisioning events can invalidate a user's cached org memberships
+	// instead of waiting out the cache TTL.
+	userInfoCache cache.TypedCacheObject[sessions.CachedUserInfo]
 }
 
-func NewProcessWorkOSOrganizationEvents(logger *slog.Logger, db *pgxpool.Pool, workosClient WorkOSClient) *ProcessWorkOSOrganizationEvents {
+func NewProcessWorkOSOrganizationEvents(logger *slog.Logger, db *pgxpool.Pool, workosClient WorkOSClient, cacheAdapter cache.Cache) *ProcessWorkOSOrganizationEvents {
 	return &ProcessWorkOSOrganizationEvents{
-		db:           db,
-		logger:       logger,
-		workosClient: workosClient,
+		db:            db,
+		logger:        logger,
+		workosClient:  workosClient,
+		userInfoCache: cache.NewTypedObjectCache[sessions.CachedUserInfo](logger.With(attr.SlogCacheNamespace("user_info")), cacheAdapter, cache.SuffixNone),
 	}
 }
 
@@ -184,7 +192,7 @@ func (p *ProcessWorkOSOrganizationEvents) handleEvent(ctx context.Context, logge
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	externalIDUpdate, err := handleOrganizationEvent(ctx, logger, dbtx, event)
+	externalIDUpdate, invalidateUserID, err := handleOrganizationEvent(ctx, logger, dbtx, event)
 	if err != nil {
 		return "", err
 	}
@@ -206,43 +214,70 @@ func (p *ProcessWorkOSOrganizationEvents) handleEvent(ctx context.Context, logge
 		}
 	}
 
+	if invalidateUserID != "" {
+		// Best-effort: the DB is the source of truth and the cache expires on
+		// its own TTL, so a failed invalidation only delays deprovisioning
+		// from taking effect on cached org-access checks.
+		if err := p.userInfoCache.Delete(ctx, sessions.CachedUserInfo{
+			UserID:             invalidateUserID,
+			Admin:              false,
+			Email:              "",
+			DisplayName:        nil,
+			PhotoURL:           nil,
+			UserPylonSignature: nil,
+			Organizations:      nil,
+		}); err != nil {
+			logger.WarnContext(ctx, "failed to invalidate user info cache after deprovisioning",
+				attr.SlogError(err),
+				attr.SlogUserID(invalidateUserID),
+			)
+		}
+	}
+
 	return event.ID, nil
 }
 
 // handleOrganizationEvent dispatches a WorkOS event scoped to a specific
 // organization to its handler. Each handler is responsible for the
-// ShouldProcessEvent guard against duplicate apply.
-func handleOrganizationEvent(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) (*workosOrgExternalIDUpdate, error) {
+// ShouldProcessEvent guard against duplicate apply. The second return value
+// is the Gram user ID whose organization access was deprovisioned by the
+// event (empty when none) so the caller can invalidate cached user info
+// after the transaction commits.
+func handleOrganizationEvent(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) (*workosOrgExternalIDUpdate, string, error) {
 	switch event.Event {
 	case string(workos.EventKindOrganizationCreated), string(workos.EventKindOrganizationUpdated):
-		return handleOrganizationUpsert(ctx, logger, dbtx, event)
+		externalIDUpdate, err := handleOrganizationUpsert(ctx, logger, dbtx, event)
+		return externalIDUpdate, "", err
 	case string(workos.EventKindOrganizationDeleted):
-		return nil, handleOrganizationDeleted(ctx, logger, dbtx, event)
+		return nil, "", handleOrganizationDeleted(ctx, logger, dbtx, event)
 	case string(workos.EventKindOrganizationRoleCreated), string(workos.EventKindOrganizationRoleUpdated):
-		return nil, handleRoleUpsert(ctx, logger, dbtx, event)
+		return nil, "", handleRoleUpsert(ctx, logger, dbtx, event)
 	case string(workos.EventKindOrganizationRoleDeleted):
-		return nil, handleRoleDeleted(ctx, logger, dbtx, event)
+		return nil, "", handleRoleDeleted(ctx, logger, dbtx, event)
 	case string(workos.EventKindOrganizationMembershipCreated), string(workos.EventKindOrganizationMembershipUpdated):
-		return nil, handleOrganizationMembershipUpsert(ctx, logger, dbtx, event)
+		deprovisionedUserID, err := handleOrganizationMembershipUpsert(ctx, logger, dbtx, event)
+		return nil, deprovisionedUserID, err
 	case string(workos.EventKindOrganizationMembershipDeleted):
-		return nil, handleOrganizationMembershipDeleted(ctx, logger, dbtx, event)
+		deprovisionedUserID, err := handleOrganizationMembershipDeleted(ctx, logger, dbtx, event)
+		return nil, deprovisionedUserID, err
 	case string(workos.EventKindConnectionActivated):
-		return nil, handleSSOConnectionChange(ctx, logger, dbtx, event, true)
+		return nil, "", handleSSOConnectionChange(ctx, logger, dbtx, event, true)
 	case string(workos.EventKindConnectionDeactivated), string(workos.EventKindConnectionDeleted):
-		return nil, handleSSOConnectionChange(ctx, logger, dbtx, event, false)
+		return nil, "", handleSSOConnectionChange(ctx, logger, dbtx, event, false)
 	case string(workos.EventKindDirectorySyncActivated):
-		return nil, handleDSyncChange(ctx, logger, dbtx, event, true)
+		return nil, "", handleDSyncChange(ctx, logger, dbtx, event, true)
 	case string(workos.EventKindDirectorySyncDeleted):
-		return nil, handleDSyncChange(ctx, logger, dbtx, event, false)
+		return nil, "", handleDSyncChange(ctx, logger, dbtx, event, false)
 	case string(workos.EventKindDirectorySyncUserCreated), string(workos.EventKindDirectorySyncUserUpdated), string(workos.EventKindDirectorySyncUserDeleted):
-		return nil, handleDirectoryUserEvent(ctx, logger, dbtx, event)
+		deprovisionedUserID, err := handleDirectoryUserEvent(ctx, logger, dbtx, event)
+		return nil, deprovisionedUserID, err
 	case string(workos.EventKindDirectorySyncGroupCreated), string(workos.EventKindDirectorySyncGroupUpdated), string(workos.EventKindDirectorySyncGroupDeleted):
-		return nil, handleDirectoryGroupEvent(ctx, logger, dbtx, event)
+		return nil, "", handleDirectoryGroupEvent(ctx, logger, dbtx, event)
 	case string(workos.EventKindDirectorySyncGroupUserAdded), string(workos.EventKindDirectorySyncGroupUserRemoved):
-		return nil, handleDirectoryGroupMembershipEvent(ctx, logger, dbtx, event)
+		return nil, "", handleDirectoryGroupMembershipEvent(ctx, logger, dbtx, event)
 	}
 
-	return nil, oops.Permanent(fmt.Errorf("unhandled workos organization event type: %s", event.Event))
+	return nil, "", oops.Permanent(fmt.Errorf("unhandled workos organization event type: %s", event.Event))
 }
 
 // workosOrganizationEventPayload is the relevant subset of an

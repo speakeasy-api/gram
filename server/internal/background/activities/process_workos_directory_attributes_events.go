@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/workos/workos-go/v6/pkg/directorysync"
 	"github.com/workos/workos-go/v6/pkg/events"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -38,6 +39,7 @@ type workosDirectoryUserEventPayload struct {
 	Username         string          `json:"username"`
 	FirstName        string          `json:"first_name"`
 	LastName         string          `json:"last_name"`
+	State            string          `json:"state"`
 	CreatedAt        time.Time       `json:"created_at"`
 	UpdatedAt        time.Time       `json:"updated_at"`
 }
@@ -47,25 +49,34 @@ type workosDirectoryGroupMembershipEventPayload struct {
 	Group workosDirectoryGroupEventPayload `json:"group"`
 }
 
-func handleDirectoryUserEvent(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) error {
+// handleDirectoryUserEvent applies a dsync.user.* event. It returns the Gram
+// user ID whose organization access was deprovisioned (empty when no access
+// changed) so the caller can invalidate cached user info after commit.
+func handleDirectoryUserEvent(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) (string, error) {
 	var payload workosDirectoryUserEventPayload
 	if err := json.Unmarshal(event.Data, &payload); err != nil {
-		return oops.Permanent(oops.E(oops.CodeBadRequest, err, "unmarshal directory user event payload"))
+		return "", oops.Permanent(oops.E(oops.CodeBadRequest, err, "unmarshal directory user event payload"))
 	}
 	if payload.ID == "" {
-		return oops.Permanent(oops.E(oops.CodeBadRequest, nil, "invalid directory user event payload missing ID"))
+		return "", oops.Permanent(oops.E(oops.CodeBadRequest, nil, "invalid directory user event payload missing ID"))
 	}
 
 	switch workos.EventKind(event.Event) {
 	case workos.EventKindDirectorySyncUserCreated, workos.EventKindDirectorySyncUserUpdated:
-		return upsertDirectoryUser(ctx, dbtx, event, payload)
+		// A non-active state on a create/update is how SCIM deactivation
+		// (e.g. suspending a user in the IdP) surfaces: WorkOS emits
+		// dsync.user.updated with state=inactive rather than a delete event.
+		if payload.State != "" && payload.State != string(directorysync.Active) {
+			return deactivateDirectoryUser(ctx, logger, dbtx, event, payload)
+		}
+		return "", upsertDirectoryUser(ctx, dbtx, event, payload)
 	case workos.EventKindDirectorySyncUserDeleted:
 		existing, err := workosrepo.New(dbtx).GetDirectoryUserSyncStateByWorkOSID(ctx, payload.ID)
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil
+			return "", nil
 		}
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "get directory user sync state")
+			return "", oops.E(oops.CodeUnexpected, err, "get directory user sync state")
 		}
 		var rowUpdatedAt *time.Time
 		if existing.WorkosUpdatedAt.Valid {
@@ -73,18 +84,18 @@ func handleDirectoryUserEvent(ctx context.Context, logger *slog.Logger, dbtx dat
 		}
 		eventUpdatedAt := conv.Default(payload.UpdatedAt, event.CreatedAt)
 		if !ShouldProcessEvent(conv.FromPGText[string](existing.WorkosLastEventID), rowUpdatedAt, event.ID, eventUpdatedAt) {
-			return nil
+			return "", nil
 		}
 		if _, err := workosrepo.New(dbtx).DeleteDirectoryUserByWorkOSID(ctx, workosrepo.DeleteDirectoryUserByWorkOSIDParams{
 			WorkosDeletedAt:       conv.ToPGTimestamptz(eventUpdatedAt),
 			WorkosLastEventID:     conv.ToPGText(event.ID),
 			WorkosDirectoryUserID: payload.ID,
 		}); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "delete directory user")
+			return "", oops.E(oops.CodeUnexpected, err, "delete directory user")
 		}
-		return nil
+		return "", nil
 	default:
-		return nil
+		return "", nil
 	}
 }
 
@@ -210,13 +221,145 @@ func upsertDirectoryUser(ctx context.Context, dbtx database.DBTX, event events.E
 		WorkosDirectoryUserID: payload.ID,
 		Email:                 conv.ToPGText(email),
 		Attributes:            attributes,
-		WorkosCreatedAt:       conv.ToPGTimestamptz(conv.Default(payload.CreatedAt, event.CreatedAt)),
-		WorkosUpdatedAt:       conv.ToPGTimestamptz(conv.Default(payload.UpdatedAt, event.CreatedAt)),
-		WorkosLastEventID:     conv.ToPGText(event.ID),
+		// Only an explicitly active state may resurrect a soft-deleted row.
+		// This keeps legitimate re-provisioning working while preventing
+		// stateless upserts from restoring a deactivated directory user.
+		RestoreDeleted:    payload.State == string(directorysync.Active),
+		WorkosCreatedAt:   conv.ToPGTimestamptz(conv.Default(payload.CreatedAt, event.CreatedAt)),
+		WorkosUpdatedAt:   conv.ToPGTimestamptz(conv.Default(payload.UpdatedAt, event.CreatedAt)),
+		WorkosLastEventID: conv.ToPGText(event.ID),
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "upsert directory user")
 	}
 	return nil
+}
+
+// deactivateDirectoryUser handles a dsync.user.{created,updated} event whose
+// state is not active. It soft-deletes the directory user row and, when the
+// directory user maps to a Gram user, deprovisions that user's access to the
+// organization (relationship + role assignments), mirroring what an
+// organization_membership.deleted event does. Returns the Gram user ID whose
+// access was removed, or empty when nothing was deprovisioned.
+func deactivateDirectoryUser(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event, payload workosDirectoryUserEventPayload) (string, error) {
+	org, err := organizationsrepo.New(dbtx).GetOrganizationByWorkosID(ctx, conv.ToPGText(payload.OrganizationID))
+	if err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "get organization by WorkOS ID")
+	}
+
+	eventUpdatedAt := conv.Default(payload.UpdatedAt, event.CreatedAt)
+
+	existing, err := workosrepo.New(dbtx).GetDirectoryUserSyncStateByWorkOSID(ctx, payload.ID)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return "", oops.E(oops.CodeUnexpected, err, "get directory user sync state")
+	}
+	if err == nil {
+		var rowUpdatedAt *time.Time
+		if existing.WorkosUpdatedAt.Valid {
+			rowUpdatedAt = &existing.WorkosUpdatedAt.Time
+		}
+		if !ShouldProcessEvent(conv.FromPGText[string](existing.WorkosLastEventID), rowUpdatedAt, event.ID, eventUpdatedAt) {
+			return "", nil
+		}
+	}
+
+	// Resolve the linked Gram user before soft-deleting the directory row:
+	// email is the canonical linkage (mirroring upsertDirectoryUser), with the
+	// stored user_id as a fallback for directory users whose email changed.
+	var gramUserID string
+	if email := conv.NormalizeEmail(payload.Email); email != "" {
+		user, err := usersrepo.New(dbtx).GetUserByEmail(ctx, email)
+		switch {
+		case err == nil:
+			gramUserID = user.ID
+		case errors.Is(err, pgx.ErrNoRows):
+		default:
+			return "", oops.E(oops.CodeUnexpected, err, "get user by directory email")
+		}
+	}
+	if gramUserID == "" {
+		directoryUser, err := workosrepo.New(dbtx).GetDirectoryUserByWorkOSID(ctx, payload.ID)
+		switch {
+		case err == nil && directoryUser.UserID.Valid:
+			gramUserID = directoryUser.UserID.String
+		case err != nil && !errors.Is(err, pgx.ErrNoRows):
+			return "", oops.E(oops.CodeUnexpected, err, "get directory user by WorkOS ID")
+		}
+	}
+
+	if _, err := workosrepo.New(dbtx).DeleteDirectoryUserByWorkOSID(ctx, workosrepo.DeleteDirectoryUserByWorkOSIDParams{
+		WorkosDeletedAt:       conv.ToPGTimestamptz(eventUpdatedAt),
+		WorkosLastEventID:     conv.ToPGText(event.ID),
+		WorkosDirectoryUserID: payload.ID,
+	}); err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "deactivate directory user")
+	}
+
+	if gramUserID == "" {
+		logger.WarnContext(ctx, "directory user deactivated but no linked Gram user found",
+			attr.SlogWorkOSDirectoryUserID(payload.ID),
+		)
+		return "", nil
+	}
+
+	rel, err := organizationsrepo.New(dbtx).GetOrganizationRelationshipForUser(ctx, organizationsrepo.GetOrganizationRelationshipForUserParams{
+		OrganizationID: org.ID,
+		UserID:         conv.ToPGText(gramUserID),
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return "", nil
+	case err != nil:
+		return "", oops.E(oops.CodeUnexpected, err, "get organization relationship for directory user")
+	}
+	if rel.Deleted {
+		return "", nil
+	}
+
+	var relUpdatedAt *time.Time
+	if rel.WorkosUpdatedAt.Valid {
+		relUpdatedAt = &rel.WorkosUpdatedAt.Time
+	}
+	if !ShouldProcessEvent(conv.FromPGText[string](rel.WorkosLastEventID), relUpdatedAt, event.ID, eventUpdatedAt) {
+		return "", nil
+	}
+
+	if err := organizationsrepo.New(dbtx).MarkWorkOSMembershipDeleted(ctx, organizationsrepo.MarkWorkOSMembershipDeletedParams{
+		OrganizationID:     org.ID,
+		UserID:             conv.ToPGText(gramUserID),
+		WorkosUserID:       rel.WorkosUserID,
+		WorkosMembershipID: rel.WorkosMembershipID,
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(eventUpdatedAt),
+		WorkosLastEventID:  conv.ToPGText(event.ID),
+	}); err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "mark organization membership deleted for directory user")
+	}
+
+	workosUserID := rel.WorkosUserID.String
+	if workosUserID == "" {
+		user, err := usersrepo.New(dbtx).GetUser(ctx, gramUserID)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return "", oops.E(oops.CodeUnexpected, err, "get user for directory deactivation")
+		}
+		if err == nil && user.WorkosID.Valid {
+			workosUserID = user.WorkosID.String
+		}
+	}
+	if workosUserID != "" {
+		if err := organizationsrepo.New(dbtx).MarkRoleAssignmentsDeleted(ctx, organizationsrepo.MarkRoleAssignmentsDeletedParams{
+			OrganizationID:    org.ID,
+			WorkosUserID:      workosUserID,
+			WorkosUpdatedAt:   conv.ToPGTimestamptz(eventUpdatedAt),
+			WorkosLastEventID: conv.ToPGText(event.ID),
+		}); err != nil {
+			return "", oops.E(oops.CodeUnexpected, err, "mark role assignments deleted for directory user")
+		}
+	}
+
+	logger.InfoContext(ctx, "deprovisioned organization access for deactivated directory user",
+		attr.SlogUserID(gramUserID),
+		attr.SlogWorkOSDirectoryUserID(payload.ID),
+	)
+	return gramUserID, nil
 }
 
 func deleteDirectoryGroup(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event, payload workosDirectoryGroupEventPayload) error {

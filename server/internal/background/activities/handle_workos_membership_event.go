@@ -11,6 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/workos/workos-go/v6/pkg/events"
+	"github.com/workos/workos-go/v6/pkg/usermanagement"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -32,39 +33,53 @@ type workosMembershipEventPayload struct {
 	RoleSlug       string                 `json:"role_slug"`
 	Role           workosMembershipRole   `json:"role"`
 	Roles          []workosMembershipRole `json:"roles"`
+	Status         string                 `json:"status"`
 	UpdatedAt      time.Time              `json:"updated_at"`
 }
 
-func handleOrganizationMembershipUpsert(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) error {
+// handleOrganizationMembershipUpsert applies an organization_membership
+// created/updated event. It returns the Gram user ID whose organization
+// access was deprovisioned (empty when no access was removed) so the caller
+// can invalidate cached user info after commit.
+func handleOrganizationMembershipUpsert(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) (string, error) {
 	payload, err := decodeWorkOSMembershipPayload(event)
 	if err != nil {
-		return err
+		return "", err
 	}
 	logger = logger.With(
 		attr.SlogWorkOSOrganizationID(payload.OrganizationID),
 		attr.SlogWorkOSUserID(payload.UserID),
 	)
 
+	// SCIM deactivation (e.g. suspending a user in the IdP) surfaces as
+	// organization_membership.updated with status=inactive, not as a delete
+	// event. Route it through the delete path so the user's access is
+	// deprovisioned. A later update with status=active upserts normally and
+	// restores access.
+	if payload.Status == string(usermanagement.Inactive) {
+		return handleOrganizationMembershipDeleted(ctx, logger, dbtx, event)
+	}
+
 	org, err := orgrepo.New(dbtx).GetOrganizationByWorkosID(ctx, conv.ToPGText(payload.OrganizationID))
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		logger.DebugContext(ctx, "skipping membership event for unknown organization")
-		return nil
+		return "", nil
 	case err != nil:
-		return fmt.Errorf("get organization by workos id %q: %w", payload.OrganizationID, err)
+		return "", fmt.Errorf("get organization by workos id %q: %w", payload.OrganizationID, err)
 	}
 
 	gramUserID, err := usersrepo.New(dbtx).GetUserIDByWorkosID(ctx, conv.ToPGText(payload.UserID))
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return fmt.Errorf("get user by workos id %q: %w", payload.UserID, err)
+		return "", fmt.Errorf("get user by workos id %q: %w", payload.UserID, err)
 	}
 
 	lastEventID, rowUpdatedAt, err := getMembershipRelationshipCursor(ctx, orgrepo.New(dbtx), org.ID, gramUserID, payload.ID)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if !ShouldProcessEvent(lastEventID, rowUpdatedAt, event.ID, payload.UpdatedAt) {
-		return nil
+		return "", nil
 	}
 	if err := orgrepo.New(dbtx).UpsertWorkOSMembership(ctx, orgrepo.UpsertWorkOSMembershipParams{
 		OrganizationID:     org.ID,
@@ -74,7 +89,7 @@ func handleOrganizationMembershipUpsert(ctx context.Context, logger *slog.Logger
 		WorkosUpdatedAt:    conv.ToPGTimestamptz(payload.UpdatedAt),
 		WorkosLastEventID:  conv.ToPGText(event.ID),
 	}); err != nil {
-		return fmt.Errorf("upsert organization membership %q: %w", payload.ID, err)
+		return "", fmt.Errorf("upsert organization membership %q: %w", payload.ID, err)
 	}
 
 	if err := orgrepo.New(dbtx).SyncUserOrganizationRoleAssignments(ctx, orgrepo.SyncUserOrganizationRoleAssignmentsParams{
@@ -86,16 +101,21 @@ func handleOrganizationMembershipUpsert(ctx context.Context, logger *slog.Logger
 		WorkosLastEventID:  conv.ToPGText(event.ID),
 		WorkosRoleSlugs:    membershipRoleSlugs(payload),
 	}); err != nil {
-		return fmt.Errorf("sync organization role assignments for membership %q: %w", payload.ID, err)
+		return "", fmt.Errorf("sync organization role assignments for membership %q: %w", payload.ID, err)
 	}
 
-	return nil
+	return "", nil
 }
 
-func handleOrganizationMembershipDeleted(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) error {
+// handleOrganizationMembershipDeleted applies an organization_membership
+// delete (or deactivation) event. It returns the Gram user ID whose
+// organization access was deprovisioned (empty when the WorkOS user has no
+// local Gram user) so the caller can invalidate cached user info after
+// commit.
+func handleOrganizationMembershipDeleted(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) (string, error) {
 	payload, err := decodeWorkOSMembershipPayload(event)
 	if err != nil {
-		return err
+		return "", err
 	}
 	logger = logger.With(
 		attr.SlogWorkOSOrganizationID(payload.OrganizationID),
@@ -106,22 +126,22 @@ func handleOrganizationMembershipDeleted(ctx context.Context, logger *slog.Logge
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		logger.DebugContext(ctx, "skipping membership delete for unknown organization")
-		return nil
+		return "", nil
 	case err != nil:
-		return fmt.Errorf("get organization by workos id %q: %w", payload.OrganizationID, err)
+		return "", fmt.Errorf("get organization by workos id %q: %w", payload.OrganizationID, err)
 	}
 
 	gramUserID, err := usersrepo.New(dbtx).GetUserIDByWorkosID(ctx, conv.ToPGText(payload.UserID))
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return fmt.Errorf("get user by workos id %q: %w", payload.UserID, err)
+		return "", fmt.Errorf("get user by workos id %q: %w", payload.UserID, err)
 	}
 
 	lastEventID, rowUpdatedAt, err := getMembershipRelationshipCursor(ctx, orgrepo.New(dbtx), org.ID, gramUserID, payload.ID)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if !ShouldProcessEvent(lastEventID, rowUpdatedAt, event.ID, payload.UpdatedAt) {
-		return nil
+		return "", nil
 	}
 	if err := orgrepo.New(dbtx).MarkWorkOSMembershipDeleted(ctx, orgrepo.MarkWorkOSMembershipDeletedParams{
 		OrganizationID:     org.ID,
@@ -131,7 +151,7 @@ func handleOrganizationMembershipDeleted(ctx context.Context, logger *slog.Logge
 		WorkosUpdatedAt:    conv.ToPGTimestamptz(payload.UpdatedAt),
 		WorkosLastEventID:  conv.ToPGText(event.ID),
 	}); err != nil {
-		return fmt.Errorf("mark organization membership %q deleted: %w", payload.ID, err)
+		return "", fmt.Errorf("mark organization membership %q deleted: %w", payload.ID, err)
 	}
 
 	if err := orgrepo.New(dbtx).MarkRoleAssignmentsDeleted(ctx, orgrepo.MarkRoleAssignmentsDeletedParams{
@@ -140,10 +160,10 @@ func handleOrganizationMembershipDeleted(ctx context.Context, logger *slog.Logge
 		WorkosUpdatedAt:   conv.ToPGTimestamptz(payload.UpdatedAt),
 		WorkosLastEventID: conv.ToPGText(event.ID),
 	}); err != nil {
-		return fmt.Errorf("mark role assignments for workos user %q deleted: %w", payload.UserID, err)
+		return "", fmt.Errorf("mark role assignments for workos user %q deleted: %w", payload.UserID, err)
 	}
 
-	return nil
+	return gramUserID, nil
 }
 
 func getMembershipRelationshipCursor(ctx context.Context, repo *orgrepo.Queries, organizationID, gramUserID, workosMembershipID string) (*string, *time.Time, error) {
