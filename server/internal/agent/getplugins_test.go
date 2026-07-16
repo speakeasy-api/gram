@@ -248,6 +248,34 @@ func TestGetPlugins_CrossOrgIsolation(t *testing.T) {
 	require.NotContains(t, pluginSlugs(res), "other-plugin", "another org's plugin must not leak")
 }
 
+// TestGetPlugins_IgnoresMismatchedOrgAssignment pins the assignment tenant
+// boundary on the read path: a plugin in the caller's org whose only assignment
+// row is stamped with a *different* organization_id (a stale or manually
+// backfilled anomaly) is not delivered, even though its principal ("*") is in
+// every caller's resolved set. The getPlugins EXISTS scopes on
+// pa.organization_id, so the mismatched row can't change delivery. The row is
+// inserted raw because AddPluginAssignment is org-scoped and refuses to create
+// such a row.
+func TestGetPlugins_IgnoresMismatchedOrgAssignment(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+
+	publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
+	// Creates the "other-org-id" org so the assignment's organization_id FK holds.
+	seedSecondOrg(t, ctx, ti.conn)
+
+	stale := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "stale-tool")
+	_, err := ti.conn.Exec(ctx,
+		`INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn) VALUES ($1, $2, $3)`,
+		stale, "other-org-id", "*")
+	require.NoError(t, err)
+
+	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: mockidp.MockUserEmail})
+	require.NoError(t, err)
+	require.Equal(t, []string{wantObservability}, pluginSlugs(res),
+		"an assignment row stamped with a different org must not deliver the plugin")
+}
+
 func TestGetPlugins_InvalidEmail(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestAgentService(t)

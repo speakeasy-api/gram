@@ -13,6 +13,8 @@ import { z } from "zod";
 export const WILDCARD_PRINCIPAL = "*";
 
 const EMAIL_PREFIX = "email:";
+const ROLE_PREFIX = "role:";
+const USER_PREFIX = "user:";
 
 export type PrincipalKind = "everyone" | "email" | "role" | "user" | "unknown";
 
@@ -75,10 +77,14 @@ const emailSchema = z.string().email();
 export function normalizeToPrincipalUrn(value: string): string | null {
   const trimmed = value.trim();
   if (!trimmed) return null;
+  if (trimmed === WILDCARD_PRINCIPAL) return trimmed;
+  // role:/user: URNs are type:id — require a non-empty id after the prefix so a
+  // malformed "role:" or "user:" fails local validation instead of being sent
+  // to setPluginAssignments, where the server rejects the empty id with only a
+  // generic mutation error.
   if (
-    trimmed === WILDCARD_PRINCIPAL ||
-    trimmed.startsWith("role:") ||
-    trimmed.startsWith("user:")
+    (trimmed.startsWith(ROLE_PREFIX) && trimmed.length > ROLE_PREFIX.length) ||
+    (trimmed.startsWith(USER_PREFIX) && trimmed.length > USER_PREFIX.length)
   ) {
     return trimmed;
   }

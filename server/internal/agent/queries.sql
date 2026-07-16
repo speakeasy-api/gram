@@ -65,6 +65,7 @@ LEFT JOIN plugins p
   AND EXISTS (
     SELECT 1 FROM plugin_assignments pa
     WHERE pa.plugin_id = p.id
+      AND pa.organization_id = @organization_id
       AND pa.principal_urn = ANY(@principal_urns::text[])
   )
 WHERE pr.organization_id = @organization_id

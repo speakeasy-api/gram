@@ -55,6 +55,12 @@ describe("normalizeToPrincipalUrn", () => {
       "email:jane@corp.com",
     );
   });
+
+  it("rejects role:/user: prefixes with an empty id", () => {
+    expect(normalizeToPrincipalUrn("role:")).toBeNull();
+    expect(normalizeToPrincipalUrn("user:")).toBeNull();
+    expect(normalizeToPrincipalUrn("  role: ")).toBeNull();
+  });
 });
 
 describe("describePrincipal", () => {
