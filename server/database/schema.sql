@@ -2738,11 +2738,24 @@ CREATE UNIQUE INDEX IF NOT EXISTS ai_integration_config_chats_chat_id_key
   ON ai_integration_config_chats (chat_id);
 
 -- AI integration syncs: provider-specific query cursors, scheduler state,
--- and failure metadata.
+-- and failure metadata. A config can run several independent sync schedules
+-- (e.g. an anthropic_compliance config runs the compliance chat import and
+-- the Admin Analytics usage/cost ingest on different cadences), so rows are
+-- unique per (config, schedule) rather than per config.
 CREATE TABLE IF NOT EXISTS ai_integration_syncs (
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   ai_integration_config_id uuid NOT NULL,
+  -- Which sync pipeline this row schedules. Values follow provider-style
+  -- naming: 'cursor' and 'anthropic_compliance' for each provider's primary
+  -- sync, 'anthropic_analytics' for the Admin Analytics ingest. Free-form
+  -- text (deliberately not an enum / CHECK) so new schedules can be
+  -- introduced without a schema change; validated in application code.
+  schedule TEXT NOT NULL,
+  -- How the schedule checkpoints progress: 'cursor' rows resume from an
+  -- opaque pagination token (last_cursor_id), 'time' rows resume from
+  -- poll_watermark_at. Informational; validated in application code.
+  kind TEXT NOT NULL,
   poll_watermark_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   last_cursor_id TEXT,
   next_poll_after timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -2755,32 +2768,8 @@ CREATE TABLE IF NOT EXISTS ai_integration_syncs (
   CONSTRAINT ai_integration_syncs_config_id_fkey FOREIGN KEY (ai_integration_config_id) REFERENCES ai_integration_configs (id) ON DELETE CASCADE
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS ai_integration_syncs_config_id_key
-  ON ai_integration_syncs (ai_integration_config_id);
-
--- AI integration analytics syncs: scheduler state for the provider analytics
--- (usage/cost report) polling path, which runs on its own cadence separate
--- from the main sync in ai_integration_syncs. One row per config, created
--- lazily on first poll.
-CREATE TABLE IF NOT EXISTS ai_integration_analytics_syncs (
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  ai_integration_config_id uuid NOT NULL,
-  -- Exclusive end of the last ingested time-bucket range. NULL means never
-  -- synced; the first sync applies the initial lookback window.
-  poll_watermark_at timestamptz,
-  next_poll_after timestamptz NOT NULL DEFAULT clock_timestamp(),
-  last_poll_error TEXT,
-  last_poll_failed_at timestamptz,
-  last_poll_success_at timestamptz,
-  consecutive_failures integer NOT NULL DEFAULT 0,
-  id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
-
-  CONSTRAINT ai_integration_analytics_syncs_config_id_fkey FOREIGN KEY (ai_integration_config_id) REFERENCES ai_integration_configs (id) ON DELETE CASCADE
-);
-
-CREATE UNIQUE INDEX IF NOT EXISTS ai_integration_analytics_syncs_config_id_key
-  ON ai_integration_analytics_syncs (ai_integration_config_id);
+CREATE UNIQUE INDEX IF NOT EXISTS ai_integration_syncs_config_id_schedule_key
+  ON ai_integration_syncs (ai_integration_config_id, schedule);
 
 CREATE TABLE IF NOT EXISTS principal_grants (
   id uuid NOT NULL DEFAULT generate_uuidv7(),

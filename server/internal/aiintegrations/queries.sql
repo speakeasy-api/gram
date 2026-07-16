@@ -1,3 +1,7 @@
+-- The primary sync schedule shares its name with the config's provider, so
+-- config-level reads join on s.schedule = c.provider. Secondary schedules
+-- (e.g. anthropic_analytics) are read by their own queries.
+
 -- name: GetConfigByOrgAndProvider :one
 SELECT
     c.*
@@ -12,7 +16,7 @@ SELECT
   , s.created_at AS sync_created_at
   , s.updated_at AS sync_updated_at
 FROM ai_integration_configs c
-JOIN ai_integration_syncs s ON s.ai_integration_config_id = c.id
+JOIN ai_integration_syncs s ON s.ai_integration_config_id = c.id AND s.schedule = c.provider
 WHERE c.organization_id = @organization_id
   AND c.provider = @provider
   AND c.deleted IS FALSE;
@@ -67,10 +71,18 @@ RETURNING *;
 WITH inserted AS (
   INSERT INTO ai_integration_syncs (
     ai_integration_config_id
+  , schedule
+  , kind
+  , poll_watermark_at
+  , next_poll_after
   ) VALUES (
     @ai_integration_config_id
+  , @schedule
+  , @kind
+  , @poll_watermark_at
+  , @next_poll_after
   )
-  ON CONFLICT (ai_integration_config_id) DO NOTHING
+  ON CONFLICT (ai_integration_config_id, schedule) DO NOTHING
   RETURNING *
 )
 SELECT *
@@ -79,6 +91,7 @@ UNION ALL
 SELECT *
 FROM ai_integration_syncs
 WHERE ai_integration_config_id = @ai_integration_config_id
+  AND schedule = @schedule
 LIMIT 1;
 
 -- name: SoftDeleteConfig :exec
@@ -102,7 +115,7 @@ SELECT
   , s.created_at AS sync_created_at
   , s.updated_at AS sync_updated_at
 FROM ai_integration_configs c
-JOIN ai_integration_syncs s ON s.ai_integration_config_id = c.id
+JOIN ai_integration_syncs s ON s.ai_integration_config_id = c.id AND s.schedule = c.provider
 WHERE c.provider = @provider
   AND c.enabled IS TRUE
   AND c.deleted IS FALSE
@@ -119,7 +132,8 @@ SET poll_watermark_at = @poll_watermark_at,
     consecutive_failures = 0,
     last_cursor_id = NULL,
     updated_at = clock_timestamp()
-WHERE ai_integration_config_id = @ai_integration_config_id;
+WHERE ai_integration_config_id = @ai_integration_config_id
+  AND schedule = @schedule;
 
 -- name: ListUsagePollCandidates :many
 SELECT
@@ -128,7 +142,7 @@ SELECT
   , om.slug AS organization_slug
   , c.provider
 FROM ai_integration_syncs s
-JOIN ai_integration_configs c ON c.id = s.ai_integration_config_id
+JOIN ai_integration_configs c ON c.id = s.ai_integration_config_id AND s.schedule = c.provider
 JOIN organization_metadata om ON om.id = c.organization_id
 WHERE c.enabled IS TRUE
   AND c.deleted IS FALSE
@@ -151,7 +165,7 @@ SELECT
   , s.created_at AS sync_created_at
   , s.updated_at AS sync_updated_at
 FROM ai_integration_configs c
-JOIN ai_integration_syncs s ON s.ai_integration_config_id = c.id
+JOIN ai_integration_syncs s ON s.ai_integration_config_id = c.id AND s.schedule = c.provider
 WHERE c.id = @ai_integration_config_id
   AND c.enabled IS TRUE
   AND c.deleted IS FALSE
@@ -167,7 +181,8 @@ SET poll_watermark_at = @poll_watermark_at,
     consecutive_failures = 0,
     last_cursor_id = @last_cursor_id,
     updated_at = clock_timestamp()
-WHERE ai_integration_config_id = @ai_integration_config_id;
+WHERE ai_integration_config_id = @ai_integration_config_id
+  AND schedule = @schedule;
 
 -- name: RecordUsagePollFailure :exec
 UPDATE ai_integration_syncs
@@ -176,52 +191,33 @@ SET next_poll_after = @next_poll_after,
     last_poll_failed_at = clock_timestamp(),
     consecutive_failures = consecutive_failures + 1,
     updated_at = clock_timestamp()
-WHERE ai_integration_config_id = @ai_integration_config_id;
-
--- name: EnsureAnalyticsSync :one
-WITH inserted AS (
-  INSERT INTO ai_integration_analytics_syncs (
-    ai_integration_config_id
-    -- A newly created analytics sync is due immediately: the poll activity
-    -- captures its end time before this row exists, so a clock_timestamp()
-    -- default would push the first sync to the next poll cycle.
-  , next_poll_after
-  ) VALUES (
-    @ai_integration_config_id
-  , to_timestamp(0)
-  )
-  ON CONFLICT (ai_integration_config_id) DO NOTHING
-  RETURNING *
-)
-SELECT *
-FROM inserted
-UNION ALL
-SELECT *
-FROM ai_integration_analytics_syncs
 WHERE ai_integration_config_id = @ai_integration_config_id
-LIMIT 1;
+  AND schedule = @schedule;
 
--- name: AdvanceAnalyticsPollWatermark :exec
-UPDATE ai_integration_analytics_syncs
+-- name: AdvancePollWatermark :exec
+UPDATE ai_integration_syncs
 SET poll_watermark_at = @poll_watermark_at,
     updated_at = clock_timestamp()
-WHERE ai_integration_config_id = @ai_integration_config_id;
+WHERE ai_integration_config_id = @ai_integration_config_id
+  AND schedule = @schedule;
 
--- name: RecordAnalyticsPollSuccess :exec
-UPDATE ai_integration_analytics_syncs
+-- name: ListSyncSchedules :many
+SELECT schedule, kind
+FROM ai_integration_syncs
+WHERE ai_integration_config_id = @ai_integration_config_id
+ORDER BY schedule;
+
+-- RecordPollSuccessKeepWatermark reschedules a sync and clears failure state
+-- without touching the watermark or cursor. Used by schedules that advance
+-- poll_watermark_at incrementally mid-sync (e.g. anthropic_analytics) rather
+-- than once at the end of a successful poll.
+-- name: RecordPollSuccessKeepWatermark :exec
+UPDATE ai_integration_syncs
 SET next_poll_after = @next_poll_after,
     last_poll_error = NULL,
     last_poll_failed_at = NULL,
     last_poll_success_at = clock_timestamp(),
     consecutive_failures = 0,
     updated_at = clock_timestamp()
-WHERE ai_integration_config_id = @ai_integration_config_id;
-
--- name: RecordAnalyticsPollFailure :exec
-UPDATE ai_integration_analytics_syncs
-SET next_poll_after = @next_poll_after,
-    last_poll_error = @last_poll_error,
-    last_poll_failed_at = clock_timestamp(),
-    consecutive_failures = consecutive_failures + 1,
-    updated_at = clock_timestamp()
-WHERE ai_integration_config_id = @ai_integration_config_id;
+WHERE ai_integration_config_id = @ai_integration_config_id
+  AND schedule = @schedule;

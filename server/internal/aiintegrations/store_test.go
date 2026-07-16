@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
@@ -62,6 +63,32 @@ func TestUpsertWithTxKeyReplacementCreatesNewConfigGeneration(t *testing.T) {
 	require.Equal(t, int64(2), countAIIntegrationConfigs(t, ctx, conn, orgID, true))
 }
 
+func TestUpsertWithTxStartsAllProviderSchedules(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+
+	extOrgID := "org_ext_1"
+	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderAnthropicCompliance, "anthropic-key", true, true, &extOrgID, nil)
+
+	require.Equal(t, map[string]string{
+		ScheduleAnthropicCompliance: SyncKindCursor,
+		ScheduleAnthropicAnalytics:  SyncKindTime,
+	}, listSyncSchedules(t, ctx, conn, created.Config.ID))
+}
+
+func TestUpsertWithTxStartsSingleCursorSchedule(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+
+	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderCursor, "cursor-key", true, true, nil, nil)
+
+	require.Equal(t, map[string]string{
+		ScheduleCursor: SyncKindTime,
+	}, listSyncSchedules(t, ctx, conn, created.Config.ID))
+}
+
 func TestRecordUsagePollFailureStoresErrorAsData(t *testing.T) {
 	t.Parallel()
 
@@ -101,6 +128,19 @@ func upsertConfigWithTx(
 		return err
 	}))
 	return result
+}
+
+func listSyncSchedules(t *testing.T, ctx context.Context, conn *pgxpool.Pool, configID uuid.UUID) map[string]string {
+	t.Helper()
+
+	rows, err := repo.New(conn).ListSyncSchedules(ctx, configID)
+	require.NoError(t, err)
+
+	schedules := map[string]string{}
+	for _, row := range rows {
+		schedules[row.Schedule] = row.Kind
+	}
+	return schedules
 }
 
 func countAIIntegrationConfigs(t *testing.T, ctx context.Context, conn *pgxpool.Pool, orgID string, includeDeleted bool) int64 {

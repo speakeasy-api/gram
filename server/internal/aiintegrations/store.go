@@ -24,6 +24,46 @@ const (
 	ProviderAnthropicCompliance = "anthropic_compliance"
 )
 
+// Sync schedules name the independent polling pipelines a config can run,
+// each with its own ai_integration_syncs row (cadence, checkpoint, failure
+// state). A provider's primary schedule shares the provider's name; secondary
+// pipelines get their own provider-style names.
+const (
+	ScheduleCursor              = ProviderCursor
+	ScheduleAnthropicCompliance = ProviderAnthropicCompliance
+	ScheduleAnthropicAnalytics  = "anthropic_analytics"
+)
+
+// Sync kinds record how a schedule checkpoints progress.
+const (
+	// SyncKindCursor schedules resume from an opaque pagination token
+	// (last_cursor_id).
+	SyncKindCursor = "cursor"
+	// SyncKindTime schedules resume from poll_watermark_at.
+	SyncKindTime = "time"
+)
+
+// syncSchedule pairs a schedule name with its checkpointing kind.
+type syncSchedule struct {
+	schedule string
+	kind     string
+}
+
+// syncSchedulesFor lists every sync schedule a provider's configs run. The
+// first entry is the provider's primary schedule — the one driven by the
+// usage poll coordinator and surfaced on Config.
+func syncSchedulesFor(provider string) []syncSchedule {
+	switch provider {
+	case ProviderAnthropicCompliance:
+		return []syncSchedule{
+			{schedule: ScheduleAnthropicCompliance, kind: SyncKindCursor},
+			{schedule: ScheduleAnthropicAnalytics, kind: SyncKindTime},
+		}
+	default:
+		return []syncSchedule{{schedule: ScheduleCursor, kind: SyncKindTime}}
+	}
+}
+
 const (
 	initialUsagePollLookback             = time.Hour * 24
 	cursorUsagePollInterval              = time.Hour
@@ -192,9 +232,30 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 		}
 	}
 
-	syncRow, err := q.EnsureSync(ctx, row.ID)
-	if err != nil {
-		return UpsertResult{}, oops.E(oops.CodeUnexpected, err, "failed to save ai integration sync")
+	// Every schedule the provider runs is started eagerly so all pipelines
+	// are due as soon as the config exists. The primary schedule (named after
+	// the provider) starts due now; secondary schedules start at epoch, which
+	// doubles as the never-synced watermark sentinel for their initial
+	// lookback.
+	var syncRow repo.EnsureSyncRow
+	for i, sched := range syncSchedulesFor(provider) {
+		initialAt := time.Now().UTC()
+		if sched.schedule != provider {
+			initialAt = epochTime()
+		}
+		ensured, err := q.EnsureSync(ctx, repo.EnsureSyncParams{
+			AiIntegrationConfigID: row.ID,
+			Schedule:              sched.schedule,
+			Kind:                  sched.kind,
+			PollWatermarkAt:       conv.ToPGTimestamptz(initialAt),
+			NextPollAfter:         conv.ToPGTimestamptz(initialAt),
+		})
+		if err != nil {
+			return UpsertResult{}, oops.E(oops.CodeUnexpected, err, "failed to save ai integration sync")
+		}
+		if i == 0 {
+			syncRow = ensured
+		}
 	}
 	if resetPollWatermarkAt != nil {
 		syncRow.PollWatermarkAt = conv.ToPGTimestamptz(*resetPollWatermarkAt)
@@ -206,6 +267,7 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 		syncRow.LastCursorID = pgtype.Text{String: "", Valid: false}
 		if err := q.ResetUsagePollState(ctx, repo.ResetUsagePollStateParams{
 			AiIntegrationConfigID: row.ID,
+			Schedule:              provider,
 			PollWatermarkAt:       syncRow.PollWatermarkAt,
 			NextPollAfter:         syncRow.NextPollAfter,
 		}); err != nil {
@@ -310,6 +372,7 @@ func (s *Store) GetUsagePollConfig(ctx context.Context, configID uuid.UUID) (Con
 func (s *Store) RecordUsagePollSuccess(ctx context.Context, configID uuid.UUID, provider string, t time.Time, lastCursor string) error {
 	if err := s.repo.RecordUsagePollSuccess(ctx, repo.RecordUsagePollSuccessParams{
 		AiIntegrationConfigID: configID,
+		Schedule:              provider,
 		PollWatermarkAt:       conv.ToPGTimestamptz(t),
 		NextPollAfter:         conv.ToPGTimestamptz(t.UTC().Add(usagePollIntervalFor(provider))),
 		LastCursorID:          conv.ToPGTextEmpty(lastCursor),
@@ -319,8 +382,8 @@ func (s *Store) RecordUsagePollSuccess(ctx context.Context, configID uuid.UUID, 
 	return nil
 }
 
-// AnalyticsSyncState is the scheduler state for the provider analytics
-// (usage/cost report) polling path. WatermarkAt is the exclusive end of the
+// AnalyticsSyncState is the scheduler state for the anthropic_analytics
+// (usage/cost report) sync schedule. WatermarkAt is the exclusive end of the
 // last ingested bucket range; its zero value means the config never synced.
 type AnalyticsSyncState struct {
 	ConfigID            uuid.UUID
@@ -331,15 +394,31 @@ type AnalyticsSyncState struct {
 }
 
 // EnsureAnalyticsSync returns the analytics sync state for a config, creating
-// the row (due immediately, no watermark) on first use.
+// the schedule row (due immediately, no watermark) on first use. It exists
+// alongside the eager creation in upsertWithTx so configs that predate the
+// analytics schedule pick it up on their next poll.
 func (s *Store) EnsureAnalyticsSync(ctx context.Context, configID uuid.UUID) (AnalyticsSyncState, error) {
-	row, err := s.repo.EnsureAnalyticsSync(ctx, configID)
+	epoch := epochTime()
+	row, err := s.repo.EnsureSync(ctx, repo.EnsureSyncParams{
+		AiIntegrationConfigID: configID,
+		Schedule:              ScheduleAnthropicAnalytics,
+		Kind:                  SyncKindTime,
+		PollWatermarkAt:       conv.ToPGTimestamptz(epoch),
+		NextPollAfter:         conv.ToPGTimestamptz(epoch),
+	})
 	if err != nil {
 		return AnalyticsSyncState{}, oops.E(oops.CodeUnexpected, err, "failed to load ai integration analytics sync")
 	}
+
+	// The epoch watermark is the never-synced sentinel; surface it as the
+	// zero time so callers keep a single "no watermark yet" check.
+	watermark := row.PollWatermarkAt.Time
+	if !watermark.After(epoch) {
+		watermark = time.Time{}
+	}
 	return AnalyticsSyncState{
 		ConfigID:            row.AiIntegrationConfigID,
-		WatermarkAt:         row.PollWatermarkAt.Time,
+		WatermarkAt:         watermark,
 		NextPollAfter:       row.NextPollAfter.Time,
 		LastPollError:       row.LastPollError.String,
 		ConsecutiveFailures: row.ConsecutiveFailures,
@@ -350,8 +429,9 @@ func (s *Store) EnsureAnalyticsSync(ctx context.Context, configID uuid.UUID) (An
 // including) watermark have been ingested. It is called after each ingested
 // window so a mid-sync crash re-fetches at most one window.
 func (s *Store) AdvanceAnalyticsPollWatermark(ctx context.Context, configID uuid.UUID, watermark time.Time) error {
-	if err := s.repo.AdvanceAnalyticsPollWatermark(ctx, repo.AdvanceAnalyticsPollWatermarkParams{
+	if err := s.repo.AdvancePollWatermark(ctx, repo.AdvancePollWatermarkParams{
 		AiIntegrationConfigID: configID,
+		Schedule:              ScheduleAnthropicAnalytics,
 		PollWatermarkAt:       conv.ToPGTimestamptz(watermark),
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to advance ai integration analytics watermark")
@@ -360,8 +440,9 @@ func (s *Store) AdvanceAnalyticsPollWatermark(ctx context.Context, configID uuid
 }
 
 func (s *Store) RecordAnalyticsPollSuccess(ctx context.Context, configID uuid.UUID, t time.Time) error {
-	if err := s.repo.RecordAnalyticsPollSuccess(ctx, repo.RecordAnalyticsPollSuccessParams{
+	if err := s.repo.RecordPollSuccessKeepWatermark(ctx, repo.RecordPollSuccessKeepWatermarkParams{
 		AiIntegrationConfigID: configID,
+		Schedule:              ScheduleAnthropicAnalytics,
 		NextPollAfter:         conv.ToPGTimestamptz(t.UTC().Add(anthropicAnalyticsPollInterval)),
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to record ai integration analytics poll success")
@@ -375,8 +456,9 @@ func (s *Store) RecordAnalyticsPollFailure(ctx context.Context, configID uuid.UU
 		errStr = cause.Error()
 	}
 
-	if err := s.repo.RecordAnalyticsPollFailure(ctx, repo.RecordAnalyticsPollFailureParams{
+	if err := s.repo.RecordUsagePollFailure(ctx, repo.RecordUsagePollFailureParams{
 		AiIntegrationConfigID: configID,
+		Schedule:              ScheduleAnthropicAnalytics,
 		NextPollAfter:         conv.ToPGTimestamptz(t.UTC().Add(anthropicAnalyticsPollInterval)),
 		LastPollError:         conv.ToPGTextEmpty(conv.TruncateString(errStr, maxUsagePollErrorMessage)),
 	}); err != nil {
@@ -393,12 +475,19 @@ func (s *Store) RecordUsagePollFailure(ctx context.Context, configID uuid.UUID, 
 
 	if err := s.repo.RecordUsagePollFailure(ctx, repo.RecordUsagePollFailureParams{
 		AiIntegrationConfigID: configID,
+		Schedule:              provider,
 		NextPollAfter:         conv.ToPGTimestamptz(t.UTC().Add(usagePollIntervalFor(provider))),
 		LastPollError:         conv.ToPGTextEmpty(conv.TruncateString(errStr, maxUsagePollErrorMessage)),
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to record ai integration usage poll failure")
 	}
 	return nil
+}
+
+// epochTime is the never-synced watermark sentinel and the "due immediately"
+// next_poll_after for newly created secondary schedules.
+func epochTime() time.Time {
+	return time.Unix(0, 0).UTC()
 }
 
 func (s *Store) configFromGetRow(row repo.GetConfigByOrgAndProviderRow) (Config, error) {

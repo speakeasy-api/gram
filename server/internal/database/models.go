@@ -25,19 +25,6 @@ type AgentExecution struct {
 	Deleted      bool
 }
 
-type AiIntegrationAnalyticsSync struct {
-	CreatedAt             pgtype.Timestamptz
-	UpdatedAt             pgtype.Timestamptz
-	AiIntegrationConfigID uuid.UUID
-	PollWatermarkAt       pgtype.Timestamptz
-	NextPollAfter         pgtype.Timestamptz
-	LastPollError         pgtype.Text
-	LastPollFailedAt      pgtype.Timestamptz
-	LastPollSuccessAt     pgtype.Timestamptz
-	ConsecutiveFailures   int32
-	ID                    uuid.UUID
-}
-
 type AiIntegrationConfig struct {
 	CreatedAt              pgtype.Timestamptz
 	DeletedAt              pgtype.Timestamptz
@@ -66,6 +53,8 @@ type AiIntegrationSync struct {
 	CreatedAt             pgtype.Timestamptz
 	UpdatedAt             pgtype.Timestamptz
 	AiIntegrationConfigID uuid.UUID
+	Schedule              string
+	Kind                  string
 	PollWatermarkAt       pgtype.Timestamptz
 	LastCursorID          pgtype.Text
 	NextPollAfter         pgtype.Timestamptz
