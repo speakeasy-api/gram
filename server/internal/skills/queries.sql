@@ -314,6 +314,7 @@ SELECT
   receipts.shadowed,
   receipts.degraded
 FROM skill_distributions sd
+JOIN projects p ON p.id = sd.project_id
 JOIN skills s
   ON s.project_id = sd.project_id
   AND s.id = sd.skill_id
@@ -336,6 +337,26 @@ JOIN LATERAL (
   FROM skill_sync_receipts ssr
   WHERE ssr.project_id = sd.project_id
     AND ssr.skill_id = sd.skill_id
+    AND (
+      sd.audience IS NULL
+      OR EXISTS (
+        SELECT 1
+        FROM directory_users du
+        JOIN directory_user_group_memberships m
+          ON m.directory_user_id = du.id
+          AND m.deleted IS FALSE
+        JOIN directory_groups dg
+          ON dg.id = m.directory_group_id
+          AND dg.organization_id = p.organization_id
+          AND dg.deleted IS FALSE
+          AND dg.workos_deleted IS FALSE
+        WHERE du.organization_id = p.organization_id
+          AND du.user_id = ssr.user_id
+          AND du.deleted IS FALSE
+          AND du.workos_deleted IS FALSE
+          AND dg.workos_directory_group_id = ANY(sd.audience)
+      )
+    )
 ) receipts ON TRUE
 WHERE sd.project_id = @project_id
   AND sd.skill_id = @skill_id
@@ -371,8 +392,10 @@ WHERE s.project_id = @project_id
       FROM skill_versions sv
       WHERE sv.skill_id = s.id
         AND sv.id = sqlc.narg(skill_version_id)::uuid
+        AND sv.spec_valid IS TRUE
     )
   )
+FOR KEY SHARE OF s
 ON CONFLICT (project_id, skill_id, user_id, hostname, provider) DO UPDATE SET
   skill_version_id = EXCLUDED.skill_version_id,
   status = EXCLUDED.status,

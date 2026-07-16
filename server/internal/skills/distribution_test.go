@@ -212,11 +212,77 @@ func TestSkillDistributionStatusReceiptMatrixAndValidation(t *testing.T) {
 		SkillVersionID: uuid.NullUUID{}, UserID: "invalid", Hostname: "invalid", Provider: "claude", Status: "unknown", ProjectID: ti.projectID, SkillID: uuid.MustParse(first.Skill.ID),
 	})
 	require.Error(t, err)
+	invalidVersion, err := ti.service.AddVersion(ctx, &gen.AddVersionPayload{
+		ID: first.Skill.ID, Content: skillManifest("Receipt_Status", "Invalid receipt version.", "invalid"),
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.False(t, invalidVersion.Version.SpecValid)
+	insertReceipt("preserved", "preserved", uuid.NullUUID{UUID: secondVersionID, Valid: true}, skills.SyncReceiptStatusApplied)
+	_, err = skills.UpsertSkillSyncReceipt(ctx, ti.repo, repo.UpsertSkillSyncReceiptParams{
+		SkillVersionID: uuid.NullUUID{UUID: uuid.MustParse(invalidVersion.Version.ID), Valid: true}, UserID: "preserved", Hostname: "preserved", Provider: "claude", Status: string(skills.SyncReceiptStatusApplied), ProjectID: ti.projectID, SkillID: uuid.MustParse(first.Skill.ID),
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	status, err = ti.service.GetDistributionStatus(ctx, &gen.GetDistributionStatusPayload{ID: first.Skill.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), status.Live)
+	require.Equal(t, int64(2), status.Stale)
 	_, otherProjectID := createProjectContext(t, ctx, ti, authz.ScopeSkillWrite)
 	_, err = skills.UpsertSkillSyncReceipt(ctx, ti.repo, repo.UpsertSkillSyncReceiptParams{
 		SkillVersionID: uuid.NullUUID{UUID: secondVersionID, Valid: true}, UserID: "cross-project", Hostname: "cross-project", Provider: "claude", Status: string(skills.SyncReceiptStatusApplied), ProjectID: otherProjectID, SkillID: uuid.MustParse(first.Skill.ID),
 	})
 	require.Error(t, err)
+}
+
+func TestSkillDistributionStatusFiltersTargetedAudience(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	created := createSkill(t, ctx, ti, "targeted-receipts", "Targeted receipt status.")
+	targetGroupID := createDirectoryGroup(t, ctx, ti, ti.authContext.ActiveOrganizationID, "group-target", "Target")
+	secondTargetGroupID := createDirectoryGroup(t, ctx, ti, ti.authContext.ActiveOrganizationID, "group-second-target", "Second Target")
+	otherGroupID := createDirectoryGroup(t, ctx, ti, ti.authContext.ActiveOrganizationID, "group-other", "Other")
+	targetUserID := createDirectoryUser(t, ctx, ti, "target-user", "directory-target-user")
+	otherUserID := createDirectoryUser(t, ctx, ti, "other-user", "directory-other-user")
+	createDirectoryUserGroupMembership(t, ctx, ti, targetUserID, targetGroupID, "directory-target-user", "group-target")
+	createDirectoryUserGroupMembership(t, ctx, ti, targetUserID, secondTargetGroupID, "directory-target-user", "group-second-target")
+	createDirectoryUserGroupMembership(t, ctx, ti, otherUserID, otherGroupID, "directory-other-user", "group-other")
+
+	_, err := ti.service.Distribute(ctx, &gen.DistributePayload{
+		ID: created.Skill.ID, PinnedVersionID: nil, AudienceGroupIds: []string{"group-target", "group-second-target"},
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	versionID := uuid.MustParse(created.Version.ID)
+	for _, userID := range []string{"target-user", "other-user", "unknown-user"} {
+		_, err = skills.UpsertSkillSyncReceipt(ctx, ti.repo, repo.UpsertSkillSyncReceiptParams{
+			SkillVersionID: uuid.NullUUID{UUID: versionID, Valid: true}, UserID: userID, Hostname: "host-" + userID, Provider: "claude", Status: string(skills.SyncReceiptStatusApplied), ProjectID: ti.projectID, SkillID: uuid.MustParse(created.Skill.ID),
+		})
+		require.NoError(t, err)
+	}
+
+	status, err := ti.service.GetDistributionStatus(ctx, &gen.GetDistributionStatusPayload{ID: created.Skill.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.Equal(t, &types.SkillDistributionStatus{SkillID: created.Skill.ID, ResolvedVersionID: created.Version.ID, Live: 1, Stale: 0, Shadowed: 0, Degraded: 0}, status)
+
+	_, err = workosrepo.New(ti.conn).CloseDirectoryUserGroupMembership(ctx, workosrepo.CloseDirectoryUserGroupMembershipParams{
+		DirectoryUserID:  targetUserID,
+		DirectoryGroupID: targetGroupID,
+	})
+	require.NoError(t, err)
+	status, err = ti.service.GetDistributionStatus(ctx, &gen.GetDistributionStatusPayload{ID: created.Skill.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), status.Live)
+
+	_, err = workosrepo.New(ti.conn).CloseDirectoryUserGroupMembership(ctx, workosrepo.CloseDirectoryUserGroupMembershipParams{
+		DirectoryUserID:  targetUserID,
+		DirectoryGroupID: secondTargetGroupID,
+	})
+	require.NoError(t, err)
+	status, err = ti.service.GetDistributionStatus(ctx, &gen.GetDistributionStatusPayload{ID: created.Skill.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.Equal(t, int64(0), status.Live)
 }
 
 func TestSkillDistributionProjectIsolationAndArchiveRevocation(t *testing.T) {

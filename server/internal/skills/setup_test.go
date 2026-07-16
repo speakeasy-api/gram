@@ -185,11 +185,11 @@ func createSkill(t *testing.T, ctx context.Context, ti *testInstance, name, desc
 	return result
 }
 
-func createDirectoryGroup(t *testing.T, ctx context.Context, ti *testInstance, organizationID, id, name string) {
+func createDirectoryGroup(t *testing.T, ctx context.Context, ti *testInstance, organizationID, id, name string) uuid.UUID {
 	t.Helper()
 
 	now := time.Now()
-	_, err := workosrepo.New(ti.conn).UpsertDirectoryGroup(ctx, workosrepo.UpsertDirectoryGroupParams{
+	directoryGroupID, err := workosrepo.New(ti.conn).UpsertDirectoryGroup(ctx, workosrepo.UpsertDirectoryGroupParams{
 		OrganizationID:         organizationID,
 		WorkosDirectoryGroupID: id,
 		Name:                   name,
@@ -197,6 +197,38 @@ func createDirectoryGroup(t *testing.T, ctx context.Context, ti *testInstance, o
 		WorkosCreatedAt:        conv.ToPGTimestamptz(now),
 		WorkosUpdatedAt:        conv.ToPGTimestamptz(now),
 		WorkosLastEventID:      conv.ToPGText("event-" + id),
+	})
+	require.NoError(t, err)
+	return directoryGroupID
+}
+
+func createDirectoryUser(t *testing.T, ctx context.Context, ti *testInstance, userID, workosDirectoryUserID string) uuid.UUID {
+	t.Helper()
+
+	now := time.Now()
+	directoryUserID, err := workosrepo.New(ti.conn).UpsertDirectoryUser(ctx, workosrepo.UpsertDirectoryUserParams{
+		OrganizationID:        ti.authContext.ActiveOrganizationID,
+		UserID:                conv.ToPGText(userID),
+		WorkosDirectoryUserID: workosDirectoryUserID,
+		Email:                 conv.ToPGText(userID + "@example.com"),
+		Attributes:            []byte(`{}`),
+		WorkosCreatedAt:       conv.ToPGTimestamptz(now),
+		WorkosUpdatedAt:       conv.ToPGTimestamptz(now),
+		WorkosLastEventID:     conv.ToPGText("event-" + workosDirectoryUserID),
+	})
+	require.NoError(t, err)
+	return directoryUserID
+}
+
+func createDirectoryUserGroupMembership(t *testing.T, ctx context.Context, ti *testInstance, directoryUserID, directoryGroupID uuid.UUID, workosDirectoryUserID, workosDirectoryGroupID string) {
+	t.Helper()
+
+	_, err := workosrepo.New(ti.conn).OpenDirectoryUserGroupMembership(ctx, workosrepo.OpenDirectoryUserGroupMembershipParams{
+		DirectoryUserID:        directoryUserID,
+		DirectoryGroupID:       directoryGroupID,
+		WorkosDirectoryUserID:  workosDirectoryUserID,
+		WorkosDirectoryGroupID: workosDirectoryGroupID,
+		WorkosCreatedAt:        conv.ToPGTimestamptz(time.Now()),
 	})
 	require.NoError(t, err)
 }
