@@ -177,3 +177,51 @@ SET next_poll_after = @next_poll_after,
     consecutive_failures = consecutive_failures + 1,
     updated_at = clock_timestamp()
 WHERE ai_integration_config_id = @ai_integration_config_id;
+
+-- name: EnsureAnalyticsSync :one
+WITH inserted AS (
+  INSERT INTO ai_integration_analytics_syncs (
+    ai_integration_config_id
+    -- A newly created analytics sync is due immediately: the poll activity
+    -- captures its end time before this row exists, so a clock_timestamp()
+    -- default would push the first sync to the next poll cycle.
+  , next_poll_after
+  ) VALUES (
+    @ai_integration_config_id
+  , to_timestamp(0)
+  )
+  ON CONFLICT (ai_integration_config_id) DO NOTHING
+  RETURNING *
+)
+SELECT *
+FROM inserted
+UNION ALL
+SELECT *
+FROM ai_integration_analytics_syncs
+WHERE ai_integration_config_id = @ai_integration_config_id
+LIMIT 1;
+
+-- name: AdvanceAnalyticsPollWatermark :exec
+UPDATE ai_integration_analytics_syncs
+SET poll_watermark_at = @poll_watermark_at,
+    updated_at = clock_timestamp()
+WHERE ai_integration_config_id = @ai_integration_config_id;
+
+-- name: RecordAnalyticsPollSuccess :exec
+UPDATE ai_integration_analytics_syncs
+SET next_poll_after = @next_poll_after,
+    last_poll_error = NULL,
+    last_poll_failed_at = NULL,
+    last_poll_success_at = clock_timestamp(),
+    consecutive_failures = 0,
+    updated_at = clock_timestamp()
+WHERE ai_integration_config_id = @ai_integration_config_id;
+
+-- name: RecordAnalyticsPollFailure :exec
+UPDATE ai_integration_analytics_syncs
+SET next_poll_after = @next_poll_after,
+    last_poll_error = @last_poll_error,
+    last_poll_failed_at = clock_timestamp(),
+    consecutive_failures = consecutive_failures + 1,
+    updated_at = clock_timestamp()
+WHERE ai_integration_config_id = @ai_integration_config_id;

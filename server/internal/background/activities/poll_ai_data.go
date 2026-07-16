@@ -25,6 +25,7 @@ type PollAIData struct {
 	integrations       *aiintegrations.Store
 	cursorUsagePoller  *aiintegrations.UsagePollService
 	complianceImporter *aiintegrations.ComplianceImportService
+	analyticsPoller    *aiintegrations.AnalyticsPollService
 }
 
 func NewPollAIData(
@@ -35,8 +36,9 @@ func NewPollAIData(
 	guardianPolicy *guardian.Policy,
 	chatWriter *chat.ChatMessageWriter,
 ) *PollAIData {
+	store := aiintegrations.NewStore(logger, db, encryptionClient)
 	return &PollAIData{
-		integrations: aiintegrations.NewStore(logger, db, encryptionClient),
+		integrations: store,
 		cursorUsagePoller: aiintegrations.NewUsagePollService(telemetryLogger, guardianPolicy, func(ctx context.Context, page int) {
 			activity.RecordHeartbeat(ctx, map[string]any{
 				"provider": aiintegrations.ProviderCursor,
@@ -44,6 +46,13 @@ func NewPollAIData(
 			})
 		}),
 		complianceImporter: aiintegrations.NewComplianceImportService(logger, db, guardianPolicy, chatWriter, func(ctx context.Context, scope string, page int) {
+			activity.RecordHeartbeat(ctx, map[string]any{
+				"provider": aiintegrations.ProviderAnthropicCompliance,
+				"scope":    scope,
+				"page":     page,
+			})
+		}),
+		analyticsPoller: aiintegrations.NewAnalyticsPollService(logger, store, guardianPolicy, telemetryLogger, func(ctx context.Context, scope string, page int) {
 			activity.RecordHeartbeat(ctx, map[string]any{
 				"provider": aiintegrations.ProviderAnthropicCompliance,
 				"scope":    scope,
@@ -106,6 +115,11 @@ func (p *PollAIData) Do(ctx context.Context, configID string) (err error) {
 			return oops.E(oops.CodeUnexpected, err, "sync anthropic compliance data")
 		}
 		lastCursor = nextCursor
+
+		// Admin Analytics (usage/cost) ingestion rides on the compliance poll
+		// but keeps its own cadence and failure state; it records outcomes
+		// internally and never fails the activity.
+		p.analyticsPoller.MaybeSyncAnthropicAnalytics(ctx, cfg, endTime)
 	default:
 		return oops.E(oops.CodeInvalid, nil, "unsupported ai integration provider for usage polling: %s", cfg.Provider)
 	}

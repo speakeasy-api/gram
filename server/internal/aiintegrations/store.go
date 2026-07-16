@@ -29,6 +29,14 @@ const (
 	cursorUsagePollInterval              = time.Hour
 	anthropicComplianceUsagePollInterval = 5 * time.Minute
 	maxUsagePollErrorMessage             = 4000
+
+	// anthropicAnalyticsPollInterval is the delay between Admin Analytics API
+	// polls. The analytics export is refreshed roughly every 4 hours, so
+	// polling more often only re-reads the same watermark.
+	anthropicAnalyticsPollInterval = 4 * time.Hour
+	// anthropicAnalyticsInitialLookback bounds the first analytics ingest for
+	// a config that has never synced.
+	anthropicAnalyticsInitialLookback = 24 * time.Hour
 )
 
 // usagePollIntervalFor returns the delay between polls for a provider.
@@ -307,6 +315,72 @@ func (s *Store) RecordUsagePollSuccess(ctx context.Context, configID uuid.UUID, 
 		LastCursorID:          conv.ToPGTextEmpty(lastCursor),
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to record ai integration usage poll success")
+	}
+	return nil
+}
+
+// AnalyticsSyncState is the scheduler state for the provider analytics
+// (usage/cost report) polling path. WatermarkAt is the exclusive end of the
+// last ingested bucket range; its zero value means the config never synced.
+type AnalyticsSyncState struct {
+	ConfigID            uuid.UUID
+	WatermarkAt         time.Time
+	NextPollAfter       time.Time
+	LastPollError       string
+	ConsecutiveFailures int32
+}
+
+// EnsureAnalyticsSync returns the analytics sync state for a config, creating
+// the row (due immediately, no watermark) on first use.
+func (s *Store) EnsureAnalyticsSync(ctx context.Context, configID uuid.UUID) (AnalyticsSyncState, error) {
+	row, err := s.repo.EnsureAnalyticsSync(ctx, configID)
+	if err != nil {
+		return AnalyticsSyncState{}, oops.E(oops.CodeUnexpected, err, "failed to load ai integration analytics sync")
+	}
+	return AnalyticsSyncState{
+		ConfigID:            row.AiIntegrationConfigID,
+		WatermarkAt:         row.PollWatermarkAt.Time,
+		NextPollAfter:       row.NextPollAfter.Time,
+		LastPollError:       row.LastPollError.String,
+		ConsecutiveFailures: row.ConsecutiveFailures,
+	}, nil
+}
+
+// AdvanceAnalyticsPollWatermark durably records that buckets up to (but not
+// including) watermark have been ingested. It is called after each ingested
+// window so a mid-sync crash re-fetches at most one window.
+func (s *Store) AdvanceAnalyticsPollWatermark(ctx context.Context, configID uuid.UUID, watermark time.Time) error {
+	if err := s.repo.AdvanceAnalyticsPollWatermark(ctx, repo.AdvanceAnalyticsPollWatermarkParams{
+		AiIntegrationConfigID: configID,
+		PollWatermarkAt:       conv.ToPGTimestamptz(watermark),
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to advance ai integration analytics watermark")
+	}
+	return nil
+}
+
+func (s *Store) RecordAnalyticsPollSuccess(ctx context.Context, configID uuid.UUID, t time.Time) error {
+	if err := s.repo.RecordAnalyticsPollSuccess(ctx, repo.RecordAnalyticsPollSuccessParams{
+		AiIntegrationConfigID: configID,
+		NextPollAfter:         conv.ToPGTimestamptz(t.UTC().Add(anthropicAnalyticsPollInterval)),
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to record ai integration analytics poll success")
+	}
+	return nil
+}
+
+func (s *Store) RecordAnalyticsPollFailure(ctx context.Context, configID uuid.UUID, t time.Time, cause error) error {
+	var errStr string
+	if cause != nil {
+		errStr = cause.Error()
+	}
+
+	if err := s.repo.RecordAnalyticsPollFailure(ctx, repo.RecordAnalyticsPollFailureParams{
+		AiIntegrationConfigID: configID,
+		NextPollAfter:         conv.ToPGTimestamptz(t.UTC().Add(anthropicAnalyticsPollInterval)),
+		LastPollError:         conv.ToPGTextEmpty(conv.TruncateString(errStr, maxUsagePollErrorMessage)),
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to record ai integration analytics poll failure")
 	}
 	return nil
 }

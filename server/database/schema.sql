@@ -2758,6 +2758,30 @@ CREATE TABLE IF NOT EXISTS ai_integration_syncs (
 CREATE UNIQUE INDEX IF NOT EXISTS ai_integration_syncs_config_id_key
   ON ai_integration_syncs (ai_integration_config_id);
 
+-- AI integration analytics syncs: scheduler state for the provider analytics
+-- (usage/cost report) polling path, which runs on its own cadence separate
+-- from the main sync in ai_integration_syncs. One row per config, created
+-- lazily on first poll.
+CREATE TABLE IF NOT EXISTS ai_integration_analytics_syncs (
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  ai_integration_config_id uuid NOT NULL,
+  -- Exclusive end of the last ingested time-bucket range. NULL means never
+  -- synced; the first sync applies the initial lookback window.
+  poll_watermark_at timestamptz,
+  next_poll_after timestamptz NOT NULL DEFAULT clock_timestamp(),
+  last_poll_error TEXT,
+  last_poll_failed_at timestamptz,
+  last_poll_success_at timestamptz,
+  consecutive_failures integer NOT NULL DEFAULT 0,
+  id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
+
+  CONSTRAINT ai_integration_analytics_syncs_config_id_fkey FOREIGN KEY (ai_integration_config_id) REFERENCES ai_integration_configs (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ai_integration_analytics_syncs_config_id_key
+  ON ai_integration_analytics_syncs (ai_integration_config_id);
+
 CREATE TABLE IF NOT EXISTS principal_grants (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,

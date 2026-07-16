@@ -12,6 +12,23 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const advanceAnalyticsPollWatermark = `-- name: AdvanceAnalyticsPollWatermark :exec
+UPDATE ai_integration_analytics_syncs
+SET poll_watermark_at = $1,
+    updated_at = clock_timestamp()
+WHERE ai_integration_config_id = $2
+`
+
+type AdvanceAnalyticsPollWatermarkParams struct {
+	PollWatermarkAt       pgtype.Timestamptz
+	AiIntegrationConfigID uuid.UUID
+}
+
+func (q *Queries) AdvanceAnalyticsPollWatermark(ctx context.Context, arg AdvanceAnalyticsPollWatermarkParams) error {
+	_, err := q.db.Exec(ctx, advanceAnalyticsPollWatermark, arg.PollWatermarkAt, arg.AiIntegrationConfigID)
+	return err
+}
+
 const countConfigsByOrganization = `-- name: CountConfigsByOrganization :one
 SELECT count(*)
 FROM ai_integration_configs
@@ -29,6 +46,61 @@ func (q *Queries) CountConfigsByOrganization(ctx context.Context, arg CountConfi
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const ensureAnalyticsSync = `-- name: EnsureAnalyticsSync :one
+WITH inserted AS (
+  INSERT INTO ai_integration_analytics_syncs (
+    ai_integration_config_id
+    -- A newly created analytics sync is due immediately: the poll activity
+    -- captures its end time before this row exists, so a clock_timestamp()
+    -- default would push the first sync to the next poll cycle.
+  , next_poll_after
+  ) VALUES (
+    $1
+  , to_timestamp(0)
+  )
+  ON CONFLICT (ai_integration_config_id) DO NOTHING
+  RETURNING created_at, updated_at, ai_integration_config_id, poll_watermark_at, next_poll_after, last_poll_error, last_poll_failed_at, last_poll_success_at, consecutive_failures, id
+)
+SELECT created_at, updated_at, ai_integration_config_id, poll_watermark_at, next_poll_after, last_poll_error, last_poll_failed_at, last_poll_success_at, consecutive_failures, id
+FROM inserted
+UNION ALL
+SELECT created_at, updated_at, ai_integration_config_id, poll_watermark_at, next_poll_after, last_poll_error, last_poll_failed_at, last_poll_success_at, consecutive_failures, id
+FROM ai_integration_analytics_syncs
+WHERE ai_integration_config_id = $1
+LIMIT 1
+`
+
+type EnsureAnalyticsSyncRow struct {
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+	AiIntegrationConfigID uuid.UUID
+	PollWatermarkAt       pgtype.Timestamptz
+	NextPollAfter         pgtype.Timestamptz
+	LastPollError         pgtype.Text
+	LastPollFailedAt      pgtype.Timestamptz
+	LastPollSuccessAt     pgtype.Timestamptz
+	ConsecutiveFailures   int32
+	ID                    uuid.UUID
+}
+
+func (q *Queries) EnsureAnalyticsSync(ctx context.Context, aiIntegrationConfigID uuid.UUID) (EnsureAnalyticsSyncRow, error) {
+	row := q.db.QueryRow(ctx, ensureAnalyticsSync, aiIntegrationConfigID)
+	var i EnsureAnalyticsSyncRow
+	err := row.Scan(
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.AiIntegrationConfigID,
+		&i.PollWatermarkAt,
+		&i.NextPollAfter,
+		&i.LastPollError,
+		&i.LastPollFailedAt,
+		&i.LastPollSuccessAt,
+		&i.ConsecutiveFailures,
+		&i.ID,
+	)
+	return i, err
 }
 
 const ensureSync = `-- name: EnsureSync :one
@@ -456,6 +528,48 @@ func (q *Queries) ListUsagePollCandidates(ctx context.Context, arg ListUsagePoll
 		return nil, err
 	}
 	return items, nil
+}
+
+const recordAnalyticsPollFailure = `-- name: RecordAnalyticsPollFailure :exec
+UPDATE ai_integration_analytics_syncs
+SET next_poll_after = $1,
+    last_poll_error = $2,
+    last_poll_failed_at = clock_timestamp(),
+    consecutive_failures = consecutive_failures + 1,
+    updated_at = clock_timestamp()
+WHERE ai_integration_config_id = $3
+`
+
+type RecordAnalyticsPollFailureParams struct {
+	NextPollAfter         pgtype.Timestamptz
+	LastPollError         pgtype.Text
+	AiIntegrationConfigID uuid.UUID
+}
+
+func (q *Queries) RecordAnalyticsPollFailure(ctx context.Context, arg RecordAnalyticsPollFailureParams) error {
+	_, err := q.db.Exec(ctx, recordAnalyticsPollFailure, arg.NextPollAfter, arg.LastPollError, arg.AiIntegrationConfigID)
+	return err
+}
+
+const recordAnalyticsPollSuccess = `-- name: RecordAnalyticsPollSuccess :exec
+UPDATE ai_integration_analytics_syncs
+SET next_poll_after = $1,
+    last_poll_error = NULL,
+    last_poll_failed_at = NULL,
+    last_poll_success_at = clock_timestamp(),
+    consecutive_failures = 0,
+    updated_at = clock_timestamp()
+WHERE ai_integration_config_id = $2
+`
+
+type RecordAnalyticsPollSuccessParams struct {
+	NextPollAfter         pgtype.Timestamptz
+	AiIntegrationConfigID uuid.UUID
+}
+
+func (q *Queries) RecordAnalyticsPollSuccess(ctx context.Context, arg RecordAnalyticsPollSuccessParams) error {
+	_, err := q.db.Exec(ctx, recordAnalyticsPollSuccess, arg.NextPollAfter, arg.AiIntegrationConfigID)
+	return err
 }
 
 const recordUsagePollFailure = `-- name: RecordUsagePollFailure :exec
