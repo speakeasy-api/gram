@@ -72,6 +72,12 @@ The main frontend application lives in `client/dashboard/` (not `client/` direct
 
 </commands>
 
+### Dashboard browser automation
+
+Use the `gram-playwright-cli` skill and `mise run playwright` for routine dashboard inspection, page interaction, console or network debugging, and screenshots. The mise task uses the repository Playwright config, installs Chromium when missing, and writes ignored artifacts to `.playwright-cli/`.
+
+Use `pr-demo-gif` when a user-visible change needs a shareable PR screenshot, GIF recording, or PR comment. It builds on the same `mise run playwright` workflow and adds the capture and publishing steps. Do not use `npm`, `npx`, or `yarn` for either workflow.
+
 ### Testing assistants locally
 
 `.mcp.json` registers the `assistants-dev` MCP server (`server/cmd/dev-mcp`), which drives the local management API without the dashboard UI. It logs into the local stack on its own (dev-idp auto-approves), so no setup is needed beyond a running dev stack. Use its tools — assistant CRUD, `run_turn` (send a message and wait for the assistant's reply), `load_chat`, and trigger CRUD — to exercise assistant runtime changes end to end. `whoami` lists the available project slugs.
@@ -129,6 +135,7 @@ Activate a skill when your task falls within its scope.
 | `pr`                              | Creating a Pull Request for current changes                                     |
 | `spec`                            | Interviewing user in-depth to produce a detailed spec before building           |
 | `page-toolbar`                    | Dashboard list page search, filters, sort, or view controls                     |
+| `gram-playwright-cli`             | Browser automation, dashboard inspection, screenshots, and page interaction     |
 | `pr-demo-gif`                     | Recording a demo GIF of a user-visible frontend change for a PR comment         |
 
 # Plan Mode
