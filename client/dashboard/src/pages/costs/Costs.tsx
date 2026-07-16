@@ -61,7 +61,10 @@ function NewCostsPage(): JSX.Element {
 
 // The Costs page with a Budgets tab beside the cost explorer. Tab state is
 // local (PolicyCenter pattern): the drill URL under /costs/... keeps working
-// and always lands on the Costs tab.
+// and always lands on the Costs tab. The tab strip lives inside the content
+// column — aligned with each tab's max-width content, like PolicyCenter's
+// Policies/Exclusions strip — not up in the page chrome beside the
+// breadcrumbs.
 function TabbedCostsPage({
   newCostsEnabled,
 }: {
@@ -69,6 +72,13 @@ function TabbedCostsPage({
 }): JSX.Element {
   const [activeTab, setActiveTab] = useState<CostsTab>("costs");
   const breadcrumbSubstitutions = useCostsBreadcrumbSubstitutions();
+
+  // The two cost views scroll differently: the explorer expects its container
+  // to scroll (the old Page.Body default), while the legacy agents view owns
+  // an internal scroll area and needs a non-scrolling flex column around it.
+  const costsTabClass = newCostsEnabled
+    ? "min-h-0 overflow-y-auto"
+    : "flex min-h-0 flex-col overflow-hidden";
 
   return (
     <div className="flex h-full flex-col">
@@ -79,25 +89,27 @@ function TabbedCostsPage({
             substitutions={breadcrumbSubstitutions}
           />
         </Page.Header>
-        <Tabs
-          value={activeTab}
-          onValueChange={(value) => setActiveTab(value as CostsTab)}
-          className="min-h-0 flex-1 gap-0"
-        >
-          <div className="border-border w-full border-b px-8">
-            <PageTabsList>
-              <PageTabsTrigger value="costs">Costs</PageTabsTrigger>
-              <PageTabsTrigger
-                value="budgets"
-                className="inline-flex items-center gap-2"
-              >
-                Budgets
-                <ReleaseStageBadge stage="preview" noTooltip />
-              </PageTabsTrigger>
-            </PageTabsList>
-          </div>
-          <TabsContent value="costs" className="flex min-h-0 flex-col">
-            <Page.Body noPadding fullWidth overflowHidden={!newCostsEnabled}>
+        <Page.Body noPadding fullWidth overflowHidden>
+          <Tabs
+            value={activeTab}
+            onValueChange={(value) => setActiveTab(value as CostsTab)}
+            className="min-h-0 flex-1 gap-0"
+          >
+            <div className="mx-auto w-full max-w-7xl px-8 pt-6">
+              <div className="border-b">
+                <PageTabsList>
+                  <PageTabsTrigger value="costs">Costs</PageTabsTrigger>
+                  <PageTabsTrigger
+                    value="budgets"
+                    className="inline-flex items-center gap-2"
+                  >
+                    Budgets
+                    <ReleaseStageBadge stage="preview" noTooltip />
+                  </PageTabsTrigger>
+                </PageTabsList>
+              </div>
+            </div>
+            <TabsContent value="costs" className={costsTabClass}>
               <RequireScope scope="org:admin" level="page">
                 {newCostsEnabled ? (
                   <CostsExplorer />
@@ -105,16 +117,16 @@ function TabbedCostsPage({
                   <InsightsAgentsContent />
                 )}
               </RequireScope>
-            </Page.Body>
-          </TabsContent>
-          <TabsContent value="budgets" className="flex min-h-0 flex-col">
-            <Page.Body>
-              <RequireScope scope="org:admin" level="page">
-                <BudgetsContent />
-              </RequireScope>
-            </Page.Body>
-          </TabsContent>
-        </Tabs>
+            </TabsContent>
+            <TabsContent value="budgets" className="min-h-0 overflow-y-auto">
+              <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 p-8 pt-6 pb-24">
+                <RequireScope scope="org:admin" level="page">
+                  <BudgetsContent />
+                </RequireScope>
+              </div>
+            </TabsContent>
+          </Tabs>
+        </Page.Body>
       </Page>
     </div>
   );
