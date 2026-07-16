@@ -3,7 +3,7 @@
 //MISE dir="{{ config_root }}"
 //USAGE flag "--project <slug>" default="default" help="Project slug to test against."
 //USAGE flag "--providers <list>" default="claude,cursor,codex" help="Comma-separated providers to drive: claude,cursor,codex."
-//USAGE flag "--suites <list>" default="capture,shadow-mcp,ratchet" help="Comma-separated feature suites to run: capture,shadow-mcp,ratchet."
+//USAGE flag "--suites <list>" default="capture,shadow-mcp,ratchet" help="Comma-separated feature suites to run: capture,shadow-mcp,ratchet,skill-sync. skill-sync requires claude."
 //USAGE flag "--timeout-seconds <seconds>" default="180" help="Timeout per provider scenario."
 //USAGE flag "--poll-seconds <seconds>" default="90" help="How long to poll Gram telemetry and database evidence."
 //USAGE flag "--keep-artifacts" help="Keep the temp workspace and built plugin artifacts."
@@ -19,7 +19,12 @@ import { GramCore } from "#gram/client/core.js";
 import { authInfo } from "#gram/client/funcs/authInfo.js";
 import { keysCreate } from "#gram/client/funcs/keysCreate.js";
 const VALID_PROVIDERS = new Set(["claude", "cursor", "codex"]);
-const VALID_SUITES = new Set(["capture", "shadow-mcp", "ratchet"]);
+const VALID_SUITES = new Set([
+  "capture",
+  "shadow-mcp",
+  "ratchet",
+  "skill-sync",
+]);
 const SOURCE_ALIASES = {
   claude: ["claude", "claude-code"],
   cursor: ["cursor"],
@@ -61,8 +66,19 @@ function parseArgs(argv) {
   }
   for (const s of suites) {
     if (!VALID_SUITES.has(s)) {
-      throw new Error(`Unsupported suite "${s}". Use capture,shadow-mcp.`);
+      throw new Error(
+        `Unsupported suite "${s}". Use capture,shadow-mcp,ratchet,skill-sync.`,
+      );
     }
+  }
+  if (suites.includes("skill-sync") && !providers.includes("claude")) {
+    throw new Error('The "skill-sync" suite requires --providers=claude.');
+  }
+  const skipBuild = Boolean(args["skip-build"] ?? args["skip-download"]);
+  if (suites.includes("skill-sync") && skipBuild) {
+    throw new Error(
+      'The "skill-sync" suite invokes the freshly built hook binary and does not support --skip-build.',
+    );
   }
   return {
     project: String(args.project ?? "default"),
@@ -71,7 +87,7 @@ function parseArgs(argv) {
     timeoutSeconds: Number(args["timeout-seconds"] ?? 180),
     pollSeconds: Number(args["poll-seconds"] ?? 90),
     keepArtifacts: Boolean(args["keep-artifacts"]),
-    skipBuild: Boolean(args["skip-build"] ?? args["skip-download"]),
+    skipBuild,
   };
 }
 function fail(message) {
@@ -652,7 +668,8 @@ async function rpcJSON(args) {
   if (res.status === 204) {
     return null;
   }
-  return await res.json();
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
 }
 async function createHostedMCPFixture(args) {
   const endpointSuffix = `${Date.now().toString(36)}-${crypto.randomBytes(3).toString("hex")}`;
@@ -1945,6 +1962,322 @@ async function runRatchetSuite(args) {
   return { checks, commandResults };
 }
 
+function distributedSkillContent(skillName, runId, version) {
+  return [
+    "---",
+    `name: ${skillName}`,
+    `description: Gram hooks E2E distributed skill ${runId}.`,
+    "---",
+    "",
+    "# Gram hooks E2E distributed skill",
+    "",
+    `version-marker: ${version}`,
+    "",
+  ].join("\n");
+}
+
+async function setSkillsFeature(args, enabled) {
+  await rpcJSON({
+    serverURL: args.serverURL,
+    session: args.session,
+    projectSlug: args.projectSlug,
+    path: "/rpc/productFeatures.set",
+    body: { feature_name: "skills", enabled },
+    label: `${enabled ? "enable" : "disable"} skills product feature`,
+  });
+}
+
+async function getSkillDistributionStatus(args, skillId) {
+  return await rpcJSON({
+    serverURL: args.serverURL,
+    session: args.session,
+    projectSlug: args.projectSlug,
+    path: `/rpc/skills.getDistributionStatus?id=${encodeURIComponent(skillId)}`,
+    method: "GET",
+    label: "get skill distribution status",
+  });
+}
+
+async function waitForSkillDistributionStatus(args, skillId, field) {
+  const status = await poll(
+    Date.now() + args.pollSeconds * 1000,
+    () => getSkillDistributionStatus(args, skillId),
+    (value) => Number(value?.[field] ?? 0) >= 1,
+  );
+  if (Number(status?.[field] ?? 0) < 1) {
+    fail(
+      `skill distribution status did not report ${field}: ${JSON.stringify(status)}`,
+    );
+  }
+  return status;
+}
+
+async function runSyntheticClaudeSessionStart(args, label) {
+  const payload = {
+    session_id: crypto.randomUUID(),
+    cwd: args.workdir,
+    hook_event_name: "SessionStart",
+    source: "startup",
+  };
+  const result = await runProcess(
+    args.hookBinary,
+    [
+      `--config=${path.join(args.pluginDirs.get("claude"), "speakeasy.json")}`,
+      "agenthooks",
+      "run",
+      "--provider=claude-code",
+      "--variant=cli",
+    ],
+    {
+      cwd: args.workdir,
+      env: {
+        CLAUDE_CONFIG_DIR: args.claudeConfigDir,
+        GRAM_HOOKS_AUTH_FILE: process.env.GRAM_HOOKS_AUTH_FILE,
+        GRAM_HOOKS_DISABLE_LOCAL_AUTH: "1",
+        XDG_STATE_HOME: path.join(args.rootDir, "skill-sync-state"),
+      },
+      input: JSON.stringify(payload),
+      timeoutMs: args.timeoutSeconds * 1000,
+    },
+  );
+  result.provider = "claude";
+  await writeCommandArtifacts(
+    args.artifactsDir,
+    "claude",
+    `skill-sync-${label}`,
+    result,
+  );
+  if (result.timedOut) {
+    fail(`claude synthetic SessionStart (${label}) timed out`);
+  }
+  if (result.exitCode !== 0) {
+    fail(
+      `claude synthetic SessionStart (${label}) failed:\n${result.stderr || result.stdout}`,
+    );
+  }
+  return result;
+}
+
+function addSkillSyncCheck(checks, feature, condition, detail) {
+  checks.push({
+    provider: "claude",
+    feature: `skill_sync.${feature}`,
+    status: condition ? "PASS" : "FAIL",
+    detail,
+  });
+  if (!condition) {
+    fail(`skill-sync ${feature} failed: ${detail}`);
+  }
+}
+
+async function runSkillSyncSuite(args) {
+  const checks = [];
+  const commandResults = [];
+  const featureState = await rpcJSON({
+    serverURL: args.serverURL,
+    session: args.session,
+    projectSlug: args.projectSlug,
+    path: "/rpc/productFeatures.get",
+    method: "GET",
+    label: "get product features before skill sync",
+  });
+  const skillsWasEnabled = Boolean(featureState?.skills_enabled);
+  const suffix = `${Date.now().toString(36)}-${crypto.randomBytes(3).toString("hex")}`;
+  const skillName = `hooks-e2e-${suffix}`;
+  const claudeConfigDir = path.join(args.rootDir, "skill-sync-claude");
+  const skillsRoot = path.join(claudeConfigDir, "skills");
+  const skillDir = path.join(skillsRoot, skillName);
+  const skillPath = path.join(skillDir, "SKILL.md");
+  const firstContent = distributedSkillContent(skillName, args.runId, "v1");
+  const secondContent = distributedSkillContent(skillName, args.runId, "v2");
+  let skillId = null;
+  let distributionActive = false;
+  await fs.mkdir(claudeConfigDir, { recursive: true });
+
+  try {
+    if (!skillsWasEnabled) {
+      await setSkillsFeature(args, true);
+    }
+    log.info(`claude: creating and distributing skill ${skillName}`);
+    const created = await rpcJSON({
+      serverURL: args.serverURL,
+      session: args.session,
+      projectSlug: args.projectSlug,
+      path: "/rpc/skills.create",
+      body: { content: firstContent },
+      label: "create distributed skill",
+    });
+    skillId = created?.skill?.id;
+    if (!skillId) {
+      fail(`skills.create returned no skill id: ${JSON.stringify(created)}`);
+    }
+    await rpcJSON({
+      serverURL: args.serverURL,
+      session: args.session,
+      projectSlug: args.projectSlug,
+      path: "/rpc/skills.distribute",
+      body: { id: skillId },
+      label: "distribute skill project-wide",
+    });
+    distributionActive = true;
+
+    const installed = await runSyntheticClaudeSessionStart(
+      { ...args, claudeConfigDir },
+      "install",
+    );
+    commandResults.push(installed);
+    const installedContent = await fs.readFile(skillPath, "utf8");
+    addSkillSyncCheck(
+      checks,
+      "installed",
+      installedContent === firstContent,
+      `SKILL.md materialized at ${skillPath}`,
+    );
+    const installOutput = commandOutput(installed);
+    addSkillSyncCheck(
+      checks,
+      "additional_context",
+      installOutput.includes(skillName) &&
+        installOutput.includes(skillPath) &&
+        installOutput.includes("Read"),
+      "SessionStart output names the skill, absolute path, and Read-before-use instruction",
+    );
+    const installedStatus = await waitForSkillDistributionStatus(
+      args,
+      skillId,
+      "live",
+    );
+    addSkillSyncCheck(
+      checks,
+      "receipt_live",
+      Number(installedStatus.live) >= 1,
+      `distribution status=${JSON.stringify(installedStatus)}`,
+    );
+
+    await rpcJSON({
+      serverURL: args.serverURL,
+      session: args.session,
+      projectSlug: args.projectSlug,
+      path: "/rpc/skills.addVersion",
+      body: { id: skillId, content: secondContent },
+      label: "add distributed skill version",
+    });
+    const updated = await runSyntheticClaudeSessionStart(
+      { ...args, claudeConfigDir },
+      "update",
+    );
+    commandResults.push(updated);
+    const updatedContent = await fs.readFile(skillPath, "utf8");
+    addSkillSyncCheck(
+      checks,
+      "updated",
+      updatedContent === secondContent,
+      "SessionStart applied the latest valid skill version",
+    );
+    await waitForSkillDistributionStatus(args, skillId, "live");
+
+    await rpcJSON({
+      serverURL: args.serverURL,
+      session: args.session,
+      projectSlug: args.projectSlug,
+      path: "/rpc/skills.undistribute",
+      body: { id: skillId },
+      label: "undistribute skill",
+    });
+    distributionActive = false;
+    const removed = await runSyntheticClaudeSessionStart(
+      { ...args, claudeConfigDir },
+      "remove",
+    );
+    commandResults.push(removed);
+    let removedFromDisk = false;
+    try {
+      await fs.lstat(skillDir);
+    } catch (err) {
+      removedFromDisk = err?.code === "ENOENT";
+    }
+    addSkillSyncCheck(
+      checks,
+      "removed",
+      removedFromDisk,
+      "undistributed owned skill directory was removed",
+    );
+
+    const unownedContent = `unowned-${args.runId}\n`;
+    await fs.mkdir(skillDir, { recursive: true });
+    await fs.writeFile(skillPath, unownedContent);
+    await rpcJSON({
+      serverURL: args.serverURL,
+      session: args.session,
+      projectSlug: args.projectSlug,
+      path: "/rpc/skills.distribute",
+      body: { id: skillId },
+      label: "redistribute skill for conflict receipt",
+    });
+    distributionActive = true;
+    const conflicted = await runSyntheticClaudeSessionStart(
+      { ...args, claudeConfigDir },
+      "conflict",
+    );
+    commandResults.push(conflicted);
+    const preservedContent = await fs.readFile(skillPath, "utf8");
+    addSkillSyncCheck(
+      checks,
+      "conflict_preserved",
+      preservedContent === unownedContent,
+      "unowned same-name SKILL.md was preserved",
+    );
+    const conflictStatus = await waitForSkillDistributionStatus(
+      args,
+      skillId,
+      "shadowed",
+    );
+    addSkillSyncCheck(
+      checks,
+      "receipt_shadowed",
+      Number(conflictStatus.shadowed) >= 1,
+      `distribution status=${JSON.stringify(conflictStatus)}`,
+    );
+  } finally {
+    if (skillId && distributionActive) {
+      try {
+        await rpcJSON({
+          serverURL: args.serverURL,
+          session: args.session,
+          projectSlug: args.projectSlug,
+          path: "/rpc/skills.undistribute",
+          body: { id: skillId },
+          label: "clean up distributed skill",
+        });
+      } catch (err) {
+        log.warn(`Failed to clean up skill distribution: ${String(err)}`);
+      }
+    }
+    if (skillId) {
+      try {
+        await rpcJSON({
+          serverURL: args.serverURL,
+          session: args.session,
+          projectSlug: args.projectSlug,
+          path: "/rpc/skills.archive",
+          body: { id: skillId },
+          label: "archive E2E skill",
+        });
+      } catch (err) {
+        log.warn(`Failed to archive E2E skill ${skillId}: ${String(err)}`);
+      }
+    }
+    if (!skillsWasEnabled) {
+      try {
+        await setSkillsFeature(args, false);
+      } catch (err) {
+        log.warn(`Failed to restore skills product feature: ${String(err)}`);
+      }
+    }
+  }
+  return { checks, commandResults };
+}
+
 async function runCaptureSuite(args) {
   const commandResults = [];
   const skillNamesByProvider = new Map();
@@ -2408,8 +2741,10 @@ async function main() {
     log.info(
       `Authenticated as ${session.userEmail}; org=${session.organizationId} project=${args.project}`,
     );
-    await enableSessionCapture(session.organizationId);
-    log.info("Enabled session_capture for the active org");
+    if (args.suites.some((suite) => suite !== "skill-sync")) {
+      await enableSessionCapture(session.organizationId);
+      log.info("Enabled session_capture for the active org");
+    }
     const hooksAuthFile = await provisionHooksAuth(
       serverURL,
       session,
@@ -2450,6 +2785,9 @@ async function main() {
       pluginDirs.set(provider, pluginDir);
       log.info(`${provider}: using plugin ${pluginDir}`);
     }
+    const hookBinary = args.suites.includes("skill-sync")
+      ? await buildHookBinary(artifactsDir)
+      : null;
     const allChecks = [];
     const commandResults = [];
     const suiteArgs = {
@@ -2466,6 +2804,7 @@ async function main() {
       session,
       projectSlug: args.project,
       startedUnixNano,
+      hookBinary,
     };
     if (args.suites.includes("capture")) {
       const result = await runCaptureSuite(suiteArgs);
@@ -2479,6 +2818,11 @@ async function main() {
     }
     if (args.suites.includes("ratchet")) {
       const result = await runRatchetSuite(suiteArgs);
+      allChecks.push(...result.checks);
+      commandResults.push(...result.commandResults);
+    }
+    if (args.suites.includes("skill-sync")) {
+      const result = await runSkillSyncSuite(suiteArgs);
       allChecks.push(...result.checks);
       commandResults.push(...result.commandResults);
     }
