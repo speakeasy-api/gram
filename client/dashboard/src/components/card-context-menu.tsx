@@ -1,9 +1,11 @@
 import { Icon } from "@speakeasy-api/moonshine";
+import * as React from "react";
 import { cn } from "@/lib/utils";
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuTrigger,
 } from "./ui/context-menu";
 import type { Action } from "./ui/more-actions";
@@ -38,21 +40,47 @@ export function CardContextMenu({
       <ContextMenuTrigger asChild>
         <div className={cn("h-full", className)}>{children}</div>
       </ContextMenuTrigger>
-      <ContextMenuContent className="min-w-[10rem]">
-        {actions.map((action, index) => (
+      <ActionContextMenuContent actions={actions} />
+    </ContextMenu>
+  );
+}
+
+/**
+ * The `ContextMenuContent` for a right-click menu built from an `Action[]`.
+ * Shared by CardContextMenu and TableRowContextMenu so every context menu in
+ * the app maps actions to items the same way.
+ */
+export function ActionContextMenuContent({
+  actions,
+}: {
+  actions: Action[];
+}): React.JSX.Element {
+  return (
+    <ContextMenuContent className="min-w-[10rem]">
+      {actions.map((action, index) => (
+        <React.Fragment key={index}>
+          {action.separatorBefore && index > 0 && <ContextMenuSeparator />}
           <ContextMenuItem
-            key={index}
             disabled={action.disabled}
             variant={action.destructive ? "destructive" : "default"}
             onSelect={() => action.onClick()}
           >
-            {action.label}
+            {action.description ? (
+              <span className="flex min-w-0 flex-col">
+                <span>{action.label}</span>
+                <span className="text-muted-foreground text-xs">
+                  {action.description}
+                </span>
+              </span>
+            ) : (
+              action.label
+            )}
             {action.icon && (
               <Icon name={action.icon} className="size-3 shrink-0" />
             )}
           </ContextMenuItem>
-        ))}
-      </ContextMenuContent>
-    </ContextMenu>
+        </React.Fragment>
+      ))}
+    </ContextMenuContent>
   );
 }
