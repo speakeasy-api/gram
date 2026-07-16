@@ -510,6 +510,35 @@ func (q *Queries) GetProjectMarketplaceNameContext(ctx context.Context, projectI
 	return i, err
 }
 
+const isDefaultProject = `-- name: IsDefaultProject :one
+SELECT (
+  SELECT p.id
+  FROM projects p
+  WHERE p.organization_id = $1
+    AND p.deleted IS FALSE
+  ORDER BY p.id ASC
+  LIMIT 1
+) = $2 AS is_default
+`
+
+type IsDefaultProjectParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+// Whether @project_id is the org's default project — the oldest (first by id
+// ASC) non-deleted project, created at org setup. Mirrors the default-project
+// definition the agent's getPlugins read path uses, so the audience the seeding
+// side grants matches the project the delivery side treats as default. Used to
+// decide whether a new plugin defaults to the org-wide audience: only plugins in
+// the default project do; plugins in other projects default to no assignments.
+func (q *Queries) IsDefaultProject(ctx context.Context, arg IsDefaultProjectParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isDefaultProject, arg.OrganizationID, arg.ProjectID)
+	var is_default bool
+	err := row.Scan(&is_default)
+	return is_default, err
+}
+
 const isOrganizationFeatureEnabled = `-- name: IsOrganizationFeatureEnabled :one
 SELECT EXISTS (
   SELECT 1

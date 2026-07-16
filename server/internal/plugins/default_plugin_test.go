@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -31,12 +32,46 @@ func TestEnsureDefaultPlugin_CreatesWhenMissing(t *testing.T) {
 	require.Equal(t, "default", result.Plugin.Slug)
 	require.Equal(t, pgtype.Bool{Bool: true, Valid: true}, result.Plugin.IsDefault)
 
-	// A freshly-created Default plugin is assigned to the org wildcard so it
+	// A freshly-created Default plugin in the org's default project (the test's
+	// only, and thus oldest, project) is assigned to the org wildcard so it
 	// delivers to everyone under agent.getPlugins' per-principal scoping.
 	assignments, err := pluginsrepo.New(tx).ListPluginAssignments(ctx, result.Plugin.ID)
 	require.NoError(t, err)
 	require.Len(t, assignments, 1)
 	require.Equal(t, "*", assignments[0].PrincipalUrn)
+}
+
+// TestEnsureDefaultPlugin_NonDefaultProjectSeedsNoAudience pins that only the
+// org's default project gets the org-wide audience: a Default plugin created in
+// a second (non-default) project starts with no assignments, so enabling a
+// server there doesn't auto-broadcast to the whole org.
+func TestEnsureDefaultPlugin_NonDefaultProjectSeedsNoAudience(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	// A second project created after the default one — its uuidv7 id sorts after
+	// the org's original project, so it is not the default (oldest) project.
+	other, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           "second-project",
+		Slug:           "second-project",
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+
+	result, err := plugins.EnsureDefaultPlugin(ctx, tx, authCtx.ActiveOrganizationID, other.ID)
+	require.NoError(t, err)
+	require.True(t, result.Created)
+
+	assignments, err := pluginsrepo.New(tx).ListPluginAssignments(ctx, result.Plugin.ID)
+	require.NoError(t, err)
+	require.Empty(t, assignments,
+		"a non-default project's Default plugin starts with no audience")
 }
 
 func TestEnsureDefaultPlugin_ReturnsExistingWhenPresent(t *testing.T) {

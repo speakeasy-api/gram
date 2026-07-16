@@ -40,6 +40,22 @@ WHERE organization_id = @organization_id
   AND deleted IS FALSE
 RETURNING *;
 
+-- name: IsDefaultProject :one
+-- Whether @project_id is the org's default project — the oldest (first by id
+-- ASC) non-deleted project, created at org setup. Mirrors the default-project
+-- definition the agent's getPlugins read path uses, so the audience the seeding
+-- side grants matches the project the delivery side treats as default. Used to
+-- decide whether a new plugin defaults to the org-wide audience: only plugins in
+-- the default project do; plugins in other projects default to no assignments.
+SELECT (
+  SELECT p.id
+  FROM projects p
+  WHERE p.organization_id = @organization_id
+    AND p.deleted IS FALSE
+  ORDER BY p.id ASC
+  LIMIT 1
+) = @project_id AS is_default;
+
 -- name: GetPlugin :one
 SELECT *
 FROM plugins
