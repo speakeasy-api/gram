@@ -324,7 +324,8 @@ CREATE TABLE IF NOT EXISTS skill_distributions (
   CONSTRAINT skill_distributions_pkey PRIMARY KEY (id),
   CONSTRAINT skill_distributions_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
   CONSTRAINT skill_distributions_skill_id_fkey FOREIGN KEY (skill_id) REFERENCES skills (id) ON DELETE CASCADE,
-  CONSTRAINT skill_distributions_pinned_version_id_fkey FOREIGN KEY (pinned_version_id) REFERENCES skill_versions (id) ON DELETE SET NULL
+  CONSTRAINT skill_distributions_pinned_version_id_fkey FOREIGN KEY (pinned_version_id) REFERENCES skill_versions (id),
+  CONSTRAINT skill_distributions_audience_check CHECK (audience IS NULL OR cardinality(audience) > 0)
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS skill_distributions_project_id_skill_id_channel_key
@@ -336,7 +337,6 @@ CREATE INDEX IF NOT EXISTS skill_distributions_skill_id_idx ON skill_distributio
 CREATE INDEX IF NOT EXISTS skill_distributions_pinned_version_id_idx ON skill_distributions (pinned_version_id);
 
 CREATE TABLE IF NOT EXISTS skill_sync_receipts (
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
   skill_id uuid NOT NULL,
   skill_version_id uuid,
@@ -350,17 +350,13 @@ CREATE TABLE IF NOT EXISTS skill_sync_receipts (
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
-  CONSTRAINT skill_sync_receipts_pkey PRIMARY KEY (id),
+  CONSTRAINT skill_sync_receipts_pkey PRIMARY KEY (project_id, skill_id, user_id, hostname, provider),
   CONSTRAINT skill_sync_receipts_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
   CONSTRAINT skill_sync_receipts_skill_id_fkey FOREIGN KEY (skill_id) REFERENCES skills (id) ON DELETE CASCADE,
-  CONSTRAINT skill_sync_receipts_skill_version_id_fkey FOREIGN KEY (skill_version_id) REFERENCES skill_versions (id) ON DELETE SET NULL
+  CONSTRAINT skill_sync_receipts_skill_version_id_fkey FOREIGN KEY (skill_version_id) REFERENCES skill_versions (id)
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS skill_sync_receipts_project_skill_user_host_provider_key
-ON skill_sync_receipts (project_id, skill_id, user_id, hostname, provider);
-
 CREATE INDEX IF NOT EXISTS skill_sync_receipts_skill_id_idx ON skill_sync_receipts (skill_id);
-CREATE INDEX IF NOT EXISTS skill_sync_receipts_skill_version_id_idx ON skill_sync_receipts (skill_version_id);
 CREATE INDEX IF NOT EXISTS skill_sync_receipts_project_id_skill_version_id_idx ON skill_sync_receipts (project_id, skill_version_id);
 
 CREATE TABLE IF NOT EXISTS packages (

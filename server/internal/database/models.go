@@ -1656,7 +1656,6 @@ type SkillDistribution struct {
 }
 
 type SkillSyncReceipt struct {
-	ID             uuid.UUID
 	ProjectID      uuid.UUID
 	SkillID        uuid.UUID
 	SkillVersionID uuid.NullUUID
