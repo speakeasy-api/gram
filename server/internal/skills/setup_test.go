@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -20,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -29,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/skills/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
 )
 
 var infra *testenv.Environment
@@ -180,6 +183,22 @@ func createSkill(t *testing.T, ctx context.Context, ti *testInstance, name, desc
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	return result
+}
+
+func createDirectoryGroup(t *testing.T, ctx context.Context, ti *testInstance, organizationID, id, name string) {
+	t.Helper()
+
+	now := time.Now()
+	_, err := workosrepo.New(ti.conn).UpsertDirectoryGroup(ctx, workosrepo.UpsertDirectoryGroupParams{
+		OrganizationID:         organizationID,
+		WorkosDirectoryGroupID: id,
+		Name:                   name,
+		Attributes:             []byte(`{}`),
+		WorkosCreatedAt:        conv.ToPGTimestamptz(now),
+		WorkosUpdatedAt:        conv.ToPGTimestamptz(now),
+		WorkosLastEventID:      conv.ToPGText("event-" + id),
+	})
+	require.NoError(t, err)
 }
 
 func requireOopsCode(t *testing.T, err error, code oops.Code) {

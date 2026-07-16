@@ -89,3 +89,50 @@ func BuildSkillVersionListView(rows []repo.SkillVersion, frontmatter func(conten
 
 	return result, nil
 }
+
+func BuildSkillDistributionView(distribution repo.SkillDistribution, resolvedVersionID uuid.UUID) *types.SkillDistribution {
+	return &types.SkillDistribution{
+		ID:                distribution.ID.String(),
+		ProjectID:         distribution.ProjectID.String(),
+		SkillID:           distribution.SkillID.String(),
+		PinnedVersionID:   conv.FromNullableUUID(distribution.PinnedVersionID),
+		ResolvedVersionID: resolvedVersionID.String(),
+		AudienceGroupIds:  distribution.Audience,
+		Channel:           distribution.Channel,
+		CreatedByUserID:   distribution.CreatedByUserID,
+		CreatedAt:         conv.FromPGTimestamptz(distribution.CreatedAt),
+		UpdatedAt:         conv.FromPGTimestamptz(distribution.UpdatedAt),
+	}
+}
+
+func BuildSkillDistributionListView(rows []repo.ListActiveSkillDistributionsRow) []*types.SkillDistribution {
+	result := make([]*types.SkillDistribution, len(rows))
+	for i, row := range rows {
+		result[i] = BuildSkillDistributionView(row.SkillDistribution, row.ResolvedVersionID)
+	}
+
+	return result
+}
+
+func BuildSkillDistributionStatusView(row repo.GetActiveSkillDistributionStatusRow) *types.SkillDistributionStatus {
+	return &types.SkillDistributionStatus{
+		SkillID:           row.SkillID.String(),
+		ResolvedVersionID: row.ResolvedVersionID.String(),
+		Live:              row.Live,
+		Stale:             row.Stale,
+		Shadowed:          row.Shadowed,
+		Degraded:          row.Degraded,
+	}
+}
+
+func BuildSkillDistributionAudienceGroupListView(rows []repo.ListSkillDistributionAudienceGroupsRow) []*types.SkillDistributionAudienceGroup {
+	result := make([]*types.SkillDistributionAudienceGroup, len(rows))
+	for i, row := range rows {
+		result[i] = &types.SkillDistributionAudienceGroup{
+			ID:   row.WorkosDirectoryGroupID,
+			Name: row.Name,
+		}
+	}
+
+	return result
+}

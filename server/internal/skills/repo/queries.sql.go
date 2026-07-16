@@ -96,6 +96,61 @@ func (q *Queries) CreateSkill(ctx context.Context, arg CreateSkillParams) (Skill
 	return i, err
 }
 
+const createSkillDistribution = `-- name: CreateSkillDistribution :one
+INSERT INTO skill_distributions (
+  project_id,
+  skill_id,
+  pinned_version_id,
+  audience,
+  channel,
+  created_by_user_id
+)
+SELECT
+  s.project_id,
+  s.id,
+  $1::uuid,
+  $2::text[],
+  'plugin',
+  $3
+FROM skills s
+WHERE s.project_id = $4
+  AND s.id = $5
+  AND s.archived_at IS NULL
+RETURNING id, project_id, skill_id, pinned_version_id, audience, channel, created_by_user_id, revoked_at, created_at, updated_at
+`
+
+type CreateSkillDistributionParams struct {
+	PinnedVersionID uuid.NullUUID
+	Audience        []string
+	CreatedByUserID string
+	ProjectID       uuid.UUID
+	SkillID         uuid.UUID
+}
+
+func (q *Queries) CreateSkillDistribution(ctx context.Context, arg CreateSkillDistributionParams) (SkillDistribution, error) {
+	row := q.db.QueryRow(ctx, createSkillDistribution,
+		arg.PinnedVersionID,
+		arg.Audience,
+		arg.CreatedByUserID,
+		arg.ProjectID,
+		arg.SkillID,
+	)
+	var i SkillDistribution
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.SkillID,
+		&i.PinnedVersionID,
+		&i.Audience,
+		&i.Channel,
+		&i.CreatedByUserID,
+		&i.RevokedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const createSkillVersion = `-- name: CreateSkillVersion :one
 INSERT INTO skill_versions (
   skill_id,
@@ -168,6 +223,128 @@ func (q *Queries) CreateSkillVersion(ctx context.Context, arg CreateSkillVersion
 		&i.CreatedByUserID,
 	)
 	return i, err
+}
+
+const getActiveSkillDistributionRecord = `-- name: GetActiveSkillDistributionRecord :one
+SELECT sd.id, sd.project_id, sd.skill_id, sd.pinned_version_id, sd.audience, sd.channel, sd.created_by_user_id, sd.revoked_at, sd.created_at, sd.updated_at
+FROM skill_distributions sd
+WHERE sd.project_id = $1
+  AND sd.skill_id = $2
+  AND sd.channel = 'plugin'
+  AND sd.revoked_at IS NULL
+`
+
+type GetActiveSkillDistributionRecordParams struct {
+	ProjectID uuid.UUID
+	SkillID   uuid.UUID
+}
+
+func (q *Queries) GetActiveSkillDistributionRecord(ctx context.Context, arg GetActiveSkillDistributionRecordParams) (SkillDistribution, error) {
+	row := q.db.QueryRow(ctx, getActiveSkillDistributionRecord, arg.ProjectID, arg.SkillID)
+	var i SkillDistribution
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.SkillID,
+		&i.PinnedVersionID,
+		&i.Audience,
+		&i.Channel,
+		&i.CreatedByUserID,
+		&i.RevokedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getActiveSkillDistributionStatus = `-- name: GetActiveSkillDistributionStatus :one
+SELECT
+  sd.skill_id,
+  resolved.id AS resolved_version_id,
+  receipts.live,
+  receipts.stale,
+  receipts.shadowed,
+  receipts.degraded
+FROM skill_distributions sd
+JOIN skills s
+  ON s.project_id = sd.project_id
+  AND s.id = sd.skill_id
+  AND s.archived_at IS NULL
+JOIN LATERAL (
+  SELECT sv.id
+  FROM skill_versions sv
+  WHERE sv.skill_id = sd.skill_id
+    AND sv.spec_valid IS TRUE
+    AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
+  ORDER BY sv.created_at DESC, sv.id DESC
+  LIMIT 1
+) resolved ON TRUE
+JOIN LATERAL (
+  SELECT
+    COUNT(*) FILTER (WHERE ssr.status = 'applied' AND ssr.skill_version_id = resolved.id)::bigint AS live,
+    COUNT(*) FILTER (WHERE ssr.status = 'applied' AND ssr.skill_version_id IS DISTINCT FROM resolved.id)::bigint AS stale,
+    COUNT(*) FILTER (WHERE ssr.status = 'conflict_skipped')::bigint AS shadowed,
+    COUNT(*) FILTER (WHERE ssr.status = 'fs_readonly')::bigint AS degraded
+  FROM skill_sync_receipts ssr
+  WHERE ssr.project_id = sd.project_id
+    AND ssr.skill_id = sd.skill_id
+) receipts ON TRUE
+WHERE sd.project_id = $1
+  AND sd.skill_id = $2
+  AND sd.channel = 'plugin'
+  AND sd.revoked_at IS NULL
+`
+
+type GetActiveSkillDistributionStatusParams struct {
+	ProjectID uuid.UUID
+	SkillID   uuid.UUID
+}
+
+type GetActiveSkillDistributionStatusRow struct {
+	SkillID           uuid.UUID
+	ResolvedVersionID uuid.UUID
+	Live              int64
+	Stale             int64
+	Shadowed          int64
+	Degraded          int64
+}
+
+func (q *Queries) GetActiveSkillDistributionStatus(ctx context.Context, arg GetActiveSkillDistributionStatusParams) (GetActiveSkillDistributionStatusRow, error) {
+	row := q.db.QueryRow(ctx, getActiveSkillDistributionStatus, arg.ProjectID, arg.SkillID)
+	var i GetActiveSkillDistributionStatusRow
+	err := row.Scan(
+		&i.SkillID,
+		&i.ResolvedVersionID,
+		&i.Live,
+		&i.Stale,
+		&i.Shadowed,
+		&i.Degraded,
+	)
+	return i, err
+}
+
+const getLatestValidSkillVersion = `-- name: GetLatestValidSkillVersion :one
+SELECT sv.id
+FROM skill_versions sv
+JOIN skills s ON s.id = sv.skill_id
+WHERE s.project_id = $1
+  AND s.id = $2
+  AND s.archived_at IS NULL
+  AND sv.spec_valid IS TRUE
+ORDER BY sv.created_at DESC, sv.id DESC
+LIMIT 1
+`
+
+type GetLatestValidSkillVersionParams struct {
+	ProjectID uuid.UUID
+	SkillID   uuid.UUID
+}
+
+func (q *Queries) GetLatestValidSkillVersion(ctx context.Context, arg GetLatestValidSkillVersionParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getLatestValidSkillVersion, arg.ProjectID, arg.SkillID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const getSkill = `-- name: GetSkill :one
@@ -420,6 +597,128 @@ func (q *Queries) GetSkillVersionByHash(ctx context.Context, arg GetSkillVersion
 	return i, err
 }
 
+const getValidSkillVersion = `-- name: GetValidSkillVersion :one
+SELECT sv.id
+FROM skill_versions sv
+JOIN skills s ON s.id = sv.skill_id
+WHERE s.project_id = $1
+  AND s.id = $2
+  AND s.archived_at IS NULL
+  AND sv.id = $3
+  AND sv.spec_valid IS TRUE
+`
+
+type GetValidSkillVersionParams struct {
+	ProjectID uuid.UUID
+	SkillID   uuid.UUID
+	VersionID uuid.UUID
+}
+
+func (q *Queries) GetValidSkillVersion(ctx context.Context, arg GetValidSkillVersionParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getValidSkillVersion, arg.ProjectID, arg.SkillID, arg.VersionID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const listActiveSkillDistributions = `-- name: ListActiveSkillDistributions :many
+SELECT
+  sd.id, sd.project_id, sd.skill_id, sd.pinned_version_id, sd.audience, sd.channel, sd.created_by_user_id, sd.revoked_at, sd.created_at, sd.updated_at,
+  resolved.id AS resolved_version_id
+FROM skill_distributions sd
+JOIN skills s
+  ON s.project_id = sd.project_id
+  AND s.id = sd.skill_id
+  AND s.archived_at IS NULL
+JOIN LATERAL (
+  SELECT sv.id
+  FROM skill_versions sv
+  WHERE sv.skill_id = sd.skill_id
+    AND sv.spec_valid IS TRUE
+    AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
+  ORDER BY sv.created_at DESC, sv.id DESC
+  LIMIT 1
+) resolved ON TRUE
+WHERE sd.project_id = $1
+  AND sd.channel = 'plugin'
+  AND sd.revoked_at IS NULL
+ORDER BY sd.created_at ASC, sd.id ASC
+`
+
+type ListActiveSkillDistributionsRow struct {
+	SkillDistribution SkillDistribution
+	ResolvedVersionID uuid.UUID
+}
+
+func (q *Queries) ListActiveSkillDistributions(ctx context.Context, projectID uuid.UUID) ([]ListActiveSkillDistributionsRow, error) {
+	rows, err := q.db.Query(ctx, listActiveSkillDistributions, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListActiveSkillDistributionsRow
+	for rows.Next() {
+		var i ListActiveSkillDistributionsRow
+		if err := rows.Scan(
+			&i.SkillDistribution.ID,
+			&i.SkillDistribution.ProjectID,
+			&i.SkillDistribution.SkillID,
+			&i.SkillDistribution.PinnedVersionID,
+			&i.SkillDistribution.Audience,
+			&i.SkillDistribution.Channel,
+			&i.SkillDistribution.CreatedByUserID,
+			&i.SkillDistribution.RevokedAt,
+			&i.SkillDistribution.CreatedAt,
+			&i.SkillDistribution.UpdatedAt,
+			&i.ResolvedVersionID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSkillDistributionAudienceGroups = `-- name: ListSkillDistributionAudienceGroups :many
+SELECT
+  dg.workos_directory_group_id,
+  dg.name
+FROM projects p
+JOIN directory_groups dg ON dg.organization_id = p.organization_id
+WHERE p.id = $1
+  AND dg.deleted IS FALSE
+  AND dg.workos_deleted IS FALSE
+ORDER BY dg.name ASC, dg.workos_directory_group_id ASC
+`
+
+type ListSkillDistributionAudienceGroupsRow struct {
+	WorkosDirectoryGroupID string
+	Name                   string
+}
+
+func (q *Queries) ListSkillDistributionAudienceGroups(ctx context.Context, projectID uuid.UUID) ([]ListSkillDistributionAudienceGroupsRow, error) {
+	rows, err := q.db.Query(ctx, listSkillDistributionAudienceGroups, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSkillDistributionAudienceGroupsRow
+	for rows.Next() {
+		var i ListSkillDistributionAudienceGroupsRow
+		if err := rows.Scan(&i.WorkosDirectoryGroupID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSkillVersions = `-- name: ListSkillVersions :many
 SELECT sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.created_at, sv.created_by_user_id
 FROM skill_versions sv
@@ -568,6 +867,40 @@ func (q *Queries) LockSkillName(ctx context.Context, arg LockSkillNameParams) er
 	return err
 }
 
+const revokeActiveSkillDistribution = `-- name: RevokeActiveSkillDistribution :one
+UPDATE skill_distributions
+SET revoked_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE project_id = $1
+  AND skill_id = $2
+  AND channel = 'plugin'
+  AND revoked_at IS NULL
+RETURNING id, project_id, skill_id, pinned_version_id, audience, channel, created_by_user_id, revoked_at, created_at, updated_at
+`
+
+type RevokeActiveSkillDistributionParams struct {
+	ProjectID uuid.UUID
+	SkillID   uuid.UUID
+}
+
+func (q *Queries) RevokeActiveSkillDistribution(ctx context.Context, arg RevokeActiveSkillDistributionParams) (SkillDistribution, error) {
+	row := q.db.QueryRow(ctx, revokeActiveSkillDistribution, arg.ProjectID, arg.SkillID)
+	var i SkillDistribution
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.SkillID,
+		&i.PinnedVersionID,
+		&i.Audience,
+		&i.Channel,
+		&i.CreatedByUserID,
+		&i.RevokedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const updateSkill = `-- name: UpdateSkill :one
 UPDATE skills
 SET display_name = $1,
@@ -607,4 +940,156 @@ func (q *Queries) UpdateSkill(ctx context.Context, arg UpdateSkillParams) (Skill
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const updateSkillDistribution = `-- name: UpdateSkillDistribution :one
+UPDATE skill_distributions
+SET pinned_version_id = $1::uuid,
+    audience = $2::text[],
+    updated_at = clock_timestamp()
+WHERE project_id = $3
+  AND skill_id = $4
+  AND channel = 'plugin'
+  AND revoked_at IS NULL
+RETURNING id, project_id, skill_id, pinned_version_id, audience, channel, created_by_user_id, revoked_at, created_at, updated_at
+`
+
+type UpdateSkillDistributionParams struct {
+	PinnedVersionID uuid.NullUUID
+	Audience        []string
+	ProjectID       uuid.UUID
+	SkillID         uuid.UUID
+}
+
+func (q *Queries) UpdateSkillDistribution(ctx context.Context, arg UpdateSkillDistributionParams) (SkillDistribution, error) {
+	row := q.db.QueryRow(ctx, updateSkillDistribution,
+		arg.PinnedVersionID,
+		arg.Audience,
+		arg.ProjectID,
+		arg.SkillID,
+	)
+	var i SkillDistribution
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.SkillID,
+		&i.PinnedVersionID,
+		&i.Audience,
+		&i.Channel,
+		&i.CreatedByUserID,
+		&i.RevokedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertSkillSyncReceipt = `-- name: UpsertSkillSyncReceipt :one
+INSERT INTO skill_sync_receipts (
+  project_id,
+  skill_id,
+  skill_version_id,
+  user_id,
+  hostname,
+  provider,
+  status
+)
+SELECT
+  s.project_id,
+  s.id,
+  $1::uuid,
+  $2,
+  $3,
+  $4,
+  $5
+FROM skills s
+WHERE s.project_id = $6
+  AND s.id = $7
+  AND s.archived_at IS NULL
+  AND (
+    $1::uuid IS NULL
+    OR EXISTS (
+      SELECT 1
+      FROM skill_versions sv
+      WHERE sv.skill_id = s.id
+        AND sv.id = $1::uuid
+    )
+  )
+ON CONFLICT (project_id, skill_id, user_id, hostname, provider) DO UPDATE SET
+  skill_version_id = EXCLUDED.skill_version_id,
+  status = EXCLUDED.status,
+  synced_at = clock_timestamp(),
+  updated_at = clock_timestamp()
+RETURNING project_id, skill_id, skill_version_id, user_id, hostname, provider, status, synced_at, created_at, updated_at
+`
+
+type UpsertSkillSyncReceiptParams struct {
+	SkillVersionID uuid.NullUUID
+	UserID         string
+	Hostname       string
+	Provider       string
+	Status         string
+	ProjectID      uuid.UUID
+	SkillID        uuid.UUID
+}
+
+func (q *Queries) UpsertSkillSyncReceipt(ctx context.Context, arg UpsertSkillSyncReceiptParams) (SkillSyncReceipt, error) {
+	row := q.db.QueryRow(ctx, upsertSkillSyncReceipt,
+		arg.SkillVersionID,
+		arg.UserID,
+		arg.Hostname,
+		arg.Provider,
+		arg.Status,
+		arg.ProjectID,
+		arg.SkillID,
+	)
+	var i SkillSyncReceipt
+	err := row.Scan(
+		&i.ProjectID,
+		&i.SkillID,
+		&i.SkillVersionID,
+		&i.UserID,
+		&i.Hostname,
+		&i.Provider,
+		&i.Status,
+		&i.SyncedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const validateSkillDistributionAudienceGroups = `-- name: ValidateSkillDistributionAudienceGroups :many
+SELECT dg.workos_directory_group_id
+FROM projects p
+JOIN directory_groups dg ON dg.organization_id = p.organization_id
+WHERE p.id = $1
+  AND dg.workos_directory_group_id = ANY($2::text[])
+  AND dg.deleted IS FALSE
+  AND dg.workos_deleted IS FALSE
+`
+
+type ValidateSkillDistributionAudienceGroupsParams struct {
+	ProjectID        uuid.UUID
+	AudienceGroupIds []string
+}
+
+func (q *Queries) ValidateSkillDistributionAudienceGroups(ctx context.Context, arg ValidateSkillDistributionAudienceGroupsParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, validateSkillDistributionAudienceGroups, arg.ProjectID, arg.AudienceGroupIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var workos_directory_group_id string
+		if err := rows.Scan(&workos_directory_group_id); err != nil {
+			return nil, err
+		}
+		items = append(items, workos_directory_group_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

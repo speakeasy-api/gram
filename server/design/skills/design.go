@@ -198,6 +198,135 @@ var _ = Service("skills", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "archive")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ArchiveSkill"}`)
 	})
+
+	Method("distribute", func() {
+		Description("Create or update the active plugin distribution for a skill. Omit audience_group_ids to distribute project-wide.")
+
+		Payload(func() {
+			Attribute("id", String, "The skill ID.", func() { Format(FormatUUID) })
+			Attribute("pinned_version_id", String, "An optional valid version to pin instead of tracking the latest valid version.", func() { Format(FormatUUID) })
+			Attribute("audience_group_ids", ArrayOf(String), "Optional WorkOS directory group IDs. Omit for every project user; an explicit empty array is invalid.")
+			Required("id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(SkillDistribution)
+
+		HTTP(func() {
+			POST("/rpc/skills.distribute")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Body(DistributeSkillRequestBody)
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "distributeSkill")
+		Meta("openapi:extension:x-speakeasy-name-override", "distribute")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DistributeSkill"}`)
+	})
+
+	Method("undistribute", func() {
+		Description("Revoke a skill's active plugin distribution. Repeated requests are a no-op.")
+
+		Payload(func() {
+			Attribute("id", String, "The skill ID.", func() { Format(FormatUUID) })
+			Required("id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		HTTP(func() {
+			POST("/rpc/skills.undistribute")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Body(UndistributeSkillRequestBody)
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "undistributeSkill")
+		Meta("openapi:extension:x-speakeasy-name-override", "undistribute")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UndistributeSkill"}`)
+	})
+
+	Method("listDistributions", func() {
+		Description("List active plugin skill distributions for the current project.")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ListSkillDistributionsResult)
+
+		HTTP(func() {
+			GET("/rpc/skills.listDistributions")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listSkillDistributions")
+		Meta("openapi:extension:x-speakeasy-name-override", "listDistributions")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SkillDistributions"}`)
+	})
+
+	Method("getDistributionStatus", func() {
+		Description("Return mutually exclusive sync receipt rollups for an active skill distribution.")
+
+		Payload(func() {
+			Attribute("id", String, "The skill ID.", func() { Format(FormatUUID) })
+			Required("id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(SkillDistributionStatus)
+
+		HTTP(func() {
+			GET("/rpc/skills.getDistributionStatus")
+			Param("id")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getSkillDistributionStatus")
+		Meta("openapi:extension:x-speakeasy-name-override", "getDistributionStatus")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SkillDistributionStatus"}`)
+	})
+
+	Method("listDistributionAudienceGroups", func() {
+		Description("List active local WorkOS directory groups available as a skill distribution audience.")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ListSkillDistributionAudienceGroupsResult)
+
+		HTTP(func() {
+			GET("/rpc/skills.listDistributionAudienceGroups")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listSkillDistributionAudienceGroups")
+		Meta("openapi:extension:x-speakeasy-name-override", "listDistributionAudienceGroups")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SkillDistributionAudienceGroups"}`)
+	})
 })
 
 var CreateSkillRequestBody = Type("CreateSkillRequestBody", func() {
@@ -223,6 +352,22 @@ var ArchiveSkillRequestBody = Type("ArchiveSkillRequestBody", func() {
 	Attribute("id", String, "The skill ID.", func() {
 		Format(FormatUUID)
 	})
+	Required("id")
+})
+
+var DistributeSkillRequestBody = Type("DistributeSkillRequestBody", func() {
+	Meta("openapi:typename", "DistributeSkillRequestBody")
+
+	Attribute("id", String, "The skill ID.", func() { Format(FormatUUID) })
+	Attribute("pinned_version_id", String, "An optional valid version to pin instead of tracking the latest valid version.", func() { Format(FormatUUID) })
+	Attribute("audience_group_ids", ArrayOf(String), "Optional WorkOS directory group IDs. Omit for every project user; an explicit empty array is invalid.")
+	Required("id")
+})
+
+var UndistributeSkillRequestBody = Type("UndistributeSkillRequestBody", func() {
+	Meta("openapi:typename", "UndistributeSkillRequestBody")
+
+	Attribute("id", String, "The skill ID.", func() { Format(FormatUUID) })
 	Required("id")
 })
 
@@ -289,6 +434,60 @@ var SkillVersion = Type("SkillVersion", func() {
 	Attribute("created_by_user_id", String, "The user that recorded this version.")
 
 	Required("id", "skill_id", "content", "canonical_sha256", "raw_sha256", "metadata", "frontmatter", "spec_valid", "validation_errors", "created_at", "created_by_user_id")
+})
+
+var SkillDistribution = Type("SkillDistribution", func() {
+	Meta("struct:pkg:path", "types")
+	Description("An active plugin distribution of a project skill.")
+
+	Attribute("id", String, "The distribution ID.", func() { Format(FormatUUID) })
+	Attribute("project_id", String, "The project that owns the distribution.", func() { Format(FormatUUID) })
+	Attribute("skill_id", String, "The distributed skill ID.", func() { Format(FormatUUID) })
+	Attribute("pinned_version_id", String, "The pinned version, absent when tracking the latest valid version.", func() { Format(FormatUUID) })
+	Attribute("resolved_version_id", String, "The version currently targeted by this distribution.", func() { Format(FormatUUID) })
+	Attribute("audience_group_ids", ArrayOf(String), "WorkOS directory group IDs, absent for every project user.")
+	Attribute("channel", String, "The distribution channel.")
+	Attribute("created_by_user_id", String, "The user that created the distribution.")
+	Attribute("created_at", String, "When the distribution was created.", func() { Format(FormatDateTime) })
+	Attribute("updated_at", String, "When the distribution configuration last changed.", func() { Format(FormatDateTime) })
+
+	Required("id", "project_id", "skill_id", "resolved_version_id", "channel", "created_by_user_id", "created_at", "updated_at")
+})
+
+var SkillDistributionStatus = Type("SkillDistributionStatus", func() {
+	Meta("struct:pkg:path", "types")
+	Description("Sync receipt rollups for a skill's active distribution.")
+
+	Attribute("skill_id", String, "The distributed skill ID.", func() { Format(FormatUUID) })
+	Attribute("resolved_version_id", String, "The version targeted by the active distribution.", func() { Format(FormatUUID) })
+	Attribute("live", Int64, "Applied receipts materialized at the target version.")
+	Attribute("stale", Int64, "Applied receipts materialized at another or unknown version.")
+	Attribute("shadowed", Int64, "Receipts skipped because another installation won a conflict.")
+	Attribute("degraded", Int64, "Receipts that could not apply because the filesystem is read-only.")
+	Required("skill_id", "resolved_version_id", "live", "stale", "shadowed", "degraded")
+})
+
+var SkillDistributionAudienceGroup = Type("SkillDistributionAudienceGroup", func() {
+	Meta("struct:pkg:path", "types")
+	Description("A local WorkOS directory group available as a distribution audience.")
+
+	Attribute("id", String, "The WorkOS directory group ID.")
+	Attribute("name", String, "The directory group name.")
+	Required("id", "name")
+})
+
+var ListSkillDistributionsResult = Type("ListSkillDistributionsResult", func() {
+	Description("Active plugin skill distributions for the current project.")
+
+	Attribute("distributions", ArrayOf(SkillDistribution), "The active skill distributions.")
+	Required("distributions")
+})
+
+var ListSkillDistributionAudienceGroupsResult = Type("ListSkillDistributionAudienceGroupsResult", func() {
+	Description("Directory groups available as skill distribution audiences.")
+
+	Attribute("groups", ArrayOf(SkillDistributionAudienceGroup), "The available directory groups.")
+	Required("groups")
 })
 
 var RecordSkillResult = Type("RecordSkillResult", func() {

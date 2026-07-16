@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/google/uuid"
@@ -19,6 +20,7 @@ import (
 
 	srv "github.com/speakeasy-api/gram/server/gen/http/skills/server"
 	gen "github.com/speakeasy-api/gram/server/gen/skills"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -181,6 +183,21 @@ func buildSkillAuditSnapshot(skill repo.Skill, latestVersionID uuid.UUID, versio
 		CreatedAt:       conv.FromPGTimestamptz(skill.CreatedAt),
 		UpdatedAt:       conv.FromPGTimestamptz(skill.UpdatedAt),
 		ArchivedAt:      archivedAt,
+	}
+}
+
+func buildSkillDistributionAuditSnapshot(distribution repo.SkillDistribution) *audit.SkillDistributionSnapshot {
+	return &audit.SkillDistributionSnapshot{
+		ID:               distribution.ID.String(),
+		ProjectID:        distribution.ProjectID.String(),
+		SkillID:          distribution.SkillID.String(),
+		PinnedVersionID:  conv.FromNullableUUID(distribution.PinnedVersionID),
+		AudienceGroupIDs: distribution.Audience,
+		Channel:          distribution.Channel,
+		CreatedByUserID:  distribution.CreatedByUserID,
+		RevokedAt:        conv.PtrEmpty(conv.FromPGTimestamptz(distribution.RevokedAt)),
+		CreatedAt:        conv.FromPGTimestamptz(distribution.CreatedAt),
+		UpdatedAt:        conv.FromPGTimestamptz(distribution.UpdatedAt),
 	}
 }
 
@@ -565,6 +582,271 @@ func (s *Service) ListVersions(ctx context.Context, payload *gen.ListVersionsPay
 	}, nil
 }
 
+func (s *Service) Distribute(ctx context.Context, payload *gen.DistributePayload) (*types.SkillDistribution, error) {
+	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillWrite)
+	if err != nil {
+		return nil, err
+	}
+
+	skillID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, nil, "invalid skill id")
+	}
+	pinnedVersionID, err := conv.PtrToNullUUID(payload.PinnedVersionID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, nil, "invalid pinned version id")
+	}
+
+	audience := payload.AudienceGroupIds
+	if audience != nil {
+		if len(audience) == 0 {
+			return nil, oops.E(oops.CodeBadRequest, nil, "audience group ids must not be empty when supplied")
+		}
+		audience = slices.Clone(audience)
+		slices.Sort(audience)
+		audience = slices.Compact(audience)
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin distribute skill transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	queries := repo.New(dbtx)
+
+	skill, err := queries.GetSkillForUpdate(ctx, repo.GetSkillForUpdateParams{ProjectID: *authCtx.ProjectID, ID: skillID})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, nil, "skill not found")
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "lock skill for distribution").LogError(ctx, logger)
+	}
+
+	var resolvedVersionID uuid.UUID
+	if pinnedVersionID.Valid {
+		version, versionErr := queries.GetValidSkillVersion(ctx, repo.GetValidSkillVersionParams{
+			ProjectID: *authCtx.ProjectID,
+			SkillID:   skill.ID,
+			VersionID: pinnedVersionID.UUID,
+		})
+		if errors.Is(versionErr, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeBadRequest, nil, "pinned version must be a valid version of the skill")
+		}
+		if versionErr != nil {
+			return nil, oops.E(oops.CodeUnexpected, versionErr, "validate pinned skill version").LogError(ctx, logger)
+		}
+		resolvedVersionID = version
+	} else {
+		version, versionErr := queries.GetLatestValidSkillVersion(ctx, repo.GetLatestValidSkillVersionParams{
+			ProjectID: *authCtx.ProjectID,
+			SkillID:   skill.ID,
+		})
+		if errors.Is(versionErr, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeBadRequest, nil, "skill has no valid version to distribute")
+		}
+		if versionErr != nil {
+			return nil, oops.E(oops.CodeUnexpected, versionErr, "resolve latest valid skill version").LogError(ctx, logger)
+		}
+		resolvedVersionID = version
+	}
+
+	if audience != nil {
+		validAudience, validationErr := queries.ValidateSkillDistributionAudienceGroups(ctx, repo.ValidateSkillDistributionAudienceGroupsParams{
+			ProjectID:        *authCtx.ProjectID,
+			AudienceGroupIds: audience,
+		})
+		if validationErr != nil {
+			return nil, oops.E(oops.CodeUnexpected, validationErr, "validate skill distribution audience").LogError(ctx, logger)
+		}
+		if len(validAudience) != len(audience) {
+			return nil, oops.E(oops.CodeBadRequest, nil, "audience contains an unavailable directory group")
+		}
+	}
+
+	existing, err := queries.GetActiveSkillDistributionRecord(ctx, repo.GetActiveSkillDistributionRecordParams{
+		ProjectID: *authCtx.ProjectID,
+		SkillID:   skill.ID,
+	})
+	if err == nil {
+		distribution := existing
+		if distribution.PinnedVersionID == pinnedVersionID && slices.Equal(distribution.Audience, audience) {
+			if err := dbtx.Commit(ctx); err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "commit unchanged skill distribution transaction").LogError(ctx, logger)
+			}
+			return mv.BuildSkillDistributionView(distribution, resolvedVersionID), nil
+		}
+
+		beforeSnapshot := buildSkillDistributionAuditSnapshot(distribution)
+		distribution, err = queries.UpdateSkillDistribution(ctx, repo.UpdateSkillDistributionParams{
+			PinnedVersionID: pinnedVersionID,
+			Audience:        audience,
+			ProjectID:       *authCtx.ProjectID,
+			SkillID:         skill.ID,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "update skill distribution").LogError(ctx, logger)
+		}
+		if err := s.audit.LogSkillUpdateDistribution(ctx, dbtx, audit.LogSkillUpdateDistributionEvent{
+			OrganizationID:             authCtx.ActiveOrganizationID,
+			ProjectID:                  *authCtx.ProjectID,
+			Actor:                      urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName:           authCtx.Email,
+			ActorSlug:                  nil,
+			SkillURN:                   urn.NewSkill(skill.ID),
+			SkillName:                  skill.Name,
+			SkillDisplayName:           skill.DisplayName,
+			DistributionSnapshotBefore: beforeSnapshot,
+			DistributionSnapshotAfter:  buildSkillDistributionAuditSnapshot(distribution),
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "log skill distribution update").LogError(ctx, logger)
+		}
+		if err := dbtx.Commit(ctx); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "commit skill distribution update transaction").LogError(ctx, logger)
+		}
+		return mv.BuildSkillDistributionView(distribution, resolvedVersionID), nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.E(oops.CodeUnexpected, err, "get active skill distribution").LogError(ctx, logger)
+	}
+
+	distribution, err := queries.CreateSkillDistribution(ctx, repo.CreateSkillDistributionParams{
+		PinnedVersionID: pinnedVersionID,
+		Audience:        audience,
+		CreatedByUserID: authCtx.UserID,
+		ProjectID:       *authCtx.ProjectID,
+		SkillID:         skill.ID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "create skill distribution").LogError(ctx, logger)
+	}
+	if err := s.audit.LogSkillDistribute(ctx, dbtx, audit.LogSkillDistributeEvent{
+		OrganizationID:            authCtx.ActiveOrganizationID,
+		ProjectID:                 *authCtx.ProjectID,
+		Actor:                     urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:          authCtx.Email,
+		ActorSlug:                 nil,
+		SkillURN:                  urn.NewSkill(skill.ID),
+		SkillName:                 skill.Name,
+		SkillDisplayName:          skill.DisplayName,
+		DistributionSnapshotAfter: buildSkillDistributionAuditSnapshot(distribution),
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log skill distribution create").LogError(ctx, logger)
+	}
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit distribute skill transaction").LogError(ctx, logger)
+	}
+
+	return mv.BuildSkillDistributionView(distribution, resolvedVersionID), nil
+}
+
+func (s *Service) Undistribute(ctx context.Context, payload *gen.UndistributePayload) error {
+	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillWrite)
+	if err != nil {
+		return err
+	}
+	skillID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, nil, "invalid skill id")
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "begin undistribute skill transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	queries := repo.New(dbtx)
+
+	skill, err := queries.GetSkillForUpdate(ctx, repo.GetSkillForUpdateParams{ProjectID: *authCtx.ProjectID, ID: skillID})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return oops.E(oops.CodeNotFound, nil, "skill not found")
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "lock skill for undistribution").LogError(ctx, logger)
+	}
+	distribution, err := queries.GetActiveSkillDistributionRecord(ctx, repo.GetActiveSkillDistributionRecordParams{ProjectID: *authCtx.ProjectID, SkillID: skill.ID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		if err := dbtx.Commit(ctx); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "commit missing skill distribution transaction").LogError(ctx, logger)
+		}
+		return nil
+	}
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "get skill distribution for revocation").LogError(ctx, logger)
+	}
+
+	beforeSnapshot := buildSkillDistributionAuditSnapshot(distribution)
+	revoked, err := queries.RevokeActiveSkillDistribution(ctx, repo.RevokeActiveSkillDistributionParams{ProjectID: *authCtx.ProjectID, SkillID: skill.ID})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "revoke skill distribution").LogError(ctx, logger)
+	}
+	if err := s.audit.LogSkillUndistribute(ctx, dbtx, audit.LogSkillUndistributeEvent{
+		OrganizationID:             authCtx.ActiveOrganizationID,
+		ProjectID:                  *authCtx.ProjectID,
+		Actor:                      urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:           authCtx.Email,
+		ActorSlug:                  nil,
+		SkillURN:                   urn.NewSkill(skill.ID),
+		SkillName:                  skill.Name,
+		SkillDisplayName:           skill.DisplayName,
+		DistributionSnapshotBefore: beforeSnapshot,
+		DistributionSnapshotAfter:  buildSkillDistributionAuditSnapshot(revoked),
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "log skill undistribution").LogError(ctx, logger)
+	}
+	if err := dbtx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "commit undistribute skill transaction").LogError(ctx, logger)
+	}
+
+	return nil
+}
+
+func (s *Service) ListDistributions(ctx context.Context, _ *gen.ListDistributionsPayload) (*gen.ListSkillDistributionsResult, error) {
+	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillRead)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := repo.New(s.db).ListActiveSkillDistributions(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list skill distributions").LogError(ctx, logger)
+	}
+
+	return &gen.ListSkillDistributionsResult{Distributions: mv.BuildSkillDistributionListView(rows)}, nil
+}
+
+func (s *Service) GetDistributionStatus(ctx context.Context, payload *gen.GetDistributionStatusPayload) (*types.SkillDistributionStatus, error) {
+	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillRead)
+	if err != nil {
+		return nil, err
+	}
+	skillID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, nil, "invalid skill id")
+	}
+
+	queries := repo.New(s.db)
+	status, err := queries.GetActiveSkillDistributionStatus(ctx, repo.GetActiveSkillDistributionStatusParams{ProjectID: *authCtx.ProjectID, SkillID: skillID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.E(oops.CodeNotFound, nil, "active skill distribution not found")
+	}
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get skill distribution status").LogError(ctx, logger)
+	}
+
+	return mv.BuildSkillDistributionStatusView(status), nil
+}
+
+func (s *Service) ListDistributionAudienceGroups(ctx context.Context, _ *gen.ListDistributionAudienceGroupsPayload) (*gen.ListSkillDistributionAudienceGroupsResult, error) {
+	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillRead)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := repo.New(s.db).ListSkillDistributionAudienceGroups(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list skill distribution audience groups").LogError(ctx, logger)
+	}
+	return &gen.ListSkillDistributionAudienceGroupsResult{Groups: mv.BuildSkillDistributionAudienceGroupListView(rows)}, nil
+}
+
 func (s *Service) Archive(ctx context.Context, payload *gen.ArchivePayload) error {
 	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillWrite)
 	if err != nil {
@@ -621,6 +903,37 @@ func (s *Service) Archive(ctx context.Context, payload *gen.ArchivePayload) erro
 		return oops.E(oops.CodeUnexpected, err, "load skill state before archive").LogError(ctx, logger)
 	}
 	beforeSnapshot := buildSkillAuditSnapshot(skill, latestID, count)
+
+	distribution, err := queries.GetActiveSkillDistributionRecord(ctx, repo.GetActiveSkillDistributionRecordParams{
+		ProjectID: *authCtx.ProjectID,
+		SkillID:   skill.ID,
+	})
+	if err == nil {
+		beforeDistribution := buildSkillDistributionAuditSnapshot(distribution)
+		revoked, revokeErr := queries.RevokeActiveSkillDistribution(ctx, repo.RevokeActiveSkillDistributionParams{
+			ProjectID: *authCtx.ProjectID,
+			SkillID:   skill.ID,
+		})
+		if revokeErr != nil {
+			return oops.E(oops.CodeUnexpected, revokeErr, "revoke skill distribution during archive").LogError(ctx, logger)
+		}
+		if auditErr := s.audit.LogSkillUndistribute(ctx, dbtx, audit.LogSkillUndistributeEvent{
+			OrganizationID:             authCtx.ActiveOrganizationID,
+			ProjectID:                  *authCtx.ProjectID,
+			Actor:                      urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName:           authCtx.Email,
+			ActorSlug:                  nil,
+			SkillURN:                   urn.NewSkill(skill.ID),
+			SkillName:                  skill.Name,
+			SkillDisplayName:           skill.DisplayName,
+			DistributionSnapshotBefore: beforeDistribution,
+			DistributionSnapshotAfter:  buildSkillDistributionAuditSnapshot(revoked),
+		}); auditErr != nil {
+			return oops.E(oops.CodeUnexpected, auditErr, "log archived skill undistribution").LogError(ctx, logger)
+		}
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return oops.E(oops.CodeUnexpected, err, "get skill distribution during archive").LogError(ctx, logger)
+	}
 
 	archived, err := queries.ArchiveSkill(ctx, repo.ArchiveSkillParams{
 		ProjectID: *authCtx.ProjectID,

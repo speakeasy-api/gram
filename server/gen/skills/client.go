@@ -10,28 +10,39 @@ package skills
 import (
 	"context"
 
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
 )
 
 // Client is the "skills" service client.
 type Client struct {
-	CreateEndpoint       goa.Endpoint
-	AddVersionEndpoint   goa.Endpoint
-	ListEndpoint         goa.Endpoint
-	GetEndpoint          goa.Endpoint
-	ListVersionsEndpoint goa.Endpoint
-	ArchiveEndpoint      goa.Endpoint
+	CreateEndpoint                         goa.Endpoint
+	AddVersionEndpoint                     goa.Endpoint
+	ListEndpoint                           goa.Endpoint
+	GetEndpoint                            goa.Endpoint
+	ListVersionsEndpoint                   goa.Endpoint
+	ArchiveEndpoint                        goa.Endpoint
+	DistributeEndpoint                     goa.Endpoint
+	UndistributeEndpoint                   goa.Endpoint
+	ListDistributionsEndpoint              goa.Endpoint
+	GetDistributionStatusEndpoint          goa.Endpoint
+	ListDistributionAudienceGroupsEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "skills" service client given the endpoints.
-func NewClient(create, addVersion, list, get, listVersions, archive goa.Endpoint) *Client {
+func NewClient(create, addVersion, list, get, listVersions, archive, distribute, undistribute, listDistributions, getDistributionStatus, listDistributionAudienceGroups goa.Endpoint) *Client {
 	return &Client{
-		CreateEndpoint:       create,
-		AddVersionEndpoint:   addVersion,
-		ListEndpoint:         list,
-		GetEndpoint:          get,
-		ListVersionsEndpoint: listVersions,
-		ArchiveEndpoint:      archive,
+		CreateEndpoint:                         create,
+		AddVersionEndpoint:                     addVersion,
+		ListEndpoint:                           list,
+		GetEndpoint:                            get,
+		ListVersionsEndpoint:                   listVersions,
+		ArchiveEndpoint:                        archive,
+		DistributeEndpoint:                     distribute,
+		UndistributeEndpoint:                   undistribute,
+		ListDistributionsEndpoint:              listDistributions,
+		GetDistributionStatusEndpoint:          getDistributionStatus,
+		ListDistributionAudienceGroupsEndpoint: listDistributionAudienceGroups,
 	}
 }
 
@@ -161,4 +172,113 @@ func (c *Client) ListVersions(ctx context.Context, p *ListVersionsPayload) (res 
 func (c *Client) Archive(ctx context.Context, p *ArchivePayload) (err error) {
 	_, err = c.ArchiveEndpoint(ctx, p)
 	return
+}
+
+// Distribute calls the "distribute" endpoint of the "skills" service.
+// Distribute may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) Distribute(ctx context.Context, p *DistributePayload) (res *types.SkillDistribution, err error) {
+	var ires any
+	ires, err = c.DistributeEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.SkillDistribution), nil
+}
+
+// Undistribute calls the "undistribute" endpoint of the "skills" service.
+// Undistribute may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) Undistribute(ctx context.Context, p *UndistributePayload) (err error) {
+	_, err = c.UndistributeEndpoint(ctx, p)
+	return
+}
+
+// ListDistributions calls the "listDistributions" endpoint of the "skills"
+// service.
+// ListDistributions may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListDistributions(ctx context.Context, p *ListDistributionsPayload) (res *ListSkillDistributionsResult, err error) {
+	var ires any
+	ires, err = c.ListDistributionsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListSkillDistributionsResult), nil
+}
+
+// GetDistributionStatus calls the "getDistributionStatus" endpoint of the
+// "skills" service.
+// GetDistributionStatus may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetDistributionStatus(ctx context.Context, p *GetDistributionStatusPayload) (res *types.SkillDistributionStatus, err error) {
+	var ires any
+	ires, err = c.GetDistributionStatusEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.SkillDistributionStatus), nil
+}
+
+// ListDistributionAudienceGroups calls the "listDistributionAudienceGroups"
+// endpoint of the "skills" service.
+// ListDistributionAudienceGroups may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListDistributionAudienceGroups(ctx context.Context, p *ListDistributionAudienceGroupsPayload) (res *ListSkillDistributionAudienceGroupsResult, err error) {
+	var ires any
+	ires, err = c.ListDistributionAudienceGroupsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListSkillDistributionAudienceGroupsResult), nil
 }

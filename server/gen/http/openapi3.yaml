@@ -32199,6 +32199,110 @@ paths:
             x-speakeasy-name-override: create
             x-speakeasy-react-hook:
                 name: CreateSkill
+    /rpc/skills.distribute:
+        post:
+            description: Create or update the active plugin distribution for a skill. Omit audience_group_ids to distribute project-wide.
+            operationId: distributeSkill
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DistributeSkillRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SkillDistribution'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: distribute skills
+            tags:
+                - skills
+            x-speakeasy-name-override: distribute
+            x-speakeasy-react-hook:
+                name: DistributeSkill
     /rpc/skills.get:
         get:
             description: Get an active skill and its latest version. The implementation requires the skills product feature and skill read scope.
@@ -32306,6 +32410,113 @@ paths:
             x-speakeasy-name-override: get
             x-speakeasy-react-hook:
                 name: Skill
+    /rpc/skills.getDistributionStatus:
+        get:
+            description: Return mutually exclusive sync receipt rollups for an active skill distribution.
+            operationId: getSkillDistributionStatus
+            parameters:
+                - allowEmptyValue: true
+                  description: The skill ID.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The skill ID.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SkillDistributionStatus'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: getDistributionStatus skills
+            tags:
+                - skills
+            x-speakeasy-name-override: getDistributionStatus
+            x-speakeasy-react-hook:
+                name: SkillDistributionStatus
     /rpc/skills.list:
         get:
             description: List active skills in the project. The implementation requires the skills product feature and skill read scope.
@@ -32430,6 +32641,202 @@ paths:
                 type: cursor
             x-speakeasy-react-hook:
                 name: Skills
+    /rpc/skills.listDistributionAudienceGroups:
+        get:
+            description: List active local WorkOS directory groups available as a skill distribution audience.
+            operationId: listSkillDistributionAudienceGroups
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListSkillDistributionAudienceGroupsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: listDistributionAudienceGroups skills
+            tags:
+                - skills
+            x-speakeasy-name-override: listDistributionAudienceGroups
+            x-speakeasy-react-hook:
+                name: SkillDistributionAudienceGroups
+    /rpc/skills.listDistributions:
+        get:
+            description: List active plugin skill distributions for the current project.
+            operationId: listSkillDistributions
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListSkillDistributionsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: listDistributions skills
+            tags:
+                - skills
+            x-speakeasy-name-override: listDistributions
+            x-speakeasy-react-hook:
+                name: SkillDistributions
     /rpc/skills.listVersions:
         get:
             description: List immutable versions of an active skill, newest first. The implementation requires the skills product feature and skill read scope.
@@ -32563,6 +32970,106 @@ paths:
                 type: cursor
             x-speakeasy-react-hook:
                 name: SkillVersions
+    /rpc/skills.undistribute:
+        post:
+            description: Revoke a skill's active plugin distribution. Repeated requests are a no-op.
+            operationId: undistributeSkill
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UndistributeSkillRequestBody'
+                required: true
+            responses:
+                "200":
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: undistribute skills
+            tags:
+                - skills
+            x-speakeasy-name-override: undistribute
+            x-speakeasy-react-hook:
+                name: UndistributeSkill
     /rpc/telemetry.captureEvent:
         post:
             description: Capture a telemetry event and forward it to PostHog
@@ -45438,6 +45945,24 @@ components:
                     description: Issuer URL to discover (e.g. https://login.linear.com).
             required:
                 - issuer
+        DistributeSkillRequestBody:
+            type: object
+            properties:
+                audience_group_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: Optional WorkOS directory group IDs. Omit for every project user; an explicit empty array is invalid.
+                id:
+                    type: string
+                    description: The skill ID.
+                    format: uuid
+                pinned_version_id:
+                    type: string
+                    description: An optional valid version to pin instead of tracking the latest valid version.
+                    format: uuid
+            required:
+                - id
         EmployeeDataFlowEdge:
             type: object
             properties:
@@ -49025,6 +49550,28 @@ components:
                         $ref: '#/components/schemas/ShadowMCPInventoryUser'
             required:
                 - users
+        ListSkillDistributionAudienceGroupsResult:
+            type: object
+            properties:
+                groups:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SkillDistributionAudienceGroup'
+                    description: The available directory groups.
+            description: Directory groups available as skill distribution audiences.
+            required:
+                - groups
+        ListSkillDistributionsResult:
+            type: object
+            properties:
+                distributions:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SkillDistribution'
+                    description: The active skill distributions.
+            description: Active plugin skill distributions for the current project.
+            required:
+                - distributions
         ListSkillVersionsResult:
             type: object
             properties:
@@ -55166,6 +55713,106 @@ components:
                 - skill_name
                 - user_email
                 - use_count
+        SkillDistribution:
+            type: object
+            properties:
+                audience_group_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: WorkOS directory group IDs, absent for every project user.
+                channel:
+                    type: string
+                    description: The distribution channel.
+                created_at:
+                    type: string
+                    description: When the distribution was created.
+                    format: date-time
+                created_by_user_id:
+                    type: string
+                    description: The user that created the distribution.
+                id:
+                    type: string
+                    description: The distribution ID.
+                    format: uuid
+                pinned_version_id:
+                    type: string
+                    description: The pinned version, absent when tracking the latest valid version.
+                    format: uuid
+                project_id:
+                    type: string
+                    description: The project that owns the distribution.
+                    format: uuid
+                resolved_version_id:
+                    type: string
+                    description: The version currently targeted by this distribution.
+                    format: uuid
+                skill_id:
+                    type: string
+                    description: The distributed skill ID.
+                    format: uuid
+                updated_at:
+                    type: string
+                    description: When the distribution configuration last changed.
+                    format: date-time
+            description: An active plugin distribution of a project skill.
+            required:
+                - id
+                - project_id
+                - skill_id
+                - resolved_version_id
+                - channel
+                - created_by_user_id
+                - created_at
+                - updated_at
+        SkillDistributionAudienceGroup:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The WorkOS directory group ID.
+                name:
+                    type: string
+                    description: The directory group name.
+            description: A local WorkOS directory group available as a distribution audience.
+            required:
+                - id
+                - name
+        SkillDistributionStatus:
+            type: object
+            properties:
+                degraded:
+                    type: integer
+                    description: Receipts that could not apply because the filesystem is read-only.
+                    format: int64
+                live:
+                    type: integer
+                    description: Applied receipts materialized at the target version.
+                    format: int64
+                resolved_version_id:
+                    type: string
+                    description: The version targeted by the active distribution.
+                    format: uuid
+                shadowed:
+                    type: integer
+                    description: Receipts skipped because another installation won a conflict.
+                    format: int64
+                skill_id:
+                    type: string
+                    description: The distributed skill ID.
+                    format: uuid
+                stale:
+                    type: integer
+                    description: Applied receipts materialized at another or unknown version.
+                    format: int64
+            description: Sync receipt rollups for a skill's active distribution.
+            required:
+                - skill_id
+                - resolved_version_id
+                - live
+                - stale
+                - shadowed
+                - degraded
         SkillSummary:
             type: object
             properties:
@@ -57384,6 +58031,15 @@ components:
                 - connections
                 - active_connection_count
                 - active_consumer_session_count
+        UndistributeSkillRequestBody:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The skill ID.
+                    format: uuid
+            required:
+                - id
         UpdateAssistantForm:
             type: object
             properties:

@@ -305,3 +305,196 @@ func BuildArchivePayload(skillsArchiveBody string, skillsArchiveSessionToken str
 
 	return v, nil
 }
+
+// BuildDistributePayload builds the payload for the skills distribute endpoint
+// from CLI flags.
+func BuildDistributePayload(skillsDistributeBody string, skillsDistributeSessionToken string, skillsDistributeApikeyToken string, skillsDistributeProjectSlugInput string) (*skills.DistributePayload, error) {
+	var err error
+	var body DistributeRequestBody
+	{
+		err = json.Unmarshal([]byte(skillsDistributeBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"audience_group_ids\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"pinned_version_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if body.PinnedVersionID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.pinned_version_id", *body.PinnedVersionID, goa.FormatUUID))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if skillsDistributeSessionToken != "" {
+			sessionToken = &skillsDistributeSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if skillsDistributeApikeyToken != "" {
+			apikeyToken = &skillsDistributeApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if skillsDistributeProjectSlugInput != "" {
+			projectSlugInput = &skillsDistributeProjectSlugInput
+		}
+	}
+	v := &skills.DistributePayload{
+		ID:              body.ID,
+		PinnedVersionID: body.PinnedVersionID,
+	}
+	if body.AudienceGroupIds != nil {
+		v.AudienceGroupIds = make([]string, len(body.AudienceGroupIds))
+		for i, val := range body.AudienceGroupIds {
+			v.AudienceGroupIds[i] = val
+		}
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildUndistributePayload builds the payload for the skills undistribute
+// endpoint from CLI flags.
+func BuildUndistributePayload(skillsUndistributeBody string, skillsUndistributeSessionToken string, skillsUndistributeApikeyToken string, skillsUndistributeProjectSlugInput string) (*skills.UndistributePayload, error) {
+	var err error
+	var body UndistributeRequestBody
+	{
+		err = json.Unmarshal([]byte(skillsUndistributeBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if skillsUndistributeSessionToken != "" {
+			sessionToken = &skillsUndistributeSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if skillsUndistributeApikeyToken != "" {
+			apikeyToken = &skillsUndistributeApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if skillsUndistributeProjectSlugInput != "" {
+			projectSlugInput = &skillsUndistributeProjectSlugInput
+		}
+	}
+	v := &skills.UndistributePayload{
+		ID: body.ID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildListDistributionsPayload builds the payload for the skills
+// listDistributions endpoint from CLI flags.
+func BuildListDistributionsPayload(skillsListDistributionsSessionToken string, skillsListDistributionsApikeyToken string, skillsListDistributionsProjectSlugInput string) (*skills.ListDistributionsPayload, error) {
+	var sessionToken *string
+	{
+		if skillsListDistributionsSessionToken != "" {
+			sessionToken = &skillsListDistributionsSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if skillsListDistributionsApikeyToken != "" {
+			apikeyToken = &skillsListDistributionsApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if skillsListDistributionsProjectSlugInput != "" {
+			projectSlugInput = &skillsListDistributionsProjectSlugInput
+		}
+	}
+	v := &skills.ListDistributionsPayload{}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildGetDistributionStatusPayload builds the payload for the skills
+// getDistributionStatus endpoint from CLI flags.
+func BuildGetDistributionStatusPayload(skillsGetDistributionStatusID string, skillsGetDistributionStatusSessionToken string, skillsGetDistributionStatusApikeyToken string, skillsGetDistributionStatusProjectSlugInput string) (*skills.GetDistributionStatusPayload, error) {
+	var err error
+	var id string
+	{
+		id = skillsGetDistributionStatusID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if skillsGetDistributionStatusSessionToken != "" {
+			sessionToken = &skillsGetDistributionStatusSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if skillsGetDistributionStatusApikeyToken != "" {
+			apikeyToken = &skillsGetDistributionStatusApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if skillsGetDistributionStatusProjectSlugInput != "" {
+			projectSlugInput = &skillsGetDistributionStatusProjectSlugInput
+		}
+	}
+	v := &skills.GetDistributionStatusPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildListDistributionAudienceGroupsPayload builds the payload for the skills
+// listDistributionAudienceGroups endpoint from CLI flags.
+func BuildListDistributionAudienceGroupsPayload(skillsListDistributionAudienceGroupsSessionToken string, skillsListDistributionAudienceGroupsApikeyToken string, skillsListDistributionAudienceGroupsProjectSlugInput string) (*skills.ListDistributionAudienceGroupsPayload, error) {
+	var sessionToken *string
+	{
+		if skillsListDistributionAudienceGroupsSessionToken != "" {
+			sessionToken = &skillsListDistributionAudienceGroupsSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if skillsListDistributionAudienceGroupsApikeyToken != "" {
+			apikeyToken = &skillsListDistributionAudienceGroupsApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if skillsListDistributionAudienceGroupsProjectSlugInput != "" {
+			projectSlugInput = &skillsListDistributionAudienceGroupsProjectSlugInput
+		}
+	}
+	v := &skills.ListDistributionAudienceGroupsPayload{}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}

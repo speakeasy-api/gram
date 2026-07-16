@@ -5,12 +5,21 @@
 import { skillsAddVersion } from "../funcs/skillsAddVersion.js";
 import { skillsArchive } from "../funcs/skillsArchive.js";
 import { skillsCreate } from "../funcs/skillsCreate.js";
+import { skillsDistribute } from "../funcs/skillsDistribute.js";
 import { skillsGet } from "../funcs/skillsGet.js";
+import { skillsGetDistributionStatus } from "../funcs/skillsGetDistributionStatus.js";
 import { skillsList } from "../funcs/skillsList.js";
+import { skillsListDistributionAudienceGroups } from "../funcs/skillsListDistributionAudienceGroups.js";
+import { skillsListDistributions } from "../funcs/skillsListDistributions.js";
 import { skillsListVersions } from "../funcs/skillsListVersions.js";
+import { skillsUndistribute } from "../funcs/skillsUndistribute.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { GetSkillResult } from "../models/components/getskillresult.js";
+import { ListSkillDistributionAudienceGroupsResult } from "../models/components/listskilldistributionaudiencegroupsresult.js";
+import { ListSkillDistributionsResult } from "../models/components/listskilldistributionsresult.js";
 import { RecordSkillResult } from "../models/components/recordskillresult.js";
+import { SkillDistribution } from "../models/components/skilldistribution.js";
+import { SkillDistributionStatus } from "../models/components/skilldistributionstatus.js";
 import {
   AddSkillVersionRequest,
   AddSkillVersionSecurity,
@@ -24,9 +33,25 @@ import {
   CreateSkillSecurity,
 } from "../models/operations/createskill.js";
 import {
+  DistributeSkillRequest,
+  DistributeSkillSecurity,
+} from "../models/operations/distributeskill.js";
+import {
   GetSkillRequest,
   GetSkillSecurity,
 } from "../models/operations/getskill.js";
+import {
+  GetSkillDistributionStatusRequest,
+  GetSkillDistributionStatusSecurity,
+} from "../models/operations/getskilldistributionstatus.js";
+import {
+  ListSkillDistributionAudienceGroupsRequest,
+  ListSkillDistributionAudienceGroupsSecurity,
+} from "../models/operations/listskilldistributionaudiencegroups.js";
+import {
+  ListSkillDistributionsRequest,
+  ListSkillDistributionsSecurity,
+} from "../models/operations/listskilldistributions.js";
 import {
   ListSkillsRequest,
   ListSkillsResponse,
@@ -37,6 +62,10 @@ import {
   ListSkillVersionsResponse,
   ListSkillVersionsSecurity,
 } from "../models/operations/listskillversions.js";
+import {
+  UndistributeSkillRequest,
+  UndistributeSkillSecurity,
+} from "../models/operations/undistributeskill.js";
 import { unwrapAsync } from "../types/fp.js";
 import { PageIterator, unwrapResultIterator } from "../types/operations.js";
 
@@ -99,6 +128,25 @@ export class Skills extends ClientSDK {
   }
 
   /**
+   * distribute skills
+   *
+   * @remarks
+   * Create or update the active plugin distribution for a skill. Omit audience_group_ids to distribute project-wide.
+   */
+  async distribute(
+    request: DistributeSkillRequest,
+    security?: DistributeSkillSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<SkillDistribution> {
+    return unwrapAsync(skillsDistribute(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * get skills
    *
    * @remarks
@@ -110,6 +158,25 @@ export class Skills extends ClientSDK {
     options?: RequestOptions,
   ): Promise<GetSkillResult> {
     return unwrapAsync(skillsGet(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getDistributionStatus skills
+   *
+   * @remarks
+   * Return mutually exclusive sync receipt rollups for an active skill distribution.
+   */
+  async getDistributionStatus(
+    request: GetSkillDistributionStatusRequest,
+    security?: GetSkillDistributionStatusSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<SkillDistributionStatus> {
+    return unwrapAsync(skillsGetDistributionStatus(
       this,
       request,
       security,
@@ -137,6 +204,44 @@ export class Skills extends ClientSDK {
   }
 
   /**
+   * listDistributionAudienceGroups skills
+   *
+   * @remarks
+   * List active local WorkOS directory groups available as a skill distribution audience.
+   */
+  async listDistributionAudienceGroups(
+    request?: ListSkillDistributionAudienceGroupsRequest | undefined,
+    security?: ListSkillDistributionAudienceGroupsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListSkillDistributionAudienceGroupsResult> {
+    return unwrapAsync(skillsListDistributionAudienceGroups(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listDistributions skills
+   *
+   * @remarks
+   * List active plugin skill distributions for the current project.
+   */
+  async listDistributions(
+    request?: ListSkillDistributionsRequest | undefined,
+    security?: ListSkillDistributionsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListSkillDistributionsResult> {
+    return unwrapAsync(skillsListDistributions(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * listVersions skills
    *
    * @remarks
@@ -148,6 +253,25 @@ export class Skills extends ClientSDK {
     options?: RequestOptions,
   ): Promise<PageIterator<ListSkillVersionsResponse, { cursor: string }>> {
     return unwrapResultIterator(skillsListVersions(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * undistribute skills
+   *
+   * @remarks
+   * Revoke a skill's active plugin distribution. Repeated requests are a no-op.
+   */
+  async undistribute(
+    request: UndistributeSkillRequest,
+    security?: UndistributeSkillSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(skillsUndistribute(
       this,
       request,
       security,

@@ -36,3 +36,28 @@ func ListVersionsSkillsPath() string {
 func ArchiveSkillsPath() string {
 	return "/rpc/skills.archive"
 }
+
+// DistributeSkillsPath returns the URL path to the skills service distribute HTTP endpoint.
+func DistributeSkillsPath() string {
+	return "/rpc/skills.distribute"
+}
+
+// UndistributeSkillsPath returns the URL path to the skills service undistribute HTTP endpoint.
+func UndistributeSkillsPath() string {
+	return "/rpc/skills.undistribute"
+}
+
+// ListDistributionsSkillsPath returns the URL path to the skills service listDistributions HTTP endpoint.
+func ListDistributionsSkillsPath() string {
+	return "/rpc/skills.listDistributions"
+}
+
+// GetDistributionStatusSkillsPath returns the URL path to the skills service getDistributionStatus HTTP endpoint.
+func GetDistributionStatusSkillsPath() string {
+	return "/rpc/skills.getDistributionStatus"
+}
+
+// ListDistributionAudienceGroupsSkillsPath returns the URL path to the skills service listDistributionAudienceGroups HTTP endpoint.
+func ListDistributionAudienceGroupsSkillsPath() string {
+	return "/rpc/skills.listDistributionAudienceGroups"
+}
