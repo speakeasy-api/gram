@@ -11,13 +11,15 @@ import (
 )
 
 const (
-	meterFindingMessagesInserted = "gram.risk_findings.bq_messages_inserted"
-	meterFindingMessagesSkipped  = "gram.risk_findings.bq_messages_skipped"
+	meterFindingMessagesInserted   = "gram.risk_findings.bq_messages_inserted"
+	meterFindingMessagesSkipped    = "gram.risk_findings.bq_messages_skipped"
+	meterFindingCHMessagesInserted = "gram.risk_findings.ch_messages_inserted"
 )
 
 type metrics struct {
-	messagesInserted metric.Int64Counter
-	messagesSkipped  metric.Int64Counter
+	messagesInserted   metric.Int64Counter
+	messagesSkipped    metric.Int64Counter
+	chMessagesInserted metric.Int64Counter
 }
 
 func newMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *metrics {
@@ -42,9 +44,19 @@ func newMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *metric
 		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterFindingMessagesSkipped), attr.SlogError(err))
 	}
 
+	chMessagesInserted, err := meter.Int64Counter(
+		meterFindingCHMessagesInserted,
+		metric.WithDescription("Number of risk finding messages submitted to ClickHouse"),
+		metric.WithUnit("{message}"),
+	)
+	if err != nil {
+		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterFindingCHMessagesInserted), attr.SlogError(err))
+	}
+
 	return &metrics{
-		messagesInserted: messagesInserted,
-		messagesSkipped:  messagesSkipped,
+		messagesInserted:   messagesInserted,
+		messagesSkipped:    messagesSkipped,
+		chMessagesInserted: chMessagesInserted,
 	}
 }
 
@@ -55,6 +67,15 @@ func (m *metrics) RecordFindingBQInserts(ctx context.Context, count int, outcome
 		return
 	}
 	m.messagesInserted.Add(ctx, int64(count), metric.WithAttributes(attr.Outcome(outcome)))
+}
+
+// RecordFindingCHInserts records the number of finding messages submitted to
+// ClickHouse in a single batch insert along with the outcome of the insert call.
+func (m *metrics) RecordFindingCHInserts(ctx context.Context, count int, outcome o11y.Outcome) {
+	if m.chMessagesInserted == nil {
+		return
+	}
+	m.chMessagesInserted.Add(ctx, int64(count), metric.WithAttributes(attr.Outcome(outcome)))
 }
 
 // RecordFindingSkipped records a risk finding message that was dropped before

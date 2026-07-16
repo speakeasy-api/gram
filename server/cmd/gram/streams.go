@@ -7,6 +7,7 @@ import (
 	"runtime/debug"
 	"time"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/urfave/cli/v2"
@@ -33,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/ping"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
 	"github.com/speakeasy-api/gram/server/internal/streams"
@@ -104,6 +106,7 @@ func newStreamsCommand() *cli.Command {
 	flags = append(flags, gcpFlags...)
 	flags = append(flags, posthogFlags...)
 	flags = append(flags, riskFlags...)
+	flags = append(flags, clickHouseFlags...)
 
 	return &cli.Command{
 		Name:  "streams",
@@ -196,6 +199,20 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("failed to parse risk fingerprint pepper keyring: %w", err)
 			}
 
+			// ClickHouse risk_findings writer (shadow path). Only connect when
+			// the kill switch is off so a disabled deployment does not require
+			// ClickHouse reachability.
+			enableCHRiskWrites := !c.Bool("disable-clickhouse-risk-writes")
+			var chConn clickhouse.Conn
+			if enableCHRiskWrites {
+				conn, shutdown, err := newClickhouseClient(ctx, logger, c)
+				shutdownFuncs = append(shutdownFuncs, shutdown)
+				if err != nil {
+					return fmt.Errorf("failed to create clickhouse client: %w", err)
+				}
+				chConn = conn
+			}
+
 			// Gitleaks shadow-mode subscriber: re-runs the in-process gitleaks
 			// scan over GitleaksAnalysis requests and publishes any matches into
 			// the shared Finding topic (nothing consumes them yet).
@@ -268,6 +285,14 @@ func newStreamsCommand() *cli.Command {
 					gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second},
 					risk.NewFindingBQWriter(logger, meterProvider, riskFindingsTable, featureFlags, riskFingerprinter),
 				)
+
+				if enableCHRiskWrites {
+					mustReceiveBatch(
+						rg, &riskv1.Finding{}, &riskv1.FindingCHWriter{},
+						gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second},
+						risk.NewFindingCHWriter(logger, meterProvider, chrepo.New(chConn), riskFingerprinter),
+					)
+				}
 			}
 
 			// This is just a heartbeat publisher that validates the publisher-
