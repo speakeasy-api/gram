@@ -26,6 +26,7 @@ import { useAllRemoteSessionClients } from "@/pages/mcp/x/tabs/settings/sections
 import { MCP_SERVER_URL_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/ServerUrlSection";
 import { useRoutes } from "@/routes";
 import { useGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
+import { useGetRemoteMcpServer } from "@gram/client/react-query/getRemoteMcpServer.js";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { usePlugins } from "@gram/client/react-query/plugins";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
@@ -63,6 +64,14 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
     endpoints,
     isLoadingEndpoints,
   );
+
+  const remoteMcpServerId = mcpServer?.remoteMcpServerId ?? "";
+  const { data: remoteMcpServer } = useGetRemoteMcpServer(
+    { id: remoteMcpServerId },
+    undefined,
+    { enabled: remoteMcpServerId !== "" },
+  );
+  const upstreamUrl = remoteMcpServer?.url;
 
   const userSessionIssuerId = mcpServer?.userSessionIssuerId;
   // A remote identity provider is attached when this server's issuer has at
@@ -236,10 +245,26 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
         </div>
       )}
 
-      <div className="flex flex-col gap-1">
-        <McpSidebarInfoLabel>Endpoints</McpSidebarInfoLabel>
-        <Type variant="small">{endpoints.length}</Type>
-      </div>
+      {upstreamUrl && (
+        <div className="flex flex-col gap-1">
+          <McpSidebarInfoLabel>Upstream URL</McpSidebarInfoLabel>
+          <div className="flex items-start gap-1">
+            <Type
+              variant="small"
+              muted
+              className="line-clamp-2 font-mono text-xs break-all"
+            >
+              {upstreamUrl.replace(/^https?:\/\//, "")}
+            </Type>
+            <CopyButton
+              text={upstreamUrl}
+              size="inline"
+              tooltip="Copy upstream URL"
+              className="mt-[-2px] shrink-0"
+            />
+          </div>
+        </div>
+      )}
 
       <div className="border-border flex items-stretch border-t pt-3">
         {installPageUrl ? (

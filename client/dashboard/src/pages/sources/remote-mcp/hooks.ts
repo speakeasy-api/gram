@@ -1,7 +1,10 @@
 import { useFetcher } from "@/contexts/Fetcher";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { formatRemoteMcpDisplay } from "@/lib/sources";
-import { createDefaultMcpEndpoint } from "@/lib/mcpEndpoints";
+import {
+  createDefaultMcpEndpoint,
+  DEFAULT_ENDPOINT_FAILED_MESSAGE,
+} from "@/lib/mcpEndpoints";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { RemoteMcpServer } from "@gram/client/models/components/remotemcpserver.js";
 import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
@@ -15,6 +18,7 @@ import {
   useQueryClient,
   type UseMutationResult,
 } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
   autoConfigureRemoteMcpAuth,
   type AutoConfigureAuthResult,
@@ -95,7 +99,11 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
 
       // Pre-stage a default endpoint so the user doesn't have to create one
       // before the server can serve. Best-effort: never rolls back the source.
-      await createDefaultMcpEndpoint(client, configuredMcpServer, orgSlug);
+      if (orgSlug) {
+        await createDefaultMcpEndpoint(client, configuredMcpServer, orgSlug);
+      } else {
+        toast.warning(DEFAULT_ENDPOINT_FAILED_MESSAGE);
+      }
 
       return {
         remoteMcpServer,
@@ -164,7 +172,11 @@ export function useLinkMcpServerToRemote(): UseMutationResult<
       });
 
       // Mirror the create flow: pre-stage a default endpoint. Best-effort.
-      await createDefaultMcpEndpoint(client, mcpServer, orgSlug);
+      if (orgSlug) {
+        await createDefaultMcpEndpoint(client, mcpServer, orgSlug);
+      } else {
+        toast.warning(DEFAULT_ENDPOINT_FAILED_MESSAGE);
+      }
     },
     onSuccess: async () => {
       await Promise.all([

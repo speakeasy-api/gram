@@ -1,8 +1,11 @@
 import { useSdkClient } from "@/contexts/Sdk";
+import { normalizeRemoteUrl } from "@/pages/catalog/remotes";
 import { ExternalMCPServerEntry } from "@gram/client/models/components/externalmcpserverentry.js";
 import { ExternalMCPTool } from "@gram/client/models/components/externalmcptool.js";
 import { queryKeyListMCPCatalog } from "@gram/client/react-query/listMCPCatalog.js";
+import { useRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.js";
 import { useQuery } from "@tanstack/react-query";
+import { useCallback, useMemo } from "react";
 
 interface ServerMeta {
   "com.pulsemcp/server"?: {
@@ -72,4 +75,33 @@ export function useListMCPCatalog(
   enabled = true,
 ): ReturnType<typeof useListMCPCatalogImpl> {
   return useListMCPCatalogImpl(search, registryId, enabled);
+}
+
+/**
+ * Informational "already installed" check for catalog entries: true when a
+ * remote MCP server with one of the entry's endpoint URLs already exists in
+ * the project. Installing again is always allowed and just creates another
+ * server, so this only drives indicators, never blocking.
+ */
+export function useIsCatalogServerInstalled(): (
+  server: PulseMCPServer,
+) => boolean {
+  const { data: remoteServersData } = useRemoteMcpServers();
+  const installedUrls = useMemo(
+    () =>
+      new Set(
+        (remoteServersData?.remoteMcpServers ?? []).map((server) =>
+          normalizeRemoteUrl(server.url),
+        ),
+      ),
+    [remoteServersData?.remoteMcpServers],
+  );
+
+  return useCallback(
+    (server: PulseMCPServer) =>
+      (server.remotes ?? []).some((remote) =>
+        installedUrls.has(normalizeRemoteUrl(remote.url)),
+      ),
+    [installedUrls],
+  );
 }
