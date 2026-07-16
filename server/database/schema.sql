@@ -282,6 +282,7 @@ CREATE TABLE IF NOT EXISTS skills (
 );
 
 CREATE INDEX IF NOT EXISTS skills_project_id_idx ON skills (project_id);
+CREATE UNIQUE INDEX IF NOT EXISTS skills_project_id_id_key ON skills (project_id, id);
 CREATE UNIQUE INDEX IF NOT EXISTS skills_project_id_name_key ON skills (project_id, name) WHERE archived_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS skill_versions (
@@ -305,7 +306,103 @@ CREATE TABLE IF NOT EXISTS skill_versions (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS skill_versions_skill_id_canonical_sha256_key ON skill_versions (skill_id, canonical_sha256);
+CREATE UNIQUE INDEX IF NOT EXISTS skill_versions_skill_id_id_key ON skill_versions (skill_id, id);
 CREATE INDEX IF NOT EXISTS skill_versions_skill_id_created_at_id_idx ON skill_versions (skill_id, created_at DESC, id DESC);
+
+-- Plugin definitions: project-scoped distributable bundles of MCP servers.
+-- Admins create plugins and assign them to roles for distribution.
+CREATE TABLE IF NOT EXISTS plugins (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  name TEXT NOT NULL CHECK (name <> ''),
+  slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 60),
+  description TEXT,
+  is_default boolean DEFAULT false,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT plugins_pkey PRIMARY KEY (id),
+  CONSTRAINT plugins_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT plugins_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS plugins_organization_id_project_id_slug_key
+  ON plugins (organization_id, project_id, slug)
+  WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS plugins_project_id_idx
+  ON plugins (project_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS plugins_project_id_id_key ON plugins (project_id, id);
+
+-- Only one plugin per project may be the default (fallback) target that new
+-- servers land in absent explicit routing to a named plugin.
+CREATE UNIQUE INDEX IF NOT EXISTS plugins_project_id_is_default_key
+  ON plugins (project_id)
+  WHERE is_default IS TRUE AND deleted IS FALSE;
+
+COMMENT ON COLUMN plugins.is_default IS 'Marks the fallback plugin new servers land in when not explicitly routed to a named plugin. At most one true per project (see plugins_project_id_is_default_key).';
+
+CREATE TABLE IF NOT EXISTS skill_distributions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  skill_id uuid NOT NULL,
+  pinned_version_id uuid,
+  plugin_id uuid,
+
+  channel TEXT NOT NULL,
+  created_by_user_id TEXT NOT NULL,
+  revoked_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT skill_distributions_pkey PRIMARY KEY (id),
+  CONSTRAINT skill_distributions_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT skill_distributions_project_id_skill_id_fkey FOREIGN KEY (project_id, skill_id) REFERENCES skills (project_id, id) ON DELETE CASCADE,
+  CONSTRAINT skill_distributions_skill_id_pinned_version_id_fkey FOREIGN KEY (skill_id, pinned_version_id) REFERENCES skill_versions (skill_id, id),
+  -- NULL plugin_id targets the whole project; otherwise targeting is delegated
+  -- to the plugin's own assignment mechanism.
+  CONSTRAINT skill_distributions_project_id_plugin_id_fkey FOREIGN KEY (project_id, plugin_id) REFERENCES plugins (project_id, id)
+);
+
+-- NULLS NOT DISTINCT so at most one active direct (plugin_id IS NULL)
+-- distribution exists per skill and channel alongside per-plugin ones.
+CREATE UNIQUE INDEX IF NOT EXISTS skill_distributions_project_id_skill_id_channel_plugin_id_key
+ON skill_distributions (project_id, skill_id, channel, plugin_id) NULLS NOT DISTINCT
+WHERE revoked_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS skill_distributions_project_id_idx ON skill_distributions (project_id);
+CREATE INDEX IF NOT EXISTS skill_distributions_skill_id_pinned_version_id_idx ON skill_distributions (skill_id, pinned_version_id);
+CREATE INDEX IF NOT EXISTS skill_distributions_plugin_id_idx ON skill_distributions (plugin_id);
+
+CREATE TABLE IF NOT EXISTS skill_sync_receipts (
+  project_id uuid NOT NULL,
+  skill_id uuid NOT NULL,
+  skill_version_id uuid,
+
+  user_id TEXT NOT NULL,
+  hostname TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  status TEXT NOT NULL,
+  synced_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT skill_sync_receipts_pkey PRIMARY KEY (project_id, skill_id, user_id, hostname, provider),
+  CONSTRAINT skill_sync_receipts_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT skill_sync_receipts_project_id_skill_id_fkey FOREIGN KEY (project_id, skill_id) REFERENCES skills (project_id, id) ON DELETE CASCADE,
+  CONSTRAINT skill_sync_receipts_skill_id_skill_version_id_fkey FOREIGN KEY (skill_id, skill_version_id) REFERENCES skill_versions (skill_id, id)
+);
+
+CREATE INDEX IF NOT EXISTS skill_sync_receipts_skill_id_skill_version_id_idx ON skill_sync_receipts (skill_id, skill_version_id);
+CREATE INDEX IF NOT EXISTS skill_sync_receipts_project_id_skill_version_id_idx ON skill_sync_receipts (project_id, skill_version_id);
+CREATE INDEX IF NOT EXISTS skill_sync_receipts_project_id_user_id_hostname_provider_idx ON skill_sync_receipts (project_id, user_id, hostname, provider, skill_id);
 
 CREATE TABLE IF NOT EXISTS packages (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -3264,42 +3361,6 @@ WHERE deleted IS FALSE;
 CREATE UNIQUE INDEX IF NOT EXISTS mcp_server_tool_metadata_mcp_server_id_tool_name_key
 ON mcp_server_tool_metadata (mcp_server_id, tool_name)
 WHERE deleted IS FALSE;
-
--- Plugin definitions: project-scoped distributable bundles of MCP servers.
--- Admins create plugins and assign them to roles for distribution.
-CREATE TABLE IF NOT EXISTS plugins (
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-  organization_id TEXT NOT NULL,
-  project_id uuid NOT NULL,
-  name TEXT NOT NULL CHECK (name <> ''),
-  slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 60),
-  description TEXT,
-  is_default boolean DEFAULT false,
-
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  deleted_at timestamptz,
-  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
-
-  CONSTRAINT plugins_pkey PRIMARY KEY (id),
-  CONSTRAINT plugins_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT plugins_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
-);
-
-CREATE UNIQUE INDEX IF NOT EXISTS plugins_organization_id_project_id_slug_key
-  ON plugins (organization_id, project_id, slug)
-  WHERE deleted IS FALSE;
-
-CREATE INDEX IF NOT EXISTS plugins_project_id_idx
-  ON plugins (project_id);
-
--- Only one plugin per project may be the default (fallback) target that new
--- servers land in absent explicit routing to a named plugin.
-CREATE UNIQUE INDEX IF NOT EXISTS plugins_project_id_is_default_key
-  ON plugins (project_id)
-  WHERE is_default IS TRUE AND deleted IS FALSE;
-
-COMMENT ON COLUMN plugins.is_default IS 'Marks the fallback plugin new servers land in when not explicitly routed to a named plugin. At most one true per project (see plugins_project_id_is_default_key).';
 
 -- Links a plugin to an MCP server, backed by either a toolset or an
 -- mcp_servers row (exactly one, enforced by the exclusivity check below).
