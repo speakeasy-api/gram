@@ -24,7 +24,7 @@ const testState = vi.hoisted(() => ({
   invalidateSkills: vi.fn().mockResolvedValue(undefined),
   invalidateSkill: vi.fn().mockResolvedValue(undefined),
   invalidateVersions: vi.fn().mockResolvedValue(undefined),
-  goToDetail: vi.fn(),
+  setSkillParam: vi.fn(),
 }));
 
 vi.mock("@tanstack/react-query", () => ({
@@ -45,8 +45,8 @@ vi.mock("@gram/client/react-query/skill.js", () => ({
 vi.mock("@gram/client/react-query/skillVersions.js", () => ({
   invalidateAllSkillVersions: testState.invalidateVersions,
 }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({ clis: { detail: { goTo: testState.goToDetail } } }),
+vi.mock("nuqs", () => ({
+  useQueryState: () => [null, testState.setSkillParam],
 }));
 
 const VALID_MANIFEST =
@@ -78,7 +78,7 @@ beforeEach(() => {
   testState.invalidateSkills.mockClear();
   testState.invalidateSkill.mockClear();
   testState.invalidateVersions.mockClear();
-  testState.goToDetail.mockReset();
+  testState.setSkillParam.mockReset();
 });
 
 afterEach(cleanup);
@@ -111,7 +111,7 @@ describe("SkillManifestDialog", () => {
       testState.queryClient,
     );
     await waitFor(() => {
-      expect(testState.goToDetail).toHaveBeenCalledWith("skill_result");
+      expect(testState.setSkillParam).toHaveBeenCalledWith("skill_result");
     });
   });
 
@@ -210,7 +210,7 @@ describe("SkillManifestDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add skill" }));
 
     expect(await screen.findByText("No changes detected.")).toBeTruthy();
-    expect(testState.goToDetail).not.toHaveBeenCalled();
+    expect(testState.setSkillParam).not.toHaveBeenCalled();
     expect(testState.invalidateSkills).not.toHaveBeenCalled();
     expect(testState.invalidateSkill).not.toHaveBeenCalled();
     expect(testState.invalidateVersions).not.toHaveBeenCalled();

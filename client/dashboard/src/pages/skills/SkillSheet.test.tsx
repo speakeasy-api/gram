@@ -6,14 +6,13 @@ import {
   waitFor,
 } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import SkillDetail from "./SkillDetail";
+import { SkillSheet } from "./SkillSheet";
 
 const testState = vi.hoisted(() => ({
   queryClient: { id: "query-client" },
   archive: { mutateAsync: vi.fn(), isPending: false },
-  listGoTo: vi.fn(),
+  onOpenChange: vi.fn(),
   invalidateSkills: vi.fn().mockResolvedValue(undefined),
   invalidateSkill: vi.fn().mockResolvedValue(undefined),
   invalidateVersions: vi.fn().mockResolvedValue(undefined),
@@ -42,14 +41,6 @@ vi.mock("@/contexts/Auth", () => ({ useProject: () => ({ id: "project_a" }) }));
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => testState.queryClient,
 }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    clis: {
-      href: () => "/clis",
-      goTo: testState.listGoTo,
-    },
-  }),
-}));
 vi.mock("@gram/client/react-query/skill.js", () => ({
   useSkill: () => ({
     isPending: false,
@@ -61,6 +52,9 @@ vi.mock("@gram/client/react-query/skill.js", () => ({
         name: "example",
         summary: "Summary",
         classification: "custom",
+        sourceKind: "manual",
+        versionCount: 1,
+        updatedAt: new Date("2026-07-16T00:00:00Z"),
       },
       latestVersion: testState.version,
     },
@@ -110,6 +104,7 @@ vi.mock("@/elements/components/Markdown", () => ({
 vi.mock("./SkillManifestDialog", () => ({ SkillManifestDialog: () => null }));
 vi.mock("@speakeasy-api/moonshine", () => ({
   Badge: ({ children }: { children: ReactNode }) => <span>{children}</span>,
+  Icon: () => <span />,
   Table: ({
     columns,
     data,
@@ -136,19 +131,20 @@ vi.mock("sonner", () => ({
   toast: { success: testState.toastSuccess, error: testState.toastError },
 }));
 
-function renderDetail(): void {
+function renderSheet(): void {
   render(
-    <MemoryRouter initialEntries={["/clis/skill_a"]}>
-      <Routes>
-        <Route path="/clis/:skillId" element={<SkillDetail />} />
-      </Routes>
-    </MemoryRouter>,
+    <SkillSheet
+      skillId="skill_a"
+      onOpenChange={(open) => {
+        testState.onOpenChange(open);
+      }}
+    />,
   );
 }
 
 beforeEach(() => {
   testState.archive.mutateAsync.mockReset();
-  testState.listGoTo.mockReset();
+  testState.onOpenChange.mockReset();
   testState.invalidateSkills.mockClear();
   testState.invalidateSkill.mockClear();
   testState.invalidateVersions.mockClear();
@@ -162,9 +158,9 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
-describe("SkillDetail", () => {
+describe("SkillSheet", () => {
   it("project-scopes every write affordance", () => {
-    renderDetail();
+    renderSheet();
     const gates = screen.getAllByTestId("write-gate");
     expect(gates).toHaveLength(1);
     for (const gate of gates) {
@@ -190,7 +186,7 @@ describe("SkillDetail", () => {
         ],
       },
     ];
-    renderDetail();
+    renderSheet();
     expect(
       screen.getByText(
         (_, element) =>
@@ -203,7 +199,7 @@ describe("SkillDetail", () => {
   it("keeps loaded versions visible and retries a next-page failure explicitly", () => {
     testState.isFetchNextPageError = true;
     testState.versionError = new Error("next page failed");
-    renderDetail();
+    renderSheet();
 
     expect(screen.getByText("Version table")).toBeTruthy();
     expect(screen.getByText("Unable to load more versions.")).toBeTruthy();
@@ -211,9 +207,9 @@ describe("SkillDetail", () => {
     expect(testState.fetchNextPage).toHaveBeenCalledOnce();
   });
 
-  it("archives with the exact wrapper, navigates to the list, and invalidates all skill caches", async () => {
+  it("archives with the exact wrapper, closes the sheet, and invalidates all skill caches", async () => {
     testState.archive.mutateAsync.mockResolvedValue(undefined);
-    renderDetail();
+    renderSheet();
     fireEvent.click(screen.getByRole("button", { name: "Archive" }));
     fireEvent.click(screen.getByRole("button", { name: "Archive skill" }));
 
@@ -222,7 +218,7 @@ describe("SkillDetail", () => {
         request: { archiveSkillRequestBody: { id: "skill_a" } },
       });
     });
-    expect(testState.listGoTo).toHaveBeenCalledOnce();
+    expect(testState.onOpenChange).toHaveBeenCalledWith(false);
     expect(testState.invalidateSkills).toHaveBeenCalledWith(
       testState.queryClient,
     );

@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Textarea } from "@/components/moon/textarea";
 import { Type } from "@/components/ui/type";
-import { useRoutes } from "@/routes";
+import { useQueryState } from "nuqs";
 import type { RecordSkillResult } from "@gram/client/models/components/recordskillresult.js";
 import { useAddSkillVersionMutation } from "@gram/client/react-query/addSkillVersion.js";
 import { useCreateSkillMutation } from "@gram/client/react-query/createSkill.js";
@@ -18,7 +18,7 @@ import {
 import { invalidateSkillQueries } from "./invalidate-skill-queries";
 import { SkillValidationErrors } from "./SkillValidationErrors";
 
-export type SkillManifestDialogMode = "create" | "add-version" | "edit";
+export type SkillManifestDialogMode = "create" | "edit";
 
 const MODE_COPY: Record<
   SkillManifestDialogMode,
@@ -28,11 +28,6 @@ const MODE_COPY: Record<
     title: "Add skill",
     description: "Paste a SKILL.md manifest or upload a Markdown file.",
     submit: "Add skill",
-  },
-  "add-version": {
-    title: "Add skill version",
-    description: "Record a new immutable SKILL.md version.",
-    submit: "Add version",
   },
   edit: {
     title: "Edit skill",
@@ -55,7 +50,7 @@ export function SkillManifestDialog({
   initialContent?: string;
 }): JSX.Element {
   const copy = MODE_COPY[mode];
-  const routes = useRoutes();
+  const [, setSelectedSkillId] = useQueryState("skill");
   const queryClient = useQueryClient();
   const fieldId = useId();
   const helpId = `${fieldId}-help`;
@@ -136,7 +131,7 @@ export function SkillManifestDialog({
       }
 
       handleOpenChange(false);
-      routes.clis.detail.goTo(result.skill.id);
+      void setSelectedSkillId(result.skill.id);
     } catch (error) {
       setMutationError(
         error instanceof Error ? error.message : "Unable to save SKILL.md.",
@@ -171,7 +166,7 @@ export function SkillManifestDialog({
   const viewSkill = (): void => {
     if (!savedResult) return;
     handleOpenChange(false);
-    routes.clis.detail.goTo(savedResult.skill.id);
+    void setSelectedSkillId(savedResult.skill.id);
   };
 
   return (

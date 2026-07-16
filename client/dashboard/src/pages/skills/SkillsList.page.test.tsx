@@ -26,11 +26,11 @@ vi.mock("@/components/filters", () => ({
   }),
 }));
 vi.mock("@/contexts/Auth", () => ({ useProject: () => ({ id: "project_a" }) }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    clis: { detail: { href: (id: string) => `/clis/${id}` } },
-  }),
+vi.mock("nuqs", () => ({
+  useQueryState: () => [null, vi.fn()],
 }));
+vi.mock("./SkillSheet", () => ({ SkillSheet: () => null }));
+vi.mock("./ArchiveSkillDialog", () => ({ ArchiveSkillDialog: () => null }));
 vi.mock("@gram/client/react-query/skills.js", () => ({
   useSkillsInfinite: () => ({
     data: { pages: [{ result: { skills: testState.skills } }] },

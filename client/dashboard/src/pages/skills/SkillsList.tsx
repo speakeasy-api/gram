@@ -8,13 +8,14 @@ import { SkeletonTable } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { useProject } from "@/contexts/Auth";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
-import { useRoutes } from "@/routes";
 import type { Skill } from "@gram/client/models/components/skill.js";
 import { useSkillsInfinite } from "@gram/client/react-query/skills.js";
-import { Badge, type Column, Table } from "@speakeasy-api/moonshine";
+import { Badge, type Column, Icon, Table } from "@speakeasy-api/moonshine";
+import { useQueryState } from "nuqs";
 import { useDeferredValue, useMemo, useState } from "react";
 import { Link } from "react-router";
 import { SkillManifestDialog } from "./SkillManifestDialog";
+import { SkillSheet } from "./SkillSheet";
 import { filterSkills, skillCountLabel } from "./skills-list-helpers";
 import { useDrainSkillPages } from "./use-drain-skill-pages";
 
@@ -47,12 +48,11 @@ function noResultsMessage(
 }
 
 export default function SkillsList(): JSX.Element {
-  const routes = useRoutes();
-  const project = useProject();
   const filters = useFilterState(SKILL_FILTERS);
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [selectedSkillId, setSelectedSkillId] = useQueryState("skill");
   const [displayCount, setDisplayCount] = useState(RESULT_PAGE_SIZE);
   const query = useSkillsInfinite({ limit: 200 }, undefined, {
     throwOnError: false,
@@ -90,6 +90,8 @@ export default function SkillsList(): JSX.Element {
   });
 
   const displayedSkills = visibleSkills.slice(0, displayCount);
+  const isEmptyProject =
+    !!query.data && skills.length === 0 && !active && !query.hasNextPage;
 
   const columns: Column<Skill>[] = [
     {
@@ -99,8 +101,9 @@ export default function SkillsList(): JSX.Element {
       render: (skill) => (
         <div className="min-w-0">
           <Link
-            to={routes.clis.detail.href(skill.id)}
+            to={{ search: `?skill=${skill.id}` }}
             className="font-medium hover:underline"
+            onClick={(e) => e.stopPropagation()}
           >
             {skill.displayName}
           </Link>
@@ -146,6 +149,18 @@ export default function SkillsList(): JSX.Element {
         </Type>
       ),
     },
+    {
+      key: "open",
+      header: "",
+      width: "48px",
+      render: () => (
+        <Icon
+          name="arrow-right"
+          className="text-muted-foreground h-4 w-4"
+          aria-hidden
+        />
+      ),
+    },
   ];
 
   const countLabel = skillCountLabel({
@@ -164,55 +179,47 @@ export default function SkillsList(): JSX.Element {
         Record, inspect, and version the skills available to this project.
       </Page.Section.Description>
       <Page.Section.CTA>
-        <RequireScope
-          scope="skill:write"
-          resourceId={project.id}
-          level="component"
-          reason="You need write access to add skills."
-        >
-          <Button icon="plus" onClick={() => setDialogOpen(true)}>
-            Add skill
-          </Button>
-        </RequireScope>
+        <AddSkillButton onClick={() => setDialogOpen(true)} />
       </Page.Section.CTA>
       <Page.Section.Body>
         <div className="space-y-4">
-          <Page.Toolbar>
-            <Page.Toolbar.Search
-              value={search}
-              onChange={(value) => {
-                setSearch(value);
-                setDisplayCount(RESULT_PAGE_SIZE);
-              }}
-              debounceMs={150}
-              placeholder="Search skills"
-            />
-            <Page.Toolbar.Filters
-              schema={SKILL_FILTERS}
-              values={filters.values}
-              optionsById={FILTER_OPTIONS}
-              onChange={(id, value) => {
-                (filters.setValue as (id: string, value: FilterValue) => void)(
-                  id,
-                  value,
-                );
-                setDisplayCount(RESULT_PAGE_SIZE);
-              }}
-              onClear={(id) => {
-                (filters.clearValue as (id: string) => void)(id);
-                setDisplayCount(RESULT_PAGE_SIZE);
-              }}
-              onClearAll={() => {
-                filters.clearAll();
-                setDisplayCount(RESULT_PAGE_SIZE);
-              }}
-            />
-            <Page.Toolbar.Count>{countLabel}</Page.Toolbar.Count>
-            <Page.Toolbar.Refresh
-              onRefresh={() => void query.refetch()}
-              isRefreshing={query.isFetching && !query.isFetchingNextPage}
-            />
-          </Page.Toolbar>
+          {!isEmptyProject && (
+            <Page.Toolbar>
+              <Page.Toolbar.Search
+                value={search}
+                onChange={(value) => {
+                  setSearch(value);
+                  setDisplayCount(RESULT_PAGE_SIZE);
+                }}
+                debounceMs={150}
+                placeholder="Search skills"
+              />
+              <Page.Toolbar.Filters
+                schema={SKILL_FILTERS}
+                values={filters.values}
+                optionsById={FILTER_OPTIONS}
+                onChange={(id, value) => {
+                  (
+                    filters.setValue as (id: string, value: FilterValue) => void
+                  )(id, value);
+                  setDisplayCount(RESULT_PAGE_SIZE);
+                }}
+                onClear={(id) => {
+                  (filters.clearValue as (id: string) => void)(id);
+                  setDisplayCount(RESULT_PAGE_SIZE);
+                }}
+                onClearAll={() => {
+                  filters.clearAll();
+                  setDisplayCount(RESULT_PAGE_SIZE);
+                }}
+              />
+              <Page.Toolbar.Count>{countLabel}</Page.Toolbar.Count>
+              <Page.Toolbar.Refresh
+                onRefresh={() => void query.refetch()}
+                isRefreshing={query.isFetching && !query.isFetchingNextPage}
+              />
+            </Page.Toolbar>
+          )}
 
           {draining && (
             <Type small muted role="status" aria-live="polite">
@@ -227,12 +234,16 @@ export default function SkillsList(): JSX.Element {
               error={query.error instanceof Error ? query.error : "Try again."}
             />
           )}
-          {query.data && (
+          {isEmptyProject && (
+            <SkillsEmptyState onAdd={() => setDialogOpen(true)} />
+          )}
+          {query.data && !isEmptyProject && (
             <div className="overflow-x-auto">
               <Table
                 columns={columns}
                 data={displayedSkills}
                 rowKey={(skill) => skill.id}
+                onRowClick={(skill) => void setSelectedSkillId(skill.id)}
                 className="min-w-[900px]"
                 noResultsMessage={noResultsMessage(
                   draining,
@@ -278,8 +289,48 @@ export default function SkillsList(): JSX.Element {
           open={dialogOpen}
           onOpenChange={setDialogOpen}
         />
+        <SkillSheet
+          skillId={selectedSkillId}
+          onOpenChange={(open) => {
+            if (!open) void setSelectedSkillId(null);
+          }}
+        />
       </Page.Section.Body>
     </Page.Section>
+  );
+}
+
+function AddSkillButton({ onClick }: { onClick: () => void }): JSX.Element {
+  const project = useProject();
+  return (
+    <RequireScope
+      scope="skill:write"
+      resourceId={project.id}
+      level="component"
+      reason="You need write access to add skills."
+    >
+      <Button icon="plus" onClick={onClick}>
+        Add skill
+      </Button>
+    </RequireScope>
+  );
+}
+
+function SkillsEmptyState({ onAdd }: { onAdd: () => void }): JSX.Element {
+  return (
+    <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
+      <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
+        <Icon name="terminal" className="text-muted-foreground h-6 w-6" />
+      </div>
+      <Type variant="subheading" className="mb-1">
+        No skills yet
+      </Type>
+      <Type small muted className="mb-4 max-w-md text-center">
+        Skills are reusable instructions your agents can load on demand. Add
+        your first skill to start versioning it here.
+      </Type>
+      <AddSkillButton onClick={onAdd} />
+    </div>
   );
 }
 
