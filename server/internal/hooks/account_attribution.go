@@ -52,15 +52,13 @@ func classifyAccountType(emailResolvedUserID string) string {
 // bridge (device_owners). It mutates meta in place: AccountType, UserAccountID,
 // and — for a personal account attributed through the device bridge — UserID.
 //
-// It is a no-op when the session carries no provider account identity (e.g. an
-// older client that does not emit user.account_uuid), since there is no entity
-// to key on. All failures are returned to the caller, which logs and continues:
-// account attribution must never block session capture or enforcement.
+// Classification always runs and always stamps AccountType, including for a
+// session that carries no provider account UUID (a company-credential session —
+// see classifyAccount). The device bridge and the user_accounts entity, however,
+// key on that UUID, so they are skipped when it is absent: there is no account
+// entity to persist. All failures are returned to the caller, which logs and
+// continues: account attribution must never block session capture or enforcement.
 func (s *Service) attributeSession(ctx context.Context, meta *SessionMetadata) error {
-	if meta.ExternalAccountUUID == "" {
-		return nil
-	}
-
 	// Classify before consulting the device bridge: meta.UserID at this point
 	// reflects email resolution only.
 	accountType, err := s.classifyAccount(ctx, meta)
@@ -68,6 +66,16 @@ func (s *Service) attributeSession(ctx context.Context, meta *SessionMetadata) e
 		return fmt.Errorf("classify account: %w", err)
 	}
 	meta.AccountType = accountType
+
+	// The device bridge, the user_accounts entity, and its billing mode all key on
+	// the provider account UUID (user_accounts.external_account_uuid is NOT NULL
+	// and is the entity key). A session authenticated by company credentials (an
+	// API key, a gateway/proxy, Bedrock, or Vertex) carries no such UUID, so there
+	// is no account entity to persist — the account_type stamped above is the
+	// signal the cost surfaces consume. Stop here for these sessions.
+	if meta.ExternalAccountUUID == "" {
+		return nil
+	}
 
 	// Teach and resolve the device bridge. A team session (known employee)
 	// teaches device -> employee; a personal session (empty UserID) adopts the
@@ -179,6 +187,28 @@ func (s *Service) resolveBillingMode(ctx context.Context, meta *SessionMetadata,
 // this deterministically needs an explicit admin-declared enterprise org id (a
 // separate follow-up); accepted because Gram is enterprise software.
 func (s *Service) classifyAccount(ctx context.Context, meta *SessionMetadata) (string, error) {
+	// A Claude session with no provider account UUID is authenticated by company
+	// credentials — an API key, a gateway/proxy, Bedrock, or Vertex — not a
+	// personal Claude subscription. A personal Max/Pro account signs in via OAuth
+	// and so always emits user.account_uuid (and organization.id); their absence
+	// means no personal account is behind the session, so it is a company (team)
+	// account. This holds even when the work email has not been provisioned in
+	// Gram yet — the whole population an email- or org-based signal would miss for
+	// an org that runs Claude Code entirely through a corporate gateway.
+	//
+	// KNOWN RESIDUAL GAP: user.account_uuid rides only on some event types, so a
+	// personal session whose first OTEL batch happens to carry none is classified
+	// team for that batch; when the UUID arrives, sessionEnrichesAttribution
+	// re-attributes it personal, but the first batch's rows keep the team stamp
+	// (telemetry rows are stamped at write). Likewise a client too old to emit
+	// user.account_uuid at all is classified team for personal sessions too.
+	// Accepted: both slices are small and the prior behavior — an entire
+	// company-credential org parked under an unclassified account type — was the
+	// far larger distortion.
+	if meta.ExternalAccountUUID == "" {
+		return accountTypeTeam, nil
+	}
+
 	if meta.ExternalOrgID != "" {
 		shared, err := s.isSharedEnterpriseOrg(ctx, meta)
 		if err != nil {

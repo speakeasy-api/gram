@@ -531,6 +531,52 @@ func TestLogs_NoAccountIdentityDoesNotCreateUserAccount(t *testing.T) {
 	require.Error(t, err)
 }
 
+// TestLogs_ClassifiesCompanyCredentialSessionAsTeam covers a Claude session
+// authenticated by company credentials (an API key / gateway / Bedrock / Vertex):
+// it emits user.email and user.id but no user.account_uuid or organization.id, so
+// no personal account is behind it. Attribution must classify it team and stamp
+// account_type onto the telemetry — even though no user_accounts entity can be
+// persisted (that entity keys on the absent UUID) — so the cost breakdown does
+// not park the whole org's spend under "(unset)". The email is deliberately NOT
+// provisioned in Gram: this is the corporate-gateway population that an email- or
+// provider-org-based signal alone would miss.
+func TestLogs_ClassifiesCompanyCredentialSessionAsTeam(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	chClient := enableHookTelemetryLogger(t, ctx, ti)
+	authCtx := hookAuthContext(t, ctx)
+	orgID := authCtx.ActiveOrganizationID
+	now := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
+
+	err := ti.service.Logs(ctx, claudeLogsPayload(
+		[]*gen.OTELResourceAttribute{resourceStrAttr("service.name", "claude-code")},
+		nil,
+		&gen.OTELLogRecord{
+			TimeUnixNano: new(nanoString(now)),
+			Body:         &gen.OTELLogBody{StringValue: new("api request")},
+			Attributes: []*gen.OTELAttribute{
+				strAttr("session.id", "gateway-session"),
+				strAttr("user.email", "gateway-user@example.com"),
+				strAttr("user.id", "gateway-device"),
+			},
+		},
+	))
+	require.NoError(t, err)
+
+	logs := waitForHookLogs(t, ctx, chClient, authCtx.ProjectID.String(), claudeOTELLogsURN, now, 1)
+	require.Contains(t, logs[0].Attributes, accountTypeTeam)
+
+	// No account entity is persisted: the user_accounts key (external_account_uuid)
+	// is absent for a company-credential session.
+	_, err = repo.New(ti.conn).GetUserAccount(ctx, repo.GetUserAccountParams{
+		OrganizationID:      orgID,
+		Provider:            providerAnthropic,
+		ExternalAccountUuid: "",
+	})
+	require.Error(t, err)
+}
+
 // TestLogs_LateBridgeBackfillsPersonalAccount covers the "late linking" ordering:
 // an employee uses their personal account BEFORE any team session exists on the
 // device, so it is first attributed with no owner; later a team session teaches
