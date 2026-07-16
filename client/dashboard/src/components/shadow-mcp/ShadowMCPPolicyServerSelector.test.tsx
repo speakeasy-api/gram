@@ -151,6 +151,7 @@ describe("ShadowMCPPolicyServerSelector", () => {
       name: "Servers allowed by this policy",
     });
     const table = within(section).getByRole("table");
+    expect(table.getAttribute("data-cell-padding")).toBe("condensed");
 
     expect(
       within(table)

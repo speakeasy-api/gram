@@ -195,7 +195,11 @@ function AppliedServerTable({ rows }: { rows: PolicyServerChange[] }) {
   ];
 
   return (
-    <Table columns={columns} className="grid-rows-[auto_minmax(0,1fr)]">
+    <Table
+      columns={columns}
+      cellPadding="condensed"
+      className="grid-rows-[auto_minmax(0,1fr)]"
+    >
       <Table.Header columns={columns} />
       <Table.Body
         columns={columns}
