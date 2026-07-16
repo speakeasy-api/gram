@@ -185,6 +185,12 @@ export function CreateRoleDialog({
         description: "Organization metadata, members, and access settings.",
       },
       {
+        label: "Roles & Access",
+        resourceType: "role",
+        description:
+          "Manage roles, member role assignments, and identity-provider (SSO) group-to-role mappings.",
+      },
+      {
         label: "Build & Deploy",
         resourceType: "project",
         description: "Projects and their related resources.",
@@ -757,6 +763,7 @@ export function CreateRoleDialog({
                                 const isChecked = !!grant;
                                 const isConfigurable =
                                   scopeDef.resourceType !== "org" &&
+                                  scopeDef.resourceType !== "role" &&
                                   scopeDef.resourceType !== "environment" &&
                                   scopeDef.resourceType !== "chat";
 

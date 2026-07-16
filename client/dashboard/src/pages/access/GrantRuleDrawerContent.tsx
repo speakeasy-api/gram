@@ -318,6 +318,7 @@ export function GrantRuleDrawerContent({
   // grant that admins receive).
   if (
     resourceType === "org" ||
+    resourceType === "role" ||
     resourceType === "environment" ||
     resourceType === "chat"
   ) {

@@ -46,6 +46,7 @@ const tabClass = (active: boolean) =>
 
 type ResourceType =
   | "org"
+  | "role"
   | "project"
   | "environment"
   | "skill"
@@ -69,6 +70,12 @@ const SCOPE_DEFS: {
     label: "org:admin",
     resourceType: "org",
     description: "Manage org settings & access",
+  },
+  {
+    scope: "role:write",
+    label: "role:write",
+    resourceType: "role",
+    description: "Manage roles & IdP group mappings",
   },
   {
     scope: "project:read",
@@ -240,6 +247,7 @@ function loadPosition(): { x: number; y: number } | null {
 
 const GROUP_ORDER: { key: ResourceType; label: string }[] = [
   { key: "org", label: "Organization" },
+  { key: "role", label: "Roles & Access" },
   { key: "project", label: "Project" },
   { key: "environment", label: "Environments" },
   { key: "skill", label: "Skills" },
