@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * getSpendRule spendRules
  *
  * @remarks
- * Get a spend control rule by ID.
+ * Get a budget rule by ID.
  */
 export function spendRulesRulesGet(
   client: GramCore,

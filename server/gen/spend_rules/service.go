@@ -15,29 +15,29 @@ import (
 	"goa.design/goa/v3/security"
 )
 
-// Manage spend control rules, view budget events, and preview actor targeting.
+// Manage budget rules, view budget events, and preview actor targeting.
 type Service interface {
-	// Create a new spend control rule for the current organization.
+	// Create a new budget rule for the current organization.
 	CreateSpendRule(context.Context, *CreateSpendRulePayload) (res *types.SpendRule, err error)
-	// List all spend control rules for the current organization.
+	// List all budget rules for the current organization.
 	ListSpendRules(context.Context, *ListSpendRulesPayload) (res *ListSpendRulesResult, err error)
-	// Get a spend control rule by ID.
+	// Get a budget rule by ID.
 	GetSpendRule(context.Context, *GetSpendRulePayload) (res *types.SpendRule, err error)
-	// Update a spend control rule. Material changes (target, limit_usd,
-	// window_kind, warn_at_pct, action) bump the rule version.
+	// Update a budget rule. Material changes (target, limit_usd, window_kind,
+	// warn_at_pct, action) bump the rule version.
 	UpdateSpendRule(context.Context, *UpdateSpendRulePayload) (res *types.SpendRule, err error)
-	// Delete a spend control rule. Any open circuits for the rule close on the
-	// next evaluation cycle.
+	// Archive a budget rule. Any open circuits for the rule close on the next
+	// evaluation cycle; the rule's slug, version history, and events are retained.
 	DeleteSpendRule(context.Context, *DeleteSpendRulePayload) (err error)
 	// Preview which actors a target expression matches and their current spend
 	// against a proposed budget. Powers the live preview in the rule editor and
 	// the per-actor breakdown in the rule detail view.
 	PreviewSpendRule(context.Context, *PreviewSpendRulePayload) (res *PreviewSpendRuleResult, err error)
-	// List warning and breach events emitted by spend rule evaluation, most recent
-	// first.
+	// List warning and breach events emitted by budget rule evaluation, most
+	// recent first.
 	ListSpendRuleEvents(context.Context, *ListSpendRuleEventsPayload) (res *ListSpendRuleEventsResult, err error)
-	// Get spend control overview metrics: aggregate card numbers plus
-	// current-window usage per rule.
+	// Get budgets overview metrics: aggregate card numbers plus current-window
+	// usage per rule.
 	GetSpendRulesOverview(context.Context, *GetSpendRulesOverviewPayload) (res *SpendRulesOverviewResult, err error)
 }
 
@@ -134,7 +134,7 @@ type ListSpendRuleEventsPayload struct {
 // ListSpendRuleEventsResult is the result type of the spendRules service
 // listSpendRuleEvents method.
 type ListSpendRuleEventsResult struct {
-	// The list of spend rule events, most recent first.
+	// The list of budget rule events, most recent first.
 	Events []*SpendRuleEvent
 	// Cursor for the next page of events.
 	NextCursor *string
@@ -151,7 +151,7 @@ type ListSpendRulesPayload struct {
 // ListSpendRulesResult is the result type of the spendRules service
 // listSpendRules method.
 type ListSpendRulesResult struct {
-	// The list of spend rules.
+	// The list of budget rules.
 	Rules []*types.SpendRule
 }
 
@@ -205,7 +205,7 @@ type SpendRuleActorUsage struct {
 type SpendRuleEvent struct {
 	// The event ID.
 	ID string
-	// The spend rule ID that produced the event.
+	// The budget rule ID that produced the event.
 	RuleID string
 	// Versioned rule URN pinning the config that produced the event.
 	RuleUrn string
@@ -232,7 +232,7 @@ type SpendRuleEvent struct {
 }
 
 type SpendRuleUsage struct {
-	// The spend rule ID.
+	// The budget rule ID.
 	RuleID string
 	// Number of organization members the rule currently matches.
 	MatchedUsers int

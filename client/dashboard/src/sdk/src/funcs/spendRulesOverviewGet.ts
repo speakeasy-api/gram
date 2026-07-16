@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * getSpendRulesOverview spendRules
  *
  * @remarks
- * Get spend control overview metrics: aggregate card numbers plus current-window usage per rule.
+ * Get budgets overview metrics: aggregate card numbers plus current-window usage per rule.
  */
 export function spendRulesOverviewGet(
   client: GramCore,

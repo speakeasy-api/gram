@@ -43,7 +43,7 @@ export class GramRules extends ClientSDK {
    * createSpendRule spendRules
    *
    * @remarks
-   * Create a new spend control rule for the current organization.
+   * Create a new budget rule for the current organization.
    */
   async create(
     request: CreateSpendRuleRequest,
@@ -62,7 +62,7 @@ export class GramRules extends ClientSDK {
    * deleteSpendRule spendRules
    *
    * @remarks
-   * Delete a spend control rule. Any open circuits for the rule close on the next evaluation cycle.
+   * Archive a budget rule. Any open circuits for the rule close on the next evaluation cycle; the rule's slug, version history, and events are retained.
    */
   async delete(
     request: DeleteSpendRuleRequest,
@@ -81,7 +81,7 @@ export class GramRules extends ClientSDK {
    * getSpendRule spendRules
    *
    * @remarks
-   * Get a spend control rule by ID.
+   * Get a budget rule by ID.
    */
   async get(
     request: GetSpendRuleRequest,
@@ -100,7 +100,7 @@ export class GramRules extends ClientSDK {
    * listSpendRules spendRules
    *
    * @remarks
-   * List all spend control rules for the current organization.
+   * List all budget rules for the current organization.
    */
   async list(
     request?: ListSpendRulesRequest | undefined,
@@ -138,7 +138,7 @@ export class GramRules extends ClientSDK {
    * updateSpendRule spendRules
    *
    * @remarks
-   * Update a spend control rule. Material changes (target, limit_usd, window_kind, warn_at_pct, action) bump the rule version.
+   * Update a budget rule. Material changes (target, limit_usd, window_kind, warn_at_pct, action) bump the rule version.
    */
   async update(
     request: UpdateSpendRuleRequest,

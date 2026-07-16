@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * createSpendRule spendRules
  *
  * @remarks
- * Create a new spend control rule for the current organization.
+ * Create a new budget rule for the current organization.
  */
 export function spendRulesRulesCreate(
   client: GramCore,

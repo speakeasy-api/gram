@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * listSpendRules spendRules
  *
  * @remarks
- * List all spend control rules for the current organization.
+ * List all budget rules for the current organization.
  */
 export function spendRulesRulesList(
   client: GramCore,

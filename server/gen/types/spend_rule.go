@@ -10,7 +10,7 @@ package types
 // SpendRule is the result type of the spendRules service createSpendRule
 // method.
 type SpendRule struct {
-	// The spend rule ID.
+	// The budget rule ID.
 	ID string
 	// Versioned rule URN, e.g. spend_rule:eng-monthly-cap:v3. Pins the exact rule
 	// configuration that produced an event.

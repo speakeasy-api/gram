@@ -22,7 +22,7 @@ func SpendRuleActionEnum() {
 }
 
 var _ = Service("spendRules", func() {
-	Description("Manage spend control rules, view budget events, and preview actor targeting.")
+	Description("Manage budget rules, view budget events, and preview actor targeting.")
 	Meta("openapi:extension:x-speakeasy-group", "spendRules")
 
 	Security(security.ByKey, security.ProjectSlug, func() { Scope("producer") })
@@ -30,7 +30,7 @@ var _ = Service("spendRules", func() {
 	shared.DeclareErrorResponses()
 
 	Method("createSpendRule", func() {
-		Description("Create a new spend control rule for the current organization.")
+		Description("Create a new budget rule for the current organization.")
 
 		Payload(func() {
 			security.ByKeyPayload()
@@ -79,7 +79,7 @@ var _ = Service("spendRules", func() {
 	})
 
 	Method("listSpendRules", func() {
-		Description("List all spend control rules for the current organization.")
+		Description("List all budget rules for the current organization.")
 
 		Payload(func() {
 			security.ByKeyPayload()
@@ -104,7 +104,7 @@ var _ = Service("spendRules", func() {
 	})
 
 	Method("getSpendRule", func() {
-		Description("Get a spend control rule by ID.")
+		Description("Get a budget rule by ID.")
 
 		Payload(func() {
 			security.ByKeyPayload()
@@ -134,7 +134,7 @@ var _ = Service("spendRules", func() {
 	})
 
 	Method("updateSpendRule", func() {
-		Description("Update a spend control rule. Material changes (target, limit_usd, window_kind, warn_at_pct, action) bump the rule version.")
+		Description("Update a budget rule. Material changes (target, limit_usd, window_kind, warn_at_pct, action) bump the rule version.")
 
 		Payload(func() {
 			security.ByKeyPayload()
@@ -180,7 +180,7 @@ var _ = Service("spendRules", func() {
 	})
 
 	Method("deleteSpendRule", func() {
-		Description("Delete a spend control rule. Any open circuits for the rule close on the next evaluation cycle.")
+		Description("Archive a budget rule. Any open circuits for the rule close on the next evaluation cycle; the rule's slug, version history, and events are retained.")
 
 		Payload(func() {
 			security.ByKeyPayload()
@@ -246,7 +246,7 @@ var _ = Service("spendRules", func() {
 	})
 
 	Method("listSpendRuleEvents", func() {
-		Description("List warning and breach events emitted by spend rule evaluation, most recent first.")
+		Description("List warning and breach events emitted by budget rule evaluation, most recent first.")
 
 		Payload(func() {
 			security.ByKeyPayload()
@@ -286,7 +286,7 @@ var _ = Service("spendRules", func() {
 	})
 
 	Method("getSpendRulesOverview", func() {
-		Description("Get spend control overview metrics: aggregate card numbers plus current-window usage per rule.")
+		Description("Get budgets overview metrics: aggregate card numbers plus current-window usage per rule.")
 
 		Payload(func() {
 			security.ByKeyPayload()
@@ -324,7 +324,7 @@ var SpendRuleTargetCondition = Type("SpendRuleTargetCondition", func() {
 var SpendRule = Type("SpendRule", func() {
 	Meta("struct:pkg:path", "types")
 
-	Attribute("id", String, "The spend rule ID.", func() {
+	Attribute("id", String, "The budget rule ID.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("urn", String, "Versioned rule URN, e.g. spend_rule:eng-monthly-cap:v3. Pins the exact rule configuration that produced an event.")
@@ -359,7 +359,7 @@ var SpendRuleEvent = Type("SpendRuleEvent", func() {
 	Attribute("id", String, "The event ID.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("rule_id", String, "The spend rule ID that produced the event.", func() {
+	Attribute("rule_id", String, "The budget rule ID that produced the event.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("rule_urn", String, "Versioned rule URN pinning the config that produced the event.")
@@ -411,7 +411,7 @@ var PreviewSpendRuleResult = Type("PreviewSpendRuleResult", func() {
 })
 
 var SpendRuleUsage = Type("SpendRuleUsage", func() {
-	Attribute("rule_id", String, "The spend rule ID.", func() {
+	Attribute("rule_id", String, "The budget rule ID.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("matched_users", Int, "Number of organization members the rule currently matches.")
@@ -441,12 +441,12 @@ var SpendRulesOverviewResult = Type("SpendRulesOverviewResult", func() {
 })
 
 var ListSpendRulesResult = Type("ListSpendRulesResult", func() {
-	Attribute("rules", ArrayOf(SpendRule), "The list of spend rules.")
+	Attribute("rules", ArrayOf(SpendRule), "The list of budget rules.")
 	Required("rules")
 })
 
 var ListSpendRuleEventsResult = Type("ListSpendRuleEventsResult", func() {
-	Attribute("events", ArrayOf(SpendRuleEvent), "The list of spend rule events, most recent first.")
+	Attribute("events", ArrayOf(SpendRuleEvent), "The list of budget rule events, most recent first.")
 	Attribute("next_cursor", String, "Cursor for the next page of events.")
 	Required("events")
 })

@@ -32565,7 +32565,7 @@ paths:
                 name: SkillVersions
     /rpc/spendrules.createRule:
         post:
-            description: Create a new spend control rule for the current organization.
+            description: Create a new budget rule for the current organization.
             operationId: createSpendRule
             parameters:
                 - allowEmptyValue: true
@@ -32671,7 +32671,7 @@ paths:
                 type: mutation
     /rpc/spendrules.deleteRule:
         delete:
-            description: Delete a spend control rule. Any open circuits for the rule close on the next evaluation cycle.
+            description: Archive a budget rule. Any open circuits for the rule close on the next evaluation cycle; the rule's slug, version history, and events are retained.
             operationId: deleteSpendRule
             parameters:
                 - allowEmptyValue: true
@@ -32776,7 +32776,7 @@ paths:
                 type: mutation
     /rpc/spendrules.getOverview:
         get:
-            description: 'Get spend control overview metrics: aggregate card numbers plus current-window usage per rule.'
+            description: 'Get budgets overview metrics: aggregate card numbers plus current-window usage per rule.'
             operationId: getSpendRulesOverview
             parameters:
                 - allowEmptyValue: true
@@ -32875,7 +32875,7 @@ paths:
                 name: SpendRulesOverview
     /rpc/spendrules.getRule:
         get:
-            description: Get a spend control rule by ID.
+            description: Get a budget rule by ID.
             operationId: getSpendRule
             parameters:
                 - allowEmptyValue: true
@@ -32983,7 +32983,7 @@ paths:
                 name: SpendRulesGetRule
     /rpc/spendrules.listEvents:
         get:
-            description: List warning and breach events emitted by spend rule evaluation, most recent first.
+            description: List warning and breach events emitted by budget rule evaluation, most recent first.
             operationId: listSpendRuleEvents
             parameters:
                 - allowEmptyValue: true
@@ -33117,7 +33117,7 @@ paths:
                 name: SpendRulesListEvents
     /rpc/spendrules.listRules:
         get:
-            description: List all spend control rules for the current organization.
+            description: List all budget rules for the current organization.
             operationId: listSpendRules
             parameters:
                 - allowEmptyValue: true
@@ -33322,7 +33322,7 @@ paths:
                 type: mutation
     /rpc/spendrules.updateRule:
         put:
-            description: Update a spend control rule. Material changes (target, limit_usd, window_kind, warn_at_pct, action) bump the rule version.
+            description: Update a budget rule. Material changes (target, limit_usd, window_kind, warn_at_pct, action) bump the rule version.
             operationId: updateSpendRule
             parameters:
                 - allowEmptyValue: true
@@ -49984,7 +49984,7 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/SpendRuleEvent'
-                    description: The list of spend rule events, most recent first.
+                    description: The list of budget rule events, most recent first.
                 next_cursor:
                     type: string
                     description: Cursor for the next page of events.
@@ -49997,7 +49997,7 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/SpendRule'
-                    description: The list of spend rules.
+                    description: The list of budget rules.
             required:
                 - rules
         ListSyncedUsersResult:
@@ -56316,7 +56316,7 @@ components:
                     description: Whether the rule is active.
                 id:
                     type: string
-                    description: The spend rule ID.
+                    description: The budget rule ID.
                     format: uuid
                 limit_usd:
                     type: number
@@ -56441,7 +56441,7 @@ components:
                     format: double
                 rule_id:
                     type: string
-                    description: The spend rule ID that produced the event.
+                    description: The budget rule ID that produced the event.
                     format: uuid
                 rule_name:
                     type: string
@@ -56505,7 +56505,7 @@ components:
                     format: int64
                 rule_id:
                     type: string
-                    description: The spend rule ID.
+                    description: The budget rule ID.
                     format: uuid
                 spend_usd:
                     type: number
@@ -60612,7 +60612,7 @@ tags:
     - name: skills
       description: Manage project skills and their immutable versions. Methods are gated by the skills product feature and skill read or write scopes.
     - name: spendRules
-      description: Manage spend control rules, view budget events, and preview actor targeting.
+      description: Manage budget rules, view budget events, and preview actor targeting.
     - name: telemetry
       description: Fetch telemetry data for tools in Gram.
     - name: templates

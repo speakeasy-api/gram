@@ -14,7 +14,7 @@ import {
 
 export type ListSpendRuleEventsResult = {
   /**
-   * The list of spend rule events, most recent first.
+   * The list of budget rule events, most recent first.
    */
   events: Array<SpendRuleEvent>;
   /**

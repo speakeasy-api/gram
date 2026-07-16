@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * listSpendRuleEvents spendRules
  *
  * @remarks
- * List warning and breach events emitted by spend rule evaluation, most recent first.
+ * List warning and breach events emitted by budget rule evaluation, most recent first.
  */
 export function spendRulesEventsList(
   client: GramCore,

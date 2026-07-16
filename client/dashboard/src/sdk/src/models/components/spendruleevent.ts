@@ -47,7 +47,7 @@ export type SpendRuleEvent = {
    */
   limitUsd: number;
   /**
-   * The spend rule ID that produced the event.
+   * The budget rule ID that produced the event.
    */
   ruleId: string;
   /**

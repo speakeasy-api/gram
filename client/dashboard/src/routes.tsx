@@ -504,7 +504,7 @@ const ROUTE_STRUCTURE = {
     },
   },
   budgets: {
-    title: "Spend Control",
+    title: "Budgets",
     url: "budgets",
     icon: "wallet",
     stage: "preview",

@@ -75,7 +75,7 @@ type PreviewSpendRuleRequestBody struct {
 // CreateSpendRuleResponseBody is the type of the "spendRules" service
 // "createSpendRule" endpoint HTTP response body.
 type CreateSpendRuleResponseBody struct {
-	// The spend rule ID.
+	// The budget rule ID.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Versioned rule URN, e.g. spend_rule:eng-monthly-cap:v3. Pins the exact rule
 	// configuration that produced an event.
@@ -119,14 +119,14 @@ type CreateSpendRuleResponseBody struct {
 // ListSpendRulesResponseBody is the type of the "spendRules" service
 // "listSpendRules" endpoint HTTP response body.
 type ListSpendRulesResponseBody struct {
-	// The list of spend rules.
+	// The list of budget rules.
 	Rules []*SpendRuleResponseBody `form:"rules,omitempty" json:"rules,omitempty" xml:"rules,omitempty"`
 }
 
 // GetSpendRuleResponseBody is the type of the "spendRules" service
 // "getSpendRule" endpoint HTTP response body.
 type GetSpendRuleResponseBody struct {
-	// The spend rule ID.
+	// The budget rule ID.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Versioned rule URN, e.g. spend_rule:eng-monthly-cap:v3. Pins the exact rule
 	// configuration that produced an event.
@@ -170,7 +170,7 @@ type GetSpendRuleResponseBody struct {
 // UpdateSpendRuleResponseBody is the type of the "spendRules" service
 // "updateSpendRule" endpoint HTTP response body.
 type UpdateSpendRuleResponseBody struct {
-	// The spend rule ID.
+	// The budget rule ID.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Versioned rule URN, e.g. spend_rule:eng-monthly-cap:v3. Pins the exact rule
 	// configuration that produced an event.
@@ -228,7 +228,7 @@ type PreviewSpendRuleResponseBody struct {
 // ListSpendRuleEventsResponseBody is the type of the "spendRules" service
 // "listSpendRuleEvents" endpoint HTTP response body.
 type ListSpendRuleEventsResponseBody struct {
-	// The list of spend rule events, most recent first.
+	// The list of budget rule events, most recent first.
 	Events []*SpendRuleEventResponseBody `form:"events,omitempty" json:"events,omitempty" xml:"events,omitempty"`
 	// Cursor for the next page of events.
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
@@ -1775,7 +1775,7 @@ type SpendRuleTargetConditionResponseBody struct {
 
 // SpendRuleResponseBody is used to define fields on response body types.
 type SpendRuleResponseBody struct {
-	// The spend rule ID.
+	// The budget rule ID.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Versioned rule URN, e.g. spend_rule:eng-monthly-cap:v3. Pins the exact rule
 	// configuration that produced an event.
@@ -1839,7 +1839,7 @@ type SpendRuleActorUsageResponseBody struct {
 type SpendRuleEventResponseBody struct {
 	// The event ID.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The spend rule ID that produced the event.
+	// The budget rule ID that produced the event.
 	RuleID *string `form:"rule_id,omitempty" json:"rule_id,omitempty" xml:"rule_id,omitempty"`
 	// Versioned rule URN pinning the config that produced the event.
 	RuleUrn *string `form:"rule_urn,omitempty" json:"rule_urn,omitempty" xml:"rule_urn,omitempty"`
@@ -1867,7 +1867,7 @@ type SpendRuleEventResponseBody struct {
 
 // SpendRuleUsageResponseBody is used to define fields on response body types.
 type SpendRuleUsageResponseBody struct {
-	// The spend rule ID.
+	// The budget rule ID.
 	RuleID *string `form:"rule_id,omitempty" json:"rule_id,omitempty" xml:"rule_id,omitempty"`
 	// Number of organization members the rule currently matches.
 	MatchedUsers *int `form:"matched_users,omitempty" json:"matched_users,omitempty" xml:"matched_users,omitempty"`

@@ -10,7 +10,7 @@ import { SpendRule, SpendRule$inboundSchema } from "./spendrule.js";
 
 export type ListSpendRulesResult = {
   /**
-   * The list of spend rules.
+   * The list of budget rules.
    */
   rules: Array<SpendRule>;
 };

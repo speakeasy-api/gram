@@ -59,7 +59,7 @@ export type SpendRulesGetRuleQueryError =
  * getSpendRule spendRules
  *
  * @remarks
- * Get a spend control rule by ID.
+ * Get a budget rule by ID.
  */
 export function useSpendRulesGetRule(
   request: GetSpendRuleRequest,
@@ -85,7 +85,7 @@ export function useSpendRulesGetRule(
  * getSpendRule spendRules
  *
  * @remarks
- * Get a spend control rule by ID.
+ * Get a budget rule by ID.
  */
 export function useSpendRulesGetRuleSuspense(
   request: GetSpendRuleRequest,

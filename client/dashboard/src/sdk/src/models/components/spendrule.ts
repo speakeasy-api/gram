@@ -56,7 +56,7 @@ export type SpendRule = {
    */
   enabled: boolean;
   /**
-   * The spend rule ID.
+   * The budget rule ID.
    */
   id: string;
   /**

@@ -16,7 +16,7 @@ export class GramOverview extends ClientSDK {
    * getSpendRulesOverview spendRules
    *
    * @remarks
-   * Get spend control overview metrics: aggregate card numbers plus current-window usage per rule.
+   * Get budgets overview metrics: aggregate card numbers plus current-window usage per rule.
    */
   async get(
     request?: GetSpendRulesOverviewRequest | undefined,

@@ -38,7 +38,7 @@ import {
 import {
   WINDOW_LABELS,
   formatUsd,
-  invalidateSpendControlQueries,
+  invalidateBudgetQueries,
   parseRuleUrn,
   ruleStatusOf,
   targetSummary,
@@ -93,7 +93,7 @@ function BudgetsContent(): JSX.Element {
   const rules = useMemo(() => rulesData?.rules ?? [], [rulesData]);
   const usageMap = useMemo(() => usageByRuleId(overview?.rules), [overview]);
 
-  const invalidate = () => invalidateSpendControlQueries(queryClient);
+  const invalidate = () => invalidateBudgetQueries(queryClient);
 
   const createMutation = useSpendRulesCreateRuleMutation({
     onSuccess: () => {
@@ -153,7 +153,7 @@ function BudgetsContent(): JSX.Element {
   return (
     <>
       <Page.Section>
-        <Page.Section.Title stage="preview">Spend Control</Page.Section.Title>
+        <Page.Section.Title stage="preview">Budgets</Page.Section.Title>
         <Page.Section.Description>
           Give each matched person a fixed-window AI budget. Flag overspend for
           review, or block requests until the window resets. The strictest
@@ -343,8 +343,8 @@ function RulesTab({
     return (
       <TabEmptyState
         icon={Wallet}
-        title="No spend rules"
-        description="Spend rules give each matched person a fixed-window AI budget — flag overspend for review, or block requests until the window resets. Create your first rule to get started."
+        title="No budget rules"
+        description="Budget rules give each matched person a fixed-window AI budget — flag overspend for review, or block requests until the window resets. Create your first rule to get started."
         action={
           <Button onClick={onNew}>
             <Plus className="mr-2 h-4 w-4" />
@@ -688,7 +688,7 @@ function eventsEmptyCopy(
     case "all": {
       const description =
         rulesCount === 0
-          ? "Create a spend rule first — warnings and breaches are recorded here as people approach or exceed their budgets."
+          ? "Create a budget rule first — warnings and breaches are recorded here as people approach or exceed their budgets."
           : "Warnings and breaches appear here as enabled rules evaluate each person's spend against their budget.";
       return { title: "No budget events", description };
     }

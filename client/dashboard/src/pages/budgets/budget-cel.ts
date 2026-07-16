@@ -1,4 +1,4 @@
-/** A member attribute a spend-control target condition can be written against.
+/** A member attribute a budget-rule target condition can be written against.
  *  The server turns the selected attribute/operator/value into the stored CEL
  *  expression; this file is only UI reference data. */
 export interface ActorAttribute {
@@ -10,7 +10,7 @@ export interface ActorAttribute {
 }
 
 /**
- * The actor attributes available to spend-control rules. Rules target
+ * The actor attributes available to budget rules. Rules target
  * organization members: identity (email), org roles (roles), and — when the
  * org syncs a directory — the WorkOS directory attributes Gram already
  * ingests (department_name, job_title, employee_type, division_name,

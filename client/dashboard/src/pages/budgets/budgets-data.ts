@@ -138,8 +138,8 @@ export function parseRuleUrn(
 /* -------------------------------------------------------------------------- */
 
 /** Rules, overview, and events all describe the same state; a rule mutation
- *  refreshes every spend-control query so no tab shows stale numbers. */
-export function invalidateSpendControlQueries(client: QueryClient): void {
+ *  refreshes every budgets query so no tab shows stale numbers. */
+export function invalidateBudgetQueries(client: QueryClient): void {
   void invalidateAllSpendRulesListRules(client);
   void invalidateAllSpendRulesOverview(client);
   void invalidateAllSpendRulesListEvents(client);

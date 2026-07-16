@@ -59,7 +59,7 @@ export type SpendRulesListRulesQueryError =
  * listSpendRules spendRules
  *
  * @remarks
- * List all spend control rules for the current organization.
+ * List all budget rules for the current organization.
  */
 export function useSpendRulesListRules(
   request?: ListSpendRulesRequest | undefined,
@@ -85,7 +85,7 @@ export function useSpendRulesListRules(
  * listSpendRules spendRules
  *
  * @remarks
- * List all spend control rules for the current organization.
+ * List all budget rules for the current organization.
  */
 export function useSpendRulesListRulesSuspense(
   request?: ListSpendRulesRequest | undefined,

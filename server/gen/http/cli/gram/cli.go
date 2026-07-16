@@ -14638,17 +14638,17 @@ func skillsArchiveUsage() {
 // spendRulesUsage displays the usage of the spend-rules command and its
 // subcommands.
 func spendRulesUsage() {
-	fmt.Fprintln(os.Stderr, `Manage spend control rules, view budget events, and preview actor targeting.`)
+	fmt.Fprintln(os.Stderr, `Manage budget rules, view budget events, and preview actor targeting.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] spend-rules COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    create-spend-rule: Create a new spend control rule for the current organization.`)
-	fmt.Fprintln(os.Stderr, `    list-spend-rules: List all spend control rules for the current organization.`)
-	fmt.Fprintln(os.Stderr, `    get-spend-rule: Get a spend control rule by ID.`)
-	fmt.Fprintln(os.Stderr, `    update-spend-rule: Update a spend control rule. Material changes (target, limit_usd, window_kind, warn_at_pct, action) bump the rule version.`)
-	fmt.Fprintln(os.Stderr, `    delete-spend-rule: Delete a spend control rule. Any open circuits for the rule close on the next evaluation cycle.`)
+	fmt.Fprintln(os.Stderr, `    create-spend-rule: Create a new budget rule for the current organization.`)
+	fmt.Fprintln(os.Stderr, `    list-spend-rules: List all budget rules for the current organization.`)
+	fmt.Fprintln(os.Stderr, `    get-spend-rule: Get a budget rule by ID.`)
+	fmt.Fprintln(os.Stderr, `    update-spend-rule: Update a budget rule. Material changes (target, limit_usd, window_kind, warn_at_pct, action) bump the rule version.`)
+	fmt.Fprintln(os.Stderr, `    delete-spend-rule: Archive a budget rule. Any open circuits for the rule close on the next evaluation cycle; the rule's slug, version history, and events are retained.`)
 	fmt.Fprintln(os.Stderr, `    preview-spend-rule: Preview which actors a target expression matches and their current spend against a proposed budget. Powers the live preview in the rule editor and the per-actor breakdown in the rule detail view.`)
-	fmt.Fprintln(os.Stderr, `    list-spend-rule-events: List warning and breach events emitted by spend rule evaluation, most recent first.`)
-	fmt.Fprintln(os.Stderr, `    get-spend-rules-overview: Get spend control overview metrics: aggregate card numbers plus current-window usage per rule.`)
+	fmt.Fprintln(os.Stderr, `    list-spend-rule-events: List warning and breach events emitted by budget rule evaluation, most recent first.`)
+	fmt.Fprintln(os.Stderr, `    get-spend-rules-overview: Get budgets overview metrics: aggregate card numbers plus current-window usage per rule.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s spend-rules COMMAND --help\n", os.Args[0])
@@ -14664,7 +14664,7 @@ func spendRulesCreateSpendRuleUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Create a new spend control rule for the current organization.`)
+	fmt.Fprintln(os.Stderr, `Create a new budget rule for the current organization.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -14687,7 +14687,7 @@ func spendRulesListSpendRulesUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List all spend control rules for the current organization.`)
+	fmt.Fprintln(os.Stderr, `List all budget rules for the current organization.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
@@ -14710,7 +14710,7 @@ func spendRulesGetSpendRuleUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Get a spend control rule by ID.`)
+	fmt.Fprintln(os.Stderr, `Get a budget rule by ID.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -id STRING: `)
@@ -14734,7 +14734,7 @@ func spendRulesUpdateSpendRuleUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Update a spend control rule. Material changes (target, limit_usd, window_kind, warn_at_pct, action) bump the rule version.`)
+	fmt.Fprintln(os.Stderr, `Update a budget rule. Material changes (target, limit_usd, window_kind, warn_at_pct, action) bump the rule version.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -14758,7 +14758,7 @@ func spendRulesDeleteSpendRuleUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Delete a spend control rule. Any open circuits for the rule close on the next evaluation cycle.`)
+	fmt.Fprintln(os.Stderr, `Archive a budget rule. Any open circuits for the rule close on the next evaluation cycle; the rule's slug, version history, and events are retained.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -id STRING: `)
@@ -14809,7 +14809,7 @@ func spendRulesListSpendRuleEventsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List warning and breach events emitted by spend rule evaluation, most recent first.`)
+	fmt.Fprintln(os.Stderr, `List warning and breach events emitted by budget rule evaluation, most recent first.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -rule-id STRING: `)
@@ -14835,7 +14835,7 @@ func spendRulesGetSpendRulesOverviewUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Get spend control overview metrics: aggregate card numbers plus current-window usage per rule.`)
+	fmt.Fprintln(os.Stderr, `Get budgets overview metrics: aggregate card numbers plus current-window usage per rule.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)

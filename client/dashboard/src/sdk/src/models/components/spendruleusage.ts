@@ -33,7 +33,7 @@ export type SpendRuleUsage = {
    */
   matchedUsers: number;
   /**
-   * The spend rule ID.
+   * The budget rule ID.
    */
   ruleId: string;
   /**

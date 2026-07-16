@@ -16,7 +16,7 @@ export class Events extends ClientSDK {
    * listSpendRuleEvents spendRules
    *
    * @remarks
-   * List warning and breach events emitted by spend rule evaluation, most recent first.
+   * List warning and breach events emitted by budget rule evaluation, most recent first.
    */
   async list(
     request?: ListSpendRuleEventsRequest | undefined,

@@ -38,7 +38,7 @@ import { Result } from "../types/fp.js";
  * deleteSpendRule spendRules
  *
  * @remarks
- * Delete a spend control rule. Any open circuits for the rule close on the next evaluation cycle.
+ * Archive a budget rule. Any open circuits for the rule close on the next evaluation cycle; the rule's slug, version history, and events are retained.
  */
 export function spendRulesRulesDelete(
   client: GramCore,

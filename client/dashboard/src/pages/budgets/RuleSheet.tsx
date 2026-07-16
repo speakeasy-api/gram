@@ -99,7 +99,7 @@ function attributeLabel(name: string): string {
     .join(" ");
 }
 
-/** Create or edit a spend-control rule. */
+/** Create or edit a budget rule. */
 export function RuleSheet({
   open,
   onOpenChange,
@@ -221,7 +221,7 @@ function RuleForm({
   return (
     <>
       <SheetHeader className="px-6 pt-6">
-        <SheetTitle>{rule ? "Edit rule" : "New spend rule"}</SheetTitle>
+        <SheetTitle>{rule ? "Edit rule" : "New budget rule"}</SheetTitle>
         <SheetDescription>
           Give each matched person a fixed-window budget and choose what happens
           when it is spent.

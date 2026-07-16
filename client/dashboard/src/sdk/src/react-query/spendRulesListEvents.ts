@@ -60,7 +60,7 @@ export type SpendRulesListEventsQueryError =
  * listSpendRuleEvents spendRules
  *
  * @remarks
- * List warning and breach events emitted by spend rule evaluation, most recent first.
+ * List warning and breach events emitted by budget rule evaluation, most recent first.
  */
 export function useSpendRulesListEvents(
   request?: ListSpendRuleEventsRequest | undefined,
@@ -89,7 +89,7 @@ export function useSpendRulesListEvents(
  * listSpendRuleEvents spendRules
  *
  * @remarks
- * List warning and breach events emitted by spend rule evaluation, most recent first.
+ * List warning and breach events emitted by budget rule evaluation, most recent first.
  */
 export function useSpendRulesListEventsSuspense(
   request?: ListSpendRuleEventsRequest | undefined,
