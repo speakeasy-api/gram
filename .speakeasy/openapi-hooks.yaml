@@ -543,6 +543,8 @@ tags:
     description: Dashboard API for interacting with resources.
   - name: risk
     description: Manage risk analysis policies and view scan results.
+  - name: skills
+    description: Manage project skills and their immutable versions. Methods are gated by the skills product feature and skill read or write scopes.
   - name: telemetry
     description: Fetch telemetry data for tools in Gram.
   - name: templates
