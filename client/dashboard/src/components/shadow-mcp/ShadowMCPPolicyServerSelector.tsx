@@ -475,7 +475,15 @@ export function ShadowMCPPolicyServerSelector({
       )}
 
       <Dialog open={open} onOpenChange={handleOpenChange}>
-        <Dialog.Content className="max-h-[80vh] grid-rows-[auto_auto_minmax(0,1fr)_auto] overflow-hidden sm:max-w-5xl">
+        <Dialog.Content
+          className="max-h-[80vh] grid-rows-[auto_auto_minmax(0,1fr)_auto] overflow-hidden sm:max-w-5xl"
+          onEscapeKeyDown={(event) => {
+            if (search) {
+              event.preventDefault();
+              setSearch("");
+            }
+          }}
+        >
           <Dialog.Header>
             <Dialog.Title>Select allowed servers</Dialog.Title>
             <Dialog.Description>

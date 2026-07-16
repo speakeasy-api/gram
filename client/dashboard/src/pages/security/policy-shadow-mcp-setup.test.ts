@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   idempotencyKeyForFingerprint,
   isBlockingShadowMCPPolicy,
+  isShadowMCPBlockConfiguration,
   shadowMCPAllowedURLsForMutation,
   shadowMCPSelectionBaselineForUpdate,
   shadowMCPSelectionIsDirty,
@@ -35,6 +36,12 @@ describe("isBlockingShadowMCPPolicy", () => {
   );
 });
 
+describe("isShadowMCPBlockConfiguration", () => {
+  it("recognizes a disabled blocking Shadow MCP policy configuration", () => {
+    expect(isShadowMCPBlockConfiguration(["shadow_mcp"], "block")).toBe(true);
+  });
+});
+
 describe("shadowMCPAllowedURLsForMutation", () => {
   it("returns sorted selected URLs for a target blocking Shadow MCP policy", () => {
     expect(
@@ -60,6 +67,17 @@ describe("shadowMCPAllowedURLsForMutation", () => {
         selectedCategories: new Set(["shadow_mcp"]),
         selectedURLs: new Set(["https://github.example.com/mcp"]),
         originalPolicy: blockingShadowMCPPolicy,
+      }),
+    ).toEqual([]);
+  });
+
+  it("clears grants when a disabled blocking policy changes to flag", () => {
+    expect(
+      shadowMCPAllowedURLsForMutation({
+        action: "flag",
+        selectedCategories: new Set(["shadow_mcp"]),
+        selectedURLs: new Set(["https://github.example.com/mcp"]),
+        originalPolicy: { ...blockingShadowMCPPolicy, enabled: false },
       }),
     ).toEqual([]);
   });

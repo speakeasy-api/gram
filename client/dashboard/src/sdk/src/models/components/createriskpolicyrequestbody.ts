@@ -132,7 +132,7 @@ export type CreateRiskPolicyRequestBody = {
    */
   score?: number | undefined;
   /**
-   * Complete desired canonical URL allow set for this policy. Omit to preserve; send empty to clear.
+   * Complete desired canonical URL allow set for this policy. Omit or send empty to create no URL-specific allow decisions.
    */
   shadowMcpAllowedUrls?: Array<string> | undefined;
   /**

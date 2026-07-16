@@ -345,8 +345,8 @@ type CreateRiskPolicyPayload struct {
 	// Principal URNs this policy applies to. For audience_type=everyone, the
 	// server stores user:all.
 	AudiencePrincipalUrns []string
-	// Complete desired canonical URL allow set for this policy. Omit to preserve;
-	// send empty to clear.
+	// Complete desired canonical URL allow set for this policy. Omit or send empty
+	// to create no URL-specific allow decisions.
 	ShadowMcpAllowedUrls []string `json:"shadow_mcp_allowed_urls"`
 	// Whether the policy name should be auto-generated.
 	AutoName *bool

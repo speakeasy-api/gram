@@ -14,8 +14,9 @@ import (
 type ReconcilePolicyURLsInput struct {
 	OrganizationID string
 	PolicyID       string
-	DesiredURLs    []string
-	Principals     []urn.Principal
+	// DesiredURLs nil preserves the existing URL set while refreshing its audience.
+	DesiredURLs []string
+	Principals  []urn.Principal
 }
 
 func URLSelector(policyID, canonicalURL string) authz.Selector {
@@ -47,11 +48,6 @@ func ReconcilePolicyURLs(ctx context.Context, db riskrepo.DBTX, input ReconcileP
 		return fmt.Errorf("list policy url grants: %w", err)
 	}
 
-	desired := make(map[string]struct{}, len(input.DesiredURLs))
-	for _, serverURL := range input.DesiredURLs {
-		desired[serverURL] = struct{}{}
-	}
-
 	existing := make(map[string]struct{}, len(grants))
 	existingGrants := make(map[string][]authz.Grant, len(grants))
 	for _, grant := range grants {
@@ -64,6 +60,17 @@ func ReconcilePolicyURLs(ctx context.Context, db riskrepo.DBTX, input ReconcileP
 		}
 		existing[serverURL] = struct{}{}
 		existingGrants[serverURL] = append(existingGrants[serverURL], grant)
+	}
+
+	desired := make(map[string]struct{}, len(input.DesiredURLs))
+	if input.DesiredURLs == nil {
+		for serverURL := range existing {
+			desired[serverURL] = struct{}{}
+		}
+	} else {
+		for _, serverURL := range input.DesiredURLs {
+			desired[serverURL] = struct{}{}
+		}
 	}
 
 	toAdd := make(map[string]struct{}, len(desired))

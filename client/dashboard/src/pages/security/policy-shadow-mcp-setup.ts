@@ -6,12 +6,19 @@ export type SubmissionKeyCache = {
 
 type OriginalPolicy = Pick<RiskPolicy, "action" | "enabled" | "sources">;
 
+export function isShadowMCPBlockConfiguration(
+  sources: readonly string[],
+  action: string,
+): boolean {
+  return action === "block" && sources.includes("shadow_mcp");
+}
+
 export function isBlockingShadowMCPPolicy(
   enabled: boolean,
   sources: readonly string[],
   action: string,
 ): boolean {
-  return enabled && action === "block" && sources.includes("shadow_mcp");
+  return enabled && isShadowMCPBlockConfiguration(sources, action);
 }
 
 export function shadowMCPAllowedURLsForMutation({
@@ -34,11 +41,7 @@ export function shadowMCPAllowedURLsForMutation({
 
   if (
     originalPolicy &&
-    isBlockingShadowMCPPolicy(
-      originalPolicy.enabled,
-      originalPolicy.sources,
-      originalPolicy.action,
-    )
+    isShadowMCPBlockConfiguration(originalPolicy.sources, originalPolicy.action)
   ) {
     return [];
   }

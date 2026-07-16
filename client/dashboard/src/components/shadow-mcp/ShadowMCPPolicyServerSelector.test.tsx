@@ -577,6 +577,31 @@ describe("ShadowMCPPolicyServerSelector", () => {
     });
   });
 
+  it("clears a nonempty search before Escape closes the selector", async () => {
+    render(<ControlledSelector />);
+    const dialog = openSelector();
+    const search = within(dialog).getByRole("searchbox", {
+      name: "Search servers",
+    });
+
+    fireEvent.change(search, { target: { value: "github" } });
+    await waitFor(() =>
+      expect(
+        within(dialog).queryByText(linearServer.canonicalServerUrl),
+      ).toBeNull(),
+    );
+
+    fireEvent.keyDown(search, { key: "Escape" });
+
+    expect((search as HTMLInputElement).value).toBe("");
+    expect(
+      screen.getByRole("dialog", { name: "Select allowed servers" }),
+    ).toBeTruthy();
+    expect(
+      within(dialog).getByText(linearServer.canonicalServerUrl),
+    ).toBeTruthy();
+  });
+
   it("toggles rows and checkboxes once while preserving hidden selections", async () => {
     render(<ControlledSelector />);
     const dialog = openSelector();

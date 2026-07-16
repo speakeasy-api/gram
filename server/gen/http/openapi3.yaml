@@ -47257,7 +47257,7 @@ components:
                     type: array
                     items:
                         type: string
-                    description: Complete desired canonical URL allow set for this policy. Omit to preserve; send empty to clear.
+                    description: Complete desired canonical URL allow set for this policy. Omit or send empty to create no URL-specific allow decisions.
                 sources:
                     type: array
                     items:

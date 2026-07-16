@@ -79,6 +79,7 @@ import { useParams } from "react-router";
 import { useQueryState } from "nuqs";
 import {
   isBlockingShadowMCPPolicy,
+  isShadowMCPBlockConfiguration,
   shadowMCPAllowedURLsForMutation,
   shadowMCPSelectionBaselineForUpdate,
   shadowMCPSelectionIsDirty,
@@ -3552,8 +3553,8 @@ export function StandardPolicyEditor({
   );
   const policyID = policy?.id ?? null;
   const editorIdentity = policyID ?? "create";
-  const originalIsShadowMCPBlock = policy
-    ? isBlockingShadowMCPPolicy(policy.enabled, policy.sources, policy.action)
+  const originalHasShadowMCPBlockConfiguration = policy
+    ? isShadowMCPBlockConfiguration(policy.sources, policy.action)
     : false;
 
   useEffect(() => {
@@ -3566,7 +3567,7 @@ export function StandardPolicyEditor({
     }
 
     const initialURLs =
-      policyID && originalIsShadowMCPBlock
+      policyID && originalHasShadowMCPBlockConfiguration
         ? initialShadowMCPPolicyURLs(inventoryQuery.data, policyID)
         : new Set<string>();
     setSelectedShadowMCPURLs(new Set(initialURLs));
@@ -3576,7 +3577,7 @@ export function StandardPolicyEditor({
     editorIdentity,
     initializedInventoryForPolicy,
     inventoryQuery.data,
-    originalIsShadowMCPBlock,
+    originalHasShadowMCPBlockConfiguration,
     policyID,
     targetIsShadowMCPBlock,
   ]);

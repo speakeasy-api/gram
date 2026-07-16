@@ -308,7 +308,6 @@ func TestUpdateRiskPolicy_ShadowMCPReplacesAllowedURLAudience(t *testing.T) {
 		Name:                  created.Name,
 		AudienceType:          &targeted,
 		AudiencePrincipalUrns: []string{"user:" + authCtx.UserID},
-		ShadowMcpAllowedUrls:  []string{serverURL},
 	})
 	require.NoError(t, err)
 	require.Equal(t, map[string][]string{serverURL: {"user:" + authCtx.UserID}}, shadowMCPPolicyURLPrincipals(t, ctx, ti.conn, created.ID))
