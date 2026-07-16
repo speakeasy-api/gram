@@ -121,7 +121,13 @@ const envKeyRejectedMessage = "Speakeasy hooks rejected the API key configured i
 // deliver relays one event to the server, returning the result and the
 // credential posture. It performs no work when the machine holds no credential
 // so an unauthenticated install never leaks events.
-func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState) {
+//
+// queueBehind marks observe-only events, which may queue behind a non-empty
+// spool instead of sending live: an event that overtakes the outage backlog
+// persists ahead of messages that happened before it. Gating events pass
+// false — their verdict IS the send, so they always go live (after
+// evaluate's bounded pre-verdict drain).
+func (r *Relay) deliver(ctx context.Context, typed any, queueBehind bool) (ingestResult, authState) {
 	// An unreadable speakeasy.json means the deployment identity is unknown:
 	// the default server plus a cached key would route this workspace's events
 	// to whatever project the cache was minted for. Skip the network with the
@@ -176,6 +182,16 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 	// the spooled copy a later drain replays. The server stores at most one
 	// event per key, so every redelivery path is safe.
 	idemKey := newIdempotencyToken()
+	if queueBehind && spoolHasBacklog() {
+		// The spool still holds outage backlog: sending this event live would
+		// persist it ahead of older messages. Queue it behind the backlog and
+		// let the (spawned) drain deliver everything oldest-first — the spool
+		// doubles as an ordered send queue until it runs dry.
+		r.spoolUnsent(idemKey, payload)
+		r.maybeSpawnDrain()
+		r.debugf("event=%s type=%s queued behind spool backlog", base.NativeName, payload.Event.Type)
+		return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: ""}, authRejected: false, failOpen: nil}, stateReady
+	}
 	res := r.send(ctx, c, payload, idemKey)
 	r.debugf("event=%s type=%s server=%s authfile=%s status=%d denied=%t", agenthooks.EventOf(typed).NativeName, payload.Event.Type, r.cfg.ServerURL, authFilePath(), res.statusCode, res.decision.denied())
 	if res.authRejected && c.Source == credEnv {
@@ -236,7 +252,11 @@ func (r *Relay) send(ctx context.Context, c creds, payload components.IngestRequ
 // evaluate delivers a gating event and resolves the block decision under the
 // ratchet and the org's fail-open posture.
 func (r *Relay) evaluate(ctx context.Context, typed any) verdict {
-	res, state := r.deliver(ctx, typed)
+	// Flush any outage backlog first (bounded) so this event's row lands
+	// after the messages that preceded it; the live send below then carries
+	// the authoritative verdict.
+	r.drainBeforeVerdict(ctx)
+	res, state := r.deliver(ctx, typed, false)
 	switch state {
 	case stateNeverAuthed:
 		// A broken config suppresses the nudge: sign-in cannot recover an
@@ -359,7 +379,7 @@ func (r *Relay) onToolPost(ctx context.Context, e *agenthooks.ToolPostEvent) (ag
 	if cursorMCPEcho(&e.Event, e.Tool.Name) {
 		return agenthooks.Observed(), nil
 	}
-	r.deliver(ctx, e)
+	r.deliver(ctx, e, true)
 	return agenthooks.Observed(), nil
 }
 
@@ -380,7 +400,7 @@ func cursorMCPEcho(base *agenthooks.Event, toolName string) bool {
 }
 
 func (r *Relay) onStop(ctx context.Context, e *agenthooks.StopEvent) (agenthooks.StopDecision, error) {
-	r.deliver(ctx, e)
+	r.deliver(ctx, e, true)
 	return agenthooks.Finish(), nil
 }
 
@@ -394,12 +414,12 @@ func (r *Relay) onSessionStart(ctx context.Context, e *agenthooks.SessionStartEv
 	if r.cfg.BrowserLogin && strings.TrimSpace(os.Getenv("GRAM_HOOKS_API_KEY")) == "" && !cached {
 		r.login.tryInteractive(ctx)
 	}
-	r.deliver(ctx, e)
+	r.deliver(ctx, e, true)
 	return agenthooks.ContinueSession(), nil
 }
 
 func (r *Relay) onObserve(ctx context.Context, typed any) error {
-	r.deliver(ctx, typed)
+	r.deliver(ctx, typed, true)
 	return nil
 }
 

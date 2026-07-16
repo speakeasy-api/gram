@@ -111,6 +111,25 @@ func withFileLock(path string, fn func()) {
 	fn()
 }
 
+// withFileTryLock is withFileLock's non-blocking variant: it reports false
+// without running fn when another process already holds the lock. Lock
+// *setup* failures degrade to running unlocked, same as withFileLock — only
+// a genuinely held lock skips.
+func withFileTryLock(path string, fn func()) bool {
+	f, err := os.OpenFile(path+".lock", os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		fn()
+		return true
+	}
+	defer func() { _ = f.Close() }()
+	if err := tryLockFile(f); err != nil {
+		return false
+	}
+	defer unlockFile(f)
+	fn()
+	return true
+}
+
 func readCodexToolQueue(path string) []string {
 	b, err := os.ReadFile(path)
 	if err != nil {

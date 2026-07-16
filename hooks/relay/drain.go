@@ -77,9 +77,65 @@ func Drain(ctx context.Context) DrainSummary {
 		return s
 	}
 	withFileLock(filepath.Join(dir, "drain"), func() {
-		s = drainSpool(ctx, dir)
+		s = drainUntilDry(ctx, dir)
 	})
 	return s
+}
+
+// drainUntilDry re-runs drainSpool while passes make progress. Each pass
+// works from a snapshot of the directory, so entries appended mid-pass —
+// non-gating hooks queue behind a non-empty spool to preserve conversation
+// order — would otherwise strand until the next drain trigger. A pass that
+// only skips (no credential, newer schema) ends the run: retrying cannot
+// deliver those until the machine's state changes.
+func drainUntilDry(ctx context.Context, dir string) DrainSummary {
+	var total DrainSummary
+	for {
+		s := drainSpool(ctx, dir)
+		total.Replayed += s.Replayed
+		total.Dropped += s.Dropped
+		total.Expired += s.Expired
+		// Skipped and Remaining describe the directory now, not a running
+		// tally: a re-skipped entry must not count twice.
+		total.Skipped = s.Skipped
+		total.Remaining = s.Remaining
+		total.Aborted = s.Aborted
+		if s.Aborted || s.Remaining == 0 || s.Replayed+s.Dropped+s.Expired == 0 {
+			return total
+		}
+	}
+}
+
+// gatingDrainBudget bounds the synchronous backlog flush a gating event runs
+// before requesting its verdict. Backlogs are typically small — a budget's
+// worth of draining covers them with room to spare — and a gating hook must
+// answer well inside the provider's ~60s hook kill. Var rather than const so
+// budget-expiry tests don't have to wait out real seconds.
+var gatingDrainBudget = 2 * time.Second
+
+// drainBeforeVerdict synchronously flushes the spool before a gating event's
+// live send so outage backlog persists ahead of it in conversation order.
+// Best-effort by design: it returns immediately when the spool is empty,
+// skips when another drain already holds the lock (waiting on it could burn
+// the whole budget without changing what that drain delivers), and gives up
+// at the budget — enforcement needs the live verdict, so a rare oversized
+// backlog costs row ordering for this one event rather than blocking the
+// user.
+func (r *Relay) drainBeforeVerdict(ctx context.Context) {
+	dir := spoolDirPath()
+	if dir == "" || len(listSpoolEntries(dir)) == 0 {
+		return
+	}
+	dctx, cancel := context.WithTimeout(ctx, gatingDrainBudget)
+	defer cancel()
+	ran := withFileTryLock(filepath.Join(dir, "drain"), func() {
+		s := drainUntilDry(dctx, dir)
+		r.debugf("spool: pre-verdict drain replayed=%d dropped=%d expired=%d skipped=%d remaining=%d aborted=%t",
+			s.Replayed, s.Dropped, s.Expired, s.Skipped, s.Remaining, s.Aborted)
+	})
+	if !ran {
+		r.debugf("spool: pre-verdict drain skipped; another drain holds the lock")
+	}
 }
 
 func drainSpool(ctx context.Context, dir string) DrainSummary {

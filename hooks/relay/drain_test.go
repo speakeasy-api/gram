@@ -3,6 +3,7 @@ package relay
 import (
 	"bytes"
 	"encoding/json"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -229,21 +230,42 @@ func TestMaybeSpawnDrainAfterRecovery(t *testing.T) {
 	startDrainProcess = func() error { spawns++; return nil }
 	t.Cleanup(func() { startDrainProcess = orig })
 
+	// One deployment address across outage and recovery, like a real outage:
+	// bind a port to learn the address, keep it closed during the outage,
+	// then serve on the same address.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	addr := ln.Addr().String()
+	require.NoError(t, ln.Close())
+
 	// Outage: the payload spools, and no drain spawns off a failed send.
-	cfg := authedConfig(t, closedPortURL(t))
+	cfg := authedConfig(t, "http://"+addr)
 	invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 	require.Len(t, spoolFiles(t), 1)
 	require.Zero(t, spawns, "a failed send must not spawn a drain")
 
-	// Recovery: a successful send with a non-empty spool spawns the drain.
-	fs := newFakeServer(t, nil)
-	cfg.ServerURL = fs.URL
-	invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
-	require.Equal(t, 1, spawns, "the first healthy send after an outage must flush the backlog")
+	// Recovery via a gating event: the backlog now flushes synchronously
+	// before the verdict send (drainBeforeVerdict), so the queue empties in
+	// conversation order with no detached spawn needed.
+	var requests int
+	ln2, err := net.Listen("tcp", addr)
+	require.NoError(t, err)
+	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"decision":"allow"}`))
+	}), ReadHeaderTimeout: time.Second}
+	go func() { _ = srv.Serve(ln2) }()
+	t.Cleanup(func() { _ = srv.Close() })
 
-	// Burst: the debounce marker suppresses a second spawn.
 	invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
-	require.Equal(t, 1, spawns, "a burst of healthy sends must not stack drains")
+	require.Zero(t, spawns, "an inline pre-verdict flush must not also spawn a detached drain")
+	require.Empty(t, spoolFiles(t), "the first healthy gating event after an outage must flush the backlog")
+	require.Equal(t, 2, requests, "the spooled entry must replay ahead of the live event")
+
+	// Steady state: healthy sends with an empty spool never pay a spawn.
+	invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+	require.Zero(t, spawns)
 }
 
 // TestMaybeSpawnDrainSkipsEmptySpool: healthy sends on a machine with no

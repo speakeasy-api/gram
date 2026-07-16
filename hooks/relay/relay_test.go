@@ -498,6 +498,9 @@ func TestCachedAuthUsesConfigProject(t *testing.T) {
 // emit afterAgentResponse): the assistant message text and token usage must
 // reach the server as assistant.responded.
 func TestCursorModelResponseRelaysMessage(t *testing.T) {
+	// Isolate the spool: a non-empty backlog makes observe events queue
+	// behind it instead of sending live, which is not under test here.
+	setSpoolStateHome(t)
 	fs := newFakeServer(t, nil)
 	cfg := authedConfig(t, fs.URL)
 	payload := []byte(`{"hook_event_name":"afterAgentResponse","conversation_id":"sess-cursor-1","text":"final answer","input_tokens":10,"output_tokens":5}`)
@@ -591,6 +594,9 @@ func TestWritePluginMatchesPublishedEventSets(t *testing.T) {
 }
 
 func TestClaudeConfigChangeIsRelayed(t *testing.T) {
+	// Isolate the spool: a non-empty backlog makes observe events queue
+	// behind it instead of sending live, which is not under test here.
+	setSpoolStateHome(t)
 	fs := newFakeServer(t, nil)
 	cfg := authedConfig(t, fs.URL)
 	t.Setenv("GRAM_DEVICE_AGENT_COMMANDS", "speakeasy-hooks-test-missing-device-agent")
@@ -624,6 +630,9 @@ func TestParseClaudeMCPInventory(t *testing.T) {
 }
 
 func TestClaudeSessionStartRelaysRedactedMCPInventory(t *testing.T) {
+	// Isolate the spool: a non-empty backlog makes observe events queue
+	// behind it instead of sending live, which is not under test here.
+	setSpoolStateHome(t)
 	if runtime.GOOS == "windows" {
 		t.Skip("fake claude executable uses a POSIX shell")
 	}
@@ -661,6 +670,9 @@ func TestClaudeSessionStartRelaysRedactedMCPInventory(t *testing.T) {
 }
 
 func TestClaudeConfigChangeCollectsFreshMCPInventory(t *testing.T) {
+	// Isolate the spool: a non-empty backlog makes observe events queue
+	// behind it instead of sending live, which is not under test here.
+	setSpoolStateHome(t)
 	if runtime.GOOS == "windows" {
 		t.Skip("fake claude executable uses a POSIX shell")
 	}

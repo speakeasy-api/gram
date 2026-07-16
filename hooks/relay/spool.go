@@ -152,6 +152,14 @@ func commitSpoolEntry(dir string, data []byte) error {
 	return nil
 }
 
+// spoolHasBacklog reports whether undelivered entries are waiting on disk.
+// deliver consults it so observe-only events queue behind an outage backlog
+// instead of overtaking it.
+func spoolHasBacklog() bool {
+	dir := spoolDirPath()
+	return dir != "" && len(listSpoolEntries(dir)) > 0
+}
+
 // spoolDirPath resolves the spool directory without creating it, or "" when
 // no state home exists. Readers (drain, the spawn check) use this so an
 // install that never spooled doesn't grow an empty directory.

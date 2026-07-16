@@ -9,4 +9,6 @@ import "os"
 // and the queue self-heals as entries drain.
 func lockFile(*os.File) error { return nil }
 
+func tryLockFile(*os.File) error { return nil }
+
 func unlockFile(*os.File) {}
