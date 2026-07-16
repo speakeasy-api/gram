@@ -353,6 +353,7 @@ trackedFiles:
   src/funcs/skillsListDistributionAudienceGroups.ts: {}
   src/funcs/skillsListDistributions.ts: {}
   src/funcs/skillsListVersions.ts: {}
+  src/funcs/skillsSync.ts: {}
   src/funcs/skillsUndistribute.ts: {}
   src/funcs/telemetryCaptureEvent.ts: {}
   src/funcs/telemetryGetEmployeeDataFlowGraph.ts: {}
@@ -955,6 +956,11 @@ trackedFiles:
   src/models/components/suggestexclusionrequestbody.ts: {}
   src/models/components/suggestexclusionresult.ts: {}
   src/models/components/syncedagentuser.ts: {}
+  src/models/components/syncskillexception.ts: {}
+  src/models/components/syncskillinstalled.ts: {}
+  src/models/components/syncskillsrequestbody.ts: {}
+  src/models/components/syncskillsresult.ts: {}
+  src/models/components/syncskillupdate.ts: {}
   src/models/components/telemetrylogrecord.ts: {}
   src/models/components/telemetrywindowpayload.ts: {}
   src/models/components/testdetectionrulematch.ts: {}
@@ -1431,6 +1437,7 @@ trackedFiles:
   src/models/operations/suggestcustomdetectionrule.ts: {}
   src/models/operations/suggestexclusion.ts: {}
   src/models/operations/switchauthscopes.ts: {}
+  src/models/operations/syncskills.ts: {}
   src/models/operations/testdetectionrule.ts: {}
   src/models/operations/triggerriskanalysis.ts: {}
   src/models/operations/undistributeskill.ts: {}
@@ -1991,6 +1998,7 @@ trackedFiles:
   src/react-query/skills.core.ts: {}
   src/react-query/skills.ts: {}
   src/react-query/switchScopes.ts: {}
+  src/react-query/syncSkills.ts: {}
   src/react-query/syncedAgentUsers.core.ts: {}
   src/react-query/syncedAgentUsers.ts: {}
   src/react-query/telemetryCaptureEvent.ts: {}
@@ -6019,6 +6027,20 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  syncSkills:
+    speakeasy-default-sync-skills:
+      parameters:
+        header:
+          X-Gram-Hook-Hostname: "<value>"
+      requestBody:
+        application/json: {"exceptions": [], "installed": [], "provider": "claude"}
+      responses:
+        "200":
+          application/json: {"removals": ["<value 1>", "<value 2>"], "updates": [{"content": "<value>", "name": "<value>", "raw_sha256": "<value>"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   testDetectionRule:
     speakeasy-default-test-detection-rule:
       requestBody:

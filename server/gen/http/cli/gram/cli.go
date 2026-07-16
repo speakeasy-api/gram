@@ -127,7 +127,7 @@ func UsageCommands() []string {
 		"remote-sessions (list-remote-sessions|revoke-remote-session)",
 		"resources list-resources",
 		"risk (create-risk-policy|list-risk-policies|list-builtin-exclusions|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-for-agent|unmask-risk-result|list-risk-results-by-chat|get-risk-overview|list-risk-categories|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-policy-status|create-risk-policy-bypass-request|acknowledge-risk-policy-challenge|get-risk-policy-challenge|decline-risk-policy-challenge|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|suggest-exclusion|test-detection-rule|evaluate-prompt-guardrail|save-risk-eval-review|list-risk-eval-reviews|delete-risk-eval-review)",
-		"skills (create|add-version|list|get|list-versions|archive|distribute|undistribute|list-distributions|get-distribution-status|list-distribution-audience-groups)",
+		"skills (create|add-version|list|get|list-versions|archive|distribute|undistribute|list-distributions|get-distribution-status|list-distribution-audience-groups|sync)",
 		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-employee-data-flow-graph|get-observability-overview|get-project-overview|query|query-tum-details|list-sessions|list-filter-options|list-attribute-keys|get-hooks-summary|get-tool-usage-summary|list-tool-usage-traces|get-tool-usage-filter-options|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
 		"tools list-tools",
@@ -2064,6 +2064,13 @@ func ParseEndpoint(
 		skillsListDistributionAudienceGroupsApikeyTokenFlag      = skillsListDistributionAudienceGroupsFlags.String("apikey-token", "", "")
 		skillsListDistributionAudienceGroupsProjectSlugInputFlag = skillsListDistributionAudienceGroupsFlags.String("project-slug-input", "", "")
 
+		skillsSyncFlags                = flag.NewFlagSet("sync", flag.ExitOnError)
+		skillsSyncBodyFlag             = skillsSyncFlags.String("body", "REQUIRED", "")
+		skillsSyncApikeyTokenFlag      = skillsSyncFlags.String("apikey-token", "", "")
+		skillsSyncProjectSlugInputFlag = skillsSyncFlags.String("project-slug-input", "", "")
+		skillsSyncHostnameFlag         = skillsSyncFlags.String("hostname", "REQUIRED", "")
+		skillsSyncIdempotencyKeyFlag   = skillsSyncFlags.String("idempotency-key", "", "")
+
 		telemetryFlags = flag.NewFlagSet("telemetry", flag.ContinueOnError)
 
 		telemetrySearchLogsFlags                = flag.NewFlagSet("search-logs", flag.ExitOnError)
@@ -3004,6 +3011,7 @@ func ParseEndpoint(
 	skillsListDistributionsFlags.Usage = skillsListDistributionsUsage
 	skillsGetDistributionStatusFlags.Usage = skillsGetDistributionStatusUsage
 	skillsListDistributionAudienceGroupsFlags.Usage = skillsListDistributionAudienceGroupsUsage
+	skillsSyncFlags.Usage = skillsSyncUsage
 
 	telemetryFlags.Usage = telemetryUsage
 	telemetrySearchLogsFlags.Usage = telemetrySearchLogsUsage
@@ -4449,6 +4457,9 @@ func ParseEndpoint(
 
 			case "list-distribution-audience-groups":
 				epf = skillsListDistributionAudienceGroupsFlags
+
+			case "sync":
+				epf = skillsSyncFlags
 
 			}
 
@@ -5978,6 +5989,9 @@ func ParseEndpoint(
 			case "list-distribution-audience-groups":
 				endpoint = c.ListDistributionAudienceGroups()
 				data, err = skillsc.BuildListDistributionAudienceGroupsPayload(*skillsListDistributionAudienceGroupsSessionTokenFlag, *skillsListDistributionAudienceGroupsApikeyTokenFlag, *skillsListDistributionAudienceGroupsProjectSlugInputFlag)
+			case "sync":
+				endpoint = c.Sync()
+				data, err = skillsc.BuildSyncPayload(*skillsSyncBodyFlag, *skillsSyncApikeyTokenFlag, *skillsSyncProjectSlugInputFlag, *skillsSyncHostnameFlag, *skillsSyncIdempotencyKeyFlag)
 			}
 		case "telemetry":
 			c := telemetryc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -14428,6 +14442,7 @@ func skillsUsage() {
 	fmt.Fprintln(os.Stderr, `    list-distributions: List active plugin skill distributions for the current project.`)
 	fmt.Fprintln(os.Stderr, `    get-distribution-status: Return mutually exclusive sync receipt rollups for an active skill distribution.`)
 	fmt.Fprintln(os.Stderr, `    list-distribution-audience-groups: List active local WorkOS directory groups available as a skill distribution audience.`)
+	fmt.Fprintln(os.Stderr, `    sync: Synchronize the authenticated user's locally managed Claude skills with active project distributions. A 401 or 403 response means the client must remove all Gram-managed skills. Transient failures retain the last successfully managed local state.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s skills COMMAND --help\n", os.Args[0])
@@ -14696,6 +14711,32 @@ func skillsListDistributionAudienceGroupsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills list-distribution-audience-groups --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func skillsSyncUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] skills sync", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprint(os.Stderr, " -hostname STRING")
+	fmt.Fprint(os.Stderr, " -idempotency-key STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Synchronize the authenticated user's locally managed Claude skills with active project distributions. A 401 or 403 response means the client must remove all Gram-managed skills. Transient failures retain the last successfully managed local state.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+	fmt.Fprintln(os.Stderr, `    -hostname STRING: `)
+	fmt.Fprintln(os.Stderr, `    -idempotency-key STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills sync --body '{\n      \"exceptions\": [\n         {\n            \"name\": \"aa\",\n            \"status\": \"fs_readonly\"\n         },\n         {\n            \"name\": \"aa\",\n            \"status\": \"fs_readonly\"\n         },\n         {\n            \"name\": \"aa\",\n            \"status\": \"fs_readonly\"\n         }\n      ],\n      \"installed\": [\n         {\n            \"name\": \"aa\",\n            \"raw_sha256\": \"1111111111111111111111111111111111111111111111111111111111111111\"\n         },\n         {\n            \"name\": \"aa\",\n            \"raw_sha256\": \"1111111111111111111111111111111111111111111111111111111111111111\"\n         },\n         {\n            \"name\": \"aa\",\n            \"raw_sha256\": \"1111111111111111111111111111111111111111111111111111111111111111\"\n         }\n      ],\n      \"provider\": \"claude\"\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\" --hostname \"aa\" --idempotency-key \"abc123\"")
 }
 
 // telemetryUsage displays the usage of the telemetry command and its

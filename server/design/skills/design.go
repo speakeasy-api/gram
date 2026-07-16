@@ -327,6 +327,42 @@ var _ = Service("skills", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "listDistributionAudienceGroups")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SkillDistributionAudienceGroups"}`)
 	})
+
+	Method("sync", func() {
+		Description("Synchronize the authenticated user's locally managed Claude skills with active project distributions. A 401 or 403 response means the client must remove all Gram-managed skills. Transient failures retain the last successfully managed local state.")
+
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("hooks")
+		})
+
+		Payload(func() {
+			Extend(SyncSkillsRequestBody)
+			security.ByKeyPayload()
+			security.ProjectPayload()
+			Attribute("hostname", String, "The machine hostname used to isolate sync receipt state.", func() {
+				MinLength(1)
+				MaxLength(255)
+			})
+			Attribute("idempotency_key", String, "Accepted for hooks transport compatibility. It does not deduplicate or order sync snapshots.")
+			Required("hostname")
+		})
+
+		Result(SyncSkillsResult)
+
+		HTTP(func() {
+			POST("/rpc/skills.sync")
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Header("hostname:X-Gram-Hook-Hostname")
+			Header("idempotency_key:Idempotency-Key")
+			Body(SyncSkillsRequestBody)
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "syncSkills")
+		Meta("openapi:extension:x-speakeasy-name-override", "sync")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SyncSkills"}`)
+	})
 })
 
 var CreateSkillRequestBody = Type("CreateSkillRequestBody", func() {
@@ -369,6 +405,63 @@ var UndistributeSkillRequestBody = Type("UndistributeSkillRequestBody", func() {
 
 	Attribute("id", String, "The skill ID.", func() { Format(FormatUUID) })
 	Required("id")
+})
+
+var SyncSkillInstalled = Type("SyncSkillInstalled", func() {
+	Description("A Gram-managed skill currently present on the caller's machine.")
+	Attribute("name", String, "The normalized skill name.", func() {
+		MinLength(1)
+		MaxLength(64)
+		Pattern(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
+	})
+	Attribute("raw_sha256", String, "The SHA-256 digest of the exact local SKILL.md content.", func() {
+		Pattern(`^[a-f0-9]{64}$`)
+	})
+	Required("name", "raw_sha256")
+})
+
+var SyncSkillException = Type("SyncSkillException", func() {
+	Description("A distributed skill the caller could not apply locally.")
+	Attribute("name", String, "The normalized skill name.", func() {
+		MinLength(1)
+		MaxLength(64)
+		Pattern(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
+	})
+	Attribute("status", String, "Why the distributed skill was not applied.", func() {
+		Enum("conflict_skipped", "fs_readonly")
+	})
+	Required("name", "status")
+})
+
+var SyncSkillsRequestBody = Type("SyncSkillsRequestBody", func() {
+	Meta("openapi:typename", "SyncSkillsRequestBody")
+	Description("A complete snapshot of Gram-managed skills and current application exceptions for one machine.")
+	Attribute("provider", String, "The local coding assistant provider.", func() {
+		Enum("claude")
+	})
+	Attribute("installed", ArrayOf(SyncSkillInstalled), "All Gram-managed skills currently installed on the machine.", func() {
+		MaxLength(200)
+	})
+	Attribute("exceptions", ArrayOf(SyncSkillException), "All current failures to apply distributed skills on the machine.", func() {
+		MaxLength(200)
+	})
+	Required("provider", "installed", "exceptions")
+})
+
+var SyncSkillUpdate = Type("SyncSkillUpdate", func() {
+	Description("A skill manifest the caller should write to local managed state.")
+	Attribute("name", String, "The normalized skill name.")
+	Attribute("raw_sha256", String, "The SHA-256 digest of content.")
+	Attribute("content", String, "The complete SKILL.md content to write.")
+	Attribute("description", String, "The optional description from the resolved manifest version.")
+	Required("name", "raw_sha256", "content")
+})
+
+var SyncSkillsResult = Type("SyncSkillsResult", func() {
+	Description("The deterministic delta from the submitted complete snapshot to the user's current visible distributions.")
+	Attribute("updates", ArrayOf(SyncSkillUpdate), "New or changed skill manifests to write.")
+	Attribute("removals", ArrayOf(String), "Installed Gram-managed skill names no longer visible to this user.")
+	Required("updates", "removals")
 })
 
 var SkillValidationError = Type("SkillValidationError", func() {

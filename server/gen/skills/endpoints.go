@@ -27,6 +27,7 @@ type Endpoints struct {
 	ListDistributions              goa.Endpoint
 	GetDistributionStatus          goa.Endpoint
 	ListDistributionAudienceGroups goa.Endpoint
+	Sync                           goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "skills" service with endpoints.
@@ -45,6 +46,7 @@ func NewEndpoints(s Service) *Endpoints {
 		ListDistributions:              NewListDistributionsEndpoint(s, a.APIKeyAuth),
 		GetDistributionStatus:          NewGetDistributionStatusEndpoint(s, a.APIKeyAuth),
 		ListDistributionAudienceGroups: NewListDistributionAudienceGroupsEndpoint(s, a.APIKeyAuth),
+		Sync:                           NewSyncEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -61,6 +63,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListDistributions = m(e.ListDistributions)
 	e.GetDistributionStatus = m(e.GetDistributionStatus)
 	e.ListDistributionAudienceGroups = m(e.ListDistributionAudienceGroups)
+	e.Sync = m(e.Sync)
 }
 
 // NewCreateEndpoint returns an endpoint function that calls the method
@@ -709,5 +712,40 @@ func NewListDistributionAudienceGroupsEndpoint(s Service, authAPIKeyFn security.
 			return nil, err
 		}
 		return s.ListDistributionAudienceGroups(ctx, p)
+	}
+}
+
+// NewSyncEndpoint returns an endpoint function that calls the method "sync" of
+// service "skills".
+func NewSyncEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SyncPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			RequiredScopes: []string{"hooks"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"hooks"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.Sync(ctx, p)
 	}
 }

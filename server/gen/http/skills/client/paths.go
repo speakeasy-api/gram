@@ -61,3 +61,8 @@ func GetDistributionStatusSkillsPath() string {
 func ListDistributionAudienceGroupsSkillsPath() string {
 	return "/rpc/skills.listDistributionAudienceGroups"
 }
+
+// SyncSkillsPath returns the URL path to the skills service sync HTTP endpoint.
+func SyncSkillsPath() string {
+	return "/rpc/skills.sync"
+}

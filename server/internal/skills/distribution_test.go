@@ -1,6 +1,7 @@
 package skills_test
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -412,4 +413,99 @@ func TestSkillDistributionReadScopeAndWriteMutations(t *testing.T) {
 	require.NoError(t, err)
 	_, err = ti.service.GetDistributionStatus(readCtx, &gen.GetDistributionStatusPayload{ID: created.Skill.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
+}
+
+func TestSkillDistributionActiveLimitAllowsUpdates(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	var firstSkill repo.Skill
+	var firstVersion repo.SkillVersion
+	overflowSkills := make([]repo.Skill, 0, 2)
+	for i := range 201 {
+		name := fmt.Sprintf("distribution-limit-%03d", i)
+		skill, err := ti.repo.CreateSkill(ctx, repo.CreateSkillParams{
+			ProjectID:   ti.projectID,
+			Name:        name,
+			DisplayName: name,
+			Summary:     conv.ToPGText("limit fixture"),
+		})
+		require.NoError(t, err)
+		version, err := ti.repo.CreateSkillVersion(ctx, repo.CreateSkillVersionParams{
+			Content:          skillManifest(name, "Limit fixture.", "fixture"),
+			CanonicalSha256:  fmt.Sprintf("canonical-%03d", i),
+			RawSha256:        fmt.Sprintf("raw-%03d", i),
+			Description:      conv.ToPGText("Limit fixture."),
+			Metadata:         []byte(`{}`),
+			SpecValid:        true,
+			ValidationErrors: []byte(`[]`),
+			CreatedByUserID:  ti.authContext.UserID,
+			ProjectID:        ti.projectID,
+			SkillID:          skill.ID,
+		})
+		require.NoError(t, err)
+		if i == 0 {
+			firstSkill = skill
+			firstVersion = version
+		}
+		if i >= 199 {
+			overflowSkills = append(overflowSkills, skill)
+			continue
+		}
+		_, err = ti.repo.CreateSkillDistribution(ctx, repo.CreateSkillDistributionParams{
+			PinnedVersionID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			Audience:        nil,
+			CreatedByUserID: ti.authContext.UserID,
+			ProjectID:       ti.projectID,
+			SkillID:         skill.ID,
+		})
+		require.NoError(t, err)
+	}
+
+	count, err := ti.repo.CountActivePluginSkillDistributions(ctx, ti.projectID)
+	require.NoError(t, err)
+	require.Equal(t, int64(199), count)
+
+	start := make(chan struct{})
+	results := make(chan concurrentDistributionResult, len(overflowSkills))
+	for _, skill := range overflowSkills {
+		go func() {
+			<-start
+			distribution, distributeErr := ti.service.Distribute(ctx, &gen.DistributePayload{
+				ID: skill.ID.String(), PinnedVersionID: nil, AudienceGroupIds: nil,
+				SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+			})
+			if distributeErr != nil {
+				results <- concurrentDistributionResult{id: "", err: distributeErr}
+				return
+			}
+			results <- concurrentDistributionResult{id: distribution.ID, err: nil}
+		}()
+	}
+	close(start)
+
+	succeeded := 0
+	rejected := 0
+	for range overflowSkills {
+		result := <-results
+		if result.err == nil {
+			succeeded++
+			continue
+		}
+		requireOopsCode(t, result.err, oops.CodeBadRequest)
+		rejected++
+	}
+	require.Equal(t, 1, succeeded)
+	require.Equal(t, 1, rejected)
+	count, err = ti.repo.CountActivePluginSkillDistributions(ctx, ti.projectID)
+	require.NoError(t, err)
+	require.Equal(t, int64(200), count)
+
+	pinnedVersionID := firstVersion.ID.String()
+	updated, err := ti.service.Distribute(ctx, &gen.DistributePayload{
+		ID: firstSkill.ID.String(), PinnedVersionID: &pinnedVersionID, AudienceGroupIds: nil,
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, pinnedVersionID, *updated.PinnedVersionID)
 }

@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"unicode/utf8"
 
 	skills "github.com/speakeasy-api/gram/server/gen/skills"
 	goa "goa.design/goa/v3/pkg"
@@ -495,6 +496,115 @@ func BuildListDistributionAudienceGroupsPayload(skillsListDistributionAudienceGr
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildSyncPayload builds the payload for the skills sync endpoint from CLI
+// flags.
+func BuildSyncPayload(skillsSyncBody string, skillsSyncApikeyToken string, skillsSyncProjectSlugInput string, skillsSyncHostname string, skillsSyncIdempotencyKey string) (*skills.SyncPayload, error) {
+	var err error
+	var body SyncRequestBody
+	{
+		err = json.Unmarshal([]byte(skillsSyncBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"exceptions\": [\n         {\n            \"name\": \"aa\",\n            \"status\": \"fs_readonly\"\n         },\n         {\n            \"name\": \"aa\",\n            \"status\": \"fs_readonly\"\n         },\n         {\n            \"name\": \"aa\",\n            \"status\": \"fs_readonly\"\n         }\n      ],\n      \"installed\": [\n         {\n            \"name\": \"aa\",\n            \"raw_sha256\": \"1111111111111111111111111111111111111111111111111111111111111111\"\n         },\n         {\n            \"name\": \"aa\",\n            \"raw_sha256\": \"1111111111111111111111111111111111111111111111111111111111111111\"\n         },\n         {\n            \"name\": \"aa\",\n            \"raw_sha256\": \"1111111111111111111111111111111111111111111111111111111111111111\"\n         }\n      ],\n      \"provider\": \"claude\"\n   }'")
+		}
+		if body.Installed == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("installed", "body"))
+		}
+		if body.Exceptions == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("exceptions", "body"))
+		}
+		if !(body.Provider == "claude") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.provider", body.Provider, []any{"claude"}))
+		}
+		if len(body.Installed) > 200 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.installed", body.Installed, len(body.Installed), 200, false))
+		}
+		for _, e := range body.Installed {
+			if e != nil {
+				if err2 := ValidateSyncSkillInstalledRequestBodyRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		if len(body.Exceptions) > 200 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.exceptions", body.Exceptions, len(body.Exceptions), 200, false))
+		}
+		for _, e := range body.Exceptions {
+			if e != nil {
+				if err2 := ValidateSyncSkillExceptionRequestBodyRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if skillsSyncApikeyToken != "" {
+			apikeyToken = &skillsSyncApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if skillsSyncProjectSlugInput != "" {
+			projectSlugInput = &skillsSyncProjectSlugInput
+		}
+	}
+	var hostname string
+	{
+		hostname = skillsSyncHostname
+		if utf8.RuneCountInString(hostname) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("hostname", hostname, utf8.RuneCountInString(hostname), 1, true))
+		}
+		if utf8.RuneCountInString(hostname) > 255 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("hostname", hostname, utf8.RuneCountInString(hostname), 255, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var idempotencyKey *string
+	{
+		if skillsSyncIdempotencyKey != "" {
+			idempotencyKey = &skillsSyncIdempotencyKey
+		}
+	}
+	v := &skills.SyncPayload{
+		Provider: body.Provider,
+	}
+	if body.Installed != nil {
+		v.Installed = make([]*skills.SyncSkillInstalled, len(body.Installed))
+		for i, val := range body.Installed {
+			if val == nil {
+				v.Installed[i] = nil
+				continue
+			}
+			v.Installed[i] = marshalSyncSkillInstalledRequestBodyRequestBodyToSkillsSyncSkillInstalled(val)
+		}
+	} else {
+		v.Installed = []*skills.SyncSkillInstalled{}
+	}
+	if body.Exceptions != nil {
+		v.Exceptions = make([]*skills.SyncSkillException, len(body.Exceptions))
+		for i, val := range body.Exceptions {
+			if val == nil {
+				v.Exceptions[i] = nil
+				continue
+			}
+			v.Exceptions[i] = marshalSyncSkillExceptionRequestBodyRequestBodyToSkillsSyncSkillException(val)
+		}
+	} else {
+		v.Exceptions = []*skills.SyncSkillException{}
+	}
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+	v.Hostname = hostname
+	v.IdempotencyKey = idempotencyKey
 
 	return v, nil
 }

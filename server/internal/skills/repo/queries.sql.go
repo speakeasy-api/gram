@@ -45,6 +45,21 @@ func (q *Queries) ArchiveSkill(ctx context.Context, arg ArchiveSkillParams) (Ski
 	return i, err
 }
 
+const countActivePluginSkillDistributions = `-- name: CountActivePluginSkillDistributions :one
+SELECT COUNT(*)
+FROM skill_distributions
+WHERE project_id = $1
+  AND channel = 'plugin'
+  AND revoked_at IS NULL
+`
+
+func (q *Queries) CountActivePluginSkillDistributions(ctx context.Context, projectID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countActivePluginSkillDistributions, projectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createSkill = `-- name: CreateSkill :one
 INSERT INTO skills (
   project_id,
@@ -583,6 +598,51 @@ func (q *Queries) GetSkillState(ctx context.Context, arg GetSkillStateParams) (G
 	return i, err
 }
 
+const getSkillSyncUpdateContents = `-- name: GetSkillSyncUpdateContents :many
+SELECT
+  sv.id AS skill_version_id,
+  sv.content,
+  sv.description
+FROM skill_versions sv
+JOIN skills s
+  ON s.id = sv.skill_id
+  AND s.project_id = $1
+  AND s.archived_at IS NULL
+WHERE sv.id = ANY($2::uuid[])
+  AND sv.spec_valid IS TRUE
+`
+
+type GetSkillSyncUpdateContentsParams struct {
+	ProjectID       uuid.UUID
+	SkillVersionIds []uuid.UUID
+}
+
+type GetSkillSyncUpdateContentsRow struct {
+	SkillVersionID uuid.UUID
+	Content        string
+	Description    pgtype.Text
+}
+
+func (q *Queries) GetSkillSyncUpdateContents(ctx context.Context, arg GetSkillSyncUpdateContentsParams) ([]GetSkillSyncUpdateContentsRow, error) {
+	rows, err := q.db.Query(ctx, getSkillSyncUpdateContents, arg.ProjectID, arg.SkillVersionIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetSkillSyncUpdateContentsRow
+	for rows.Next() {
+		var i GetSkillSyncUpdateContentsRow
+		if err := rows.Scan(&i.SkillVersionID, &i.Content, &i.Description); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getSkillVersionByHash = `-- name: GetSkillVersionByHash :one
 SELECT sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.created_at, sv.created_by_user_id
 FROM skill_versions sv
@@ -740,6 +800,59 @@ func (q *Queries) ListSkillDistributionAudienceGroups(ctx context.Context, proje
 	return items, nil
 }
 
+const listSkillSyncReceiptsForMachine = `-- name: ListSkillSyncReceiptsForMachine :many
+SELECT project_id, skill_id, skill_version_id, user_id, hostname, provider, status, synced_at, created_at, updated_at
+FROM skill_sync_receipts
+WHERE project_id = $1
+  AND user_id = $2
+  AND hostname = $3
+  AND provider = $4
+ORDER BY skill_id ASC
+`
+
+type ListSkillSyncReceiptsForMachineParams struct {
+	ProjectID uuid.UUID
+	UserID    string
+	Hostname  string
+	Provider  string
+}
+
+func (q *Queries) ListSkillSyncReceiptsForMachine(ctx context.Context, arg ListSkillSyncReceiptsForMachineParams) ([]SkillSyncReceipt, error) {
+	rows, err := q.db.Query(ctx, listSkillSyncReceiptsForMachine,
+		arg.ProjectID,
+		arg.UserID,
+		arg.Hostname,
+		arg.Provider,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SkillSyncReceipt
+	for rows.Next() {
+		var i SkillSyncReceipt
+		if err := rows.Scan(
+			&i.ProjectID,
+			&i.SkillID,
+			&i.SkillVersionID,
+			&i.UserID,
+			&i.Hostname,
+			&i.Provider,
+			&i.Status,
+			&i.SyncedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSkillVersions = `-- name: ListSkillVersions :many
 SELECT sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.created_at, sv.created_by_user_id
 FROM skill_versions sv
@@ -874,6 +987,102 @@ func (q *Queries) ListSkills(ctx context.Context, arg ListSkillsParams) ([]ListS
 	return items, nil
 }
 
+const listUserSyncableSkillDistributions = `-- name: ListUserSyncableSkillDistributions :many
+SELECT
+  s.id AS skill_id,
+  s.name,
+  COALESCE(resolved.id, '00000000-0000-0000-0000-000000000000'::uuid) AS resolved_version_id,
+  COALESCE(resolved.raw_sha256, '') AS raw_sha256
+FROM skill_distributions sd
+JOIN projects p ON p.id = sd.project_id
+JOIN skills s
+  ON s.project_id = sd.project_id
+  AND s.id = sd.skill_id
+  AND s.archived_at IS NULL
+LEFT JOIN LATERAL (
+  SELECT
+    sv.id,
+    sv.raw_sha256
+  FROM skill_versions sv
+  WHERE sv.skill_id = sd.skill_id
+    AND sv.spec_valid IS TRUE
+    AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
+  ORDER BY sv.created_at DESC, sv.id DESC
+  LIMIT 1
+) resolved ON TRUE
+WHERE sd.project_id = $1
+  AND sd.channel = 'plugin'
+  AND sd.revoked_at IS NULL
+  AND (
+    sd.audience IS NULL
+    OR EXISTS (
+      SELECT 1
+      FROM directory_users du
+      JOIN directory_user_group_memberships m
+        ON m.directory_user_id = du.id
+        AND m.deleted IS FALSE
+      JOIN directory_groups dg
+        ON dg.id = m.directory_group_id
+        AND dg.organization_id = p.organization_id
+        AND dg.deleted IS FALSE
+        AND dg.workos_deleted IS FALSE
+      WHERE du.organization_id = p.organization_id
+        AND du.user_id = $2
+        AND du.deleted IS FALSE
+        AND du.workos_deleted IS FALSE
+        AND dg.workos_directory_group_id = ANY(sd.audience)
+    )
+  )
+ORDER BY s.name ASC
+FOR KEY SHARE OF s
+`
+
+type ListUserSyncableSkillDistributionsParams struct {
+	ProjectID uuid.UUID
+	UserID    pgtype.Text
+}
+
+type ListUserSyncableSkillDistributionsRow struct {
+	SkillID           uuid.UUID
+	Name              string
+	ResolvedVersionID uuid.UUID
+	RawSha256         string
+}
+
+func (q *Queries) ListUserSyncableSkillDistributions(ctx context.Context, arg ListUserSyncableSkillDistributionsParams) ([]ListUserSyncableSkillDistributionsRow, error) {
+	rows, err := q.db.Query(ctx, listUserSyncableSkillDistributions, arg.ProjectID, arg.UserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserSyncableSkillDistributionsRow
+	for rows.Next() {
+		var i ListUserSyncableSkillDistributionsRow
+		if err := rows.Scan(
+			&i.SkillID,
+			&i.Name,
+			&i.ResolvedVersionID,
+			&i.RawSha256,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockSkillDistributionProject = `-- name: LockSkillDistributionProject :exec
+SELECT pg_advisory_xact_lock(hashtextextended('skill-distributions:' || ($1::uuid)::text, 0))
+`
+
+func (q *Queries) LockSkillDistributionProject(ctx context.Context, projectID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, lockSkillDistributionProject, projectID)
+	return err
+}
+
 const lockSkillName = `-- name: LockSkillName :exec
 SELECT pg_advisory_xact_lock(hashtextextended('skill:' || ($1::uuid)::text || ':' || $2::text, 0))
 `
@@ -886,6 +1095,179 @@ type LockSkillNameParams struct {
 func (q *Queries) LockSkillName(ctx context.Context, arg LockSkillNameParams) error {
 	_, err := q.db.Exec(ctx, lockSkillName, arg.ProjectID, arg.Name)
 	return err
+}
+
+const lockSkillSyncMachine = `-- name: LockSkillSyncMachine :exec
+SELECT pg_advisory_xact_lock(hashtextextended(jsonb_build_array(
+  'skill-sync',
+  ($1::uuid)::text,
+  $2::text,
+  $3::text,
+  $4::text
+)::text, 0))
+`
+
+type LockSkillSyncMachineParams struct {
+	ProjectID uuid.UUID
+	UserID    string
+	Hostname  string
+	Provider  string
+}
+
+func (q *Queries) LockSkillSyncMachine(ctx context.Context, arg LockSkillSyncMachineParams) error {
+	_, err := q.db.Exec(ctx, lockSkillSyncMachine,
+		arg.ProjectID,
+		arg.UserID,
+		arg.Hostname,
+		arg.Provider,
+	)
+	return err
+}
+
+const reconcileSkillSyncReceipts = `-- name: ReconcileSkillSyncReceipts :one
+WITH submitted AS (
+  SELECT
+    unnest($1::uuid[]) AS skill_id,
+    unnest($2::uuid[]) AS skill_version_id,
+    unnest($3::text[]) AS status
+), valid_receipts AS (
+  SELECT
+    s.project_id,
+    s.id AS skill_id,
+    NULLIF(submitted.skill_version_id, '00000000-0000-0000-0000-000000000000'::uuid) AS skill_version_id,
+    submitted.status
+  FROM submitted
+  JOIN skills s
+    ON s.project_id = $4
+    AND s.id = submitted.skill_id
+    AND s.archived_at IS NULL
+  WHERE submitted.skill_version_id = '00000000-0000-0000-0000-000000000000'::uuid
+    OR EXISTS (
+      SELECT 1
+      FROM skill_versions sv
+      WHERE sv.skill_id = s.id
+        AND sv.id = submitted.skill_version_id
+        AND sv.spec_valid IS TRUE
+    )
+  FOR KEY SHARE OF s
+), upserted AS (
+  INSERT INTO skill_sync_receipts (
+    project_id,
+    skill_id,
+    skill_version_id,
+    user_id,
+    hostname,
+    provider,
+    status
+  )
+  SELECT
+    valid_receipts.project_id,
+    valid_receipts.skill_id,
+    valid_receipts.skill_version_id,
+    $5,
+    $6,
+    $7,
+    valid_receipts.status
+  FROM valid_receipts
+  ON CONFLICT (project_id, skill_id, user_id, hostname, provider) DO UPDATE SET
+    skill_version_id = EXCLUDED.skill_version_id,
+    status = EXCLUDED.status,
+    synced_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+  RETURNING skill_id
+), pruned AS (
+  DELETE FROM skill_sync_receipts
+  WHERE project_id = $4
+    AND user_id = $5
+    AND hostname = $6
+    AND provider = $7
+    AND NOT (skill_id = ANY($1::uuid[]))
+  RETURNING skill_id
+)
+SELECT
+  (SELECT COUNT(*) FROM upserted) AS upserted_count,
+  (SELECT COUNT(*) FROM pruned) AS pruned_count
+`
+
+type ReconcileSkillSyncReceiptsParams struct {
+	SkillIds        []uuid.UUID
+	SkillVersionIds []uuid.UUID
+	Statuses        []string
+	ProjectID       uuid.UUID
+	UserID          string
+	Hostname        string
+	Provider        string
+}
+
+type ReconcileSkillSyncReceiptsRow struct {
+	UpsertedCount int64
+	PrunedCount   int64
+}
+
+func (q *Queries) ReconcileSkillSyncReceipts(ctx context.Context, arg ReconcileSkillSyncReceiptsParams) (ReconcileSkillSyncReceiptsRow, error) {
+	row := q.db.QueryRow(ctx, reconcileSkillSyncReceipts,
+		arg.SkillIds,
+		arg.SkillVersionIds,
+		arg.Statuses,
+		arg.ProjectID,
+		arg.UserID,
+		arg.Hostname,
+		arg.Provider,
+	)
+	var i ReconcileSkillSyncReceiptsRow
+	err := row.Scan(&i.UpsertedCount, &i.PrunedCount)
+	return i, err
+}
+
+const resolveSkillVersionsByRawSHA = `-- name: ResolveSkillVersionsByRawSHA :many
+SELECT
+  s.id AS skill_id,
+  sv.id AS skill_version_id
+FROM (
+  SELECT
+    unnest($1::uuid[]) AS skill_id,
+    unnest($2::text[]) AS raw_sha256
+) submitted
+JOIN skills s
+  ON s.project_id = $3
+  AND s.id = submitted.skill_id
+  AND s.archived_at IS NULL
+JOIN skill_versions sv
+  ON sv.skill_id = submitted.skill_id
+  AND sv.raw_sha256 = submitted.raw_sha256
+  AND sv.spec_valid IS TRUE
+FOR KEY SHARE OF s
+`
+
+type ResolveSkillVersionsByRawSHAParams struct {
+	SkillIds   []uuid.UUID
+	RawSha256s []string
+	ProjectID  uuid.UUID
+}
+
+type ResolveSkillVersionsByRawSHARow struct {
+	SkillID        uuid.UUID
+	SkillVersionID uuid.UUID
+}
+
+func (q *Queries) ResolveSkillVersionsByRawSHA(ctx context.Context, arg ResolveSkillVersionsByRawSHAParams) ([]ResolveSkillVersionsByRawSHARow, error) {
+	rows, err := q.db.Query(ctx, resolveSkillVersionsByRawSHA, arg.SkillIds, arg.RawSha256s, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ResolveSkillVersionsByRawSHARow
+	for rows.Next() {
+		var i ResolveSkillVersionsByRawSHARow
+		if err := rows.Scan(&i.SkillID, &i.SkillVersionID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const revokeActiveSkillDistribution = `-- name: RevokeActiveSkillDistribution :one

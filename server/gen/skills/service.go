@@ -52,6 +52,11 @@ type Service interface {
 	// List active local WorkOS directory groups available as a skill distribution
 	// audience.
 	ListDistributionAudienceGroups(context.Context, *ListDistributionAudienceGroupsPayload) (res *ListSkillDistributionAudienceGroupsResult, err error)
+	// Synchronize the authenticated user's locally managed Claude skills with
+	// active project distributions. A 401 or 403 response means the client must
+	// remove all Gram-managed skills. Transient failures retain the last
+	// successfully managed local state.
+	Sync(context.Context, *SyncPayload) (res *SyncSkillsResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -74,7 +79,7 @@ const ServiceName = "skills"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [11]string{"create", "addVersion", "list", "get", "listVersions", "archive", "distribute", "undistribute", "listDistributions", "getDistributionStatus", "listDistributionAudienceGroups"}
+var MethodNames = [12]string{"create", "addVersion", "list", "get", "listVersions", "archive", "distribute", "undistribute", "listDistributions", "getDistributionStatus", "listDistributionAudienceGroups", "sync"}
 
 // AddVersionPayload is the payload type of the skills service addVersion
 // method.
@@ -234,6 +239,59 @@ type RecordSkillResult struct {
 	// Whether this request created a new immutable version rather than resolving
 	// to an existing canonical version.
 	CreatedVersion bool
+}
+
+// SyncPayload is the payload type of the skills service sync method.
+type SyncPayload struct {
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// The machine hostname used to isolate sync receipt state.
+	Hostname string
+	// Accepted for hooks transport compatibility. It does not deduplicate or order
+	// sync snapshots.
+	IdempotencyKey *string
+	// The local coding assistant provider.
+	Provider string
+	// All Gram-managed skills currently installed on the machine.
+	Installed []*SyncSkillInstalled
+	// All current failures to apply distributed skills on the machine.
+	Exceptions []*SyncSkillException
+}
+
+// A distributed skill the caller could not apply locally.
+type SyncSkillException struct {
+	// The normalized skill name.
+	Name string
+	// Why the distributed skill was not applied.
+	Status string
+}
+
+// A Gram-managed skill currently present on the caller's machine.
+type SyncSkillInstalled struct {
+	// The normalized skill name.
+	Name string
+	// The SHA-256 digest of the exact local SKILL.md content.
+	RawSha256 string
+}
+
+// A skill manifest the caller should write to local managed state.
+type SyncSkillUpdate struct {
+	// The normalized skill name.
+	Name string
+	// The SHA-256 digest of content.
+	RawSha256 string
+	// The complete SKILL.md content to write.
+	Content string
+	// The optional description from the resolved manifest version.
+	Description *string
+}
+
+// SyncSkillsResult is the result type of the skills service sync method.
+type SyncSkillsResult struct {
+	// New or changed skill manifests to write.
+	Updates []*SyncSkillUpdate
+	// Installed Gram-managed skill names no longer visible to this user.
+	Removals []string
 }
 
 // UndistributePayload is the payload type of the skills service undistribute

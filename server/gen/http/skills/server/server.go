@@ -30,6 +30,7 @@ type Server struct {
 	ListDistributions              http.Handler
 	GetDistributionStatus          http.Handler
 	ListDistributionAudienceGroups http.Handler
+	Sync                           http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -70,6 +71,7 @@ func New(
 			{"ListDistributions", "GET", "/rpc/skills.listDistributions"},
 			{"GetDistributionStatus", "GET", "/rpc/skills.getDistributionStatus"},
 			{"ListDistributionAudienceGroups", "GET", "/rpc/skills.listDistributionAudienceGroups"},
+			{"Sync", "POST", "/rpc/skills.sync"},
 		},
 		Create:                         NewCreateHandler(e.Create, mux, decoder, encoder, errhandler, formatter),
 		AddVersion:                     NewAddVersionHandler(e.AddVersion, mux, decoder, encoder, errhandler, formatter),
@@ -82,6 +84,7 @@ func New(
 		ListDistributions:              NewListDistributionsHandler(e.ListDistributions, mux, decoder, encoder, errhandler, formatter),
 		GetDistributionStatus:          NewGetDistributionStatusHandler(e.GetDistributionStatus, mux, decoder, encoder, errhandler, formatter),
 		ListDistributionAudienceGroups: NewListDistributionAudienceGroupsHandler(e.ListDistributionAudienceGroups, mux, decoder, encoder, errhandler, formatter),
+		Sync:                           NewSyncHandler(e.Sync, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -101,6 +104,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListDistributions = m(s.ListDistributions)
 	s.GetDistributionStatus = m(s.GetDistributionStatus)
 	s.ListDistributionAudienceGroups = m(s.ListDistributionAudienceGroups)
+	s.Sync = m(s.Sync)
 }
 
 // MethodNames returns the methods served.
@@ -119,6 +123,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListDistributionsHandler(mux, h.ListDistributions)
 	MountGetDistributionStatusHandler(mux, h.GetDistributionStatus)
 	MountListDistributionAudienceGroupsHandler(mux, h.ListDistributionAudienceGroups)
+	MountSyncHandler(mux, h.Sync)
 }
 
 // Mount configures the mux to serve the skills endpoints.
@@ -687,6 +692,59 @@ func NewListDistributionAudienceGroupsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listDistributionAudienceGroups")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "skills")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSyncHandler configures the mux to serve the "skills" service "sync"
+// endpoint.
+func MountSyncHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/skills.sync", f)
+}
+
+// NewSyncHandler creates a HTTP handler which loads the HTTP request and calls
+// the "skills" service "sync" endpoint.
+func NewSyncHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSyncRequest(mux, decoder)
+		encodeResponse = EncodeSyncResponse(encoder)
+		encodeError    = EncodeSyncError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "sync")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "skills")
 		payload, err := decodeRequest(r)
 		if err != nil {

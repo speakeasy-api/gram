@@ -96,6 +96,11 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		OrganizationID: organizationID,
 	})
 	require.NoError(t, err)
+	_, err = orgrepo.New(conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: organizationID,
+		UserID:         conv.ToPGText(authContext.UserID),
+	})
+	require.NoError(t, err)
 	authContext.ActiveOrganizationID = organizationID
 	authContext.ProjectID = &project.ID
 	authContext.ProjectSlug = &project.Slug

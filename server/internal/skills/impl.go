@@ -37,7 +37,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-const maxSkillsRequestBodyBytes = 512 * 1024
+const (
+	maxSkillsRequestBodyBytes         = 512 * 1024
+	maxActivePluginSkillDistributions = 200
+)
 
 type Service struct {
 	tracer   trace.Tracer
@@ -707,6 +710,16 @@ func (s *Service) Distribute(ctx context.Context, payload *gen.DistributePayload
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return nil, oops.E(oops.CodeUnexpected, err, "get active skill distribution").LogError(ctx, logger)
+	}
+	if err := queries.LockSkillDistributionProject(ctx, *authCtx.ProjectID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock skill distribution project").LogError(ctx, logger)
+	}
+	activeDistributionCount, err := queries.CountActivePluginSkillDistributions(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "count active skill distributions").LogError(ctx, logger)
+	}
+	if activeDistributionCount >= maxActivePluginSkillDistributions {
+		return nil, oops.E(oops.CodeBadRequest, nil, "a project may have at most %d active plugin skill distributions", maxActivePluginSkillDistributions)
 	}
 
 	distribution, err := queries.CreateSkillDistribution(ctx, repo.CreateSkillDistributionParams{

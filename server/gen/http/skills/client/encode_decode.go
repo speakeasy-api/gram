@@ -2653,6 +2653,252 @@ func DecodeListDistributionAudienceGroupsResponse(decoder func(*http.Response) g
 	}
 }
 
+// BuildSyncRequest instantiates a HTTP request object with method and path set
+// to call the "skills" service "sync" endpoint
+func (c *Client) BuildSyncRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SyncSkillsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("skills", "sync", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSyncRequest returns an encoder for requests sent to the skills sync
+// server.
+func EncodeSyncRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*skills.SyncPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("skills", "sync", "*skills.SyncPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		{
+			head := p.Hostname
+			req.Header.Set("X-Gram-Hook-Hostname", head)
+		}
+		if p.IdempotencyKey != nil {
+			head := *p.IdempotencyKey
+			req.Header.Set("Idempotency-Key", head)
+		}
+		body := NewSyncRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("skills", "sync", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSyncResponse returns a decoder for responses returned by the skills
+// sync endpoint. restoreBody controls whether the response body should be
+// restored after having been read.
+// DecodeSyncResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSyncResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SyncResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "sync", err)
+			}
+			err = ValidateSyncResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "sync", err)
+			}
+			res := NewSyncSkillsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SyncUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "sync", err)
+			}
+			err = ValidateSyncUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "sync", err)
+			}
+			return nil, NewSyncUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SyncForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "sync", err)
+			}
+			err = ValidateSyncForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "sync", err)
+			}
+			return nil, NewSyncForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SyncBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "sync", err)
+			}
+			err = ValidateSyncBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "sync", err)
+			}
+			return nil, NewSyncBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SyncNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "sync", err)
+			}
+			err = ValidateSyncNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "sync", err)
+			}
+			return nil, NewSyncNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SyncConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "sync", err)
+			}
+			err = ValidateSyncConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "sync", err)
+			}
+			return nil, NewSyncConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SyncUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "sync", err)
+			}
+			err = ValidateSyncUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "sync", err)
+			}
+			return nil, NewSyncUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SyncInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "sync", err)
+			}
+			err = ValidateSyncInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "sync", err)
+			}
+			return nil, NewSyncInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SyncInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skills", "sync", err)
+				}
+				err = ValidateSyncInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skills", "sync", err)
+				}
+				return nil, NewSyncInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SyncUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skills", "sync", err)
+				}
+				err = ValidateSyncUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skills", "sync", err)
+				}
+				return nil, NewSyncUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("skills", "sync", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SyncGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "sync", err)
+			}
+			err = ValidateSyncGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "sync", err)
+			}
+			return nil, NewSyncGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("skills", "sync", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalSkillResponseBodyToTypesSkill builds a value of type *types.Skill
 // from a value of type *SkillResponseBody.
 func unmarshalSkillResponseBodyToTypesSkill(v *SkillResponseBody) *types.Skill {
@@ -2756,6 +3002,68 @@ func unmarshalSkillDistributionAudienceGroupResponseBodyToTypesSkillDistribution
 	res := &types.SkillDistributionAudienceGroup{
 		ID:   *v.ID,
 		Name: *v.Name,
+	}
+
+	return res
+}
+
+// marshalSkillsSyncSkillInstalledToSyncSkillInstalledRequestBodyRequestBody
+// builds a value of type *SyncSkillInstalledRequestBodyRequestBody from a
+// value of type *skills.SyncSkillInstalled.
+func marshalSkillsSyncSkillInstalledToSyncSkillInstalledRequestBodyRequestBody(v *skills.SyncSkillInstalled) *SyncSkillInstalledRequestBodyRequestBody {
+	res := &SyncSkillInstalledRequestBodyRequestBody{
+		Name:      v.Name,
+		RawSha256: v.RawSha256,
+	}
+
+	return res
+}
+
+// marshalSkillsSyncSkillExceptionToSyncSkillExceptionRequestBodyRequestBody
+// builds a value of type *SyncSkillExceptionRequestBodyRequestBody from a
+// value of type *skills.SyncSkillException.
+func marshalSkillsSyncSkillExceptionToSyncSkillExceptionRequestBodyRequestBody(v *skills.SyncSkillException) *SyncSkillExceptionRequestBodyRequestBody {
+	res := &SyncSkillExceptionRequestBodyRequestBody{
+		Name:   v.Name,
+		Status: v.Status,
+	}
+
+	return res
+}
+
+// marshalSyncSkillInstalledRequestBodyRequestBodyToSkillsSyncSkillInstalled
+// builds a value of type *skills.SyncSkillInstalled from a value of type
+// *SyncSkillInstalledRequestBodyRequestBody.
+func marshalSyncSkillInstalledRequestBodyRequestBodyToSkillsSyncSkillInstalled(v *SyncSkillInstalledRequestBodyRequestBody) *skills.SyncSkillInstalled {
+	res := &skills.SyncSkillInstalled{
+		Name:      v.Name,
+		RawSha256: v.RawSha256,
+	}
+
+	return res
+}
+
+// marshalSyncSkillExceptionRequestBodyRequestBodyToSkillsSyncSkillException
+// builds a value of type *skills.SyncSkillException from a value of type
+// *SyncSkillExceptionRequestBodyRequestBody.
+func marshalSyncSkillExceptionRequestBodyRequestBodyToSkillsSyncSkillException(v *SyncSkillExceptionRequestBodyRequestBody) *skills.SyncSkillException {
+	res := &skills.SyncSkillException{
+		Name:   v.Name,
+		Status: v.Status,
+	}
+
+	return res
+}
+
+// unmarshalSyncSkillUpdateResponseBodyToSkillsSyncSkillUpdate builds a value
+// of type *skills.SyncSkillUpdate from a value of type
+// *SyncSkillUpdateResponseBody.
+func unmarshalSyncSkillUpdateResponseBodyToSkillsSyncSkillUpdate(v *SyncSkillUpdateResponseBody) *skills.SyncSkillUpdate {
+	res := &skills.SyncSkillUpdate{
+		Name:        *v.Name,
+		RawSha256:   *v.RawSha256,
+		Content:     *v.Content,
+		Description: v.Description,
 	}
 
 	return res

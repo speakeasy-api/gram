@@ -12,6 +12,7 @@ import { skillsList } from "../funcs/skillsList.js";
 import { skillsListDistributionAudienceGroups } from "../funcs/skillsListDistributionAudienceGroups.js";
 import { skillsListDistributions } from "../funcs/skillsListDistributions.js";
 import { skillsListVersions } from "../funcs/skillsListVersions.js";
+import { skillsSync } from "../funcs/skillsSync.js";
 import { skillsUndistribute } from "../funcs/skillsUndistribute.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { GetSkillResult } from "../models/components/getskillresult.js";
@@ -20,6 +21,7 @@ import { ListSkillDistributionsResult } from "../models/components/listskilldist
 import { RecordSkillResult } from "../models/components/recordskillresult.js";
 import { SkillDistribution } from "../models/components/skilldistribution.js";
 import { SkillDistributionStatus } from "../models/components/skilldistributionstatus.js";
+import { SyncSkillsResult } from "../models/components/syncskillsresult.js";
 import {
   AddSkillVersionRequest,
   AddSkillVersionSecurity,
@@ -62,6 +64,10 @@ import {
   ListSkillVersionsResponse,
   ListSkillVersionsSecurity,
 } from "../models/operations/listskillversions.js";
+import {
+  SyncSkillsRequest,
+  SyncSkillsSecurity,
+} from "../models/operations/syncskills.js";
 import {
   UndistributeSkillRequest,
   UndistributeSkillSecurity,
@@ -253,6 +259,25 @@ export class Skills extends ClientSDK {
     options?: RequestOptions,
   ): Promise<PageIterator<ListSkillVersionsResponse, { cursor: string }>> {
     return unwrapResultIterator(skillsListVersions(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * sync skills
+   *
+   * @remarks
+   * Synchronize the authenticated user's locally managed Claude skills with active project distributions. A 401 or 403 response means the client must remove all Gram-managed skills. Transient failures retain the last successfully managed local state.
+   */
+  async sync(
+    request: SyncSkillsRequest,
+    security?: SyncSkillsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<SyncSkillsResult> {
+    return unwrapAsync(skillsSync(
       this,
       request,
       security,

@@ -8,6 +8,8 @@
 package server
 
 import (
+	"unicode/utf8"
+
 	skills "github.com/speakeasy-api/gram/server/gen/skills"
 	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
@@ -56,6 +58,17 @@ type DistributeRequestBody struct {
 type UndistributeRequestBody struct {
 	// The skill ID.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+}
+
+// SyncRequestBody is the type of the "skills" service "sync" endpoint HTTP
+// request body.
+type SyncRequestBody struct {
+	// The local coding assistant provider.
+	Provider *string `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
+	// All Gram-managed skills currently installed on the machine.
+	Installed []*SyncSkillInstalledRequestBodyRequestBody `form:"installed,omitempty" json:"installed,omitempty" xml:"installed,omitempty"`
+	// All current failures to apply distributed skills on the machine.
+	Exceptions []*SyncSkillExceptionRequestBodyRequestBody `form:"exceptions,omitempty" json:"exceptions,omitempty" xml:"exceptions,omitempty"`
 }
 
 // CreateResponseBody is the type of the "skills" service "create" endpoint
@@ -167,6 +180,15 @@ type GetDistributionStatusResponseBody struct {
 type ListDistributionAudienceGroupsResponseBody struct {
 	// The available directory groups.
 	Groups []*SkillDistributionAudienceGroupResponseBody `form:"groups" json:"groups" xml:"groups"`
+}
+
+// SyncResponseBody is the type of the "skills" service "sync" endpoint HTTP
+// response body.
+type SyncResponseBody struct {
+	// New or changed skill manifests to write.
+	Updates []*SyncSkillUpdateResponseBody `form:"updates" json:"updates" xml:"updates"`
+	// Installed Gram-managed skill names no longer visible to this user.
+	Removals []string `form:"removals" json:"removals" xml:"removals"`
 }
 
 // CreateUnauthorizedResponseBody is the type of the "skills" service "create"
@@ -2174,6 +2196,186 @@ type ListDistributionAudienceGroupsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// SyncUnauthorizedResponseBody is the type of the "skills" service "sync"
+// endpoint HTTP response body for the "unauthorized" error.
+type SyncUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SyncForbiddenResponseBody is the type of the "skills" service "sync"
+// endpoint HTTP response body for the "forbidden" error.
+type SyncForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SyncBadRequestResponseBody is the type of the "skills" service "sync"
+// endpoint HTTP response body for the "bad_request" error.
+type SyncBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SyncNotFoundResponseBody is the type of the "skills" service "sync" endpoint
+// HTTP response body for the "not_found" error.
+type SyncNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SyncConflictResponseBody is the type of the "skills" service "sync" endpoint
+// HTTP response body for the "conflict" error.
+type SyncConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SyncUnsupportedMediaResponseBody is the type of the "skills" service "sync"
+// endpoint HTTP response body for the "unsupported_media" error.
+type SyncUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SyncInvalidResponseBody is the type of the "skills" service "sync" endpoint
+// HTTP response body for the "invalid" error.
+type SyncInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SyncInvariantViolationResponseBody is the type of the "skills" service
+// "sync" endpoint HTTP response body for the "invariant_violation" error.
+type SyncInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SyncUnexpectedResponseBody is the type of the "skills" service "sync"
+// endpoint HTTP response body for the "unexpected" error.
+type SyncUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SyncGatewayErrorResponseBody is the type of the "skills" service "sync"
+// endpoint HTTP response body for the "gateway_error" error.
+type SyncGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // SkillResponseBody is used to define fields on response body types.
 type SkillResponseBody struct {
 	// The skill ID.
@@ -2272,6 +2474,36 @@ type SkillDistributionAudienceGroupResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The directory group name.
 	Name string `form:"name" json:"name" xml:"name"`
+}
+
+// SyncSkillUpdateResponseBody is used to define fields on response body types.
+type SyncSkillUpdateResponseBody struct {
+	// The normalized skill name.
+	Name string `form:"name" json:"name" xml:"name"`
+	// The SHA-256 digest of content.
+	RawSha256 string `form:"raw_sha256" json:"raw_sha256" xml:"raw_sha256"`
+	// The complete SKILL.md content to write.
+	Content string `form:"content" json:"content" xml:"content"`
+	// The optional description from the resolved manifest version.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+}
+
+// SyncSkillInstalledRequestBodyRequestBody is used to define fields on request
+// body types.
+type SyncSkillInstalledRequestBodyRequestBody struct {
+	// The normalized skill name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The SHA-256 digest of the exact local SKILL.md content.
+	RawSha256 *string `form:"raw_sha256,omitempty" json:"raw_sha256,omitempty" xml:"raw_sha256,omitempty"`
+}
+
+// SyncSkillExceptionRequestBodyRequestBody is used to define fields on request
+// body types.
+type SyncSkillExceptionRequestBodyRequestBody struct {
+	// The normalized skill name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Why the distributed skill was not applied.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 }
 
 // NewCreateResponseBody builds the HTTP response body from the result of the
@@ -2433,6 +2665,33 @@ func NewListDistributionAudienceGroupsResponseBody(res *skills.ListSkillDistribu
 		}
 	} else {
 		body.Groups = []*SkillDistributionAudienceGroupResponseBody{}
+	}
+	return body
+}
+
+// NewSyncResponseBody builds the HTTP response body from the result of the
+// "sync" endpoint of the "skills" service.
+func NewSyncResponseBody(res *skills.SyncSkillsResult) *SyncResponseBody {
+	body := &SyncResponseBody{}
+	if res.Updates != nil {
+		body.Updates = make([]*SyncSkillUpdateResponseBody, len(res.Updates))
+		for i, val := range res.Updates {
+			if val == nil {
+				body.Updates[i] = nil
+				continue
+			}
+			body.Updates[i] = marshalSkillsSyncSkillUpdateToSyncSkillUpdateResponseBody(val)
+		}
+	} else {
+		body.Updates = []*SyncSkillUpdateResponseBody{}
+	}
+	if res.Removals != nil {
+		body.Removals = make([]string, len(res.Removals))
+		for i, val := range res.Removals {
+			body.Removals[i] = val
+		}
+	} else {
+		body.Removals = []string{}
 	}
 	return body
 }
@@ -3999,6 +4258,146 @@ func NewListDistributionAudienceGroupsGatewayErrorResponseBody(res *goa.ServiceE
 	return body
 }
 
+// NewSyncUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "sync" endpoint of the "skills" service.
+func NewSyncUnauthorizedResponseBody(res *goa.ServiceError) *SyncUnauthorizedResponseBody {
+	body := &SyncUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSyncForbiddenResponseBody builds the HTTP response body from the result
+// of the "sync" endpoint of the "skills" service.
+func NewSyncForbiddenResponseBody(res *goa.ServiceError) *SyncForbiddenResponseBody {
+	body := &SyncForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSyncBadRequestResponseBody builds the HTTP response body from the result
+// of the "sync" endpoint of the "skills" service.
+func NewSyncBadRequestResponseBody(res *goa.ServiceError) *SyncBadRequestResponseBody {
+	body := &SyncBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSyncNotFoundResponseBody builds the HTTP response body from the result of
+// the "sync" endpoint of the "skills" service.
+func NewSyncNotFoundResponseBody(res *goa.ServiceError) *SyncNotFoundResponseBody {
+	body := &SyncNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSyncConflictResponseBody builds the HTTP response body from the result of
+// the "sync" endpoint of the "skills" service.
+func NewSyncConflictResponseBody(res *goa.ServiceError) *SyncConflictResponseBody {
+	body := &SyncConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSyncUnsupportedMediaResponseBody builds the HTTP response body from the
+// result of the "sync" endpoint of the "skills" service.
+func NewSyncUnsupportedMediaResponseBody(res *goa.ServiceError) *SyncUnsupportedMediaResponseBody {
+	body := &SyncUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSyncInvalidResponseBody builds the HTTP response body from the result of
+// the "sync" endpoint of the "skills" service.
+func NewSyncInvalidResponseBody(res *goa.ServiceError) *SyncInvalidResponseBody {
+	body := &SyncInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSyncInvariantViolationResponseBody builds the HTTP response body from the
+// result of the "sync" endpoint of the "skills" service.
+func NewSyncInvariantViolationResponseBody(res *goa.ServiceError) *SyncInvariantViolationResponseBody {
+	body := &SyncInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSyncUnexpectedResponseBody builds the HTTP response body from the result
+// of the "sync" endpoint of the "skills" service.
+func NewSyncUnexpectedResponseBody(res *goa.ServiceError) *SyncUnexpectedResponseBody {
+	body := &SyncUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSyncGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "sync" endpoint of the "skills" service.
+func NewSyncGatewayErrorResponseBody(res *goa.ServiceError) *SyncGatewayErrorResponseBody {
+	body := &SyncGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewCreatePayload builds a skills service create endpoint payload.
 func NewCreatePayload(body *CreateRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *skills.CreatePayload {
 	v := &skills.CreatePayload{
@@ -4137,6 +4536,35 @@ func NewListDistributionAudienceGroupsPayload(sessionToken *string, apikeyToken 
 	return v
 }
 
+// NewSyncPayload builds a skills service sync endpoint payload.
+func NewSyncPayload(body *SyncRequestBody, apikeyToken *string, projectSlugInput *string, hostname string, idempotencyKey *string) *skills.SyncPayload {
+	v := &skills.SyncPayload{
+		Provider: *body.Provider,
+	}
+	v.Installed = make([]*skills.SyncSkillInstalled, len(body.Installed))
+	for i, val := range body.Installed {
+		if val == nil {
+			v.Installed[i] = nil
+			continue
+		}
+		v.Installed[i] = unmarshalSyncSkillInstalledRequestBodyRequestBodyToSkillsSyncSkillInstalled(val)
+	}
+	v.Exceptions = make([]*skills.SyncSkillException, len(body.Exceptions))
+	for i, val := range body.Exceptions {
+		if val == nil {
+			v.Exceptions[i] = nil
+			continue
+		}
+		v.Exceptions[i] = unmarshalSyncSkillExceptionRequestBodyRequestBodyToSkillsSyncSkillException(val)
+	}
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+	v.Hostname = hostname
+	v.IdempotencyKey = idempotencyKey
+
+	return v
+}
+
 // ValidateCreateRequestBody runs the validations defined on CreateRequestBody
 func ValidateCreateRequestBody(body *CreateRequestBody) (err error) {
 	if body.Content == nil {
@@ -4194,6 +4622,103 @@ func ValidateUndistributeRequestBody(body *UndistributeRequestBody) (err error) 
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateSyncRequestBody runs the validations defined on SyncRequestBody
+func ValidateSyncRequestBody(body *SyncRequestBody) (err error) {
+	if body.Provider == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("provider", "body"))
+	}
+	if body.Installed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("installed", "body"))
+	}
+	if body.Exceptions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("exceptions", "body"))
+	}
+	if body.Provider != nil {
+		if !(*body.Provider == "claude") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.provider", *body.Provider, []any{"claude"}))
+		}
+	}
+	if len(body.Installed) > 200 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.installed", body.Installed, len(body.Installed), 200, false))
+	}
+	for _, e := range body.Installed {
+		if e != nil {
+			if err2 := ValidateSyncSkillInstalledRequestBodyRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if len(body.Exceptions) > 200 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.exceptions", body.Exceptions, len(body.Exceptions), 200, false))
+	}
+	for _, e := range body.Exceptions {
+		if e != nil {
+			if err2 := ValidateSyncSkillExceptionRequestBodyRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateSyncSkillInstalledRequestBodyRequestBody runs the validations
+// defined on SyncSkillInstalledRequestBodyRequestBody
+func ValidateSyncSkillInstalledRequestBodyRequestBody(body *SyncSkillInstalledRequestBodyRequestBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.RawSha256 == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("raw_sha256", "body"))
+	}
+	if body.Name != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.name", *body.Name, "^[a-z0-9]+(?:-[a-z0-9]+)*$"))
+	}
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 1, true))
+		}
+	}
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) > 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 64, false))
+		}
+	}
+	if body.RawSha256 != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.raw_sha256", *body.RawSha256, "^[a-f0-9]{64}$"))
+	}
+	return
+}
+
+// ValidateSyncSkillExceptionRequestBodyRequestBody runs the validations
+// defined on SyncSkillExceptionRequestBodyRequestBody
+func ValidateSyncSkillExceptionRequestBodyRequestBody(body *SyncSkillExceptionRequestBodyRequestBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.Name != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.name", *body.Name, "^[a-z0-9]+(?:-[a-z0-9]+)*$"))
+	}
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 1, true))
+		}
+	}
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) > 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 64, false))
+		}
+	}
+	if body.Status != nil {
+		if !(*body.Status == "conflict_skipped" || *body.Status == "fs_readonly") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"conflict_skipped", "fs_readonly"}))
+		}
 	}
 	return
 }

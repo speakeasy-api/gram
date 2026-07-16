@@ -58,6 +58,9 @@ type Client struct {
 	// to the listDistributionAudienceGroups endpoint.
 	ListDistributionAudienceGroupsDoer goahttp.Doer
 
+	// Sync Doer is the HTTP client used to make requests to the sync endpoint.
+	SyncDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -89,6 +92,7 @@ func NewClient(
 		ListDistributionsDoer:              doer,
 		GetDistributionStatusDoer:          doer,
 		ListDistributionAudienceGroupsDoer: doer,
+		SyncDoer:                           doer,
 		RestoreResponseBody:                restoreBody,
 		scheme:                             scheme,
 		host:                               host,
@@ -356,6 +360,30 @@ func (c *Client) ListDistributionAudienceGroups() goa.Endpoint {
 		resp, err := c.ListDistributionAudienceGroupsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("skills", "listDistributionAudienceGroups", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// Sync returns an endpoint that makes HTTP requests to the skills service sync
+// server.
+func (c *Client) Sync() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSyncRequest(c.encoder)
+		decodeResponse = DecodeSyncResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSyncRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SyncDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("skills", "sync", err)
 		}
 		return decodeResponse(resp)
 	}

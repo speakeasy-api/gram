@@ -219,6 +219,16 @@ WHERE sd.project_id = @project_id
   AND sd.channel = 'plugin'
   AND sd.revoked_at IS NULL;
 
+-- name: LockSkillDistributionProject :exec
+SELECT pg_advisory_xact_lock(hashtextextended('skill-distributions:' || (@project_id::uuid)::text, 0));
+
+-- name: CountActivePluginSkillDistributions :one
+SELECT COUNT(*)
+FROM skill_distributions
+WHERE project_id = @project_id
+  AND channel = 'plugin'
+  AND revoked_at IS NULL;
+
 -- name: ListActiveSkillDistributions :many
 SELECT
   sqlc.embed(sd),
@@ -402,3 +412,166 @@ ON CONFLICT (project_id, skill_id, user_id, hostname, provider) DO UPDATE SET
   synced_at = clock_timestamp(),
   updated_at = clock_timestamp()
 RETURNING *;
+
+-- name: LockSkillSyncMachine :exec
+SELECT pg_advisory_xact_lock(hashtextextended(jsonb_build_array(
+  'skill-sync',
+  (@project_id::uuid)::text,
+  @user_id::text,
+  @hostname::text,
+  @provider::text
+)::text, 0));
+
+-- name: ListUserSyncableSkillDistributions :many
+SELECT
+  s.id AS skill_id,
+  s.name,
+  COALESCE(resolved.id, '00000000-0000-0000-0000-000000000000'::uuid) AS resolved_version_id,
+  COALESCE(resolved.raw_sha256, '') AS raw_sha256
+FROM skill_distributions sd
+JOIN projects p ON p.id = sd.project_id
+JOIN skills s
+  ON s.project_id = sd.project_id
+  AND s.id = sd.skill_id
+  AND s.archived_at IS NULL
+LEFT JOIN LATERAL (
+  SELECT
+    sv.id,
+    sv.raw_sha256
+  FROM skill_versions sv
+  WHERE sv.skill_id = sd.skill_id
+    AND sv.spec_valid IS TRUE
+    AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
+  ORDER BY sv.created_at DESC, sv.id DESC
+  LIMIT 1
+) resolved ON TRUE
+WHERE sd.project_id = @project_id
+  AND sd.channel = 'plugin'
+  AND sd.revoked_at IS NULL
+  AND (
+    sd.audience IS NULL
+    OR EXISTS (
+      SELECT 1
+      FROM directory_users du
+      JOIN directory_user_group_memberships m
+        ON m.directory_user_id = du.id
+        AND m.deleted IS FALSE
+      JOIN directory_groups dg
+        ON dg.id = m.directory_group_id
+        AND dg.organization_id = p.organization_id
+        AND dg.deleted IS FALSE
+        AND dg.workos_deleted IS FALSE
+      WHERE du.organization_id = p.organization_id
+        AND du.user_id = @user_id
+        AND du.deleted IS FALSE
+        AND du.workos_deleted IS FALSE
+        AND dg.workos_directory_group_id = ANY(sd.audience)
+    )
+  )
+ORDER BY s.name ASC
+FOR KEY SHARE OF s;
+
+-- name: ResolveSkillVersionsByRawSHA :many
+SELECT
+  s.id AS skill_id,
+  sv.id AS skill_version_id
+FROM (
+  SELECT
+    unnest(@skill_ids::uuid[]) AS skill_id,
+    unnest(@raw_sha256s::text[]) AS raw_sha256
+) submitted
+JOIN skills s
+  ON s.project_id = @project_id
+  AND s.id = submitted.skill_id
+  AND s.archived_at IS NULL
+JOIN skill_versions sv
+  ON sv.skill_id = submitted.skill_id
+  AND sv.raw_sha256 = submitted.raw_sha256
+  AND sv.spec_valid IS TRUE
+FOR KEY SHARE OF s;
+
+-- name: ReconcileSkillSyncReceipts :one
+WITH submitted AS (
+  SELECT
+    unnest(@skill_ids::uuid[]) AS skill_id,
+    unnest(@skill_version_ids::uuid[]) AS skill_version_id,
+    unnest(@statuses::text[]) AS status
+), valid_receipts AS (
+  SELECT
+    s.project_id,
+    s.id AS skill_id,
+    NULLIF(submitted.skill_version_id, '00000000-0000-0000-0000-000000000000'::uuid) AS skill_version_id,
+    submitted.status
+  FROM submitted
+  JOIN skills s
+    ON s.project_id = @project_id
+    AND s.id = submitted.skill_id
+    AND s.archived_at IS NULL
+  WHERE submitted.skill_version_id = '00000000-0000-0000-0000-000000000000'::uuid
+    OR EXISTS (
+      SELECT 1
+      FROM skill_versions sv
+      WHERE sv.skill_id = s.id
+        AND sv.id = submitted.skill_version_id
+        AND sv.spec_valid IS TRUE
+    )
+  FOR KEY SHARE OF s
+), upserted AS (
+  INSERT INTO skill_sync_receipts (
+    project_id,
+    skill_id,
+    skill_version_id,
+    user_id,
+    hostname,
+    provider,
+    status
+  )
+  SELECT
+    valid_receipts.project_id,
+    valid_receipts.skill_id,
+    valid_receipts.skill_version_id,
+    @user_id,
+    @hostname,
+    @provider,
+    valid_receipts.status
+  FROM valid_receipts
+  ON CONFLICT (project_id, skill_id, user_id, hostname, provider) DO UPDATE SET
+    skill_version_id = EXCLUDED.skill_version_id,
+    status = EXCLUDED.status,
+    synced_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+  RETURNING skill_id
+), pruned AS (
+  DELETE FROM skill_sync_receipts
+  WHERE project_id = @project_id
+    AND user_id = @user_id
+    AND hostname = @hostname
+    AND provider = @provider
+    AND NOT (skill_id = ANY(@skill_ids::uuid[]))
+  RETURNING skill_id
+)
+SELECT
+  (SELECT COUNT(*) FROM upserted) AS upserted_count,
+  (SELECT COUNT(*) FROM pruned) AS pruned_count;
+
+-- name: GetSkillSyncUpdateContents :many
+SELECT
+  sv.id AS skill_version_id,
+  sv.content,
+  sv.description
+FROM skill_versions sv
+JOIN skills s
+  ON s.id = sv.skill_id
+  AND s.project_id = @project_id
+  AND s.archived_at IS NULL
+WHERE sv.id = ANY(@skill_version_ids::uuid[])
+  AND sv.spec_valid IS TRUE;
+
+-- name: ListSkillSyncReceiptsForMachine :many
+SELECT *
+FROM skill_sync_receipts
+WHERE project_id = @project_id
+  AND user_id = @user_id
+  AND hostname = @hostname
+  AND provider = @provider
+ORDER BY skill_id ASC;

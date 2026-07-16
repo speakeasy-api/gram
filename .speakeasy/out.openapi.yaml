@@ -32527,6 +32527,119 @@ paths:
         type: cursor
       x-speakeasy-react-hook:
         name: SkillVersions
+  /rpc/skills.sync:
+    post:
+      description: Synchronize the authenticated user's locally managed Claude skills with active project distributions. A 401 or 403 response means the client must remove all Gram-managed skills. Transient failures retain the last successfully managed local state.
+      operationId: syncSkills
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+        - allowEmptyValue: true
+          description: The machine hostname used to isolate sync receipt state.
+          in: header
+          name: X-Gram-Hook-Hostname
+          required: true
+          schema:
+            description: The machine hostname used to isolate sync receipt state.
+            maxLength: 255
+            minLength: 1
+            type: string
+        - allowEmptyValue: true
+          description: Accepted for hooks transport compatibility. It does not deduplicate or order sync snapshots.
+          in: header
+          name: Idempotency-Key
+          schema:
+            description: Accepted for hooks transport compatibility. It does not deduplicate or order sync snapshots.
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncSkillsRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncSkillsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: sync skills
+      tags:
+        - skills
+      x-speakeasy-name-override: sync
+      x-speakeasy-react-hook:
+        name: SyncSkills
   /rpc/skills.undistribute:
     post:
       description: Revoke a skill's active plugin distribution. Repeated requests are a no-op.
@@ -55707,6 +55820,104 @@ components:
       required:
         - match_type
         - match_value
+    SyncSkillException:
+      type: object
+      properties:
+        name:
+          type: string
+          description: The normalized skill name.
+          pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          minLength: 1
+          maxLength: 64
+        status:
+          type: string
+          description: Why the distributed skill was not applied.
+          enum:
+            - conflict_skipped
+            - fs_readonly
+      description: A distributed skill the caller could not apply locally.
+      required:
+        - name
+        - status
+    SyncSkillInstalled:
+      type: object
+      properties:
+        name:
+          type: string
+          description: The normalized skill name.
+          pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          minLength: 1
+          maxLength: 64
+        raw_sha256:
+          type: string
+          description: The SHA-256 digest of the exact local SKILL.md content.
+          pattern: ^[a-f0-9]{64}$
+      description: A Gram-managed skill currently present on the caller's machine.
+      required:
+        - name
+        - raw_sha256
+    SyncSkillUpdate:
+      type: object
+      properties:
+        content:
+          type: string
+          description: The complete SKILL.md content to write.
+        description:
+          type: string
+          description: The optional description from the resolved manifest version.
+        name:
+          type: string
+          description: The normalized skill name.
+        raw_sha256:
+          type: string
+          description: The SHA-256 digest of content.
+      description: A skill manifest the caller should write to local managed state.
+      required:
+        - name
+        - raw_sha256
+        - content
+    SyncSkillsRequestBody:
+      type: object
+      properties:
+        exceptions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SyncSkillException'
+          description: All current failures to apply distributed skills on the machine.
+          maxItems: 200
+        installed:
+          type: array
+          items:
+            $ref: '#/components/schemas/SyncSkillInstalled'
+          description: All Gram-managed skills currently installed on the machine.
+          maxItems: 200
+        provider:
+          type: string
+          description: The local coding assistant provider.
+          enum:
+            - claude
+      description: A complete snapshot of Gram-managed skills and current application exceptions for one machine.
+      required:
+        - provider
+        - installed
+        - exceptions
+    SyncSkillsResult:
+      type: object
+      properties:
+        removals:
+          type: array
+          items:
+            type: string
+          description: Installed Gram-managed skill names no longer visible to this user.
+        updates:
+          type: array
+          items:
+            $ref: '#/components/schemas/SyncSkillUpdate'
+          description: New or changed skill manifests to write.
+      description: The deterministic delta from the submitted complete snapshot to the user's current visible distributions.
+      required:
+        - updates
+        - removals
     SyncedAgentUser:
       type: object
       properties:
