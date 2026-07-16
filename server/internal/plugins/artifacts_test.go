@@ -10,6 +10,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/singleflight"
@@ -37,9 +38,10 @@ func newTestHooksArtifactServer(t *testing.T, archive []byte, sha string) (*Hook
 				"linux-arm64": {URL: upstream.URL + "/hooks.zip", SHA256: sha},
 			},
 		},
-		group: singleflight.Group{},
-		mu:    sync.RWMutex{},
-		cache: map[string][]byte{},
+		group:    singleflight.Group{},
+		mu:       sync.RWMutex{},
+		cache:    map[string][]byte{},
+		failedAt: map[string]time.Time{},
 	}, &hits
 }
 
@@ -80,7 +82,7 @@ func TestHooksArtifactServerRejectsUpstreamChecksumMismatch(t *testing.T) {
 		require.Equal(t, http.StatusBadGateway, resp.StatusCode)
 		require.NotContains(t, string(body), "tampered-bytes", "unverified bytes must never reach the client")
 	}
-	require.Equal(t, int64(2), hits.Load(), "mismatching bytes must not be cached")
+	require.Equal(t, int64(1), hits.Load(), "failed fetches must be negatively cached, not retried per request")
 }
 
 func TestHooksArtifactServerUnknownArtifactsAre404(t *testing.T) {

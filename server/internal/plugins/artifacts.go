@@ -52,6 +52,15 @@ const maxHooksArtifactBytes = 128 << 20
 // so the next hook invocation installs from warm bytes.
 const hooksArtifactFetchTimeout = 30 * time.Second
 
+// hooksArtifactFailureTTL suppresses upstream refetches after a failed fetch.
+// Hooks re-fire on every editor event under fail-open, so while the pinned
+// release is unavailable each event's cold-install attempt would trigger a
+// fresh upstream fetch — singleflight only collapses concurrent ones. The TTL
+// must be long enough to absorb that per-event retry storm, and short enough
+// that a transient upstream blip delays recovery by seconds rather than
+// stretching client-visible downtime.
+const hooksArtifactFailureTTL = 15 * time.Second
+
 // HooksArtifactServer serves the pinned speakeasy-hooks release archives from
 // the Gram server domain. It is a verifying proxy in front of the GitHub
 // release: only the exact version × target set in hooksArtifactIndex is
@@ -65,9 +74,10 @@ type HooksArtifactServer struct {
 	httpClient *guardian.HTTPClient
 	index      map[string]map[string]hooksBinaryTarget
 
-	group singleflight.Group
-	mu    sync.RWMutex
-	cache map[string][]byte
+	group    singleflight.Group
+	mu       sync.RWMutex
+	cache    map[string][]byte
+	failedAt map[string]time.Time
 }
 
 func NewHooksArtifactServer(logger *slog.Logger, httpClient *guardian.HTTPClient) *HooksArtifactServer {
@@ -78,6 +88,7 @@ func NewHooksArtifactServer(logger *slog.Logger, httpClient *guardian.HTTPClient
 		group:      singleflight.Group{},
 		mu:         sync.RWMutex{},
 		cache:      make(map[string][]byte),
+		failedAt:   make(map[string]time.Time),
 	}
 }
 
@@ -141,7 +152,8 @@ func (s *HooksArtifactServer) handleArtifact(w http.ResponseWriter, r *http.Requ
 
 // artifact returns the verified archive bytes for one pinned target, fetching
 // and caching them on first use. Concurrent cold requests for the same target
-// share a single upstream fetch.
+// share a single upstream fetch, and failed fetches are negatively cached for
+// hooksArtifactFailureTTL so sequential retries don't hammer the upstream.
 func (s *HooksArtifactServer) artifact(ctx context.Context, version, target string, upstream hooksBinaryTarget) ([]byte, error) {
 	key := version + "/" + target
 
@@ -155,9 +167,13 @@ func (s *HooksArtifactServer) artifact(ctx context.Context, version, target stri
 	out, err, _ := s.group.Do(key, func() (any, error) {
 		s.mu.RLock()
 		data, ok := s.cache[key]
+		failedAt := s.failedAt[key]
 		s.mu.RUnlock()
 		if ok {
 			return data, nil
+		}
+		if since := time.Since(failedAt); since < hooksArtifactFailureTTL {
+			return nil, fmt.Errorf("hooks artifact fetch suppressed: upstream failed %s ago", since.Round(time.Millisecond))
 		}
 
 		// The fetch outlives any single requester: a canceled download would
@@ -168,11 +184,15 @@ func (s *HooksArtifactServer) artifact(ctx context.Context, version, target stri
 
 		data, err := s.fetchVerified(fetchCtx, upstream)
 		if err != nil {
+			s.mu.Lock()
+			s.failedAt[key] = time.Now()
+			s.mu.Unlock()
 			return nil, err
 		}
 
 		s.mu.Lock()
 		s.cache[key] = data
+		delete(s.failedAt, key)
 		s.mu.Unlock()
 		return data, nil
 	})
