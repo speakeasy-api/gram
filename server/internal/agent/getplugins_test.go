@@ -139,7 +139,8 @@ func TestGetPlugins_UnpublishedProjectExcluded(t *testing.T) {
 // org with multiple published projects surfaces each as its own marketplace. The
 // default project (from InitAuthContext, the org's oldest) keeps the bare
 // org-derived name; a non-default project is scoped by its slug. Both are
-// returned, each with its own token.
+// returned, each with its own token. The non-default project has an assignment
+// for the caller so it surfaces at all under the default-plus-assigned scoping.
 func TestGetPlugins_MultiProjectDistinctByDefault(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestAgentService(t)
@@ -148,6 +149,10 @@ func TestGetPlugins_MultiProjectDistinctByDefault(t *testing.T) {
 
 	adam := seedProject(t, ctx, ti.conn, ti.orgID, "adam")
 	publishMarketplace(t, ctx, ti.conn, adam, "adam-token")
+	// A wildcard-assigned plugin makes the non-default project surface for the
+	// caller (a non-default project with no assignment is intentionally hidden).
+	adamTool := seedPlugin(t, ctx, ti.conn, ti.orgID, adam, "adam-tool")
+	assignPlugin(t, ctx, ti.conn, adamTool, ti.orgID, "*")
 	wantAdam := naming.MarketplaceName(mockidp.MockOrgName, "adam", false) // local-dev-org-adam-speakeasy
 
 	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: mockidp.MockUserEmail})
@@ -209,10 +214,14 @@ func TestGetPlugins_DistinctOverridesYieldSeparateMarketplaces(t *testing.T) {
 	// Default project keeps the org-derived name.
 	publishMarketplace(t, ctx, ti.conn, ti.projectID, "default-token")
 
-	// A second project published under a distinct override name.
+	// A second project published under a distinct override name, with a
+	// wildcard-assigned plugin so it surfaces under the default-plus-assigned
+	// scoping (a non-default project with no assignment is hidden).
 	adam := seedProject(t, ctx, ti.conn, ti.orgID, "adam")
 	setMarketplaceOverride(t, ctx, ti.conn, adam, "team-adam")
 	publishMarketplace(t, ctx, ti.conn, adam, "adam-token")
+	adamTool := seedPlugin(t, ctx, ti.conn, ti.orgID, adam, "adam-tool")
+	assignPlugin(t, ctx, ti.conn, adamTool, ti.orgID, "*")
 
 	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: mockidp.MockUserEmail})
 	require.NoError(t, err)
@@ -227,6 +236,36 @@ func TestGetPlugins_DistinctOverridesYieldSeparateMarketplaces(t *testing.T) {
 	require.Contains(t, byName, "team-adam", "override project surfaces under its published name")
 	require.Contains(t, byName[wantMarketplace], "default-token")
 	require.Contains(t, byName["team-adam"], "adam-token")
+}
+
+// TestGetPlugins_NonDefaultProjectWithoutAssignmentHidden pins the
+// default-plus-assigned scoping: a published non-default project the caller has
+// no assignment in is omitted entirely — its marketplace and always-on
+// observability plugin would otherwise flood the device agent — while the
+// default project still surfaces as the org-wide baseline.
+func TestGetPlugins_NonDefaultProjectWithoutAssignmentHidden(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+
+	publishMarketplace(t, ctx, ti.conn, ti.projectID, "default-token")
+
+	// A published non-default project with no assignment for the caller.
+	adam := seedProject(t, ctx, ti.conn, ti.orgID, "adam")
+	publishMarketplace(t, ctx, ti.conn, adam, "adam-token")
+	wantAdam := naming.MarketplaceName(mockidp.MockOrgName, "adam", false)
+
+	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: mockidp.MockUserEmail})
+	require.NoError(t, err)
+
+	require.Len(t, res.Marketplaces, 1, "only the default project surfaces")
+	require.Equal(t, wantMarketplace, res.Marketplaces[0].Name)
+	names := make([]string, 0, len(res.Marketplaces))
+	for _, m := range res.Marketplaces {
+		names = append(names, m.Name)
+	}
+	require.NotContains(t, names, wantAdam, "an unassigned non-default project is hidden")
+	require.Equal(t, []string{wantObservability}, pluginSlugs(res),
+		"only the default project's observability ships, not adam's")
 }
 
 func TestGetPlugins_CrossOrgIsolation(t *testing.T) {
