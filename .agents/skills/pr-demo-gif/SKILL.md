@@ -11,14 +11,14 @@ Capture only the changed dashboard behavior and post it as a PR comment. Use one
 
 ## Prerequisites
 
-1. Run `mise run zero:summary`. Read the URL from the **Gram dashboard** row; do not assume a port. Start stopped dashboard or server processes with `madprocs`.
-2. Use the `ecommerce-api` project. Verify the seed using the database URL from the **Database** row:
+- Discover the dashboard URL with `mise run zero:summary` — read the address from the **Gram dashboard** row (don't assume a port). The same table shows whether each service is RUNNING; if the dashboard or server is STOPPED, start the stack with `mise start` first. Dev-idp auto-login is enabled, and the local TLS cert is browser-trusted (mkcert CA in the NSS store, set up by `mise run zero:tls` — rerun that if you see cert errors).
+- Use the **`ecommerce-api`** project for all flows (`default` is empty). Before recording, verify the database is seeded by probing it directly (the connection string is in the **Database** row of `zero:summary`):
 
-   ```bash
-   psql "<database-url>" -c "SELECT p.slug, om.gram_account_type FROM projects p JOIN organization_metadata om ON om.id = p.organization_id WHERE p.slug = 'ecommerce-api' AND NOT p.deleted;"
-   ```
+  ```bash
+  psql "<database-url>" -c "SELECT p.slug, om.gram_account_type FROM projects p JOIN organization_metadata om ON om.id = p.organization_id WHERE p.slug = 'ecommerce-api' AND NOT p.deleted;"
+  ```
 
-   Expect one row with `gram_account_type = 'enterprise'`. Otherwise run `mise run seed` before continuing.
+  Expect one row with `gram_account_type = 'enterprise'`. Otherwise run `mise run seed` before continuing.
 
 3. Invoke Playwright only through `mise run playwright`. The task uses the repo configuration and installs Chromium on demand.
 4. Use `./tools/ffmpeg` for GIF conversion.

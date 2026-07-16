@@ -2,6 +2,8 @@
 
 //MISE description="Seed the local database with data"
 
+//USAGE flag "--force" default="false" help="Re-seed even if the database already has an up-to-date seed marker."
+
 import assert from "node:assert";
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
@@ -67,17 +69,112 @@ function withTimeout<T>(
   ) as Promise<T>;
 }
 
+/**
+ * Best-effort seed steps that failed this run. When non-empty, the completion
+ * marker is withheld so the next `mise seed` retries the missing data instead
+ * of short-circuiting on a partially seeded database.
+ */
+const seedStepFailures: string[] = [];
+
 /** clack log with time-since-previous-statement appended, to surface slow seed steps. */
 const log = {
   info: (message: string) => clackLog.info(`${message} ${lap()}`),
   warn: (message: string) => clackLog.warn(`${message} ${lap()}`),
   error: (message: string) => clackLog.error(`${message} ${lap()}`),
+  /** Like warn, but records that a best-effort seed step failed. */
+  stepFailed: (message: string) => {
+    seedStepFailures.push(message);
+    clackLog.warn(`${message} ${lap()}`);
+  },
 };
 
 async function runClickHouseSQL(sql: string): Promise<void> {
   await $({
     input: sql,
   })`docker compose exec -T clickhouse clickhouse-client --multiquery`.quiet();
+}
+
+/**
+ * Marker keys are scoped to the seeded org + user so that switching the
+ * dev-idp user or active organization doesn't treat the new (unseeded)
+ * target as already seeded.
+ */
+function seedMarkerKey(organizationId: string, userId: string): string {
+  return `seed.mts:${organizationId}:${userId}`;
+}
+
+async function runSeedMarkerSQL(sql: string) {
+  const dbUser = process.env.DB_USER || "gram";
+  const dbName = process.env.DB_NAME || "gram";
+  return await $({
+    input: sql,
+  })`docker compose exec -T gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -tA -f -`.quiet();
+}
+
+/**
+ * Fingerprint the seed inputs (this script, everything under
+ * .mise-tasks/seed/, local files referenced by seed assets, and env that
+ * changes what gets seeded) so edits invalidate the completion marker and
+ * force a re-seed. Remote (url) assets are not fingerprinted.
+ */
+async function seedFingerprint(): Promise<string> {
+  const seedDir = path.join(".mise-tasks", "seed");
+  const files = [path.join(".mise-tasks", "seed.mts")];
+  for (const entry of (await fs.readdir(seedDir, { recursive: true })).sort()) {
+    const full = path.join(seedDir, entry);
+    if ((await fs.stat(full)).isFile()) {
+      files.push(full);
+    }
+  }
+  for (const project of SEED_PROJECTS) {
+    for (const asset of project.assets) {
+      if (asset.type === "openapi" && "filename" in asset) {
+        files.push(asset.filename);
+      }
+    }
+  }
+  const hash = crypto.createHash("sha256");
+  for (const file of files) {
+    hash.update(file);
+    hash.update("\0");
+    hash.update(await fs.readFile(file));
+    hash.update("\0");
+  }
+  hash.update(process.env["GRAM_FUNCTIONS_PROVIDER"] ?? "local");
+  return hash.digest("hex").slice(0, 16);
+}
+
+async function isAlreadySeeded(
+  markerKey: string,
+  fingerprint: string,
+): Promise<boolean> {
+  try {
+    const res = await runSeedMarkerSQL(
+      `SELECT fingerprint FROM devtools.seed_markers WHERE key = '${markerKey}';`,
+    );
+    return res.stdout.trim() === fingerprint;
+  } catch {
+    // Marker table missing or database unreachable — treat as not seeded.
+    return false;
+  }
+}
+
+async function writeSeedMarker(
+  markerKey: string,
+  fingerprint: string,
+): Promise<void> {
+  await runSeedMarkerSQL(`
+CREATE SCHEMA IF NOT EXISTS devtools;
+CREATE TABLE IF NOT EXISTS devtools.seed_markers (
+  key text PRIMARY KEY,
+  fingerprint text NOT NULL,
+  completed_at timestamptz NOT NULL DEFAULT now()
+);
+INSERT INTO devtools.seed_markers (key, fingerprint)
+VALUES ('${markerKey}', '${fingerprint}')
+ON CONFLICT (key) DO UPDATE
+  SET fingerprint = EXCLUDED.fingerprint, completed_at = now();
+`);
 }
 
 type Asset = {
@@ -169,291 +266,6 @@ async function authenticateViaDevIDP(serverURL: string): Promise<string> {
     );
   }
   return sessionToken;
-}
-
-async function seed() {
-  let success = false;
-  intro("Seeding local development environment...");
-  using _ = {
-    [Symbol.dispose]() {
-      const total = formatDuration(performance.now() - seedStartedAt);
-      outro(
-        success
-          ? `Seeding complete in ${total}!`
-          : `Seeding failed after ${total}.`,
-      );
-    },
-  };
-  const serverURL = process.env["GRAM_SERVER_URL"];
-  if (!serverURL) {
-    throw new Error("GRAM_SERVER_URL is not set");
-  }
-  const functionsProvider = process.env["GRAM_FUNCTIONS_PROVIDER"] ?? "local";
-  const shouldSeedFunctions = functionsProvider === "local";
-  if (!shouldSeedFunctions) {
-    log.info(
-      `Skipping seeded MCP app function assets because GRAM_FUNCTIONS_PROVIDER is '${functionsProvider}', not 'local'.`,
-    );
-  }
-
-  const gram = new GramCore({ serverURL });
-
-  // Authenticate via the dev-idp to get a session token.
-  log.info("Authenticating via dev-idp...");
-  const sessionId = await authenticateViaDevIDP(serverURL);
-  log.info("Authenticated successfully.");
-
-  const res = await authInfo(gram, undefined, {
-    sessionHeaderGramSession: sessionId,
-  });
-  if (!res.ok) {
-    abort("Failed to query session info", res.error);
-  }
-  const sessionInfo = res.value;
-  const sessionJSON = JSON.stringify(sessionInfo, null, 2);
-
-  const activeOrgID = sessionInfo.result.activeOrganizationId;
-  if (!activeOrgID) {
-    abort("Active organization ID not found", sessionJSON);
-  }
-  const activeUserID = sessionInfo.result.userId;
-  if (!activeUserID) {
-    abort("Active user ID not found", sessionJSON);
-  }
-  await seedCurrentUserSuperAdmin(activeUserID);
-
-  const orgs = sessionInfo.result.organizations;
-  const org = orgs.find(
-    (o: unknown) =>
-      typeof o === "object" && o != null && "id" in o && o?.id === activeOrgID,
-  );
-  if (!org) {
-    abort("Active organization not found", sessionJSON);
-  }
-
-  const projects: Record<string, { slug: string; id: string }> = {};
-  for (const p of org.projects) {
-    const id = p.id;
-    const slug = p.slug;
-    projects[slug] = { id, slug };
-  }
-
-  // Seed the default MCP registry (Pulse)
-  try {
-    const dbUser = process.env.DB_USER || "gram";
-    const dbName = process.env.DB_NAME || "gram";
-    await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -c "INSERT INTO mcp_registries (name, url) VALUES ('Gram Recommended', 'https://api.pulsemcp.com') ON CONFLICT (url) WHERE deleted IS FALSE DO NOTHING;"`.quiet();
-    log.info("Seeded MCP registry 'Gram Recommended'");
-  } catch (e: unknown) {
-    const err = e as { stderr?: string; message?: string };
-    log.warn(
-      `Failed to seed MCP registry: ${err.message || err.stderr || JSON.stringify(e)}`,
-    );
-  }
-
-  // Set active org as whitelisted
-  try {
-    const dbUser = process.env.DB_USER || "gram";
-    const dbName = process.env.DB_NAME || "gram";
-    await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -c "UPDATE organization_metadata SET whitelisted = TRUE, gram_account_type = 'pro' WHERE id = '${activeOrgID}';"`.quiet();
-    log.info("Set active org as whitelisted (downgraded to pro for seeding)");
-  } catch (e: unknown) {
-    const err = e as { stderr?: string; message?: string };
-    log.warn(
-      `Failed to set org whitelisted: ${err.message || err.stderr || JSON.stringify(e)}`,
-    );
-  }
-
-  try {
-    const dbUser = process.env.DB_USER || "gram";
-    const dbName = process.env.DB_NAME || "gram";
-    const redisPassword = process.env.GRAM_REDIS_CACHE_PASSWORD || "xi9XILbY";
-    await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -c "INSERT INTO organization_features (organization_id, feature_name) VALUES ('${activeOrgID}', 'logs'), ('${activeOrgID}', 'tool_io_logs') ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;"`.quiet();
-    await $`docker compose exec gram-cache redis-cli -p 35299 -a ${redisPassword} DEL feature:${activeOrgID}:logs: feature:${activeOrgID}:tool_io_logs:`.quiet();
-    log.info("Enabled local logs and tool_io_logs features");
-  } catch (e: unknown) {
-    const err = e as { stderr?: string; message?: string };
-    log.warn(
-      `Failed to enable local log features: ${err.message || err.stderr || JSON.stringify(e)}`,
-    );
-  }
-
-  // oxlint-disable-next-line no-unused-vars
-  const key = await initAPIKey({
-    gram,
-    sessionId,
-  });
-
-  // Collect all tool URNs per project for seeding observability data
-  const projectToolUrns: Record<string, string[]> = {};
-
-  for (const { name, slug, assets, mcpPublic } of SEED_PROJECTS) {
-    const seedAssets = shouldSeedFunctions
-      ? assets
-      : assets.filter((asset) => asset.type !== "functions");
-
-    const {
-      created,
-      id,
-      slug: projectSlug,
-    } = await getOrCreateProject({
-      gram,
-      sessionId,
-      activeOrgID,
-      slug,
-    });
-    projects[projectSlug] = { id, slug: projectSlug };
-    projectToolUrns[projectSlug] = [];
-    let verb = created ? "Created" : "Found existing";
-    log.info(`${verb} project '${projectSlug}' (project_id = ${id})`);
-
-    if (seedAssets.length === 0) {
-      log.info(`No seed assets selected for '${projectSlug}', skipping.`);
-      continue;
-    }
-
-    const deploymentId = await deployAssets({
-      gram,
-      sessionId,
-      projectSlug,
-      projectName: name,
-      assets: seedAssets,
-    });
-    log.info(
-      `Deployed assets into '${projectSlug}' (deployment_id = ${deploymentId})`,
-    );
-
-    for (const asset of seedAssets) {
-      const toolset = await upsertToolset({
-        gram,
-        serverURL,
-        sessionId,
-        projectSlug,
-        deploymentId,
-        asset,
-        mcpPublic,
-      });
-      verb = toolset.created ? "Created" : "Updated";
-      log.info(
-        `${verb} toolset '${toolset.slug}' for project '${projectSlug}' (mcp_url = ${toolset.mcpURL}, tools: ${toolset.toolUrns.length})`,
-      );
-
-      // Collect tool URNs for observability seeding
-      projectToolUrns[projectSlug].push(...toolset.toolUrns);
-    }
-  }
-
-  // Create the MCP Logs toolset — a curated subset of Gram's own API tools
-  // exposed as a built-in MCP server on the project MCP page.
-  // In production this lives in speakeasy-team/kitchen-sink; locally we
-  // reuse ecommerce-api since the gram asset is already deployed there.
-  {
-    const projectSlug = SEED_PROJECTS[0].slug;
-    const mcpLogsToolset = await upsertMcpLogsToolset({
-      gram,
-      serverURL,
-      sessionId,
-      projectSlug,
-    });
-    const verb = mcpLogsToolset.created ? "Created" : "Updated";
-    log.info(
-      `${verb} MCP Logs toolset '${mcpLogsToolset.slug}' for project '${projectSlug}' (mcp_url = ${mcpLogsToolset.mcpURL})`,
-    );
-
-    await $`mise set --file mise.local.toml \
-      VITE_GRAM_OBSERVABILITY_MCP_URL=${mcpLogsToolset.mcpURL}`;
-    log.info(`Set VITE_GRAM_OBSERVABILITY_MCP_URL in mise.local.toml`);
-  }
-
-  // Seed a default environment for each project
-  for (const { slug: projectSlug } of SEED_PROJECTS) {
-    const env = await getOrCreateEnvironment({
-      gram,
-      sessionId,
-      projectSlug,
-      activeOrgID,
-      name: "Default",
-    });
-    log.info(
-      `${env.created ? "Created" : "Found existing"} environment '${env.slug}' for project '${projectSlug}'`,
-    );
-  }
-  await seedTunnel();
-
-  // Seed observability data for the E-Commerce project.
-  const firstSeededProjectSlug = SEED_PROJECTS[0].slug;
-  const firstProject = projects[firstSeededProjectSlug];
-  if (firstProject) {
-    const toolUrns = projectToolUrns[firstProject.slug] ?? [];
-    await seedObservabilityData({
-      projectId: firstProject.id,
-      organizationId: activeOrgID,
-      toolUrns,
-    });
-    await seedShadowMCPInventoryData({ projectId: firstProject.id });
-    // Risk findings depend on the chats/messages seeded above (FK +
-    // attachment), so seed them after observability data.
-    await seedRiskFindings({
-      projectId: firstProject.id,
-      organizationId: activeOrgID,
-    });
-    // Personal-account tracking data: employees with team + personal accounts,
-    // the device bridge, and account-linked chats. Runs after observability so
-    // its blanket chat delete doesn't wipe these account-linked chats.
-    await seedPersonalAccounts({
-      projectId: firstProject.id,
-      organizationId: activeOrgID,
-    });
-    // Non-corporate account risk policy + findings over the personal-account
-    // chats seeded just above. Runs last so seedRiskFindings' blanket
-    // risk_results reset can't wipe these events.
-    await seedNonCorporateAccountFindings({
-      projectId: firstProject.id,
-      organizationId: activeOrgID,
-    });
-  }
-
-  // Give the local dev user the "see all org sessions" admin view that the
-  // Agent Sessions page promises. That view is gated behind RBAC enforcement
-  // plus a chat:read grant, so enable RBAC and grant the dev user the admin
-  // scope set (chat:read is intentionally not part of any system role). Runs
-  // after asset/toolset seeding so those admin API calls aren't gated, and
-  // before the enterprise-account-type flip below (enforcement only activates
-  // once the org is enterprise).
-  await enableRBACForDevUser({
-    sessionId,
-    organizationId: activeOrgID,
-    userId: sessionInfo.result.userId,
-    gram,
-  });
-
-  // Set enterprise account type last so RBAC enforcement doesn't block seeding.
-  try {
-    const dbUser = process.env.DB_USER || "gram";
-    const dbName = process.env.DB_NAME || "gram";
-    await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -c "UPDATE organization_metadata SET gram_account_type = 'enterprise' WHERE id = '${activeOrgID}';"`.quiet();
-    log.info("Set active org to enterprise account type");
-  } catch (e: unknown) {
-    const err = e as { stderr?: string; message?: string };
-    log.warn(
-      `Failed to set enterprise account type: ${err.message || err.stderr || JSON.stringify(e)}`,
-    );
-  }
-
-  const enableRBACRes = await accessEnableRBAC(gram, undefined, {
-    sessionHeaderGramSession: sessionId,
-  });
-  if (!enableRBACRes.ok) {
-    abort("Failed to enable RBAC and seed system roles", enableRBACRes.error);
-  }
-  log.info("Enabled RBAC and seeded system roles");
-
-  await seedCurrentUserAdminRole({
-    organizationId: activeOrgID,
-    userId: activeUserID,
-  });
-
-  success = true;
 }
 
 async function seedShadowMCPInventoryData(init: {
@@ -552,7 +364,7 @@ async function seedShadowMCPInventoryData(init: {
     );
   } catch (e: unknown) {
     const err = e as { stderr?: string; stdout?: string; message?: string };
-    log.warn(
+    log.stepFailed(
       `Failed to seed Shadow MCP inventory: ${err.message || err.stderr || err.stdout || JSON.stringify(e)}`,
     );
   }
@@ -660,7 +472,7 @@ SELECT COALESCE((SELECT id FROM updated), '');
     await $`docker compose exec gram-cache redis-cli -p 35299 -a ${redisPassword} DEL ${`userInfo:${userId}:`}`.quiet();
   } catch (e: unknown) {
     const err = e as { stderr?: string; message?: string };
-    log.warn(
+    log.stepFailed(
       `Marked current user as super admin, but failed to clear user info cache: ${err.message || err.stderr || JSON.stringify(e)}`,
     );
     return;
@@ -2206,7 +2018,7 @@ async function seedRiskFindings(init: {
     }
   } catch (e: unknown) {
     const err = e as { stderr?: string; stdout?: string; message?: string };
-    log.warn(
+    log.stepFailed(
       `Failed to seed risk findings: ${err.message || err.stderr || err.stdout || JSON.stringify(e)}`,
     );
   }
@@ -2321,7 +2133,7 @@ async function seedNonCorporateAccountFindings(init: {
     }
   } catch (e: unknown) {
     const err = e as { stderr?: string; stdout?: string; message?: string };
-    log.warn(
+    log.stepFailed(
       `Failed to seed non-corporate account findings: ${err.message || err.stderr || err.stdout || JSON.stringify(e)}`,
     );
   }
@@ -2724,7 +2536,7 @@ async function seedPersonalAccounts(init: {
     );
   } catch (e: unknown) {
     const err = e as { stderr?: string; stdout?: string; message?: string };
-    log.warn(
+    log.stepFailed(
       `Failed to seed personal-account data: ${err.message || err.stderr || err.stdout || JSON.stringify(e)}`,
     );
     return;
@@ -2855,7 +2667,7 @@ async function seedPersonalAccounts(init: {
     );
   } catch (e: unknown) {
     const err = e as { stderr?: string; stdout?: string; message?: string };
-    log.warn(
+    log.stepFailed(
       `Failed to seed personal-account ClickHouse telemetry: ${err.message || err.stderr || err.stdout || JSON.stringify(e)}`,
     );
   }
@@ -2871,7 +2683,7 @@ async function seedObservabilityData(init: {
   log.info(`Seeding observability data with ${toolUrns.length} tool URNs...`);
 
   if (toolUrns.length === 0) {
-    log.warn(
+    log.stepFailed(
       "No tool URNs available for seeding observability data. Skipping.",
     );
     return;
@@ -3489,7 +3301,7 @@ async function seedObservabilityData(init: {
     }
   } catch (e: unknown) {
     const err = e as { stderr?: string; stdout?: string; message?: string };
-    log.warn(
+    log.stepFailed(
       `Failed to seed PostgreSQL: ${err.message || err.stderr || err.stdout || JSON.stringify(e)}`,
     );
   }
@@ -3961,7 +3773,7 @@ async function seedObservabilityData(init: {
       }
     } catch (e: unknown) {
       const err = e as { stderr?: string; stdout?: string; message?: string };
-      log.warn(
+      log.stepFailed(
         `Failed to seed history chats: ${err.message || err.stderr || err.stdout || JSON.stringify(e)}`,
       );
     }
@@ -4370,7 +4182,7 @@ async function seedObservabilityData(init: {
     await runClickHouseSQL(chSQL);
     log.info(`Inserted ${chInserts.length} telemetry events into ClickHouse`);
   } catch (e) {
-    log.warn(`Failed to seed ClickHouse: ${e}`);
+    log.stepFailed(`Failed to seed ClickHouse: ${e}`);
   }
 
   log.info("Observability data seeding complete");
@@ -4496,6 +4308,355 @@ function abort(message: string, ...values: unknown[]): never {
     }
   }
   process.exit(1);
+}
+
+async function seed() {
+  let success = false;
+  intro("Seeding local development environment...");
+  using _ = {
+    [Symbol.dispose]() {
+      const total = formatDuration(performance.now() - seedStartedAt);
+      outro(
+        success
+          ? `Seeding complete in ${total}!`
+          : `Seeding failed after ${total}.`,
+      );
+    },
+  };
+  const serverURL = process.env["GRAM_SERVER_URL"];
+  if (!serverURL) {
+    throw new Error("GRAM_SERVER_URL is not set");
+  }
+
+  const force = process.env["usage_force"] === "true";
+  const fingerprint = await seedFingerprint();
+
+  const functionsProvider = process.env["GRAM_FUNCTIONS_PROVIDER"] ?? "local";
+  const shouldSeedFunctions = functionsProvider === "local";
+  if (!shouldSeedFunctions) {
+    log.info(
+      `Skipping seeded MCP app function assets because GRAM_FUNCTIONS_PROVIDER is '${functionsProvider}', not 'local'.`,
+    );
+  }
+
+  const gram = new GramCore({ serverURL });
+
+  // Authenticate via the dev-idp to get a session token.
+  log.info("Authenticating via dev-idp...");
+  const sessionId = await authenticateViaDevIDP(serverURL);
+  log.info("Authenticated successfully.");
+
+  const res = await authInfo(gram, undefined, {
+    sessionHeaderGramSession: sessionId,
+  });
+  if (!res.ok) {
+    abort("Failed to query session info", res.error);
+  }
+  const sessionInfo = res.value;
+  const sessionJSON = JSON.stringify(sessionInfo, null, 2);
+
+  const activeOrgID = sessionInfo.result.activeOrganizationId;
+  if (!activeOrgID) {
+    abort("Active organization ID not found", sessionJSON);
+  }
+  const activeUserID = sessionInfo.result.userId;
+  if (!activeUserID) {
+    abort("Active user ID not found", sessionJSON);
+  }
+
+  // The already-seeded shortcut runs only after resolving the seed target:
+  // the marker is scoped to org + user so that switching the dev-idp user or
+  // active organization re-seeds the new target instead of skipping it.
+  const markerKey = seedMarkerKey(activeOrgID, activeUserID);
+  if (!force && (await isAlreadySeeded(markerKey, fingerprint))) {
+    // The marker only proves the database was seeded. Seeding also writes
+    // values into mise.local.toml (mise loads them into the task env), so if
+    // any are missing — e.g. mise.local.toml was deleted — fall through to a
+    // full re-seed (idempotent) to restore them instead of reporting success.
+    // Keep this list in sync with every `mise set --file mise.local.toml`
+    // this task performs (initAPIKey, the MCP Logs toolset, seedTunnel).
+    const missingLocalConfig = [
+      "GRAM_API_KEY",
+      "VITE_GRAM_OBSERVABILITY_MCP_URL",
+      "TUNNEL_LOCAL_ID",
+      "TUNNEL_LOCAL_KEY",
+      "TUNNEL_LOCAL_MCP_ENDPOINT_SLUG",
+      "TUNNEL_LOCAL_MCP_SERVER_ID",
+    ].filter((key) => !process.env[key]);
+    if (missingLocalConfig.length > 0) {
+      log.info(
+        `Database already seeded, but mise.local.toml is missing ${missingLocalConfig.join(", ")} — re-seeding to restore local config.`,
+      );
+    } else {
+      // Presence is not enough for the API key: a revoked/rotated key would
+      // otherwise skip initAPIKey's validate-and-recreate repair path.
+      const existingApiKey = process.env["GRAM_API_KEY"] ?? "";
+      const vres = await keysValidate(gram, undefined, {
+        apikeyHeaderGramKey: existingApiKey,
+      });
+      if (vres.ok) {
+        log.info("Database already seeded. Pass --force to re-seed.");
+        success = true;
+        return;
+      }
+      log.info(
+        "Database already seeded, but GRAM_API_KEY no longer validates — re-seeding to repair local config.",
+      );
+    }
+  }
+
+  await seedCurrentUserSuperAdmin(activeUserID);
+
+  const orgs = sessionInfo.result.organizations;
+  const org = orgs.find(
+    (o: unknown) =>
+      typeof o === "object" && o != null && "id" in o && o?.id === activeOrgID,
+  );
+  if (!org) {
+    abort("Active organization not found", sessionJSON);
+  }
+
+  const projects: Record<string, { slug: string; id: string }> = {};
+  for (const p of org.projects) {
+    const id = p.id;
+    const slug = p.slug;
+    projects[slug] = { id, slug };
+  }
+
+  // Seed the default MCP registry (Pulse)
+  try {
+    const dbUser = process.env.DB_USER || "gram";
+    const dbName = process.env.DB_NAME || "gram";
+    await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -c "INSERT INTO mcp_registries (name, url) VALUES ('Gram Recommended', 'https://api.pulsemcp.com') ON CONFLICT (url) WHERE deleted IS FALSE DO NOTHING;"`.quiet();
+    log.info("Seeded MCP registry 'Gram Recommended'");
+  } catch (e: unknown) {
+    const err = e as { stderr?: string; message?: string };
+    log.stepFailed(
+      `Failed to seed MCP registry: ${err.message || err.stderr || JSON.stringify(e)}`,
+    );
+  }
+
+  // Set active org as whitelisted
+  try {
+    const dbUser = process.env.DB_USER || "gram";
+    const dbName = process.env.DB_NAME || "gram";
+    await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -c "UPDATE organization_metadata SET whitelisted = TRUE, gram_account_type = 'pro' WHERE id = '${activeOrgID}';"`.quiet();
+    log.info("Set active org as whitelisted (downgraded to pro for seeding)");
+  } catch (e: unknown) {
+    const err = e as { stderr?: string; message?: string };
+    log.stepFailed(
+      `Failed to set org whitelisted: ${err.message || err.stderr || JSON.stringify(e)}`,
+    );
+  }
+
+  try {
+    const dbUser = process.env.DB_USER || "gram";
+    const dbName = process.env.DB_NAME || "gram";
+    const redisPassword = process.env.GRAM_REDIS_CACHE_PASSWORD || "xi9XILbY";
+    await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -c "INSERT INTO organization_features (organization_id, feature_name) VALUES ('${activeOrgID}', 'logs'), ('${activeOrgID}', 'tool_io_logs') ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;"`.quiet();
+    await $`docker compose exec gram-cache redis-cli -p 35299 -a ${redisPassword} DEL feature:${activeOrgID}:logs: feature:${activeOrgID}:tool_io_logs:`.quiet();
+    log.info("Enabled local logs and tool_io_logs features");
+  } catch (e: unknown) {
+    const err = e as { stderr?: string; message?: string };
+    log.stepFailed(
+      `Failed to enable local log features: ${err.message || err.stderr || JSON.stringify(e)}`,
+    );
+  }
+
+  // oxlint-disable-next-line no-unused-vars
+  const key = await initAPIKey({
+    gram,
+    sessionId,
+  });
+
+  // Collect all tool URNs per project for seeding observability data
+  const projectToolUrns: Record<string, string[]> = {};
+
+  for (const { name, slug, assets, mcpPublic } of SEED_PROJECTS) {
+    const seedAssets = shouldSeedFunctions
+      ? assets
+      : assets.filter((asset) => asset.type !== "functions");
+
+    const {
+      created,
+      id,
+      slug: projectSlug,
+    } = await getOrCreateProject({
+      gram,
+      sessionId,
+      activeOrgID,
+      slug,
+    });
+    projects[projectSlug] = { id, slug: projectSlug };
+    projectToolUrns[projectSlug] = [];
+    let verb = created ? "Created" : "Found existing";
+    log.info(`${verb} project '${projectSlug}' (project_id = ${id})`);
+
+    if (seedAssets.length === 0) {
+      log.info(`No seed assets selected for '${projectSlug}', skipping.`);
+      continue;
+    }
+
+    const deploymentId = await deployAssets({
+      gram,
+      sessionId,
+      projectSlug,
+      projectName: name,
+      assets: seedAssets,
+    });
+    log.info(
+      `Deployed assets into '${projectSlug}' (deployment_id = ${deploymentId})`,
+    );
+
+    for (const asset of seedAssets) {
+      const toolset = await upsertToolset({
+        gram,
+        serverURL,
+        sessionId,
+        projectSlug,
+        deploymentId,
+        asset,
+        mcpPublic,
+      });
+      verb = toolset.created ? "Created" : "Updated";
+      log.info(
+        `${verb} toolset '${toolset.slug}' for project '${projectSlug}' (mcp_url = ${toolset.mcpURL}, tools: ${toolset.toolUrns.length})`,
+      );
+
+      // Collect tool URNs for observability seeding
+      projectToolUrns[projectSlug].push(...toolset.toolUrns);
+    }
+  }
+
+  // Create the MCP Logs toolset — a curated subset of Gram's own API tools
+  // exposed as a built-in MCP server on the project MCP page.
+  // In production this lives in speakeasy-team/kitchen-sink; locally we
+  // reuse ecommerce-api since the gram asset is already deployed there.
+  {
+    const projectSlug = SEED_PROJECTS[0].slug;
+    const mcpLogsToolset = await upsertMcpLogsToolset({
+      gram,
+      serverURL,
+      sessionId,
+      projectSlug,
+    });
+    const verb = mcpLogsToolset.created ? "Created" : "Updated";
+    log.info(
+      `${verb} MCP Logs toolset '${mcpLogsToolset.slug}' for project '${projectSlug}' (mcp_url = ${mcpLogsToolset.mcpURL})`,
+    );
+
+    await $`mise set --file mise.local.toml \
+      VITE_GRAM_OBSERVABILITY_MCP_URL=${mcpLogsToolset.mcpURL}`;
+    log.info(`Set VITE_GRAM_OBSERVABILITY_MCP_URL in mise.local.toml`);
+  }
+
+  // Seed a default environment for each project
+  for (const { slug: projectSlug } of SEED_PROJECTS) {
+    const env = await getOrCreateEnvironment({
+      gram,
+      sessionId,
+      projectSlug,
+      activeOrgID,
+      name: "Default",
+    });
+    log.info(
+      `${env.created ? "Created" : "Found existing"} environment '${env.slug}' for project '${projectSlug}'`,
+    );
+  }
+  await seedTunnel();
+
+  // Seed observability data for the E-Commerce project.
+  const firstSeededProjectSlug = SEED_PROJECTS[0].slug;
+  const firstProject = projects[firstSeededProjectSlug];
+  if (firstProject) {
+    const toolUrns = projectToolUrns[firstProject.slug] ?? [];
+    await seedObservabilityData({
+      projectId: firstProject.id,
+      organizationId: activeOrgID,
+      toolUrns,
+    });
+    await seedShadowMCPInventoryData({ projectId: firstProject.id });
+    // Risk findings depend on the chats/messages seeded above (FK +
+    // attachment), so seed them after observability data.
+    await seedRiskFindings({
+      projectId: firstProject.id,
+      organizationId: activeOrgID,
+    });
+    // Personal-account tracking data: employees with team + personal accounts,
+    // the device bridge, and account-linked chats. Runs after observability so
+    // its blanket chat delete doesn't wipe these account-linked chats.
+    await seedPersonalAccounts({
+      projectId: firstProject.id,
+      organizationId: activeOrgID,
+    });
+    // Non-corporate account risk policy + findings over the personal-account
+    // chats seeded just above. Runs last so seedRiskFindings' blanket
+    // risk_results reset can't wipe these events.
+    await seedNonCorporateAccountFindings({
+      projectId: firstProject.id,
+      organizationId: activeOrgID,
+    });
+  }
+
+  // Give the local dev user the "see all org sessions" admin view that the
+  // Agent Sessions page promises. That view is gated behind RBAC enforcement
+  // plus a chat:read grant, so enable RBAC and grant the dev user the admin
+  // scope set (chat:read is intentionally not part of any system role). Runs
+  // after asset/toolset seeding so those admin API calls aren't gated, and
+  // before the enterprise-account-type flip below (enforcement only activates
+  // once the org is enterprise).
+  await enableRBACForDevUser({
+    sessionId,
+    organizationId: activeOrgID,
+    userId: sessionInfo.result.userId,
+    gram,
+  });
+
+  // Set enterprise account type last so RBAC enforcement doesn't block seeding.
+  try {
+    const dbUser = process.env.DB_USER || "gram";
+    const dbName = process.env.DB_NAME || "gram";
+    await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -c "UPDATE organization_metadata SET gram_account_type = 'enterprise' WHERE id = '${activeOrgID}';"`.quiet();
+    log.info("Set active org to enterprise account type");
+  } catch (e: unknown) {
+    const err = e as { stderr?: string; message?: string };
+    log.stepFailed(
+      `Failed to set enterprise account type: ${err.message || err.stderr || JSON.stringify(e)}`,
+    );
+  }
+
+  const enableRBACRes = await accessEnableRBAC(gram, undefined, {
+    sessionHeaderGramSession: sessionId,
+  });
+  if (!enableRBACRes.ok) {
+    abort("Failed to enable RBAC and seed system roles", enableRBACRes.error);
+  }
+  log.info("Enabled RBAC and seeded system roles");
+
+  await seedCurrentUserAdminRole({
+    organizationId: activeOrgID,
+    userId: activeUserID,
+  });
+
+  if (seedStepFailures.length > 0) {
+    log.warn(
+      `Not recording the seed completion marker because ${seedStepFailures.length} best-effort seed step(s) failed above — the next 'mise seed' will retry them.`,
+    );
+  } else {
+    try {
+      await writeSeedMarker(markerKey, fingerprint);
+      log.info(
+        "Recorded seed completion marker in Postgres (devtools.seed_markers).",
+      );
+    } catch (e: unknown) {
+      const err = e as { stderr?: string; message?: string };
+      log.warn(
+        `Failed to record seed completion marker: ${err.message || err.stderr || JSON.stringify(e)}`,
+      );
+    }
+  }
+
+  success = true;
 }
 
 seed();

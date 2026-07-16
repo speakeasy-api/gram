@@ -1,0 +1,55 @@
+#:schema https://pitchfork.jdx.dev/schema.json
+
+# Config docs: https://pitchfork.jdx.dev/reference/configuration.html
+
+[daemons.dev-idp]
+run = "mise run start:dev-idp"
+ready_cmd = "mise run check:daemon --name {{name}}"
+
+[daemons.dev-idp-dashboard]
+run = "mise run start:dev-idp-dashboard"
+ready_cmd = "mise run check:daemon --name {{name}}"
+depends = ["dev-idp"]
+
+[daemons.admin]
+run = "mise run start:admin"
+ready_cmd = "mise run check:daemon --name {{name}}"
+depends = ["mock-oidc"]
+
+[daemons.mock-oidc]
+run = "mise run start:mock-oidc"
+ready_cmd = "mise run check:daemon --name {{name}}"
+
+[daemons.server]
+run = "mise run start:server"
+ready_cmd = "mise run check:daemon --name {{name}}"
+
+[daemons.worker]
+run = "mise run start:worker"
+ready_cmd = "mise run check:daemon --name {{name}}"
+
+[daemons.streams]
+run = "mise run start:streams"
+ready_cmd = "mise run check:daemon --name {{name}}"
+
+[daemons.pystreams-multi]
+run = "mise run start:pystreams-multi"
+ready_cmd = "mise run check:daemon --name {{name}}"
+
+[daemons.dashboard]
+run = "mise run start:dashboard"
+ready_cmd = "mise run check:daemon --name {{name}}"
+depends = ["server"]
+
+[daemons.assistant-runtime]
+run = "mise run start:assistant-runtime"
+ready_cmd = "mise run check:daemon --name {{name}}"
+
+[daemons.tunnel-gateway]
+run = "mise run start:tunnel-gateway"
+ready_cmd = "mise run check:daemon --name {{name}}"
+
+[daemons.tunnel-postgres-mcp]
+run = "mise run start:tunnel-postgres-mcp"
+ready_cmd = "mise run check:daemon --name {{name}}"
+depends = ["tunnel-gateway"]
