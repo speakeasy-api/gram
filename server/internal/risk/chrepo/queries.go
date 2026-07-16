@@ -7,6 +7,7 @@ import (
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/Masterminds/squirrel"
+	"github.com/google/uuid"
 )
 
 // sq is the squirrel statement builder pre-configured for ClickHouse (uses ?
@@ -18,7 +19,7 @@ var sq = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Question)
 // string, and one-way fingerprints. See internal/risk/finding_ch.go for how it
 // is populated and internal/risk/fingerprint.go for the fingerprint scheme.
 type RiskFindingRow struct {
-	ID                       string    `ch:"id"`
+	ID                       uuid.UUID `ch:"id"`
 	CreatedAt                time.Time `ch:"created_at"`
 	OrganizationID           string    `ch:"organization_id"`
 	ProjectID                string    `ch:"project_id"`

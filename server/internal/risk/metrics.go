@@ -14,12 +14,14 @@ const (
 	meterFindingMessagesInserted   = "gram.risk_findings.bq_messages_inserted"
 	meterFindingMessagesSkipped    = "gram.risk_findings.bq_messages_skipped"
 	meterFindingCHMessagesInserted = "gram.risk_findings.ch_messages_inserted"
+	meterFindingCHMessagesSkipped  = "gram.risk_findings.ch_messages_skipped"
 )
 
 type metrics struct {
 	messagesInserted   metric.Int64Counter
 	messagesSkipped    metric.Int64Counter
 	chMessagesInserted metric.Int64Counter
+	chMessagesSkipped  metric.Int64Counter
 }
 
 func newMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *metrics {
@@ -53,10 +55,20 @@ func newMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *metric
 		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterFindingCHMessagesInserted), attr.SlogError(err))
 	}
 
+	chMessagesSkipped, err := meter.Int64Counter(
+		meterFindingCHMessagesSkipped,
+		metric.WithDescription("Number of risk finding messages skipped before being submitted to ClickHouse"),
+		metric.WithUnit("{message}"),
+	)
+	if err != nil {
+		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterFindingCHMessagesSkipped), attr.SlogError(err))
+	}
+
 	return &metrics{
 		messagesInserted:   messagesInserted,
 		messagesSkipped:    messagesSkipped,
 		chMessagesInserted: chMessagesInserted,
+		chMessagesSkipped:  chMessagesSkipped,
 	}
 }
 
@@ -85,4 +97,13 @@ func (m *metrics) RecordFindingSkipped(ctx context.Context, reason string) {
 		return
 	}
 	m.messagesSkipped.Add(ctx, 1, metric.WithAttributes(attr.Reason(reason)))
+}
+
+// RecordFindingCHSkipped records a risk finding message that was dropped before
+// reaching ClickHouse, tagged with the reason it was skipped.
+func (m *metrics) RecordFindingCHSkipped(ctx context.Context, reason string) {
+	if m.chMessagesSkipped == nil {
+		return
+	}
+	m.chMessagesSkipped.Add(ctx, 1, metric.WithAttributes(attr.Reason(reason)))
 }

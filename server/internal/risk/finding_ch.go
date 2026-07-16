@@ -3,6 +3,8 @@ package risk
 import (
 	"context"
 	"encoding/base64"
+	"encoding/hex"
+	"fmt"
 	"log/slog"
 	"math"
 	"strings"
@@ -73,10 +75,20 @@ func (w *FindingCHWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 		match := message.GetMatch()
 		deadLetter := message.GetDeadLetterReason() != ""
 
+		// The id maps to a ClickHouse UUID column. Parse it here so a malformed
+		// or missing id skips only that finding rather than failing the binding
+		// for the whole multi-row batch insert.
+		id, err := uuid.Parse(message.GetId())
+		if err != nil {
+			logger.ErrorContext(ctx, "finding has invalid uuid id", attr.SlogError(err), attr.SlogValueString(message.GetId()))
+			w.metrics.RecordFindingCHSkipped(ctx, "invalid_id")
+			continue
+		}
+
 		createdAt, err := time.Parse(time.RFC3339, message.GetCreatedAt())
 		if err != nil {
 			logger.ErrorContext(ctx, "finding has invalid rfc3339 timestamp", attr.SlogError(err), attr.SlogValueString(message.GetCreatedAt()))
-			w.metrics.RecordFindingSkipped(ctx, "invalid_timestamp")
+			w.metrics.RecordFindingCHSkipped(ctx, "invalid_timestamp")
 			continue
 		}
 
@@ -85,44 +97,64 @@ func (w *FindingCHWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 		// Postgres path here. Dead-letter sentinels carry no rule/match to match
 		// against, so they bypass the check.
 		if !deadLetter && w.isExcluded(ctx, message) {
-			w.metrics.RecordFindingSkipped(ctx, "excluded")
+			w.metrics.RecordFindingCHSkipped(ctx, "excluded")
 			continue
 		}
 
-		// Compute global hmac-sha256.
+		// Compute the fingerprints. Keep the raw HMAC bytes around so the
+		// redacted display string can reuse a keyed prefix (see below) instead of
+		// an unkeyed hash. pepperVersion is captured from whichever fingerprint
+		// runs so a global-only finding still records the version needed to
+		// interpret it after a pepper rotation.
+		pepperVersion := ""
+
+		var globalSum []byte
 		globalHS256 := ""
 		if !deadLetter && match != "" {
-			if sum, _, err := w.fingerprinter.HS256([]byte(match)); err != nil {
+			if sum, pepperver, err := w.fingerprinter.HS256([]byte(match)); err != nil {
 				logger.ErrorContext(ctx, "failed to compute global fingerprint", attr.SlogError(err))
 			} else {
+				globalSum = sum
 				globalHS256 = base64.RawURLEncoding.EncodeToString(sum)
+				pepperVersion = pepperver
 			}
 		}
 
-		// Compute tenant-qualified hmac-sha256.
-		pepperVersion := ""
+		var tenantSum []byte
 		tenantHS256 := ""
 		if !deadLetter && orgID != "" && match != "" {
 			if sum, pepperver, err := w.fingerprinter.TenantedHS256(orgID, []byte(match), WithKeyCache(tenantKeyCache)); err != nil {
 				logger.ErrorContext(ctx, "failed to compute tenant-qualified fingerprint", attr.SlogError(err))
 			} else {
-				pepperVersion = pepperver
+				tenantSum = sum
 				tenantHS256 = base64.RawURLEncoding.EncodeToString(sum)
+				pepperVersion = pepperver
 			}
 		}
 
 		// Precompute the redacted display string. Every source is redacted here
 		// including shadow_mcp and account_identity — CH must never hold a
-		// plaintext match or PII. A dead-letter sentinel has no match, so its
-		// redaction stays empty.
+		// plaintext match or PII. The disambiguator is a prefix of the keyed HMAC
+		// fingerprint (tenant-qualified when available, else global) rather than
+		// an unkeyed SHA-256, so a low-entropy match (e.g. an email) can't be
+		// recovered offline from the stored value. A dead-letter sentinel has no
+		// match, so its redaction stays empty.
 		matchRedacted := ""
 		matchLen := uint32(0)
 		if !deadLetter && match != "" {
-			matchRedacted = fingerprintRedactedMatch(orgID, match)
 			if n := len(match); n > math.MaxUint32 {
 				matchLen = math.MaxUint32
 			} else {
 				matchLen = uint32(n)
+			}
+			displaySum := tenantSum
+			if displaySum == nil {
+				displaySum = globalSum
+			}
+			if len(displaySum) >= 4 {
+				matchRedacted = fmt.Sprintf("<redacted len=%d sha=%s>", matchLen, hex.EncodeToString(displaySum[:4]))
+			} else {
+				matchRedacted = fmt.Sprintf("<redacted len=%d>", matchLen)
 			}
 		}
 
@@ -132,7 +164,7 @@ func (w *FindingCHWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 		}
 
 		rows = append(rows, chrepo.RiskFindingRow{
-			ID:                       message.GetId(),
+			ID:                       id,
 			CreatedAt:                createdAt.UTC(),
 			OrganizationID:           message.GetOrganizationId(),
 			ProjectID:                message.GetProjectId(),

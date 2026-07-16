@@ -2,7 +2,6 @@ package risk_test
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -68,12 +67,21 @@ func chRows(t *testing.T, ins *fakeCHInserter) []chrepo.RiskFindingRow {
 	return ins.rows
 }
 
-// wantRedacted mirrors fingerprintRedactedMatch: `<redacted len=N sha=XXXXXXXX>`
-// over sha256(orgID \x00 match).
-func wantRedacted(orgID, match string) string {
-	buf := append([]byte(orgID), 0x00)
-	buf = append(buf, match...)
-	sum := sha256.Sum256(buf)
+// chFinding is finding() with a real UUIDv7 id. The CH writer parses id into a
+// UUID column and skips findings whose id is not a valid UUID, so CH tests need
+// a valid one (finding()'s "finding-1" is deliberately kept for the BQ tests).
+func chFinding() *riskv1.Finding {
+	f := finding()
+	f.SetId(uuid.Must(uuid.NewV7()).String())
+	return f
+}
+
+// wantRedacted mirrors the CH writer's redacted display string: a prefix of the
+// keyed HMAC fingerprint (tenant-qualified for an org-scoped finding), not an
+// unkeyed hash, so a low-entropy match can't be recovered from the stored value.
+func wantRedacted(t *testing.T, tenantID, match string) string {
+	t.Helper()
+	sum := wantTenantedHMAC(t, testPepperKey, tenantID, []byte(match))
 	return fmt.Sprintf("<redacted len=%d sha=%s>", len(match), hex.EncodeToString(sum[:4]))
 }
 
@@ -82,14 +90,18 @@ func TestFindingCHWriter_HandleBatch_MapsAllFields(t *testing.T) {
 
 	w, ins := newCHWriter(t)
 
-	require.NoError(t, w.HandleBatch(context.Background(), []*riskv1.Finding{finding()}, nil))
+	f := finding()
+	id := uuid.Must(uuid.NewV7())
+	f.SetId(id.String())
+
+	require.NoError(t, w.HandleBatch(context.Background(), []*riskv1.Finding{f}, nil))
 
 	require.Equal(t, 1, ins.calls)
 	all := chRows(t, ins)
 	require.Len(t, all, 1)
 	row := all[0]
 
-	require.Equal(t, "finding-1", row.ID)
+	require.Equal(t, id, row.ID)
 	require.Equal(t, "req-1", row.RequestID)
 	require.Equal(t, "chat-1", row.ChatMessageID)
 	require.Equal(t, "proj-1", row.ProjectID)
@@ -108,7 +120,7 @@ func TestFindingCHWriter_HandleBatch_MapsAllFields(t *testing.T) {
 
 	// Hashes-only: the raw match is never stored, only its length + redaction.
 	require.Equal(t, uint32(len("hunter2")), row.MatchLen)
-	require.Equal(t, wantRedacted("org-1", "hunter2"), row.MatchRedacted)
+	require.Equal(t, wantRedacted(t, "org-1", "hunter2"), row.MatchRedacted)
 	require.NotContains(t, row.MatchRedacted, "hunter2")
 	require.Equal(t, wantGlobalFingerprint("hunter2"), row.FingerprintGlobalHS256)
 	require.Equal(t, wantTenantFingerprint(t, "org-1", "hunter2"), row.FingerprintTenantHS256)
@@ -124,14 +136,14 @@ func TestFindingCHWriter_HandleBatch_RedactsEverySourceNoPassthrough(t *testing.
 	for _, source := range []string{shadowmcp.SourceShadowMCP, ra.SourceAccountIdentity} {
 		w, ins := newCHWriter(t)
 
-		f := finding()
+		f := chFinding()
 		f.SetSource(source)
 		f.SetMatch("user@example.com")
 
 		require.NoError(t, w.HandleBatch(context.Background(), []*riskv1.Finding{f}, nil))
 
 		row := chRows(t, ins)[0]
-		require.Equal(t, wantRedacted("org-1", "user@example.com"), row.MatchRedacted,
+		require.Equal(t, wantRedacted(t, "org-1", "user@example.com"), row.MatchRedacted,
 			"source %q must be redacted in ClickHouse, not passed through verbatim", source)
 		require.NotContains(t, row.MatchRedacted, "user@example.com",
 			"source %q leaked plaintext into ClickHouse", source)
@@ -143,7 +155,7 @@ func TestFindingCHWriter_HandleBatch_NoMatchYieldsNoFingerprintsOrRedaction(t *t
 
 	w, ins := newCHWriter(t)
 
-	f := finding()
+	f := chFinding()
 	f.SetMatch("")
 
 	require.NoError(t, w.HandleBatch(context.Background(), []*riskv1.Finding{f}, nil))
@@ -160,7 +172,7 @@ func TestFindingCHWriter_HandleBatch_DeadLetterSuppressesFingerprintsAndRedactio
 
 	w, ins := newCHWriter(t)
 
-	f := finding()
+	f := chFinding()
 	f.SetDeadLetterReason("malformed")
 
 	require.NoError(t, w.HandleBatch(context.Background(), []*riskv1.Finding{f}, nil))
@@ -178,7 +190,7 @@ func TestFindingCHWriter_HandleBatch_TenantFingerprintRequiresOrg(t *testing.T) 
 
 	w, ins := newCHWriter(t)
 
-	f := finding()
+	f := chFinding()
 	f.SetOrganizationId("   ") // trims to empty
 
 	require.NoError(t, w.HandleBatch(context.Background(), []*riskv1.Finding{f}, nil))
@@ -193,12 +205,18 @@ func TestFindingCHWriter_HandleBatch_InvalidTimestampSkipsFinding(t *testing.T) 
 
 	w, ins := newCHWriter(t)
 
-	bad := finding()
+	bad := chFinding()
 	bad.SetCreatedAt("not-a-timestamp")
 
-	require.NoError(t, w.HandleBatch(context.Background(), []*riskv1.Finding{bad, finding()}, nil))
+	good := finding()
+	goodID := uuid.Must(uuid.NewV7())
+	good.SetId(goodID.String())
 
-	require.Len(t, chRows(t, ins), 1, "only the finding with a valid timestamp is inserted")
+	require.NoError(t, w.HandleBatch(context.Background(), []*riskv1.Finding{bad, good}, nil))
+
+	rows := chRows(t, ins)
+	require.Len(t, rows, 1, "only the finding with a valid timestamp is inserted")
+	require.Equal(t, goodID, rows[0].ID, "the surviving row must be the valid finding, not the skipped one")
 }
 
 func TestFindingCHWriter_HandleBatch_EmptyBatchSkipsInsert(t *testing.T) {
@@ -219,7 +237,7 @@ func TestFindingCHWriter_HandleBatch_InserterErrorIsSwallowed(t *testing.T) {
 	ins.err = errors.New("clickhouse unavailable")
 
 	// Shadow mode: the writer logs but does not surface insert failures.
-	require.NoError(t, w.HandleBatch(context.Background(), []*riskv1.Finding{finding()}, nil))
+	require.NoError(t, w.HandleBatch(context.Background(), []*riskv1.Finding{chFinding()}, nil))
 }
 
 func TestFindingCHWriter_HandleBatch_RecordsInsertedMetric(t *testing.T) {
@@ -241,7 +259,7 @@ func TestFindingCHWriter_HandleBatch_RecordsInsertedMetric(t *testing.T) {
 		w, ins := newCHWriterWithMeter(t, mp)
 		ins.err = tt.inserterErr
 
-		require.NoError(t, w.HandleBatch(context.Background(), []*riskv1.Finding{finding(), finding()}, nil))
+		require.NoError(t, w.HandleBatch(context.Background(), []*riskv1.Finding{chFinding(), chFinding()}, nil))
 
 		point := chMessagesInsertedPoint(t, reader)
 		require.Equal(t, int64(2), point.Value)
@@ -282,13 +300,13 @@ func TestFindingCHWriter_HandleBatch_DropsExcludedFindings(t *testing.T) {
 	policyID := uuid.Must(uuid.NewV7()).String()
 
 	// Excluded: match "hunter2" (== the exclusion value).
-	excluded := finding()
+	excluded := chFinding()
 	excluded.SetProjectId(authCtx.ProjectID.String())
 	excluded.SetRiskPolicyId(policyID)
 	excluded.SetMatch("hunter2")
 
 	// Kept: a different value the exclusion does not cover.
-	kept := finding()
+	kept := chFinding()
 	kept.SetProjectId(authCtx.ProjectID.String())
 	kept.SetRiskPolicyId(policyID)
 	kept.SetMatch("different-secret")
@@ -297,7 +315,7 @@ func TestFindingCHWriter_HandleBatch_DropsExcludedFindings(t *testing.T) {
 
 	rows := chRows(t, ins)
 	require.Len(t, rows, 1, "the excluded finding must be dropped, the other kept")
-	require.Equal(t, wantRedacted("org-1", "different-secret"), rows[0].MatchRedacted)
+	require.Equal(t, wantRedacted(t, "org-1", "different-secret"), rows[0].MatchRedacted)
 }
 
 // chMessagesInsertedPoint returns the single data point for the CH
