@@ -8,6 +8,7 @@ import (
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
 	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 // wantMarketplace / wantObservability derive the expected names from the same
@@ -265,9 +266,14 @@ func TestGetPlugins_IgnoresMismatchedOrgAssignment(t *testing.T) {
 	seedSecondOrg(t, ctx, ti.conn)
 
 	stale := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "stale-tool")
-	_, err := ti.conn.Exec(ctx,
-		`INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn) VALUES ($1, $2, $3)`,
-		stale, "other-org-id", "*")
+	// Raw fixture: the org-scoped AddPluginAssignment can't create a row whose
+	// organization_id differs from the plugin's org, which is exactly the anomaly
+	// under test.
+	err := testrepo.New(ti.conn).InsertPluginAssignmentFixture(ctx, testrepo.InsertPluginAssignmentFixtureParams{
+		PluginID:       stale,
+		OrganizationID: "other-org-id",
+		PrincipalUrn:   "*",
+	})
 	require.NoError(t, err)
 
 	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: mockidp.MockUserEmail})
