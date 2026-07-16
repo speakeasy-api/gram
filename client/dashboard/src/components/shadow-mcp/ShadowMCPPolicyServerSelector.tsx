@@ -8,6 +8,7 @@ import {
   Button,
   type Column,
   Dialog,
+  Icon,
   Table,
 } from "@speakeasy-api/moonshine";
 import { useCallback, useDeferredValue, useMemo, useState } from "react";
@@ -121,6 +122,30 @@ function AppliedServerRow({ server }: { server: ShadowMCPInventoryServer }) {
         {server.canonicalServerUrl}
       </Type>
     </li>
+  );
+}
+
+function EmptyServerSelection({ onSelect }: { onSelect: () => void }) {
+  return (
+    <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-10 text-center">
+      <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
+        <Icon
+          aria-hidden="true"
+          name="shield-check"
+          className="text-muted-foreground h-6 w-6"
+        />
+      </div>
+      <Type variant="subheading" className="mb-1">
+        No servers allowed yet
+      </Type>
+      <Type small muted className="mb-4 max-w-md">
+        Select any Shadow MCP servers that should remain available when this
+        policy blocks access.
+      </Type>
+      <Button type="button" variant="primary" onClick={onSelect}>
+        Select servers
+      </Button>
+    </div>
   );
 }
 
@@ -256,6 +281,36 @@ export function ShadowMCPPolicyServerSelector({
     setOpen(false);
   };
 
+  const showHeaderAction = selectedURLs.size > 0 || isLoading || error !== null;
+  const headerActionLabel =
+    selectedURLs.size > 0 ? "Manage servers" : "Select servers";
+
+  let selectionContent: JSX.Element;
+  if (isLoading) {
+    selectionContent = (
+      <Type muted small>
+        Loading Shadow MCP inventory…
+      </Type>
+    );
+  } else if (error) {
+    selectionContent = (
+      <div className="border-border bg-muted/20 flex items-center justify-between gap-4 rounded-md border px-4 py-3">
+        <Type muted small>
+          Shadow MCP inventory could not be loaded.
+        </Type>
+        <Button type="button" variant="tertiary" size="sm" onClick={onRetry}>
+          Retry
+        </Button>
+      </div>
+    );
+  } else if (selectedURLs.size === 0) {
+    selectionContent = (
+      <EmptyServerSelection onSelect={() => handleOpenChange(true)} />
+    );
+  } else {
+    selectionContent = <AppliedServerList servers={appliedServers} />;
+  }
+
   return (
     <section
       aria-labelledby="shadow-mcp-policy-server-selector-title"
@@ -268,52 +323,41 @@ export function ShadowMCPPolicyServerSelector({
             variant="body"
             className="font-medium"
           >
-            Allowed Shadow MCP servers
+            Servers allowed by this policy
           </Type>
           <Type muted small className="mt-1">
-            Selected servers will remain available when this policy starts
-            blocking.
+            These Shadow MCP servers remain available when the policy blocks
+            access.
           </Type>
         </div>
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          disabled={isLoading || error !== null}
-          onClick={() => handleOpenChange(true)}
-        >
-          Select servers
-        </Button>
+        {showHeaderAction && (
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            disabled={isLoading || error !== null}
+            onClick={() => handleOpenChange(true)}
+          >
+            {headerActionLabel}
+          </Button>
+        )}
       </div>
 
-      {isLoading ? (
-        <Type muted small>
-          Loading Shadow MCP inventory…
-        </Type>
-      ) : error ? (
-        <div className="border-border bg-muted/20 flex items-center justify-between gap-4 rounded-md border px-4 py-3">
-          <Type muted small>
-            Shadow MCP inventory could not be loaded.
-          </Type>
-          <Button type="button" variant="tertiary" size="sm" onClick={onRetry}>
-            Retry
-          </Button>
-        </div>
-      ) : (
-        <AppliedServerList servers={appliedServers} />
-      )}
+      {selectionContent}
 
-      <Type muted small>
-        {selectedCountLabel(selectedURLs.size)}
-      </Type>
+      {selectedURLs.size > 0 && (
+        <Type muted small>
+          {selectedCountLabel(selectedURLs.size)}
+        </Type>
+      )}
 
       <Dialog open={open} onOpenChange={handleOpenChange}>
         <Dialog.Content className="max-h-[80vh] grid-rows-[auto_auto_minmax(0,1fr)_auto] overflow-hidden sm:max-w-5xl">
           <Dialog.Header>
             <Dialog.Title>Select allowed servers</Dialog.Title>
             <Dialog.Description>
-              Choose the observed Shadow MCP servers that should remain
-              available.
+              Choose which Shadow MCP servers remain available when this policy
+              blocks access.
             </Dialog.Description>
           </Dialog.Header>
 

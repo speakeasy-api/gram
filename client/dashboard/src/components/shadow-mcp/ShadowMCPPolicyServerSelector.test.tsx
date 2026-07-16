@@ -77,7 +77,11 @@ function ControlledSelector({
 }
 
 function openSelector() {
-  fireEvent.click(screen.getByRole("button", { name: "Select servers" }));
+  const trigger =
+    screen.queryByRole("button", { name: "Select servers" }) ??
+    screen.getByRole("button", { name: "Manage servers" });
+
+  fireEvent.click(trigger);
   return screen.getByRole("dialog", { name: "Select allowed servers" });
 }
 
@@ -94,19 +98,30 @@ describe("ShadowMCPPolicyServerSelector", () => {
 
   afterEach(cleanup);
 
-  it("renders the empty applied selection", () => {
+  it("renders an actionable empty selection", () => {
     render(<ControlledSelector />);
 
     const section = screen.getByRole("region", {
-      name: "Allowed Shadow MCP servers",
+      name: "Servers allowed by this policy",
     });
-    expect(within(section).getByText("No servers selected")).toBeTruthy();
-    expect(within(section).getByText("0 servers selected")).toBeTruthy();
     expect(
-      within(section).queryByRole("list", {
-        name: "Selected Shadow MCP servers",
-      }),
+      within(section).getByText(
+        "These Shadow MCP servers remain available when the policy blocks access.",
+      ),
+    ).toBeTruthy();
+    expect(within(section).getByText("No servers allowed yet")).toBeTruthy();
+    expect(
+      within(section).getByText(
+        "Select any Shadow MCP servers that should remain available when this policy blocks access.",
+      ),
+    ).toBeTruthy();
+    expect(
+      within(section).getByRole("button", { name: "Select servers" }),
+    ).toBeTruthy();
+    expect(
+      within(section).queryByRole("button", { name: "Manage servers" }),
     ).toBeNull();
+    expect(within(section).queryByText("0 servers selected")).toBeNull();
   });
 
   it("renders a compact scrollable applied summary with only names and URLs", () => {
@@ -132,8 +147,14 @@ describe("ShadowMCPPolicyServerSelector", () => {
     );
 
     const section = screen.getByRole("region", {
-      name: "Allowed Shadow MCP servers",
+      name: "Servers allowed by this policy",
     });
+    expect(
+      within(section).getByRole("button", { name: "Manage servers" }),
+    ).toBeTruthy();
+    expect(
+      within(section).queryByRole("button", { name: "Select servers" }),
+    ).toBeNull();
     const list = within(section).getByRole("list", {
       name: "Selected Shadow MCP servers",
     });
@@ -172,6 +193,11 @@ describe("ShadowMCPPolicyServerSelector", () => {
     render(<ControlledSelector />);
 
     const dialog = openSelector();
+    expect(
+      within(dialog).getByText(
+        "Choose which Shadow MCP servers remain available when this policy blocks access.",
+      ),
+    ).toBeTruthy();
     const githubRow = within(dialog).getByRole("row", { name: /GitHub MCP/ });
     expect(
       within(githubRow).getByText(githubServer.canonicalServerUrl),
@@ -271,7 +297,7 @@ describe("ShadowMCPPolicyServerSelector", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
 
     const section = screen.getByRole("region", {
-      name: "Allowed Shadow MCP servers",
+      name: "Servers allowed by this policy",
     });
     expect(within(section).getByText("GitHub MCP")).toBeTruthy();
     expect(
@@ -331,7 +357,7 @@ describe("ShadowMCPPolicyServerSelector", () => {
     );
 
     const section = screen.getByRole("region", {
-      name: "Allowed Shadow MCP servers",
+      name: "Servers allowed by this policy",
     });
     expect(within(section).getByText("GitHub MCP")).toBeTruthy();
     expect(
