@@ -51,6 +51,15 @@ Write concise release notes.
 	require.NoError(t, err)
 	require.True(t, manifest.SpecValid)
 	require.Equal(t, map[string]any{"author": "platform", "version": "1"}, manifest.Metadata)
+	require.Equal(t, map[string]any{
+		"name":           "release-notes",
+		"description":    "Produces release notes.",
+		"compatibility":  "Requires git 2.40 or newer.",
+		"license":        "Apache-2.0",
+		"allowed-tools":  "Bash(git:*) Read",
+		"metadata":       map[string]any{"author": "platform", "version": "1"},
+		"x-gram-setting": "tolerated",
+	}, manifest.Frontmatter)
 	require.NotNil(t, manifest.Description)
 	require.Equal(t, "Produces release notes.", *manifest.Description)
 }
@@ -64,6 +73,11 @@ func TestParseSkillManifestUnknownTopLevelKeysAreTolerated(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, manifest.SpecValid)
 	require.Empty(t, manifest.ValidationErrors)
+	require.Equal(t, map[string]any{
+		"name":        "unknown-keys",
+		"description": "Valid description.",
+		"future":      map[string]any{"nested": []any{"one", "two"}},
+	}, manifest.Frontmatter)
 }
 
 func TestParseSkillManifestFatalInputs(t *testing.T) {

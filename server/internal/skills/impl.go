@@ -238,7 +238,7 @@ func (s *Service) recordVersion(
 		if stateErr != nil {
 			return nil, oops.E(oops.CodeUnexpected, stateErr, "load current skill state after version no-op").LogError(ctx, logger)
 		}
-		matchedView, viewErr := mv.BuildSkillVersionView(matched)
+		matchedView, viewErr := mv.BuildSkillVersionView(matched, manifestFrontmatter(matched.Content))
 		if viewErr != nil {
 			return nil, oops.E(oops.CodeUnexpected, viewErr, "build existing skill version").LogError(ctx, logger)
 		}
@@ -269,7 +269,7 @@ func (s *Service) recordVersion(
 		return nil, oops.E(oops.CodeUnexpected, err, "load skill state after adding version").LogError(ctx, logger)
 	}
 	afterView := mv.BuildSkillView(updated, latestID, count)
-	versionView, err := mv.BuildSkillVersionView(version)
+	versionView, err := mv.BuildSkillVersionView(version, manifestFrontmatter(version.Content))
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "build created skill version").LogError(ctx, logger)
 	}
@@ -489,7 +489,7 @@ func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.GetSki
 		return nil, oops.E(oops.CodeUnexpected, err, "get skill details").LogError(ctx, logger)
 	}
 
-	latestView, err := mv.BuildSkillVersionView(details.SkillVersion)
+	latestView, err := mv.BuildSkillVersionView(details.SkillVersion, manifestFrontmatter(details.SkillVersion.Content))
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "build latest skill version").LogError(ctx, logger)
 	}
@@ -548,7 +548,7 @@ func (s *Service) ListVersions(ctx context.Context, payload *gen.ListVersionsPay
 	if hasMore {
 		rows = rows[:payload.Limit]
 	}
-	views, err := mv.BuildSkillVersionListView(rows)
+	views, err := mv.BuildSkillVersionListView(rows, manifestFrontmatter)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "build skill versions").LogError(ctx, logger)
 	}

@@ -1503,6 +1503,12 @@ func unmarshalSkillVersionResponseBodyToTypesSkillVersion(v *SkillVersionRespons
 		tv := val
 		res.Metadata[tk] = tv
 	}
+	res.Frontmatter = make(map[string]any, len(v.Frontmatter))
+	for key, val := range v.Frontmatter {
+		tk := key
+		tv := val
+		res.Frontmatter[tk] = tv
+	}
 	res.ValidationErrors = make([]*types.SkillValidationError, len(v.ValidationErrors))
 	for i, val := range v.ValidationErrors {
 		if val == nil {

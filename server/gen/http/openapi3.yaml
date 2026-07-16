@@ -55239,6 +55239,10 @@ components:
                 description:
                     type: string
                     description: The optional description from this manifest version.
+                frontmatter:
+                    type: object
+                    description: All top-level frontmatter fields parsed from this manifest version.
+                    additionalProperties: true
                 id:
                     type: string
                     description: The skill version ID.
@@ -55270,6 +55274,7 @@ components:
                 - canonical_sha256
                 - raw_sha256
                 - metadata
+                - frontmatter
                 - spec_valid
                 - validation_errors
                 - created_at

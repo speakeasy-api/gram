@@ -280,6 +280,7 @@ var SkillVersion = Type("SkillVersion", func() {
 	Attribute("raw_sha256", String, "The SHA-256 digest of the exact uploaded SKILL.md content.")
 	Attribute("description", String, "The optional description from this manifest version.")
 	Attribute("metadata", MapOf(String, Any), "Metadata parsed from this manifest version.")
+	Attribute("frontmatter", MapOf(String, Any), "All top-level frontmatter fields parsed from this manifest version.")
 	Attribute("spec_valid", Boolean, "Whether this manifest version conforms to the Agent Skills specification.")
 	Attribute("validation_errors", ArrayOf(SkillValidationError), "Specification validation problems recorded for this manifest version.")
 	Attribute("created_at", String, "When this immutable version was recorded.", func() {
@@ -287,7 +288,7 @@ var SkillVersion = Type("SkillVersion", func() {
 	})
 	Attribute("created_by_user_id", String, "The user that recorded this version.")
 
-	Required("id", "skill_id", "content", "canonical_sha256", "raw_sha256", "metadata", "spec_valid", "validation_errors", "created_at", "created_by_user_id")
+	Required("id", "skill_id", "content", "canonical_sha256", "raw_sha256", "metadata", "frontmatter", "spec_valid", "validation_errors", "created_at", "created_by_user_id")
 })
 
 var RecordSkillResult = Type("RecordSkillResult", func() {

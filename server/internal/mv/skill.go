@@ -37,7 +37,7 @@ func BuildSkillListView(rows []repo.ListSkillsRow) []*types.Skill {
 	return result
 }
 
-func BuildSkillVersionView(version repo.SkillVersion) (*types.SkillVersion, error) {
+func BuildSkillVersionView(version repo.SkillVersion, frontmatter map[string]any) (*types.SkillVersion, error) {
 	metadata := make(map[string]any)
 	metadataDecoder := json.NewDecoder(bytes.NewReader(version.Metadata))
 	metadataDecoder.UseNumber()
@@ -46,6 +46,10 @@ func BuildSkillVersionView(version repo.SkillVersion) (*types.SkillVersion, erro
 	}
 	if metadata == nil {
 		metadata = make(map[string]any)
+	}
+
+	if frontmatter == nil {
+		frontmatter = make(map[string]any)
 	}
 
 	validationErrors := make([]*types.SkillValidationError, 0)
@@ -65,6 +69,7 @@ func BuildSkillVersionView(version repo.SkillVersion) (*types.SkillVersion, erro
 		RawSha256:        version.RawSha256,
 		Description:      conv.FromPGText[string](version.Description),
 		Metadata:         metadata,
+		Frontmatter:      frontmatter,
 		SpecValid:        version.SpecValid,
 		ValidationErrors: validationErrors,
 		CreatedAt:        conv.FromPGTimestamptz(version.CreatedAt),
@@ -72,10 +77,10 @@ func BuildSkillVersionView(version repo.SkillVersion) (*types.SkillVersion, erro
 	}, nil
 }
 
-func BuildSkillVersionListView(rows []repo.SkillVersion) ([]*types.SkillVersion, error) {
+func BuildSkillVersionListView(rows []repo.SkillVersion, frontmatter func(content string) map[string]any) ([]*types.SkillVersion, error) {
 	result := make([]*types.SkillVersion, len(rows))
 	for i, row := range rows {
-		view, err := BuildSkillVersionView(row)
+		view, err := BuildSkillVersionView(row, frontmatter(row.Content))
 		if err != nil {
 			return nil, fmt.Errorf("build skill version %s: %w", row.ID, err)
 		}

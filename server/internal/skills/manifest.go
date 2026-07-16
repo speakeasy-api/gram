@@ -43,6 +43,7 @@ type parsedSkillManifest struct {
 	DisplayName      string
 	Description      *string
 	Metadata         map[string]any
+	Frontmatter      map[string]any
 	SpecValid        bool
 	ValidationErrors []validationError
 	RawSHA256        string
@@ -131,6 +132,7 @@ func parseSkillManifest(content string) (parsedSkillManifest, error) {
 	validationErrors := validateSkillSpec(fields, displayName)
 	description := stringField(fields, "description")
 	metadata := metadataField(fields)
+	frontmatterValues := frontmatterFields(fields)
 
 	body := strings.Join(lines[closingLine+1:], "\n")
 	body = strings.Trim(body, "\n")
@@ -187,6 +189,7 @@ func parseSkillManifest(content string) (parsedSkillManifest, error) {
 		DisplayName:      displayName,
 		Description:      description,
 		Metadata:         metadata,
+		Frontmatter:      frontmatterValues,
 		SpecValid:        len(validationErrors) == 0,
 		ValidationErrors: validationErrors,
 		RawSHA256:        hex.EncodeToString(rawDigest[:]),
@@ -714,6 +717,24 @@ func stringField(fields map[string]*yaml.Node, field string) *string {
 	}
 	value := strings.TrimSpace(node.Value)
 	return &value
+}
+
+func frontmatterFields(fields map[string]*yaml.Node) map[string]any {
+	frontmatter := make(map[string]any, len(fields))
+	for key, node := range fields {
+		frontmatter[key] = yamlJSONValue(node)
+	}
+	return frontmatter
+}
+
+// manifestFrontmatter re-derives the top-level frontmatter fields from stored
+// manifest content, which is guaranteed to have parsed at write time.
+func manifestFrontmatter(content string) map[string]any {
+	parsed, err := parseSkillManifest(content)
+	if err != nil {
+		return map[string]any{}
+	}
+	return parsed.Frontmatter
 }
 
 func metadataField(fields map[string]*yaml.Node) map[string]any {

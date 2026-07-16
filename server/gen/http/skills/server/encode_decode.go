@@ -1496,6 +1496,14 @@ func marshalTypesSkillVersionToSkillVersionResponseBody(v *types.SkillVersion) *
 			res.Metadata[tk] = tv
 		}
 	}
+	if v.Frontmatter != nil {
+		res.Frontmatter = make(map[string]any, len(v.Frontmatter))
+		for key, val := range v.Frontmatter {
+			tk := key
+			tv := val
+			res.Frontmatter[tk] = tv
+		}
+	}
 	if v.ValidationErrors != nil {
 		res.ValidationErrors = make([]*SkillValidationErrorResponseBody, len(v.ValidationErrors))
 		for i, val := range v.ValidationErrors {

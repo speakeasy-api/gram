@@ -1217,6 +1217,8 @@ type SkillVersionResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Metadata parsed from this manifest version.
 	Metadata map[string]any `form:"metadata,omitempty" json:"metadata,omitempty" xml:"metadata,omitempty"`
+	// All top-level frontmatter fields parsed from this manifest version.
+	Frontmatter map[string]any `form:"frontmatter,omitempty" json:"frontmatter,omitempty" xml:"frontmatter,omitempty"`
 	// Whether this manifest version conforms to the Agent Skills specification.
 	SpecValid *bool `form:"spec_valid,omitempty" json:"spec_valid,omitempty" xml:"spec_valid,omitempty"`
 	// Specification validation problems recorded for this manifest version.
@@ -3831,6 +3833,9 @@ func ValidateSkillVersionResponseBody(body *SkillVersionResponseBody) (err error
 	}
 	if body.Metadata == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("metadata", "body"))
+	}
+	if body.Frontmatter == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("frontmatter", "body"))
 	}
 	if body.SpecValid == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("spec_valid", "body"))

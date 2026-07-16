@@ -37,6 +37,10 @@ export type SkillVersion = {
    */
   description?: string | undefined;
   /**
+   * All top-level frontmatter fields parsed from this manifest version.
+   */
+  frontmatter: { [k: string]: any };
+  /**
    * The skill version ID.
    */
   id: string;
@@ -74,6 +78,7 @@ export const SkillVersion$inboundSchema: z.ZodMiniType<SkillVersion, unknown> =
       ),
       created_by_user_id: z.string(),
       description: z.optional(z.string()),
+      frontmatter: z.record(z.string(), z.any()),
       id: z.string(),
       metadata: z.record(z.string(), z.any()),
       raw_sha256: z.string(),

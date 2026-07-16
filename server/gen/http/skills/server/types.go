@@ -1216,6 +1216,8 @@ type SkillVersionResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Metadata parsed from this manifest version.
 	Metadata map[string]any `form:"metadata" json:"metadata" xml:"metadata"`
+	// All top-level frontmatter fields parsed from this manifest version.
+	Frontmatter map[string]any `form:"frontmatter" json:"frontmatter" xml:"frontmatter"`
 	// Whether this manifest version conforms to the Agent Skills specification.
 	SpecValid bool `form:"spec_valid" json:"spec_valid" xml:"spec_valid"`
 	// Specification validation problems recorded for this manifest version.

@@ -23,6 +23,8 @@ type SkillVersion struct {
 	Description *string
 	// Metadata parsed from this manifest version.
 	Metadata map[string]any
+	// All top-level frontmatter fields parsed from this manifest version.
+	Frontmatter map[string]any
 	// Whether this manifest version conforms to the Agent Skills specification.
 	SpecValid bool
 	// Specification validation problems recorded for this manifest version.

@@ -45,6 +45,11 @@ func TestSkillsCreateValidManifestRoundTrip(t *testing.T) {
 	require.Equal(t, "2ec7c886f769f3f8a417d2b6a62c55de38a3aa5aaf1655e519203b67daa51721", result.Version.CanonicalSha256)
 	require.False(t, result.Version.SpecValid)
 	require.Equal(t, map[string]any{"owner": "platform"}, result.Version.Metadata)
+	require.Equal(t, map[string]any{
+		"name":        "My_Skill",
+		"description": "First summary.",
+		"metadata":    map[string]any{"owner": "platform"},
+	}, result.Version.Frontmatter)
 	require.Equal(t, []*types.SkillValidationError{{
 		Code:    "invalid_format",
 		Field:   "name",
