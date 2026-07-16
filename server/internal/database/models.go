@@ -1647,7 +1647,7 @@ type SkillDistribution struct {
 	ProjectID       uuid.UUID
 	SkillID         uuid.UUID
 	PinnedVersionID uuid.NullUUID
-	Audience        []string
+	PluginID        uuid.NullUUID
 	Channel         string
 	CreatedByUserID string
 	RevokedAt       pgtype.Timestamptz
