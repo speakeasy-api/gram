@@ -68,6 +68,17 @@ function serverLabel(server: ShadowMCPInventoryServer): string {
   return server.serverName || server.urlHost;
 }
 
+function comparePolicyServerNames(
+  left: PolicyServerChange,
+  right: PolicyServerChange,
+): number {
+  return serverLabel(left.server).localeCompare(
+    serverLabel(right.server),
+    undefined,
+    { numeric: true, sensitivity: "base" },
+  );
+}
+
 function policyServerAction(
   url: string,
   originalURLs: ReadonlySet<string>,
@@ -218,11 +229,14 @@ function AppliedServerTable({ rows }: { rows: PolicyServerChange[] }) {
     [],
   );
 
-  const sortedRows = useMemo(
-    () =>
-      sortTableData(rows, APPLIED_SERVER_COLUMNS, sort) as PolicyServerChange[],
-    [rows, sort],
-  );
+  const sortedRows = useMemo(() => {
+    const rowsByServer = rows.toSorted(comparePolicyServerNames);
+    return sortTableData(
+      rowsByServer,
+      APPLIED_SERVER_COLUMNS,
+      sort,
+    ) as PolicyServerChange[];
+  }, [rows, sort]);
 
   return (
     <Table

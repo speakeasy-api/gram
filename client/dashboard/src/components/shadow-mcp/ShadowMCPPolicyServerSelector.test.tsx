@@ -348,6 +348,80 @@ describe("ShadowMCPPolicyServerSelector", () => {
     ).toBe("ascending");
   });
 
+  it("sorts servers A-Z within each action group in both directions", () => {
+    const alphaRemove = inventoryServer(
+      "https://alpha-remove.example.com/mcp",
+      {
+        serverName: "Alpha Remove",
+      },
+    );
+    const zuluRemove = inventoryServer("https://zulu-remove.example.com/mcp", {
+      serverName: "Zulu Remove",
+    });
+    const alphaAdd = inventoryServer("https://alpha-add.example.com/mcp", {
+      serverName: "Alpha Add",
+    });
+    const zuluAdd = inventoryServer("https://zulu-add.example.com/mcp", {
+      serverName: "Zulu Add",
+    });
+    const alphaNoChange = inventoryServer(
+      "https://alpha-no-change.example.com/mcp",
+      { serverName: "Alpha No change" },
+    );
+    const zuluNoChange = inventoryServer(
+      "https://zulu-no-change.example.com/mcp",
+      { serverName: "Zulu No change" },
+    );
+
+    render(
+      <ControlledSelector
+        servers={[
+          zuluNoChange,
+          zuluAdd,
+          zuluRemove,
+          alphaNoChange,
+          alphaAdd,
+          alphaRemove,
+        ]}
+        originalSelection={[
+          alphaRemove.canonicalServerUrl,
+          zuluRemove.canonicalServerUrl,
+          alphaNoChange.canonicalServerUrl,
+          zuluNoChange.canonicalServerUrl,
+        ]}
+        initialSelection={[
+          alphaAdd.canonicalServerUrl,
+          zuluAdd.canonicalServerUrl,
+          alphaNoChange.canonicalServerUrl,
+          zuluNoChange.canonicalServerUrl,
+        ]}
+      />,
+    );
+
+    const table = within(
+      screen.getByRole("region", { name: "Servers allowed by this policy" }),
+    ).getByRole("table");
+
+    expect(appliedRowLabels(table)).toEqual([
+      expect.stringContaining("Alpha Remove"),
+      expect.stringContaining("Zulu Remove"),
+      expect.stringContaining("Alpha Add"),
+      expect.stringContaining("Zulu Add"),
+      expect.stringContaining("Alpha No change"),
+      expect.stringContaining("Zulu No change"),
+    ]);
+
+    fireEvent.click(within(table).getByRole("button", { name: /Action/ }));
+    expect(appliedRowLabels(table)).toEqual([
+      expect.stringContaining("Alpha No change"),
+      expect.stringContaining("Zulu No change"),
+      expect.stringContaining("Alpha Add"),
+      expect.stringContaining("Zulu Add"),
+      expect.stringContaining("Alpha Remove"),
+      expect.stringContaining("Zulu Remove"),
+    ]);
+  });
+
   it("keeps summary sorting independent from modal sorting", () => {
     const notionServer = inventoryServer("https://aaa.example.com/mcp", {
       serverName: "Notion MCP",
