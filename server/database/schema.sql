@@ -3618,7 +3618,7 @@ CREATE TABLE IF NOT EXISTS risk_policies (
 
 CREATE UNIQUE INDEX IF NOT EXISTS risk_policies_project_id_idempotency_key_idx
 ON risk_policies (project_id, idempotency_key)
-WHERE idempotency_key IS NOT NULL;
+WHERE idempotency_key IS NOT NULL AND deleted IS FALSE;
 
 CREATE INDEX IF NOT EXISTS risk_policies_project_id_idx
 ON risk_policies (project_id)
