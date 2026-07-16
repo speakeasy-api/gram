@@ -56,13 +56,8 @@ CREATE TABLE IF NOT EXISTS telemetry_logs (
     hook_block_reason String MATERIALIZED toString(attributes.gram.hook.block_reason) COMMENT 'Hook block reason set when the Gram hook denied a tool call (materialized from attributes.gram.hook.block_reason).',
     remote_mcp_server_id String MATERIALIZED toString(attributes.gram.remote_mcp_server.id) COMMENT 'Remote MCP server ID (materialized from attributes.gram.remote_mcp_server.id).',
     mcp_server_id String MATERIALIZED toString(attributes.gram.mcp_server.id) COMMENT 'MCP server ID (materialized from attributes.gram.mcp_server.id).',
-    skill_name String MATERIALIZED if(
-        toString(attributes.gram.tool.name) = 'Skill',
-        JSONExtractString(toString(attributes.gen_ai.tool.call.arguments), 'skill'),
-        ''
-    ) COMMENT 'Skill name extracted from tool arguments when tool_name is Skill (materialized).',
-    provider String MATERIALIZED toString(attributes.gram.provider)
-        COMMENT 'AI provider for the session account (e.g. anthropic, openai). Set by ingest (materialized from attributes.gram.provider).',
+    skill_name String MATERIALIZED if(toString(attributes.gram.tool.name) = 'Skill', JSONExtractString(toString(attributes.gen_ai.tool.call.arguments), 'skill'), '') COMMENT 'Skill name extracted from tool arguments when tool_name is Skill (materialized).',
+    provider String MATERIALIZED toString(attributes.gram.provider) COMMENT 'AI provider for the session account (e.g. anthropic, openai). Set by ingest (materialized from attributes.gram.provider).',
     external_org_id String MATERIALIZED toString(attributes.gram.external_org_id) COMMENT 'Provider organization id for the account the user was logged into on-device (e.g. Claude organization.id). Distinct from the Gram org. Personal-account tracking discriminator. Normalized by ingest (materialized from attributes.gram.external_org_id).',
     account_type String MATERIALIZED toString(attributes.gram.account_type) COMMENT 'team (company/enterprise account) or personal (individual account). Set by ingest. Empty until classified (materialized from attributes.gram.account_type).',
     billing_mode String MATERIALIZED toString(attributes.gram.billing_mode) COMMENT 'How the account is billed: metered (pay-per-token, cost is real spend) | flat_rate (subscription seat, cost is an estimate) | unknown | empty. Resolved by ingest from admin-declared config (materialized from attributes.gram.billing_mode).'
@@ -544,8 +539,9 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS attribute_metrics_summaries_mv TO attribu
 -- admitted. Claude Code data comes exclusively from the Claude OTEL log
 -- stream (api_request rows for usage, tool_result rows for tool calls);
 -- Codex and Cursor come from their usage-metrics rows plus completed
--- tool-call hook rows; Claude Chat (web/desktop) usage arrives as
--- anthropic:usage rows polled from the Admin Analytics API. Everything else —
+-- tool-call hook rows; Claude Chat (web/desktop) usage and cost arrive as
+-- claude_chat:usage / claude_chat:cost rows polled from the Admin Analytics
+-- API. Everything else —
 -- Gram-hosted chat completions, claude-code:usage metric rows (which
 -- duplicate api_request usage), Claude hook rows, MCP hook rows — is
 -- excluded so cost attribution never mixes sources.
@@ -578,11 +574,12 @@ WITH
         is_claude_otel_row
         AND (toString(attributes.event.name) = 'tool_result' OR body = 'claude_code.tool_result')
     ) AS is_claude_tool_result,
-    -- anthropic:usage rows carry Claude Chat (web/desktop) per-user usage and
-    -- cost polled from the Anthropic Admin Analytics API — sessionless usage,
-    -- like Cursor's Admin API rows. Deliberately NOT claude-code:usage, which
-    -- stays excluded as a duplicate of the OTEL api_request stream.
-    (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'anthropic:usage')) AS is_agent_usage_row,
+    -- claude_chat:usage rows carry Claude Chat (web/desktop) per-user token
+    -- usage and claude_chat:cost rows the matching spend, both polled from the
+    -- Anthropic Admin Analytics API — sessionless usage, like Cursor's Admin
+    -- API rows. Deliberately NOT claude-code:usage, which stays excluded as a
+    -- duplicate of the OTEL api_request stream.
+    (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost')) AS is_agent_usage_row,
     -- Codex/Cursor have no OTEL log stream; their tool calls arrive as hook
     -- rows, one PostToolUse/PostToolUseFailure row per completed call. The
     -- hook.event guard is required: every call also emits a PreToolUse row
@@ -676,7 +673,7 @@ SELECT
     toUInt8(1) AS is_active
 FROM telemetry_logs
 -- Admit only the observed agent surfaces: Claude OTEL api_request/tool_result
--- rows, Codex/Cursor/Anthropic-analytics usage rows, and Codex/Cursor
+-- rows, Codex/Cursor/Claude-Chat usage and cost rows, and Codex/Cursor
 -- completed tool-call hook rows. Tool rows carry no token/cost fields, so
 -- they only contribute to the tool-call counts.
 WHERE time_unix_nano >= attribute_metrics_cutoff_unix_nano

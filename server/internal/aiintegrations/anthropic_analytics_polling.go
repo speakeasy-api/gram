@@ -17,12 +17,14 @@ import (
 )
 
 const (
-	// anthropicUsageMetricsURN tags Admin Analytics API usage rows in
-	// telemetry_logs. The attribute_metrics_summaries MV admits rows whose URN
-	// starts with "anthropic:usage", which is how these rows enter
-	// tokens-under-management billing. Deliberately distinct from
-	// "claude-code:usage" (excluded from the MV as a duplicate of OTEL data).
-	anthropicUsageMetricsURN = "anthropic:usage:metrics"
+	// claudeChatUsageMetricsURN tags Admin Analytics user_usage_report rows
+	// (token counts) in telemetry_logs and claudeChatCostMetricsURN the
+	// user_cost_report rows (spend). The attribute_metrics_summaries MV admits
+	// both prefixes, which is how these rows enter tokens-under-management
+	// billing. Deliberately distinct from "claude-code:usage" (excluded from
+	// the MV as a duplicate of OTEL data).
+	claudeChatUsageMetricsURN = "claude_chat:usage:metrics"
+	claudeChatCostMetricsURN  = "claude_chat:cost:metrics"
 
 	// anthropicAnalyticsHookSource is the consuming-surface tag for Claude
 	// Chat (web + desktop) usage observed via the Admin Analytics API. It must
@@ -169,7 +171,7 @@ func (s *AnalyticsPollService) syncAnalytics(ctx context.Context, cfg Config, st
 			return nil
 		}
 
-		events, err := buildAnthropicUsageEvents(cfg, usageRows, costRows, cutoff)
+		events, err := buildClaudeChatMetricRows(cfg, usageRows, costRows, cutoff)
 		if err != nil {
 			return err
 		}
@@ -259,124 +261,71 @@ func (s *AnalyticsPollService) fetchCostWindow(ctx context.Context, client *anth
 	}
 }
 
-// anthropicUsageEventKey joins usage and cost rows reported for the same
-// actor, minute bucket, and model.
-type anthropicUsageEventKey struct {
-	userID     string
-	startingAt string
-	model      string
-}
-
-// anthropicUsageEvent is one joined usage/cost data point ready to emit.
-type anthropicUsageEvent struct {
-	bucketStart          time.Time
-	email                string
-	externalUserID       string
-	model                string
-	uncachedInputTokens  int64
-	outputTokens         int64
-	cacheReadInputTokens int64
-	cacheCreationTokens  int64
-	costUSD              float64
-}
-
-// buildAnthropicUsageEvents joins usage rows with cost rows on (actor, bucket,
-// model) and converts complete buckets (starting before cutoff) into telemetry
-// log rows. Cost rows without a usage counterpart (e.g. web-search charges in
-// a minute with no token usage row) still produce a cost-only event so spend
-// is never dropped.
-func buildAnthropicUsageEvents(cfg Config, usageRows []anthropicapi.UserUsageRow, costRows []anthropicapi.UserCostRow, cutoff time.Time) ([]telemetry.LogParams, error) {
-	events := make(map[anthropicUsageEventKey]*anthropicUsageEvent, len(usageRows))
-	order := make([]anthropicUsageEventKey, 0, len(usageRows))
-
-	upsert := func(key anthropicUsageEventKey, email *string) (*anthropicUsageEvent, error) {
-		if event, ok := events[key]; ok {
-			return event, nil
-		}
-		bucketStart, err := time.Parse(time.RFC3339, key.startingAt)
-		if err != nil {
-			return nil, fmt.Errorf("parse analytics row starting_at: %w", err)
-		}
-		event := &anthropicUsageEvent{
-			bucketStart:          bucketStart.UTC(),
-			email:                conv.NormalizeEmail(conv.PtrValOr(email, "")),
-			externalUserID:       key.userID,
-			model:                key.model,
-			uncachedInputTokens:  0,
-			outputTokens:         0,
-			cacheReadInputTokens: 0,
-			cacheCreationTokens:  0,
-			costUSD:              0,
-		}
-		events[key] = event
-		order = append(order, key)
-		return event, nil
-	}
+// buildClaudeChatMetricRows converts complete buckets (starting before cutoff)
+// into telemetry log rows: one claude_chat:usage:metrics row per usage-report
+// row and one claude_chat:cost:metrics row per cost-report row. The two
+// reports are ingested independently — no join — so spend in a bucket without
+// token usage (e.g. web-search charges) is never dropped, and the summary MV
+// sums tokens and cost across both row kinds.
+func buildClaudeChatMetricRows(cfg Config, usageRows []anthropicapi.UserUsageRow, costRows []anthropicapi.UserCostRow, cutoff time.Time) ([]telemetry.LogParams, error) {
+	logParams := make([]telemetry.LogParams, 0, len(usageRows)+len(costRows))
 
 	for _, row := range usageRows {
-		event, err := upsert(anthropicUsageEventKey{
-			userID:     row.Actor.UserID,
-			startingAt: row.StartingAt,
-			model:      row.Model,
-		}, row.Actor.Email)
+		bucketStart, err := row.StartingAtTime()
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("parse usage row starting_at: %w", err)
 		}
-		event.uncachedInputTokens += row.UncachedInputTokens
-		event.outputTokens += row.OutputTokens
-		event.cacheReadInputTokens += row.CacheReadInputTokens
-		event.cacheCreationTokens += row.CacheCreation.Ephemeral1hInputTokens + row.CacheCreation.Ephemeral5mInputTokens
+		if !bucketStart.Before(cutoff) {
+			continue
+		}
+		params := newClaudeChatLogParams(cfg, claudeChatUsageMetricsURN, "Claude Chat usage metrics", bucketStart, row.Actor, row.Model)
+		params.Attributes[attr.GenAIUsageInputTokensKey] = row.UncachedInputTokens
+		params.Attributes[attr.GenAIUsageOutputTokensKey] = row.OutputTokens
+		params.Attributes[attr.GenAIUsageCacheReadInputTokensKey] = row.CacheReadInputTokens
+		params.Attributes[attr.GenAIUsageCacheCreationInputTokensKey] = row.CacheCreation.Ephemeral1hInputTokens + row.CacheCreation.Ephemeral5mInputTokens
+		logParams = append(logParams, params)
 	}
 
 	for _, row := range costRows {
-		event, err := upsert(anthropicUsageEventKey{
-			userID:     row.Actor.UserID,
-			startingAt: row.StartingAt,
-			model:      row.Model,
-		}, row.Actor.Email)
+		bucketStart, err := time.Parse(time.RFC3339, row.StartingAt)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("parse cost row starting_at: %w", err)
+		}
+		if !bucketStart.UTC().Before(cutoff) {
+			continue
 		}
 		amountUSD, err := row.AmountUSD()
 		if err != nil {
 			return nil, fmt.Errorf("convert analytics cost row amount: %w", err)
 		}
-		event.costUSD += amountUSD
+		params := newClaudeChatLogParams(cfg, claudeChatCostMetricsURN, "Claude Chat cost metrics", bucketStart.UTC(), row.Actor, row.Model)
+		params.Attributes[attr.GenAIUsageCostKey] = amountUSD
+		logParams = append(logParams, params)
 	}
 
-	logParams := make([]telemetry.LogParams, 0, len(order))
-	for _, key := range order {
-		event := events[key]
-		if !event.bucketStart.Before(cutoff) {
-			continue
-		}
-		logParams = append(logParams, buildAnthropicUsageLogParams(cfg, event))
-	}
 	return logParams, nil
 }
 
-func buildAnthropicUsageLogParams(cfg Config, event *anthropicUsageEvent) telemetry.LogParams {
+// newClaudeChatLogParams stamps the provenance shared by usage and cost rows:
+// URN, hook source, account/provider classification, org/config attribution,
+// and the actor's identity.
+func newClaudeChatLogParams(cfg Config, urn string, body string, bucketStart time.Time, actor anthropicapi.AnalyticsActor, model string) telemetry.LogParams {
 	attrs := map[attr.Key]any{
-		attr.EventSourceKey:                        string(telemetry.EventSourceAPI),
-		attr.LogBodyKey:                            "Anthropic chat usage metrics",
-		attr.ProjectIDKey:                          cfg.ProjectID.String(),
-		attr.OrganizationIDKey:                     cfg.OrganizationID,
-		attr.ResourceURNKey:                        anthropicUsageMetricsURN,
-		attr.HookSourceKey:                         anthropicAnalyticsHookSource,
-		attr.AIIntegrationConfigIDKey:              cfg.ID.String(),
-		attr.GenAIUsageInputTokensKey:              event.uncachedInputTokens,
-		attr.GenAIUsageOutputTokensKey:             event.outputTokens,
-		attr.GenAIUsageCacheReadInputTokensKey:     event.cacheReadInputTokens,
-		attr.GenAIUsageCacheCreationInputTokensKey: event.cacheCreationTokens,
-		attr.GenAIUsageCostKey:                     event.costUSD,
-		attr.ProviderKey:                           anthropicAnalyticsProviderTag,
-		attr.AccountTypeKey:                        anthropicAnalyticsAccountType,
+		attr.EventSourceKey:           string(telemetry.EventSourceAPI),
+		attr.LogBodyKey:               body,
+		attr.ProjectIDKey:             cfg.ProjectID.String(),
+		attr.OrganizationIDKey:        cfg.OrganizationID,
+		attr.ResourceURNKey:           urn,
+		attr.HookSourceKey:            anthropicAnalyticsHookSource,
+		attr.AIIntegrationConfigIDKey: cfg.ID.String(),
+		attr.ProviderKey:              anthropicAnalyticsProviderTag,
+		attr.AccountTypeKey:           anthropicAnalyticsAccountType,
 	}
-	if event.model != "" {
-		attrs[attr.GenAIResponseModelKey] = event.model
+	if model != "" {
+		attrs[attr.GenAIResponseModelKey] = model
 	}
-	if event.externalUserID != "" {
-		attrs[attr.ExternalUserIDKey] = event.externalUserID
+	if actor.UserID != "" {
+		attrs[attr.ExternalUserIDKey] = actor.UserID
 	}
 	if cfg.ExternalOrganizationID != nil && *cfg.ExternalOrganizationID != "" {
 		attrs[attr.ExternalOrgIDKey] = *cfg.ExternalOrganizationID
@@ -386,17 +335,17 @@ func buildAnthropicUsageLogParams(cfg Config, event *anthropicUsageEvent) teleme
 	}
 
 	return telemetry.LogParams{
-		Timestamp: event.bucketStart,
+		Timestamp: bucketStart,
 		ToolInfo: telemetry.ToolInfo{
 			Name:           anthropicAnalyticsHookSource,
 			OrganizationID: cfg.OrganizationID,
 			ProjectID:      cfg.ProjectID.String(),
 			ID:             "",
-			URN:            anthropicUsageMetricsURN,
+			URN:            urn,
 			DeploymentID:   "",
 			FunctionID:     nil,
 		},
-		UserInfo:   telemetry.UserInfoByEmail(event.email),
+		UserInfo:   telemetry.UserInfoByEmail(conv.NormalizeEmail(conv.PtrValOr(actor.Email, ""))),
 		Attributes: attrs,
 	}
 }

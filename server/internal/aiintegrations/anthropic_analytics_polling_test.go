@@ -21,7 +21,7 @@ import (
 	anthropicapi "github.com/speakeasy-api/gram/server/internal/thirdparty/anthropic"
 )
 
-func TestBuildAnthropicUsageEventsJoinsUsageAndCost(t *testing.T) {
+func TestBuildClaudeChatMetricRowsEmitsUsageAndCostRows(t *testing.T) {
 	t.Parallel()
 
 	cfg := testAnalyticsConfig()
@@ -57,7 +57,8 @@ func TestBuildAnthropicUsageEventsJoinsUsageAndCost(t *testing.T) {
 		},
 	}
 	costRows := []anthropicapi.UserCostRow{
-		// Matches the first usage row.
+		// Spend for the same bucket as the first usage row: emitted as its
+		// own cost row, not merged.
 		{
 			Actor:      anthropicapi.AnalyticsActor{UserID: "user_1", Email: new("dev@example.com"), Name: new("Dev"), Deleted: false},
 			StartingAt: "2026-07-16T10:00:00Z",
@@ -69,7 +70,7 @@ func TestBuildAnthropicUsageEventsJoinsUsageAndCost(t *testing.T) {
 			Currency:   "USD",
 			Requests:   2,
 		},
-		// Cost-only row (no usage counterpart) still yields an event.
+		// Deleted user (null email) still yields a cost row.
 		{
 			Actor:      anthropicapi.AnalyticsActor{UserID: "user_2", Email: nil, Name: nil, Deleted: true},
 			StartingAt: "2026-07-16T11:00:00Z",
@@ -83,49 +84,47 @@ func TestBuildAnthropicUsageEventsJoinsUsageAndCost(t *testing.T) {
 		},
 	}
 
-	events, err := buildAnthropicUsageEvents(cfg, usageRows, costRows, cutoff)
+	events, err := buildClaudeChatMetricRows(cfg, usageRows, costRows, cutoff)
 	require.NoError(t, err)
-	require.Len(t, events, 2)
+	require.Len(t, events, 3, "one usage row survives the cutoff plus two cost rows")
 
-	joined := events[0]
-	require.Equal(t, time.Date(2026, 7, 16, 10, 0, 0, 0, time.UTC), joined.Timestamp)
-	require.Equal(t, "dev@example.com", joined.UserInfo.Email())
-	require.Equal(t, int64(100), joined.Attributes[attr.GenAIUsageInputTokensKey])
-	require.Equal(t, int64(50), joined.Attributes[attr.GenAIUsageOutputTokensKey])
-	require.Equal(t, int64(3200), joined.Attributes[attr.GenAIUsageCacheReadInputTokensKey])
-	require.Equal(t, int64(1500), joined.Attributes[attr.GenAIUsageCacheCreationInputTokensKey])
-	require.InDelta(t, 1.50, joined.Attributes[attr.GenAIUsageCostKey], 0.0001)
-	require.Equal(t, "claude-opus-4-8", joined.Attributes[attr.GenAIResponseModelKey])
+	usage := events[0]
+	require.Equal(t, claudeChatUsageMetricsURN, usage.ToolInfo.URN)
+	require.Equal(t, time.Date(2026, 7, 16, 10, 0, 0, 0, time.UTC), usage.Timestamp)
+	require.Equal(t, "dev@example.com", usage.UserInfo.Email())
+	require.Equal(t, int64(100), usage.Attributes[attr.GenAIUsageInputTokensKey])
+	require.Equal(t, int64(50), usage.Attributes[attr.GenAIUsageOutputTokensKey])
+	require.Equal(t, int64(3200), usage.Attributes[attr.GenAIUsageCacheReadInputTokensKey])
+	require.Equal(t, int64(1500), usage.Attributes[attr.GenAIUsageCacheCreationInputTokensKey])
+	require.NotContains(t, usage.Attributes, attr.GenAIUsageCostKey, "usage rows carry no cost")
+	require.Equal(t, "claude-opus-4-8", usage.Attributes[attr.GenAIResponseModelKey])
 
-	costOnly := events[1]
-	require.Equal(t, time.Date(2026, 7, 16, 11, 0, 0, 0, time.UTC), costOnly.Timestamp)
-	require.Empty(t, costOnly.UserInfo.Email())
-	require.Equal(t, int64(0), costOnly.Attributes[attr.GenAIUsageInputTokensKey])
-	require.InDelta(t, 0.42, costOnly.Attributes[attr.GenAIUsageCostKey], 0.0001)
-	require.Equal(t, "user_2", costOnly.Attributes[attr.ExternalUserIDKey])
+	cost := events[1]
+	require.Equal(t, claudeChatCostMetricsURN, cost.ToolInfo.URN)
+	require.Equal(t, time.Date(2026, 7, 16, 10, 0, 0, 0, time.UTC), cost.Timestamp)
+	require.InDelta(t, 1.50, cost.Attributes[attr.GenAIUsageCostKey], 0.0001)
+	require.NotContains(t, cost.Attributes, attr.GenAIUsageInputTokensKey, "cost rows carry no tokens")
+
+	deletedUserCost := events[2]
+	require.Equal(t, claudeChatCostMetricsURN, deletedUserCost.ToolInfo.URN)
+	require.Equal(t, time.Date(2026, 7, 16, 11, 0, 0, 0, time.UTC), deletedUserCost.Timestamp)
+	require.Empty(t, deletedUserCost.UserInfo.Email())
+	require.InDelta(t, 0.42, deletedUserCost.Attributes[attr.GenAIUsageCostKey], 0.0001)
+	require.Equal(t, "user_2", deletedUserCost.Attributes[attr.ExternalUserIDKey])
 }
 
-func TestBuildAnthropicUsageLogParamsStampsProvenance(t *testing.T) {
+func TestNewClaudeChatLogParamsStampsProvenance(t *testing.T) {
 	t.Parallel()
 
 	cfg := testAnalyticsConfig()
-	event := &anthropicUsageEvent{
-		bucketStart:          time.Date(2026, 7, 16, 10, 0, 0, 0, time.UTC),
-		email:                "dev@example.com",
-		externalUserID:       "user_1",
-		model:                "claude-opus-4-8",
-		uncachedInputTokens:  100,
-		outputTokens:         50,
-		cacheReadInputTokens: 3200,
-		cacheCreationTokens:  1500,
-		costUSD:              1.5,
-	}
+	actor := anthropicapi.AnalyticsActor{UserID: "user_1", Email: new("Dev@Example.com"), Name: new("Dev"), Deleted: false}
 
-	params := buildAnthropicUsageLogParams(cfg, event)
+	params := newClaudeChatLogParams(cfg, claudeChatUsageMetricsURN, "Claude Chat usage metrics", time.Date(2026, 7, 16, 10, 0, 0, 0, time.UTC), actor, "claude-opus-4-8")
 
-	require.Equal(t, anthropicUsageMetricsURN, params.ToolInfo.URN)
+	require.Equal(t, claudeChatUsageMetricsURN, params.ToolInfo.URN)
 	require.Equal(t, cfg.OrganizationID, params.ToolInfo.OrganizationID)
 	require.Equal(t, cfg.ProjectID.String(), params.ToolInfo.ProjectID)
+	require.Equal(t, "dev@example.com", params.UserInfo.Email())
 	require.Equal(t, "claude-chat", params.Attributes[attr.HookSourceKey])
 	require.Equal(t, cfg.ID.String(), params.Attributes[attr.AIIntegrationConfigIDKey])
 	require.Equal(t, "anthropic", params.Attributes[attr.ProviderKey])
