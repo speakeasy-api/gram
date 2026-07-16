@@ -2036,6 +2036,14 @@ CREATE INDEX IF NOT EXISTS directory_users_user_id_idx
 ON directory_users (user_id)
 WHERE user_id IS NOT NULL;
 
+-- Case-insensitive email lookup for resolving an org member to their directory
+-- profile (spend-rule evaluation's ListOrgActors matches on LOWER(email)); the
+-- user_id branch is served by directory_users_user_id_idx, so together the two
+-- keep that per-member lookup off a sequential scan of the org's directory rows.
+CREATE INDEX IF NOT EXISTS directory_users_organization_id_lower_email_idx
+ON directory_users (organization_id, LOWER(email))
+WHERE deleted IS FALSE AND workos_deleted IS FALSE;
+
 CREATE UNIQUE INDEX IF NOT EXISTS directory_users_workos_directory_user_id_key
 ON directory_users (workos_directory_user_id);
 
