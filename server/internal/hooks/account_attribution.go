@@ -52,12 +52,14 @@ func classifyAccountType(emailResolvedUserID string) string {
 // bridge (device_owners). It mutates meta in place: AccountType, UserAccountID,
 // and — for a personal account attributed through the device bridge — UserID.
 //
-// Classification always runs and always stamps AccountType, including for a
-// session that carries no provider account UUID (a company-credential session —
-// see classifyAccount). The device bridge and the user_accounts entity, however,
-// key on that UUID, so they are skipped when it is absent: there is no account
-// entity to persist. All failures are returned to the caller, which logs and
-// continues: account attribution must never block session capture or enforcement.
+// Classification always runs and always stamps AccountType, and the device
+// bridge (keyed on the per-device id) is taught/consulted whenever a DeviceID
+// is present — both including sessions that carry no provider account UUID (a
+// company-credential session — see classifyAccount). The user_accounts entity
+// and billing mode, however, key on that UUID, so they are skipped when it is
+// absent: there is no account entity to persist. All failures are returned to
+// the caller, which logs and continues: account attribution must never block
+// session capture or enforcement.
 func (s *Service) attributeSession(ctx context.Context, meta *SessionMetadata) error {
 	// Classify before consulting the device bridge: meta.UserID at this point
 	// reflects email resolution only.
@@ -67,20 +69,15 @@ func (s *Service) attributeSession(ctx context.Context, meta *SessionMetadata) e
 	}
 	meta.AccountType = accountType
 
-	// The device bridge, the user_accounts entity, and its billing mode all key on
-	// the provider account UUID (user_accounts.external_account_uuid is NOT NULL
-	// and is the entity key). A session authenticated by company credentials (an
-	// API key, a gateway/proxy, Bedrock, or Vertex) carries no such UUID, so there
-	// is no account entity to persist — the account_type stamped above is the
-	// signal the cost surfaces consume. Stop here for these sessions.
-	if meta.ExternalAccountUUID == "" {
-		return nil
-	}
-
-	// Teach and resolve the device bridge. A team session (known employee)
-	// teaches device -> employee; a personal session (empty UserID) adopts the
-	// employee already learned for the device, if any. COALESCE in the query
-	// keeps a known owner when this session has none.
+	// Teach and resolve the device bridge. A session with a resolved employee
+	// (work email resolved to an org member) teaches device -> employee; a
+	// session with no resolved employee adopts the one already learned for the
+	// device, if any. COALESCE in the query keeps a known owner when this
+	// session has none. The bridge keys on the per-device id, not the account
+	// UUID, so company-credential sessions participate fully: at a gateway-only
+	// org they are the ONLY sessions that can teach the bridge, and without that
+	// teaching a personal account later seen on the same device could never be
+	// attributed to its employee.
 	if meta.DeviceID != "" {
 		owner, err := s.repo.UpsertDeviceOwner(ctx, repo.UpsertDeviceOwnerParams{
 			OrganizationID: meta.GramOrgID,
@@ -94,6 +91,16 @@ func (s *Service) attributeSession(ctx context.Context, meta *SessionMetadata) e
 		if meta.UserID == "" {
 			meta.UserID = conv.FromPGTextOrEmpty[string](owner)
 		}
+	}
+
+	// The user_accounts entity and its billing mode key on the provider account
+	// UUID (user_accounts.external_account_uuid is NOT NULL and is the entity
+	// key). A session authenticated by company credentials (an API key, a
+	// gateway/proxy, Bedrock, or Vertex) carries no such UUID, so there is no
+	// account entity to persist — the account_type stamped above is the signal
+	// the cost surfaces consume. Stop here for these sessions.
+	if meta.ExternalAccountUUID == "" {
+		return nil
 	}
 
 	account, err := s.repo.UpsertUserAccount(ctx, repo.UpsertUserAccountParams{

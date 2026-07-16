@@ -577,6 +577,65 @@ func TestLogs_ClassifiesCompanyCredentialSessionAsTeam(t *testing.T) {
 	require.Error(t, err)
 }
 
+// TestLogs_CompanyCredentialSessionTeachesDeviceBridge covers the bridge at a
+// gateway-only org: the device bridge keys on the per-device id, not the account
+// UUID, so a company-credential session whose work email resolves must still
+// teach device -> employee — it is the only session shape such an org ever
+// produces, and without its teaching a personal account later seen on the same
+// device could never be attributed to its employee.
+func TestLogs_CompanyCredentialSessionTeachesDeviceBridge(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx := hookAuthContext(t, ctx)
+	orgID := authCtx.ActiveOrganizationID
+	queries := repo.New(ti.conn)
+	now := time.Now().UTC().Truncate(time.Second)
+
+	userID, workEmail := "gateway-employee", "gateway-employee@example.com"
+	seedHookUser(t, ctx, ti.conn, orgID, userID, workEmail)
+
+	const deviceID = "device-gateway-1"
+
+	// Company-credential session: work email resolves, no account UUID.
+	err := ti.service.Logs(ctx, claudeLogsPayload(
+		[]*gen.OTELResourceAttribute{resourceStrAttr("service.name", "claude-code")},
+		nil,
+		&gen.OTELLogRecord{
+			TimeUnixNano: new(nanoString(now)),
+			Body:         &gen.OTELLogBody{StringValue: new("api request")},
+			Attributes: []*gen.OTELAttribute{
+				strAttr("session.id", "gateway-teach-session"),
+				strAttr("user.email", workEmail),
+				strAttr("user.id", deviceID),
+			},
+		},
+	))
+	require.NoError(t, err)
+
+	// The gateway session taught the bridge despite carrying no account UUID.
+	owner, err := queries.GetDeviceOwner(ctx, repo.GetDeviceOwnerParams{
+		OrganizationID: orgID,
+		Provider:       providerAnthropic,
+		DeviceID:       deviceID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, userID, owner.LinkedUserID.String)
+
+	// A personal session on the same device (UUID present, gmail does not
+	// resolve) adopts the learned employee through the bridge.
+	claudeAccountSession(t, ctx, ti, "gateway-pers-session", "gateway-person@gmail.com", "gateway-max-org", "acct-gateway-personal", deviceID, now.Add(time.Minute))
+
+	personalAccount, err := queries.GetUserAccount(ctx, repo.GetUserAccountParams{
+		OrganizationID:      orgID,
+		Provider:            providerAnthropic,
+		ExternalAccountUuid: "acct-gateway-personal",
+	})
+	require.NoError(t, err)
+	require.Equal(t, accountTypePersonal, personalAccount.AccountType.String)
+	require.Equal(t, userID, personalAccount.UserID.String)
+}
+
 // TestLogs_LateBridgeBackfillsPersonalAccount covers the "late linking" ordering:
 // an employee uses their personal account BEFORE any team session exists on the
 // device, so it is first attributed with no owner; later a team session teaches
