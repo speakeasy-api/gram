@@ -147,13 +147,13 @@ func TestGetPlugins_MultiProjectDistinctByDefault(t *testing.T) {
 
 	publishMarketplace(t, ctx, ti.conn, ti.projectID, "default-token")
 
-	adam := seedProject(t, ctx, ti.conn, ti.orgID, "adam")
-	publishMarketplace(t, ctx, ti.conn, adam, "adam-token")
+	beta := seedProject(t, ctx, ti.conn, ti.orgID, "beta")
+	publishMarketplace(t, ctx, ti.conn, beta, "beta-token")
 	// A wildcard-assigned plugin makes the non-default project surface for the
 	// caller (a non-default project with no assignment is intentionally hidden).
-	adamTool := seedPlugin(t, ctx, ti.conn, ti.orgID, adam, "adam-tool")
-	assignPlugin(t, ctx, ti.conn, adamTool, ti.orgID, "*")
-	wantAdam := naming.MarketplaceName(mockidp.MockOrgName, "adam", false) // local-dev-org-adam-speakeasy
+	betaTool := seedPlugin(t, ctx, ti.conn, ti.orgID, beta, "beta-tool")
+	assignPlugin(t, ctx, ti.conn, betaTool, ti.orgID, "*")
+	wantBeta := naming.MarketplaceName(mockidp.MockOrgName, "beta", false) // local-dev-org-beta-speakeasy
 
 	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: mockidp.MockUserEmail})
 	require.NoError(t, err)
@@ -164,9 +164,9 @@ func TestGetPlugins_MultiProjectDistinctByDefault(t *testing.T) {
 		byName[m.Name] = m.URL
 	}
 	require.Contains(t, byName, wantMarketplace, "default project keeps the bare org name")
-	require.Contains(t, byName, wantAdam, "non-default project is scoped by slug")
+	require.Contains(t, byName, wantBeta, "non-default project is scoped by slug")
 	require.Contains(t, byName[wantMarketplace], "default-token")
-	require.Contains(t, byName[wantAdam], "adam-token")
+	require.Contains(t, byName[wantBeta], "beta-token")
 }
 
 // TestGetPlugins_CollidingNamesPreferDefault pins the DNO-228 tiebreak that still
@@ -180,15 +180,15 @@ func TestGetPlugins_CollidingNamesPreferDefault(t *testing.T) {
 
 	publishMarketplace(t, ctx, ti.conn, ti.projectID, "default-token")
 
-	// "adam" sorts before the default project's "test-<hex>" slug, but overrides
+	// "beta" sorts before the default project's "test-<hex>" slug, but overrides
 	// its name to collide with the default's bare org name. Its plugin — assigned
 	// to the caller so scoping would otherwise deliver it — must NOT leak onto the
-	// winning marketplace, since adam's repo isn't the one served under that name.
-	adam := seedProject(t, ctx, ti.conn, ti.orgID, "adam")
-	setMarketplaceOverride(t, ctx, ti.conn, adam, wantMarketplace)
-	publishMarketplace(t, ctx, ti.conn, adam, "adam-token")
-	adamTool := seedPlugin(t, ctx, ti.conn, ti.orgID, adam, "adam-only-tool")
-	assignPlugin(t, ctx, ti.conn, adamTool, ti.orgID, "*")
+	// winning marketplace, since beta's repo isn't the one served under that name.
+	beta := seedProject(t, ctx, ti.conn, ti.orgID, "beta")
+	setMarketplaceOverride(t, ctx, ti.conn, beta, wantMarketplace)
+	publishMarketplace(t, ctx, ti.conn, beta, "beta-token")
+	betaTool := seedPlugin(t, ctx, ti.conn, ti.orgID, beta, "beta-only-tool")
+	assignPlugin(t, ctx, ti.conn, betaTool, ti.orgID, "*")
 
 	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: mockidp.MockUserEmail})
 	require.NoError(t, err)
@@ -197,8 +197,8 @@ func TestGetPlugins_CollidingNamesPreferDefault(t *testing.T) {
 	require.Equal(t, wantMarketplace, res.Marketplaces[0].Name)
 	require.Contains(t, res.Marketplaces[0].URL, "default-token",
 		"the default project's token must win the collision, not the alphabetically-first one")
-	require.NotContains(t, res.Marketplaces[0].URL, "adam-token")
-	require.NotContains(t, pluginSlugs(res), "adam-only-tool",
+	require.NotContains(t, res.Marketplaces[0].URL, "beta-token")
+	require.NotContains(t, pluginSlugs(res), "beta-only-tool",
 		"the collapsed project's plugin must not be attached to the winning marketplace")
 }
 
@@ -217,11 +217,11 @@ func TestGetPlugins_DistinctOverridesYieldSeparateMarketplaces(t *testing.T) {
 	// A second project published under a distinct override name, with a
 	// wildcard-assigned plugin so it surfaces under the default-plus-assigned
 	// scoping (a non-default project with no assignment is hidden).
-	adam := seedProject(t, ctx, ti.conn, ti.orgID, "adam")
-	setMarketplaceOverride(t, ctx, ti.conn, adam, "team-adam")
-	publishMarketplace(t, ctx, ti.conn, adam, "adam-token")
-	adamTool := seedPlugin(t, ctx, ti.conn, ti.orgID, adam, "adam-tool")
-	assignPlugin(t, ctx, ti.conn, adamTool, ti.orgID, "*")
+	beta := seedProject(t, ctx, ti.conn, ti.orgID, "beta")
+	setMarketplaceOverride(t, ctx, ti.conn, beta, "team-beta")
+	publishMarketplace(t, ctx, ti.conn, beta, "beta-token")
+	betaTool := seedPlugin(t, ctx, ti.conn, ti.orgID, beta, "beta-tool")
+	assignPlugin(t, ctx, ti.conn, betaTool, ti.orgID, "*")
 
 	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: mockidp.MockUserEmail})
 	require.NoError(t, err)
@@ -233,9 +233,9 @@ func TestGetPlugins_DistinctOverridesYieldSeparateMarketplaces(t *testing.T) {
 		byName[m.Name] = m.URL
 	}
 	require.Contains(t, byName, wantMarketplace, "default project keeps the org-derived name")
-	require.Contains(t, byName, "team-adam", "override project surfaces under its published name")
+	require.Contains(t, byName, "team-beta", "override project surfaces under its published name")
 	require.Contains(t, byName[wantMarketplace], "default-token")
-	require.Contains(t, byName["team-adam"], "adam-token")
+	require.Contains(t, byName["team-beta"], "beta-token")
 }
 
 // TestGetPlugins_NonDefaultProjectWithoutAssignmentHidden pins the
@@ -250,9 +250,9 @@ func TestGetPlugins_NonDefaultProjectWithoutAssignmentHidden(t *testing.T) {
 	publishMarketplace(t, ctx, ti.conn, ti.projectID, "default-token")
 
 	// A published non-default project with no assignment for the caller.
-	adam := seedProject(t, ctx, ti.conn, ti.orgID, "adam")
-	publishMarketplace(t, ctx, ti.conn, adam, "adam-token")
-	wantAdam := naming.MarketplaceName(mockidp.MockOrgName, "adam", false)
+	beta := seedProject(t, ctx, ti.conn, ti.orgID, "beta")
+	publishMarketplace(t, ctx, ti.conn, beta, "beta-token")
+	wantBeta := naming.MarketplaceName(mockidp.MockOrgName, "beta", false)
 
 	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: mockidp.MockUserEmail})
 	require.NoError(t, err)
@@ -263,9 +263,9 @@ func TestGetPlugins_NonDefaultProjectWithoutAssignmentHidden(t *testing.T) {
 	for _, m := range res.Marketplaces {
 		names = append(names, m.Name)
 	}
-	require.NotContains(t, names, wantAdam, "an unassigned non-default project is hidden")
+	require.NotContains(t, names, wantBeta, "an unassigned non-default project is hidden")
 	require.Equal(t, []string{wantObservability}, pluginSlugs(res),
-		"only the default project's observability ships, not adam's")
+		"only the default project's observability ships, not beta's")
 }
 
 func TestGetPlugins_CrossOrgIsolation(t *testing.T) {
