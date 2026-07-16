@@ -1,7 +1,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { SkillTextDiff } from "./SkillTextDiff";
+import SkillTextDiff from "./SkillTextDiff";
 
 const testState = vi.hoisted(() => ({
   mobile: false,

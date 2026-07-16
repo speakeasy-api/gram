@@ -4,7 +4,7 @@ import type { FileDiffOptions, ThemeTypes } from "@pierre/diffs";
 import { MultiFileDiff } from "@pierre/diffs/react";
 import { useMoonshineConfig } from "@speakeasy-api/moonshine";
 
-export function SkillTextDiff({
+export default function SkillTextDiff({
   oldContent,
   newContent,
   oldLabel,
@@ -41,5 +41,3 @@ export function SkillTextDiff({
     </HighlightProvider>
   );
 }
-
-export default SkillTextDiff;
