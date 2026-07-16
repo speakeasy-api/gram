@@ -1,6 +1,7 @@
 package relay
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -111,10 +112,16 @@ func withFileLock(path string, fn func()) {
 	fn()
 }
 
+// errLockHeld is tryLockFile's contention sentinel: the lock exists and
+// another process holds it. Any other tryLockFile error means the lock
+// machinery itself is unavailable.
+var errLockHeld = errors.New("file lock held by another process")
+
 // withFileTryLock is withFileLock's non-blocking variant: it reports false
-// without running fn when another process already holds the lock. Lock
-// *setup* failures degrade to running unlocked, same as withFileLock — only
-// a genuinely held lock skips.
+// without running fn when another process already holds the lock. Every
+// other failure — open error, unsupported/interrupted lock operation —
+// degrades to running unlocked, same as withFileLock; only genuine
+// contention skips.
 func withFileTryLock(path string, fn func()) bool {
 	f, err := os.OpenFile(path+".lock", os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
@@ -122,8 +129,12 @@ func withFileTryLock(path string, fn func()) bool {
 		return true
 	}
 	defer func() { _ = f.Close() }()
-	if err := tryLockFile(f); err != nil {
+	switch err := tryLockFile(f); {
+	case errors.Is(err, errLockHeld):
 		return false
+	case err != nil:
+		fn()
+		return true
 	}
 	defer unlockFile(f)
 	fn()

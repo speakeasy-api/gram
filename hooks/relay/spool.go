@@ -277,25 +277,40 @@ func writeUndrainable(dir string, names []string) {
 // guard. Entries the last drain run marked undrainable don't count: a
 // poison entry (newer schema) lingers until the 14-day expiry, and counting
 // it would reroute every observe event through the spool for two weeks.
+// It answers a boolean, so it probes the directory in batches and returns on
+// the first live entry instead of materializing and sorting the full listing
+// the way listSpoolEntries does — this runs on every observe event.
 func spoolHasBacklog() bool {
 	dir := spoolDirPath()
 	if dir == "" {
 		return false
 	}
-	names := listSpoolEntries(dir)
-	if len(names) == 0 {
+	f, err := os.Open(dir)
+	if err != nil {
 		return false
 	}
-	und := readUndrainable(dir)
-	if len(und) == 0 {
-		return true
-	}
-	for _, name := range names {
-		if !und[name] {
-			return true
+	defer func() { _ = f.Close() }()
+	var und map[string]bool
+	undLoaded := false
+	for {
+		names, err := f.Readdirnames(64)
+		for _, name := range names {
+			if _, ok := spoolNanos(name); !ok {
+				continue
+			}
+			// Lazy: the marker is only worth reading once an entry exists.
+			if !undLoaded {
+				und = readUndrainable(dir)
+				undLoaded = true
+			}
+			if !und[name] {
+				return true
+			}
+		}
+		if err != nil {
+			return false
 		}
 	}
-	return false
 }
 
 // spoolDirPath resolves the spool directory without creating it, or "" when

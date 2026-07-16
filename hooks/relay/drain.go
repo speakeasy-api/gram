@@ -79,6 +79,14 @@ func Drain(ctx context.Context) DrainSummary {
 	withFileLock(filepath.Join(dir, "drain"), func() {
 		s = drainUntilDry(ctx, dir)
 	})
+	if s.Aborted {
+		// The queue path spawns drains while the control plane may still be
+		// down (unlike the accepted-send trigger, which proves it is up).
+		// Clear the spawn debounce after a failed run so the next queued
+		// event re-triggers immediately at recovery instead of waiting out
+		// the window.
+		_ = os.Remove(filepath.Join(dir, "last-spawn"))
+	}
 	return s
 }
 
