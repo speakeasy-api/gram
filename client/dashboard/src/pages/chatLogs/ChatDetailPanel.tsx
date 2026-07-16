@@ -86,6 +86,7 @@ import {
 import { cn } from "@/lib/utils";
 import {
   buildClaudeToolUsageByToolUseId,
+  buildClaudeTurnByPromptId,
   buildClaudeUsageByMessageId,
   formatTokenCount,
   formatUsageCost,
@@ -929,6 +930,13 @@ function ChatDetailPanel({
         : [];
     return buildClaudeToolUsageByToolUseId(tools);
   }, [chat?.agentUsage]);
+  const claudeTurnByPromptId = useMemo(() => {
+    const turns =
+      chat?.agentUsage?.type === "claude"
+        ? (chat.agentUsage.claude?.turns ?? [])
+        : [];
+    return buildClaudeTurnByPromptId(turns);
+  }, [chat?.agentUsage]);
 
   const transcriptRows = useMemo(
     () => buildTranscript(chatMessages),
@@ -1115,6 +1123,7 @@ function ChatDetailPanel({
       riskResultsByMessage,
       claudeUsageByMessage,
       claudeToolUsageByToolUseId,
+      claudeTurnByPromptId,
       dimNonRisk,
       searchQuery: searchActive ? searchQuery : undefined,
       userLabel: chat?.externalUserId,
@@ -1124,6 +1133,7 @@ function ChatDetailPanel({
       riskResultsByMessage,
       claudeUsageByMessage,
       claudeToolUsageByToolUseId,
+      claudeTurnByPromptId,
       dimNonRisk,
       searchActive,
       searchQuery,
