@@ -1,4 +1,4 @@
-h1:nRk74D+N0tOKnNiihSndYChcCuU5YiIiq+rHPVCStqU=
+h1:3K6OD0tpREPcGC/lOZ8NZagPHGVFsjAjM+MYcCHnLXw=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -270,3 +270,4 @@ h1:nRk74D+N0tOKnNiihSndYChcCuU5YiIiq+rHPVCStqU=
 20260715234644_skill_versions_ordering_index.sql h1:VrJFF+sNk9bil82fYMMgHmSQKABV3qmvJDcTUFVEw6s=
 20260716152842_skill-distributions-sync-receipts.sql h1:+7lViijiJnaB0DicmYrWr3MaYXh0TCqfBcb4Czdad88=
 20260716181457_skill_sync_receipts_machine_index.sql h1:PBA73ZSJeSwJKrCWI9JiY9/lkMIUaIfY8keIv6xjOO8=
+20260716205928_skill-distributions-plugin-targeting.sql h1:+fS2kI7/TI7a+xiwlg2/1JwEE3DiGOvyKMMuCSChzWA=
