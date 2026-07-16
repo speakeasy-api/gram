@@ -1,4 +1,4 @@
-package remotemcp
+package interceptors
 
 import (
 	"context"
@@ -54,7 +54,29 @@ var figmaAllowedUserAgents = []string{
 	"devin",
 }
 
-func isFigmaUpstream(upstreamURL string) bool {
+// figma rejects inbound MCP requests whose User-Agent does not match a client
+// in Figma's MCP catalog. Figma's hosted MCP server only supports those
+// clients, and the proxy replaces the client's transport with its own —
+// enforcing the allowlist here preserves Figma's client policy for proxied
+// traffic. It is a policy gate, not a security boundary: User-Agent is
+// client-asserted and trivially spoofable.
+type figma struct {
+	logger *slog.Logger
+}
+
+// NewFigma builds the Figma client-allowlist policy.
+func NewFigma(logger *slog.Logger) UpstreamPolicy {
+	return &figma{logger: logger}
+}
+
+var _ UpstreamPolicy = (*figma)(nil)
+
+// Name implements [proxy.UserRequestInterceptor].
+func (f *figma) Name() string { return "figma-user-agent-allowlist" }
+
+// Match implements [UpstreamPolicy]. Unparseable URLs are treated as
+// non-Figma; the proxy rejects them downstream for its own reasons.
+func (f *figma) Match(upstreamURL string) bool {
 	u, err := url.Parse(upstreamURL)
 	if err != nil {
 		return false
@@ -62,67 +84,37 @@ func isFigmaUpstream(upstreamURL string) bool {
 	return strings.EqualFold(u.Hostname(), figmaMCPHost)
 }
 
-// UserAgentAllowlistInterceptor rejects inbound MCP requests whose User-Agent
-// does not match any allowed client token. Upstreams like Figma's only support
-// a fixed catalog of MCP clients, and the proxy replaces the client's
-// transport with its own — enforcing the allowlist here preserves the
-// upstream's client policy for proxied traffic. It is a policy gate, not a
-// security boundary: User-Agent is client-asserted and trivially spoofable.
-type UserAgentAllowlistInterceptor struct {
-	allowed    []string
-	catalogURL string
-	logger     *slog.Logger
-}
-
-var _ proxy.UserRequestInterceptor = (*UserAgentAllowlistInterceptor)(nil)
-
-// NewUserAgentAllowlistInterceptor constructs the interceptor. allowed holds
-// lowercase substrings matched case-insensitively against the User-Agent
-// header; catalogURL is surfaced in rejection messages.
-func NewUserAgentAllowlistInterceptor(allowed []string, catalogURL string, logger *slog.Logger) *UserAgentAllowlistInterceptor {
-	return &UserAgentAllowlistInterceptor{
-		allowed:    allowed,
-		catalogURL: catalogURL,
-		logger:     logger,
-	}
-}
-
-// Name implements [proxy.UserRequestInterceptor].
-func (i *UserAgentAllowlistInterceptor) Name() string {
-	return "user-agent-allowlist"
-}
-
 // InterceptUserRequest implements [proxy.UserRequestInterceptor]. A missing
 // User-Agent is rejected like an unlisted one: anonymous callers cannot be
 // one of the allowed clients.
-func (i *UserAgentAllowlistInterceptor) InterceptUserRequest(ctx context.Context, req *proxy.UserRequest) error {
+func (f *figma) InterceptUserRequest(ctx context.Context, req *proxy.UserRequest) error {
 	var userAgent string
 	if req != nil && req.UserHTTPRequest != nil {
 		userAgent = req.UserHTTPRequest.UserAgent()
 	}
 
 	loweredUA := strings.ToLower(userAgent)
-	for _, token := range i.allowed {
+	for _, token := range figmaAllowedUserAgents {
 		if strings.Contains(loweredUA, token) {
 			return nil
 		}
 	}
 
-	i.logger.InfoContext(ctx, "rejected mcp request from unlisted client",
+	f.logger.InfoContext(ctx, "rejected mcp request from unlisted client",
 		attr.SlogHTTPRequestHeaderUserAgent(userAgent),
 	)
 
 	if userAgent == "" {
 		return &proxy.RejectError{
 			Code:    proxy.RejectCodeServerError,
-			Message: fmt.Sprintf("missing User-Agent header: this MCP server only accepts requests from approved clients, see %s", i.catalogURL),
+			Message: fmt.Sprintf("missing User-Agent header: this MCP server only accepts requests from approved clients, see %s", figmaMCPCatalogURL),
 			Data:    nil,
 		}
 	}
 
 	return &proxy.RejectError{
 		Code:    proxy.RejectCodeServerError,
-		Message: fmt.Sprintf("client %q is not an approved client for this MCP server, see %s", conv.TruncateString(userAgent, 200), i.catalogURL),
+		Message: fmt.Sprintf("client %q is not an approved client for this MCP server, see %s", conv.TruncateString(userAgent, 200), figmaMCPCatalogURL),
 		Data:    nil,
 	}
 }

@@ -1,4 +1,4 @@
-package remotemcp
+package interceptors_test
 
 import (
 	"net/http/httptest"
@@ -6,14 +6,12 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/remotemcp/interceptors"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-func newFigmaInterceptorForTest(t *testing.T) *UserAgentAllowlistInterceptor {
-	t.Helper()
-	return NewUserAgentAllowlistInterceptor(figmaAllowedUserAgents, figmaMCPCatalogURL, testenv.NewLogger(t))
-}
+const figmaCatalogURL = "https://www.figma.com/mcp-catalog/"
 
 func newUserRequestWithUserAgent(userAgent string) *proxy.UserRequest {
 	r := httptest.NewRequest("POST", "/x/mcp/figma", nil)
@@ -24,10 +22,10 @@ func newUserRequestWithUserAgent(userAgent string) *proxy.UserRequest {
 	}
 }
 
-func TestUserAgentAllowlistInterceptor_AllowsCatalogClients(t *testing.T) {
+func TestFigma_AllowsCatalogClients(t *testing.T) {
 	t.Parallel()
 
-	interceptor := newFigmaInterceptorForTest(t)
+	policy := interceptors.NewFigma(testenv.NewLogger(t))
 
 	// Real User-Agent strings observed on Gram-hosted MCP servers in
 	// production, one per catalog client family with a verified token.
@@ -48,24 +46,24 @@ func TestUserAgentAllowlistInterceptor_AllowsCatalogClients(t *testing.T) {
 	}
 
 	for _, userAgent := range observed {
-		err := interceptor.InterceptUserRequest(t.Context(), newUserRequestWithUserAgent(userAgent))
+		err := policy.InterceptUserRequest(t.Context(), newUserRequestWithUserAgent(userAgent))
 		require.NoError(t, err, "user agent %q should be allowed", userAgent)
 	}
 }
 
-func TestUserAgentAllowlistInterceptor_MatchesCaseInsensitively(t *testing.T) {
+func TestFigma_MatchesCaseInsensitively(t *testing.T) {
 	t.Parallel()
 
-	interceptor := newFigmaInterceptorForTest(t)
+	policy := interceptors.NewFigma(testenv.NewLogger(t))
 
-	err := interceptor.InterceptUserRequest(t.Context(), newUserRequestWithUserAgent("CURSOR/3.9.16 (DARWIN ARM64)"))
+	err := policy.InterceptUserRequest(t.Context(), newUserRequestWithUserAgent("CURSOR/3.9.16 (DARWIN ARM64)"))
 	require.NoError(t, err)
 }
 
-func TestUserAgentAllowlistInterceptor_RejectsUnlistedClient(t *testing.T) {
+func TestFigma_RejectsUnlistedClient(t *testing.T) {
 	t.Parallel()
 
-	interceptor := newFigmaInterceptorForTest(t)
+	policy := interceptors.NewFigma(testenv.NewLogger(t))
 
 	unlisted := []string{
 		"python-httpx/0.28.1",
@@ -76,23 +74,23 @@ func TestUserAgentAllowlistInterceptor_RejectsUnlistedClient(t *testing.T) {
 	}
 
 	for _, userAgent := range unlisted {
-		err := interceptor.InterceptUserRequest(t.Context(), newUserRequestWithUserAgent(userAgent))
+		err := policy.InterceptUserRequest(t.Context(), newUserRequestWithUserAgent(userAgent))
 		require.Error(t, err, "user agent %q should be rejected", userAgent)
 
 		var reject *proxy.RejectError
 		require.ErrorAs(t, err, &reject, "rejection should be a *proxy.RejectError")
 		require.Equal(t, proxy.RejectCodeServerError, reject.Code)
 		require.Contains(t, reject.Message, userAgent)
-		require.Contains(t, reject.Message, figmaMCPCatalogURL)
+		require.Contains(t, reject.Message, figmaCatalogURL)
 	}
 }
 
-func TestUserAgentAllowlistInterceptor_RejectsMissingUserAgent(t *testing.T) {
+func TestFigma_RejectsMissingUserAgent(t *testing.T) {
 	t.Parallel()
 
-	interceptor := newFigmaInterceptorForTest(t)
+	policy := interceptors.NewFigma(testenv.NewLogger(t))
 
-	err := interceptor.InterceptUserRequest(t.Context(), newUserRequestWithUserAgent(""))
+	err := policy.InterceptUserRequest(t.Context(), newUserRequestWithUserAgent(""))
 	require.Error(t, err)
 
 	var reject *proxy.RejectError
@@ -101,12 +99,12 @@ func TestUserAgentAllowlistInterceptor_RejectsMissingUserAgent(t *testing.T) {
 	require.Contains(t, reject.Message, "missing User-Agent header")
 }
 
-func TestUserAgentAllowlistInterceptor_RejectsNilHTTPRequest(t *testing.T) {
+func TestFigma_RejectsNilHTTPRequest(t *testing.T) {
 	t.Parallel()
 
-	interceptor := newFigmaInterceptorForTest(t)
+	policy := interceptors.NewFigma(testenv.NewLogger(t))
 
-	err := interceptor.InterceptUserRequest(t.Context(), &proxy.UserRequest{})
+	err := policy.InterceptUserRequest(t.Context(), &proxy.UserRequest{})
 	require.Error(t, err)
 
 	var reject *proxy.RejectError
@@ -114,16 +112,18 @@ func TestUserAgentAllowlistInterceptor_RejectsNilHTTPRequest(t *testing.T) {
 	require.Equal(t, proxy.RejectCodeServerError, reject.Code)
 }
 
-func TestIsFigmaUpstream(t *testing.T) {
+func TestFigma_Match(t *testing.T) {
 	t.Parallel()
 
-	require.True(t, isFigmaUpstream("https://mcp.figma.com/mcp"))
-	require.True(t, isFigmaUpstream("https://MCP.FIGMA.COM/mcp"))
-	require.True(t, isFigmaUpstream("https://mcp.figma.com:443/mcp"))
+	policy := interceptors.NewFigma(testenv.NewLogger(t))
 
-	require.False(t, isFigmaUpstream("https://mcp.linear.app/mcp"))
-	require.False(t, isFigmaUpstream("https://figma.com/mcp"))
-	require.False(t, isFigmaUpstream("https://mcp.figma.com.evil.example/mcp"))
-	require.False(t, isFigmaUpstream("://not-a-url"))
-	require.False(t, isFigmaUpstream(""))
+	require.True(t, policy.Match("https://mcp.figma.com/mcp"))
+	require.True(t, policy.Match("https://MCP.FIGMA.COM/mcp"))
+	require.True(t, policy.Match("https://mcp.figma.com:443/mcp"))
+
+	require.False(t, policy.Match("https://mcp.linear.app/mcp"))
+	require.False(t, policy.Match("https://figma.com/mcp"))
+	require.False(t, policy.Match("https://mcp.figma.com.evil.example/mcp"))
+	require.False(t, policy.Match("://not-a-url"))
+	require.False(t, policy.Match(""))
 }

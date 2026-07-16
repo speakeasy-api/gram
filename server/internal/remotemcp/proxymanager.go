@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp/interceptors"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -142,13 +143,16 @@ func (f *ProxyManager) BuildTarget(
 ) *proxy.Proxy {
 	backendID := identity.SourceID()
 
-	// Figma only supports its cataloged MCP clients; enforce that on our side
-	// since proxied traffic reaches Figma with Gram's transport, not the client's.
+	// Per-vendor policies self-select on the upstream URL — e.g. Figma only
+	// supports its cataloged MCP clients, and proxied traffic reaches Figma
+	// with Gram's transport rather than the client's.
 	var userRequestInterceptors []proxy.UserRequestInterceptor
-	if isFigmaUpstream(upstreamURL) {
-		userRequestInterceptors = append(userRequestInterceptors,
-			NewUserAgentAllowlistInterceptor(figmaAllowedUserAgents, figmaMCPCatalogURL, logger),
-		)
+	for _, policy := range []interceptors.UpstreamPolicy{
+		interceptors.NewFigma(logger),
+	} {
+		if policy.Match(upstreamURL) {
+			userRequestInterceptors = append(userRequestInterceptors, policy)
+		}
 	}
 
 	// Per-request instance: the interceptor holds a single nilable start
