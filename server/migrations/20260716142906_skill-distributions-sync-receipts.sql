@@ -1,3 +1,7 @@
+-- atlas:txmode none
+
+-- Create index "skill_versions_skill_id_id_key" to table: "skill_versions"
+CREATE UNIQUE INDEX CONCURRENTLY "skill_versions_skill_id_id_key" ON "skill_versions" ("skill_id", "id");
 -- Create "skill_distributions" table
 CREATE TABLE "skill_distributions" (
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -11,9 +15,9 @@ CREATE TABLE "skill_distributions" (
   "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY ("id"),
-  CONSTRAINT "skill_distributions_pinned_version_id_fkey" FOREIGN KEY ("pinned_version_id") REFERENCES "skill_versions" ("id") ON UPDATE NO ACTION ON DELETE NO ACTION,
   CONSTRAINT "skill_distributions_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "projects" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
   CONSTRAINT "skill_distributions_skill_id_fkey" FOREIGN KEY ("skill_id") REFERENCES "skills" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
+  CONSTRAINT "skill_distributions_skill_id_pinned_version_id_fkey" FOREIGN KEY ("skill_id", "pinned_version_id") REFERENCES "skill_versions" ("skill_id", "id") ON UPDATE NO ACTION ON DELETE NO ACTION,
   CONSTRAINT "skill_distributions_audience_check" CHECK ((audience IS NULL) OR (cardinality(audience) > 0))
 );
 -- Create index "skill_distributions_pinned_version_id_idx" to table: "skill_distributions"
@@ -39,7 +43,7 @@ CREATE TABLE "skill_sync_receipts" (
   PRIMARY KEY ("project_id", "skill_id", "user_id", "hostname", "provider"),
   CONSTRAINT "skill_sync_receipts_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "projects" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
   CONSTRAINT "skill_sync_receipts_skill_id_fkey" FOREIGN KEY ("skill_id") REFERENCES "skills" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
-  CONSTRAINT "skill_sync_receipts_skill_version_id_fkey" FOREIGN KEY ("skill_version_id") REFERENCES "skill_versions" ("id") ON UPDATE NO ACTION ON DELETE NO ACTION
+  CONSTRAINT "skill_sync_receipts_skill_id_skill_version_id_fkey" FOREIGN KEY ("skill_id", "skill_version_id") REFERENCES "skill_versions" ("skill_id", "id") ON UPDATE NO ACTION ON DELETE NO ACTION
 );
 -- Create index "skill_sync_receipts_project_id_skill_version_id_idx" to table: "skill_sync_receipts"
 CREATE INDEX "skill_sync_receipts_project_id_skill_version_id_idx" ON "skill_sync_receipts" ("project_id", "skill_version_id");

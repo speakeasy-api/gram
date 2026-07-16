@@ -305,6 +305,7 @@ CREATE TABLE IF NOT EXISTS skill_versions (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS skill_versions_skill_id_canonical_sha256_key ON skill_versions (skill_id, canonical_sha256);
+CREATE UNIQUE INDEX IF NOT EXISTS skill_versions_skill_id_id_key ON skill_versions (skill_id, id);
 CREATE INDEX IF NOT EXISTS skill_versions_skill_id_created_at_id_idx ON skill_versions (skill_id, created_at DESC, id DESC);
 
 CREATE TABLE IF NOT EXISTS skill_distributions (
@@ -324,7 +325,7 @@ CREATE TABLE IF NOT EXISTS skill_distributions (
   CONSTRAINT skill_distributions_pkey PRIMARY KEY (id),
   CONSTRAINT skill_distributions_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
   CONSTRAINT skill_distributions_skill_id_fkey FOREIGN KEY (skill_id) REFERENCES skills (id) ON DELETE CASCADE,
-  CONSTRAINT skill_distributions_pinned_version_id_fkey FOREIGN KEY (pinned_version_id) REFERENCES skill_versions (id),
+  CONSTRAINT skill_distributions_skill_id_pinned_version_id_fkey FOREIGN KEY (skill_id, pinned_version_id) REFERENCES skill_versions (skill_id, id),
   CONSTRAINT skill_distributions_audience_check CHECK (audience IS NULL OR cardinality(audience) > 0)
 );
 
@@ -353,7 +354,7 @@ CREATE TABLE IF NOT EXISTS skill_sync_receipts (
   CONSTRAINT skill_sync_receipts_pkey PRIMARY KEY (project_id, skill_id, user_id, hostname, provider),
   CONSTRAINT skill_sync_receipts_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
   CONSTRAINT skill_sync_receipts_skill_id_fkey FOREIGN KEY (skill_id) REFERENCES skills (id) ON DELETE CASCADE,
-  CONSTRAINT skill_sync_receipts_skill_version_id_fkey FOREIGN KEY (skill_version_id) REFERENCES skill_versions (id)
+  CONSTRAINT skill_sync_receipts_skill_id_skill_version_id_fkey FOREIGN KEY (skill_id, skill_version_id) REFERENCES skill_versions (skill_id, id)
 );
 
 CREATE INDEX IF NOT EXISTS skill_sync_receipts_skill_id_idx ON skill_sync_receipts (skill_id);
