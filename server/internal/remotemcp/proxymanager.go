@@ -143,18 +143,6 @@ func (f *ProxyManager) BuildTarget(
 ) *proxy.Proxy {
 	backendID := identity.SourceID()
 
-	// Per-vendor policies self-select on the upstream URL — e.g. Figma only
-	// supports its cataloged MCP clients, and proxied traffic reaches Figma
-	// with Gram's transport rather than the client's.
-	var userRequestInterceptors []proxy.UserRequestInterceptor
-	for _, policy := range []interceptors.UpstreamPolicy{
-		interceptors.NewFigma(logger),
-	} {
-		if policy.Match(upstreamURL) {
-			userRequestInterceptors = append(userRequestInterceptors, policy)
-		}
-	}
-
 	// Per-request instance: the interceptor holds a single nilable start
 	// timestamp set by the request side and consumed by the response side.
 	// A fresh instance per Build makes that field's lifetime match the
@@ -231,7 +219,13 @@ func (f *ProxyManager) BuildTarget(
 		AuthorizationOverride:   upstreamAuth,
 		UpstreamResponseRetryer: nil,
 		WWWAuthenticate:         wwwAuthenticate,
-		UserRequestInterceptors: userRequestInterceptors,
+		UserRequestInterceptors: []proxy.UserRequestInterceptor{
+			// Vendor policies attach unconditionally and no-op for upstreams
+			// they don't apply to — e.g. Figma only supports its cataloged MCP
+			// clients, and proxied traffic reaches Figma with Gram's transport
+			// rather than the client's.
+			interceptors.NewFigma(upstreamURL, logger),
+		},
 		InitializeRequestInterceptors: []proxy.InitializeRequestInterceptor{
 			NewInitializePostHogEventInterceptor(f.posthog, identity, logger),
 		},
