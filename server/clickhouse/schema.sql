@@ -499,7 +499,8 @@ CREATE TABLE IF NOT EXISTS attribute_metrics_summaries (
     --
     -- generation is an IMMUTABLE sort-key discriminator separating coexisting
     -- data generations: 0 = original/MV-ingested rows, 1 = the 2026-07 full
-    -- re-derive backfill (future backfills increment). Because it is part of
+    -- re-derive backfill, 2 = the 2026-07 SmartNews account-type unset->team
+    -- backfill (POC-305; future backfills increment). Because it is part of
     -- the sorting key, a backfill row never merges with the original row for
     -- the same logical key — the two generations coexist untouched, which is
     -- what makes rollback lossless. Sort-key columns cannot be ALTER UPDATEd,

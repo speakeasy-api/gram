@@ -1,0 +1,389 @@
+-- Production runbook: reclassify SmartNews's historical "(unset)" account-type
+-- spend as team on attribute_metrics_summaries (POC-305), with the same
+-- lossless, flip-based rollback used by the 2026-07 full re-derive
+-- (20260713000000_backfill-attribute-metrics-summaries.sql — read that file's
+-- header first; the generation/is_active machinery is documented there and in
+-- the column comments in server/clickhouse/schema.sql).
+--
+-- WHY: when Claude Code runs against company credentials (API key,
+-- gateway/proxy, Bedrock, Vertex) it never emits user.account_uuid, and until
+-- speakeasy-api/gram#4259 (merged 2026-07-16) attributeSession early-returned
+-- on the empty UUID before classifying — so those sessions were stamped with
+-- an empty account_type and the Costs page account-type breakdown parked
+-- nearly all SmartNews spend (~98.3% / $63k) under "(unset)". #4259 fixes
+-- ingest going forward (empty UUID => team); this runbook applies the same
+-- rule to the historical rows.
+--
+-- WHAT MOVES: only aggregate rows keyed account_type = '' whose source rows
+-- are Claude OTEL rows from sessions that never carried a user.account_uuid.
+-- Deliberately left as "(unset)":
+--   * Codex/Cursor rows — they never run account attribution (matching #4259's
+--     scope; a separate feature).
+--   * Claude rows from sessions that DID carry a UUID somewhere (a mid-session
+--     OAuth login): their pre-enrichment rows keep the empty stamp, mirroring
+--     the ingest behavior. A tiny slice (336 of ~15.8k SmartNews sessions,
+--     $491 of $64.5k).
+--   * Buckets older than the telemetry_logs 90-day TTL horizon — there is no
+--     raw data left to re-derive them from, so they stay visible untouched
+--     rather than silently disappearing.
+-- Raw telemetry_logs rows are NOT touched: account_type there is a
+-- MATERIALIZED column (not mutable), so raw-path group-bys keep showing the
+-- historical "(unset)" until the 90-day TTL ages it out. Filter semantics are
+-- already correct everywhere: withAccountTypeFilter treats empty as team
+-- ("ifNull(account_type, '') != 'personal'").
+--
+-- MECHANICS: account_type is part of the sorting key, so the "(unset)" bucket
+-- rows cannot be UPDATEd in place. Instead we stage replacement rows as
+-- generation 2 (hidden), re-derived from telemetry_logs with the corrected
+-- account_type, then flip visibility: hide the project's generation-0/1
+-- account_type = '' rows in the covered window, reveal generation 2. Existing
+-- team/personal rows are never touched — the staged team rows simply coexist
+-- with them and the query layer's -Merge aggregation combines the states.
+--
+-- INVARIANT (same as the parent runbook): is_active UPDATE predicates must
+-- only reference sort-key columns. Every mutation below predicates on
+-- gram_project_id, generation, account_type, and time_bucket — all in the
+-- sorting key.
+--
+-- PARAMETERS — verified against prod on 2026-07-16 (read replica + ClickHouse
+-- read-only) and baked into the statements below:
+--   project id            019e2049-65e2-730b-b68a-2c68cb84ab7e — SmartNews's
+--                         "Default" project, which carries ALL the unset spend
+--                         ($64.5k live / 104k aggregate rows). The org's only
+--                         other project (test-project,
+--                         019f360c-bbc5-771b-8cd2-d30ca43fbfbd) has one $0
+--                         unset row — not worth a run.
+--   window upper bound    2026-07-16 05:00:00 UTC — whole hour after the
+--                         #4259 deploy started stamping team at 04:55:17 UTC;
+--                         the last unset Claude row landed 04:57:31 during the
+--                         rollout. Claude rows after the bound are stamped at
+--                         ingest and stay untouched.
+--   <OLDEST_STAGED_BUCKET> the one run-time parameter: min(time_bucket) of
+--                         generation 2 after step 1 (step 2 tells you) —
+--                         bounds the hide flip so any history the raw logs
+--                         cannot re-derive stays visible. Expected around
+--                         2026-06-22 06:00:00 (SmartNews history begins
+--                         2026-06-21, well inside the raw 90-day TTL, so the
+--                         whole window is re-derivable).
+--
+-- Prod state verified before writing this (step 0 re-confirms at run time):
+--   * #4259 live since 2026-07-16 04:55:17 UTC (267k+ UUID-less team rows).
+--   * 20260713 re-derive HAS cut over for this project: generation 1 active
+--     2026-06-22..2026-07-13, generation 0 hidden there, generation 0 active
+--     from 2026-07-14.
+--   * 15,495 UUID-less Claude sessions vs 336 UUID-bearing.
+--   * The unset bucket is 100% Claude OTEL rows — SmartNews has NO Codex or
+--     Cursor traffic.
+--   * Preview of the split this runbook produces: $64,068.93 / 6.75M rows
+--     move to team; $491.35 / 36k rows stay "(unset)" (UUID-bearing sessions'
+--     pre-enrichment rows).
+--
+-- Do not start before step 0 re-confirms the two preconditions: #4259 stamping
+-- team (0b) and the 20260713 cutover end state (0c). Anything else: stop.
+
+-- ============================================================================
+-- Step 0a — find SmartNews's project id (Postgres, prod read replica):
+--
+--   SELECT p.id, p.name, p.slug, o.name AS org_name
+--   FROM projects p
+--   JOIN organization_metadata o ON o.id = p.organization_id
+--   WHERE o.name ILIKE '%smartnews%' AND NOT p.deleted;
+--
+-- Then confirm which project(s) actually carry the unset spend:
+-- ============================================================================
+
+SELECT gram_project_id,
+       count() AS unset_rows,
+       round(sumIf(finalizeAggregation(total_cost), is_active = 1), 2) AS live_unset_cost
+FROM attribute_metrics_summaries
+WHERE account_type = ''
+  AND gram_project_id IN (toUUID('019e2049-65e2-730b-b68a-2c68cb84ab7e') /* , more ids from the Postgres lookup */)
+GROUP BY gram_project_id;
+
+-- ============================================================================
+-- Step 0b — confirm the #4259 fix is live: the first UUID-less Claude row
+-- stamped team. Expect 2026-07-16 04:55:17 UTC — the baked window upper bound
+-- (2026-07-16 05:00:00) is the whole hour right after it.
+-- ============================================================================
+
+SELECT min(fromUnixTimestamp64Nano(time_unix_nano)) AS first_uuidless_team_row
+FROM telemetry_logs
+WHERE gram_project_id = toUUID('019e2049-65e2-730b-b68a-2c68cb84ab7e')
+  AND gram_urn = 'claude-code:otel:logs'
+  AND account_type = 'team'
+  AND toString(attributes.user.account_uuid) = ''
+  AND time_unix_nano >= toUnixTimestamp64Nano(toDateTime64('2026-07-16 00:00:00', 9, 'UTC'));
+
+-- ============================================================================
+-- Step 0c — record the before-state. Expected shape for the project:
+--   generation 0, is_active 0 — pre-2026-07-14 rows hidden by the 20260713
+--                               cutover (absent if its final cleanup ran);
+--   generation 0, is_active 1 — MV rows from 2026-07-14 on;
+--   generation 1, is_active 1 — the 20260713 re-derive;
+--   no generation 2 rows yet.
+-- Anything else: stop and reconcile before proceeding.
+-- ============================================================================
+
+SELECT generation, is_active, count() AS rows, min(time_bucket) AS oldest, max(time_bucket) AS newest
+FROM attribute_metrics_summaries
+WHERE gram_project_id = toUUID('019e2049-65e2-730b-b68a-2c68cb84ab7e')
+GROUP BY generation, is_active
+ORDER BY generation, is_active;
+
+-- Size the slice that will move: distinct Claude sessions with vs without a
+-- user.account_uuid (verified 2026-07-16: 15,495 without, 336 with).
+SELECT
+    uniqExactIf(chat_id, chat_id != '' AND max_uuid != '') AS sessions_with_uuid,
+    uniqExactIf(chat_id, chat_id != '' AND max_uuid = '') AS sessions_without_uuid
+FROM (
+    SELECT chat_id, max(toString(attributes.user.account_uuid)) AS max_uuid
+    FROM telemetry_logs
+    WHERE gram_project_id = toUUID('019e2049-65e2-730b-b68a-2c68cb84ab7e')
+      AND gram_urn = 'claude-code:otel:logs'
+    GROUP BY chat_id
+);
+
+-- ============================================================================
+-- Step 1 — stage the replacement rows: re-derive ONLY the source rows that fed
+-- the "(unset)" bucket (account_type = '' — the corrected value deliberately
+-- carries a different alias, corrected_account_type, so it can never shadow
+-- the source column in WHERE), with the corrected classification, as
+-- generation 2, HIDDEN (is_active = 0).
+--
+-- Everything except the WHERE restriction and corrected_account_type mirrors
+-- attribute_metrics_summaries_mv (server/clickhouse/schema.sql) — keep them in
+-- sync if the MV changes before this runs.
+-- ============================================================================
+
+INSERT INTO attribute_metrics_summaries (gram_project_id, time_bucket, department_name, job_title, employee_type, division_name, cost_center_name, user_email, model, hook_source, roles, groups, total_chats, total_input_tokens, total_output_tokens, total_tokens, cache_read_input_tokens, cache_creation_input_tokens, total_cost, total_tool_calls, unique_tool_calls, account_type, provider, billing_mode, query_source, skill_name, agent_name, mcp_server_name, mcp_tool_name, generation, is_active)
+WITH
+    toUnixTimestamp64Nano(toDateTime64('2026-07-16 05:00:00', 9, 'UTC')) AS backfill_boundary_unix_nano,
+    (gram_urn = 'claude-code:otel:logs') AS is_claude_otel_row,
+    (
+        is_claude_otel_row
+        AND chat_id != ''
+        AND toString(attributes.prompt.id) != ''
+        AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')
+    ) AS is_claude_api_request,
+    (
+        is_claude_otel_row
+        AND (toString(attributes.event.name) = 'tool_result' OR body = 'claude_code.tool_result')
+    ) AS is_claude_tool_result,
+    (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage')) AS is_agent_usage_row,
+    (
+        toString(attributes.gram.hook.source) IN ('codex', 'cursor')
+        AND toString(attributes.gram.tool.name) != ''
+        AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor')
+        AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')
+    ) AS is_agent_tool_call,
+    (is_claude_tool_result OR is_agent_tool_call) AS is_counted_tool_call,
+    multiIf(
+        toString(attributes.tool_use_id) != '', toString(attributes.tool_use_id),
+        toString(attributes.gen_ai.tool.call.id) != '', toString(attributes.gen_ai.tool.call.id),
+        toString(id)
+    ) AS tool_call_dedup_id,
+    -- The #4259 rule applied retroactively: a Claude OTEL row from a session
+    -- that never carried user.account_uuid is company-credential => team.
+    -- Session granularity (not row): the UUID rides only on some event types,
+    -- so a row-level check would misclassify UUID-bearing sessions' quiet
+    -- rows. Rows with no chat_id cannot be session-matched and fall back to
+    -- the row-level attribute.
+    (
+        is_claude_otel_row
+        AND if(
+            chat_id != '',
+            chat_id NOT IN (
+                SELECT DISTINCT chat_id
+                FROM telemetry_logs
+                WHERE gram_project_id = toUUID('019e2049-65e2-730b-b68a-2c68cb84ab7e')
+                  AND gram_urn = 'claude-code:otel:logs'
+                  AND chat_id != ''
+                  AND toString(attributes.user.account_uuid) != ''
+            ),
+            toString(attributes.user.account_uuid) = ''
+        )
+    ) AS is_company_credential_claude_row,
+    -- Source rows are restricted to account_type = '' below, so the corrected
+    -- value is either the team reclassification or the preserved empty stamp
+    -- (Codex/Cursor rows and UUID-bearing sessions' pre-enrichment rows).
+    if(is_company_credential_claude_row, 'team', '') AS corrected_account_type
+SELECT
+    gram_project_id,
+    toStartOfHour(fromUnixTimestamp64Nano(time_unix_nano)) AS time_bucket,
+    toString(attributes.user.attributes.department_name) AS department_name,
+    toString(attributes.user.attributes.job_title) AS job_title,
+    toString(attributes.user.attributes.employee_type) AS employee_type,
+    toString(attributes.user.attributes.division_name) AS division_name,
+    toString(attributes.user.attributes.cost_center_name) AS cost_center_name,
+    user_email AS user_email,
+    multiIf(
+        is_claude_api_request AND toString(attributes.model) != '', toString(attributes.model),
+        is_claude_api_request AND toString(attributes.gen_ai.request.model) != '', toString(attributes.gen_ai.request.model),
+        toString(attributes.gen_ai.response.model)
+    ) AS model,
+    hook_source,
+    arraySort(JSONExtract(ifNull(toJSONString(attributes.user.roles), '[]'), 'Array(String)')) AS roles,
+    arraySort(JSONExtract(ifNull(toJSONString(attributes.user.groups), '[]'), 'Array(String)')) AS groups,
+    uniqExactIfState(toString(attributes.gen_ai.conversation.id), toString(attributes.gen_ai.conversation.id) != '' AND (is_claude_api_request OR is_agent_usage_row)) AS total_chats,
+    sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens))), is_claude_api_request OR is_agent_usage_row) AS total_input_tokens,
+    sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.output_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens))), is_claude_api_request OR is_agent_usage_row) AS total_output_tokens,
+    sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)) + toInt64OrZero(toString(attributes.output_tokens)) + toInt64OrZero(toString(attributes.cache_creation_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), is_claude_api_request OR is_agent_usage_row) AS total_tokens,
+    sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.cache_read_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens))), is_claude_api_request OR is_agent_usage_row) AS cache_read_input_tokens,
+    sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.cache_creation_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), is_claude_api_request OR is_agent_usage_row) AS cache_creation_input_tokens,
+    sumIfState(if(is_claude_api_request, multiIf(toString(attributes.cost_usd) != '', toFloat64OrZero(toString(attributes.cost_usd)), toString(attributes.cost_usd_micros) != '', toFloat64OrZero(toString(attributes.cost_usd_micros)) / 1000000, 0), toFloat64OrZero(toString(attributes.gen_ai.usage.cost))), is_claude_api_request OR is_agent_usage_row) AS total_cost,
+    countIfState(is_counted_tool_call) AS total_tool_calls,
+    uniqExactIfState(tool_call_dedup_id, is_counted_tool_call) AS unique_tool_calls,
+    corrected_account_type,
+    provider,
+    billing_mode,
+    if(is_claude_api_request, toString(attributes.query_source), '') AS query_source,
+    if(is_claude_api_request, toString(attributes.skill.name), '') AS skill_name,
+    if(is_claude_api_request, toString(attributes.agent.name), '') AS agent_name,
+    if(is_claude_api_request, toString(attributes.mcp_server.name), '') AS mcp_server_name,
+    if(is_claude_api_request, toString(attributes.mcp_tool.name), '') AS mcp_tool_name,
+    2 AS generation,
+    0 AS is_active
+FROM telemetry_logs
+WHERE gram_project_id = toUUID('019e2049-65e2-730b-b68a-2c68cb84ab7e')
+  AND time_unix_nano < backfill_boundary_unix_nano
+  -- Only source rows that fed the "(unset)" bucket (indexed materialized column).
+  AND account_type = ''
+  AND (is_claude_api_request OR is_claude_tool_result OR is_agent_usage_row OR is_agent_tool_call)
+GROUP BY
+    gram_project_id,
+    time_bucket,
+    department_name,
+    job_title,
+    employee_type,
+    division_name,
+    cost_center_name,
+    user_email,
+    model,
+    hook_source,
+    roles,
+    groups,
+    corrected_account_type,
+    provider,
+    billing_mode,
+    query_source,
+    skill_name,
+    agent_name,
+    mcp_server_name,
+    mcp_tool_name;
+
+-- ============================================================================
+-- Step 2 — verify the staged generation in place (hidden, so take your time).
+-- Note min(time_bucket) of generation 2: that is <OLDEST_STAGED_BUCKET> for
+-- the flips below. Buckets older than it (beyond the raw 90-day horizon) are
+-- deliberately left visible as "(unset)".
+-- ============================================================================
+
+SELECT generation, count() AS rows, min(time_bucket) AS oldest, max(time_bucket) AS newest
+FROM attribute_metrics_summaries
+WHERE gram_project_id = toUUID('019e2049-65e2-730b-b68a-2c68cb84ab7e')
+GROUP BY generation;
+
+-- Conservation check, per day: the staged rows must carry (approximately) the
+-- same cost as the live "(unset)" rows they replace — staged_cost may run
+-- slightly HIGHER on pre-2026-07-14 days (late-arriving rows the 20260713
+-- re-derive missed), never materially lower. staged_team_cost is the share
+-- moving to team; the remainder stays "(unset)" by design. Expected totals
+-- across the window (previewed 2026-07-16 against raw logs): staged_team_cost
+-- ~= $64,069, residual unset ~= $491.
+SELECT toStartOfDay(time_bucket) AS day,
+       round(sumIf(finalizeAggregation(total_cost), generation IN (0, 1) AND account_type = '' AND is_active = 1), 2) AS live_unset_cost,
+       round(sumIf(finalizeAggregation(total_cost), generation = 2), 2) AS staged_cost,
+       round(sumIf(finalizeAggregation(total_cost), generation = 2 AND account_type = 'team'), 2) AS staged_team_cost
+FROM attribute_metrics_summaries
+WHERE gram_project_id = toUUID('019e2049-65e2-730b-b68a-2c68cb84ab7e')
+  AND time_bucket < toDateTime('2026-07-16 05:00:00', 'UTC')
+GROUP BY day
+ORDER BY day DESC;
+
+-- ============================================================================
+-- Step 3 — CUTOVER: flip visibility, scoped to the project's "(unset)" bucket
+-- in the covered window. Hide first, then reveal (a moment of undercount
+-- instead of double count). generation IN (0, 1) covers both the post-cutoff
+-- MV rows and the 20260713 re-derive; re-hiding already-hidden generation-0
+-- pre-cutoff rows is a no-op.
+-- ============================================================================
+
+ALTER TABLE attribute_metrics_summaries
+    UPDATE is_active = 0
+    WHERE gram_project_id = toUUID('019e2049-65e2-730b-b68a-2c68cb84ab7e')
+      AND generation IN (0, 1)
+      AND account_type = ''
+      AND time_bucket >= toDateTime('<OLDEST_STAGED_BUCKET>', 'UTC')
+      AND time_bucket < toDateTime('2026-07-16 05:00:00', 'UTC')
+    SETTINGS mutations_sync = 2;
+
+ALTER TABLE attribute_metrics_summaries
+    UPDATE is_active = 1
+    WHERE gram_project_id = toUUID('019e2049-65e2-730b-b68a-2c68cb84ab7e')
+      AND generation = 2
+    SETTINGS mutations_sync = 2;
+
+-- Verify, then spot-check the SmartNews Costs page account-type breakdown:
+-- the "(unset)" share should collapse to the residual slice.
+SELECT generation, is_active, count() AS rows, min(time_bucket) AS oldest, max(time_bucket) AS newest
+FROM attribute_metrics_summaries
+WHERE gram_project_id = toUUID('019e2049-65e2-730b-b68a-2c68cb84ab7e')
+GROUP BY generation, is_active
+ORDER BY generation, is_active;
+
+SELECT account_type,
+       round(sumIf(finalizeAggregation(total_cost), is_active = 1), 2) AS live_cost
+FROM attribute_metrics_summaries
+WHERE gram_project_id = toUUID('019e2049-65e2-730b-b68a-2c68cb84ab7e')
+GROUP BY account_type;
+
+-- ============================================================================
+-- ROLLBACK — exact reverse flips, lossless and repeatable. This restores the
+-- step-0c end state: generation 1 visible before 2026-07-14 (the 20260713
+-- runbook's cutoff), generation 0 visible from it (generation-0 rows before it
+-- were already hidden by that runbook's cutover and must stay hidden). To
+-- retry a corrected backfill afterwards, hard-delete generation 2 for the
+-- project (`ALTER TABLE attribute_metrics_summaries DELETE WHERE
+-- gram_project_id = toUUID('019e2049-65e2-730b-b68a-2c68cb84ab7e') AND generation = 2 SETTINGS
+-- mutations_sync = 2`) and start over from step 1.
+-- ============================================================================
+
+-- ALTER TABLE attribute_metrics_summaries
+--     UPDATE is_active = 0
+--     WHERE gram_project_id = toUUID('019e2049-65e2-730b-b68a-2c68cb84ab7e')
+--       AND generation = 2
+--     SETTINGS mutations_sync = 2;
+--
+-- ALTER TABLE attribute_metrics_summaries
+--     UPDATE is_active = 1
+--     WHERE gram_project_id = toUUID('019e2049-65e2-730b-b68a-2c68cb84ab7e')
+--       AND generation = 1
+--       AND account_type = ''
+--       AND time_bucket >= toDateTime('<OLDEST_STAGED_BUCKET>', 'UTC')
+--       AND time_bucket < toDateTime('2026-07-14 00:00:00', 'UTC')
+--     SETTINGS mutations_sync = 2;
+--
+-- ALTER TABLE attribute_metrics_summaries
+--     UPDATE is_active = 1
+--     WHERE gram_project_id = toUUID('019e2049-65e2-730b-b68a-2c68cb84ab7e')
+--       AND generation = 0
+--       AND account_type = ''
+--       AND time_bucket >= toDateTime('2026-07-14 00:00:00', 'UTC')
+--       AND time_bucket < toDateTime('2026-07-16 05:00:00', 'UTC')
+--     SETTINGS mutations_sync = 2;
+
+-- ============================================================================
+-- Step 4 — OPTIONAL cleanup, days/weeks later once fully confident: drop the
+-- project's hidden replaced rows. Destructive — after it, rollback is no
+-- longer possible. Scoped tighter than a bare is_active = 0 sweep so it cannot
+-- collide with other generations' hidden rows.
+-- ============================================================================
+
+-- ALTER TABLE attribute_metrics_summaries
+--     DELETE WHERE gram_project_id = toUUID('019e2049-65e2-730b-b68a-2c68cb84ab7e')
+--       AND generation IN (0, 1)
+--       AND account_type = ''
+--       AND is_active = 0
+--       AND time_bucket >= toDateTime('<OLDEST_STAGED_BUCKET>', 'UTC')
+--       AND time_bucket < toDateTime('2026-07-16 05:00:00', 'UTC')
+--     SETTINGS mutations_sync = 2;
