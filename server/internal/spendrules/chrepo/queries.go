@@ -42,8 +42,16 @@ func LoadActorWindowSpend(ctx context.Context, queries *Queries, projectIDs []st
 		if email == "" {
 			continue
 		}
-		row.Email = email
-		spendByEmail[email] = row
+		// ClickHouse groups by raw user_email, so the same actor can arrive as
+		// several rows differing only in email casing. Accumulate after
+		// normalization rather than overwriting, or spend would be undercounted
+		// and a breached blocking rule could stay unblocked.
+		existing := spendByEmail[email]
+		existing.Email = email
+		existing.DailyCost += row.DailyCost
+		existing.WeeklyCost += row.WeeklyCost
+		existing.MonthlyCost += row.MonthlyCost
+		spendByEmail[email] = existing
 	}
 
 	return spendByEmail, nil

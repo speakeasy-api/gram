@@ -28,12 +28,14 @@ VALUES (
 RETURNING *;
 
 -- name: SpendRuleSlugExists :one
+-- Slugs are reserved permanently, even for archived (soft-deleted) rules, so a
+-- new rule never reuses a slug and rule URNs stay globally unique. Do NOT scope
+-- this to `deleted IS FALSE`.
 SELECT EXISTS (
   SELECT 1
   FROM spend_rules
   WHERE organization_id = @organization_id
     AND slug = @slug
-    AND deleted IS FALSE
 ) AS taken;
 
 -- name: GetSpendRule :one
@@ -128,6 +130,7 @@ ON CONFLICT (spend_rule_id, version) DO NOTHING;
 INSERT INTO spend_rule_events (
     organization_id
   , spend_rule_id
+  , rule_version
   , rule_urn
   , event_type
   , user_id
@@ -141,6 +144,7 @@ INSERT INTO spend_rule_events (
 VALUES (
     @organization_id
   , @spend_rule_id
+  , @rule_version
   , @rule_urn
   , @event_type
   , sqlc.narg(user_id)::text

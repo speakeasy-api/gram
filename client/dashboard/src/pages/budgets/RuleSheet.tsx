@@ -21,7 +21,7 @@ import {
 import { TextArea } from "@/components/ui/textarea";
 import { Type } from "@/components/ui/type";
 import { useSpendRulesPreviewRuleMutation } from "@gram/client/react-query/spendRulesPreviewRule.js";
-import { Check, Loader2, Trash2, Users } from "lucide-react";
+import { Archive, Check, Loader2, Users } from "lucide-react";
 import { useEffect, useMemo, useState, type JSX, type ReactNode } from "react";
 import { ACTOR_ATTRIBUTES, type ActorAttribute } from "./budget-cel";
 import {
@@ -307,12 +307,16 @@ function RuleForm({
                 type="number"
                 min={1}
                 max={99}
+                step={1}
                 value={draft.warnAtPct}
                 onChange={(e) =>
                   patch({
+                    // warn_at_pct is an integer in the API contract; round so a
+                    // fractional entry can't leave the form submittable but
+                    // rejected by the generated client.
                     warnAtPct: Math.min(
                       99,
-                      Math.max(1, Number(e.target.value) || 0),
+                      Math.max(1, Math.round(Number(e.target.value) || 0)),
                     ),
                   })
                 }
@@ -404,10 +408,10 @@ function RuleForm({
             size="sm"
             onClick={onDelete}
             disabled={submitting}
-            className="text-destructive hover:text-destructive"
+            className="text-muted-foreground"
           >
-            <Trash2 className="mr-2 h-4 w-4" />
-            Delete
+            <Archive className="mr-2 h-4 w-4" />
+            Archive
           </Button>
         ) : (
           <span />

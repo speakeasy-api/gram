@@ -18,22 +18,13 @@ import (
 type SpendRule struct {
 	Slug    string
 	Version int64
-
-	checked bool
-	err     error
 }
 
 func NewSpendRule(slug string, version int64) SpendRule {
-	s := SpendRule{
+	return SpendRule{
 		Slug:    slug,
 		Version: version,
-		checked: false,
-		err:     nil,
 	}
-
-	_ = s.validate()
-
-	return s
 }
 
 func ParseSpendRule(value string) (SpendRule, error) {
@@ -162,26 +153,20 @@ func (u *SpendRule) UnmarshalText(text []byte) error {
 	return nil
 }
 
-func (u *SpendRule) validate() error {
-	if u.checked {
-		return u.err
-	}
-
-	u.checked = true
-
+// validate recomputes on every call (no caching) and takes a value receiver so
+// the exported Slug/Version fields cannot be mutated after construction into a
+// state that Value/MarshalJSON/MarshalText would then serialize unchecked.
+func (u SpendRule) validate() error {
 	if u.Slug == "" {
-		u.err = fmt.Errorf("%w: empty slug", ErrInvalid)
-		return u.err
+		return fmt.Errorf("%w: empty slug", ErrInvalid)
 	}
 
 	if !constants.SlugPatternRE.MatchString(u.Slug) {
-		u.err = fmt.Errorf("%w: disallowed characters in slug: %q", ErrInvalid, u.Slug[:min(maxSegmentLength, len(u.Slug))])
-		return u.err
+		return fmt.Errorf("%w: disallowed characters in slug: %q", ErrInvalid, u.Slug[:min(maxSegmentLength, len(u.Slug))])
 	}
 
 	if u.Version < 1 {
-		u.err = fmt.Errorf("%w: version must be at least 1", ErrInvalid)
-		return u.err
+		return fmt.Errorf("%w: version must be at least 1", ErrInvalid)
 	}
 
 	return nil

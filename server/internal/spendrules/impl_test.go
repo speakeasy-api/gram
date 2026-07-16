@@ -295,6 +295,7 @@ func TestSpendRuleEventsListAndDedupe(t *testing.T) {
 	params := spendrepo.InsertSpendRuleEventParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		SpendRuleID:    ruleID,
+		RuleVersion:    1,
 		RuleUrn:        ruleURN,
 		EventType:      spendrules.EventTypeBreach,
 		UserID:         conv.ToPGTextEmpty("user_ada"),

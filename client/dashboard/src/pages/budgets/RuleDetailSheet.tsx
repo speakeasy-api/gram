@@ -11,7 +11,7 @@ import { Type } from "@/components/ui/type";
 import { useSpendRulesListEvents } from "@gram/client/react-query/spendRulesListEvents.js";
 import { useSpendRulesPreviewRuleMutation } from "@gram/client/react-query/spendRulesPreviewRule.js";
 import { Loader2, Pencil, Search, Users } from "lucide-react";
-import { useEffect, useMemo, useState, type JSX } from "react";
+import { useCallback, useEffect, useMemo, useState, type JSX } from "react";
 import {
   EventTypeBadge,
   RuleActionBadge,
@@ -66,12 +66,14 @@ export function RuleDetailSheet({
 function useRuleActorBreakdown(rule: SpendRule): {
   preview: PreviewSpendRuleResult | null;
   loading: boolean;
+  error: boolean;
+  retry: () => void;
 } {
   const previewMutation = useSpendRulesPreviewRuleMutation();
   const [preview, setPreview] = useState<PreviewSpendRuleResult | null>(null);
   const { mutate } = previewMutation;
 
-  useEffect(() => {
+  const runPreview = useCallback(() => {
     mutate(
       {
         request: {
@@ -87,7 +89,19 @@ function useRuleActorBreakdown(rule: SpendRule): {
     );
   }, [rule.target, rule.limitUsd, rule.warnAtPct, rule.windowKind, mutate]);
 
-  return { preview, loading: previewMutation.isPending };
+  useEffect(() => {
+    runPreview();
+  }, [runPreview]);
+
+  // Surface failures explicitly: a failed preview leaves no data, and callers
+  // must not render that as "no members matched" (an unavailable evaluator and
+  // an empty match look identical otherwise).
+  return {
+    preview,
+    loading: previewMutation.isPending,
+    error: previewMutation.isError && preview === null,
+    retry: runPreview,
+  };
 }
 
 function RuleDetail({
@@ -100,7 +114,12 @@ function RuleDetail({
   onEdit: (rule: SpendRule) => void;
 }): JSX.Element {
   const status = ruleStatusOf(rule, usage);
-  const { preview, loading: actorsLoading } = useRuleActorBreakdown(rule);
+  const {
+    preview,
+    loading: actorsLoading,
+    error: actorsError,
+    retry: retryActors,
+  } = useRuleActorBreakdown(rule);
   const { data: eventsData } = useSpendRulesListEvents({
     ruleId: rule.id,
     limit: 50,
@@ -174,6 +193,8 @@ function RuleDetail({
           actors={actors}
           matchedCount={preview?.matchedCount ?? 0}
           loading={actorsLoading}
+          error={actorsError}
+          onRetry={retryActors}
         />
 
         {/* Lifecycle events */}
@@ -243,10 +264,14 @@ function PeopleSection({
   actors,
   matchedCount,
   loading,
+  error,
+  onRetry,
 }: {
   actors: SpendRuleActorUsage[];
   matchedCount: number;
   loading: boolean;
+  error: boolean;
+  onRetry: () => void;
 }): JSX.Element {
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState(false);
@@ -295,7 +320,17 @@ function PeopleSection({
         </div>
       )}
 
-      {actors.length === 0 ? (
+      {error ? (
+        <div className="flex items-center gap-2">
+          <p className="text-destructive text-xs">
+            Couldn't load matched people. The preview is temporarily
+            unavailable.
+          </p>
+          <Button variant="outline" size="sm" onClick={onRetry}>
+            Retry
+          </Button>
+        </div>
+      ) : actors.length === 0 ? (
         <p className="text-muted-foreground text-xs">
           {loading
             ? "Matching members…"

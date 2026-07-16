@@ -100,7 +100,9 @@ func TestGateEvaluatesRuleCELAgainstCachedUsage(t *testing.T) {
 	ctx := t.Context()
 	cacheImpl := newGateCache()
 	actors := testActors()
-	windowEnd := time.Date(2026, time.July, 5, 0, 0, 0, 0, time.UTC)
+	// Future window: the block must fire on cached usage, not be skipped as an
+	// already-reset window.
+	windowEnd := time.Now().UTC().AddDate(0, 0, 7)
 	state := spendrules.NewGateState("org_123", actors)
 	state.Rules = append(state.Rules, spendrules.GateRule{
 		RuleURN:    "spend_rule:engineering:v1",
@@ -132,6 +134,41 @@ func TestGateEvaluatesRuleCELAgainstCachedUsage(t *testing.T) {
 	require.Equal(t, windowEnd, block.WindowEnd)
 }
 
+func TestGateSkipsExpiredWindow(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	cacheImpl := newGateCache()
+	actors := testActors()
+	state := spendrules.NewGateState("org_123", actors)
+	state.Rules = append(state.Rules, spendrules.GateRule{
+		RuleURN:    "spend_rule:engineering:v1",
+		RuleName:   "Engineering budget",
+		Action:     spendrules.ActionBlock,
+		TargetExpr: `department_name == "Engineering"`,
+		RuleExpr:   `used_pct >= warn_at_pct`,
+		LimitUSD:   100,
+		WarnAtPct:  80,
+		WindowKind: spendrules.WindowMonthly,
+		// Window already ended: the snapshot's spend belongs to a window that
+		// has reset, so the block must lift even though the cached usage breaches.
+		WindowEnd: time.Now().UTC().Add(-time.Hour),
+	})
+	state.SetActorWindowSpend("org_123", actors[0], chrepo.ActorWindowSpendRow{
+		Email:       "ada@acme.com",
+		DailyCost:   0,
+		WeeklyCost:  0,
+		MonthlyCost: 90,
+	})
+
+	require.NoError(t, spendrules.WriteGateState(ctx, cacheImpl, "org_123", state))
+	gate := spendrules.NewGate(testenv.NewLogger(t), cacheImpl)
+
+	block, err := gate.CheckBlocked(ctx, "org_123", "Ada@Acme.com")
+	require.NoError(t, err)
+	require.Nil(t, block)
+}
+
 func TestGateEvaluatesTargetCELBeforeRuleCEL(t *testing.T) {
 	t.Parallel()
 
@@ -148,7 +185,7 @@ func TestGateEvaluatesTargetCELBeforeRuleCEL(t *testing.T) {
 		LimitUSD:   100,
 		WarnAtPct:  80,
 		WindowKind: spendrules.WindowMonthly,
-		WindowEnd:  time.Date(2026, time.July, 5, 0, 0, 0, 0, time.UTC),
+		WindowEnd:  time.Now().UTC().AddDate(0, 0, 7),
 	})
 	state.SetActorWindowSpend("org_123", actors[1], chrepo.ActorWindowSpendRow{
 		Email:       "sam@acme.com",

@@ -23,7 +23,7 @@ import { useSpendRulesUpdateRuleMutation } from "@gram/client/react-query/spendR
 import { Table, type Column } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Inbox, Plus, SearchX, Wallet } from "lucide-react";
-import { useMemo, useState, type JSX } from "react";
+import { useEffect, useMemo, useState, type JSX } from "react";
 import { Navigate } from "react-router";
 import { toast } from "sonner";
 import { RuleDetailSheet } from "./RuleDetailSheet";
@@ -57,15 +57,18 @@ type BudgetTab = "rules" | "events";
 export default function Budgets(): JSX.Element {
   const telemetry = useTelemetry();
   const routes = useRoutes();
-  // Gated behind a PostHog flag so it can be dogfooded per org/user.
-  const enabled = telemetry.isFeatureEnabled("gram-budgets-page") ?? false;
 
-  if (!enabled) {
+  // Gated behind a PostHog flag so it can be dogfooded per org/user. Redirect
+  // only once the flag has resolved to disabled; while it is still loading
+  // (undefined) render and let the org:admin scope guard below gate access, so
+  // a flag-enabled admin opening the route directly is not bounced home before
+  // PostHog finishes loading.
+  if (telemetry.isFeatureEnabled("gram-budgets-page") === false) {
     return <Navigate to={routes.home.href()} replace />;
   }
 
   return (
-    <RequireScope scope={["project:read", "project:write"]} level="page">
+    <RequireScope scope="org:admin" level="page">
       <Page>
         <Page.Header>
           <Page.Header.Breadcrumbs />
@@ -114,7 +117,7 @@ function BudgetsContent(): JSX.Element {
     onSuccess: () => {
       invalidate();
       setEditing(null);
-      toast.success("Rule deleted");
+      toast.success("Rule archived");
     },
     onError: (error) => toast.error(error.message),
   });
@@ -509,14 +512,42 @@ function RuleBudgetCell({
 
 type EventFilter = "all" | "warning" | "breach";
 
+const EVENTS_PAGE_LIMIT = 100;
+
 function EventsTab({ rules }: { rules: SpendRule[] }): JSX.Element {
   const [filter, setFilter] = useState<EventFilter>("all");
+  // Cursor of the page currently being fetched; undefined is the first page.
+  const [cursor, setCursor] = useState<string | undefined>(undefined);
+  // Pages fetched so far are accumulated here so "Load more" grows the feed
+  // instead of replacing it.
+  const [loaded, setLoaded] = useState<SpendRuleEvent[]>([]);
 
-  const { data, isLoading } = useSpendRulesListEvents({
+  const { data, isLoading, isFetching } = useSpendRulesListEvents({
     eventType: filter === "all" ? undefined : filter,
-    limit: 200,
+    cursor,
+    limit: EVENTS_PAGE_LIMIT,
   });
-  const events = useMemo(() => data?.events ?? [], [data]);
+
+  // Changing the filter restarts pagination from the first page.
+  useEffect(() => {
+    setLoaded([]);
+    setCursor(undefined);
+  }, [filter]);
+
+  // Append each fetched page, de-duping by id so a re-render or overlap never
+  // doubles a row.
+  useEffect(() => {
+    const page = data?.events;
+    if (!page || page.length === 0) return;
+    setLoaded((prev) => {
+      const seen = new Set(prev.map((event) => event.id));
+      const additions = page.filter((event) => !seen.has(event.id));
+      return additions.length > 0 ? [...prev, ...additions] : prev;
+    });
+  }, [data]);
+
+  const events = loaded;
+  const nextCursor = data?.nextCursor;
 
   const versionByRuleId = useMemo(() => {
     const map = new Map<string, number>();
@@ -613,7 +644,21 @@ function EventsTab({ rules }: { rules: SpendRule[] }): JSX.Element {
           description={filteredEmpty.description}
         />
       ) : (
-        <Table columns={columns} data={events} rowKey={(event) => event.id} />
+        <>
+          <Table columns={columns} data={events} rowKey={(event) => event.id} />
+          {nextCursor && (
+            <div className="flex justify-center">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCursor(nextCursor)}
+                disabled={isFetching}
+              >
+                {isFetching ? "Loading…" : "Load more"}
+              </Button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -681,7 +726,7 @@ function versionMarker(
   currentVersion: number | undefined,
 ): string | null {
   if (ref === null) return null;
-  if (currentVersion === undefined) return `v${ref.version} · rule deleted`;
+  if (currentVersion === undefined) return `v${ref.version} · rule archived`;
   if (currentVersion !== ref.version) {
     return `v${ref.version} · now v${currentVersion}`;
   }

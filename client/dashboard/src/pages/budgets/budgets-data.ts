@@ -215,10 +215,13 @@ export function sortEventsByRecency(
 /* -------------------------------------------------------------------------- */
 
 export function formatUsd(amount: number): string {
+  // Always keep cents: enforcement uses the exact double-precision limit/spend,
+  // so rounding larger amounts to whole dollars here would show a figure the
+  // evaluator never used.
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
-    maximumFractionDigits: amount >= 100 ? 0 : 2,
+    maximumFractionDigits: 2,
   }).format(amount);
 }
 

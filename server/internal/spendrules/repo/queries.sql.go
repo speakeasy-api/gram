@@ -214,6 +214,7 @@ const insertSpendRuleEvent = `-- name: InsertSpendRuleEvent :execrows
 INSERT INTO spend_rule_events (
     organization_id
   , spend_rule_id
+  , rule_version
   , rule_urn
   , event_type
   , user_id
@@ -229,13 +230,14 @@ VALUES (
   , $2
   , $3
   , $4
-  , $5::text
-  , $6
-  , $7::text
-  , $8
+  , $5
+  , $6::text
+  , $7
+  , $8::text
   , $9
   , $10
   , $11
+  , $12
 )
 ON CONFLICT (spend_rule_id, rule_urn, event_type, email, window_start) DO NOTHING
 `
@@ -243,6 +245,7 @@ ON CONFLICT (spend_rule_id, rule_urn, event_type, email, window_start) DO NOTHIN
 type InsertSpendRuleEventParams struct {
 	OrganizationID string
 	SpendRuleID    uuid.UUID
+	RuleVersion    int64
 	RuleUrn        string
 	EventType      string
 	UserID         pgtype.Text
@@ -258,6 +261,7 @@ func (q *Queries) InsertSpendRuleEvent(ctx context.Context, arg InsertSpendRuleE
 	result, err := q.db.Exec(ctx, insertSpendRuleEvent,
 		arg.OrganizationID,
 		arg.SpendRuleID,
+		arg.RuleVersion,
 		arg.RuleUrn,
 		arg.EventType,
 		arg.UserID,
@@ -499,7 +503,7 @@ func (q *Queries) ListOrganizationsWithEnabledSpendRules(ctx context.Context) ([
 }
 
 const listSpendRuleEvents = `-- name: ListSpendRuleEvents :many
-SELECT ev.id, ev.organization_id, ev.spend_rule_id, ev.rule_urn, ev.event_type, ev.user_id, ev.email, ev.display_name, ev.spend_usd, ev.limit_usd, ev.window_start, ev.window_end, ev.created_at, r.name AS rule_name
+SELECT ev.id, ev.organization_id, ev.spend_rule_id, ev.rule_version, ev.rule_urn, ev.event_type, ev.user_id, ev.email, ev.display_name, ev.spend_usd, ev.limit_usd, ev.window_start, ev.window_end, ev.created_at, r.name AS rule_name
 FROM spend_rule_events ev
 INNER JOIN spend_rules r ON r.id = ev.spend_rule_id
 WHERE ev.organization_id = $1
@@ -522,6 +526,7 @@ type ListSpendRuleEventsRow struct {
 	ID             uuid.UUID
 	OrganizationID string
 	SpendRuleID    uuid.UUID
+	RuleVersion    int64
 	RuleUrn        string
 	EventType      string
 	UserID         pgtype.Text
@@ -554,6 +559,7 @@ func (q *Queries) ListSpendRuleEvents(ctx context.Context, arg ListSpendRuleEven
 			&i.ID,
 			&i.OrganizationID,
 			&i.SpendRuleID,
+			&i.RuleVersion,
 			&i.RuleUrn,
 			&i.EventType,
 			&i.UserID,
@@ -628,7 +634,6 @@ SELECT EXISTS (
   FROM spend_rules
   WHERE organization_id = $1
     AND slug = $2
-    AND deleted IS FALSE
 ) AS taken
 `
 
@@ -637,6 +642,9 @@ type SpendRuleSlugExistsParams struct {
 	Slug           string
 }
 
+// Slugs are reserved permanently, even for archived (soft-deleted) rules, so a
+// new rule never reuses a slug and rule URNs stay globally unique. Do NOT scope
+// this to `deleted IS FALSE`.
 func (q *Queries) SpendRuleSlugExists(ctx context.Context, arg SpendRuleSlugExistsParams) (bool, error) {
 	row := q.db.QueryRow(ctx, spendRuleSlugExists, arg.OrganizationID, arg.Slug)
 	var taken bool

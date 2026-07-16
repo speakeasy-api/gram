@@ -44,9 +44,10 @@ var _ gen.Auther = (*Service)(nil)
 const (
 	defaultEventsPageLimit = 50
 	// previewActorCap bounds the per-actor breakdown returned by the preview
-	// endpoint. The dashboard shows the top few and lets admins search the rest
-	// of this list, so it holds enough of a large org's spenders to be useful.
-	previewActorCap = 100
+	// endpoint. Kept in sync with the "Capped at 50 entries" contract documented
+	// on PreviewSpendRuleResult.actors in the Goa design. The dashboard shows the
+	// top few and lets admins search the rest of this list.
+	previewActorCap = 50
 )
 
 // EvaluationSignaler triggers an immediate evaluation cycle for an
@@ -277,6 +278,26 @@ func (s *Service) UpdateSpendRule(ctx context.Context, payload *gen.UpdateSpendR
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid rule id")
 	}
 
+	// Validate caller-supplied fields before opening a transaction so a
+	// malformed request is rejected without taking a row lock that would
+	// contend with real rule changes.
+	if payload.Name != nil && *payload.Name == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "rule name is required")
+	}
+	if payload.LimitUsd != nil && *payload.LimitUsd <= 0 {
+		return nil, oops.E(oops.CodeBadRequest, nil, "limit must be greater than zero")
+	}
+	var suppliedTargetExpr string
+	if payload.Target != nil {
+		suppliedTargetExpr, err = targetConditionExpr(payload.Target.Attribute, payload.Target.Operator, payload.Target.Value)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid target")
+		}
+		if _, err := s.celEng.Compile(suppliedTargetExpr); err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid target expression: %s", err.Error())
+		}
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
@@ -297,26 +318,16 @@ func (s *Service) UpdateSpendRule(ctx context.Context, payload *gen.UpdateSpendR
 	}
 
 	name := conv.PtrValOr(payload.Name, existing.Name)
-	if name == "" {
-		return nil, oops.E(oops.CodeBadRequest, nil, "rule name is required")
-	}
 	description := existing.Description
 	if payload.Description != nil {
 		description = *payload.Description
 	}
 	targetExpr := existing.TargetExpr
 	if payload.Target != nil {
-		var err error
-		targetExpr, err = targetConditionExpr(payload.Target.Attribute, payload.Target.Operator, payload.Target.Value)
-		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid target")
-		}
+		targetExpr = suppliedTargetExpr
 	}
 	ruleExpr := existing.RuleExpr
 	limitUSD := conv.PtrValOr(payload.LimitUsd, existing.LimitUsd)
-	if limitUSD <= 0 {
-		return nil, oops.E(oops.CodeBadRequest, nil, "limit must be greater than zero")
-	}
 	windowKind := conv.PtrValOr(payload.WindowKind, existing.WindowKind)
 	warnAtPct := existing.WarnAtPct
 	if payload.WarnAtPct != nil {
@@ -326,17 +337,6 @@ func (s *Service) UpdateSpendRule(ctx context.Context, payload *gen.UpdateSpendR
 	enabled := existing.Enabled
 	if payload.Enabled != nil {
 		enabled = *payload.Enabled
-	}
-
-	if targetExpr != existing.TargetExpr {
-		if _, err := s.celEng.Compile(targetExpr); err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid target expression: %s", err.Error())
-		}
-	}
-	if ruleExpr != existing.RuleExpr {
-		if _, err := s.celEng.Compile(ruleExpr); err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid rule expression: %s", err.Error())
-		}
 	}
 
 	// Material changes alter what the rule measures or does, so the version

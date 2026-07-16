@@ -127,8 +127,18 @@ func (g *Gate) CheckBlocked(ctx context.Context, organizationID, email string) (
 		return nil, nil
 	}
 
+	now := time.Now().UTC()
 	for _, rule := range state.Rules {
 		if rule.Action != ActionBlock {
+			continue
+		}
+
+		// The snapshot holds the spend for the window that was current when the
+		// evaluator last wrote it. Once that window has ended, the block must
+		// lift immediately (spend resets to zero for the new window) rather than
+		// keep denying on stale spend until the next evaluation cycle rewrites
+		// the snapshot.
+		if !rule.WindowEnd.IsZero() && !now.Before(rule.WindowEnd) {
 			continue
 		}
 

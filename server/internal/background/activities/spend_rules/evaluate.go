@@ -216,6 +216,7 @@ func (a *EvaluateOrg) evaluateRule(
 		if _, err := queries.InsertSpendRuleEvent(ctx, spendrepo.InsertSpendRuleEventParams{
 			OrganizationID: rule.OrganizationID,
 			SpendRuleID:    rule.ID,
+			RuleVersion:    rule.Version,
 			RuleUrn:        ruleURN.String(),
 			EventType:      eventType,
 			UserID:         conv.ToPGTextEmpty(usage.Actor.UserID),

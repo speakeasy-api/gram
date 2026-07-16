@@ -21,6 +21,12 @@ import crypto from "node:crypto";
 import { intro, log, outro } from "@clack/prompts";
 import { $ } from "zx";
 
+// Seed usage rows carry a Cursor usage URN so they match is_generic_usage_row
+// in the spend-rule and attribute-metrics rollups (both key on the
+// codex:/cursor: usage prefix). The distinct suffix keeps the wholesale delete
+// below from touching real cursor:usage telemetry.
+const SEED_GRAM_URN = "cursor:usage:spend-control-seed";
+
 interface Persona {
   name: string;
   email: string;
@@ -251,45 +257,54 @@ function usageRows(
   const monthStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
   const daysElapsed = now.getUTCDate();
   const slotsPerDay = [9, 12, 15]; // UTC hours
-  const perSlot = monthlySpendUsd / (daysElapsed * slotsPerDay.length);
 
-  const rows: string[] = [];
+  // Collect only the slots at or before now — spend is never seeded in the
+  // future. perSlot divides by the slots actually emitted (not every scheduled
+  // slot) so the month-to-date total lands on monthlySpendUsd; dividing by all
+  // scheduled slots would undershoot whenever the current day's later slots are
+  // skipped, and the advertised breach thresholds might then never trigger.
+  const slots: { ts: number; day: number }[] = [];
   for (let day = 0; day < daysElapsed; day++) {
-    const conversationId = `seed-spend-${hash(email)}-${day + 1}`;
     for (const hour of slotsPerDay) {
       const ts = monthStart + day * 86_400_000 + hour * 3_600_000;
-      if (ts > now.getTime()) continue; // never seed spend in the future
-      const nanos = BigInt(ts) * 1_000_000n;
-      const cost = perSlot;
-      const inputTokens = Math.round(cost * 1000);
-      const outputTokens = Math.round(cost * 400);
-
-      // Flat dotted keys land on the same JSON paths the ingest pipeline
-      // writes; shaped to satisfy is_generic_usage_row in the spend-rule and
-      // attribute metrics rollups (gen_ai.operation.name = 'chat' plus a
-      // non-empty gen_ai.usage.cost).
-      const attrs = JSON.stringify({
-        "user.email": email,
-        "user.attributes.department_name": profile.department,
-        "user.attributes.job_title": profile.jobTitle,
-        "user.attributes.employee_type": profile.employeeType,
-        "user.attributes.division_name": profile.division,
-        "user.attributes.cost_center_name": profile.costCenter,
-        "user.roles": [...roles].sort(),
-        "user.groups": [...profile.groups].sort(),
-        "gen_ai.operation.name": "chat",
-        "gen_ai.conversation.id": conversationId,
-        "gen_ai.response.model": "claude-sonnet-4-5",
-        "gen_ai.usage.cost": cost.toFixed(6),
-        "gen_ai.usage.input_tokens": String(inputTokens),
-        "gen_ai.usage.output_tokens": String(outputTokens),
-        "gen_ai.usage.total_tokens": String(inputTokens + outputTokens),
-      });
-
-      rows.push(
-        `(${nanos}, ${nanos}, 'INFO', 'seed: spend control usage', ${sqlString(attrs)}, '{}', '${projectId}', 'seed:spend-control:usage', 'gram-seed', ${sqlString(conversationId)})`,
-      );
+      if (ts > now.getTime()) continue;
+      slots.push({ ts, day });
     }
+  }
+  const perSlot = slots.length > 0 ? monthlySpendUsd / slots.length : 0;
+
+  const rows: string[] = [];
+  for (const { ts, day } of slots) {
+    const conversationId = `seed-spend-${hash(email)}-${day + 1}`;
+    const nanos = BigInt(ts) * 1_000_000n;
+    const cost = perSlot;
+    const inputTokens = Math.round(cost * 1000);
+    const outputTokens = Math.round(cost * 400);
+
+    // Flat dotted keys land on the same JSON paths the ingest pipeline writes.
+    // The SEED_GRAM_URN (a cursor:usage prefix) is what makes the row count as
+    // is_generic_usage_row; gen_ai.usage.cost supplies the cost the rollup sums.
+    const attrs = JSON.stringify({
+      "user.email": email,
+      "user.attributes.department_name": profile.department,
+      "user.attributes.job_title": profile.jobTitle,
+      "user.attributes.employee_type": profile.employeeType,
+      "user.attributes.division_name": profile.division,
+      "user.attributes.cost_center_name": profile.costCenter,
+      "user.roles": [...roles].sort(),
+      "user.groups": [...profile.groups].sort(),
+      "gen_ai.operation.name": "chat",
+      "gen_ai.conversation.id": conversationId,
+      "gen_ai.response.model": "claude-sonnet-4-5",
+      "gen_ai.usage.cost": cost.toFixed(6),
+      "gen_ai.usage.input_tokens": String(inputTokens),
+      "gen_ai.usage.output_tokens": String(outputTokens),
+      "gen_ai.usage.total_tokens": String(inputTokens + outputTokens),
+    });
+
+    rows.push(
+      `(${nanos}, ${nanos}, 'INFO', 'seed: spend control usage', ${sqlString(attrs)}, '{}', '${projectId}', ${sqlString(SEED_GRAM_URN)}, 'gram-seed', ${sqlString(conversationId)})`,
+    );
   }
   return rows;
 }
@@ -323,12 +338,15 @@ async function main(): Promise<void> {
   /* ---------------------------- Postgres ---------------------------- */
 
   // Synthetic members. Stable ids derived from the email keep every rerun
-  // hitting the same rows.
+  // hitting the same rows. userId/workosId identify the (global) user and stay
+  // email-keyed so the same person is shared across orgs; the directory id is
+  // org-scoped, so it is namespaced with orgId to avoid a second seeded org
+  // stealing or mutating the first org's directory rows.
   const members = PERSONAS.map((p) => ({
     ...p,
     userId: `usr_spend_${hash(p.email)}`,
     workosId: `spend_workos_${hash(p.email)}`,
-    dirId: `spend_dir_${hash(p.email)}`,
+    dirId: `spend_dir_${hash(orgId + p.email)}`,
   }));
 
   const usersValues = members
@@ -352,9 +370,12 @@ async function main(): Promise<void> {
   );
   log.info(`Upserted ${members.length} synthetic org members`);
 
+  // Directory groups are org-scoped, so their workos ids are namespaced with
+  // orgId (the readable name is unchanged).
+  const groupId = (name: string): string => `spend_grp_${hash(orgId + name)}`;
   const groupValues = GROUPS.map(
     (name) =>
-      `(${sqlString(orgId)}, ${sqlString(`spend_grp_${name}`)}, ${sqlString(name)}, now(), now())`,
+      `(${sqlString(orgId)}, ${sqlString(groupId(name))}, ${sqlString(name)}, now(), now())`,
   ).join(",\n");
   await psql(
     `INSERT INTO directory_groups (organization_id, workos_directory_group_id, name, workos_created_at, workos_updated_at) VALUES\n${groupValues}\nON CONFLICT (workos_directory_group_id) DO UPDATE SET name = EXCLUDED.name, deleted_at = NULL, workos_deleted_at = NULL;`,
@@ -374,7 +395,7 @@ async function main(): Promise<void> {
         userId: userId!,
         email: email!,
         workosId: workosId!,
-        dirId: dirId || `spend_dir_self_${hash(userId!)}`,
+        dirId: dirId || `spend_dir_self_${hash(orgId + userId!)}`,
       };
     });
 
@@ -406,12 +427,12 @@ async function main(): Promise<void> {
 
   const membershipPairs = [
     ...members.flatMap((m) =>
-      m.groups.map((g) => ({ dirId: m.dirId, groupId: `spend_grp_${g}` })),
+      m.groups.map((g) => ({ dirId: m.dirId, groupId: groupId(g) })),
     ),
     ...selfMembers.flatMap((m) =>
       SELF_PROFILE.groups.map((g) => ({
         dirId: m.dirId,
-        groupId: `spend_grp_${g}`,
+        groupId: groupId(g),
       })),
     ),
   ];
@@ -459,14 +480,14 @@ async function main(): Promise<void> {
     })),
   ];
 
-  const allEmails = spenders.map((s) => `'${s.email}'`).join(", ");
-  const projectList = projectIds.map((id) => `'${id}'`).join(", ");
+  const allEmails = spenders.map((s) => sqlString(s.email)).join(", ");
+  const projectList = projectIds.map((id) => sqlString(id)).join(", ");
 
   // Replace previous seed rows so reruns do not double-count. The summary
   // delete is scoped to the seeded emails: aggregates for those members are
   // rebuilt from the fresh insert below.
   await clickhouse(
-    `ALTER TABLE telemetry_logs DELETE WHERE gram_urn = 'seed:spend-control:usage' AND gram_project_id IN (${projectList})`,
+    `ALTER TABLE telemetry_logs DELETE WHERE gram_urn = ${sqlString(SEED_GRAM_URN)} AND gram_project_id IN (${projectList})`,
   );
   await clickhouse(
     `ALTER TABLE attribute_metrics_summaries DELETE WHERE gram_project_id IN (${projectList}) AND user_email IN (${allEmails})`,
