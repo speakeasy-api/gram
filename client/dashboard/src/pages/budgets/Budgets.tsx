@@ -1,19 +1,16 @@
 import { MetricCard } from "@/components/chart/MetricCard";
 import { Page } from "@/components/page-layout";
-import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import {
+  PageTabsList,
   PageTabsTrigger,
   Tabs,
   TabsContent,
-  TabsList,
 } from "@/components/ui/tabs";
-import { useTelemetry } from "@/contexts/Telemetry";
 import { cn } from "@/lib/utils";
-import { useRoutes } from "@/routes";
 import { useSpendRulesCreateRuleMutation } from "@gram/client/react-query/spendRulesCreateRule.js";
 import { useSpendRulesDeleteRuleMutation } from "@gram/client/react-query/spendRulesDeleteRule.js";
 import { useSpendRulesListEvents } from "@gram/client/react-query/spendRulesListEvents.js";
@@ -24,7 +21,6 @@ import { Table, type Column } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Inbox, Plus, SearchX, Wallet } from "lucide-react";
 import { useEffect, useMemo, useState, type JSX } from "react";
-import { Navigate } from "react-router";
 import { toast } from "sonner";
 import { RuleDetailSheet } from "./RuleDetailSheet";
 import { RuleSheet } from "./RuleSheet";
@@ -54,34 +50,10 @@ import {
 type ActionFilter = "all" | RuleAction;
 type BudgetTab = "rules" | "events";
 
-export default function Budgets(): JSX.Element {
-  const telemetry = useTelemetry();
-  const routes = useRoutes();
-
-  // Gated behind a PostHog flag so it can be dogfooded per org/user. Redirect
-  // only once the flag has resolved to disabled; while it is still loading
-  // (undefined) render and let the org:admin scope guard below gate access, so
-  // a flag-enabled admin opening the route directly is not bounced home before
-  // PostHog finishes loading.
-  if (telemetry.isFeatureEnabled("gram-budgets-page") === false) {
-    return <Navigate to={routes.home.href()} replace />;
-  }
-
-  return (
-    <RequireScope scope="org:admin" level="page">
-      <Page>
-        <Page.Header>
-          <Page.Header.Breadcrumbs />
-        </Page.Header>
-        <Page.Body>
-          <BudgetsContent />
-        </Page.Body>
-      </Page>
-    </RequireScope>
-  );
-}
-
-function BudgetsContent(): JSX.Element {
+/** The Budgets surface, rendered as a tab on the Costs page (see
+ *  pages/costs/Costs.tsx, which owns the `gram-budgets-page` flag gate and the
+ *  org:admin scope guard around this content). */
+export function BudgetsContent(): JSX.Element {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<BudgetTab>("rules");
   const [createOpen, setCreateOpen] = useState(false);
@@ -153,7 +125,9 @@ function BudgetsContent(): JSX.Element {
   return (
     <>
       <Page.Section>
-        <Page.Section.Title stage="preview">Budgets</Page.Section.Title>
+        {/* The Preview badge lives on the Budgets tab (Costs.tsx), directly
+            above this title — a second badge here would be redundant. */}
+        <Page.Section.Title>Budgets</Page.Section.Title>
         <Page.Section.Description>
           Give each matched person a fixed-window AI budget. Flag overspend for
           review, or block requests until the window resets. The strictest
@@ -176,10 +150,10 @@ function BudgetsContent(): JSX.Element {
               onValueChange={(value) => setActiveTab(value as BudgetTab)}
             >
               <div className="border-b">
-                <TabsList className="h-auto justify-start gap-4 rounded-none bg-transparent p-0 text-sm">
+                <PageTabsList>
                   <PageTabsTrigger value="rules">Rules</PageTabsTrigger>
                   <PageTabsTrigger value="events">Events</PageTabsTrigger>
-                </TabsList>
+                </PageTabsList>
               </div>
               <TabsContent value="rules" className="mt-6">
                 <RulesTab

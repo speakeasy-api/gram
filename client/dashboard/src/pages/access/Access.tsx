@@ -2,10 +2,10 @@ import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/heading";
 import {
+  PageTabsList,
   PageTabsTrigger,
   Tabs,
   TabsContent,
-  TabsList,
 } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
 import { useOrganization } from "@/contexts/Auth";
@@ -114,7 +114,7 @@ function AccessInner() {
 
       <Tabs value={currentTab} onValueChange={handleTabChange}>
         <div className="border-border -mx-8 border-b px-8">
-          <TabsList className="h-auto justify-start gap-4 rounded-none bg-transparent p-0 text-sm">
+          <PageTabsList>
             <PageTabsTrigger value="roles">
               Roles{roleCount != null ? ` (${roleCount})` : ""}
             </PageTabsTrigger>
@@ -124,7 +124,7 @@ function AccessInner() {
             <PageTabsTrigger value="challenges">
               Authorization Challenges
             </PageTabsTrigger>
-          </TabsList>
+          </PageTabsList>
         </div>
 
         <TabsContent value="roles" className="mt-6">

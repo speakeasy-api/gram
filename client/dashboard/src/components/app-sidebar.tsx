@@ -99,9 +99,6 @@ export function AppSidebar({
   // Default true: opt-out via PostHog org-group targeting on `gram-deployments-page`.
   const isDeploymentsPageEnabled =
     telemetry.isFeatureEnabled("gram-deployments-page") ?? true;
-  // Prototype: opt-in via PostHog `gram-budgets-page`.
-  const isBudgetsEnabled =
-    telemetry.isFeatureEnabled("gram-budgets-page") ?? false;
 
   const connectActive = [
     routes.sources,
@@ -121,7 +118,6 @@ export function AppSidebar({
   const observeActive = [
     routes.employees,
     routes.costs,
-    routes.budgets,
     routes.insights,
     routes.agentSessions,
     routes.logs,
@@ -225,12 +221,6 @@ export function AppSidebar({
               item={routes.costs}
               {...accessFor(routes.costs)}
             />
-            {isBudgetsEnabled && (
-              <ScopeGatedNavItem
-                item={routes.budgets}
-                {...accessFor(routes.budgets)}
-              />
-            )}
             <ScopeGatedNavItem
               item={routes.insights}
               {...accessFor(routes.insights)}

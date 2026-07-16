@@ -20,10 +20,10 @@ import {
 } from "@/components/ui/sheet";
 import { Type } from "@/components/ui/type";
 import {
+  PageTabsList,
   PageTabsTrigger,
   Tabs,
   TabsContent,
-  TabsList,
 } from "@/components/ui/tabs";
 import { ExclusionsTab, type ExclusionSheetState } from "./ExclusionsTab";
 import {
@@ -1015,12 +1015,12 @@ function PolicyCenterContent() {
               }
             >
               <div className="border-b">
-                <TabsList className="h-auto justify-start gap-4 rounded-none bg-transparent p-0 text-sm">
+                <PageTabsList>
                   <PageTabsTrigger value="policies">Policies</PageTabsTrigger>
                   <PageTabsTrigger value="exclusions">
                     Exclusions
                   </PageTabsTrigger>
-                </TabsList>
+                </PageTabsList>
               </div>
               <TabsContent value="policies" className="mt-6">
                 {policiesBody}

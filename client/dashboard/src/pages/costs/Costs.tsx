@@ -1,23 +1,32 @@
 import { Page } from "@/components/page-layout";
+import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { RequireScope } from "@/components/require-scope";
+import {
+  PageTabsList,
+  PageTabsTrigger,
+  Tabs,
+  TabsContent,
+} from "@/components/ui/tabs";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { useMemo } from "react";
+import { BudgetsContent } from "@/pages/budgets/Budgets";
+import { useMemo, useState, type JSX } from "react";
 import { useLocation } from "react-router";
+import { InsightsAgentsContent } from "@/components/observe/InsightsAgents";
 import { InsightsAgentsPage } from "../insights/Insights";
 import { CostsExplorer } from "./CostsExplorer";
 import { displayName, parseDrillPath } from "./taxonomy";
 
-// New cost-taxonomy dashboard. Part of the Observe surface, gated on org:admin
-// so basic members (synced via directory/SCIM) don't see it by default.
-function NewCostsPage(): JSX.Element {
+type CostsTab = "costs" | "budgets";
+
+// Map each drill segment (`Dimension~encodedValue`) to its pretty label so the
+// breadcrumb bar renders "R&D", "Olivia Novak", … instead of the raw encoding.
+// Derived straight from the pathname (not the resolved route href) and keyed
+// by the literal path segment, so the substitution is present and matches on
+// every render — no slug-resolution race, no raw-segment flash.
+function useCostsBreadcrumbSubstitutions(): Record<string, string> {
   const location = useLocation();
 
-  // Map each drill segment (`Dimension~encodedValue`) to its pretty label so the
-  // breadcrumb bar renders "R&D", "Olivia Novak", … instead of the raw encoding.
-  // Derived straight from the pathname (not the resolved route href) and keyed
-  // by the literal path segment, so the substitution is present and matches on
-  // every render — no slug-resolution race, no raw-segment flash.
-  const breadcrumbSubstitutions = useMemo(() => {
+  return useMemo(() => {
     const segments = location.pathname.split("/").filter(Boolean);
     const costsIndex = segments.indexOf("costs");
     const map: Record<string, string> = {};
@@ -29,6 +38,12 @@ function NewCostsPage(): JSX.Element {
     }
     return map;
   }, [location.pathname]);
+}
+
+// New cost-taxonomy dashboard. Part of the Observe surface, gated on org:admin
+// so basic members (synced via directory/SCIM) don't see it by default.
+function NewCostsPage(): JSX.Element {
+  const breadcrumbSubstitutions = useCostsBreadcrumbSubstitutions();
 
   return (
     <Page>
@@ -44,14 +59,84 @@ function NewCostsPage(): JSX.Element {
   );
 }
 
-// Routed at the project-level `costs` path. The `gram-new-costs-page` PostHog
-// flag toggles the new taxonomy explorer on; off (the default) keeps the
-// existing agents/costs page so we can roll out and roll back per org/user.
+// The Costs page with a Budgets tab beside the cost explorer. Tab state is
+// local (PolicyCenter pattern): the drill URL under /costs/... keeps working
+// and always lands on the Costs tab.
+function TabbedCostsPage({
+  newCostsEnabled,
+}: {
+  newCostsEnabled: boolean;
+}): JSX.Element {
+  const [activeTab, setActiveTab] = useState<CostsTab>("costs");
+  const breadcrumbSubstitutions = useCostsBreadcrumbSubstitutions();
+
+  return (
+    <div className="flex h-full flex-col">
+      <Page>
+        <Page.Header>
+          <Page.Header.Breadcrumbs
+            fullWidth
+            substitutions={breadcrumbSubstitutions}
+          />
+        </Page.Header>
+        <Tabs
+          value={activeTab}
+          onValueChange={(value) => setActiveTab(value as CostsTab)}
+          className="min-h-0 flex-1 gap-0"
+        >
+          <div className="border-border w-full border-b px-8">
+            <PageTabsList>
+              <PageTabsTrigger value="costs">Costs</PageTabsTrigger>
+              <PageTabsTrigger
+                value="budgets"
+                className="inline-flex items-center gap-2"
+              >
+                Budgets
+                <ReleaseStageBadge stage="preview" noTooltip />
+              </PageTabsTrigger>
+            </PageTabsList>
+          </div>
+          <TabsContent value="costs" className="flex min-h-0 flex-col">
+            <Page.Body noPadding fullWidth overflowHidden={!newCostsEnabled}>
+              <RequireScope scope="org:admin" level="page">
+                {newCostsEnabled ? (
+                  <CostsExplorer />
+                ) : (
+                  <InsightsAgentsContent />
+                )}
+              </RequireScope>
+            </Page.Body>
+          </TabsContent>
+          <TabsContent value="budgets" className="flex min-h-0 flex-col">
+            <Page.Body>
+              <RequireScope scope="org:admin" level="page">
+                <BudgetsContent />
+              </RequireScope>
+            </Page.Body>
+          </TabsContent>
+        </Tabs>
+      </Page>
+    </div>
+  );
+}
+
+// Routed at the project-level `costs` path. Two PostHog flags shape it:
+//   • `gram-new-costs-page` toggles the new taxonomy explorer on; off (the
+//     default) keeps the existing agents/costs page so we can roll out and
+//     roll back per org/user.
+//   • `gram-budgets-page` adds the Budgets tab beside the cost view; off (the
+//     default) renders the cost view alone with no tab strip, so budgets can
+//     be released to select users only.
 export default function Costs(): JSX.Element {
   const telemetry = useTelemetry();
   const newCostsEnabled =
     telemetry.isFeatureEnabled("gram-new-costs-page") ?? false;
+  const budgetsEnabled =
+    telemetry.isFeatureEnabled("gram-budgets-page") ?? false;
 
+  if (budgetsEnabled) {
+    return <TabbedCostsPage newCostsEnabled={newCostsEnabled} />;
+  }
   if (newCostsEnabled) {
     return <NewCostsPage />;
   }
