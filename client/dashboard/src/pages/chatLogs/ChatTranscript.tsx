@@ -25,7 +25,6 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import {
-  Badge,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -37,8 +36,10 @@ import {
   type SectionMatch,
   ToolUI,
   ToolUIGroup,
+  type ToolUIMetaRow,
 } from "@/elements";
 import type { ClaudeToolUsage } from "@gram/client/models/components/claudetoolusage.js";
+import type { ClaudeTurnUsage } from "@gram/client/models/components/claudeturnusage.js";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import {
   Popover,
@@ -86,6 +87,9 @@ interface RowContext {
   riskResultsByMessage?: Map<string, RiskResult[]>;
   claudeUsageByMessage?: Map<string, ClaudeUsageMatch>;
   claudeToolUsageByToolUseId?: Map<string, ClaudeToolUsage>;
+  /** Turn usage keyed by prompt id — a tool row joins to its turn's cost
+   * through `ClaudeToolUsage.promptId`. */
+  claudeTurnByPromptId?: Map<string, ClaudeTurnUsage>;
   rowDecoration?: (messageIds: string[]) => RowDecoration | null;
   /** When the session has findings, non-flagged rows are dimmed to spotlight
    * the risky ones. */
@@ -108,6 +112,7 @@ type ResolvedRowContext = Required<
     | "riskResultsByMessage"
     | "claudeUsageByMessage"
     | "claudeToolUsageByToolUseId"
+    | "claudeTurnByPromptId"
   >
 > &
   RowContext;
@@ -115,6 +120,7 @@ type ResolvedRowContext = Required<
 const EMPTY_RISK_RESULTS = new Map<string, RiskResult[]>();
 const EMPTY_CLAUDE_USAGE = new Map<string, ClaudeUsageMatch>();
 const EMPTY_CLAUDE_TOOL_USAGE = new Map<string, ClaudeToolUsage>();
+const EMPTY_CLAUDE_TURNS = new Map<string, ClaudeTurnUsage>();
 
 function applyRowContextDefaults(ctx: RowContext): ResolvedRowContext {
   return {
@@ -123,6 +129,7 @@ function applyRowContextDefaults(ctx: RowContext): ResolvedRowContext {
     claudeUsageByMessage: ctx.claudeUsageByMessage ?? EMPTY_CLAUDE_USAGE,
     claudeToolUsageByToolUseId:
       ctx.claudeToolUsageByToolUseId ?? EMPTY_CLAUDE_TOOL_USAGE,
+    claudeTurnByPromptId: ctx.claudeTurnByPromptId ?? EMPTY_CLAUDE_TURNS,
   };
 }
 
@@ -208,13 +215,29 @@ function CostBadge({ usage }: { usage: ClaudeUsageMatch }) {
   );
 }
 
-function ToolByteBadge({ bytes }: { bytes: number }) {
-  if (bytes <= 0) return null;
-  return (
-    <Badge variant="neutral" className="shrink-0 text-[10px]">
-      <Badge.Text>{formatByteCount(bytes)}</Badge.Text>
-    </Badge>
-  );
+// The API reports payload size per tool call but cost only per turn (a turn
+// covers every tool it called), so the cost row is labelled accordingly.
+function toolMetaRows({
+  usage,
+  turn,
+}: {
+  usage: ClaudeToolUsage | undefined;
+  turn: ClaudeTurnUsage | undefined;
+}): ToolUIMetaRow[] {
+  if (!usage) return [];
+  const total = usage.inputSizeBytes + usage.resultSizeBytes;
+  const rows: ToolUIMetaRow[] = [];
+  if (total > 0) {
+    rows.push(
+      { label: "Arguments size", value: formatByteCount(usage.inputSizeBytes) },
+      { label: "Output size", value: formatByteCount(usage.resultSizeBytes) },
+      { label: "Total size", value: formatByteCount(total) },
+    );
+  }
+  if (turn) {
+    rows.push({ label: "Turn cost", value: formatUsageCost(turn.costUsd) });
+  }
+  return rows;
 }
 
 // Two letters for the avatar fallback: the first two name parts of an email
@@ -738,8 +761,8 @@ function ToolRowView({
 
   const toolUseId = row.toolCall?.id ?? row.resultMessage?.toolCallId ?? "";
   const usage = ctx.claudeToolUsageByToolUseId.get(toolUseId);
-  const inputBytes = usage?.inputSizeBytes ?? 0;
-  const outputBytes = usage?.resultSizeBytes ?? 0;
+  const turn = usage ? ctx.claudeTurnByPromptId.get(usage.promptId) : undefined;
+  const meta = toolMetaRows({ usage, turn });
   const decoration = ctx.rowDecoration?.(messageIdsForRow(row)) ?? null;
 
   return (
@@ -749,11 +772,6 @@ function ToolRowView({
         dimClass(ctx.dimNonRisk && !flagged),
       )}
     >
-      {inputBytes + outputBytes > 0 && (
-        <div className="mb-1.5 flex items-center gap-2 pl-1">
-          <ToolByteBadge bytes={inputBytes + outputBytes} />
-        </div>
-      )}
       <ToolUI
         // ToolUI expansion is uncontrolled, so key on `toolActive` to remount it:
         // landing on this tool's match opens it; moving to the next match
@@ -767,6 +785,7 @@ function ToolRowView({
         defaultExpanded={flagged || toolActive}
         requestHighlight={requestHighlight}
         resultHighlight={resultHighlight}
+        meta={meta}
         nameQuery={ctx.searchQuery}
         nameActiveOccurrence={activeNameOccurrence}
         className={bare ? "rounded-none border-0" : undefined}

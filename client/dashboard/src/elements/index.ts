@@ -33,6 +33,7 @@ export {
 } from "@/elements/components/ui/tool-ui";
 export type {
   ToolUIProps,
+  ToolUIMetaRow,
   ToolUIGroupProps,
   ToolUISectionProps,
   ToolStatus,
