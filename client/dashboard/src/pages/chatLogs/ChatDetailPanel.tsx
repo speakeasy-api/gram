@@ -75,6 +75,7 @@ import {
 import {
   buildDisplayItems,
   buildTranscript,
+  displayItemRows,
   type MessageCategory,
   rowCategory,
   rowHasRiskFlag,
@@ -124,6 +125,9 @@ type ViewMode = "chat" | "tools" | "exclusion";
 interface Occurrence {
   key: string;
   itemIndex: number;
+  /** Row holding the occurrence. A `toolGroup` item covers many rows, so the
+   * item index alone can't say which one to light up. */
+  rowId: string;
   fieldKey: SearchFieldKey;
   indexInField: number;
 }
@@ -969,8 +973,8 @@ function ChatDetailPanel({
   // the top (first message) — even when the session happens to have findings.
   const initialScrollIndex = useMemo(() => {
     if (!dimNonRisk) return null;
-    const idx = displayItems.findIndex(
-      (it) => it.type === "row" && rowIsFlagged(it.row, riskResultsByMessage),
+    const idx = displayItems.findIndex((it) =>
+      displayItemRows(it).some((r) => rowIsFlagged(r, riskResultsByMessage)),
     );
     return idx >= 0 ? idx : null;
   }, [dimNonRisk, displayItems, riskResultsByMessage]);
@@ -984,19 +988,24 @@ function ChatDetailPanel({
     if (!searchActive) return EMPTY_OCCURRENCES;
     const out: Occurrence[] = [];
     displayItems.forEach((it, itemIndex) => {
-      if (it.type !== "row") return;
-      for (const f of rowSearchFields(
-        it.row,
-        searchQuery,
-        riskResultsByMessage,
-      )) {
-        for (let k = 0; k < f.count; k++) {
-          out.push({
-            key: `${it.id}:${f.key}:${k}`,
-            itemIndex,
-            fieldKey: f.key,
-            indexInField: k,
-          });
+      // Walk every row the item renders — a `toolGroup` holds a whole run of
+      // them, and its members stay searchable while collapsed (a match inside
+      // pins the group open).
+      for (const row of displayItemRows(it)) {
+        for (const f of rowSearchFields(
+          row,
+          searchQuery,
+          riskResultsByMessage,
+        )) {
+          for (let k = 0; k < f.count; k++) {
+            out.push({
+              key: `${it.id}:${row.id}:${f.key}:${k}`,
+              itemIndex,
+              rowId: row.id,
+              fieldKey: f.key,
+              indexInField: k,
+            });
+          }
         }
       }
     });
@@ -1065,6 +1074,7 @@ function ChatDetailPanel({
       activeOccurrence: activeOccurrence
         ? {
             itemIndex: activeOccurrence.itemIndex,
+            rowId: activeOccurrence.rowId,
             fieldKey: activeOccurrence.fieldKey,
             indexInField: activeOccurrence.indexInField,
           }
