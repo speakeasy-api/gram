@@ -81,9 +81,20 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 		// short-circuiting there would freeze a session first seen without an email
 		// as personal and never persist the late-arriving email / external_org_id
 		// or teach the device bridge (DNO-360).
+		//
+		// A company-credential session (no provider account UUID) never gets a
+		// UserAccountID — there is no account entity to persist — so for those
+		// sessions the fast path keys on the resolved AccountType instead, or they
+		// would re-attribute on every batch for their lifetime. A UUID-bearing
+		// session must still present a persisted UserAccountID: attribution stamps
+		// AccountType before the user_accounts upsert, so keying on AccountType
+		// alone would freeze a session whose entity persistence transiently failed
+		// (classified but never persisted, linked, or billing-resolved) instead of
+		// retrying on the next batch.
 		var cached SessionMetadata
 		if err := s.cache.Get(ctx, sessionCacheKey(session.SessionID), &cached); err == nil &&
-			cached.UserAccountID != "" && !sessionEnrichesAttribution(session, cached) {
+			(cached.UserAccountID != "" || (cached.AccountType != "" && cached.ExternalAccountUUID == "")) &&
+			!sessionEnrichesAttribution(session, cached) {
 			attributionBySession[session.SessionID] = cached
 			continue
 		}
@@ -166,8 +177,10 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 		}
 
 		// Cache only after the backfill: the once-per-session fast path above
-		// keys on the cached UserAccountID, so caching an attribution whose
-		// backfill just failed would freeze the chat unlinked forever. Skipping
+		// keys on the cached UserAccountID (or, for a company-credential session
+		// with no account entity, the resolved AccountType), so caching an
+		// attribution whose backfill just failed would freeze the chat unlinked
+		// forever. Skipping
 		// the write keeps this batch's row stamping (attributionBySession) and
 		// lets the next batch re-attribute and retry the link. Process each
 		// session independently so a single cache failure does not abort
@@ -225,6 +238,7 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 func sessionEnrichesAttribution(incoming claudeLogMetadata, cached SessionMetadata) bool {
 	return (incoming.UserEmail != "" && cached.UserEmail == "") ||
 		(incoming.ExternalOrgID != "" && cached.ExternalOrgID == "") ||
+		(incoming.ExternalAccountUUID != "" && cached.ExternalAccountUUID == "") ||
 		(incoming.ExternalAccountID != "" && cached.ExternalAccountID == "") ||
 		(incoming.DeviceID != "" && cached.DeviceID == "")
 }
