@@ -47,30 +47,49 @@ func isExplicitSkillActivation(payload *gen.IngestPayload) bool {
 // identity is the publishing admin, not the developer at the keyboard —
 // falling back to the token owner for personal keys and senders without a
 // device agent.
-func (s *Service) Ingest(ctx context.Context, payload *gen.IngestPayload) (*gen.IngestHookResult, error) {
+func (s *Service) Ingest(ctx context.Context, payload *gen.IngestPayload) (res *gen.IngestHookResult, err error) {
+	start := time.Now()
+	source := ""
+	eventType := ""
+	orgSlug := ""
+	outcome := hookMetricOutcomeAccepted
+	defer func() {
+		if err != nil && outcome == hookMetricOutcomeAccepted {
+			outcome = hookMetricOutcomeFailure
+		}
+		decision := hookMetricDecisionNone
+		if res != nil {
+			decision = res.Decision
+		}
+		s.metrics.RecordHookEventDuration(ctx, source, eventType, outcome, decision, orgSlug, time.Since(start))
+	}()
+
 	if err := validateCanonicalIngestPayload(payload); err != nil {
 		return nil, err
 	}
+	source = strings.TrimSpace(payload.Source.Adapter)
+	eventType = strings.TrimSpace(payload.Event.Type)
 	if apikey := strings.TrimSpace(conv.PtrValOr(payload.ApikeyToken, "")); apikey != "" {
 		authedCtx, err := s.authorizePluginRequest(ctx, apikey, strings.TrimSpace(conv.PtrValOr(payload.ProjectSlugInput, "")))
 		if err != nil {
+			outcome = hookMetricOutcomeUnauthorized
 			return nil, oops.E(oops.CodeUnauthorized, err, "unauthorized")
 		}
 		ctx = authedCtx
 	}
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		outcome = hookMetricOutcomeUnauthenticated
 		s.logger.InfoContext(ctx, "unauthenticated hook acknowledged without processing",
 			attr.SlogEvent("hooks_ingest_unauthenticated"),
-			attr.SlogHookSource(strings.TrimSpace(payload.Source.Adapter)),
-			attr.SlogHookEvent(strings.TrimSpace(payload.Event.Type)),
+			attr.SlogHookSource(source),
+			attr.SlogHookEvent(eventType),
 		)
 		return canonicalAllowResult(), nil
 	}
+	orgSlug = authCtx.OrganizationSlug
 	actor := s.resolveCanonicalActor(ctx, payload, authCtx)
 
-	eventType := strings.TrimSpace(payload.Event.Type)
-	source := strings.TrimSpace(payload.Source.Adapter)
 	sessionID := canonicalSessionID(payload)
 	timestamp := canonicalEventTime(payload)
 
