@@ -6,17 +6,14 @@ import { SortBy, SortOrder } from "@gram/client/models/operations/listchats";
 import { cn, isMacPlatform } from "@/lib/utils";
 import speakeasyIcon from "@/assets/speakeasy-icon.svg";
 import { useAssistantRuntime } from "@assistant-ui/react";
-import type {
-  ElementsConfig,
-  ElementsTransportFactory,
-} from "@gram-ai/elements";
+import type { ElementsConfig, ElementsTransportFactory } from "@/elements";
 import {
   ActiveChatTitle,
   Chat,
   ChatHistory,
   GramElementsProvider,
   useThreadId,
-} from "@gram-ai/elements";
+} from "@/elements";
 import { stripMessageContextFraming } from "@/lib/projectAssistantTranscript";
 import { AssistantMarkdownLink } from "@/components/AssistantMarkdownLink";
 import { useAssistantLinkResolver } from "@/lib/assistantEntityLinks";

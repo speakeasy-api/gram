@@ -17,18 +17,20 @@ import (
 	cursorapi "github.com/speakeasy-api/gram/server/internal/thirdparty/cursor"
 )
 
-func TestPollAPIKeyRejectedMatchesProviderAuthFailures(t *testing.T) {
+func TestPollRejectedByProviderMatchesPermanentProviderFailures(t *testing.T) {
 	t.Parallel()
 
-	require.True(t, pollAPIKeyRejected(&cursorapi.HTTPError{StatusCode: 401, Status: "401 Unauthorized"}))
-	require.False(t, pollAPIKeyRejected(&cursorapi.HTTPError{StatusCode: 503, Status: "503 Service Unavailable"}))
-	require.True(t, pollAPIKeyRejected(&anthropicapi.HTTPError{StatusCode: 401, Status: "401 Unauthorized"}))
-	require.True(t, pollAPIKeyRejected(&anthropicapi.HTTPError{StatusCode: 403, Status: "403 Forbidden"}))
-	require.False(t, pollAPIKeyRejected(&anthropicapi.HTTPError{StatusCode: 503, Status: "503 Service Unavailable"}))
-	require.False(t, pollAPIKeyRejected(errors.New("network timeout")))
+	require.True(t, pollRejectedByProvider(&cursorapi.HTTPError{StatusCode: 401, Status: "401 Unauthorized"}))
+	require.False(t, pollRejectedByProvider(&cursorapi.HTTPError{StatusCode: 404, Status: "404 Not Found"}))
+	require.False(t, pollRejectedByProvider(&cursorapi.HTTPError{StatusCode: 503, Status: "503 Service Unavailable"}))
+	require.True(t, pollRejectedByProvider(&anthropicapi.HTTPError{StatusCode: 401, Status: "401 Unauthorized"}))
+	require.True(t, pollRejectedByProvider(&anthropicapi.HTTPError{StatusCode: 403, Status: "403 Forbidden"}))
+	require.True(t, pollRejectedByProvider(&anthropicapi.HTTPError{StatusCode: 404, Status: "404 Not Found"}))
+	require.False(t, pollRejectedByProvider(&anthropicapi.HTTPError{StatusCode: 503, Status: "503 Service Unavailable"}))
+	require.False(t, pollRejectedByProvider(errors.New("network timeout")))
 }
 
-func TestPollAPIKeyRejectedSeesThroughWrappedSyncErrors(t *testing.T) {
+func TestPollRejectedByProviderSeesThroughWrappedSyncErrors(t *testing.T) {
 	t.Parallel()
 
 	httpErr := &anthropicapi.HTTPError{StatusCode: 401, Status: "401 Unauthorized"}
@@ -51,7 +53,7 @@ func TestPollAPIKeyRejectedSeesThroughWrappedSyncErrors(t *testing.T) {
 	}
 	wrapped := oops.E(oops.CodeUnauthorized, syncErr, "anthropic compliance rejected the configured api key")
 
-	require.True(t, pollAPIKeyRejected(wrapped))
+	require.True(t, pollRejectedByProvider(wrapped))
 }
 
 func TestNewPollFailureErrorCarriesStageAndProgressDetails(t *testing.T) {

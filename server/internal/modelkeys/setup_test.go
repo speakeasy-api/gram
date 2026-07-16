@@ -159,10 +159,11 @@ func enableCustomModelKeys(t *testing.T, ctx context.Context, conn *pgxpool.Pool
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	require.NoError(t, pfrepo.New(conn).EnableFeature(ctx, pfrepo.EnableFeatureParams{
+	_, pfErr := pfrepo.New(conn).EnableFeature(ctx, pfrepo.EnableFeatureParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		FeatureName:    string(productfeatures.FeatureCustomModelKeys),
-	}))
+	})
+	require.NoError(t, pfErr)
 }
 
 func disableCustomModelKeys(t *testing.T, ctx context.Context, ti *testInstance) {

@@ -14,8 +14,10 @@ type IngestHookEventRequest struct {
 	// Optional project slug for plugin-driven attribution.
 	GramProject *string `header:"style=simple,explode=false,name=Gram-Project"`
 	// Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.
-	IdempotencyKey *string                      `header:"style=simple,explode=false,name=Idempotency-Key"`
-	Body           components.IngestRequestBody `request:"mediaType=application/json"`
+	IdempotencyKey *string `header:"style=simple,explode=false,name=Idempotency-Key"`
+	// Set when the event is redelivered from a device's offline spool after control-plane downtime, under its original Idempotency-Key and occurred_at.
+	XGramReplayed *bool                        `header:"style=simple,explode=false,name=X-Gram-Replayed"`
+	Body          components.IngestRequestBody `request:"mediaType=application/json"`
 }
 
 func (i *IngestHookEventRequest) GetGramKey() *string {
@@ -37,6 +39,13 @@ func (i *IngestHookEventRequest) GetIdempotencyKey() *string {
 		return nil
 	}
 	return i.IdempotencyKey
+}
+
+func (i *IngestHookEventRequest) GetXGramReplayed() *bool {
+	if i == nil {
+		return nil
+	}
+	return i.XGramReplayed
 }
 
 func (i *IngestHookEventRequest) GetBody() components.IngestRequestBody {

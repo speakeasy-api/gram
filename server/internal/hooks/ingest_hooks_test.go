@@ -1219,3 +1219,55 @@ func TestTelemetryHookEventName_TranslatesCanonicalVocabulary(t *testing.T) {
 	// provider name must not erase it.
 	require.Equal(t, "skill.activated", telemetryHookEventName(withRaw("claude", "skill.activated", "PostToolUse")))
 }
+
+// TestIngest_ReplayedFlagPersistsOnChatMessage pins the DNO-499 contract: a
+// message redelivered from a device's offline spool (X-Gram-Replayed)
+// persists chat_messages.replayed=true and a live message does not — the bit
+// risk-results reads surface so findings from retroactive scanning stay
+// distinguishable from live ones.
+func TestIngest_ReplayedFlagPersistsOnChatMessage(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := "replayed-flag-" + uuid.NewString()
+	chatID := sessionIDToUUID(sessionID)
+
+	replayedPrompt := "replayed prompt from downtime backlog"
+	replayed := true
+	replayedPayload := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
+	replayedPayload.Data = &gen.HookIngestData{
+		Prompt: &gen.HookPromptData{Text: &replayedPrompt},
+	}
+	replayedPayload.Replayed = &replayed
+	res, err := ti.service.Ingest(ctx, replayedPayload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", res.Decision)
+
+	livePrompt := "live prompt after recovery"
+	livePayload := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
+	livePayload.Data = &gen.HookIngestData{
+		Prompt: &gen.HookPromptData{Text: &livePrompt},
+	}
+	res, err = ti.service.Ingest(ctx, livePayload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", res.Decision)
+
+	msgs, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
+		ChatID:    chatID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, msgs, 2)
+	replayedByContent := make(map[string]bool, len(msgs))
+	for _, m := range msgs {
+		replayedByContent[m.Content] = m.Replayed
+	}
+	require.True(t, replayedByContent[replayedPrompt], "a replayed delivery must persist replayed=true")
+	require.False(t, replayedByContent[livePrompt], "a live delivery must persist replayed=false")
+}

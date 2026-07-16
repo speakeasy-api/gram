@@ -117,6 +117,11 @@ async function $do(
       payload["Idempotency-Key"],
       { explode: false, charEncoding: "none" },
     ),
+    "X-Gram-Replayed": encodeSimple(
+      "X-Gram-Replayed",
+      payload["X-Gram-Replayed"],
+      { explode: false, charEncoding: "none" },
+    ),
   }));
 
   const context = {

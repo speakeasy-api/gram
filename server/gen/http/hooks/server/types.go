@@ -2647,7 +2647,7 @@ func NewCodexPayload(body *CodexRequestBody, apikeyToken *string, projectSlugInp
 }
 
 // NewIngestPayload builds a hooks service ingest endpoint payload.
-func NewIngestPayload(body *IngestRequestBody, apikeyToken *string, projectSlugInput *string, idempotencyKey *string) *hooks.IngestPayload {
+func NewIngestPayload(body *IngestRequestBody, apikeyToken *string, projectSlugInput *string, idempotencyKey *string, replayed *bool) *hooks.IngestPayload {
 	v := &hooks.IngestPayload{
 		SchemaVersion: *body.SchemaVersion,
 		Raw:           body.Raw,
@@ -2663,6 +2663,7 @@ func NewIngestPayload(body *IngestRequestBody, apikeyToken *string, projectSlugI
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 	v.IdempotencyKey = idempotencyKey
+	v.Replayed = replayed
 
 	return v
 }

@@ -1,4 +1,4 @@
-import type { GramChatMessage } from "@gram-ai/elements";
+import type { GramChatMessage } from "@/elements";
 import { describe, expect, it } from "vitest";
 import { stripMessageContextFraming } from "./projectAssistantTranscript";
 

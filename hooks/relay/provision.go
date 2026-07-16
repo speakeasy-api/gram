@@ -27,7 +27,6 @@ type PluginConfig struct {
 	OrgID        string
 	HooksAPIKey  string
 	BrowserLogin bool
-	Nonblocking  bool
 	BinaryPath   string
 }
 
@@ -62,7 +61,7 @@ func WritePlugin(ctx context.Context, provider, dir string, cfg PluginConfig) er
 	if err := install.Install(ctx, manifest(target.Provider, cfg, dir), target); err != nil {
 		return err
 	}
-	return alignPublishedHookEvents(target.Provider, dir, cfg.Nonblocking)
+	return alignPublishedHookEvents(target.Provider, dir)
 }
 
 // manifest declares the event subscriptions every provider config is rendered
@@ -72,7 +71,7 @@ func WritePlugin(ctx context.Context, provider, dir string, cfg PluginConfig) er
 // carries only a pointer to the plugin's config file.
 func manifest(provider agenthooks.Provider, cfg PluginConfig, dir string) install.Manifest {
 	gate := func(kind agenthooks.EventKind, timeout time.Duration) install.HookSpec {
-		return install.HookSpec{Kind: kind, Tools: install.ToolMatcher{}, Blocking: !cfg.Nonblocking, Timeout: timeout}
+		return install.HookSpec{Kind: kind, Tools: install.ToolMatcher{}, Blocking: true, Timeout: timeout}
 	}
 	observe := func(kind agenthooks.EventKind) install.HookSpec {
 		return install.HookSpec{Kind: kind, Tools: install.ToolMatcher{}, Blocking: false, Timeout: 60 * time.Second}
@@ -91,10 +90,6 @@ func manifest(provider agenthooks.Provider, cfg PluginConfig, dir string) instal
 	if provider == agenthooks.ProviderCodex {
 		hooks = append(hooks, gate(agenthooks.KindPermission, 60*time.Second))
 	}
-	fail := agenthooks.FailClosed
-	if cfg.Nonblocking {
-		fail = agenthooks.FailOpen
-	}
 	return install.Manifest{
 		Command:  []string{cfg.BinaryPath, "--config=" + filepath.Join(dir, configFileName)},
 		Hooks:    hooks,
@@ -102,7 +97,7 @@ func manifest(provider agenthooks.Provider, cfg PluginConfig, dir string) instal
 		// Crashed decision hooks must not silently allow (cursor failClosed,
 		// quirk #7); the ratchet's fail-open posture for unauthenticated
 		// machines is handled in-process, not by the provider.
-		Fail: fail,
+		Fail: agenthooks.FailClosed,
 	}
 }
 
@@ -110,7 +105,7 @@ func manifest(provider agenthooks.Provider, cfg PluginConfig, dir string) instal
 // exact event set used by the released Bash plugins. ConfigChange has no
 // unified agenthooks kind yet, so Claude receives a copy of the asynchronous
 // Notification command and the runner observes it through OnOther.
-func alignPublishedHookEvents(provider agenthooks.Provider, dir string, nonblocking bool) error {
+func alignPublishedHookEvents(provider agenthooks.Provider, dir string) error {
 	var path string
 	switch provider {
 	case agenthooks.ProviderClaudeCode:
@@ -147,11 +142,7 @@ func alignPublishedHookEvents(provider agenthooks.Provider, dir string, nonblock
 			return fmt.Errorf("parse generated Cursor sessionStart hooks: %w", err)
 		}
 		for _, entry := range entries {
-			if nonblocking {
-				delete(entry, "failClosed")
-			} else {
-				entry["failClosed"] = true
-			}
+			entry["failClosed"] = true
 		}
 		doc.Hooks["sessionStart"], err = json.Marshal(entries)
 		if err != nil {
@@ -175,7 +166,7 @@ func writeConfigFile(dir string, cfg PluginConfig) error {
 		Org:          cfg.OrgID,
 		HooksAPIKey:  cfg.HooksAPIKey,
 		BrowserLogin: cfg.BrowserLogin,
-		Nonblocking:  cfg.Nonblocking,
+		Nonblocking:  false,
 	})
 }
 

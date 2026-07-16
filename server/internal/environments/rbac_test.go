@@ -199,7 +199,7 @@ func TestEnvironments_RBAC_Update_AllowedWithEnvironmentWrite(t *testing.T) {
 		Description:      nil,
 		Name:             nil,
 		EntriesToUpdate: []*gen.EnvironmentEntryInput{
-			{Name: "KEY", Value: "value"},
+			{Name: "KEY", Value: new("value"), IsSecret: new(true)},
 		},
 		EntriesToRemove: []string{},
 	})
@@ -236,7 +236,7 @@ func TestEnvironments_RBAC_Update_DeniedWithProjectWriteOnly(t *testing.T) {
 		Description:      nil,
 		Name:             nil,
 		EntriesToUpdate: []*gen.EnvironmentEntryInput{
-			{Name: "KEY", Value: "value"},
+			{Name: "KEY", Value: new("value"), IsSecret: new(true)},
 		},
 		EntriesToRemove: []string{},
 	})

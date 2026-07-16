@@ -212,7 +212,9 @@ tableRows.sort(([nameA, runningA], [nameB, runningB]) => {
 const q = (s: string) => `"${s}"`;
 const csv = [
   ["Service", "Status", "Address"].map(q).join(","),
-  ["", "", ""].join(","), // gum has a bug where first row is weirdly styled
+  // gum has a bug where first row is weirdly styled
+  // https://github.com/charmbracelet/gum/pull/1021
+  ["", "", ""].join(","),
   ...tableRows.map(([name, running, detail]) => {
     const status = running
       ? chalk.greenBright("RUNNING")

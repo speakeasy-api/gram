@@ -76,7 +76,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 	// re-sends the same token: the decision still re-runs so the user stays
 	// blocked, but tagging the context as a duplicate suppresses the duplicate
 	// writes in recordCodexHook.
-	if !s.claimHookIdempotency(ctx, conv.PtrValOr(payload.IdempotencyKey, "")) {
+	if !s.claimHookIdempotency(ctx, conv.PtrValOr(payload.IdempotencyKey, ""), false) {
 		ctx = withHookDuplicate(ctx)
 	}
 
@@ -525,6 +525,7 @@ func (s *Service) writeCodexToolCallRequestToPG(ctx context.Context, payload *ge
 	}
 
 	msgParams := chatRepo.CreateChatMessageParams{
+		Replayed:         false,
 		ChatID:           chatID,
 		ProjectID:        projectID,
 		Role:             "assistant",
@@ -570,6 +571,7 @@ func (s *Service) writeCodexToolCallResultToPG(ctx context.Context, payload *gen
 	chatID := sessionIDToUUID(metadata.SessionID)
 
 	msgParams := chatRepo.CreateChatMessageParams{
+		Replayed:         false,
 		ChatID:           chatID,
 		ProjectID:        projectID,
 		Role:             "tool",
@@ -616,6 +618,7 @@ func (s *Service) writeCodexUserPromptToPG(ctx context.Context, payload *gen.Cod
 	chatID := sessionIDToUUID(metadata.SessionID)
 
 	msgParams := chatRepo.CreateChatMessageParams{
+		Replayed:         false,
 		ChatID:           chatID,
 		ProjectID:        projectID,
 		Role:             "user",
@@ -662,6 +665,7 @@ func (s *Service) writeCodexAssistantResponseToPG(ctx context.Context, payload *
 	chatID := sessionIDToUUID(metadata.SessionID)
 
 	msgParams := chatRepo.CreateChatMessageParams{
+		Replayed:         false,
 		ChatID:           chatID,
 		ProjectID:        projectID,
 		Role:             "assistant",

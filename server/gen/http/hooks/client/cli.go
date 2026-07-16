@@ -10,6 +10,7 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	hooks "github.com/speakeasy-api/gram/server/gen/hooks"
 	goa "goa.design/goa/v3/pkg"
@@ -248,7 +249,7 @@ func BuildCodexPayload(hooksCodexBody string, hooksCodexApikeyToken string, hook
 
 // BuildIngestPayload builds the payload for the hooks ingest endpoint from CLI
 // flags.
-func BuildIngestPayload(hooksIngestBody string, hooksIngestApikeyToken string, hooksIngestProjectSlugInput string, hooksIngestIdempotencyKey string) (*hooks.IngestPayload, error) {
+func BuildIngestPayload(hooksIngestBody string, hooksIngestApikeyToken string, hooksIngestProjectSlugInput string, hooksIngestIdempotencyKey string, hooksIngestReplayed string) (*hooks.IngestPayload, error) {
 	var err error
 	var body IngestRequestBody
 	{
@@ -289,6 +290,17 @@ func BuildIngestPayload(hooksIngestBody string, hooksIngestApikeyToken string, h
 			idempotencyKey = &hooksIngestIdempotencyKey
 		}
 	}
+	var replayed *bool
+	{
+		if hooksIngestReplayed != "" {
+			var val bool
+			val, err = strconv.ParseBool(hooksIngestReplayed)
+			replayed = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for replayed, must be BOOL")
+			}
+		}
+	}
 	v := &hooks.IngestPayload{
 		SchemaVersion: body.SchemaVersion,
 		Raw:           body.Raw,
@@ -308,6 +320,7 @@ func BuildIngestPayload(hooksIngestBody string, hooksIngestApikeyToken string, h
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 	v.IdempotencyKey = idempotencyKey
+	v.Replayed = replayed
 
 	return v, nil
 }

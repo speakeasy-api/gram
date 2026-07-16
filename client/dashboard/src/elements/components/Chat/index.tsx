@@ -1,0 +1,47 @@
+"use client";
+
+import * as React from "react";
+import { useElements } from "@/elements/hooks/useElements";
+import { AssistantModal } from "../assistant-ui/assistant-modal";
+import { AssistantSidecar } from "../assistant-ui/assistant-sidecar";
+import { ErrorBoundary } from "../assistant-ui/error-boundary";
+import { Thread } from "../assistant-ui/thread";
+import { ShadowRoot } from "@/elements/components/ShadowRoot";
+
+interface ChatProps {
+  className?: string;
+}
+
+export const Chat = ({ className }: ChatProps): React.JSX.Element => {
+  const { config } = useElements();
+
+  switch (config.variant) {
+    case "standalone":
+      // Standalone variant wraps Thread with ErrorBoundary at this level
+      return (
+        <ErrorBoundary>
+          <ShadowRoot hostStyle={{ height: "100%", width: "100%" }}>
+            <Thread />
+          </ShadowRoot>
+        </ErrorBoundary>
+      );
+    case "sidecar":
+      // Sidecar has its own internal ErrorBoundary around Thread
+      return (
+        <ShadowRoot hostStyle={{ height: "inherit", width: "inherit" }}>
+          <AssistantSidecar />
+        </ShadowRoot>
+      );
+
+    // If no variant is provided then fallback to the modal
+    // Modal has its own internal ErrorBoundary around Thread
+    case "widget":
+    case undefined:
+    default:
+      return (
+        <ShadowRoot>
+          <AssistantModal className={className} />
+        </ShadowRoot>
+      );
+  }
+};

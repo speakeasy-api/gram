@@ -2465,8 +2465,9 @@ func EncodeGetToolsetEnvironmentError(encoder func(context.Context, http.Respons
 // type *EnvironmentEntryInputRequestBody.
 func unmarshalEnvironmentEntryInputRequestBodyToEnvironmentsEnvironmentEntryInput(v *EnvironmentEntryInputRequestBody) *environments.EnvironmentEntryInput {
 	res := &environments.EnvironmentEntryInput{
-		Name:  *v.Name,
-		Value: *v.Value,
+		Name:     *v.Name,
+		Value:    v.Value,
+		IsSecret: v.IsSecret,
 	}
 
 	return res
@@ -2479,6 +2480,7 @@ func marshalTypesEnvironmentEntryToEnvironmentEntryResponseBody(v *types.Environ
 	res := &EnvironmentEntryResponseBody{
 		Name:      v.Name,
 		Value:     v.Value,
+		IsSecret:  v.IsSecret,
 		CreatedAt: v.CreatedAt,
 		UpdatedAt: v.UpdatedAt,
 	}

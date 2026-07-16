@@ -9,7 +9,7 @@ import {
   GramElementsProvider,
   useThreadId,
   type MCPServerEntry,
-} from "@gram-ai/elements";
+} from "@/elements";
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate.js";
 import { ResizablePanel, useMoonshineConfig } from "@speakeasy-api/moonshine";

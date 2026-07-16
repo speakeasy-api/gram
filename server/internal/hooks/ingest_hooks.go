@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/toolref"
@@ -73,6 +74,8 @@ func (s *Service) Ingest(ctx context.Context, payload *gen.IngestPayload) (*gen.
 	sessionID := canonicalSessionID(payload)
 	timestamp := canonicalEventTime(payload)
 
+	replayed := conv.PtrValOr(payload.Replayed, false)
+
 	logger := s.logger.With(
 		attr.SlogHookSource(source),
 		attr.SlogHookEvent(eventType),
@@ -80,10 +83,11 @@ func (s *Service) Ingest(ctx context.Context, payload *gen.IngestPayload) (*gen.
 		attr.SlogGenAIConversationID(sessionID),
 		attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
 		attr.SlogProjectID(authCtx.ProjectID.String()),
+		attr.SlogHookReplayed(replayed),
 	)
 	logger.InfoContext(ctx, "unified hook received", attr.SlogEvent("hooks_ingest"))
 
-	if !s.claimHookIdempotency(ctx, conv.PtrValOr(payload.IdempotencyKey, "")) {
+	if !s.claimHookIdempotency(ctx, conv.PtrValOr(payload.IdempotencyKey, ""), replayed) {
 		ctx = withHookDuplicate(ctx)
 	}
 
@@ -110,9 +114,43 @@ func (s *Service) Ingest(ctx context.Context, payload *gen.IngestPayload) (*gen.
 	// duplicate).
 	s.captureMCPAttribution(context.WithoutCancel(ctx), payload, authCtx)
 	if blockReason != "" {
-		return canonicalDenyResult(userReason), nil
+		return s.withOrgSettings(ctx, authCtx.ActiveOrganizationID, canonicalDenyResult(userReason)), nil
 	}
-	return canonicalAllowResult(), nil
+	return s.withOrgSettings(ctx, authCtx.ActiveOrganizationID, canonicalAllowResult()), nil
+}
+
+// withOrgSettings attaches the org-level settings hook senders mirror locally
+// so they remain available when the control plane is unreachable. The value is
+// carried on every authenticated response — including denies and a `false`
+// setting — so a sender's cached copy converges on any successful exchange.
+// Best-effort: on lookup failure the effects are omitted and senders keep
+// their last-seen value.
+func (s *Service) withOrgSettings(ctx context.Context, orgID string, res *gen.IngestHookResult) *gen.IngestHookResult {
+	if s.productFeatures == nil {
+		return res
+	}
+	// Detach from request cancellation: the feature client answers a canceled
+	// lookup with (false, nil), which would read as a definitive fail-closed
+	// posture rather than an omitted one. Re-bound the detached context — this
+	// runs on the blocking verdict path, and a best-effort lookup must not be
+	// able to hold an already-computed verdict hostage to a slow feature store
+	// (a deadline-less pool acquire can wait unboundedly under saturation).
+	lookupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
+	defer cancel()
+	failOpen, err := s.productFeatures.IsFeatureEnabled(lookupCtx, orgID, productfeatures.FeatureHooksFailOpen)
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to resolve hooks fail-open setting for ingest effects",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(orgID),
+		)
+		return res
+	}
+	res.Effects = map[string]any{
+		"org_settings": map[string]any{
+			"fail_open": failOpen,
+		},
+	}
+	return res
 }
 
 // canonicalActor is the human the event is attributed to. Distinct from the
@@ -638,6 +676,14 @@ func hookTelemetryBaseAttrs(payload *gen.IngestPayload, authCtx *contextvalues.A
 	if sessionID := canonicalSessionID(payload); sessionID != "" {
 		attrs[attr.GenAIConversationIDKey] = sessionID
 	}
+	if conv.PtrValOr(payload.Replayed, false) {
+		// Downtime backlog redelivered from a device's offline spool: the
+		// row's timestamp is the original occurred_at when the envelope
+		// carried one (arrival time otherwise), so without this marker
+		// replays would be indistinguishable from live traffic in
+		// time-bucketed consumers.
+		attrs[attr.HookReplayedKey] = true
+	}
 	if hostname := strings.TrimSpace(conv.PtrValOr(payload.Source.Hostname, "")); hostname != "" {
 		attrs[attr.HookHostnameKey] = hostname
 	}
@@ -751,6 +797,10 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 			Source:           conv.ToPGTextEmpty(strings.TrimSpace(payload.Source.Adapter)),
 			ContentHash:      nil,
 			Generation:       0,
+			// Downtime backlog redelivered from a device's offline spool:
+			// carried onto the row so the offline risk scanner's findings
+			// (and any session view) can distinguish replayed traffic.
+			Replayed: conv.PtrValOr(payload.Replayed, false),
 		}
 	}
 
