@@ -159,8 +159,7 @@ export const PreviewSpendRuleRequest$outboundSchema: z.ZodMiniType<
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    previewSpendRuleRequestBody:
-      PreviewSpendRuleRequestBody$outboundSchema,
+    previewSpendRuleRequestBody: PreviewSpendRuleRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

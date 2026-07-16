@@ -7,7 +7,7 @@ import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { useSdkClient } from "@/contexts/Sdk";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
-import { type DateRangePreset } from "@gram-ai/elements";
+import { type DateRangePreset } from "@/elements";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";

@@ -46,6 +46,7 @@ import (
 	_ "github.com/speakeasy-api/gram/server/design/remotesessions"
 	_ "github.com/speakeasy-api/gram/server/design/resources"
 	_ "github.com/speakeasy-api/gram/server/design/risk"
+	_ "github.com/speakeasy-api/gram/server/design/skills"
 	_ "github.com/speakeasy-api/gram/server/design/spendrules"
 	_ "github.com/speakeasy-api/gram/server/design/telemetry"
 	_ "github.com/speakeasy-api/gram/server/design/templates"

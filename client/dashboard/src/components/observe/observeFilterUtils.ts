@@ -1,4 +1,4 @@
-import type { DateRangePreset } from "@gram-ai/elements";
+import type { DateRangePreset } from "@/elements";
 import { type AccessMember } from "@gram/client/models/components/accessmember.js";
 import {
   Operator,

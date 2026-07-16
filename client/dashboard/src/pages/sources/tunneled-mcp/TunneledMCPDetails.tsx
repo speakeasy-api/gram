@@ -1,4 +1,3 @@
-import { CodeBlock } from "@/components/code";
 import { DetailHero } from "@/components/detail-hero";
 import { MCPServerCard } from "@/components/mcp/MCPServerCard";
 import { Page } from "@/components/page-layout";
@@ -15,7 +14,6 @@ import {
   Tabs,
   TabsContent,
   TabsList,
-  TabsTrigger,
 } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
 import { useTelemetry } from "@/contexts/Telemetry";
@@ -25,7 +23,6 @@ import {
   getTunneledMcpServerArgs,
 } from "@/lib/sources";
 import { TUNNELED_MCP_FEATURE_FLAG } from "@/lib/tunneledMcp";
-import { tunnelGatewayURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { TunneledMcpConnection } from "@gram/client/models/components/tunneledmcpconnection.js";
@@ -61,6 +58,7 @@ import {
   type RotateTunneledMcpServerKeyData,
 } from "./hooks";
 import { RemoveTunneledMcpDialogContent } from "./RemoveTunneledMcpDialog";
+import { TunneledMcpSetupTabs } from "./TunneledMcpSetupTabs";
 
 const VALID_TABS = ["overview", "setup", "mcp-servers", "settings"] as const;
 type TabValue = (typeof VALID_TABS)[number];
@@ -212,7 +210,7 @@ function TunneledMCPDetailsContent(): JSX.Element {
             value="setup"
             className="mt-0 min-h-0 flex-1 overflow-y-auto"
           >
-            <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
+            <div className="mx-auto w-full max-w-[1500px] px-8 py-8">
               <TunneledMcpSetupTabs
                 serverName={tunneledMcpServer?.name}
                 keyPrefix={tunneledMcpServer?.keyPrefix}
@@ -939,268 +937,4 @@ function DangerZoneSection({
       </Dialog>
     </div>
   );
-}
-
-export function TunneledMcpSetupTabs({
-  tunnelKey,
-  keyPrefix,
-  serverName,
-}: {
-  tunnelKey?: string;
-  keyPrefix?: string;
-  serverName?: string;
-}): JSX.Element {
-  const renderedKey = tunnelKey ?? "<YOUR_TUNNEL_KEY>";
-  const slug = slugForSnippet(serverName);
-  const serviceVersion = "2026.06.1";
-  const upstream = "http://localhost:3000/mcp";
-  const clusterUpstream = "http://127.0.0.1:3000/mcp";
-  const dockerUpstream = `http://hello-world-mcp-${slug}:3000/mcp`;
-  const gateway = tunnelGatewayURL();
-  const helloWorldPython = `from mcp.server.fastmcp import FastMCP
-
-mcp = FastMCP(
-    "hello-world",
-    host="0.0.0.0",
-    port=3000,
-    stateless_http=True,
-    json_response=True,
-)
-
-@mcp.tool()
-def hello(name: str = "world") -> str:
-    """Return a friendly greeting."""
-    return f"Hello, {name}!"
-
-@mcp.resource("hello://world")
-def hello_resource() -> str:
-    return "Hello from a tunneled MCP server."
-
-if __name__ == "__main__":
-    mcp.run(transport="streamable-http")`;
-  const kubernetes = `apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: hello-world-mcp
-data:
-  server.py: |
-${indentSnippet(helloWorldPython, 4)}
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: gram-tunnel-key
-type: Opaque
-stringData:
-  TUNNEL_KEY: ${yamlQuote(renderedKey)}
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: gram-tunnel-${slug}
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: gram-tunnel-${slug}
-  template:
-    metadata:
-      labels:
-        app: gram-tunnel-${slug}
-    spec:
-      containers:
-        - name: hello-world-mcp
-          image: python:3.12-slim
-          command: ["/bin/sh", "-lc"]
-          args:
-            - |
-              pip install "mcp[cli]>=1.27,<2" &&
-              python /app/server.py
-          ports:
-            - containerPort: 3000
-          volumeMounts:
-            - name: hello-world-mcp
-              mountPath: /app
-              readOnly: true
-        - name: tunnel-agent
-          image: ghcr.io/speakeasy-api/gram-tunnel-agent:latest
-          env:
-            - name: TUNNEL_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: gram-tunnel-key
-                  key: TUNNEL_KEY
-            - name: TUNNEL_LOCAL_MCP_URL
-              value: ${yamlQuote(clusterUpstream)}
-            - name: TUNNEL_GATEWAY_URL
-              value: ${yamlQuote(gateway)}
-            - name: TUNNEL_SERVICE_VERSION
-              value: ${yamlQuote(serviceVersion)}
-      volumes:
-        - name: hello-world-mcp
-          configMap:
-            name: hello-world-mcp`;
-  const docker = `mkdir -p gram-tunnel-${slug}
-cd gram-tunnel-${slug}
-
-cat > server.py <<'PY'
-${helloWorldPython}
-PY
-
-cat > Dockerfile <<'DOCKERFILE'
-FROM python:3.12-slim
-RUN pip install "mcp[cli]>=1.27,<2"
-WORKDIR /app
-COPY server.py .
-EXPOSE 3000
-CMD ["python", "server.py"]
-DOCKERFILE
-
-docker build -t hello-world-mcp-${slug}:local .
-docker network create gram-tunnel-${slug} >/dev/null 2>&1 || true
-docker rm -f hello-world-mcp-${slug} gram-tunnel-${slug} >/dev/null 2>&1 || true
-trap 'docker rm -f hello-world-mcp-${slug} >/dev/null 2>&1' EXIT
-
-docker run -d --rm --name hello-world-mcp-${slug} \\
-  --network gram-tunnel-${slug} \\
-  hello-world-mcp-${slug}:local
-
-docker run --rm --name gram-tunnel-${slug} \\
-  --network gram-tunnel-${slug} \\
-  -e TUNNEL_KEY=${shellQuote(renderedKey)} \\
-  -e TUNNEL_LOCAL_MCP_URL=${shellQuote(dockerUpstream)} \\
-  -e TUNNEL_GATEWAY_URL=${shellQuote(gateway)} \\
-  -e TUNNEL_SERVICE_VERSION=${shellQuote(serviceVersion)} \\
-  ghcr.io/speakeasy-api/gram-tunnel-agent:latest`;
-  const cli = `TUNNEL_GATEWAY_URL=${shellQuote(gateway)} \\
-TUNNEL_KEY=${shellQuote(renderedKey)} \\
-TUNNEL_LOCAL_MCP_URL=${shellQuote(upstream)} \\
-TUNNEL_SERVICE_VERSION=${shellQuote(serviceVersion)} \\
-gram tunnel run`;
-
-  return (
-    <div className="rounded-lg border p-6">
-      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <Type variant="subheading">Connect your MCP server</Type>
-          <Type muted small className="mt-1">
-            Start a tunnel agent next to the MCP server you already run.
-          </Type>
-        </div>
-        {keyPrefix && (
-          <Badge variant="neutral">
-            <Badge.Text>{keyPrefix}</Badge.Text>
-          </Badge>
-        )}
-      </div>
-
-      <RequiredTunnelConfig
-        serviceVersion={serviceVersion}
-        upstream={upstream}
-      />
-
-      <Tabs defaultValue="kubernetes">
-        <TabsList>
-          <TabsTrigger value="kubernetes">Kubernetes</TabsTrigger>
-          <TabsTrigger value="docker">Docker</TabsTrigger>
-          <TabsTrigger value="cli">CLI</TabsTrigger>
-        </TabsList>
-        <TabsContent value="kubernetes" className="mt-4">
-          <div className="mb-3">
-            <Type variant="subheading">Hello world MCP</Type>
-            <Type muted small className="mt-1">
-              Run a tiny Python MCP server and the tunnel agent in the same pod.
-            </Type>
-          </div>
-          <CodeBlock language="yaml">{kubernetes}</CodeBlock>
-        </TabsContent>
-        <TabsContent value="docker" className="mt-4">
-          <div className="mb-3">
-            <Type variant="subheading">Hello world MCP container</Type>
-            <Type muted small className="mt-1">
-              Build a tiny Python MCP image and run the tunnel agent on the same
-              Docker network.
-            </Type>
-          </div>
-          <CodeBlock language="bash">{docker}</CodeBlock>
-        </TabsContent>
-        <TabsContent value="cli" className="mt-4">
-          <CodeBlock language="bash">{cli}</CodeBlock>
-        </TabsContent>
-      </Tabs>
-    </div>
-  );
-}
-
-function RequiredTunnelConfig({
-  serviceVersion,
-  upstream,
-}: {
-  serviceVersion: string;
-  upstream: string;
-}) {
-  const fields = [
-    {
-      key: "TUNNEL_SERVICE_VERSION",
-      value: serviceVersion,
-      description: "Version of the MCP service behind this tunnel.",
-    },
-    {
-      key: "TUNNEL_LOCAL_MCP_URL",
-      value: upstream,
-      description: "Local Streamable HTTP endpoint the agent proxies to.",
-    },
-  ];
-
-  return (
-    <div className="bg-muted/30 mb-5 rounded-md border p-4">
-      <Type variant="subheading" className="mb-1">
-        Required tunnel config
-      </Type>
-      <Type muted small className="mb-3 max-w-3xl">
-        Each tunnel agent connects with the local Streamable HTTP endpoint and a
-        version string so live connections can be inspected.
-      </Type>
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-        {fields.map((field) => (
-          <div key={field.key} className="min-w-0">
-            <Type small mono className="truncate">
-              {field.key}
-            </Type>
-            <Type small className="mt-1 truncate font-medium">
-              {field.value}
-            </Type>
-            <Type muted small className="mt-1">
-              {field.description}
-            </Type>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function slugForSnippet(name: string | undefined): string {
-  const slug = (name ?? "internal-mcp")
-    .toLowerCase()
-    .replace(/[^a-z0-9-]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 40);
-  return slug || "internal-mcp";
-}
-
-function yamlQuote(value: string): string {
-  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
-}
-
-function indentSnippet(value: string, spaces: number): string {
-  const indent = " ".repeat(spaces);
-  return value
-    .split("\n")
-    .map((line) => (line ? `${indent}${line}` : ""))
-    .join("\n");
-}
-
-function shellQuote(value: string): string {
-  return `'${value.replace(/'/g, "'\\''")}'`;
 }

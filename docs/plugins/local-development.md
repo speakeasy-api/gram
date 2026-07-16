@@ -62,13 +62,7 @@ Repeat for each of the four secrets, then paste the values into `mise.local.toml
 Start all services with:
 
 ```bash
-madprocs
-```
-
-Or just the server:
-
-```bash
-mise start:server --dev-single-process
+./zero --agent
 ```
 
 The Plugins UI is at `http://local.gram.dev:<port>/plugins` once the dashboard is running.

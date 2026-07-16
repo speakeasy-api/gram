@@ -9,6 +9,7 @@ interface Environment {
   entries: Array<{
     name: string;
     value: string;
+    isSecret: boolean;
     createdAt: Date;
   }>;
 }
@@ -42,11 +43,20 @@ export function useEnvironmentVariables(
       return envEntries.find((e) => e.variableName === varName);
     };
 
-    // Helper to collect a variable's (redacted) value in each environment that defines it
+    // Helper to collect a variable's value in each environment that defines it.
+    // Secret entries arrive redacted, non-secret ones in cleartext.
     const getEnvironmentValues = (varName: string) =>
       environments.flatMap((env) => {
         const entry = env.entries.find((e) => e.name === varName);
-        return entry ? [{ environmentSlug: env.slug, value: entry.value }] : [];
+        return entry
+          ? [
+              {
+                environmentSlug: env.slug,
+                value: entry.value,
+                isSecret: entry.isSecret,
+              },
+            ]
+          : [];
       });
 
     // Get env vars from security variables (these are required auth credentials)
@@ -155,7 +165,11 @@ export function useEnvironmentVariables(
     const customVarMap = new Map<
       string,
       {
-        environmentValues: Array<{ environmentSlug: string; value: string }>;
+        environmentValues: Array<{
+          environmentSlug: string;
+          value: string;
+          isSecret: boolean;
+        }>;
         createdAt: Date;
       }
     >();
@@ -167,7 +181,11 @@ export function useEnvironmentVariables(
           !requiredVarNames.has(entry.name) &&
           !entry.name.toLowerCase().includes("token_url")
         ) {
-          const value = { environmentSlug: env.slug, value: entry.value };
+          const value = {
+            environmentSlug: env.slug,
+            value: entry.value,
+            isSecret: entry.isSecret,
+          };
           const varData = customVarMap.get(entry.name);
           if (varData) {
             varData.environmentValues.push(value);

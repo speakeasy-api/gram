@@ -11,9 +11,7 @@ import { GramCore } from "../core.js";
 import { spendRulesRulesPreview } from "../funcs/spendRulesRulesPreview.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import {
-  PreviewSpendRuleResult,
-} from "../models/components/previewspendruleresult.js";
+import { PreviewSpendRuleResult } from "../models/components/previewspendruleresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -22,11 +20,9 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import {
-  ServiceError,
-} from "../models/errors/serviceerror.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
 import {
   PreviewSpendRuleRequest,
   PreviewSpendRuleSecurity,
@@ -41,8 +37,7 @@ export type SpendRulesPreviewRuleMutationVariables = {
   options?: RequestOptions;
 };
 
-export type SpendRulesPreviewRuleMutationData =
-  PreviewSpendRuleResult;
+export type SpendRulesPreviewRuleMutationData = PreviewSpendRuleResult;
 
 export type SpendRulesPreviewRuleMutationError =
   | ServiceError

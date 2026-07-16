@@ -5,6 +5,7 @@ import { FeatureName } from "@gram/client/models/components/setproductfeaturereq
 import { useDisableRBACMutation } from "@gram/client/react-query/disableRBAC.js";
 import { useEnableRBACMutation } from "@gram/client/react-query/enableRBAC.js";
 import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet.js";
+import { invalidateAllGrants } from "@gram/client/react-query/grants.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useRbacStatus } from "@gram/client/react-query/rbacStatus.js";
 import { useSendEnterpriseAdminOnboardingEmailMutation } from "@gram/client/react-query/sendEnterpriseAdminOnboardingEmail.js";
@@ -13,6 +14,7 @@ import { invalidateAllRbacStatus } from "@gram/client/react-query/rbacStatus.js"
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowRightLeft,
+  BookOpen,
   Building2,
   FileSearch,
   FolderSync,
@@ -149,6 +151,7 @@ function RBACManagementSection(): ReactElement {
   const enableMutation = useEnableRBACMutation({
     onSuccess: () => {
       void invalidateAllRbacStatus(queryClient);
+      void invalidateAllGrants(queryClient);
       setConfirmAction(null);
     },
   });
@@ -156,6 +159,7 @@ function RBACManagementSection(): ReactElement {
   const disableMutation = useDisableRBACMutation({
     onSuccess: () => {
       void invalidateAllRbacStatus(queryClient);
+      void invalidateAllGrants(queryClient);
       setConfirmAction(null);
     },
   });
@@ -243,8 +247,14 @@ function ProductFeaturesSection(): ReactElement {
     error: mutError,
     variables,
   } = useFeaturesSetMutation({
-    onSuccess: () => {
+    onSuccess: (_data, mutationVariables) => {
       void invalidateAllProductFeatures(queryClient);
+      if (
+        mutationVariables.request?.setProductFeatureRequestBody?.featureName ===
+        FeatureName.Skills
+      ) {
+        void invalidateAllGrants(queryClient);
+      }
     },
   });
 
@@ -283,6 +293,19 @@ function ProductFeaturesSection(): ReactElement {
       >
         <RBACManagementSection />
       </Section>
+
+      <FeatureToggle
+        label="Skills"
+        description="Enables the Skills page and provisions default Skills grants when RBAC is active."
+        icon={BookOpen}
+        featureName={FeatureName.Skills}
+        enabled={features.skillsEnabled}
+        isPending={isPending && pendingFeature === FeatureName.Skills}
+        onToggle={handleToggle}
+        error={
+          pendingFeature === FeatureName.Skills ? mutError?.message : undefined
+        }
+      />
 
       <FeatureToggle
         label="Authz Challenge Logging"

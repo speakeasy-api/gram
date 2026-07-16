@@ -16,7 +16,7 @@ This populates the database with projects, deployments, API keys, and other reso
 
 ### Local auth and identity (dev-idp)
 
-Local development uses **dev-idp** — a lightweight Go server (`dev-idp/`) that replaces the external identity services Gram uses in production. It runs as a madprocs process, uses SQLite, and requires no external accounts.
+Local development uses **dev-idp** — a lightweight Go server (`dev-idp/`) that replaces the external identity services Gram uses in production. It runs as a pitchfork daemon, uses SQLite, and requires no external accounts.
 
 The mode is controlled by a single env var:
 
@@ -46,7 +46,7 @@ GRAM_IDP_CLIENT_ID = "client_..."
 
 This routes the server's WorkOS API calls through a dev-idp proxy to the real WorkOS API. OIDC login still goes through dev-idp's `/oauth2` handler locally.
 
-After changing modes, restart madprocs.
+After changing modes, restart pitchfork with `mise run start`.
 
 <details>
 <summary>dev-idp protocol handlers (advanced)</summary>

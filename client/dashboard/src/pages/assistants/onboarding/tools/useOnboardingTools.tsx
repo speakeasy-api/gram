@@ -1,7 +1,7 @@
 import { useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { DEFAULT_ASSISTANT_MODEL } from "@/lib/models";
-import { defineFrontendTool, type FrontendTool } from "@gram-ai/elements";
+import { defineFrontendTool, type FrontendTool } from "@/elements";
 import { Gram } from "@gram/client";
 import { ToolCallMessagePartComponent } from "@assistant-ui/react";
 import { useMemo } from "react";

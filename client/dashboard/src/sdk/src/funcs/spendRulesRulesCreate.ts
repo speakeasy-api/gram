@@ -24,12 +24,12 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import {
   ServiceError,
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
-import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
-import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import {
   CreateSpendRuleRequest,
   CreateSpendRuleRequest$outboundSchema,
@@ -211,10 +211,7 @@ async function $do(
     | SDKValidationError
   >(
     M.json(200, SpendRule$inboundSchema),
-    M.jsonErr(
-      [400, 401, 403, 404, 409, 415, 422],
-      ServiceError$inboundSchema,
-    ),
+    M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),
     M.fail("5XX"),

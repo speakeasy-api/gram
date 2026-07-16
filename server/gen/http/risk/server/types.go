@@ -9397,6 +9397,10 @@ type RiskResultResponseBody struct {
 	MatchRedacted *string `form:"match_redacted,omitempty" json:"match_redacted,omitempty" xml:"match_redacted,omitempty"`
 	// When this result was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// True when the scanned message arrived as a replay from a device's offline
+	// spool after control-plane downtime — the finding was produced retroactively
+	// rather than from live traffic.
+	Replayed bool `form:"replayed" json:"replayed" xml:"replayed"`
 }
 
 // RiskSpanResponseBody is used to define fields on response body types.

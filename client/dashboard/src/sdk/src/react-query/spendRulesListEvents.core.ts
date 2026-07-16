@@ -11,17 +11,14 @@ import { GramCore } from "../core.js";
 import { spendRulesEventsList } from "../funcs/spendRulesEventsList.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import {
-  ListSpendRuleEventsResult,
-} from "../models/components/listspendruleeventsresult.js";
+import { ListSpendRuleEventsResult } from "../models/components/listspendruleeventsresult.js";
 import {
   EventType,
   ListSpendRuleEventsRequest,
   ListSpendRuleEventsSecurity,
 } from "../models/operations/listspendruleevents.js";
 import { unwrapAsync } from "../types/fp.js";
-export type SpendRulesListEventsQueryData =
-  ListSpendRuleEventsResult;
+export type SpendRulesListEventsQueryData = ListSpendRuleEventsResult;
 
 export function prefetchSpendRulesListEvents(
   queryClient: QueryClient,

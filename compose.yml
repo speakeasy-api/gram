@@ -177,7 +177,7 @@ services:
 
   tunnel-agent:
     profiles: [tunnel]
-    image: golang:1.26.3-bookworm
+    image: golang:1.26.4-bookworm
     restart: unless-stopped
     network_mode: "service:tunnel-postgres-mcp"
     working_dir: /workspace

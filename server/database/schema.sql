@@ -262,6 +262,51 @@ CREATE TABLE IF NOT EXISTS assets (
   CONSTRAINT assets_project_id_sha256_key UNIQUE (project_id, sha256)
 );
 
+CREATE TABLE IF NOT EXISTS skills (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+
+  name TEXT NOT NULL,
+  display_name TEXT NOT NULL,
+  summary TEXT,
+  source_kind TEXT NOT NULL DEFAULT 'manual',
+  classification TEXT NOT NULL DEFAULT 'custom',
+
+  archived_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT skills_pkey PRIMARY KEY (id),
+  CONSTRAINT skills_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS skills_project_id_idx ON skills (project_id);
+CREATE UNIQUE INDEX IF NOT EXISTS skills_project_id_name_key ON skills (project_id, name) WHERE archived_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS skill_versions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  skill_id uuid NOT NULL,
+
+  content TEXT NOT NULL,
+  canonical_sha256 TEXT NOT NULL,
+  raw_sha256 TEXT NOT NULL,
+  description TEXT,
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+  spec_valid boolean NOT NULL,
+  validation_errors JSONB NOT NULL DEFAULT '[]'::jsonb,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  created_by_user_id TEXT NOT NULL,
+
+  CONSTRAINT skill_versions_pkey PRIMARY KEY (id),
+  CONSTRAINT skill_versions_skill_id_fkey FOREIGN KEY (skill_id) REFERENCES skills (id) ON DELETE CASCADE,
+  CONSTRAINT skill_versions_content_size_check CHECK (octet_length(content) <= 65536)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS skill_versions_skill_id_canonical_sha256_key ON skill_versions (skill_id, canonical_sha256);
+CREATE INDEX IF NOT EXISTS skill_versions_skill_id_created_at_id_idx ON skill_versions (skill_id, created_at DESC, id DESC);
+
 CREATE TABLE IF NOT EXISTS packages (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 100),
@@ -1575,6 +1620,12 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   -- the stored content chain (compaction or edit). Messages belonging to the
   -- same logical conversation view share a generation.
   generation INTEGER NOT NULL DEFAULT 0,
+
+  -- True when the message arrived as a replay from a device's offline spool
+  -- after control-plane downtime (X-Gram-Replayed on hooks.ingest), so
+  -- downtime backlog — and findings produced by retroactively scanning it —
+  -- stays distinguishable from live traffic.
+  replayed BOOLEAN NOT NULL DEFAULT false,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 

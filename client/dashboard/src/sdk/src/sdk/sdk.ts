@@ -46,6 +46,7 @@ import { RemoteSessionIssuers } from "./remotesessionissuers.js";
 import { RemoteSessions } from "./remotesessions.js";
 import { Resources } from "./resources.js";
 import { Risk } from "./risk.js";
+import { Skills } from "./skills.js";
 import { SpendRules } from "./spendrules.js";
 import { Telemetry } from "./telemetry.js";
 import { Templates } from "./templates.js";
@@ -286,6 +287,11 @@ export class Gram extends ClientSDK {
   private _risk?: Risk;
   get risk(): Risk {
     return (this._risk ??= new Risk(this._options));
+  }
+
+  private _skills?: Skills;
+  get skills(): Skills {
+    return (this._skills ??= new Skills(this._options));
   }
 
   private _spendRules?: SpendRules;

@@ -1,7 +1,7 @@
 import {
   TimeRangePicker as ElementsTimeRangePicker,
   type TimeRangePickerProps,
-} from "@gram-ai/elements";
+} from "@/elements";
 import { useSession } from "@/contexts/Auth";
 import { getServerURL } from "@/lib/utils";
 
@@ -16,7 +16,7 @@ import { getServerURL } from "@/lib/utils";
  * Without it the request 401s and parsing silently no-ops.
  *
  * Use this wrapper anywhere in the dashboard instead of importing
- * `TimeRangePicker` directly from `@gram-ai/elements`.
+ * `TimeRangePicker` directly from `@/elements`.
  */
 export function TimeRangePicker(props: TimeRangePickerProps): JSX.Element {
   const { session } = useSession();

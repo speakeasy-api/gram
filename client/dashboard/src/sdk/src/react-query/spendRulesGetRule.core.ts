@@ -11,9 +11,7 @@ import { GramCore } from "../core.js";
 import { spendRulesRulesGet } from "../funcs/spendRulesRulesGet.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import {
-  SpendRule,
-} from "../models/components/spendrule.js";
+import { SpendRule } from "../models/components/spendrule.js";
 import {
   GetSpendRuleRequest,
   GetSpendRuleSecurity,
