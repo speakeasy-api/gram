@@ -18,7 +18,9 @@ import (
 type CreateMcpServerRequestBody struct {
 	// A human-readable display name for the server
 	Name string `form:"name" json:"name" xml:"name"`
-	// The ID of the environment to associate with the server
+	// The ID of the environment to associate with the server. Not supported for
+	// remote MCP servers: the request is rejected when this is set alongside
+	// remote_mcp_server_id.
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
 	// The ID of the remote MCP server to use as the backend
 	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
@@ -41,7 +43,9 @@ type UpdateMcpServerRequestBody struct {
 	// A human-readable display name for the server. Omit to leave the existing
 	// name unchanged; if provided, must be non-empty.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// The ID of the environment to associate with the server
+	// The ID of the environment to associate with the server. Not supported for
+	// remote MCP servers: the request is rejected when this is set alongside
+	// remote_mcp_server_id.
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
 	// The ID of the remote MCP server to use as the backend
 	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`

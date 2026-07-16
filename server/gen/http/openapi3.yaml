@@ -43973,7 +43973,7 @@ components:
             properties:
                 environment_id:
                     type: string
-                    description: The ID of the environment to associate with the server
+                    description: 'The ID of the environment to associate with the server. Not supported for remote MCP servers: the request is rejected when this is set alongside remote_mcp_server_id.'
                     format: uuid
                 name:
                     type: string
@@ -57631,7 +57631,7 @@ components:
             properties:
                 environment_id:
                     type: string
-                    description: The ID of the environment to associate with the server
+                    description: 'The ID of the environment to associate with the server. Not supported for remote MCP servers: the request is rejected when this is set alongside remote_mcp_server_id.'
                     format: uuid
                 id:
                     type: string

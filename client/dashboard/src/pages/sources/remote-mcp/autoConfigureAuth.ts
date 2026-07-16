@@ -258,7 +258,8 @@ async function setMcpServerVisibility(
       name: mcpServer.name ?? undefined,
       remoteMcpServerId: mcpServer.remoteMcpServerId ?? undefined,
       toolsetId: mcpServer.toolsetId ?? undefined,
-      environmentId: mcpServer.environmentId ?? undefined,
+      // Remote MCP servers cannot carry an environment (rejected by the API
+      // guard). This is always a remote-backed server, so never forward it.
       toolVariationsGroupId: mcpServer.toolVariationsGroupId ?? undefined,
       visibility,
     },

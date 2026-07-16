@@ -130,6 +130,9 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 	if err := validateTunneledMCPVisibility(ids, payload.Visibility); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogWarn(ctx, logger)
 	}
+	if err := validateRemoteMcpEnvironmentExclusivity(ids); err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogWarn(ctx, logger)
+	}
 
 	// Generate the server ID up front so the slug can include its suffix and
 	// the row can be inserted in a single statement (no insert-then-update).
@@ -440,6 +443,9 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
 	}
 	if err := validateTunneledMCPVisibility(ids, payload.Visibility); err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogWarn(ctx, logger)
+	}
+	if err := validateRemoteMcpEnvironmentExclusivity(ids); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogWarn(ctx, logger)
 	}
 
@@ -814,6 +820,18 @@ func validateServerBackendExclusivity(remoteMcpServerID, tunneledMcpServerID, to
 func validateTunneledMCPVisibility(ids serverIDs, visibility types.McpServerVisibility) error {
 	if ids.TunneledMcpServerID.Valid && string(visibility) == VisibilityPublic {
 		return fmt.Errorf("tunneled MCP servers cannot be public")
+	}
+	return nil
+}
+
+// validateRemoteMcpEnvironmentExclusivity rejects environment_id on
+// remote-backed servers. environment_id is inert at runtime for remote MCP
+// servers (the remote serve path never reads it) and only adds confusion, so
+// it is disallowed at write-time even though the column remains supported for
+// toolset- and tunneled-backed servers.
+func validateRemoteMcpEnvironmentExclusivity(ids serverIDs) error {
+	if ids.RemoteMcpServerID.Valid && ids.EnvironmentID.Valid {
+		return fmt.Errorf("environments are not supported for remote MCP servers")
 	}
 	return nil
 }

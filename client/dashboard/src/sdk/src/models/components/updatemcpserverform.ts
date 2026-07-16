@@ -26,7 +26,7 @@ export type UpdateMcpServerFormVisibility = ClosedEnum<
  */
 export type UpdateMcpServerForm = {
   /**
-   * The ID of the environment to associate with the server
+   * The ID of the environment to associate with the server. Not supported for remote MCP servers: the request is rejected when this is set alongside remote_mcp_server_id.
    */
   environmentId?: string | undefined;
   /**

@@ -225,7 +225,7 @@ var CreateMcpServerForm = Type("CreateMcpServerForm", func() {
 	Description("Form for creating a new MCP server. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be provided.")
 
 	Attribute("name", String, "A human-readable display name for the server")
-	Attribute("environment_id", String, "The ID of the environment to associate with the server", func() {
+	Attribute("environment_id", String, "The ID of the environment to associate with the server. Not supported for remote MCP servers: the request is rejected when this is set alongside remote_mcp_server_id.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("remote_mcp_server_id", String, "The ID of the remote MCP server to use as the backend", func() {
@@ -252,7 +252,7 @@ var UpdateMcpServerForm = Type("UpdateMcpServerForm", func() {
 		Format(FormatUUID)
 	})
 	Attribute("name", String, "A human-readable display name for the server. Omit to leave the existing name unchanged; if provided, must be non-empty.")
-	Attribute("environment_id", String, "The ID of the environment to associate with the server", func() {
+	Attribute("environment_id", String, "The ID of the environment to associate with the server. Not supported for remote MCP servers: the request is rejected when this is set alongside remote_mcp_server_id.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("remote_mcp_server_id", String, "The ID of the remote MCP server to use as the backend", func() {
