@@ -46,7 +46,11 @@ export function SkillSheet({
     <Sheet open={skillId !== null} onOpenChange={onOpenChange}>
       <SheetContent className="w-full gap-0 overflow-y-auto sm:max-w-3xl">
         {skillId !== null && (
-          <SkillSheetContent skillId={skillId} onOpenChange={onOpenChange} />
+          <SkillSheetContent
+            key={skillId}
+            skillId={skillId}
+            onOpenChange={onOpenChange}
+          />
         )}
       </SheetContent>
     </Sheet>
@@ -115,13 +119,9 @@ function SkillSheetContent({
       });
     },
   });
-  const metadataEntries = Object.entries(latestVersion.metadata ?? {});
-  const detailsDescription =
-    latestVersion.description && latestVersion.description !== skill.summary
-      ? latestVersion.description
-      : null;
-  const hasManifestDetails =
-    metadataEntries.length > 0 || detailsDescription !== null;
+  const frontmatterEntries = Object.entries(
+    latestVersion.frontmatter ?? {},
+  ).filter(([key]) => key !== "name" && key !== "description");
 
   return (
     <>
@@ -177,30 +177,23 @@ function SkillSheetContent({
           </div>
         </SheetSection>
 
-        {hasManifestDetails && (
-          <SheetSection label="Manifest details">
-            <div className="border-border space-y-3 rounded-lg border p-4">
-              {detailsDescription && (
-                <Type small muted>
-                  {detailsDescription}
-                </Type>
-              )}
-              {metadataEntries.length > 0 && (
-                <dl className="space-y-1">
-                  {metadataEntries.map(([key, value]) => (
-                    <div key={key} className="flex gap-3 text-sm">
-                      <dt className="text-muted-foreground shrink-0 font-mono">
-                        {key}
-                      </dt>
-                      <dd className="min-w-0 break-words font-mono">
-                        {typeof value === "string"
-                          ? value
-                          : JSON.stringify(value)}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-              )}
+        {frontmatterEntries.length > 0 && (
+          <SheetSection label="Frontmatter">
+            <div className="border-border rounded-lg border p-4">
+              <dl className="space-y-1.5">
+                {frontmatterEntries.map(([key, value]) => (
+                  <div key={key} className="flex gap-3 text-sm">
+                    <dt className="text-muted-foreground shrink-0 font-mono">
+                      {key}
+                    </dt>
+                    <dd className="min-w-0 break-words font-mono">
+                      {typeof value === "string"
+                        ? value
+                        : JSON.stringify(value)}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
             </div>
           </SheetSection>
         )}

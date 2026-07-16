@@ -6,10 +6,10 @@ export function filterSkills(
   sourceKinds: string[],
   classifications: string[],
 ): Skill[] {
-  const normalizedSearch = search.trim().toLocaleLowerCase();
+  const normalizedSearch = search.trim().toLowerCase();
   return skills.filter((skill) => {
     const searchable =
-      `${skill.displayName} ${skill.name} ${skill.summary ?? ""}`.toLocaleLowerCase();
+      `${skill.displayName} ${skill.name} ${skill.summary ?? ""}`.toLowerCase();
     const matchesSearch =
       normalizedSearch.length === 0 || searchable.includes(normalizedSearch);
     const matchesSource =

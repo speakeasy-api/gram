@@ -31,9 +31,9 @@ export function ArchiveSkillDialog({
       await archive.mutateAsync({
         request: { archiveSkillRequestBody: { id: target.id } },
       });
+      await invalidateSkillQueries(queryClient);
       onClose();
       onArchived?.(target);
-      await invalidateSkillQueries(queryClient);
       toast.success(`${target.displayName} archived`);
     } catch (archiveError) {
       let message = "Unable to archive skill.";

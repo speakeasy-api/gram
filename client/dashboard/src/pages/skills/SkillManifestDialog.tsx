@@ -8,7 +8,7 @@ import type { RecordSkillResult } from "@gram/client/models/components/recordski
 import { useAddSkillVersionMutation } from "@gram/client/react-query/addSkillVersion.js";
 import { useCreateSkillMutation } from "@gram/client/react-query/createSkill.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import {
   decodeManifestFile,
   manifestByteLength,
@@ -64,6 +64,8 @@ export function SkillManifestDialog({
   const [continuing, setContinuing] = useState(false);
   const [persistedSkillId, setPersistedSkillId] = useState<string | null>(null);
   const [noOpContent, setNoOpContent] = useState<string | null>(null);
+  const [readingFile, setReadingFile] = useState(false);
+  const fileReadSeq = useRef(0);
   const createMutation = useCreateSkillMutation();
   const addVersionMutation = useAddSkillVersionMutation();
   const isPending = createMutation.isPending || addVersionMutation.isPending;
@@ -80,6 +82,8 @@ export function SkillManifestDialog({
     setContinuing(false);
     setPersistedSkillId(null);
     setNoOpContent(null);
+    fileReadSeq.current += 1;
+    setReadingFile(false);
     createMutation.reset();
     addVersionMutation.reset();
   };
@@ -147,14 +151,20 @@ export function SkillManifestDialog({
       );
       return;
     }
+    const seq = ++fileReadSeq.current;
+    setReadingFile(true);
     try {
       const nextContent = decodeManifestFile(await file.arrayBuffer());
+      if (seq !== fileReadSeq.current) return;
       setContent(nextContent);
       setSavedResult(null);
       setContinuing(false);
       setFieldError(validateManifestContent(nextContent));
     } catch {
+      if (seq !== fileReadSeq.current) return;
       setFieldError("The selected file is not valid UTF-8.");
+    } finally {
+      if (seq === fileReadSeq.current) setReadingFile(false);
     }
   };
 
@@ -258,7 +268,7 @@ export function SkillManifestDialog({
           </Button>
           <Button
             onClick={() => void submit()}
-            disabled={isPending || savedInvalid || unchangedNoOp}
+            disabled={isPending || readingFile || savedInvalid || unchangedNoOp}
           >
             {isPending ? "Saving..." : submitLabel}
           </Button>

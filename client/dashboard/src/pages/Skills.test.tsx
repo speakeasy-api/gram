@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import CLIs from "./CLIs";
+import Skills from "./Skills";
 
 const testState = vi.hoisted(() => ({
   productFeatureOptions: undefined as
@@ -94,7 +94,7 @@ function renderPage(): void {
   render(
     <MemoryRouter initialEntries={["/"]}>
       <Routes>
-        <Route path="/" element={<CLIs />}>
+        <Route path="/" element={<Skills />}>
           <Route index element={<div>Skills index route</div>} />
         </Route>
       </Routes>
@@ -111,7 +111,7 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
-describe("CLIs", () => {
+describe("Skills", () => {
   it("preserves the Coming Soon page and project gate when Skills is confirmed disabled", () => {
     testState.skillsEnabled = false;
     renderPage();

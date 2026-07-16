@@ -32,6 +32,11 @@ const testState = vi.hoisted(() => ({
     createdByUserId: "user_a",
     description: "Example description",
     metadata: {},
+    frontmatter: {
+      name: "example",
+      description: "Example skill.",
+      license: "MIT",
+    },
     specValid: true,
     validationErrors: [],
   },

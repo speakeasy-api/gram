@@ -109,7 +109,7 @@ export function AppSidebar({
 
   const distributeActive = [
     routes.mcp,
-    routes.clis,
+    routes.skills,
     routes.plugins,
     routes.environments,
     ...(isAssistantsEnabled ? [routes.assistants] : []),
@@ -304,7 +304,10 @@ export function AppSidebar({
                 {...accessFor(routes.assistants)}
               />
             )}
-            <ScopeGatedNavItem item={routes.clis} {...accessFor(routes.clis)} />
+            <ScopeGatedNavItem
+              item={routes.skills}
+              {...accessFor(routes.skills)}
+            />
             <ScopeGatedNavItem
               item={routes.plugins}
               {...accessFor(routes.plugins)}

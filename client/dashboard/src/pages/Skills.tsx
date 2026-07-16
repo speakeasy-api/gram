@@ -9,7 +9,7 @@ import { useProductFeatures } from "@gram/client/react-query/productFeatures.js"
 import { Badge, Icon } from "@speakeasy-api/moonshine";
 import { Outlet } from "react-router";
 
-export default function CLIs(): JSX.Element {
+export default function Skills(): JSX.Element {
   const { id: projectId } = useProject();
   const {
     data: features,
@@ -56,7 +56,8 @@ function SkillsFeatureGate({
     return <SkillsGateLoading />;
   }
 
-  if (error) {
+  // A failed background refresh should not hide an already-resolved gate.
+  if (error && skillsEnabled === undefined) {
     return (
       <div className="mx-auto mt-8 flex max-w-xl flex-col gap-3">
         <ErrorAlert

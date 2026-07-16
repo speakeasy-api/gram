@@ -12,6 +12,7 @@ function version(id: string): SkillVersion {
     createdAt: new Date("2026-07-16T00:00:00.000Z"),
     createdByUserId: "user_a",
     metadata: {},
+    frontmatter: {},
     specValid: true,
     validationErrors: [],
   };
