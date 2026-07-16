@@ -157,6 +157,13 @@ function PolicyServerActionBadge({ action }: { action: PolicyServerAction }) {
 }
 
 function AppliedServerTable({ rows }: { rows: PolicyServerChange[] }) {
+  const setFocusableTableBody = useCallback(
+    (element: HTMLTableSectionElement | null) => {
+      if (element) element.tabIndex = 0;
+    },
+    [],
+  );
+
   const columns: Column<PolicyServerChange>[] = [
     {
       key: "action",
@@ -205,7 +212,8 @@ function AppliedServerTable({ rows }: { rows: PolicyServerChange[] }) {
         columns={columns}
         data={rows}
         rowKey={({ server }) => server.canonicalServerUrl}
-        className="max-h-[200px] content-start overflow-y-auto"
+        ref={setFocusableTableBody}
+        className="focus-visible:ring-ring max-h-[200px] content-start overflow-y-auto focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
       />
     </Table>
   );

@@ -168,6 +168,11 @@ describe("ShadowMCPPolicyServerSelector", () => {
     if (!body) throw new Error("Expected a table body");
     expect(body.className).toContain("max-h-[200px]");
     expect(body.className).toContain("overflow-y-auto");
+    expect(body.getAttribute("tabindex")).toBe("0");
+    expect(body.className).toContain("focus-visible:ring-ring");
+    expect(body.className).toContain("focus-visible:ring-2");
+    expect(body.className).toContain("focus-visible:ring-offset-2");
+    expect(body.className).toContain("focus-visible:outline-none");
   });
 
   it("keeps complete server values accessible in the applied table", () => {
