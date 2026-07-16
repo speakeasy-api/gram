@@ -23,10 +23,15 @@ type Client struct {
 	UpdateServerEndpoint          goa.Endpoint
 	RotateServerKeyEndpoint       goa.Endpoint
 	DeleteServerEndpoint          goa.Endpoint
+	ListServerHeadersEndpoint     goa.Endpoint
+	GetServerHeaderEndpoint       goa.Endpoint
+	CreateServerHeaderEndpoint    goa.Endpoint
+	UpdateServerHeaderEndpoint    goa.Endpoint
+	DeleteServerHeaderEndpoint    goa.Endpoint
 }
 
 // NewClient initializes a "tunneledMcp" service client given the endpoints.
-func NewClient(createServer, listServers, getServer, listServerConnections, updateServer, rotateServerKey, deleteServer goa.Endpoint) *Client {
+func NewClient(createServer, listServers, getServer, listServerConnections, updateServer, rotateServerKey, deleteServer, listServerHeaders, getServerHeader, createServerHeader, updateServerHeader, deleteServerHeader goa.Endpoint) *Client {
 	return &Client{
 		CreateServerEndpoint:          createServer,
 		ListServersEndpoint:           listServers,
@@ -35,6 +40,11 @@ func NewClient(createServer, listServers, getServer, listServerConnections, upda
 		UpdateServerEndpoint:          updateServer,
 		RotateServerKeyEndpoint:       rotateServerKey,
 		DeleteServerEndpoint:          deleteServer,
+		ListServerHeadersEndpoint:     listServerHeaders,
+		GetServerHeaderEndpoint:       getServerHeader,
+		CreateServerHeaderEndpoint:    createServerHeader,
+		UpdateServerHeaderEndpoint:    updateServerHeader,
+		DeleteServerHeaderEndpoint:    deleteServerHeader,
 	}
 }
 
@@ -187,5 +197,116 @@ func (c *Client) RotateServerKey(ctx context.Context, p *RotateServerKeyPayload)
 //   - error: internal error
 func (c *Client) DeleteServer(ctx context.Context, p *DeleteServerPayload) (err error) {
 	_, err = c.DeleteServerEndpoint(ctx, p)
+	return
+}
+
+// ListServerHeaders calls the "listServerHeaders" endpoint of the
+// "tunneledMcp" service.
+// ListServerHeaders may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListServerHeaders(ctx context.Context, p *ListServerHeadersPayload) (res *ListTunneledMcpServerHeadersResult, err error) {
+	var ires any
+	ires, err = c.ListServerHeadersEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListTunneledMcpServerHeadersResult), nil
+}
+
+// GetServerHeader calls the "getServerHeader" endpoint of the "tunneledMcp"
+// service.
+// GetServerHeader may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetServerHeader(ctx context.Context, p *GetServerHeaderPayload) (res *types.TunneledMcpServerHeader, err error) {
+	var ires any
+	ires, err = c.GetServerHeaderEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.TunneledMcpServerHeader), nil
+}
+
+// CreateServerHeader calls the "createServerHeader" endpoint of the
+// "tunneledMcp" service.
+// CreateServerHeader may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CreateServerHeader(ctx context.Context, p *CreateServerHeaderPayload) (res *types.TunneledMcpServerHeader, err error) {
+	var ires any
+	ires, err = c.CreateServerHeaderEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.TunneledMcpServerHeader), nil
+}
+
+// UpdateServerHeader calls the "updateServerHeader" endpoint of the
+// "tunneledMcp" service.
+// UpdateServerHeader may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) UpdateServerHeader(ctx context.Context, p *UpdateServerHeaderPayload) (res *types.TunneledMcpServerHeader, err error) {
+	var ires any
+	ires, err = c.UpdateServerHeaderEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.TunneledMcpServerHeader), nil
+}
+
+// DeleteServerHeader calls the "deleteServerHeader" endpoint of the
+// "tunneledMcp" service.
+// DeleteServerHeader may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) DeleteServerHeader(ctx context.Context, p *DeleteServerHeaderPayload) (err error) {
+	_, err = c.DeleteServerHeaderEndpoint(ctx, p)
 	return
 }

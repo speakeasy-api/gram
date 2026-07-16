@@ -38318,6 +38318,110 @@ paths:
             x-speakeasy-name-override: createServer
             x-speakeasy-react-hook:
                 name: CreateTunneledMcpServer
+    /rpc/tunneledMcp.createServerHeader:
+        post:
+            description: Create a header on a tunneled MCP server
+            operationId: createTunneledMcpServerHeader
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateTunneledMcpServerHeaderForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/TunneledMcpServerHeader'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: createServerHeader tunneledMcp
+            tags:
+                - tunneledMcp
+            x-speakeasy-name-override: createServerHeader
+            x-speakeasy-react-hook:
+                name: CreateTunneledMcpServerHeader
     /rpc/tunneledMcp.deleteServer:
         delete:
             description: Delete a tunneled MCP server source
@@ -38421,6 +38525,109 @@ paths:
             x-speakeasy-name-override: deleteServer
             x-speakeasy-react-hook:
                 name: DeleteTunneledMcpServer
+    /rpc/tunneledMcp.deleteServerHeader:
+        delete:
+            description: Delete a tunneled MCP server header
+            operationId: deleteTunneledMcpServerHeader
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the header to delete
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The ID of the header to delete
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: deleteServerHeader tunneledMcp
+            tags:
+                - tunneledMcp
+            x-speakeasy-name-override: deleteServerHeader
+            x-speakeasy-react-hook:
+                name: DeleteTunneledMcpServerHeader
     /rpc/tunneledMcp.getServer:
         get:
             description: Get a tunneled MCP server by ID
@@ -38528,6 +38735,113 @@ paths:
             x-speakeasy-name-override: getServer
             x-speakeasy-react-hook:
                 name: GetTunneledMcpServer
+    /rpc/tunneledMcp.getServerHeader:
+        get:
+            description: Get a tunneled MCP server header by ID
+            operationId: getTunneledMcpServerHeader
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the header
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The ID of the header
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/TunneledMcpServerHeader'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: getServerHeader tunneledMcp
+            tags:
+                - tunneledMcp
+            x-speakeasy-name-override: getServerHeader
+            x-speakeasy-react-hook:
+                name: GetTunneledMcpServerHeader
     /rpc/tunneledMcp.listServerConnections:
         get:
             description: List live tunnel connections for a tunneled MCP server
@@ -38635,6 +38949,113 @@ paths:
             x-speakeasy-name-override: listServerConnections
             x-speakeasy-react-hook:
                 name: ListTunneledMcpServerConnections
+    /rpc/tunneledMcp.listServerHeaders:
+        get:
+            description: List the headers configured for a tunneled MCP server
+            operationId: listTunneledMcpServerHeaders
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the tunneled MCP server
+                  in: query
+                  name: tunneled_mcp_server_id
+                  required: true
+                  schema:
+                    description: The ID of the tunneled MCP server
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListTunneledMcpServerHeadersResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: listServerHeaders tunneledMcp
+            tags:
+                - tunneledMcp
+            x-speakeasy-name-override: listServerHeaders
+            x-speakeasy-react-hook:
+                name: TunneledMcpServerHeaders
     /rpc/tunneledMcp.listServers:
         get:
             description: List all tunneled MCP server sources for a project
@@ -38941,6 +39362,110 @@ paths:
             x-speakeasy-name-override: updateServer
             x-speakeasy-react-hook:
                 name: UpdateTunneledMcpServer
+    /rpc/tunneledMcp.updateServerHeader:
+        post:
+            description: Update a tunneled MCP server header
+            operationId: updateTunneledMcpServerHeader
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateTunneledMcpServerHeaderForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/TunneledMcpServerHeader'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: updateServerHeader tunneledMcp
+            tags:
+                - tunneledMcp
+            x-speakeasy-name-override: updateServerHeader
+            x-speakeasy-react-hook:
+                name: UpdateTunneledMcpServerHeader
     /rpc/usage.createCheckout:
         post:
             description: Create a checkout link for upgrading to the business plan
@@ -45184,6 +45709,35 @@ components:
             description: Form for creating a new tunneled MCP server source
             required:
                 - name
+        CreateTunneledMcpServerHeaderForm:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: Description of the header
+                is_required:
+                    type: boolean
+                    description: Whether the header is required. Defaults to false.
+                is_secret:
+                    type: boolean
+                    description: Whether the header value is a secret. Defaults to false. Incompatible with value_from_request_header.
+                name:
+                    type: string
+                    description: The header name
+                tunneled_mcp_server_id:
+                    type: string
+                    description: The ID of the tunneled MCP server to add the header to
+                    format: uuid
+                value:
+                    type: string
+                    description: Static header value (mutually exclusive with value_from_request_header)
+                value_from_request_header:
+                    type: string
+                    description: Name of the inbound request header to pass through (mutually exclusive with value)
+            description: Form for creating a header on a tunneled MCP server. Exactly one of value or value_from_request_header must be provided.
+            required:
+                - tunneled_mcp_server_id
+                - name
         CreateTunneledMcpServerResult:
             type: object
             properties:
@@ -49645,6 +50199,16 @@ components:
                     description: The trigger instances for the current project.
             required:
                 - triggers
+        ListTunneledMcpServerHeadersResult:
+            type: object
+            properties:
+                headers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/TunneledMcpServerHeader'
+            description: Result type for listing the headers of a tunneled MCP server
+            required:
+                - headers
         ListTunneledMcpServersResult:
             type: object
             properties:
@@ -57833,6 +58397,47 @@ components:
                 - connections
                 - active_connection_count
                 - active_consumer_session_count
+        TunneledMcpServerHeader:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: When the header was created
+                    format: date-time
+                description:
+                    type: string
+                    description: Description of the header
+                id:
+                    type: string
+                    description: The ID of the header
+                    format: uuid
+                is_required:
+                    type: boolean
+                    description: Whether the header is required
+                is_secret:
+                    type: boolean
+                    description: Whether the header value is a secret
+                name:
+                    type: string
+                    description: The header name
+                updated_at:
+                    type: string
+                    description: When the header was last updated
+                    format: date-time
+                value:
+                    type: string
+                    description: The header value (redacted if secret)
+                value_from_request_header:
+                    type: string
+                    description: Name of the inbound request header to pass through
+            description: A header configured for a tunneled MCP server
+            required:
+                - id
+                - name
+                - is_required
+                - is_secret
+                - created_at
+                - updated_at
         UndistributeSkillRequestBody:
             type: object
             properties:
@@ -58886,6 +59491,35 @@ components:
                     type: string
                     description: Human-readable display name for the tunneled MCP server
             description: Form for updating a tunneled MCP server source
+            required:
+                - id
+                - name
+        UpdateTunneledMcpServerHeaderForm:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: Description of the header
+                id:
+                    type: string
+                    description: The ID of the header to update
+                    format: uuid
+                is_required:
+                    type: boolean
+                    description: Whether the header is required. Defaults to false.
+                is_secret:
+                    type: boolean
+                    description: Whether the header value is a secret. Defaults to false. Incompatible with value_from_request_header.
+                name:
+                    type: string
+                    description: The header name
+                value:
+                    type: string
+                    description: Static header value (mutually exclusive with value_from_request_header). Omit on an existing secret header to preserve its stored value.
+                value_from_request_header:
+                    type: string
+                    description: Name of the inbound request header to pass through (mutually exclusive with value)
+            description: 'Form for updating a tunneled MCP server header. Replaces every mutable field, so omitted optional fields are reset to their defaults. The one exception is value: omitting it for a header that is already secret preserves the stored value rather than clearing it.'
             required:
                 - id
                 - name

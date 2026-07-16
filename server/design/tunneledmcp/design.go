@@ -201,6 +201,143 @@ var _ = Service("tunneledMcp", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "deleteServer")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteTunneledMcpServer"}`)
 	})
+
+	Method("listServerHeaders", func() {
+		Description("List the headers configured for a tunneled MCP server")
+
+		Payload(func() {
+			Attribute("tunneled_mcp_server_id", String, "The ID of the tunneled MCP server", func() {
+				Format(FormatUUID)
+			})
+			Required("tunneled_mcp_server_id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ListServerHeadersResult)
+
+		HTTP(func() {
+			GET("/rpc/tunneledMcp.listServerHeaders")
+			Param("tunneled_mcp_server_id")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listTunneledMcpServerHeaders")
+		Meta("openapi:extension:x-speakeasy-name-override", "listServerHeaders")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "TunneledMcpServerHeaders"}`)
+	})
+
+	Method("getServerHeader", func() {
+		Description("Get a tunneled MCP server header by ID")
+
+		Payload(func() {
+			Attribute("id", String, "The ID of the header", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(TunneledMcpServerHeader)
+
+		HTTP(func() {
+			GET("/rpc/tunneledMcp.getServerHeader")
+			Param("id")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getTunneledMcpServerHeader")
+		Meta("openapi:extension:x-speakeasy-name-override", "getServerHeader")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetTunneledMcpServerHeader"}`)
+	})
+
+	Method("createServerHeader", func() {
+		Description("Create a header on a tunneled MCP server")
+
+		Payload(func() {
+			Extend(CreateServerHeaderForm)
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(TunneledMcpServerHeader)
+
+		HTTP(func() {
+			POST("/rpc/tunneledMcp.createServerHeader")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Body(CreateServerHeaderForm)
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "createTunneledMcpServerHeader")
+		Meta("openapi:extension:x-speakeasy-name-override", "createServerHeader")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateTunneledMcpServerHeader"}`)
+	})
+
+	Method("updateServerHeader", func() {
+		Description("Update a tunneled MCP server header")
+
+		Payload(func() {
+			Extend(UpdateServerHeaderForm)
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(TunneledMcpServerHeader)
+
+		HTTP(func() {
+			POST("/rpc/tunneledMcp.updateServerHeader")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Body(UpdateServerHeaderForm)
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "updateTunneledMcpServerHeader")
+		Meta("openapi:extension:x-speakeasy-name-override", "updateServerHeader")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateTunneledMcpServerHeader"}`)
+	})
+
+	Method("deleteServerHeader", func() {
+		Description("Delete a tunneled MCP server header")
+
+		Payload(func() {
+			Attribute("id", String, "The ID of the header to delete", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		HTTP(func() {
+			DELETE("/rpc/tunneledMcp.deleteServerHeader")
+			Param("id")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "deleteTunneledMcpServerHeader")
+		Meta("openapi:extension:x-speakeasy-name-override", "deleteServerHeader")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteTunneledMcpServerHeader"}`)
+	})
 })
 
 var TunneledMcpCreateServerForm = Type("CreateTunneledMcpServerForm", func() {
@@ -340,4 +477,73 @@ var ListServersResult = Type("ListTunneledMcpServersResult", func() {
 
 	Attribute("tunneled_mcp_servers", ArrayOf(TunneledMcpServer))
 	Required("tunneled_mcp_servers")
+})
+
+var CreateServerHeaderForm = Type("CreateTunneledMcpServerHeaderForm", func() {
+	Meta("openapi:typename", "CreateTunneledMcpServerHeaderForm")
+
+	Description("Form for creating a header on a tunneled MCP server. Exactly one of value or value_from_request_header must be provided.")
+
+	Attribute("tunneled_mcp_server_id", String, "The ID of the tunneled MCP server to add the header to", func() {
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "The header name")
+	Attribute("description", String, "Description of the header")
+	Attribute("is_required", Boolean, "Whether the header is required. Defaults to false.")
+	Attribute("is_secret", Boolean, "Whether the header value is a secret. Defaults to false. Incompatible with value_from_request_header.")
+	Attribute("value", String, "Static header value (mutually exclusive with value_from_request_header)")
+	Attribute("value_from_request_header", String, "Name of the inbound request header to pass through (mutually exclusive with value)")
+
+	Required("tunneled_mcp_server_id", "name")
+})
+
+var UpdateServerHeaderForm = Type("UpdateTunneledMcpServerHeaderForm", func() {
+	Meta("openapi:typename", "UpdateTunneledMcpServerHeaderForm")
+
+	Description("Form for updating a tunneled MCP server header. Replaces every mutable field, so omitted optional fields are reset to their defaults. The one exception is value: omitting it for a header that is already secret preserves the stored value rather than clearing it.")
+
+	Attribute("id", String, "The ID of the header to update", func() {
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "The header name")
+	Attribute("description", String, "Description of the header")
+	Attribute("is_required", Boolean, "Whether the header is required. Defaults to false.")
+	Attribute("is_secret", Boolean, "Whether the header value is a secret. Defaults to false. Incompatible with value_from_request_header.")
+	Attribute("value", String, "Static header value (mutually exclusive with value_from_request_header). Omit on an existing secret header to preserve its stored value.")
+	Attribute("value_from_request_header", String, "Name of the inbound request header to pass through (mutually exclusive with value)")
+
+	Required("id", "name")
+})
+
+var TunneledMcpServerHeader = Type("TunneledMcpServerHeader", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("A header configured for a tunneled MCP server")
+
+	Attribute("id", String, "The ID of the header", func() {
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "The header name")
+	Attribute("description", String, "Description of the header")
+	Attribute("is_required", Boolean, "Whether the header is required")
+	Attribute("is_secret", Boolean, "Whether the header value is a secret")
+	Attribute("value", String, "The header value (redacted if secret)")
+	Attribute("value_from_request_header", String, "Name of the inbound request header to pass through")
+	Attribute("created_at", String, func() {
+		Description("When the header was created")
+		Format(FormatDateTime)
+	})
+	Attribute("updated_at", String, func() {
+		Description("When the header was last updated")
+		Format(FormatDateTime)
+	})
+
+	Required("id", "name", "is_required", "is_secret", "created_at", "updated_at")
+})
+
+var ListServerHeadersResult = Type("ListTunneledMcpServerHeadersResult", func() {
+	Description("Result type for listing the headers of a tunneled MCP server")
+
+	Attribute("headers", ArrayOf(TunneledMcpServerHeader))
+	Required("headers")
 })
