@@ -295,6 +295,11 @@ describe("ShadowMCPPolicyServerSelector", () => {
       expect.stringContaining("Add"),
       expect.stringContaining("No change"),
     ]);
+    expect(
+      within(table)
+        .getByRole("columnheader", { name: "Action" })
+        .getAttribute("aria-sort"),
+    ).toBe("ascending");
 
     fireEvent.click(actionHeader);
     expect(appliedRowLabels(table)).toEqual([
@@ -302,6 +307,11 @@ describe("ShadowMCPPolicyServerSelector", () => {
       expect.stringContaining("Add"),
       expect.stringContaining("Remove"),
     ]);
+    expect(
+      within(table)
+        .getByRole("columnheader", { name: "Action" })
+        .getAttribute("aria-sort"),
+    ).toBe("descending");
 
     fireEvent.click(serverHeader);
     expect(appliedRowLabels(table)).toEqual([
@@ -309,6 +319,16 @@ describe("ShadowMCPPolicyServerSelector", () => {
       expect.stringContaining("linear.example.com"),
       expect.stringContaining("Notion MCP"),
     ]);
+    expect(
+      within(table)
+        .getByRole("columnheader", { name: "Action" })
+        .getAttribute("aria-sort"),
+    ).toBeNull();
+    expect(
+      within(table)
+        .getByRole("columnheader", { name: "Server" })
+        .getAttribute("aria-sort"),
+    ).toBe("ascending");
 
     fireEvent.click(urlHeader);
     expect(appliedRowLabels(table)).toEqual([
@@ -316,6 +336,54 @@ describe("ShadowMCPPolicyServerSelector", () => {
       expect.stringContaining("github.example.com"),
       expect.stringContaining("linear.example.com"),
     ]);
+    expect(
+      within(table)
+        .getByRole("columnheader", { name: "Server" })
+        .getAttribute("aria-sort"),
+    ).toBeNull();
+    expect(
+      within(table)
+        .getByRole("columnheader", { name: "URL" })
+        .getAttribute("aria-sort"),
+    ).toBe("ascending");
+  });
+
+  it("keeps summary sorting independent from modal sorting", () => {
+    const notionServer = inventoryServer("https://aaa.example.com/mcp", {
+      serverName: "Notion MCP",
+    });
+    render(
+      <ControlledSelector
+        servers={[githubServer, linearServer, notionServer]}
+        originalSelection={[
+          githubServer.canonicalServerUrl,
+          linearServer.canonicalServerUrl,
+        ]}
+        initialSelection={[
+          githubServer.canonicalServerUrl,
+          notionServer.canonicalServerUrl,
+        ]}
+      />,
+    );
+
+    const section = screen.getByRole("region", {
+      name: "Servers allowed by this policy",
+    });
+    const summary = within(section).getByRole("table");
+    fireEvent.click(within(summary).getByRole("button", { name: /Server/ }));
+    const summaryOrder = appliedRowLabels(summary);
+    expect(summaryOrder).toEqual([
+      expect.stringContaining("GitHub MCP"),
+      expect.stringContaining("linear.example.com"),
+      expect.stringContaining("Notion MCP"),
+    ]);
+
+    const dialog = openSelector();
+    fireEvent.click(within(dialog).getByRole("button", { name: /Status/ }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /Usage/ }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+
+    expect(appliedRowLabels(summary)).toEqual(summaryOrder);
   });
 
   it("keeps pending removals visible when every saved server is deselected", () => {

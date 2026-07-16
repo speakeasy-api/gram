@@ -162,6 +162,49 @@ function PolicyServerActionBadge({ action }: { action: PolicyServerAction }) {
   }
 }
 
+const APPLIED_SERVER_COLUMNS: Column<PolicyServerChange>[] = [
+  {
+    key: "action",
+    header: "Action",
+    sortable: true,
+    sortValue: ({ action }) => POLICY_SERVER_ACTION_SORT_VALUE[action],
+    width: "112px",
+    render: (row) => <PolicyServerActionBadge action={row.action} />,
+  },
+  {
+    key: "server",
+    header: "Server",
+    sortable: true,
+    sortValue: ({ server }) => serverLabel(server).trim().toLowerCase(),
+    width: "0.35fr",
+    render: ({ server }) => {
+      const label = serverLabel(server);
+      return (
+        <Type variant="small" className="truncate font-medium" title={label}>
+          {label}
+        </Type>
+      );
+    },
+  },
+  {
+    key: "url",
+    header: "URL",
+    sortable: true,
+    sortValue: ({ server }) => server.canonicalServerUrl.trim().toLowerCase(),
+    width: "1fr",
+    render: ({ server }) => (
+      <Type
+        muted
+        small
+        className="truncate font-mono text-xs"
+        title={server.canonicalServerUrl}
+      >
+        {server.canonicalServerUrl}
+      </Type>
+    ),
+  },
+];
+
 function AppliedServerTable({ rows }: { rows: PolicyServerChange[] }) {
   const [sort, setSort] = useState<SortDescriptor | null>({
     id: "action",
@@ -175,60 +218,25 @@ function AppliedServerTable({ rows }: { rows: PolicyServerChange[] }) {
     [],
   );
 
-  const columns: Column<PolicyServerChange>[] = [
-    {
-      key: "action",
-      header: "Action",
-      sortable: true,
-      sortValue: ({ action }) => POLICY_SERVER_ACTION_SORT_VALUE[action],
-      width: "112px",
-      render: (row) => <PolicyServerActionBadge action={row.action} />,
-    },
-    {
-      key: "server",
-      header: "Server",
-      sortable: true,
-      sortValue: ({ server }) => serverLabel(server).trim().toLowerCase(),
-      width: "0.35fr",
-      render: ({ server }) => {
-        const label = serverLabel(server);
-        return (
-          <Type variant="small" className="truncate font-medium" title={label}>
-            {label}
-          </Type>
-        );
-      },
-    },
-    {
-      key: "url",
-      header: "URL",
-      sortable: true,
-      sortValue: ({ server }) => server.canonicalServerUrl.trim().toLowerCase(),
-      width: "1fr",
-      render: ({ server }) => (
-        <Type
-          muted
-          small
-          className="truncate font-mono text-xs"
-          title={server.canonicalServerUrl}
-        >
-          {server.canonicalServerUrl}
-        </Type>
-      ),
-    },
-  ];
-
-  const sortedRows = sortTableData(rows, columns, sort) as PolicyServerChange[];
+  const sortedRows = useMemo(
+    () =>
+      sortTableData(rows, APPLIED_SERVER_COLUMNS, sort) as PolicyServerChange[],
+    [rows, sort],
+  );
 
   return (
     <Table
-      columns={columns}
+      columns={APPLIED_SERVER_COLUMNS}
       cellPadding="condensed"
       className="grid-rows-[auto_minmax(0,1fr)]"
     >
-      <Table.Header columns={columns} sort={sort} onSortChange={setSort} />
+      <Table.Header
+        columns={APPLIED_SERVER_COLUMNS}
+        sort={sort}
+        onSortChange={setSort}
+      />
       <Table.Body
-        columns={columns}
+        columns={APPLIED_SERVER_COLUMNS}
         data={sortedRows}
         rowKey={({ server }) => server.canonicalServerUrl}
         ref={setFocusableTableBody}
