@@ -521,7 +521,8 @@ WHERE id IN (
     JOIN chat_messages cm ON crm.message_id = cm.id
     WHERE cr.chat_id = $1
       AND (cm.created_at, cm.seq) > (
-        SELECT created_at, seq FROM chat_messages WHERE chat_messages.id = $2
+        SELECT created_at, seq FROM chat_messages
+        WHERE chat_messages.id = $2 AND chat_messages.chat_id = $1
       )
   )
 `
@@ -1266,7 +1267,19 @@ WHERE cm.chat_id = $1
     $4::bigint IS NULL
     OR (cm.created_at, cm.seq) > (
       SELECT a.created_at, a.seq FROM chat_messages a
-      WHERE a.chat_id = $1 AND a.seq = $4::bigint
+      WHERE a.chat_id = $1
+        AND (a.project_id IS NULL OR a.project_id = $2::uuid)
+        AND a.seq = $4::bigint
+    )
+    -- Same missing-anchor fallback as ListChatMessagesBeforePage.
+    OR (
+      NOT EXISTS (
+        SELECT 1 FROM chat_messages a
+        WHERE a.chat_id = $1
+          AND (a.project_id IS NULL OR a.project_id = $2::uuid)
+          AND a.seq = $4::bigint
+      )
+      AND cm.seq > $4::bigint
     )
   )
 ORDER BY cm.created_at ASC, cm.seq ASC
@@ -1354,7 +1367,21 @@ WHERE cm.chat_id = $1
     $4::bigint IS NULL
     OR (cm.created_at, cm.seq) < (
       SELECT a.created_at, a.seq FROM chat_messages a
-      WHERE a.chat_id = $1 AND a.seq = $4::bigint
+      WHERE a.chat_id = $1
+        AND (a.project_id IS NULL OR a.project_id = $2::uuid)
+        AND a.seq = $4::bigint
+    )
+    -- A cursor whose anchor row no longer resolves must not dead-end the
+    -- page (a tuple comparison against an empty subquery is NULL): fall
+    -- back to the plain seq comparison the pre-tuple cursor used.
+    OR (
+      NOT EXISTS (
+        SELECT 1 FROM chat_messages a
+        WHERE a.chat_id = $1
+          AND (a.project_id IS NULL OR a.project_id = $2::uuid)
+          AND a.seq = $4::bigint
+      )
+      AND cm.seq < $4::bigint
     )
   )
 ORDER BY cm.created_at DESC, cm.seq DESC
@@ -1787,11 +1814,16 @@ limited_chats AS (
     COUNT(*) OVER ()::bigint AS total_count
   FROM filtered_chats fc
   ORDER BY
-    CASE WHEN $15 = 'last_message_timestamp' AND $16 = 'desc' THEN fc.last_message_timestamp END DESC NULLS LAST,
-    CASE WHEN $15 = 'last_message_timestamp' AND $16 = 'asc' THEN fc.last_message_timestamp END ASC NULLS LAST,
+    -- Recency folds in chats.updated_at (bumped at ARRIVAL by hook message
+    -- writes) because hook rows persist at their occurred_at: a chat whose
+    -- only new traffic is spool-replayed backlog carries a backdated
+    -- MAX(created_at) and would otherwise sink below genuinely stale chats.
+    -- The displayed last_message_timestamp stays the pure message time.
+    CASE WHEN $15 = 'last_message_timestamp' AND $16 = 'desc' THEN GREATEST(fc.last_message_timestamp, fc.updated_at) END DESC NULLS LAST,
+    CASE WHEN $15 = 'last_message_timestamp' AND $16 = 'asc' THEN GREATEST(fc.last_message_timestamp, fc.updated_at) END ASC NULLS LAST,
     CASE WHEN $15 = 'num_messages' AND $16 = 'desc' THEN fc.num_messages END DESC NULLS LAST,
     CASE WHEN $15 = 'num_messages' AND $16 = 'asc' THEN fc.num_messages END ASC NULLS LAST,
-    fc.last_message_timestamp DESC,
+    GREATEST(fc.last_message_timestamp, fc.updated_at) DESC,
     fc.id DESC
   LIMIT $18
   OFFSET $17

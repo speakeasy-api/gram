@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -132,7 +131,7 @@ func (s *ServiceCore) RecordCompactedGeneration(ctx context.Context, projectID, 
 		empty := pgtype.Text{String: "", Valid: false}
 		params = append(params, chatrepo.CreateChatMessageParams{
 			Replayed:         false,
-			CreatedAt:        pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: 0},
+			CreatedAt:        conv.PtrToPGTimestamptz(nil),
 			ChatID:           threadRow.ChatID,
 			Role:             m.Role,
 			ProjectID:        chatRow.ProjectID,

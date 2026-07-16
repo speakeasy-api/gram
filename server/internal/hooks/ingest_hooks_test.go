@@ -1330,18 +1330,35 @@ func TestIngest_ReplayedMessageSortsByOccurredAt(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "allow", res.Decision)
 
+	// Nor arbitrarily far into the past: occurred_at is client-controlled,
+	// and without a floor one hostile/broken clock would pin a row to the
+	// head of the transcript forever. The floor mirrors the client spool's
+	// 14-day expiry — no legitimate replay is older.
+	ancientPrompt := "from the distant past"
+	ancientAt := time.Now().UTC().Add(-30 * 24 * time.Hour).Format(time.RFC3339Nano)
+	ancientPayload := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
+	ancientPayload.Data = &gen.HookIngestData{
+		Prompt: &gen.HookPromptData{Text: &ancientPrompt},
+	}
+	ancientPayload.Event.OccurredAt = &ancientAt
+	res, err = ti.service.Ingest(ctx, ancientPayload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", res.Decision)
+
 	msgs, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
 		ChatID:    chatID,
 		ProjectID: *authCtx.ProjectID,
 	})
 	require.NoError(t, err)
-	require.Len(t, msgs, 3)
-	require.Equal(t, backlogPrompt, msgs[0].Content, "the older backlog message must sort first despite arriving second")
-	require.Equal(t, livePrompt, msgs[1].Content)
-	require.Equal(t, skewedPrompt, msgs[2].Content)
+	require.Len(t, msgs, 4)
+	require.Equal(t, ancientPrompt, msgs[0].Content, "a floored past event still sorts oldest")
+	require.Equal(t, backlogPrompt, msgs[1].Content, "the older backlog message must sort before the live event despite arriving second")
+	require.Equal(t, livePrompt, msgs[2].Content)
+	require.Equal(t, skewedPrompt, msgs[3].Content)
 
 	wantBacklogAt, err := time.Parse(time.RFC3339Nano, backlogAt)
 	require.NoError(t, err)
-	require.WithinDuration(t, wantBacklogAt, msgs[0].CreatedAt.Time, time.Second, "created_at must carry the event's occurred_at")
-	require.LessOrEqual(t, msgs[2].CreatedAt.Time.Unix(), time.Now().Add(time.Minute).Unix(), "a future occurred_at must be clamped to arrival time")
+	require.WithinDuration(t, wantBacklogAt, msgs[1].CreatedAt.Time, time.Second, "created_at must carry the event's occurred_at")
+	require.WithinDuration(t, time.Now(), msgs[3].CreatedAt.Time, 30*time.Second, "a future occurred_at must be clamped to arrival time")
+	require.WithinDuration(t, time.Now().Add(-14*24*time.Hour), msgs[0].CreatedAt.Time, 30*time.Second, "a far-past occurred_at must be floored to the 14-day backdate bound")
 }

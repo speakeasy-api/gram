@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -262,6 +261,19 @@ func (s *Service) insertMessageWithFallbackUpsert(
 	// Try to insert the message (Write handles notification on success).
 	_, err = s.writer.Write(ctx, projectID, []chatRepo.CreateChatMessageParams{msgParams})
 	if err == nil {
+		// Mark ARRIVAL-time activity on the chat: message rows persist at the
+		// event's occurred_at (backdated for spool replays), so updated_at is
+		// the only arrival-ordered signal chat listings can sort recency by.
+		// Best-effort — a missed bump only delays list placement.
+		if touchErr := s.repo.UpdateClaudeCodeSessionTimestamp(ctx, repo.UpdateClaudeCodeSessionTimestampParams{
+			ID:        chatID,
+			ProjectID: projectID,
+		}); touchErr != nil {
+			s.logger.WarnContext(ctx, "failed to bump chat activity timestamp",
+				attr.SlogError(touchErr),
+				attr.SlogProjectID(projectID.String()),
+			)
+		}
 		return nil
 	}
 
@@ -334,7 +346,7 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 
 	msgParams := chatRepo.CreateChatMessageParams{
 		Replayed:         false,
-		CreatedAt:        pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: 0},
+		CreatedAt:        conv.PtrToPGTimestamptz(nil),
 		ChatID:           chatID,
 		ProjectID:        projectID,
 		Role:             role,
@@ -432,7 +444,7 @@ func (s *Service) writeToolCallRequestToPG(ctx context.Context, payload *gen.Cla
 
 	msgParams := chatRepo.CreateChatMessageParams{
 		Replayed:         false,
-		CreatedAt:        pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: 0},
+		CreatedAt:        conv.PtrToPGTimestamptz(nil),
 		ChatID:           chatID,
 		ProjectID:        projectID,
 		Role:             "assistant",
@@ -485,7 +497,7 @@ func (s *Service) writeToolCallResultToPG(ctx context.Context, payload *gen.Clau
 
 	msgParams := chatRepo.CreateChatMessageParams{
 		Replayed:         false,
-		CreatedAt:        pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: 0},
+		CreatedAt:        conv.PtrToPGTimestamptz(nil),
 		ChatID:           chatID,
 		ProjectID:        projectID,
 		Role:             "tool",

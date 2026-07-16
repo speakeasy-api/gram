@@ -536,11 +536,16 @@ limited_chats AS (
     COUNT(*) OVER ()::bigint AS total_count
   FROM filtered_chats fc
   ORDER BY
-    CASE WHEN @sort_by = 'last_message_timestamp' AND @sort_order = 'desc' THEN fc.last_message_timestamp END DESC NULLS LAST,
-    CASE WHEN @sort_by = 'last_message_timestamp' AND @sort_order = 'asc' THEN fc.last_message_timestamp END ASC NULLS LAST,
+    -- Recency folds in chats.updated_at (bumped at ARRIVAL by hook message
+    -- writes) because hook rows persist at their occurred_at: a chat whose
+    -- only new traffic is spool-replayed backlog carries a backdated
+    -- MAX(created_at) and would otherwise sink below genuinely stale chats.
+    -- The displayed last_message_timestamp stays the pure message time.
+    CASE WHEN @sort_by = 'last_message_timestamp' AND @sort_order = 'desc' THEN GREATEST(fc.last_message_timestamp, fc.updated_at) END DESC NULLS LAST,
+    CASE WHEN @sort_by = 'last_message_timestamp' AND @sort_order = 'asc' THEN GREATEST(fc.last_message_timestamp, fc.updated_at) END ASC NULLS LAST,
     CASE WHEN @sort_by = 'num_messages' AND @sort_order = 'desc' THEN fc.num_messages END DESC NULLS LAST,
     CASE WHEN @sort_by = 'num_messages' AND @sort_order = 'asc' THEN fc.num_messages END ASC NULLS LAST,
-    fc.last_message_timestamp DESC,
+    GREATEST(fc.last_message_timestamp, fc.updated_at) DESC,
     fc.id DESC
   LIMIT @page_limit
   OFFSET @page_offset
@@ -771,7 +776,21 @@ WHERE cm.chat_id = @chat_id
     sqlc.narg('before_seq')::bigint IS NULL
     OR (cm.created_at, cm.seq) < (
       SELECT a.created_at, a.seq FROM chat_messages a
-      WHERE a.chat_id = @chat_id AND a.seq = sqlc.narg('before_seq')::bigint
+      WHERE a.chat_id = @chat_id
+        AND (a.project_id IS NULL OR a.project_id = @project_id::uuid)
+        AND a.seq = sqlc.narg('before_seq')::bigint
+    )
+    -- A cursor whose anchor row no longer resolves must not dead-end the
+    -- page (a tuple comparison against an empty subquery is NULL): fall
+    -- back to the plain seq comparison the pre-tuple cursor used.
+    OR (
+      NOT EXISTS (
+        SELECT 1 FROM chat_messages a
+        WHERE a.chat_id = @chat_id
+          AND (a.project_id IS NULL OR a.project_id = @project_id::uuid)
+          AND a.seq = sqlc.narg('before_seq')::bigint
+      )
+      AND cm.seq < sqlc.narg('before_seq')::bigint
     )
   )
 ORDER BY cm.created_at DESC, cm.seq DESC
@@ -791,7 +810,19 @@ WHERE cm.chat_id = @chat_id
     sqlc.narg('after_seq')::bigint IS NULL
     OR (cm.created_at, cm.seq) > (
       SELECT a.created_at, a.seq FROM chat_messages a
-      WHERE a.chat_id = @chat_id AND a.seq = sqlc.narg('after_seq')::bigint
+      WHERE a.chat_id = @chat_id
+        AND (a.project_id IS NULL OR a.project_id = @project_id::uuid)
+        AND a.seq = sqlc.narg('after_seq')::bigint
+    )
+    -- Same missing-anchor fallback as ListChatMessagesBeforePage.
+    OR (
+      NOT EXISTS (
+        SELECT 1 FROM chat_messages a
+        WHERE a.chat_id = @chat_id
+          AND (a.project_id IS NULL OR a.project_id = @project_id::uuid)
+          AND a.seq = sqlc.narg('after_seq')::bigint
+      )
+      AND cm.seq > sqlc.narg('after_seq')::bigint
     )
   )
 ORDER BY cm.created_at ASC, cm.seq ASC
@@ -1051,7 +1082,8 @@ WHERE id IN (
     JOIN chat_messages cm ON crm.message_id = cm.id
     WHERE cr.chat_id = @chat_id
       AND (cm.created_at, cm.seq) > (
-        SELECT created_at, seq FROM chat_messages WHERE chat_messages.id = @after_message_id
+        SELECT created_at, seq FROM chat_messages
+        WHERE chat_messages.id = @after_message_id AND chat_messages.chat_id = @chat_id
       )
   );
 

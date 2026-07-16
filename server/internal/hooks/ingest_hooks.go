@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -773,14 +772,11 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 	if sessionID == "" || authCtx.ProjectID == nil {
 		return nil
 	}
-	// The row's created_at is the event's original occurred_at (clamped so a
-	// skewed device clock can't sort a message into the future): spool-replayed
-	// backlog must interleave with live rows in occurrence order, and
-	// transcript readers order by (created_at, seq).
+	// The row's created_at is the event's original occurred_at (clamped inside
+	// canonicalEventTime): spool-replayed backlog must interleave with live
+	// rows in occurrence order, and transcript readers order by
+	// (created_at, seq).
 	occurredAt := canonicalEventTime(payload)
-	if now := time.Now(); occurredAt.After(now) {
-		occurredAt = now
-	}
 	baseMsg := func(role, content string) chatRepo.CreateChatMessageParams {
 		return chatRepo.CreateChatMessageParams{
 			ChatID:           sessionIDToUUID(sessionID),
@@ -810,7 +806,7 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 			// carried onto the row so the offline risk scanner's findings
 			// (and any session view) can distinguish replayed traffic.
 			Replayed:  conv.PtrValOr(payload.Replayed, false),
-			CreatedAt: pgtype.Timestamptz{Time: occurredAt, Valid: true, InfinityModifier: 0},
+			CreatedAt: conv.ToPGTimestamptz(occurredAt),
 		}
 	}
 
@@ -925,15 +921,34 @@ func canonicalDenyResult(message string) *gen.IngestHookResult {
 	}
 }
 
+// maxEventBackdate bounds how far into the past a sender-supplied
+// occurred_at may reach. It mirrors the client spool's 14-day expiry: no
+// legitimate replay is older, so anything beyond it is a skewed or hostile
+// clock that would otherwise sort a row ahead of the entire transcript
+// forever (occurred_at is fully client-controlled).
+const maxEventBackdate = 14 * 24 * time.Hour
+
+// canonicalEventTime returns the event's occurred_at clamped to
+// [now-maxEventBackdate, now]. The clamp lives here — not at individual
+// persistence sites — so every consumer (chat rows, ClickHouse telemetry,
+// enforcement evaluation) agrees on one time for one event; a skewed device
+// clock must never make the stores diverge.
 func canonicalEventTime(payload *gen.IngestPayload) time.Time {
+	now := time.Now()
 	if payload != nil && payload.Event != nil {
 		if raw := strings.TrimSpace(conv.PtrValOr(payload.Event.OccurredAt, "")); raw != "" {
 			if t, err := time.Parse(time.RFC3339Nano, raw); err == nil {
+				if t.After(now) {
+					return now
+				}
+				if floor := now.Add(-maxEventBackdate); t.Before(floor) {
+					return floor
+				}
 				return t
 			}
 		}
 	}
-	return time.Now()
+	return now
 }
 
 func canonicalSessionID(payload *gen.IngestPayload) string {

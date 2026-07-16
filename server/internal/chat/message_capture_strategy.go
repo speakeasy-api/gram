@@ -6,11 +6,9 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"time"
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 
@@ -372,7 +370,7 @@ func buildAssistantRows(
 	}
 	base := repo.CreateChatMessageParams{
 		Replayed:         false,
-		CreatedAt:        pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: 0},
+		CreatedAt:        conv.PtrToPGTimestamptz(nil),
 		ChatID:           request.ChatID,
 		Role:             "assistant",
 		ProjectID:        projectID,

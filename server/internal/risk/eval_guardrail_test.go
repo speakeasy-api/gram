@@ -5,7 +5,6 @@ import (
 	"errors"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -295,7 +294,7 @@ func insertAssistantToolCallMessage(t *testing.T, ti *testInstance, projectID, c
 	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, nil)
 	t.Cleanup(func() { _ = shutdown(t.Context()) })
 	_, err = writer.Write(t.Context(), projectID, []chatrepo.CreateChatMessageParams{{
-		CreatedAt:        pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: 0},
+		CreatedAt:        pgtype.Timestamptz{},
 		ChatID:           chatID,
 		Role:             "assistant",
 		ProjectID:        projectID,
