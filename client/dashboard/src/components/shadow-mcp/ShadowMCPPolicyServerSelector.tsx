@@ -9,7 +9,9 @@ import {
   type Column,
   Dialog,
   Icon,
+  type SortDescriptor,
   Table,
+  sortTableData,
 } from "@speakeasy-api/moonshine";
 import { useCallback, useDeferredValue, useMemo, useState } from "react";
 import {
@@ -55,22 +57,24 @@ function serverLabel(server: ShadowMCPInventoryServer): string {
 function ServerCell({ server }: { server: ShadowMCPInventoryServer }) {
   return (
     <div className="min-w-0 space-y-1">
-      <Type variant="small" className="truncate font-medium">
-        {serverLabel(server)}
-      </Type>
+      <div className="flex items-center gap-2">
+        <Type variant="small" className="truncate font-medium">
+          {serverLabel(server)}
+        </Type>
+        {server.requestCount > 0 && (
+          <Badge variant="warning" size="sm" background={false}>
+            <Badge.LeftIcon>
+              <Icon name="shield-alert" />
+            </Badge.LeftIcon>
+            <Badge.Text>
+              {server.requestCount} Access Request
+              {server.requestCount > 1 && "s"}
+            </Badge.Text>
+          </Badge>
+        )}
+      </div>
       <Type muted small className="truncate text-xs">
         {server.canonicalServerUrl}
-      </Type>
-    </div>
-  );
-}
-
-function ActivityCell({ server }: { server: ShadowMCPInventoryServer }) {
-  return (
-    <div className="space-y-1">
-      <Type variant="small">{formatShortDate(server.lastSeen)}</Type>
-      <Type muted small className="text-xs">
-        Last called {formatShortDate(server.lastCalled)}
       </Type>
     </div>
   );
@@ -85,14 +89,11 @@ function UsageCell({ server }: { server: ShadowMCPInventoryServer }) {
       <Type muted small className="text-xs">
         {countLabel(server.userCount, "user", "users")}
       </Type>
-      <Type muted small className="text-xs">
-        {countLabel(server.requestCount, "request", "requests")}
-      </Type>
     </div>
   );
 }
 
-function AccessCell({ server }: { server: ShadowMCPInventoryServer }) {
+function StatusCell({ server }: { server: ShadowMCPInventoryServer }) {
   const status = inventoryAccessStatus(server);
 
   return (
@@ -190,6 +191,10 @@ export function ShadowMCPPolicyServerSelector({
   );
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
+  const [sort, setSort] = useState<SortDescriptor | null>({
+    id: "lastCalled",
+    direction: "desc",
+  });
 
   const appliedServers = useMemo(
     () =>
@@ -243,30 +248,50 @@ export function ShadowMCPPolicyServerSelector({
       {
         key: "server",
         header: "Server",
-        width: "1.5fr",
+        sortable: true,
+        sortValue: (server) =>
+          (server.serverName || server.urlHost || server.canonicalServerUrl)
+            .trim()
+            .toLowerCase(),
+        width: "2fr",
         render: (server) => <ServerCell server={server} />,
       },
       {
-        key: "activity",
-        header: "Last seen",
-        width: "1fr",
-        render: (server) => <ActivityCell server={server} />,
+        key: "status",
+        header: "Status",
+        sortable: true,
+        sortValue: (server) =>
+          shadowMCPInventoryStatusLabel(inventoryAccessStatus(server)),
+        width: "0.9fr",
+        render: (server) => <StatusCell server={server} />,
+      },
+      {
+        key: "lastCalled",
+        header: "Last called",
+        sortable: true,
+        sortValue: (server) => server.lastCalled?.getTime() ?? 0,
+        width: "0.7fr",
+        render: (server) => (
+          <Type variant="small">{formatShortDate(server.lastCalled)}</Type>
+        ),
       },
       {
         key: "usage",
         header: "Usage",
-        width: "0.7fr",
+        sortable: true,
+        sortValue: (server) => server.observedUseCount,
+        width: "0.5fr",
         render: (server) => <UsageCell server={server} />,
-      },
-      {
-        key: "access",
-        header: "Access",
-        width: "0.6fr",
-        render: (server) => <AccessCell server={server} />,
       },
     ],
     [draftURLs, toggleURL],
   );
+
+  const sortedServers = sortTableData(
+    filteredServers,
+    columns,
+    sort,
+  ) as ShadowMCPInventoryServer[];
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (nextOpen) {
@@ -370,10 +395,14 @@ export function ShadowMCPPolicyServerSelector({
           />
 
           <Table columns={columns} className="min-h-0 overflow-hidden">
-            <Table.Header columns={columns} />
+            <Table.Header
+              columns={columns}
+              sort={sort}
+              onSortChange={setSort}
+            />
             <Table.Body
               columns={columns}
-              data={filteredServers}
+              data={sortedServers}
               rowKey={(server) => server.canonicalServerUrl}
               onRowClick={(server) => toggleURL(server.canonicalServerUrl)}
               noResultsMessage={

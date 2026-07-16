@@ -91,6 +91,18 @@ function expectCheckboxState(element: HTMLElement, checked: boolean) {
   );
 }
 
+function rowLabels(dialog: HTMLElement): string[] {
+  return within(dialog)
+    .getAllByRole("row")
+    .slice(1)
+    .map((row) =>
+      within(row)
+        .getByRole("checkbox")
+        .getAttribute("aria-label")!
+        .replace("Select ", ""),
+    );
+}
+
 describe("ShadowMCPPolicyServerSelector", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -189,40 +201,79 @@ describe("ShadowMCPPolicyServerSelector", () => {
     expect(within(section).queryByText("Allowed", { exact: true })).toBeNull();
   });
 
-  it("renders every inventory field including optional and zero values", () => {
+  it("matches inventory columns and request badge presentation", () => {
     render(<ControlledSelector />);
 
     const dialog = openSelector();
     expect(
-      within(dialog).getByText(
-        "Choose which Shadow MCP servers remain available when this policy blocks access.",
-      ),
-    ).toBeTruthy();
+      within(dialog)
+        .getAllByRole("columnheader")
+        .map((header) => header.textContent?.replace(/\s+/g, " ").trim()),
+    ).toEqual(["Selected", "Server", "Status", "Last called", "Usage"]);
+    for (const header of ["Server", "Status", "Last called", "Usage"]) {
+      expect(
+        within(dialog).getByRole("button", { name: new RegExp(header) }),
+      ).toBeTruthy();
+    }
+    expect(within(dialog).queryByText("Last seen", { exact: true })).toBeNull();
+    expect(within(dialog).queryByText("Access", { exact: true })).toBeNull();
+
     const githubRow = within(dialog).getByRole("row", { name: /GitHub MCP/ });
-    expect(
-      within(githubRow).getByText(githubServer.canonicalServerUrl),
-    ).toBeTruthy();
-    expect(
-      within(githubRow).getByText(formatShortDate(githubServer.lastSeen)),
-    ).toBeTruthy();
-    expect(
-      within(githubRow).getByText(
-        `Last called ${formatShortDate(githubServer.lastCalled)}`,
-      ),
-    ).toBeTruthy();
+    expect(within(githubRow).getByText("2 Access Requests")).toBeTruthy();
     expect(within(githubRow).getByText("8 calls")).toBeTruthy();
     expect(within(githubRow).getByText("3 users")).toBeTruthy();
-    expect(within(githubRow).getByText("2 requests")).toBeTruthy();
+    expect(within(githubRow).queryByText("2 requests")).toBeNull();
     expect(within(githubRow).getByText("Allowed")).toBeTruthy();
+    expect(
+      within(githubRow).getByText(formatShortDate(githubServer.lastCalled)),
+    ).toBeTruthy();
 
     const linearRow = within(dialog).getByRole("row", {
       name: /linear\.example\.com/,
     });
-    expect(within(linearRow).getByText("Last called Never")).toBeTruthy();
-    expect(within(linearRow).getByText("0 calls")).toBeTruthy();
-    expect(within(linearRow).getByText("0 users")).toBeTruthy();
-    expect(within(linearRow).getByText("0 requests")).toBeTruthy();
-    expect(within(linearRow).getByText("Observed")).toBeTruthy();
+    expect(within(linearRow).queryByText(/Access Request/)).toBeNull();
+    expect(within(linearRow).getByText("Never")).toBeTruthy();
+  });
+
+  it("sorts the same columns as inventory", () => {
+    const servers = [
+      inventoryServer("https://zulu.example.com/mcp", {
+        access: "blocked",
+        lastCalled: new Date("2026-01-03T10:00:00Z"),
+        observedUseCount: 30,
+        serverName: "Zulu MCP",
+      }),
+      inventoryServer("https://alpha.example.com/mcp", {
+        access: "allowed",
+        lastCalled: new Date("2026-01-01T10:00:00Z"),
+        observedUseCount: 10,
+        serverName: "Alpha MCP",
+      }),
+      inventoryServer("https://middle.example.com/mcp", {
+        access: "none",
+        lastCalled: new Date("2026-01-02T10:00:00Z"),
+        observedUseCount: 20,
+        serverName: "Middle MCP",
+      }),
+    ];
+    render(<ControlledSelector servers={servers} />);
+    const dialog = openSelector();
+
+    expect(rowLabels(dialog)).toEqual(["Zulu MCP", "Middle MCP", "Alpha MCP"]);
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /Server/ }));
+    expect(rowLabels(dialog)).toEqual(["Alpha MCP", "Middle MCP", "Zulu MCP"]);
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /Status/ }));
+    expect(rowLabels(dialog)).toEqual(["Alpha MCP", "Zulu MCP", "Middle MCP"]);
+
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: /Last called/ }),
+    );
+    expect(rowLabels(dialog)).toEqual(["Alpha MCP", "Middle MCP", "Zulu MCP"]);
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /Usage/ }));
+    expect(rowLabels(dialog)).toEqual(["Alpha MCP", "Middle MCP", "Zulu MCP"]);
   });
 
   it("searches names and canonical URLs case-insensitively", async () => {
