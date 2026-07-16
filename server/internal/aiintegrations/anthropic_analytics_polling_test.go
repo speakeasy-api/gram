@@ -25,7 +25,6 @@ func TestBuildClaudeChatMetricRowsEmitsUsageAndCostRows(t *testing.T) {
 	t.Parallel()
 
 	cfg := testAnalyticsConfig()
-	cutoff := time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC)
 
 	usageRows := []anthropicapi.UserUsageRow{
 		{
@@ -41,24 +40,10 @@ func TestBuildClaudeChatMetricRowsEmitsUsageAndCostRows(t *testing.T) {
 			TotalTokens:          4850,
 			Requests:             2,
 		},
-		// Bucket at the cutoff: incomplete, must be dropped.
-		{
-			Actor:                anthropicapi.AnalyticsActor{UserID: "user_1", Email: new("dev@example.com"), Name: new("Dev"), Deleted: false},
-			StartingAt:           "2026-07-16T12:00:00Z",
-			EndingAt:             "2026-07-16T12:01:00Z",
-			Model:                "claude-opus-4-8",
-			Product:              "",
-			UncachedInputTokens:  999,
-			OutputTokens:         999,
-			CacheReadInputTokens: 0,
-			CacheCreation:        anthropicapi.AnalyticsCacheCreation{Ephemeral1hInputTokens: 0, Ephemeral5mInputTokens: 0},
-			TotalTokens:          1998,
-			Requests:             1,
-		},
 	}
 	costRows := []anthropicapi.UserCostRow{
-		// Spend for the same bucket as the first usage row: emitted as its
-		// own cost row, not merged.
+		// Spend for the same bucket as the usage row: emitted as its own
+		// cost row, not merged.
 		{
 			Actor:      anthropicapi.AnalyticsActor{UserID: "user_1", Email: new("dev@example.com"), Name: new("Dev"), Deleted: false},
 			StartingAt: "2026-07-16T10:00:00Z",
@@ -84,9 +69,9 @@ func TestBuildClaudeChatMetricRowsEmitsUsageAndCostRows(t *testing.T) {
 		},
 	}
 
-	events, err := buildClaudeChatMetricRows(cfg, usageRows, costRows, cutoff)
+	events, err := buildClaudeChatMetricRows(cfg, usageRows, costRows)
 	require.NoError(t, err)
-	require.Len(t, events, 3, "one usage row survives the cutoff plus two cost rows")
+	require.Len(t, events, 3, "one usage row plus two cost rows")
 
 	usage := events[0]
 	require.Equal(t, claudeChatUsageMetricsURN, usage.ToolInfo.URN)
@@ -98,12 +83,14 @@ func TestBuildClaudeChatMetricRowsEmitsUsageAndCostRows(t *testing.T) {
 	require.Equal(t, int64(1500), usage.Attributes[attr.GenAIUsageCacheCreationInputTokensKey])
 	require.NotContains(t, usage.Attributes, attr.GenAIUsageCostKey, "usage rows carry no cost")
 	require.Equal(t, "claude-opus-4-8", usage.Attributes[attr.GenAIResponseModelKey])
+	require.Equal(t, generateClaudeChatUsageRowHash(usageRows[0]), usage.Attributes[attr.ClaudeChatEventHashKey])
 
 	cost := events[1]
 	require.Equal(t, claudeChatCostMetricsURN, cost.ToolInfo.URN)
 	require.Equal(t, time.Date(2026, 7, 16, 10, 0, 0, 0, time.UTC), cost.Timestamp)
 	require.InDelta(t, 1.50, cost.Attributes[attr.GenAIUsageCostKey], 0.0001)
 	require.NotContains(t, cost.Attributes, attr.GenAIUsageInputTokensKey, "cost rows carry no tokens")
+	require.Equal(t, generateClaudeChatCostRowHash(costRows[0]), cost.Attributes[attr.ClaudeChatEventHashKey])
 
 	deletedUserCost := events[2]
 	require.Equal(t, claudeChatCostMetricsURN, deletedUserCost.ToolInfo.URN)
@@ -111,6 +98,56 @@ func TestBuildClaudeChatMetricRowsEmitsUsageAndCostRows(t *testing.T) {
 	require.Empty(t, deletedUserCost.UserInfo.Email())
 	require.InDelta(t, 0.42, deletedUserCost.Attributes[attr.GenAIUsageCostKey], 0.0001)
 	require.Equal(t, "user_2", deletedUserCost.Attributes[attr.ExternalUserIDKey])
+
+	// Every row carries a distinct hash; re-building the same rows yields
+	// identical hashes so re-ingested windows can be deduped.
+	hashes := map[any]bool{}
+	for _, event := range events {
+		hashes[event.Attributes[attr.ClaudeChatEventHashKey]] = true
+	}
+	require.Len(t, hashes, 3, "hashes are distinct across rows")
+
+	rebuilt, err := buildClaudeChatMetricRows(cfg, usageRows, costRows)
+	require.NoError(t, err)
+	for i := range events {
+		require.Equal(t, events[i].Attributes[attr.ClaudeChatEventHashKey], rebuilt[i].Attributes[attr.ClaudeChatEventHashKey])
+	}
+}
+
+func TestClaudeChatRowHashesDistinguishKindAndContent(t *testing.T) {
+	t.Parallel()
+
+	usageRow := anthropicapi.UserUsageRow{
+		Actor:                anthropicapi.AnalyticsActor{UserID: "user_1", Email: nil, Name: nil, Deleted: false},
+		StartingAt:           "2026-07-16T10:00:00Z",
+		EndingAt:             "2026-07-16T10:01:00Z",
+		Model:                "claude-opus-4-8",
+		Product:              "chat",
+		UncachedInputTokens:  100,
+		OutputTokens:         50,
+		CacheReadInputTokens: 0,
+		CacheCreation:        anthropicapi.AnalyticsCacheCreation{Ephemeral1hInputTokens: 0, Ephemeral5mInputTokens: 0},
+		TotalTokens:          150,
+		Requests:             1,
+	}
+	costRow := anthropicapi.UserCostRow{
+		Actor:      anthropicapi.AnalyticsActor{UserID: "user_1", Email: nil, Name: nil, Deleted: false},
+		StartingAt: "2026-07-16T10:00:00Z",
+		EndingAt:   "2026-07-16T10:01:00Z",
+		Model:      "claude-opus-4-8",
+		Product:    "chat",
+		Amount:     "100.000000",
+		ListAmount: "100.000000",
+		Currency:   "USD",
+		Requests:   1,
+	}
+
+	// The same aggregation key hashes differently per report kind.
+	require.NotEqual(t, generateClaudeChatUsageRowHash(usageRow), generateClaudeChatCostRowHash(costRow))
+
+	changed := usageRow
+	changed.OutputTokens = 51
+	require.NotEqual(t, generateClaudeChatUsageRowHash(usageRow), generateClaudeChatUsageRowHash(changed))
 }
 
 func TestNewClaudeChatLogParamsStampsProvenance(t *testing.T) {
@@ -148,15 +185,20 @@ func TestMaybeSyncAnthropicAnalyticsFirstSyncAdvancesWatermark(t *testing.T) {
 
 	svc.MaybeSyncAnthropicAnalytics(ctx, cfg, endTime)
 
-	require.Equal(t, 1, api.usageRequests())
-	require.Equal(t, 1, api.costRequests())
+	// One finality probe plus one window fetch per endpoint.
+	require.Equal(t, 2, api.usageRequests())
+	require.Equal(t, 2, api.costRequests())
 
-	// The first request must cover exactly the 24h initial lookback.
-	first := api.usageQueries()[0]
-	require.Equal(t, endTime.Add(-24*time.Hour).Truncate(time.Minute).Format(time.RFC3339), first.Get("starting_at"))
-	require.Equal(t, endTime.Truncate(time.Minute).Format(time.RFC3339), first.Get("ending_at"))
-	require.Equal(t, "1m", first.Get("bucket_width"))
-	require.Equal(t, []string{"chat"}, first["products[]"])
+	// The probe is a minimal single-bucket request.
+	probe := api.usageQueries()[0]
+	require.Equal(t, "1", probe.Get("limit"))
+
+	// The window fetch must cover exactly the 24h initial lookback.
+	window := api.usageQueries()[1]
+	require.Equal(t, endTime.Add(-24*time.Hour).Truncate(time.Minute).Format(time.RFC3339), window.Get("starting_at"))
+	require.Equal(t, endTime.Truncate(time.Minute).Format(time.RFC3339), window.Get("ending_at"))
+	require.Equal(t, "1m", window.Get("bucket_width"))
+	require.Equal(t, []string{"chat"}, window["products[]"])
 
 	state, err := store.EnsureAnalyticsSync(ctx, cfg.ID)
 	require.NoError(t, err)
@@ -166,7 +208,7 @@ func TestMaybeSyncAnthropicAnalyticsFirstSyncAdvancesWatermark(t *testing.T) {
 
 	// Not due yet: a second invocation at the same time must not hit the API.
 	svc.MaybeSyncAnthropicAnalytics(ctx, cfg, endTime)
-	require.Equal(t, 1, api.usageRequests())
+	require.Equal(t, 2, api.usageRequests())
 }
 
 func TestMaybeSyncAnthropicAnalyticsChunksBacklogIntoWindows(t *testing.T) {
@@ -188,26 +230,28 @@ func TestMaybeSyncAnthropicAnalyticsChunksBacklogIntoWindows(t *testing.T) {
 
 	svc.MaybeSyncAnthropicAnalytics(ctx, cfg, endTime)
 
-	// 72h of backlog at a 24h-per-request cap is 3 usage windows.
-	require.Equal(t, 3, api.usageRequests())
+	// 72h of backlog at a 24h-per-request cap is 3 usage windows, plus the
+	// finality probe.
+	require.Equal(t, 4, api.usageRequests())
 	queries := api.usageQueries()
-	require.Equal(t, backlogStart.Format(time.RFC3339), queries[0].Get("starting_at"))
-	require.Equal(t, backlogStart.Add(24*time.Hour).Format(time.RFC3339), queries[0].Get("ending_at"))
-	require.Equal(t, backlogStart.Add(24*time.Hour).Format(time.RFC3339), queries[1].Get("starting_at"))
+	require.Equal(t, backlogStart.Format(time.RFC3339), queries[1].Get("starting_at"))
+	require.Equal(t, backlogStart.Add(24*time.Hour).Format(time.RFC3339), queries[1].Get("ending_at"))
+	require.Equal(t, backlogStart.Add(24*time.Hour).Format(time.RFC3339), queries[2].Get("starting_at"))
 
 	state, err := store.EnsureAnalyticsSync(ctx, cfg.ID)
 	require.NoError(t, err)
 	require.Equal(t, endTime.Truncate(time.Minute), state.WatermarkAt.UTC())
 }
 
-func TestMaybeSyncAnthropicAnalyticsHoldsBackUnrefreshedBuckets(t *testing.T) {
+func TestMaybeSyncAnthropicAnalyticsPullsOnlyUpToDataRefreshedAt(t *testing.T) {
 	t.Parallel()
 
 	ctx, conn, store, orgID := newStoreTestDB(t)
 
 	endTime := time.Now().UTC().Truncate(time.Second)
-	// The export watermark is 6 hours behind: only buckets before it may be
-	// ingested and the stored watermark must stop there.
+	// The export watermark is 6 hours behind: it caps the pull, so the window
+	// request must end at data_refreshed_at and the stored watermark must
+	// stop there.
 	refreshedAt := endTime.Add(-6 * time.Hour)
 	api := newFakeAnalyticsAPI(t, refreshedAt)
 	svc := newTestAnalyticsPollService(t, store, api.server.URL)
@@ -215,6 +259,11 @@ func TestMaybeSyncAnthropicAnalyticsHoldsBackUnrefreshedBuckets(t *testing.T) {
 	cfg := createAnthropicComplianceConfig(t, ctx, conn, store, orgID)
 
 	svc.MaybeSyncAnthropicAnalytics(ctx, cfg, endTime)
+
+	require.Equal(t, 2, api.usageRequests(), "one probe plus one window")
+	window := api.usageQueries()[1]
+	require.Equal(t, endTime.Add(-24*time.Hour).Truncate(time.Minute).Format(time.RFC3339), window.Get("starting_at"))
+	require.Equal(t, refreshedAt.Truncate(time.Minute).Format(time.RFC3339), window.Get("ending_at"))
 
 	state, err := store.EnsureAnalyticsSync(ctx, cfg.ID)
 	require.NoError(t, err)

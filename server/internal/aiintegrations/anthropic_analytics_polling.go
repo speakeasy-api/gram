@@ -2,10 +2,14 @@ package aiintegrations
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -128,22 +132,30 @@ func (s *AnalyticsPollService) MaybeSyncAnthropicAnalytics(ctx context.Context, 
 	}
 }
 
-// syncAnalytics ingests complete minute buckets from the config's watermark up
-// to the API's data-refresh watermark, one <=24h window at a time. The stored
-// watermark advances after each window's rows are written, so a mid-sync crash
-// re-fetches at most one window. Buckets at or beyond data_refreshed_at are
-// left for the next poll: the export only re-runs every ~4 hours, and
-// ingesting a bucket exactly once (when it is final) is what keeps billing
-// sums accurate without a reconciliation pass.
+// syncAnalytics ingests minute buckets from the config's watermark up to the
+// exports' data_refreshed_at, one <=24h window at a time. data_refreshed_at
+// is the finalization watermark: buckets at or beyond it are still being
+// exported and cannot be relied on, so it caps every pull rather than being
+// filtered client-side — everything fetched is ingested. (Anthropic finalizes
+// late-arriving events for up to 30 days; restatements behind the watermark
+// are deliberately not re-read for now.) The stored watermark advances after
+// each window's rows are written, so a mid-sync crash re-fetches at most one
+// window, and the claude_chat.event_hash on every row lets consumers dedupe
+// that overlap.
 func (s *AnalyticsPollService) syncAnalytics(ctx context.Context, cfg Config, state AnalyticsSyncState, endTime time.Time) error {
 	client := anthropicapi.New(s.guardianPolicy, anthropicapi.WithAPIKey(cfg.APIKey), anthropicapi.WithBaseURL(s.baseURL))
+
+	finalizedBefore, err := s.fetchFinalizedBefore(ctx, client, endTime)
+	if err != nil {
+		return err
+	}
 
 	windowStart := state.WatermarkAt.UTC()
 	if windowStart.IsZero() {
 		windowStart = endTime.Add(-anthropicAnalyticsInitialLookback)
 	}
 	windowStart = windowStart.Truncate(time.Minute)
-	desiredEnd := endTime.UTC().Truncate(time.Minute)
+	desiredEnd := minTime(endTime.UTC(), finalizedBefore).Truncate(time.Minute)
 
 	for windowStart.Before(desiredEnd) {
 		windowEnd := windowStart.Add(anthropicAnalyticsMaxWindow)
@@ -151,27 +163,16 @@ func (s *AnalyticsPollService) syncAnalytics(ctx context.Context, cfg Config, st
 			windowEnd = desiredEnd
 		}
 
-		usageRows, usageRefreshedAt, err := s.fetchUsageWindow(ctx, client, windowStart, windowEnd)
+		usageRows, err := s.fetchUsageWindow(ctx, client, windowStart, windowEnd)
 		if err != nil {
 			return fmt.Errorf("fetch anthropic user usage report: %w", err)
 		}
-		costRows, costRefreshedAt, err := s.fetchCostWindow(ctx, client, windowStart, windowEnd)
+		costRows, err := s.fetchCostWindow(ctx, client, windowStart, windowEnd)
 		if err != nil {
 			return fmt.Errorf("fetch anthropic user cost report: %w", err)
 		}
 
-		// Only buckets that ended before both exports' refresh watermarks are
-		// final enough to ingest. Everything at or beyond the cutoff is
-		// deferred to the next poll.
-		cutoff := minTime(usageRefreshedAt, costRefreshedAt).UTC().Truncate(time.Minute)
-		if cutoff.After(windowEnd) {
-			cutoff = windowEnd
-		}
-		if !cutoff.After(windowStart) {
-			return nil
-		}
-
-		events, err := buildClaudeChatMetricRows(cfg, usageRows, costRows, cutoff)
+		events, err := buildClaudeChatMetricRows(cfg, usageRows, costRows)
 		if err != nil {
 			return err
 		}
@@ -181,23 +182,55 @@ func (s *AnalyticsPollService) syncAnalytics(ctx context.Context, cfg Config, st
 			}
 		}
 
-		if err := s.store.AdvanceAnalyticsPollWatermark(ctx, cfg.ID, cutoff); err != nil {
+		if err := s.store.AdvanceAnalyticsPollWatermark(ctx, cfg.ID, windowEnd); err != nil {
 			return fmt.Errorf("advance anthropic analytics watermark: %w", err)
 		}
 
-		if cutoff.Before(windowEnd) {
-			// The refresh watermark truncated this window; later windows are
-			// entirely beyond it.
-			return nil
-		}
 		windowStart = windowEnd
 	}
 	return nil
 }
 
-func (s *AnalyticsPollService) fetchUsageWindow(ctx context.Context, client *anthropicapi.Client, start, end time.Time) ([]anthropicapi.UserUsageRow, time.Time, error) {
+// fetchFinalizedBefore probes both report endpoints with a minimal request
+// and returns the earlier of their data_refreshed_at watermarks. Both exports
+// must have finalized a bucket before it is ingested, otherwise a usage row
+// could land without its spend (or vice versa).
+func (s *AnalyticsPollService) fetchFinalizedBefore(ctx context.Context, client *anthropicapi.Client, endTime time.Time) (time.Time, error) {
+	probeEnd := endTime.UTC().Truncate(time.Minute)
+	params := anthropicapi.UserAnalyticsReportParams{
+		StartingAt:  probeEnd.Add(-time.Minute),
+		EndingAt:    probeEnd,
+		BucketWidth: anthropicAnalyticsBucketWidth,
+		Products:    []string{anthropicAnalyticsProductChat},
+		GroupBy:     nil,
+		Limit:       1,
+		Page:        "",
+	}
+
+	s.heartbeat(ctx, "analytics_finality_probe", 1)
+	usagePage, err := client.GetUserUsageReport(ctx, params)
+	if err != nil {
+		return time.Time{}, err //nolint:wrapcheck // Preserve HTTPError for the unauthorized classification upstream.
+	}
+	usageRefreshedAt, err := time.Parse(time.RFC3339, usagePage.DataRefreshedAt)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("parse usage report data_refreshed_at: %w", err)
+	}
+
+	costPage, err := client.GetUserCostReport(ctx, params)
+	if err != nil {
+		return time.Time{}, err //nolint:wrapcheck // Preserve HTTPError for the unauthorized classification upstream.
+	}
+	costRefreshedAt, err := time.Parse(time.RFC3339, costPage.DataRefreshedAt)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("parse cost report data_refreshed_at: %w", err)
+	}
+
+	return minTime(usageRefreshedAt, costRefreshedAt).UTC(), nil
+}
+
+func (s *AnalyticsPollService) fetchUsageWindow(ctx context.Context, client *anthropicapi.Client, start, end time.Time) ([]anthropicapi.UserUsageRow, error) {
 	var rows []anthropicapi.UserUsageRow
-	refreshedAt := time.Time{}
 	page := ""
 	for pageNum := 1; ; pageNum++ {
 		s.heartbeat(ctx, "analytics_usage", pageNum)
@@ -211,26 +244,19 @@ func (s *AnalyticsPollService) fetchUsageWindow(ctx context.Context, client *ant
 			Page:        page,
 		})
 		if err != nil {
-			return nil, time.Time{}, err //nolint:wrapcheck // Preserve HTTPError for the unauthorized classification upstream.
+			return nil, err //nolint:wrapcheck // Preserve HTTPError for the unauthorized classification upstream.
 		}
 		rows = append(rows, res.Data...)
 
-		pageRefreshedAt, err := time.Parse(time.RFC3339, res.DataRefreshedAt)
-		if err != nil {
-			return nil, time.Time{}, fmt.Errorf("parse usage report data_refreshed_at: %w", err)
-		}
-		refreshedAt = minTime(refreshedAt, pageRefreshedAt)
-
 		if !res.HasMore || res.NextPage == "" {
-			return rows, refreshedAt, nil
+			return rows, nil
 		}
 		page = res.NextPage
 	}
 }
 
-func (s *AnalyticsPollService) fetchCostWindow(ctx context.Context, client *anthropicapi.Client, start, end time.Time) ([]anthropicapi.UserCostRow, time.Time, error) {
+func (s *AnalyticsPollService) fetchCostWindow(ctx context.Context, client *anthropicapi.Client, start, end time.Time) ([]anthropicapi.UserCostRow, error) {
 	var rows []anthropicapi.UserCostRow
-	refreshedAt := time.Time{}
 	page := ""
 	for pageNum := 1; ; pageNum++ {
 		s.heartbeat(ctx, "analytics_cost", pageNum)
@@ -244,30 +270,24 @@ func (s *AnalyticsPollService) fetchCostWindow(ctx context.Context, client *anth
 			Page:        page,
 		})
 		if err != nil {
-			return nil, time.Time{}, err //nolint:wrapcheck // Preserve HTTPError for the unauthorized classification upstream.
+			return nil, err //nolint:wrapcheck // Preserve HTTPError for the unauthorized classification upstream.
 		}
 		rows = append(rows, res.Data...)
 
-		pageRefreshedAt, err := time.Parse(time.RFC3339, res.DataRefreshedAt)
-		if err != nil {
-			return nil, time.Time{}, fmt.Errorf("parse cost report data_refreshed_at: %w", err)
-		}
-		refreshedAt = minTime(refreshedAt, pageRefreshedAt)
-
 		if !res.HasMore || res.NextPage == "" {
-			return rows, refreshedAt, nil
+			return rows, nil
 		}
 		page = res.NextPage
 	}
 }
 
-// buildClaudeChatMetricRows converts complete buckets (starting before cutoff)
-// into telemetry log rows: one claude_chat:usage:metrics row per usage-report
-// row and one claude_chat:cost:metrics row per cost-report row. The two
-// reports are ingested independently — no join — so spend in a bucket without
-// token usage (e.g. web-search charges) is never dropped, and the summary MV
-// sums tokens and cost across both row kinds.
-func buildClaudeChatMetricRows(cfg Config, usageRows []anthropicapi.UserUsageRow, costRows []anthropicapi.UserCostRow, cutoff time.Time) ([]telemetry.LogParams, error) {
+// buildClaudeChatMetricRows converts report rows into telemetry log rows: one
+// claude_chat:usage:metrics row per usage-report row and one
+// claude_chat:cost:metrics row per cost-report row. The two reports are
+// ingested independently — no join — so spend in a bucket without token usage
+// (e.g. web-search charges) is never dropped, and the summary MV sums tokens
+// and cost across both row kinds.
+func buildClaudeChatMetricRows(cfg Config, usageRows []anthropicapi.UserUsageRow, costRows []anthropicapi.UserCostRow) ([]telemetry.LogParams, error) {
 	logParams := make([]telemetry.LogParams, 0, len(usageRows)+len(costRows))
 
 	for _, row := range usageRows {
@@ -275,14 +295,12 @@ func buildClaudeChatMetricRows(cfg Config, usageRows []anthropicapi.UserUsageRow
 		if err != nil {
 			return nil, fmt.Errorf("parse usage row starting_at: %w", err)
 		}
-		if !bucketStart.Before(cutoff) {
-			continue
-		}
 		params := newClaudeChatLogParams(cfg, claudeChatUsageMetricsURN, "Claude Chat usage metrics", bucketStart, row.Actor, row.Model)
 		params.Attributes[attr.GenAIUsageInputTokensKey] = row.UncachedInputTokens
 		params.Attributes[attr.GenAIUsageOutputTokensKey] = row.OutputTokens
 		params.Attributes[attr.GenAIUsageCacheReadInputTokensKey] = row.CacheReadInputTokens
 		params.Attributes[attr.GenAIUsageCacheCreationInputTokensKey] = row.CacheCreation.Ephemeral1hInputTokens + row.CacheCreation.Ephemeral5mInputTokens
+		params.Attributes[attr.ClaudeChatEventHashKey] = generateClaudeChatUsageRowHash(row)
 		logParams = append(logParams, params)
 	}
 
@@ -291,19 +309,60 @@ func buildClaudeChatMetricRows(cfg Config, usageRows []anthropicapi.UserUsageRow
 		if err != nil {
 			return nil, fmt.Errorf("parse cost row starting_at: %w", err)
 		}
-		if !bucketStart.UTC().Before(cutoff) {
-			continue
-		}
 		amountUSD, err := row.AmountUSD()
 		if err != nil {
 			return nil, fmt.Errorf("convert analytics cost row amount: %w", err)
 		}
 		params := newClaudeChatLogParams(cfg, claudeChatCostMetricsURN, "Claude Chat cost metrics", bucketStart.UTC(), row.Actor, row.Model)
 		params.Attributes[attr.GenAIUsageCostKey] = amountUSD
+		params.Attributes[attr.ClaudeChatEventHashKey] = generateClaudeChatCostRowHash(row)
 		logParams = append(logParams, params)
 	}
 
 	return logParams, nil
+}
+
+// Report rows carry no upstream identifier, but a finalized 1m bucket is
+// deterministic: re-fetching the same window yields byte-identical rows. The
+// hashes below fingerprint a row's aggregation key and values so consumers
+// needing exact-once sums can dedupe by (gram_project_id,
+// claude_chat.event_hash) — the same insurance cursor.event_hash provides —
+// covering the crash window between the ClickHouse write and the watermark
+// advance, where one window can be re-ingested.
+
+func generateClaudeChatUsageRowHash(row anthropicapi.UserUsageRow) string {
+	fields := []string{
+		"usage",
+		row.StartingAt,
+		row.Actor.UserID,
+		row.Model,
+		row.Product,
+		strconv.FormatInt(row.UncachedInputTokens, 10),
+		strconv.FormatInt(row.OutputTokens, 10),
+		strconv.FormatInt(row.CacheReadInputTokens, 10),
+		strconv.FormatInt(row.CacheCreation.Ephemeral1hInputTokens, 10),
+		strconv.FormatInt(row.CacheCreation.Ephemeral5mInputTokens, 10),
+		strconv.FormatInt(row.Requests, 10),
+	}
+
+	sum := sha256.Sum256([]byte(strings.Join(fields, "|")))
+	return hex.EncodeToString(sum[:])
+}
+
+func generateClaudeChatCostRowHash(row anthropicapi.UserCostRow) string {
+	fields := []string{
+		"cost",
+		row.StartingAt,
+		row.Actor.UserID,
+		row.Model,
+		row.Product,
+		row.Amount,
+		row.Currency,
+		strconv.FormatInt(row.Requests, 10),
+	}
+
+	sum := sha256.Sum256([]byte(strings.Join(fields, "|")))
+	return hex.EncodeToString(sum[:])
 }
 
 // newClaudeChatLogParams stamps the provenance shared by usage and cost rows:

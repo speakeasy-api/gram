@@ -406,6 +406,11 @@ const (
 	CursorUsageEventHashKey = attribute.Key("cursor.event_hash")
 	CursorChargedCentsKey   = attribute.Key("cursor.charged_cents")
 
+	// ClaudeChatEventHashKey fingerprints one Admin Analytics report row
+	// (aggregation key + values) so consumers needing exact-once sums can
+	// dedupe re-ingested windows by (gram_project_id, claude_chat.event_hash).
+	ClaudeChatEventHashKey = attribute.Key("claude_chat.event_hash")
+
 	// CodexUsageToolTokensKey stores Codex's tool_token_count verbatim for
 	// fidelity. It equals input + output, so it is intentionally not summed
 	// into any total downstream.
