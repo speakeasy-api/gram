@@ -316,7 +316,7 @@ CREATE TABLE IF NOT EXISTS skill_distributions (
   pinned_version_id uuid,
 
   audience TEXT[],
-  channel TEXT NOT NULL DEFAULT 'plugin',
+  channel TEXT NOT NULL,
   created_by_user_id TEXT NOT NULL,
   revoked_at timestamptz,
 
@@ -344,7 +344,7 @@ CREATE TABLE IF NOT EXISTS skill_sync_receipts (
 
   user_id TEXT NOT NULL,
   hostname TEXT NOT NULL,
-  provider TEXT NOT NULL DEFAULT 'claude',
+  provider TEXT NOT NULL,
   status TEXT NOT NULL,
   synced_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
@@ -359,6 +359,7 @@ CREATE TABLE IF NOT EXISTS skill_sync_receipts (
 
 CREATE INDEX IF NOT EXISTS skill_sync_receipts_skill_id_skill_version_id_idx ON skill_sync_receipts (skill_id, skill_version_id);
 CREATE INDEX IF NOT EXISTS skill_sync_receipts_project_id_skill_version_id_idx ON skill_sync_receipts (project_id, skill_version_id);
+CREATE INDEX IF NOT EXISTS skill_sync_receipts_project_id_user_id_hostname_provider_skill_id_idx ON skill_sync_receipts (project_id, user_id, hostname, provider, skill_id);
 
 CREATE TABLE IF NOT EXISTS packages (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
