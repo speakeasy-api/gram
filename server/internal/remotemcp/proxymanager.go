@@ -220,10 +220,6 @@ func (f *ProxyManager) BuildTarget(
 		UpstreamResponseRetryer: nil,
 		WWWAuthenticate:         wwwAuthenticate,
 		UserRequestInterceptors: []proxy.UserRequestInterceptor{
-			// Vendor policies attach unconditionally and no-op for upstreams
-			// they don't apply to — e.g. Figma only supports its cataloged MCP
-			// clients, and proxied traffic reaches Figma with Gram's transport
-			// rather than the client's.
 			interceptors.NewFigma(upstreamURL, logger),
 		},
 		InitializeRequestInterceptors: []proxy.InitializeRequestInterceptor{

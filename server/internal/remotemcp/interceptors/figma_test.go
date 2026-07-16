@@ -30,8 +30,7 @@ func TestFigma_AllowsCatalogClients(t *testing.T) {
 
 	policy := interceptors.NewFigma(figmaUpstreamURL, testenv.NewLogger(t))
 
-	// Real User-Agent strings observed on Gram-hosted MCP servers in
-	// production, one per catalog client family with a verified token.
+	// Real User-Agent strings observed in production.
 	observed := []string{
 		"Claude-User",
 		"claude-code/2.1.210 (cli)",
