@@ -1814,16 +1814,17 @@ limited_chats AS (
     COUNT(*) OVER ()::bigint AS total_count
   FROM filtered_chats fc
   ORDER BY
-    -- Recency folds in chats.updated_at (bumped at ARRIVAL by hook message
-    -- writes) because hook rows persist at their occurred_at: a chat whose
-    -- only new traffic is spool-replayed backlog carries a backdated
-    -- MAX(created_at) and would otherwise sink below genuinely stale chats.
-    -- The displayed last_message_timestamp stays the pure message time.
-    CASE WHEN $15 = 'last_message_timestamp' AND $16 = 'desc' THEN GREATEST(fc.last_message_timestamp, fc.updated_at) END DESC NULLS LAST,
-    CASE WHEN $15 = 'last_message_timestamp' AND $16 = 'asc' THEN GREATEST(fc.last_message_timestamp, fc.updated_at) END ASC NULLS LAST,
+    -- Recency is pure message time. Hook rows persist at their occurred_at,
+    -- so a chat whose only new traffic is spool-replayed backlog keeps its
+    -- occurred-time position rather than jumping to the top on arrival —
+    -- deliberate: listings are a timeline of when conversations happened,
+    -- and folding in updated_at would let title renames and pin toggles
+    -- reorder recency.
+    CASE WHEN $15 = 'last_message_timestamp' AND $16 = 'desc' THEN fc.last_message_timestamp END DESC NULLS LAST,
+    CASE WHEN $15 = 'last_message_timestamp' AND $16 = 'asc' THEN fc.last_message_timestamp END ASC NULLS LAST,
     CASE WHEN $15 = 'num_messages' AND $16 = 'desc' THEN fc.num_messages END DESC NULLS LAST,
     CASE WHEN $15 = 'num_messages' AND $16 = 'asc' THEN fc.num_messages END ASC NULLS LAST,
-    GREATEST(fc.last_message_timestamp, fc.updated_at) DESC,
+    fc.last_message_timestamp DESC,
     fc.id DESC
   LIMIT $18
   OFFSET $17
