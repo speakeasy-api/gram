@@ -4453,9 +4453,11 @@ async function seed() {
     const dbUser = process.env.DB_USER || "gram";
     const dbName = process.env.DB_NAME || "gram";
     const redisPassword = process.env.GRAM_REDIS_CACHE_PASSWORD || "xi9XILbY";
-    await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -c "INSERT INTO organization_features (organization_id, feature_name) VALUES ('${activeOrgID}', 'logs'), ('${activeOrgID}', 'tool_io_logs') ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;"`.quiet();
-    await $`docker compose exec gram-cache redis-cli -p 35299 -a ${redisPassword} DEL feature:${activeOrgID}:logs: feature:${activeOrgID}:tool_io_logs:`.quiet();
-    log.info("Enabled local logs and tool_io_logs features");
+    // session_capture gates Claude hook chat persistence; without it,
+    // hooks.ingest accepts events but silently skips writing chat_messages.
+    await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -c "INSERT INTO organization_features (organization_id, feature_name) VALUES ('${activeOrgID}', 'logs'), ('${activeOrgID}', 'tool_io_logs'), ('${activeOrgID}', 'session_capture') ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;"`.quiet();
+    await $`docker compose exec gram-cache redis-cli -p 35299 -a ${redisPassword} DEL feature:${activeOrgID}:logs: feature:${activeOrgID}:tool_io_logs: feature:${activeOrgID}:session_capture:`.quiet();
+    log.info("Enabled local logs, tool_io_logs, and session_capture features");
   } catch (e: unknown) {
     const err = e as { stderr?: string; message?: string };
     log.stepFailed(
