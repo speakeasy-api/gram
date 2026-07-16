@@ -228,7 +228,7 @@ export function AppSidebar({
             {isBudgetsEnabled && (
               <ScopeGatedNavItem
                 item={routes.budgets}
-                scope={scopeFor(routes.budgets)}
+                {...accessFor(routes.budgets)}
               />
             )}
             <ScopeGatedNavItem
