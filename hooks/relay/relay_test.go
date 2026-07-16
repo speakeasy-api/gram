@@ -43,6 +43,11 @@ func newFakeServer(t *testing.T, respond func(components.IngestRequestBody) (int
 	t.Helper()
 	fs := &fakeServer{Server: nil, mu: sync.Mutex{}, requests: nil, headers: nil, respond: respond, effects: nil}
 	fs.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/rpc/skills.sync" {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(components.SyncSkillsResult{Removals: []string{}, Updates: []components.SyncSkillUpdate{}})
+			return
+		}
 		body, _ := io.ReadAll(r.Body)
 		var p components.IngestRequestBody
 		_ = json.Unmarshal(body, &p)

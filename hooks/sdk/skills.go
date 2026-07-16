@@ -17,24 +17,24 @@ import (
 	"net/url"
 )
 
-// Hooks - Receives hook events from coding assistants for tool usage observability.
-type Hooks struct {
+// Skills - Manage project skills and their immutable versions. Methods are gated by the skills product feature and skill read or write scopes.
+type Skills struct {
 	rootSDK          *SpeakeasyHooks
 	sdkConfiguration config.SDKConfiguration
 	hooks            *hooks.Hooks
 }
 
-func newHooks(rootSDK *SpeakeasyHooks, sdkConfig config.SDKConfiguration, hooks *hooks.Hooks) *Hooks {
-	return &Hooks{
+func newSkills(rootSDK *SpeakeasyHooks, sdkConfig config.SDKConfiguration, hooks *hooks.Hooks) *Skills {
+	return &Skills{
 		rootSDK:          rootSDK,
 		sdkConfiguration: sdkConfig,
 		hooks:            hooks,
 	}
 }
 
-// Ingest - ingest hooks
-// Feature-first unified endpoint for hook events from supported coding assistants.
-func (s *Hooks) Ingest(ctx context.Context, request operations.IngestHookEventRequest, opts ...operations.Option) (*operations.IngestHookEventResponse, error) {
+// Sync - sync skills
+// Synchronize the authenticated user's locally managed Claude skills with active project distributions. A 401 or 403 response means the client must remove all Gram-managed skills. Transient failures retain the last successfully managed local state.
+func (s *Skills) Sync(ctx context.Context, request operations.SyncSkillsRequest, security *operations.SyncSkillsSecurity, opts ...operations.Option) (*operations.SyncSkillsResponse, error) {
 	o := operations.Options{}
 	supportedOptions := []string{
 		operations.SupportedOptionRetries,
@@ -53,7 +53,7 @@ func (s *Hooks) Ingest(ctx context.Context, request operations.IngestHookEventRe
 	} else {
 		baseURL = *o.ServerURL
 	}
-	opURL, err := url.JoinPath(baseURL, "/rpc/hooks.ingest")
+	opURL, err := url.JoinPath(baseURL, "/rpc/skills.sync")
 	if err != nil {
 		return nil, fmt.Errorf("error generating URL: %w", err)
 	}
@@ -63,9 +63,9 @@ func (s *Hooks) Ingest(ctx context.Context, request operations.IngestHookEventRe
 		SDKConfiguration: s.sdkConfiguration,
 		BaseURL:          baseURL,
 		Context:          ctx,
-		OperationID:      "ingestHookEvent",
+		OperationID:      "syncSkills",
 		OAuth2Scopes:     nil,
-		SecuritySource:   s.sdkConfiguration.Security,
+		SecuritySource:   utils.AsSecuritySource(security),
 	}
 	bodyReader, reqContentType, err := utils.SerializeRequestBody(ctx, request, false, false, "Body", "json", `request:"mediaType=application/json"`)
 	if err != nil {
@@ -95,7 +95,7 @@ func (s *Hooks) Ingest(ctx context.Context, request operations.IngestHookEventRe
 
 	utils.PopulateHeaders(ctx, req, request, nil)
 
-	if err := utils.PopulateSecurity(ctx, req, s.sdkConfiguration.Security); err != nil {
+	if err := utils.PopulateSecurity(ctx, req, utils.AsSecuritySource(security)); err != nil {
 		return nil, err
 	}
 
@@ -194,7 +194,7 @@ func (s *Hooks) Ingest(ctx context.Context, request operations.IngestHookEventRe
 		}
 	}
 
-	res := &operations.IngestHookEventResponse{
+	res := &operations.SyncSkillsResponse{
 		StatusCode:  httpRes.StatusCode,
 		ContentType: httpRes.Header.Get("Content-Type"),
 		RawResponse: httpRes,
@@ -209,12 +209,12 @@ func (s *Hooks) Ingest(ctx context.Context, request operations.IngestHookEventRe
 				return nil, err
 			}
 
-			var out components.IngestHookResult
+			var out components.SyncSkillsResult
 			if err := utils.UnmarshalJsonFromResponseBody(bytes.NewBuffer(rawBody), &out, ""); err != nil {
 				return nil, err
 			}
 
-			res.IngestHookResult = &out
+			res.SyncSkillsResult = &out
 		default:
 			rawBody, err := utils.ConsumeRawBody(httpRes)
 			if err != nil {

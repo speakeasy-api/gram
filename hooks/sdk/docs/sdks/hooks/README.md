@@ -20,8 +20,8 @@ package main
 
 import(
 	"context"
-	"github.com/speakeasy-api/gram/hooks/sdk"
 	"github.com/speakeasy-api/gram/hooks/sdk/models/components"
+	"github.com/speakeasy-api/gram/hooks/sdk"
 	"github.com/speakeasy-api/gram/hooks/sdk/models/operations"
 	"log"
 )
@@ -29,7 +29,12 @@ import(
 func main() {
     ctx := context.Background()
 
-    s := sdk.New()
+    s := sdk.New(
+        sdk.WithSecurity(components.Security{
+            ApikeyHeaderGramKey: "<YOUR_API_KEY_HERE>",
+            ProjectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
+        }),
+    )
 
     res, err := s.Hooks.Ingest(ctx, operations.IngestHookEventRequest{
         Body: components.IngestRequestBody{

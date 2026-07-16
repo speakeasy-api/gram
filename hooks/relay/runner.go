@@ -84,9 +84,7 @@ func NewRunner(cfg Config) *agenthooks.Runner {
 	runner.OnStop(r.onStop)
 	runner.OnSubagentStop(r.onStop)
 	runner.OnSessionStart(r.onSessionStart)
-	runner.OnSessionEnd(func(ctx context.Context, e *agenthooks.SessionEndEvent) error {
-		return r.onObserve(ctx, e)
-	})
+	runner.OnSessionEnd(r.onSessionEnd)
 	runner.OnNotification(func(ctx context.Context, e *agenthooks.NotificationEvent) error {
 		return r.onObserve(ctx, e)
 	})
@@ -394,8 +392,27 @@ func (r *Relay) onSessionStart(ctx context.Context, e *agenthooks.SessionStartEv
 	if r.cfg.BrowserLogin && strings.TrimSpace(os.Getenv("GRAM_HOOKS_API_KEY")) == "" && !cached {
 		r.login.tryInteractive(ctx)
 	}
+	additionalContext := ""
+	if e.Provider == agenthooks.ProviderClaudeCode {
+		syncCtx, cancel := context.WithTimeout(ctx, skillSyncBudget)
+		additionalContext = r.syncSkills(syncCtx, false)
+		cancel()
+	}
 	r.deliver(ctx, e)
-	return agenthooks.ContinueSession(), nil
+	decision := agenthooks.ContinueSession()
+	if additionalContext != "" {
+		decision = decision.WithContext(additionalContext)
+	}
+	return decision, nil
+}
+
+func (r *Relay) onSessionEnd(ctx context.Context, e *agenthooks.SessionEndEvent) error {
+	if e.Provider == agenthooks.ProviderClaudeCode {
+		syncCtx, cancel := context.WithTimeout(ctx, skillSyncBudget)
+		_ = r.syncSkills(syncCtx, true)
+		cancel()
+	}
+	return r.onObserve(ctx, e)
 }
 
 func (r *Relay) onObserve(ctx context.Context, typed any) error {
