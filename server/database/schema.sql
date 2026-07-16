@@ -354,7 +354,6 @@ CREATE TABLE IF NOT EXISTS skill_distributions (
   pinned_version_id uuid,
   plugin_id uuid,
 
-  audience TEXT[],
   channel TEXT NOT NULL,
   created_by_user_id TEXT NOT NULL,
   revoked_at timestamptz,
@@ -366,11 +365,9 @@ CREATE TABLE IF NOT EXISTS skill_distributions (
   CONSTRAINT skill_distributions_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
   CONSTRAINT skill_distributions_project_id_skill_id_fkey FOREIGN KEY (project_id, skill_id) REFERENCES skills (project_id, id) ON DELETE CASCADE,
   CONSTRAINT skill_distributions_skill_id_pinned_version_id_fkey FOREIGN KEY (skill_id, pinned_version_id) REFERENCES skill_versions (skill_id, id),
-  CONSTRAINT skill_distributions_project_id_plugin_id_fkey FOREIGN KEY (project_id, plugin_id) REFERENCES plugins (project_id, id),
-  CONSTRAINT skill_distributions_audience_check CHECK (audience IS NULL OR cardinality(audience) > 0),
-  -- Targeting is either direct (audience groups, or project-wide when both are
-  -- NULL) or delegated to the plugin's own assignment mechanism — never both.
-  CONSTRAINT skill_distributions_plugin_id_audience_check CHECK (plugin_id IS NULL OR audience IS NULL)
+  -- NULL plugin_id targets the whole project; otherwise targeting is delegated
+  -- to the plugin's own assignment mechanism.
+  CONSTRAINT skill_distributions_project_id_plugin_id_fkey FOREIGN KEY (project_id, plugin_id) REFERENCES plugins (project_id, id)
 );
 
 -- NULLS NOT DISTINCT so at most one active direct (plugin_id IS NULL)
@@ -405,7 +402,7 @@ CREATE TABLE IF NOT EXISTS skill_sync_receipts (
 
 CREATE INDEX IF NOT EXISTS skill_sync_receipts_skill_id_skill_version_id_idx ON skill_sync_receipts (skill_id, skill_version_id);
 CREATE INDEX IF NOT EXISTS skill_sync_receipts_project_id_skill_version_id_idx ON skill_sync_receipts (project_id, skill_version_id);
-CREATE INDEX IF NOT EXISTS skill_sync_receipts_project_id_user_id_hostname_provider_skill_id_idx ON skill_sync_receipts (project_id, user_id, hostname, provider, skill_id);
+CREATE INDEX IF NOT EXISTS skill_sync_receipts_project_id_user_id_hostname_provider_idx ON skill_sync_receipts (project_id, user_id, hostname, provider, skill_id);
 
 CREATE TABLE IF NOT EXISTS packages (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
