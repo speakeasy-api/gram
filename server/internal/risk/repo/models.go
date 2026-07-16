@@ -46,6 +46,7 @@ type RiskPolicy struct {
 	ID                   uuid.UUID
 	ProjectID            uuid.UUID
 	OrganizationID       string
+	IdempotencyKey       pgtype.Text
 	Enabled              bool
 	Name                 string
 	PolicyType           string
