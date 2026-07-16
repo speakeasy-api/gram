@@ -25,34 +25,10 @@ CREATE TABLE "spend_rules" (
   CONSTRAINT "spend_rules_warn_at_pct_check" CHECK ((warn_at_pct >= 1) AND (warn_at_pct <= 100)),
   CONSTRAINT "spend_rules_window_kind_check" CHECK (window_kind = ANY (ARRAY['daily'::text, 'weekly'::text, 'monthly'::text]))
 );
--- Create index "spend_rules_organization_id_idx" to table: "spend_rules"
-CREATE INDEX "spend_rules_organization_id_idx" ON "spend_rules" ("organization_id") WHERE (deleted IS FALSE);
+-- Create index "spend_rules_organization_id_id_key" to table: "spend_rules"
+CREATE UNIQUE INDEX "spend_rules_organization_id_id_key" ON "spend_rules" ("organization_id", "id");
 -- Create index "spend_rules_organization_id_slug_key" to table: "spend_rules"
-CREATE UNIQUE INDEX "spend_rules_organization_id_slug_key" ON "spend_rules" ("organization_id", "slug") WHERE (deleted IS FALSE);
--- Create "spend_rule_events" table
-CREATE TABLE "spend_rule_events" (
-  "id" uuid NOT NULL DEFAULT generate_uuidv7(),
-  "organization_id" text NOT NULL,
-  "spend_rule_id" uuid NOT NULL,
-  "rule_urn" text NOT NULL,
-  "event_type" text NOT NULL,
-  "user_id" text NULL,
-  "email" text NOT NULL,
-  "display_name" text NULL,
-  "spend_usd" double precision NOT NULL,
-  "limit_usd" double precision NOT NULL,
-  "window_start" timestamptz NOT NULL,
-  "window_end" timestamptz NOT NULL,
-  "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
-  PRIMARY KEY ("id"),
-  CONSTRAINT "spend_rule_events_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
-  CONSTRAINT "spend_rule_events_spend_rule_id_fkey" FOREIGN KEY ("spend_rule_id") REFERENCES "spend_rules" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
-  CONSTRAINT "spend_rule_events_event_type_check" CHECK (event_type = ANY (ARRAY['warning'::text, 'breach'::text]))
-);
--- Create index "spend_rule_events_dedupe_key" to table: "spend_rule_events"
-CREATE UNIQUE INDEX "spend_rule_events_dedupe_key" ON "spend_rule_events" ("spend_rule_id", "rule_urn", "event_type", "email", "window_start");
--- Create index "spend_rule_events_organization_id_created_at_idx" to table: "spend_rule_events"
-CREATE INDEX "spend_rule_events_organization_id_created_at_idx" ON "spend_rule_events" ("organization_id", "created_at" DESC);
+CREATE UNIQUE INDEX "spend_rules_organization_id_slug_key" ON "spend_rules" ("organization_id", "slug");
 -- Create "spend_rule_versions" table
 CREATE TABLE "spend_rule_versions" (
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -69,7 +45,37 @@ CREATE TABLE "spend_rule_versions" (
   PRIMARY KEY ("id"),
   CONSTRAINT "spend_rule_versions_spend_rule_id_version_key" UNIQUE ("spend_rule_id", "version"),
   CONSTRAINT "spend_rule_versions_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
-  CONSTRAINT "spend_rule_versions_spend_rule_id_fkey" FOREIGN KEY ("spend_rule_id") REFERENCES "spend_rules" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
+  CONSTRAINT "spend_rule_versions_organization_id_spend_rule_id_fkey" FOREIGN KEY ("organization_id", "spend_rule_id") REFERENCES "spend_rules" ("organization_id", "id") ON UPDATE NO ACTION ON DELETE CASCADE,
   CONSTRAINT "spend_rule_versions_action_check" CHECK (action = ANY (ARRAY['flag'::text, 'block'::text])),
+  CONSTRAINT "spend_rule_versions_limit_usd_check" CHECK (limit_usd > (0)::double precision),
+  CONSTRAINT "spend_rule_versions_warn_at_pct_check" CHECK ((warn_at_pct >= 1) AND (warn_at_pct <= 100)),
   CONSTRAINT "spend_rule_versions_window_kind_check" CHECK (window_kind = ANY (ARRAY['daily'::text, 'weekly'::text, 'monthly'::text]))
 );
+-- Create index "spend_rule_versions_organization_id_idx" to table: "spend_rule_versions"
+CREATE INDEX "spend_rule_versions_organization_id_idx" ON "spend_rule_versions" ("organization_id");
+-- Create "spend_rule_events" table
+CREATE TABLE "spend_rule_events" (
+  "id" uuid NOT NULL DEFAULT generate_uuidv7(),
+  "organization_id" text NOT NULL,
+  "spend_rule_id" uuid NOT NULL,
+  "rule_version" bigint NOT NULL,
+  "rule_urn" text NOT NULL,
+  "event_type" text NOT NULL,
+  "user_id" text NULL,
+  "email" text NOT NULL,
+  "display_name" text NULL,
+  "spend_usd" double precision NOT NULL,
+  "limit_usd" double precision NOT NULL,
+  "window_start" timestamptz NOT NULL,
+  "window_end" timestamptz NOT NULL,
+  "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
+  PRIMARY KEY ("id"),
+  CONSTRAINT "spend_rule_events_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
+  CONSTRAINT "spend_rule_events_organization_id_spend_rule_id_fkey" FOREIGN KEY ("organization_id", "spend_rule_id") REFERENCES "spend_rules" ("organization_id", "id") ON UPDATE NO ACTION ON DELETE CASCADE,
+  CONSTRAINT "spend_rule_events_spend_rule_id_rule_version_fkey" FOREIGN KEY ("spend_rule_id", "rule_version") REFERENCES "spend_rule_versions" ("spend_rule_id", "version") ON UPDATE NO ACTION ON DELETE CASCADE,
+  CONSTRAINT "spend_rule_events_event_type_check" CHECK (event_type = ANY (ARRAY['warning'::text, 'breach'::text]))
+);
+-- Create index "spend_rule_events_dedupe_key" to table: "spend_rule_events"
+CREATE UNIQUE INDEX "spend_rule_events_dedupe_key" ON "spend_rule_events" ("spend_rule_id", "rule_urn", "event_type", "email", "window_start");
+-- Create index "spend_rule_events_organization_id_created_at_idx" to table: "spend_rule_events"
+CREATE INDEX "spend_rule_events_organization_id_created_at_idx" ON "spend_rule_events" ("organization_id", "created_at" DESC);

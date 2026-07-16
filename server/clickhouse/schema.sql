@@ -722,15 +722,14 @@ WITH
             OR startsWith(body, 'claude_code.')
         )
     ) AS is_claude_api_request,
+    -- Mirror attribute_metrics_summaries_mv's is_agent_usage_row exactly: only
+    -- Codex/Cursor usage-metric rows count. Generic gen_ai chat rows
+    -- (Gram-hosted completions and other sources) are deliberately excluded so
+    -- spend-rule enforcement reconciles with the cost dashboard, which counts
+    -- the same Claude/Codex/Cursor sources and nothing else.
     (
         startsWith(gram_urn, 'codex:usage')
         OR startsWith(gram_urn, 'cursor:usage')
-        OR (
-            toString(attributes.gen_ai.operation.name) = 'chat'
-            AND toString(attributes.gen_ai.usage.cost) != ''
-            AND NOT is_claude_api_request
-            AND NOT startsWith(gram_urn, 'claude-code:usage')
-        )
     ) AS is_generic_usage_row
 SELECT
     gram_project_id,

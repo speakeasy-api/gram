@@ -1699,6 +1699,7 @@ type SpendRuleEvent struct {
 	ID             uuid.UUID
 	OrganizationID string
 	SpendRuleID    uuid.UUID
+	RuleVersion    int64
 	RuleUrn        string
 	EventType      string
 	UserID         pgtype.Text
