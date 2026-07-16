@@ -37,6 +37,12 @@ type PolicyServerChange = {
   server: ShadowMCPInventoryServer;
 };
 
+const POLICY_SERVER_ACTION_SORT_VALUE: Record<PolicyServerAction, number> = {
+  remove: 0,
+  add: 1,
+  "no-change": 2,
+};
+
 function countLabel(count: number, singular: string, plural: string): string {
   return `${count} ${count === 1 ? singular : plural}`;
 }
@@ -157,6 +163,11 @@ function PolicyServerActionBadge({ action }: { action: PolicyServerAction }) {
 }
 
 function AppliedServerTable({ rows }: { rows: PolicyServerChange[] }) {
+  const [sort, setSort] = useState<SortDescriptor | null>({
+    id: "action",
+    direction: "asc",
+  });
+
   const setFocusableTableBody = useCallback(
     (element: HTMLTableSectionElement | null) => {
       if (element) element.tabIndex = 0;
@@ -168,12 +179,16 @@ function AppliedServerTable({ rows }: { rows: PolicyServerChange[] }) {
     {
       key: "action",
       header: "Action",
+      sortable: true,
+      sortValue: ({ action }) => POLICY_SERVER_ACTION_SORT_VALUE[action],
       width: "112px",
       render: (row) => <PolicyServerActionBadge action={row.action} />,
     },
     {
       key: "server",
       header: "Server",
+      sortable: true,
+      sortValue: ({ server }) => serverLabel(server).trim().toLowerCase(),
       width: "0.35fr",
       render: ({ server }) => {
         const label = serverLabel(server);
@@ -187,6 +202,8 @@ function AppliedServerTable({ rows }: { rows: PolicyServerChange[] }) {
     {
       key: "url",
       header: "URL",
+      sortable: true,
+      sortValue: ({ server }) => server.canonicalServerUrl.trim().toLowerCase(),
       width: "1fr",
       render: ({ server }) => (
         <Type
@@ -201,16 +218,18 @@ function AppliedServerTable({ rows }: { rows: PolicyServerChange[] }) {
     },
   ];
 
+  const sortedRows = sortTableData(rows, columns, sort) as PolicyServerChange[];
+
   return (
     <Table
       columns={columns}
       cellPadding="condensed"
       className="grid-rows-[auto_minmax(0,1fr)]"
     >
-      <Table.Header columns={columns} />
+      <Table.Header columns={columns} sort={sort} onSortChange={setSort} />
       <Table.Body
         columns={columns}
-        data={rows}
+        data={sortedRows}
         rowKey={({ server }) => server.canonicalServerUrl}
         ref={setFocusableTableBody}
         className="focus-visible:ring-ring max-h-[200px] content-start overflow-y-auto focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"

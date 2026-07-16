@@ -107,6 +107,13 @@ function rowLabels(dialog: HTMLElement): string[] {
     );
 }
 
+function appliedRowLabels(table: HTMLElement): string[] {
+  return within(table)
+    .getAllByRole("row")
+    .slice(1)
+    .map((row) => row.textContent ?? "");
+}
+
 describe("ShadowMCPPolicyServerSelector", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -256,6 +263,59 @@ describe("ShadowMCPPolicyServerSelector", () => {
         "Add",
       ),
     ).toBeTruthy();
+  });
+
+  it("sorts every applied column with removals first by default", () => {
+    const notionServer = inventoryServer("https://aaa.example.com/mcp", {
+      serverName: "Notion MCP",
+    });
+    render(
+      <ControlledSelector
+        servers={[githubServer, linearServer, notionServer]}
+        originalSelection={[
+          githubServer.canonicalServerUrl,
+          linearServer.canonicalServerUrl,
+        ]}
+        initialSelection={[
+          githubServer.canonicalServerUrl,
+          notionServer.canonicalServerUrl,
+        ]}
+      />,
+    );
+
+    const table = within(
+      screen.getByRole("region", { name: "Servers allowed by this policy" }),
+    ).getByRole("table");
+    const actionHeader = within(table).getByRole("button", { name: /Action/ });
+    const serverHeader = within(table).getByRole("button", { name: /Server/ });
+    const urlHeader = within(table).getByRole("button", { name: /URL/ });
+
+    expect(appliedRowLabels(table)).toEqual([
+      expect.stringContaining("Remove"),
+      expect.stringContaining("Add"),
+      expect.stringContaining("No change"),
+    ]);
+
+    fireEvent.click(actionHeader);
+    expect(appliedRowLabels(table)).toEqual([
+      expect.stringContaining("No change"),
+      expect.stringContaining("Add"),
+      expect.stringContaining("Remove"),
+    ]);
+
+    fireEvent.click(serverHeader);
+    expect(appliedRowLabels(table)).toEqual([
+      expect.stringContaining("GitHub MCP"),
+      expect.stringContaining("linear.example.com"),
+      expect.stringContaining("Notion MCP"),
+    ]);
+
+    fireEvent.click(urlHeader);
+    expect(appliedRowLabels(table)).toEqual([
+      expect.stringContaining("aaa.example.com"),
+      expect.stringContaining("github.example.com"),
+      expect.stringContaining("linear.example.com"),
+    ]);
   });
 
   it("keeps pending removals visible when every saved server is deselected", () => {
