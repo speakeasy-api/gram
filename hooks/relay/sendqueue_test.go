@@ -1,6 +1,7 @@
 package relay
 
 import (
+	"encoding/json"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -174,6 +175,86 @@ func TestGatingEventBudgetExpiryStillSendsLive(t *testing.T) {
 		}
 	}
 	require.True(t, liveSeen, "the live gating event must still reach the server for its verdict")
+}
+
+// seedPoisonSpoolEntry writes an entry with a newer schema version — one this
+// binary can never deliver, only skip.
+func seedPoisonSpoolEntry(t *testing.T, serverURL string) {
+	t.Helper()
+	dir := filepath.Join(os.Getenv("XDG_STATE_HOME"), "gram", "hooks", "spool")
+	require.NoError(t, os.MkdirAll(dir, 0o700))
+	entry := map[string]any{
+		"v":               spoolEntryVersion + 1,
+		"idempotency_key": newIdempotencyToken(),
+		"server_url":      serverURL,
+	}
+	b, err := json.Marshal(entry)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, spoolFileName(time.Now().Add(-time.Hour))), b, 0o600))
+}
+
+// TestObserveEventIgnoresUndrainableOnlyBacklog: a poison entry (newer schema
+// version) is skipped forever and lingers until the 14-day expiry. Once a
+// drain run has proved it undrainable, it must stop counting as backlog —
+// otherwise every observe event queues behind it for two weeks.
+func TestObserveEventIgnoresUndrainableOnlyBacklog(t *testing.T) {
+	drainEnv(t)
+	stubDrainSpawn(t)
+	fs := newFakeServer(t, nil)
+	seedPoisonSpoolEntry(t, fs.URL)
+	cfg := authedConfig(t, fs.URL)
+
+	// A drain run walks the spool, skips the poison entry, and records it as
+	// undrainable for this binary.
+	s := Drain(t.Context())
+	require.Equal(t, 1, s.Skipped)
+	require.Equal(t, 1, s.Remaining)
+
+	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/post_tool_use.json")
+
+	require.Equal(t, 0, res.ExitCode)
+	require.Equal(t, 1, fs.count(), "an undrainable-only spool must not reroute observe events through the queue")
+	require.Len(t, spoolFiles(t), 1, "the poison entry stays for a newer binary or the age cap")
+}
+
+// TestQueueFullFallsBackToLiveSend: when queueing would evict older backlog
+// at the caps, the observe event sends live instead — dropping the oldest
+// conversation rows to admit a newer event would invert the ordering goal,
+// and dropping the event loses data the reachable server could store.
+func TestQueueFullFallsBackToLiveSend(t *testing.T) {
+	drainEnv(t)
+	stubDrainSpawn(t)
+	origCap := spoolEntryCap
+	spoolEntryCap = 1
+	t.Cleanup(func() { spoolEntryCap = origCap })
+
+	fs := newFakeServer(t, nil)
+	seedSpoolEntry(t, fs.URL, time.Hour, "sess-oldest")
+	before := spoolFiles(t)
+	cfg := authedConfig(t, fs.URL)
+
+	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/post_tool_use.json")
+
+	require.Equal(t, 0, res.ExitCode)
+	require.Equal(t, 1, fs.count(), "the event must send live when the queue is at capacity")
+	require.Equal(t, before, spoolFiles(t), "the oldest backlog entry must never be evicted to admit a newer event")
+}
+
+// TestQueueSpawnDebouncedAcrossBurst: a burst of queued observe events must
+// not stack detached drain processes — the last-spawn marker debounces to
+// one useful run.
+func TestQueueSpawnDebouncedAcrossBurst(t *testing.T) {
+	drainEnv(t)
+	spawns := stubDrainSpawn(t)
+	fs := newFakeServer(t, nil)
+	seedSpoolEntry(t, fs.URL, time.Hour, "sess-backlog")
+	cfg := authedConfig(t, fs.URL)
+
+	invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/post_tool_use.json")
+	invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/post_tool_use.json")
+
+	require.Equal(t, 1, *spawns, "a burst of queued events must spawn one drain, not one per event")
+	require.Len(t, spoolFiles(t), 3, "both burst events still queue behind the backlog")
 }
 
 // TestDrainPicksUpEntriesAppendedMidPass: drainUntilDry re-lists after a

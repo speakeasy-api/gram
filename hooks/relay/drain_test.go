@@ -220,15 +220,14 @@ func TestDrainUsesConfigOrgKeyFallback(t *testing.T) {
 }
 
 // TestMaybeSpawnDrainAfterRecovery drives the real provider path: sends fail
-// against a dead server (payloads spool), the server comes back, and the
-// next successful send spawns exactly one detached drain — debounced across
-// a burst.
+// against a dead server (payloads spool), the server comes back on the same
+// address, and the next gating event flushes the backlog synchronously
+// (drainBeforeVerdict) with no detached spawn. Spawn debounce across a burst
+// of queued observe events is pinned separately in
+// TestQueueSpawnDebouncedAcrossBurst.
 func TestMaybeSpawnDrainAfterRecovery(t *testing.T) {
 	setSpoolStateHome(t)
-	spawns := 0
-	orig := startDrainProcess
-	startDrainProcess = func() error { spawns++; return nil }
-	t.Cleanup(func() { startDrainProcess = orig })
+	spawns := stubDrainSpawn(t)
 
 	// One deployment address across outage and recovery, like a real outage:
 	// bind a port to learn the address, keep it closed during the outage,
@@ -242,7 +241,7 @@ func TestMaybeSpawnDrainAfterRecovery(t *testing.T) {
 	cfg := authedConfig(t, "http://"+addr)
 	invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 	require.Len(t, spoolFiles(t), 1)
-	require.Zero(t, spawns, "a failed send must not spawn a drain")
+	require.Zero(t, *spawns, "a failed send must not spawn a drain")
 
 	// Recovery via a gating event: the backlog now flushes synchronously
 	// before the verdict send (drainBeforeVerdict), so the queue empties in
@@ -259,27 +258,24 @@ func TestMaybeSpawnDrainAfterRecovery(t *testing.T) {
 	t.Cleanup(func() { _ = srv.Close() })
 
 	invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
-	require.Zero(t, spawns, "an inline pre-verdict flush must not also spawn a detached drain")
+	require.Zero(t, *spawns, "an inline pre-verdict flush must not also spawn a detached drain")
 	require.Empty(t, spoolFiles(t), "the first healthy gating event after an outage must flush the backlog")
 	require.Equal(t, 2, requests, "the spooled entry must replay ahead of the live event")
 
 	// Steady state: healthy sends with an empty spool never pay a spawn.
 	invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
-	require.Zero(t, spawns)
+	require.Zero(t, *spawns)
 }
 
 // TestMaybeSpawnDrainSkipsEmptySpool: healthy sends on a machine with no
 // backlog never pay the spawn cost.
 func TestMaybeSpawnDrainSkipsEmptySpool(t *testing.T) {
 	setSpoolStateHome(t)
-	spawns := 0
-	orig := startDrainProcess
-	startDrainProcess = func() error { spawns++; return nil }
-	t.Cleanup(func() { startDrainProcess = orig })
+	spawns := stubDrainSpawn(t)
 
 	fs := newFakeServer(t, nil)
 	invoke(t, authedConfig(t, fs.URL), agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
-	require.Zero(t, spawns)
+	require.Zero(t, *spawns)
 }
 
 // TestRunDrainExitCodes: 0 when the spool ends empty, 1 when work remains.

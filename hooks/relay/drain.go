@@ -91,7 +91,7 @@ func Drain(ctx context.Context) DrainSummary {
 func drainUntilDry(ctx context.Context, dir string) DrainSummary {
 	var total DrainSummary
 	for {
-		s := drainSpool(ctx, dir)
+		s, undrainable := drainSpool(ctx, dir)
 		total.Replayed += s.Replayed
 		total.Dropped += s.Dropped
 		total.Expired += s.Expired
@@ -101,6 +101,13 @@ func drainUntilDry(ctx context.Context, dir string) DrainSummary {
 		total.Remaining = s.Remaining
 		total.Aborted = s.Aborted
 		if s.Aborted || s.Remaining == 0 || s.Replayed+s.Dropped+s.Expired == 0 {
+			// A non-aborted final pass walked every entry, so its
+			// undrainable set is complete for the directory as it stands;
+			// persist it so spoolHasBacklog stops counting poison entries.
+			// An aborted pass saw only a prefix — keep the previous marker.
+			if !s.Aborted {
+				writeUndrainable(dir, undrainable)
+			}
 			return total
 		}
 	}
@@ -122,10 +129,10 @@ var gatingDrainBudget = 2 * time.Second
 // backlog costs row ordering for this one event rather than blocking the
 // user.
 func (r *Relay) drainBeforeVerdict(ctx context.Context) {
-	dir := spoolDirPath()
-	if dir == "" || len(listSpoolEntries(dir)) == 0 {
+	if !spoolHasBacklog() {
 		return
 	}
+	dir := spoolDirPath()
 	dctx, cancel := context.WithTimeout(ctx, gatingDrainBudget)
 	defer cancel()
 	ran := withFileTryLock(filepath.Join(dir, "drain"), func() {
@@ -138,8 +145,13 @@ func (r *Relay) drainBeforeVerdict(ctx context.Context) {
 	}
 }
 
-func drainSpool(ctx context.Context, dir string) DrainSummary {
+// drainSpool runs one pass over the directory snapshot. Alongside the
+// summary it returns the entry names this binary can never deliver
+// (undecodable, newer schema) so drainUntilDry can persist them for
+// spoolHasBacklog — a per-binary-deterministic set, unlike credential skips.
+func drainSpool(ctx context.Context, dir string) (DrainSummary, []string) {
 	var s DrainSummary
+	var undrainable []string
 	cutoff := time.Now().Add(-spoolMaxAge).UnixNano()
 	clients := make(map[string]*client)
 	auths := make(map[string]drainAuth)
@@ -174,11 +186,13 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 			// delete what we couldn't read — leave it for a newer binary, or
 			// the age cap.
 			s.Skipped++
+			undrainable = append(undrainable, name)
 			continue
 		}
 		if entry.V != spoolEntryVersion {
 			// A newer binary wrote it — not this one's to interpret or delete.
 			s.Skipped++
+			undrainable = append(undrainable, name)
 			continue
 		}
 		key := drainAuthKey(entry)
@@ -236,7 +250,7 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 		}
 	}
 	s.Remaining = len(listSpoolEntries(dir))
-	return s
+	return s, undrainable
 }
 
 // decodeSpoolEntry unmarshals an entry, restoring every any-typed envelope
@@ -406,10 +420,15 @@ var startDrainProcess = func() error {
 // recovery trigger (which covers idle machines). Best-effort and debounced;
 // never blocks the hook.
 func (r *Relay) maybeSpawnDrain() {
-	dir := spoolDirPath()
-	if dir == "" || len(listSpoolEntries(dir)) == 0 {
+	// spoolHasBacklog (not a raw entry count) so a lingering poison entry —
+	// which no drain run can ever deliver — doesn't spawn a useless drain
+	// every debounce window for two weeks. Credential-skipped entries are
+	// not in the undrainable set, so they still trigger spawns and deliver
+	// once a re-login restores access.
+	if !spoolHasBacklog() {
 		return
 	}
+	dir := spoolDirPath()
 	marker := filepath.Join(dir, "last-spawn")
 	if info, err := os.Stat(marker); err == nil && time.Since(info.ModTime()) < spawnDrainDebounce {
 		return

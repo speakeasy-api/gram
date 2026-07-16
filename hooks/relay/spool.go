@@ -137,6 +137,88 @@ func (r *Relay) spoolUnsent(idemKey string, payload components.IngestRequestBody
 	r.debugf("spool: stored event=%s bytes=%d", payload.Event.Type, len(data))
 }
 
+// spoolBehindBacklog is spoolUnsent's non-evicting variant for the ordered
+// send-queue path: it appends the event behind the existing backlog, but
+// refuses (returning false) when doing so would evict older entries at the
+// caps — dropping the oldest conversation rows to admit a newer event would
+// invert the very ordering the queue exists to preserve. The caller falls
+// back to a live send: at the cap, delivering beats both dropping backlog
+// and dropping the event.
+func (r *Relay) spoolBehindBacklog(idemKey string, payload components.IngestRequestBody) bool {
+	dir := spoolDir()
+	if dir == "" {
+		r.debugf("spool: no writable state dir; queue-behind unavailable")
+		return false
+	}
+	entry := spoolEntry{
+		V:              spoolEntryVersion,
+		IdempotencyKey: idemKey,
+		ServerURL:      r.cfg.ServerURL,
+		OrgID:          r.cfg.OrgID,
+		ProjectSlug:    r.cfg.ProjectSlug,
+		ConfigPath:     r.cfg.ConfigPath,
+		SpooledAt:      time.Now().UTC(),
+		Envelope:       payload,
+	}
+	data, err := json.Marshal(entry)
+	if err != nil {
+		r.debugf("spool: marshal failed: %v", err)
+		return false
+	}
+	if len(data) > maxSpoolEntryBytes {
+		entry.Envelope.Raw = nil
+		if data, err = json.Marshal(entry); err != nil {
+			r.debugf("spool: marshal failed: %v", err)
+			return false
+		}
+		if len(data) > maxSpoolEntryBytes {
+			return false
+		}
+		r.debugf("spool: raw echo stripped from oversize entry")
+	}
+	if spoolOverCap(dir, len(data)) {
+		return false
+	}
+	var commitErr error
+	for range 2 {
+		if commitErr = commitSpoolEntry(dir, data); commitErr == nil {
+			break
+		}
+	}
+	if commitErr != nil {
+		r.debugf("spool: commit failed: %v", commitErr)
+		return false
+	}
+	r.debugf("spool: queued event=%s bytes=%d behind backlog", payload.Event.Type, len(data))
+	return true
+}
+
+// spoolOverCap reports whether admitting one more entry of incomingBytes
+// would exceed either spool cap.
+func spoolOverCap(dir string, incomingBytes int) bool {
+	des, err := os.ReadDir(dir)
+	if err != nil {
+		return false
+	}
+	var count int
+	var total int64
+	for _, de := range des {
+		if de.IsDir() {
+			continue
+		}
+		if _, ok := spoolNanos(de.Name()); !ok {
+			continue
+		}
+		info, err := de.Info()
+		if err != nil {
+			continue
+		}
+		count++
+		total += info.Size()
+	}
+	return count+1 > spoolEntryCap || total+int64(incomingBytes) > int64(spoolBytesCap)
+}
+
 // commitSpoolEntry writes one entry under a fresh chronological name via the
 // same-directory temp+rename idiom.
 func commitSpoolEntry(dir string, data []byte) error {
@@ -152,12 +234,68 @@ func commitSpoolEntry(dir string, data []byte) error {
 	return nil
 }
 
+// undrainableMarkerName is the spool-dir sidecar listing entries a completed
+// drain run proved THIS binary can never deliver (newer schema version,
+// undecodable) — a determination that is per-binary deterministic, so the
+// marker cannot go stale while the same binary runs. Credential-related
+// skips are deliberately excluded: those become deliverable after a
+// re-login, so ordering behind them still matters. The name doesn't match
+// the entry shape, so listSpoolEntries and the caps never count it.
+const undrainableMarkerName = "undrainable"
+
+// readUndrainable loads the marker as a set. Missing or torn reads yield an
+// empty set — the conservative direction (entries count as backlog).
+func readUndrainable(dir string) map[string]bool {
+	b, err := os.ReadFile(filepath.Join(dir, undrainableMarkerName))
+	if err != nil {
+		return nil
+	}
+	out := make(map[string]bool)
+	for name := range strings.SplitSeq(strings.TrimSpace(string(b)), "\n") {
+		if name = strings.TrimSpace(name); name != "" {
+			out[name] = true
+		}
+	}
+	return out
+}
+
+// writeUndrainable persists the set, or removes the marker when empty.
+// Callers hold the drain lock; failures are swallowed — a missing marker
+// only means observe events keep queueing behind a poison entry.
+func writeUndrainable(dir string, names []string) {
+	path := filepath.Join(dir, undrainableMarkerName)
+	if len(names) == 0 {
+		_ = os.Remove(path)
+		return
+	}
+	_ = os.WriteFile(path, []byte(strings.Join(names, "\n")+"\n"), 0o600)
+}
+
 // spoolHasBacklog reports whether undelivered entries are waiting on disk.
 // deliver consults it so observe-only events queue behind an outage backlog
-// instead of overtaking it.
+// instead of overtaking it, and the drain paths use it as their emptiness
+// guard. Entries the last drain run marked undrainable don't count: a
+// poison entry (newer schema) lingers until the 14-day expiry, and counting
+// it would reroute every observe event through the spool for two weeks.
 func spoolHasBacklog() bool {
 	dir := spoolDirPath()
-	return dir != "" && len(listSpoolEntries(dir)) > 0
+	if dir == "" {
+		return false
+	}
+	names := listSpoolEntries(dir)
+	if len(names) == 0 {
+		return false
+	}
+	und := readUndrainable(dir)
+	if len(und) == 0 {
+		return true
+	}
+	for _, name := range names {
+		if !und[name] {
+			return true
+		}
+	}
+	return false
 }
 
 // spoolDirPath resolves the spool directory without creating it, or "" when

@@ -186,11 +186,17 @@ func (r *Relay) deliver(ctx context.Context, typed any, queueBehind bool) (inges
 		// The spool still holds outage backlog: sending this event live would
 		// persist it ahead of older messages. Queue it behind the backlog and
 		// let the (spawned) drain deliver everything oldest-first — the spool
-		// doubles as an ordered send queue until it runs dry.
-		r.spoolUnsent(idemKey, payload)
-		r.maybeSpawnDrain()
-		r.debugf("event=%s type=%s queued behind spool backlog", base.NativeName, payload.Event.Type)
-		return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: ""}, authRejected: false, failOpen: nil}, stateReady
+		// doubles as an ordered send queue until it runs dry. When the queue
+		// is at capacity, fall through to a live send instead: evicting
+		// backlog to admit a newer event would discard the very rows ordering
+		// protects, and dropping the event loses data the reachable server
+		// could store.
+		if r.spoolBehindBacklog(idemKey, payload) {
+			r.maybeSpawnDrain()
+			r.debugf("event=%s type=%s queued behind spool backlog", base.NativeName, payload.Event.Type)
+			return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: ""}, authRejected: false, failOpen: nil}, stateReady
+		}
+		r.debugf("event=%s type=%s queue full or unavailable; sending live", base.NativeName, payload.Event.Type)
 	}
 	res := r.send(ctx, c, payload, idemKey)
 	r.debugf("event=%s type=%s server=%s authfile=%s status=%d denied=%t", agenthooks.EventOf(typed).NativeName, payload.Event.Type, r.cfg.ServerURL, authFilePath(), res.statusCode, res.decision.denied())
