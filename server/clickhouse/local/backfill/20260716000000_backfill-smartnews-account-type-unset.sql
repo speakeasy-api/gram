@@ -153,7 +153,20 @@ FROM (
 -- Everything except the WHERE restriction and corrected_account_type mirrors
 -- attribute_metrics_summaries_mv (server/clickhouse/schema.sql) — keep them in
 -- sync if the MV changes before this runs.
+--
+-- STAGING IS NOT IDEMPOTENT: a second run of the INSERT merges duplicate
+-- aggregate states into the same generation-2 keys and doubles the staged
+-- spend. The guard below must return 0 rows staged; if it does not, a prior
+-- staging attempt exists — hard-delete it first
+-- (`ALTER TABLE attribute_metrics_summaries DELETE WHERE gram_project_id =
+-- toUUID('019e2049-65e2-730b-b68a-2c68cb84ab7e') AND generation = 2 SETTINGS
+-- mutations_sync = 2`) and only then re-run the INSERT.
 -- ============================================================================
+
+SELECT count() AS existing_generation_2_rows -- MUST be 0 before staging
+FROM attribute_metrics_summaries
+WHERE gram_project_id = toUUID('019e2049-65e2-730b-b68a-2c68cb84ab7e')
+  AND generation = 2;
 
 INSERT INTO attribute_metrics_summaries (gram_project_id, time_bucket, department_name, job_title, employee_type, division_name, cost_center_name, user_email, model, hook_source, roles, groups, total_chats, total_input_tokens, total_output_tokens, total_tokens, cache_read_input_tokens, cache_creation_input_tokens, total_cost, total_tool_calls, unique_tool_calls, account_type, provider, billing_mode, query_source, skill_name, agent_name, mcp_server_name, mcp_tool_name, generation, is_active)
 WITH
@@ -306,6 +319,16 @@ ORDER BY day DESC;
 -- instead of double count). generation IN (0, 1) covers both the post-cutoff
 -- MV rows and the 20260713 re-derive; re-hiding already-hidden generation-0
 -- pre-cutoff rows is a no-op.
+--
+-- LATE-ARRIVAL GUARD: an unset row ingested AFTER step 1 with an event time
+-- inside the window (post-#4259 that takes a transient attribution failure on
+-- a late-delivered batch — rare) would be hidden here without a staged
+-- replacement. Re-run the step-2 conservation query IMMEDIATELY before these
+-- flips: if live_unset_cost has grown materially above staged_cost on any
+-- day, re-stage (hard-delete generation 2 as described in step 1, re-run the
+-- INSERT) and check again. Any sliver that still slips through is a bounded
+-- undercount of the residual "(unset)" bucket — the safe failure direction,
+-- same trade-off as the parent runbook.
 -- ============================================================================
 
 ALTER TABLE attribute_metrics_summaries
