@@ -316,7 +316,7 @@ CREATE TABLE IF NOT EXISTS skill_distributions (
   pinned_version_id uuid,
 
   audience TEXT[],
-  channel TEXT NOT NULL DEFAULT 'plugin',
+  channel TEXT NOT NULL,
   created_by_user_id TEXT NOT NULL,
   revoked_at timestamptz,
 
@@ -344,7 +344,7 @@ CREATE TABLE IF NOT EXISTS skill_sync_receipts (
 
   user_id TEXT NOT NULL,
   hostname TEXT NOT NULL,
-  provider TEXT NOT NULL DEFAULT 'claude',
+  provider TEXT NOT NULL,
   status TEXT NOT NULL,
   synced_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 

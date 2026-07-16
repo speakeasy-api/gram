@@ -1,4 +1,4 @@
-h1:lRU+N2uZpBmLoIZAEQ1d1iv4vT6ryo9Z22BJ7qs7ivw=
+h1:Jgx095Nb5lMdzOdOgpTmNo+Jiv7xUYLDsydqBNvg1eQ=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -268,4 +268,4 @@ h1:lRU+N2uZpBmLoIZAEQ1d1iv4vT6ryo9Z22BJ7qs7ivw=
 20260715174418_observability-mode-to-hooks-fail-open.sql h1:LdG61RUE0xWhm7f/V+KWMdYVPC20yR9U5Q0jY+bj6N8=
 20260715203754_chat-messages-add-replayed.sql h1:xieBGqLsKZ4ZST5QAfn/Hq8aSaTCWM4sknr0bmMhHa0=
 20260715234644_skill_versions_ordering_index.sql h1:VrJFF+sNk9bil82fYMMgHmSQKABV3qmvJDcTUFVEw6s=
-20260716143622_skill-distributions-sync-receipts.sql h1:n082wQgG4qAksea4Q2DdKCDLgZeOO1jWaOV0d/GFJaU=
+20260716152842_skill-distributions-sync-receipts.sql h1:+7lViijiJnaB0DicmYrWr3MaYXh0TCqfBcb4Czdad88=
