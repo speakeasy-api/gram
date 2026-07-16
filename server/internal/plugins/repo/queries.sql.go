@@ -1136,6 +1136,73 @@ func (q *Queries) RemovePluginServer(ctx context.Context, arg RemovePluginServer
 	return i, err
 }
 
+const revokeSkillDistributionsByPlugin = `-- name: RevokeSkillDistributionsByPlugin :many
+UPDATE skill_distributions sd
+SET revoked_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+FROM skills s
+WHERE sd.project_id = $1
+  AND sd.plugin_id = $2
+  AND sd.revoked_at IS NULL
+  AND s.id = sd.skill_id
+RETURNING sd.id, sd.project_id, sd.skill_id, sd.pinned_version_id, sd.plugin_id, sd.channel, sd.created_by_user_id, sd.revoked_at, sd.created_at, sd.updated_at, s.name AS skill_name, s.display_name AS skill_display_name
+`
+
+type RevokeSkillDistributionsByPluginParams struct {
+	ProjectID uuid.UUID
+	PluginID  uuid.NullUUID
+}
+
+type RevokeSkillDistributionsByPluginRow struct {
+	ID               uuid.UUID
+	ProjectID        uuid.UUID
+	SkillID          uuid.UUID
+	PinnedVersionID  uuid.NullUUID
+	PluginID         uuid.NullUUID
+	Channel          string
+	CreatedByUserID  string
+	RevokedAt        pgtype.Timestamptz
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	SkillName        string
+	SkillDisplayName string
+}
+
+// Deleting a plugin revokes the skill distributions it carries so active
+// distributions never reference a tombstoned plugin.
+func (q *Queries) RevokeSkillDistributionsByPlugin(ctx context.Context, arg RevokeSkillDistributionsByPluginParams) ([]RevokeSkillDistributionsByPluginRow, error) {
+	rows, err := q.db.Query(ctx, revokeSkillDistributionsByPlugin, arg.ProjectID, arg.PluginID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RevokeSkillDistributionsByPluginRow
+	for rows.Next() {
+		var i RevokeSkillDistributionsByPluginRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.SkillID,
+			&i.PinnedVersionID,
+			&i.PluginID,
+			&i.Channel,
+			&i.CreatedByUserID,
+			&i.RevokedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.SkillName,
+			&i.SkillDisplayName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const softDeletePluginServers = `-- name: SoftDeletePluginServers :exec
 UPDATE plugin_servers
 SET deleted_at = clock_timestamp(),

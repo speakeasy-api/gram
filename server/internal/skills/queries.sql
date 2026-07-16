@@ -189,3 +189,118 @@ WHERE project_id = @project_id
   AND id = @id
   AND archived_at IS NULL
 RETURNING *;
+
+-- name: GetValidSkillVersion :one
+SELECT sv.id
+FROM skill_versions sv
+JOIN skills s ON s.id = sv.skill_id
+WHERE s.project_id = @project_id
+  AND s.id = @skill_id
+  AND s.archived_at IS NULL
+  AND sv.id = @version_id
+  AND sv.spec_valid IS TRUE;
+
+-- name: GetLatestValidSkillVersion :one
+SELECT sv.id
+FROM skill_versions sv
+JOIN skills s ON s.id = sv.skill_id
+WHERE s.project_id = @project_id
+  AND s.id = @skill_id
+  AND s.archived_at IS NULL
+  AND sv.spec_valid IS TRUE
+ORDER BY sv.created_at DESC, sv.id DESC
+LIMIT 1;
+
+-- name: GetPluginForDistribution :one
+SELECT id, name
+FROM plugins
+WHERE id = @plugin_id
+  AND project_id = @project_id
+  AND deleted IS FALSE;
+
+-- name: GetActiveSkillDistributionRecord :one
+SELECT sd.*
+FROM skill_distributions sd
+WHERE sd.project_id = @project_id
+  AND sd.skill_id = @skill_id
+  AND sd.plugin_id = @plugin_id
+  AND sd.channel = 'plugin'
+  AND sd.revoked_at IS NULL;
+
+-- name: ListActiveSkillDistributions :many
+SELECT
+  sqlc.embed(sd),
+  pl.name AS plugin_name,
+  resolved.id AS resolved_version_id
+FROM skill_distributions sd
+JOIN plugins pl ON pl.id = sd.plugin_id
+JOIN skills s
+  ON s.project_id = sd.project_id
+  AND s.id = sd.skill_id
+  AND s.archived_at IS NULL
+JOIN LATERAL (
+  SELECT sv.id
+  FROM skill_versions sv
+  WHERE sv.skill_id = sd.skill_id
+    AND sv.spec_valid IS TRUE
+    AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
+  ORDER BY sv.created_at DESC, sv.id DESC
+  LIMIT 1
+) resolved ON TRUE
+WHERE sd.project_id = @project_id
+  AND sd.channel = 'plugin'
+  AND sd.revoked_at IS NULL
+ORDER BY sd.created_at ASC, sd.id ASC;
+
+-- name: CreateSkillDistribution :one
+INSERT INTO skill_distributions (
+  project_id,
+  skill_id,
+  plugin_id,
+  pinned_version_id,
+  channel,
+  created_by_user_id
+)
+SELECT
+  s.project_id,
+  s.id,
+  @plugin_id::uuid,
+  sqlc.narg(pinned_version_id)::uuid,
+  'plugin',
+  @created_by_user_id
+FROM skills s
+WHERE s.project_id = @project_id
+  AND s.id = @skill_id
+  AND s.archived_at IS NULL
+RETURNING *;
+
+-- name: UpdateSkillDistribution :one
+UPDATE skill_distributions
+SET pinned_version_id = sqlc.narg(pinned_version_id)::uuid,
+    updated_at = clock_timestamp()
+WHERE project_id = @project_id
+  AND skill_id = @skill_id
+  AND plugin_id = @plugin_id
+  AND channel = 'plugin'
+  AND revoked_at IS NULL
+RETURNING *;
+
+-- name: RevokeActiveSkillDistribution :one
+UPDATE skill_distributions
+SET revoked_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE project_id = @project_id
+  AND skill_id = @skill_id
+  AND plugin_id = @plugin_id
+  AND channel = 'plugin'
+  AND revoked_at IS NULL
+RETURNING *;
+
+-- name: RevokeAllSkillDistributionsBySkill :many
+UPDATE skill_distributions
+SET revoked_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE project_id = @project_id
+  AND skill_id = @skill_id
+  AND revoked_at IS NULL
+RETURNING *;

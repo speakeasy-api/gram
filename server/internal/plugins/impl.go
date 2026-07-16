@@ -618,6 +618,44 @@ func (s *Service) DeletePlugin(ctx context.Context, payload *gen.DeletePluginPay
 		return oops.E(oops.CodeUnexpected, err, "remove plugin assignments").LogError(ctx, s.logger)
 	}
 
+	revokedDistributions, err := txRepo.RevokeSkillDistributionsByPlugin(ctx, repo.RevokeSkillDistributionsByPluginParams{
+		ProjectID: *ac.ProjectID,
+		PluginID:  uuid.NullUUID{UUID: pluginID, Valid: true},
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "revoke skill distributions for plugin").LogError(ctx, s.logger)
+	}
+	for _, revoked := range revokedDistributions {
+		afterSnapshot := &audit.SkillDistributionSnapshot{
+			ID:              revoked.ID.String(),
+			ProjectID:       revoked.ProjectID.String(),
+			SkillID:         revoked.SkillID.String(),
+			PluginID:        conv.FromNullableUUID(revoked.PluginID),
+			PinnedVersionID: conv.FromNullableUUID(revoked.PinnedVersionID),
+			Channel:         revoked.Channel,
+			CreatedByUserID: revoked.CreatedByUserID,
+			RevokedAt:       conv.PtrEmpty(conv.FromPGTimestamptz(revoked.RevokedAt)),
+			CreatedAt:       conv.FromPGTimestamptz(revoked.CreatedAt),
+			UpdatedAt:       conv.FromPGTimestamptz(revoked.UpdatedAt),
+		}
+		beforeSnapshot := *afterSnapshot
+		beforeSnapshot.RevokedAt = nil
+		if auditErr := s.audit.LogSkillUndistribute(ctx, tx, audit.LogSkillUndistributeEvent{
+			OrganizationID:             ac.ActiveOrganizationID,
+			ProjectID:                  *ac.ProjectID,
+			Actor:                      urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+			ActorDisplayName:           ac.Email,
+			ActorSlug:                  nil,
+			SkillURN:                   urn.NewSkill(revoked.SkillID),
+			SkillName:                  revoked.SkillName,
+			SkillDisplayName:           revoked.SkillDisplayName,
+			DistributionSnapshotBefore: &beforeSnapshot,
+			DistributionSnapshotAfter:  afterSnapshot,
+		}); auditErr != nil {
+			return oops.E(oops.CodeUnexpected, auditErr, "audit log skill undistribution for deleted plugin").LogError(ctx, s.logger)
+		}
+	}
+
 	if err := txRepo.DeletePlugin(ctx, repo.DeletePluginParams{
 		ID:             pluginID,
 		OrganizationID: ac.ActiveOrganizationID,

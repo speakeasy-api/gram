@@ -21,11 +21,19 @@ func TestSkillsRBACRejectsMissingAndOtherProjectGrants(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeForbidden)
 	_, err = ti.service.Create(noGrants, &gen.CreatePayload{Content: skillManifest("no-grant", "Denied.", "body"), SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	requireOopsCode(t, err, oops.CodeForbidden)
+	_, err = ti.service.Distribute(noGrants, &gen.DistributePayload{ID: uuid.NewString(), PluginID: uuid.NewString(), PinnedVersionID: nil, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	requireOopsCode(t, err, oops.CodeForbidden)
+	err = ti.service.Undistribute(noGrants, &gen.UndistributePayload{ID: uuid.NewString(), PluginID: uuid.NewString(), SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	requireOopsCode(t, err, oops.CodeForbidden)
+	_, err = ti.service.ListDistributions(noGrants, &gen.ListDistributionsPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	requireOopsCode(t, err, oops.CodeForbidden)
 
 	otherProjectGrant := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeSkillWrite, uuid.NewString()))
 	_, err = ti.service.List(otherProjectGrant, &gen.ListPayload{Cursor: nil, Limit: 10, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	requireOopsCode(t, err, oops.CodeForbidden)
 	_, err = ti.service.Create(otherProjectGrant, &gen.CreatePayload{Content: skillManifest("other-project-grant", "Denied.", "body"), SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	requireOopsCode(t, err, oops.CodeForbidden)
+	_, err = ti.service.ListDistributions(otherProjectGrant, &gen.ListDistributionsPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
@@ -47,5 +55,11 @@ func TestSkillsFeatureDisabledRejectsEveryEndpoint(t *testing.T) {
 	_, err = ti.service.ListVersions(ctx, &gen.ListVersionsPayload{ID: created.Skill.ID, Cursor: nil, Limit: 10, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	requireOopsCode(t, err, oops.CodeForbidden)
 	err = ti.service.Archive(ctx, &gen.ArchivePayload{ID: created.Skill.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	requireOopsCode(t, err, oops.CodeForbidden)
+	_, err = ti.service.Distribute(ctx, &gen.DistributePayload{ID: created.Skill.ID, PluginID: uuid.NewString(), PinnedVersionID: nil, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	requireOopsCode(t, err, oops.CodeForbidden)
+	err = ti.service.Undistribute(ctx, &gen.UndistributePayload{ID: created.Skill.ID, PluginID: uuid.NewString(), SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	requireOopsCode(t, err, oops.CodeForbidden)
+	_, err = ti.service.ListDistributions(ctx, &gen.ListDistributionsPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	requireOopsCode(t, err, oops.CodeForbidden)
 }

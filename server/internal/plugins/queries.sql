@@ -459,3 +459,16 @@ ON CONFLICT (project_id) DO UPDATE
   SET marketplace_name = EXCLUDED.marketplace_name,
       updated_at = clock_timestamp()
 RETURNING *;
+
+-- name: RevokeSkillDistributionsByPlugin :many
+-- Deleting a plugin revokes the skill distributions it carries so active
+-- distributions never reference a tombstoned plugin.
+UPDATE skill_distributions sd
+SET revoked_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+FROM skills s
+WHERE sd.project_id = @project_id
+  AND sd.plugin_id = @plugin_id
+  AND sd.revoked_at IS NULL
+  AND s.id = sd.skill_id
+RETURNING sd.*, s.name AS skill_name, s.display_name AS skill_display_name;

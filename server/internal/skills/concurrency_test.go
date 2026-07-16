@@ -7,11 +7,63 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/skills"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 )
 
 type concurrentCreateResult struct {
 	result *gen.RecordSkillResult
 	err    error
+}
+
+type concurrentDistributionResult struct {
+	id  string
+	err error
+}
+
+func TestSkillsConcurrentDistributionCreatesOneActiveRow(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	created := createSkill(t, ctx, ti, "concurrent-distribution", "Valid distribution.")
+	plugin := createPlugin(t, ctx, ti, ti.projectID, "concurrent-plugin")
+	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionSkillDistribute)
+	require.NoError(t, err)
+	const requests = 8
+	start := make(chan struct{})
+	results := make(chan concurrentDistributionResult, requests)
+
+	for range requests {
+		go func() {
+			<-start
+			distribution, distributeErr := ti.service.Distribute(ctx, &gen.DistributePayload{
+				ID: created.Skill.ID, PluginID: plugin.ID.String(), PinnedVersionID: nil,
+				SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+			})
+			if distributeErr != nil {
+				results <- concurrentDistributionResult{id: "", err: distributeErr}
+				return
+			}
+			results <- concurrentDistributionResult{id: distribution.ID, err: nil}
+		}()
+	}
+	close(start)
+
+	var distributionID string
+	for range requests {
+		result := <-results
+		require.NoError(t, result.err)
+		if distributionID == "" {
+			distributionID = result.id
+		}
+		require.Equal(t, distributionID, result.id)
+	}
+	listed, err := ti.service.ListDistributions(ctx, &gen.ListDistributionsPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.Len(t, listed.Distributions, 1)
+	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionSkillDistribute)
+	require.NoError(t, err)
+	require.Equal(t, before+1, after)
 }
 
 func TestSkillsConcurrentSameNameAndHashCreatesOneVersion(t *testing.T) {
