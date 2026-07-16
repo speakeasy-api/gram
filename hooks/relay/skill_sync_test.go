@@ -214,6 +214,31 @@ func TestSkillSyncPreservesOtherDeploymentOwnership(t *testing.T) {
 	require.Equal(t, components.StatusConflictSkipped, requests[1].Exceptions[0].Status)
 }
 
+func TestSkillSyncDropsMissingOtherDeploymentOwnership(t *testing.T) {
+	server := newSkillSyncServer(t, func(_ int, _ components.SyncSkillsRequestBody) (int, components.SyncSkillsResult) {
+		return http.StatusOK, components.SyncSkillsResult{Removals: []string{}, Updates: []components.SyncSkillUpdate{skillUpdate("shared-name", "current-deployment", "")}}
+	})
+	relay, root := configuredSkillRelay(t, server.URL)
+	require.NoError(t, os.MkdirAll(root, 0o755))
+	other := skillDeployment{ServerURL: "https://other.example.test", Org: "other-org", Project: "other-project"}
+	manifest := emptySkillManifest()
+	manifest.Entries = []managedSkill{{
+		Deployment:    other,
+		Name:          "shared-name",
+		Files:         []string{filepath.Join("shared-name", "SKILL.md")},
+		RawSHA256:     rawSkillHash([]byte("missing")),
+		PendingUpdate: nil,
+		PendingRemove: nil,
+	}}
+	require.NoError(t, writeSkillManifest(filepath.Join(root, skillManifestFilename), manifest))
+
+	contextNote := relay.syncSkills(t.Context(), false)
+	require.Contains(t, contextNote, "shared-name")
+	body, err := os.ReadFile(filepath.Join(root, "shared-name", "SKILL.md"))
+	require.NoError(t, err)
+	require.Equal(t, "current-deployment", string(body))
+}
+
 func TestSkillSyncModifiedManagedSkillBecomesPermanentConflict(t *testing.T) {
 	server := newSkillSyncServer(t, func(_ int, _ components.SyncSkillsRequestBody) (int, components.SyncSkillsResult) {
 		return http.StatusOK, components.SyncSkillsResult{Removals: []string{}, Updates: []components.SyncSkillUpdate{skillUpdate("managed", "server-copy", "")}}

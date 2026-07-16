@@ -574,15 +574,11 @@ func reconcileOwnedSkills(root string, deployment skillDeployment, manifest *ski
 	changed := false
 	kept := manifest.Entries[:0]
 	for _, entry := range manifest.Entries {
-		if entry.Deployment != deployment {
-			kept = append(kept, entry)
-			continue
-		}
 		if _, intact := intactManagedSkill(root, entry); intact {
 			kept = append(kept, entry)
 			continue
 		}
-		setSkillException(manifest, deployment, entry.Name, string(components.StatusConflictSkipped), true)
+		setSkillException(manifest, entry.Deployment, entry.Name, string(components.StatusConflictSkipped), true)
 		changed = true
 	}
 	manifest.Entries = kept
