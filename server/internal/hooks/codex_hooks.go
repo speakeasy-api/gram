@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -526,6 +527,7 @@ func (s *Service) writeCodexToolCallRequestToPG(ctx context.Context, payload *ge
 
 	msgParams := chatRepo.CreateChatMessageParams{
 		Replayed:         false,
+		CreatedAt:        pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: 0},
 		ChatID:           chatID,
 		ProjectID:        projectID,
 		Role:             "assistant",
@@ -572,6 +574,7 @@ func (s *Service) writeCodexToolCallResultToPG(ctx context.Context, payload *gen
 
 	msgParams := chatRepo.CreateChatMessageParams{
 		Replayed:         false,
+		CreatedAt:        pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: 0},
 		ChatID:           chatID,
 		ProjectID:        projectID,
 		Role:             "tool",
@@ -619,6 +622,7 @@ func (s *Service) writeCodexUserPromptToPG(ctx context.Context, payload *gen.Cod
 
 	msgParams := chatRepo.CreateChatMessageParams{
 		Replayed:         false,
+		CreatedAt:        pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: 0},
 		ChatID:           chatID,
 		ProjectID:        projectID,
 		Role:             "user",
@@ -666,6 +670,7 @@ func (s *Service) writeCodexAssistantResponseToPG(ctx context.Context, payload *
 
 	msgParams := chatRepo.CreateChatMessageParams{
 		Replayed:         false,
+		CreatedAt:        pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: 0},
 		ChatID:           chatID,
 		ProjectID:        projectID,
 		Role:             "assistant",

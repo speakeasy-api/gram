@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/assets"
@@ -49,8 +50,24 @@ func (w *ChatMessageWriter) AddObserver(obs MessageObserver) {
 	w.observers = append(w.observers, obs)
 }
 
+// stampUnsetCreatedAt fills rows that carry no explicit created_at with one
+// shared write-time value. Sharing a single timestamp per batch makes rows
+// tie on created_at so seq (insertion order) decides — exactly the pre-DNO-536
+// ordering for playground/assistant writers, whose rows may have been
+// CONSTRUCTED out of order relative to their intended position. Hook ingest
+// sets created_at explicitly to the event's occurred_at and is left alone.
+func stampUnsetCreatedAt(params []repo.CreateChatMessageParams) {
+	now := pgtype.Timestamptz{Time: time.Now(), Valid: true, InfinityModifier: 0}
+	for i := range params {
+		if !params[i].CreatedAt.Valid {
+			params[i].CreatedAt = now
+		}
+	}
+}
+
 // Write inserts messages via the pool and notifies observers on success.
 func (w *ChatMessageWriter) Write(ctx context.Context, projectID uuid.UUID, params []repo.CreateChatMessageParams) (int64, error) {
+	stampUnsetCreatedAt(params)
 	n, err := repo.New(w.db).CreateChatMessage(ctx, params)
 	if err != nil {
 		return 0, fmt.Errorf("create chat messages: %w", err)
@@ -85,6 +102,7 @@ func (w *ChatMessageWriter) WriteExternal(ctx context.Context, projectID uuid.UU
 // atomic with surrounding DB operations (e.g. a row-level lock for generation
 // serialisation).
 func (w *ChatMessageWriter) WriteInTx(ctx context.Context, tx repo.DBTX, params []repo.CreateChatMessageParams) (int64, error) {
+	stampUnsetCreatedAt(params)
 	n, err := repo.New(tx).CreateChatMessage(ctx, params)
 	if err != nil {
 		return 0, fmt.Errorf("create chat messages: %w", err)
@@ -118,6 +136,7 @@ func (w *ChatMessageWriter) WriteTurn(ctx context.Context, projectID uuid.UUID, 
 		return fmt.Errorf("store pending chat messages: %w", err)
 	}
 
+	stampUnsetCreatedAt(assistants)
 	n, err := repo.New(tx).CreateChatMessage(ctx, assistants)
 	if err != nil {
 		return fmt.Errorf("store assistant chat messages: %w", err)

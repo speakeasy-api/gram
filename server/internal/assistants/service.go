@@ -3162,6 +3162,7 @@ func (s *ServiceCore) selfHealCorruptHistory(ctx context.Context, chatID uuid.UU
 	empty := conv.ToPGTextEmpty("")
 	base := chatrepo.CreateChatMessageParams{
 		Replayed:         false,
+		CreatedAt:        pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: 0},
 		ChatID:           chatID,
 		ProjectID:        projectID,
 		Role:             "user",

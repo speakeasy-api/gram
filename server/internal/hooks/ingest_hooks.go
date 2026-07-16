@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -772,6 +773,14 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 	if sessionID == "" || authCtx.ProjectID == nil {
 		return nil
 	}
+	// The row's created_at is the event's original occurred_at (clamped so a
+	// skewed device clock can't sort a message into the future): spool-replayed
+	// backlog must interleave with live rows in occurrence order, and
+	// transcript readers order by (created_at, seq).
+	occurredAt := canonicalEventTime(payload)
+	if now := time.Now(); occurredAt.After(now) {
+		occurredAt = now
+	}
 	baseMsg := func(role, content string) chatRepo.CreateChatMessageParams {
 		return chatRepo.CreateChatMessageParams{
 			ChatID:           sessionIDToUUID(sessionID),
@@ -800,7 +809,8 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 			// Downtime backlog redelivered from a device's offline spool:
 			// carried onto the row so the offline risk scanner's findings
 			// (and any session view) can distinguish replayed traffic.
-			Replayed: conv.PtrValOr(payload.Replayed, false),
+			Replayed:  conv.PtrValOr(payload.Replayed, false),
+			CreatedAt: pgtype.Timestamptz{Time: occurredAt, Valid: true, InfinityModifier: 0},
 		}
 	}
 

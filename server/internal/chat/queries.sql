@@ -151,6 +151,10 @@ SET last_cursor_id = @last_cursor_id
 WHERE chat_id = @chat_id;
 
 -- name: CreateChatMessage :copyfrom
+-- created_at is caller-supplied so hook-captured messages carry the event's
+-- original occurred_at: spool replays arrive after newer live rows, and
+-- insert-time stamps would sort them out of conversation order. Transcript
+-- readers order by (created_at, seq).
 INSERT INTO chat_messages (
     chat_id
   , role
@@ -176,6 +180,7 @@ INSERT INTO chat_messages (
   , content_hash
   , generation
   , replayed
+  , created_at
 )
 VALUES (
     @chat_id
@@ -202,6 +207,7 @@ VALUES (
   , @content_hash
   , @generation
   , @replayed
+  , @created_at
 );
 
 -- name: CreateExternalChatMessage :execrows
@@ -652,9 +658,12 @@ GROUP BY 1
 ORDER BY 1;
 
 -- name: ListChatMessages :many
-SELECT * FROM chat_messages 
-WHERE chat_id = @chat_id AND (project_id IS NULL OR project_id = @project_id::uuid) 
-ORDER BY seq ASC;
+-- Transcript order is (created_at, seq): created_at carries the event's
+-- original occurred_at for hook-captured messages (spool replays arrive out
+-- of insert order), and seq breaks ties stably for same-timestamp rows.
+SELECT * FROM chat_messages
+WHERE chat_id = @chat_id AND (project_id IS NULL OR project_id = @project_id::uuid)
+ORDER BY created_at ASC, seq ASC;
 
 -- name: CountChatMessages :one
 -- Must match ListChatMessages' project_id filter, otherwise count and the
@@ -730,7 +739,7 @@ SELECT cm.* FROM chat_messages cm
 WHERE cm.chat_id = @chat_id
   AND (cm.project_id IS NULL OR cm.project_id = @project_id::uuid)
   AND cm.generation = (SELECT MAX(generation) FROM chat_messages WHERE chat_id = @chat_id)
-ORDER BY cm.seq ASC;
+ORDER BY cm.created_at ASC, cm.seq ASC;
 
 -- name: ListChatMessagesByGeneration :many
 -- Returns rows for an explicit generation, used to pin a snapshot across
@@ -740,14 +749,17 @@ SELECT cm.* FROM chat_messages cm
 WHERE cm.chat_id = @chat_id
   AND (cm.project_id IS NULL OR cm.project_id = @project_id::uuid)
   AND cm.generation = @generation::integer
-ORDER BY cm.seq ASC;
+ORDER BY cm.created_at ASC, cm.seq ASC;
 
 -- name: GetMaxGenerationForChat :one
 SELECT COALESCE(MAX(generation), 0)::integer AS generation FROM chat_messages WHERE chat_id = @chat_id;
 
 -- name: ListChatMessagesBeforePage :many
--- Keyset page within a generation, newest first. Returns messages with seq
--- strictly less than @before_seq, or the newest page when @before_seq is NULL.
+-- Keyset page within a generation, newest first. The cursor stays the anchor
+-- row's seq (stable, unique, already in the API), but position is compared in
+-- transcript order (created_at, seq) so pages agree with the display order
+-- even when spool-replayed rows carry backdated created_at. Returns rows
+-- strictly before the anchor, or the newest page when @before_seq is NULL.
 -- Order DESC so LIMIT keeps the most recent rows; the caller reverses to
 -- ascending for display. Fetch @lim = pageSize+1 to detect whether more older
 -- rows remain.
@@ -755,21 +767,34 @@ SELECT cm.* FROM chat_messages cm
 WHERE cm.chat_id = @chat_id
   AND (cm.project_id IS NULL OR cm.project_id = @project_id::uuid)
   AND cm.generation = @generation::integer
-  AND (sqlc.narg('before_seq')::bigint IS NULL OR cm.seq < sqlc.narg('before_seq')::bigint)
-ORDER BY cm.seq DESC
+  AND (
+    sqlc.narg('before_seq')::bigint IS NULL
+    OR (cm.created_at, cm.seq) < (
+      SELECT a.created_at, a.seq FROM chat_messages a
+      WHERE a.chat_id = @chat_id AND a.seq = sqlc.narg('before_seq')::bigint
+    )
+  )
+ORDER BY cm.created_at DESC, cm.seq DESC
 LIMIT @lim::integer;
 
 -- name: ListChatMessagesAfterPage :many
--- Keyset page within a generation, oldest first. Returns messages with seq
--- strictly greater than @after_seq, or the oldest page (start of the thread)
--- when @after_seq is NULL. Fetch @lim = pageSize+1 to detect whether more newer
+-- Keyset page within a generation, oldest first. Same anchor-row cursor
+-- resolution as ListChatMessagesBeforePage. Returns rows strictly after the
+-- anchor in transcript order, or the oldest page (start of the thread) when
+-- @after_seq is NULL. Fetch @lim = pageSize+1 to detect whether more newer
 -- rows remain.
 SELECT cm.* FROM chat_messages cm
 WHERE cm.chat_id = @chat_id
   AND (cm.project_id IS NULL OR cm.project_id = @project_id::uuid)
   AND cm.generation = @generation::integer
-  AND (sqlc.narg('after_seq')::bigint IS NULL OR cm.seq > sqlc.narg('after_seq')::bigint)
-ORDER BY cm.seq ASC
+  AND (
+    sqlc.narg('after_seq')::bigint IS NULL
+    OR (cm.created_at, cm.seq) > (
+      SELECT a.created_at, a.seq FROM chat_messages a
+      WHERE a.chat_id = @chat_id AND a.seq = sqlc.narg('after_seq')::bigint
+    )
+  )
+ORDER BY cm.created_at ASC, cm.seq ASC
 LIMIT @lim::integer;
 
 -- name: ListRiskWindowedMessages :many
@@ -785,7 +810,7 @@ LIMIT @lim::integer;
 WITH ordered AS (
   SELECT
     cm.*,
-    row_number() OVER (ORDER BY cm.seq) AS rn,
+    row_number() OVER (ORDER BY cm.created_at, cm.seq) AS rn,
     count(*) OVER () AS total
   FROM chat_messages cm
   WHERE cm.chat_id = @chat_id
@@ -815,7 +840,7 @@ WHERE EXISTS (
   SELECT 1 FROM risk_rns r
   WHERE o.rn BETWEEN r.rn - @context_size::bigint AND r.rn + @context_size::bigint
 )
-ORDER BY o.seq ASC;
+ORDER BY o.created_at ASC, o.seq ASC;
 
 -- name: ListSearchWindowedMessages :many
 -- Query-search view: same windowing as ListRiskWindowedMessages, but the seed
@@ -831,7 +856,7 @@ ORDER BY o.seq ASC;
 WITH ordered AS (
   SELECT
     cm.*,
-    row_number() OVER (ORDER BY cm.seq) AS rn,
+    row_number() OVER (ORDER BY cm.created_at, cm.seq) AS rn,
     count(*) OVER () AS total
   FROM chat_messages cm
   WHERE cm.chat_id = @chat_id
@@ -854,13 +879,13 @@ WHERE EXISTS (
   SELECT 1 FROM match_rns m
   WHERE o.rn BETWEEN m.rn - @context_size::bigint AND m.rn + @context_size::bigint
 )
-ORDER BY o.seq ASC;
+ORDER BY o.created_at ASC, o.seq ASC;
 
 -- name: ListChatMessagesForMatch :many
 SELECT id, role, content, tool_call_id, tool_calls
 FROM chat_messages
 WHERE chat_id = @chat_id AND generation = @generation
-ORDER BY seq ASC;
+ORDER BY created_at ASC, seq ASC;
 
 -- name: UpdateChatTitle :exec
 -- Auto-generated title write. Guarded on title_manually_set so a manual rename
@@ -1025,8 +1050,8 @@ WHERE id IN (
     JOIN chat_resolution_messages crm ON cr.id = crm.chat_resolution_id
     JOIN chat_messages cm ON crm.message_id = cm.id
     WHERE cr.chat_id = @chat_id
-      AND cm.seq > (
-        SELECT seq FROM chat_messages WHERE chat_messages.id = @after_message_id
+      AND (cm.created_at, cm.seq) > (
+        SELECT created_at, seq FROM chat_messages WHERE chat_messages.id = @after_message_id
       )
   );
 

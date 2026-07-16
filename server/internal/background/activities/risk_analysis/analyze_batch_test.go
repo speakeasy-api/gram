@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -831,6 +832,7 @@ func insertAssistantToolCallWithArgs(t *testing.T, conn *pgxpool.Pool, td testDa
 	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
 	t.Cleanup(func() { _ = shutdown(t.Context()) })
 	_, err = writer.Write(t.Context(), td.projectID, []chatrepo.CreateChatMessageParams{{
+		CreatedAt:        pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: 0},
 		ChatID:           td.chatID,
 		Role:             "assistant",
 		ProjectID:        td.projectID,
@@ -900,6 +902,7 @@ func insertAssistantToolCallsWithArgs(t *testing.T, conn *pgxpool.Pool, td testD
 	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
 	t.Cleanup(func() { _ = shutdown(t.Context()) })
 	_, err = writer.Write(t.Context(), td.projectID, []chatrepo.CreateChatMessageParams{{
+		CreatedAt:        pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: 0},
 		ChatID:           td.chatID,
 		Role:             "assistant",
 		ProjectID:        td.projectID,
@@ -1163,6 +1166,7 @@ func insertAssistantToolCall(t *testing.T, conn *pgxpool.Pool, td testData, call
 	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
 	t.Cleanup(func() { _ = shutdown(t.Context()) })
 	_, err = writer.Write(t.Context(), td.projectID, []chatrepo.CreateChatMessageParams{{
+		CreatedAt:        pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: 0},
 		ChatID:           td.chatID,
 		Role:             "assistant",
 		ProjectID:        td.projectID,

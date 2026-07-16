@@ -348,6 +348,7 @@ type CreateChatMessageParams struct {
 	ContentHash      []byte
 	Generation       int32
 	Replayed         bool
+	CreatedAt        pgtype.Timestamptz
 }
 
 const createChatMessageWithToolCalls = `-- name: CreateChatMessageWithToolCalls :exec
@@ -519,8 +520,8 @@ WHERE id IN (
     JOIN chat_resolution_messages crm ON cr.id = crm.chat_resolution_id
     JOIN chat_messages cm ON crm.message_id = cm.id
     WHERE cr.chat_id = $1
-      AND cm.seq > (
-        SELECT seq FROM chat_messages WHERE chat_messages.id = $2
+      AND (cm.created_at, cm.seq) > (
+        SELECT created_at, seq FROM chat_messages WHERE chat_messages.id = $2
       )
   )
 `
@@ -1190,9 +1191,9 @@ func (q *Queries) LinkAIIntegrationConfigChat(ctx context.Context, arg LinkAIInt
 }
 
 const listChatMessages = `-- name: ListChatMessages :many
-SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, external_message_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, content_hash, generation, replayed, created_at, risk_analyzed_at FROM chat_messages 
-WHERE chat_id = $1 AND (project_id IS NULL OR project_id = $2::uuid) 
-ORDER BY seq ASC
+SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, external_message_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, content_hash, generation, replayed, created_at, risk_analyzed_at FROM chat_messages
+WHERE chat_id = $1 AND (project_id IS NULL OR project_id = $2::uuid)
+ORDER BY created_at ASC, seq ASC
 `
 
 type ListChatMessagesParams struct {
@@ -1200,6 +1201,9 @@ type ListChatMessagesParams struct {
 	ProjectID uuid.UUID
 }
 
+// Transcript order is (created_at, seq): created_at carries the event's
+// original occurred_at for hook-captured messages (spool replays arrive out
+// of insert order), and seq breaks ties stably for same-timestamp rows.
 func (q *Queries) ListChatMessages(ctx context.Context, arg ListChatMessagesParams) ([]ChatMessage, error) {
 	rows, err := q.db.Query(ctx, listChatMessages, arg.ChatID, arg.ProjectID)
 	if err != nil {
@@ -1258,8 +1262,14 @@ SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content
 WHERE cm.chat_id = $1
   AND (cm.project_id IS NULL OR cm.project_id = $2::uuid)
   AND cm.generation = $3::integer
-  AND ($4::bigint IS NULL OR cm.seq > $4::bigint)
-ORDER BY cm.seq ASC
+  AND (
+    $4::bigint IS NULL
+    OR (cm.created_at, cm.seq) > (
+      SELECT a.created_at, a.seq FROM chat_messages a
+      WHERE a.chat_id = $1 AND a.seq = $4::bigint
+    )
+  )
+ORDER BY cm.created_at ASC, cm.seq ASC
 LIMIT $5::integer
 `
 
@@ -1271,9 +1281,10 @@ type ListChatMessagesAfterPageParams struct {
 	Lim        int32
 }
 
-// Keyset page within a generation, oldest first. Returns messages with seq
-// strictly greater than @after_seq, or the oldest page (start of the thread)
-// when @after_seq is NULL. Fetch @lim = pageSize+1 to detect whether more newer
+// Keyset page within a generation, oldest first. Same anchor-row cursor
+// resolution as ListChatMessagesBeforePage. Returns rows strictly after the
+// anchor in transcript order, or the oldest page (start of the thread) when
+// @after_seq is NULL. Fetch @lim = pageSize+1 to detect whether more newer
 // rows remain.
 func (q *Queries) ListChatMessagesAfterPage(ctx context.Context, arg ListChatMessagesAfterPageParams) ([]ChatMessage, error) {
 	rows, err := q.db.Query(ctx, listChatMessagesAfterPage,
@@ -1339,8 +1350,14 @@ SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content
 WHERE cm.chat_id = $1
   AND (cm.project_id IS NULL OR cm.project_id = $2::uuid)
   AND cm.generation = $3::integer
-  AND ($4::bigint IS NULL OR cm.seq < $4::bigint)
-ORDER BY cm.seq DESC
+  AND (
+    $4::bigint IS NULL
+    OR (cm.created_at, cm.seq) < (
+      SELECT a.created_at, a.seq FROM chat_messages a
+      WHERE a.chat_id = $1 AND a.seq = $4::bigint
+    )
+  )
+ORDER BY cm.created_at DESC, cm.seq DESC
 LIMIT $5::integer
 `
 
@@ -1352,8 +1369,11 @@ type ListChatMessagesBeforePageParams struct {
 	Lim        int32
 }
 
-// Keyset page within a generation, newest first. Returns messages with seq
-// strictly less than @before_seq, or the newest page when @before_seq is NULL.
+// Keyset page within a generation, newest first. The cursor stays the anchor
+// row's seq (stable, unique, already in the API), but position is compared in
+// transcript order (created_at, seq) so pages agree with the display order
+// even when spool-replayed rows carry backdated created_at. Returns rows
+// strictly before the anchor, or the newest page when @before_seq is NULL.
 // Order DESC so LIMIT keeps the most recent rows; the caller reverses to
 // ascending for display. Fetch @lim = pageSize+1 to detect whether more older
 // rows remain.
@@ -1421,7 +1441,7 @@ SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content
 WHERE cm.chat_id = $1
   AND (cm.project_id IS NULL OR cm.project_id = $2::uuid)
   AND cm.generation = $3::integer
-ORDER BY cm.seq ASC
+ORDER BY cm.created_at ASC, cm.seq ASC
 `
 
 type ListChatMessagesByGenerationParams struct {
@@ -1490,7 +1510,7 @@ const listChatMessagesForMatch = `-- name: ListChatMessagesForMatch :many
 SELECT id, role, content, tool_call_id, tool_calls
 FROM chat_messages
 WHERE chat_id = $1 AND generation = $2
-ORDER BY seq ASC
+ORDER BY created_at ASC, seq ASC
 `
 
 type ListChatMessagesForMatchParams struct {
@@ -1909,7 +1929,7 @@ SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content
 WHERE cm.chat_id = $1
   AND (cm.project_id IS NULL OR cm.project_id = $2::uuid)
   AND cm.generation = (SELECT MAX(generation) FROM chat_messages WHERE chat_id = $1)
-ORDER BY cm.seq ASC
+ORDER BY cm.created_at ASC, cm.seq ASC
 `
 
 type ListLatestGenerationChatMessagesParams struct {
@@ -1975,7 +1995,7 @@ const listRiskWindowedMessages = `-- name: ListRiskWindowedMessages :many
 WITH ordered AS (
   SELECT
     cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.content_hash, cm.generation, cm.replayed, cm.created_at, cm.risk_analyzed_at,
-    row_number() OVER (ORDER BY cm.seq) AS rn,
+    row_number() OVER (ORDER BY cm.created_at, cm.seq) AS rn,
     count(*) OVER () AS total
   FROM chat_messages cm
   WHERE cm.chat_id = $2
@@ -2005,7 +2025,7 @@ WHERE EXISTS (
   SELECT 1 FROM risk_rns r
   WHERE o.rn BETWEEN r.rn - $1::bigint AND r.rn + $1::bigint
 )
-ORDER BY o.seq ASC
+ORDER BY o.created_at ASC, o.seq ASC
 `
 
 type ListRiskWindowedMessagesParams struct {
@@ -2127,7 +2147,7 @@ const listSearchWindowedMessages = `-- name: ListSearchWindowedMessages :many
 WITH ordered AS (
   SELECT
     cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.content_hash, cm.generation, cm.replayed, cm.created_at, cm.risk_analyzed_at,
-    row_number() OVER (ORDER BY cm.seq) AS rn,
+    row_number() OVER (ORDER BY cm.created_at, cm.seq) AS rn,
     count(*) OVER () AS total
   FROM chat_messages cm
   WHERE cm.chat_id = $2
@@ -2150,7 +2170,7 @@ WHERE EXISTS (
   SELECT 1 FROM match_rns m
   WHERE o.rn BETWEEN m.rn - $1::bigint AND m.rn + $1::bigint
 )
-ORDER BY o.seq ASC
+ORDER BY o.created_at ASC, o.seq ASC
 `
 
 type ListSearchWindowedMessagesParams struct {

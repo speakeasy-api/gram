@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -716,6 +717,7 @@ func (s *Service) writeCursorToolCallRequestToPG(ctx context.Context, payload *g
 
 	msgParams := chatRepo.CreateChatMessageParams{
 		Replayed:         false,
+		CreatedAt:        pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: 0},
 		ChatID:           chatID,
 		ProjectID:        projectID,
 		Role:             "assistant",
@@ -785,6 +787,7 @@ func (s *Service) writeCursorToolCallResultToPG(ctx context.Context, payload *ge
 
 	msgParams := chatRepo.CreateChatMessageParams{
 		Replayed:         false,
+		CreatedAt:        pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: 0},
 		ChatID:           chatID,
 		ProjectID:        projectID,
 		Role:             "tool",
@@ -833,6 +836,7 @@ func (s *Service) persistCursorAgentResponse(ctx context.Context, payload *gen.C
 
 	msgParams := chatRepo.CreateChatMessageParams{
 		Replayed:         false,
+		CreatedAt:        pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: 0},
 		ChatID:           chatID,
 		ProjectID:        projectID,
 		Role:             "assistant",
@@ -897,6 +901,7 @@ func (s *Service) persistCursorUserPrompt(ctx context.Context, payload *gen.Curs
 
 	msgParams := chatRepo.CreateChatMessageParams{
 		Replayed:         false,
+		CreatedAt:        pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: 0},
 		ChatID:           chatID,
 		ProjectID:        parsedProjectID,
 		Role:             "user",
