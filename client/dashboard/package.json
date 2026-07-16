@@ -58,7 +58,6 @@
     "@xstate/react": "^6.1.0",
     "@xyflow/react": "^12.11.1",
     "ai": "catalog:",
-    "assistant-cloud": "0.1.34",
     "assistant-stream": "^0.3.25",
     "chart.js": "^4.5.1",
     "chartjs-plugin-zoom": "^2.2.0",
