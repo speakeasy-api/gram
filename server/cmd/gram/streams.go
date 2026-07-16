@@ -290,7 +290,7 @@ func newStreamsCommand() *cli.Command {
 					mustReceiveBatch(
 						rg, &riskv1.Finding{}, &riskv1.FindingCHWriter{},
 						gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second},
-						risk.NewFindingCHWriter(logger, meterProvider, chrepo.New(chConn), riskFingerprinter),
+						risk.NewFindingCHWriter(logger, replicaDB, meterProvider, chrepo.New(chConn), riskFingerprinter),
 					)
 				}
 			}

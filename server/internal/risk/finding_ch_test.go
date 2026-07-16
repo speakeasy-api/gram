@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -18,8 +19,10 @@ import (
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
+	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -51,7 +54,10 @@ func newCHWriterWithMeter(t *testing.T, mp metric.MeterProvider) (*risk.FindingC
 	ins := &fakeCHInserter{}
 	fp, err := risk.ParsePepperKeyRing(keyRingJSON(t, testPepperVersion, map[string][]byte{testPepperVersion: testPepperKey}))
 	require.NoError(t, err)
-	w := risk.NewFindingCHWriter(testenv.NewLogger(t), mp, ins, fp)
+	// nil exclusions DB: these unit-test findings carry non-UUID project/policy
+	// ids, so exclusion resolution fails-open before any DB access. Exclusion
+	// filtering against a real DB is covered by the integration test below.
+	w := risk.NewFindingCHWriter(testenv.NewLogger(t), nil, mp, ins, fp)
 	return w, ins
 }
 
@@ -244,6 +250,54 @@ func TestFindingCHWriter_HandleBatch_RecordsInsertedMetric(t *testing.T) {
 		require.True(t, ok, "outcome attribute should be present")
 		require.Equal(t, tt.wantOutcome, outcome.AsString())
 	}
+}
+
+// Integration test against a real Postgres: a going-forward exclusion must drop
+// the matching finding before it reaches ClickHouse, mirroring the Postgres
+// scan path. Findings from the shadow path are otherwise unfiltered.
+func TestFindingCHWriter_HandleBatch_DropsExcludedFindings(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestRiskService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	// Global exact exclusion suppressing the secret "hunter2" for this project.
+	_, err := riskrepo.New(ti.conn).CreateRiskExclusion(t.Context(), riskrepo.CreateRiskExclusionParams{
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		RiskPolicyID:   uuid.NullUUID{}, // global: applies to every policy
+		MatchType:      "exact",
+		MatchValue:     "hunter2",
+		Enabled:        true,
+	})
+	require.NoError(t, err)
+
+	ins := &fakeCHInserter{}
+	fp, err := risk.ParsePepperKeyRing(keyRingJSON(t, testPepperVersion, map[string][]byte{testPepperVersion: testPepperKey}))
+	require.NoError(t, err)
+	w := risk.NewFindingCHWriter(testenv.NewLogger(t), ti.conn, testenv.NewMeterProvider(t), ins, fp)
+
+	policyID := uuid.Must(uuid.NewV7()).String()
+
+	// Excluded: match "hunter2" (== the exclusion value).
+	excluded := finding()
+	excluded.SetProjectId(authCtx.ProjectID.String())
+	excluded.SetRiskPolicyId(policyID)
+	excluded.SetMatch("hunter2")
+
+	// Kept: a different value the exclusion does not cover.
+	kept := finding()
+	kept.SetProjectId(authCtx.ProjectID.String())
+	kept.SetRiskPolicyId(policyID)
+	kept.SetMatch("different-secret")
+
+	require.NoError(t, w.HandleBatch(ctx, []*riskv1.Finding{excluded, kept}, nil))
+
+	rows := chRows(t, ins)
+	require.Len(t, rows, 1, "the excluded finding must be dropped, the other kept")
+	require.Equal(t, wantRedacted("org-1", "different-secret"), rows[0].MatchRedacted)
 }
 
 // chMessagesInsertedPoint returns the single data point for the CH

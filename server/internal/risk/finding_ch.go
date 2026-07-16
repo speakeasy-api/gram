@@ -8,13 +8,18 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/hashicorp/golang-lru/v2/expirable"
 	"go.opentelemetry.io/otel/metric"
 
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
+	"github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
 
 // RiskFindingInserter writes a batch of findings to ClickHouse. *chrepo.Queries
@@ -33,15 +38,25 @@ type FindingCHWriter struct {
 	metrics       *metrics
 	inserter      RiskFindingInserter
 	fingerprinter Fingerprinter
+
+	exclusionsCache *expirable.LRU[string, risk_analysis.ExclusionSet]
+	exclusionsDB    repo.DBTX
 }
 
-func NewFindingCHWriter(logger *slog.Logger, meterProvider metric.MeterProvider, inserter RiskFindingInserter, fingerprinter Fingerprinter) *FindingCHWriter {
+const (
+	exclusionsSetCacheSize = 1000
+	exclusionsSetCacheTTL  = time.Minute
+)
+
+func NewFindingCHWriter(logger *slog.Logger, exclusionsDB repo.DBTX, meterProvider metric.MeterProvider, inserter RiskFindingInserter, fingerprinter Fingerprinter) *FindingCHWriter {
 	logger = logger.With(attr.SlogComponent("finding-ch-writer"))
 	return &FindingCHWriter{
-		logger:        logger,
-		metrics:       newMetrics(meterProvider, logger),
-		inserter:      inserter,
-		fingerprinter: fingerprinter,
+		logger:          logger,
+		metrics:         newMetrics(meterProvider, logger),
+		inserter:        inserter,
+		fingerprinter:   fingerprinter,
+		exclusionsDB:    exclusionsDB,
+		exclusionsCache: expirable.NewLRU[string, risk_analysis.ExclusionSet](exclusionsSetCacheSize, nil, exclusionsSetCacheTTL),
 	}
 }
 
@@ -62,6 +77,15 @@ func (w *FindingCHWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 		if err != nil {
 			logger.ErrorContext(ctx, "finding has invalid rfc3339 timestamp", attr.SlogError(err), attr.SlogValueString(message.GetCreatedAt()))
 			w.metrics.RecordFindingSkipped(ctx, "invalid_timestamp")
+			continue
+		}
+
+		// Drop findings suppressed by a going-forward exclusion. The shadow scan
+		// path that feeds this writer does not apply exclusions, so we mirror the
+		// Postgres path here. Dead-letter sentinels carry no rule/match to match
+		// against, so they bypass the check.
+		if !deadLetter && w.isExcluded(ctx, message) {
+			w.metrics.RecordFindingSkipped(ctx, "excluded")
 			continue
 		}
 
@@ -147,4 +171,74 @@ func (w *FindingCHWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 	w.metrics.RecordFindingCHInserts(ctx, len(rows), o11y.OutcomeFromError(err))
 
 	return nil
+}
+
+// isExcluded reports whether a going-forward exclusion for the finding's policy
+// suppresses it, reusing the same matching logic (ExclusionSet) as the Postgres
+// scan path.
+func (w *FindingCHWriter) isExcluded(ctx context.Context, message *riskv1.Finding) bool {
+	set := w.exclusionSetFor(ctx, message.GetProjectId(), message.GetRiskPolicyId())
+	if set.Empty() {
+		return false
+	}
+	// ExclusionSet.Excluded matches on RuleID, Source and Match only; the
+	// remaining fields are set for completeness (exhaustruct) but unused.
+	return set.Excluded(scanners.Finding{
+		RuleID:              message.GetRuleId(),
+		Description:         message.GetDescription(),
+		Match:               message.GetMatch(),
+		StartPos:            int(message.GetStartPos()),
+		EndPos:              int(message.GetEndPos()),
+		Tags:                message.GetTags(),
+		Source:              message.GetSource(),
+		Confidence:          message.GetConfidence(),
+		DeadLetterReason:    message.GetDeadLetterReason(),
+		McpLookupToolCallID: "",
+		SpanGroupKey:        "",
+		Field:               "",
+		Path:                "",
+	})
+}
+
+// exclusionSetFor resolves the enabled exclusions (the policy's own plus every
+// global one) that apply to a finding's policy, cached per (project, policy)
+// with a TTL so exclusion edits take effect within exclusionsSetCacheTTL
+// without a Postgres read per batch.
+//
+// Fail-open: an empty/unparseable project or policy id, or a lookup error,
+// returns an empty set (nothing excluded) rather than dropping findings. On a
+// lookup error the result is not cached, so the next batch retries.
+func (w *FindingCHWriter) exclusionSetFor(ctx context.Context, projectID, policyID string) risk_analysis.ExclusionSet {
+	if projectID == "" || policyID == "" {
+		return risk_analysis.ExclusionSet{}
+	}
+
+	key := projectID + "#" + policyID
+	if set, ok := w.exclusionsCache.Get(key); ok {
+		return set
+	}
+
+	projectUUID, err := uuid.Parse(projectID)
+	if err != nil {
+		w.logger.ErrorContext(ctx, "finding has invalid project id", attr.SlogError(err), attr.SlogValueString(projectID))
+		return risk_analysis.ExclusionSet{}
+	}
+	policyUUID, err := uuid.Parse(policyID)
+	if err != nil {
+		w.logger.ErrorContext(ctx, "finding has invalid risk policy id", attr.SlogError(err), attr.SlogValueString(policyID))
+		return risk_analysis.ExclusionSet{}
+	}
+
+	exclusions, err := repo.New(w.exclusionsDB).ListEnabledExclusionsForPolicy(ctx, repo.ListEnabledExclusionsForPolicyParams{
+		ProjectID:    projectUUID,
+		RiskPolicyID: uuid.NullUUID{UUID: policyUUID, Valid: true},
+	})
+	if err != nil {
+		w.logger.ErrorContext(ctx, "list exclusions for policy", attr.SlogError(err), attr.SlogValueString(policyID))
+		return risk_analysis.ExclusionSet{}
+	}
+
+	set := risk_analysis.NewExclusionSet(exclusions)
+	w.exclusionsCache.Add(key, set)
+	return set
 }
