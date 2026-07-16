@@ -261,19 +261,6 @@ func (s *Service) insertMessageWithFallbackUpsert(
 	// Try to insert the message (Write handles notification on success).
 	_, err = s.writer.Write(ctx, projectID, []chatRepo.CreateChatMessageParams{msgParams})
 	if err == nil {
-		// Mark ARRIVAL-time activity on the chat: message rows persist at the
-		// event's occurred_at (backdated for spool replays), so updated_at is
-		// the only arrival-ordered signal chat listings can sort recency by.
-		// Best-effort — a missed bump only delays list placement.
-		if touchErr := s.repo.UpdateClaudeCodeSessionTimestamp(ctx, repo.UpdateClaudeCodeSessionTimestampParams{
-			ID:        chatID,
-			ProjectID: projectID,
-		}); touchErr != nil {
-			s.logger.WarnContext(ctx, "failed to bump chat activity timestamp",
-				attr.SlogError(touchErr),
-				attr.SlogProjectID(projectID.String()),
-			)
-		}
 		return nil
 	}
 

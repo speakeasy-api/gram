@@ -486,7 +486,7 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 		}
 	}
 	s.writeCanonicalTelemetry(ctx, payload, authCtx, &metadata, timestamp, blockReason)
-	if err := s.persistCanonicalConversationEvent(ctx, payload, authCtx, &metadata); err != nil {
+	if err := s.persistCanonicalConversationEvent(ctx, payload, authCtx, &metadata, timestamp); err != nil {
 		s.logger.WarnContext(ctx, "failed to persist canonical hook conversation event",
 			attr.SlogEvent("hooks_ingest_chat_persist_failed"),
 			attr.SlogError(err),
@@ -767,16 +767,16 @@ func telemetryHookEventName(payload *gen.IngestPayload) string {
 	}
 }
 
-func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, metadata *SessionMetadata) error {
+// persistCanonicalConversationEvent writes the event's chat row. occurredAt
+// is the ingest-resolved canonicalEventTime, passed in rather than recomputed
+// so the chat row, telemetry, and enforcement carry the exact same
+// server-resolved time for one event — a recomputed fallback or clamp would
+// drift by the handler's processing latency.
+func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, occurredAt time.Time) error {
 	sessionID := canonicalSessionID(payload)
 	if sessionID == "" || authCtx.ProjectID == nil {
 		return nil
 	}
-	// The row's created_at is the event's original occurred_at (clamped inside
-	// canonicalEventTime): spool-replayed backlog must interleave with live
-	// rows in occurrence order, and transcript readers order by
-	// (created_at, seq).
-	occurredAt := canonicalEventTime(payload)
 	baseMsg := func(role, content string) chatRepo.CreateChatMessageParams {
 		return chatRepo.CreateChatMessageParams{
 			ChatID:           sessionIDToUUID(sessionID),
