@@ -288,6 +288,9 @@ GRAM_ADMIN_OIDC_EMULATOR_URL = "http://{{env.GRAM_ADMIN_OIDC_EMULATOR_HOST}}:{{e
 GRAM_ADMIN_OIDC_CLIENT_ID = "gram-local.apps.googleusercontent.com"
 GRAM_ADMIN_OIDC_CLIENT_SECRET = "GOCSPX-example_secret"
 GRAM_ADMIN_ALLOWED_HDS = "speakeasyapi.dev,speakeasy.com"
+## Used for admin local development as a fake Google IDP
+MOCK_OIDC_PORT = "4000"
+MOCK_OIDC_ADDRESS = ":{{env.MOCK_OIDC_PORT}}"
 
 ########################
 ## Svix configuration ##
