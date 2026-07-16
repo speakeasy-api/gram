@@ -40,6 +40,22 @@ WHERE organization_id = @organization_id
   AND deleted IS FALSE
 RETURNING *;
 
+-- name: IsDefaultProject :one
+-- Whether @project_id is the org's default project — the oldest (first by id
+-- ASC) non-deleted project, created at org setup. Mirrors the default-project
+-- definition the agent's getPlugins read path uses, so the audience the seeding
+-- side grants matches the project the delivery side treats as default. Used to
+-- decide whether a new plugin defaults to the org-wide audience: only plugins in
+-- the default project do; plugins in other projects default to no assignments.
+SELECT (
+  SELECT p.id
+  FROM projects p
+  WHERE p.organization_id = @organization_id
+    AND p.deleted IS FALSE
+  ORDER BY p.id ASC
+  LIMIT 1
+) = @project_id AS is_default;
+
 -- name: GetPlugin :one
 SELECT *
 FROM plugins
@@ -177,8 +193,16 @@ WHERE id = @id
 RETURNING *;
 
 -- name: AddPluginAssignment :one
+-- Scoped to the org: the row is inserted only when @plugin_id resolves to a
+-- non-deleted plugin in @organization_id, so a mismatched (plugin, org) pair
+-- can never create a cross-tenant assignment. Returns no row (ErrNoRows) when
+-- the plugin does not belong to the org.
 INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn)
-VALUES (@plugin_id, @organization_id, @principal_urn)
+SELECT p.id, @organization_id, @principal_urn
+FROM plugins p
+WHERE p.id = @plugin_id
+  AND p.organization_id = @organization_id
+  AND p.deleted IS FALSE
 ON CONFLICT (plugin_id, principal_urn) DO UPDATE
   SET principal_urn = EXCLUDED.principal_urn
 RETURNING *;

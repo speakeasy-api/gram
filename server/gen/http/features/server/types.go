@@ -50,6 +50,10 @@ type GetProductFeaturesResponseBody struct {
 	CustomModelKeysEnabled bool `form:"custom_model_keys_enabled" json:"custom_model_keys_enabled" xml:"custom_model_keys_enabled"`
 	// Whether the Skills page is enabled for the organization
 	SkillsEnabled bool `form:"skills_enabled" json:"skills_enabled" xml:"skills_enabled"`
+	// Whether the organization uses the device agent (any device has polled
+	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
+	// feature.
+	DeviceAgent bool `form:"device_agent" json:"device_agent" xml:"device_agent"`
 }
 
 // GetProductFeaturesUnauthorizedResponseBody is the type of the "features"
@@ -440,6 +444,7 @@ func NewGetProductFeaturesResponseBody(res *features.GetProductFeaturesResult) *
 		HooksFailOpenEnabled:         res.HooksFailOpenEnabled,
 		CustomModelKeysEnabled:       res.CustomModelKeysEnabled,
 		SkillsEnabled:                res.SkillsEnabled,
+		DeviceAgent:                  res.DeviceAgent,
 	}
 	return body
 }

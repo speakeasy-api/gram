@@ -77,6 +77,10 @@ type GetProductFeaturesResult struct {
 	CustomModelKeysEnabled bool
 	// Whether the Skills page is enabled for the organization
 	SkillsEnabled bool
+	// Whether the organization uses the device agent (any device has polled
+	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
+	// feature.
+	DeviceAgent bool
 }
 
 // SetProductFeaturePayload is the payload type of the features service

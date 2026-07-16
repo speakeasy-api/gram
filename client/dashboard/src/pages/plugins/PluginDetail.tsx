@@ -27,6 +27,9 @@ import { useRemovePluginServerMutation } from "@gram/client/react-query/removePl
 import { useListToolsets } from "@gram/client/react-query/listToolsets";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers";
+import { useMembers } from "@gram/client/react-query/members";
+import { useRoles } from "@gram/client/react-query/roles";
+import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
 import {
   Badge,
@@ -48,10 +51,14 @@ import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { PluginServer } from "@gram/client/models/components/pluginserver.js";
 import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import { useSdkClient } from "@/contexts/Sdk";
+import { useTelemetry } from "@/contexts/Telemetry";
 import { toast } from "sonner";
 import { DEFAULT_PLUGIN_DESCRIPTION } from "./default-plugin";
 import { downloadPluginPackage } from "./downloadPluginPackage";
 import { InstallInstructionsDialog } from "./InstallInstructionsDialog";
+import { PluginAssignmentsSheet } from "./PluginAssignmentsSheet";
+import { PluginAssignmentsList } from "./PluginAssignmentsList";
+import { memberMapByUrn, roleMapByUrn } from "./principals";
 import { PublishDialog } from "./PublishDialog";
 
 // A selectable server for a plugin, sourced from either a toolset (Hosted) or
@@ -79,6 +86,7 @@ export default function PluginDetail(): JSX.Element | null {
   const [isInstallSheetOpen, setIsInstallSheetOpen] = useState(false);
   const [isPublishDialogOpen, setIsPublishDialogOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [isAssignmentsOpen, setIsAssignmentsOpen] = useState(false);
 
   const { data: plugin } = usePluginSuspense({ id: pluginId! });
   // Polled so the publish-freshness badges/banner pick up the Temporal
@@ -122,6 +130,32 @@ export default function PluginDetail(): JSX.Element | null {
 
   const isLoadingServers =
     isLoadingToolsets || isLoadingMcpServers || isLoadingMcpEndpoints;
+
+  // Roles and members resolve the plugin's assignment principal URNs to human
+  // names in the summary below (and seed the assignment sheet). React Query
+  // dedupes these with the sheet's own calls.
+  const { data: rolesData } = useRoles();
+  const { data: membersData } = useMembers();
+  const roleByUrn = useMemo(
+    () => roleMapByUrn(rolesData?.roles ?? []),
+    [rolesData?.roles],
+  );
+  const memberByUrn = useMemo(
+    () => memberMapByUrn(membersData?.members ?? []),
+    [membersData?.members],
+  );
+
+  // Assignments only gate delivery for the device agent (agent.getPlugins);
+  // marketplace installs (Claude/Cursor/Codex) ship every published plugin. So
+  // only surface the section for device-agent orgs: those enrolled in the
+  // program (the gram-device-agent flag) or with devices that have actually
+  // synced (productFeatures.deviceAgent — member-readable, unlike the admin-only
+  // synced-users list, so non-admin viewers see the section too).
+  const isDeviceAgentEnabled =
+    useTelemetry().isFeatureEnabled("gram-device-agent") ?? false;
+  const { data: productFeatures } = useProductFeatures();
+  const showAssignments =
+    isDeviceAgentEnabled || (productFeatures?.deviceAgent ?? false);
 
   // Invalidate publish status too so the dirty/up-to-date affordance reflects
   // the edit the moment a mutation lands.
@@ -330,6 +364,7 @@ export default function PluginDetail(): JSX.Element | null {
     (isDefaultPlugin ? DEFAULT_PLUGIN_DESCRIPTION : "No description");
 
   const servers = plugin.servers ?? [];
+  const assignments = plugin.assignments ?? [];
 
   // Exclude servers already added to the plugin, keyed per backend.
   const addedToolsetIds = new Set(
@@ -542,6 +577,72 @@ export default function PluginDetail(): JSX.Element | null {
           )}
         </div>
 
+        {/* Assignments only affect device-agent delivery, so the section is
+            hidden for marketplace-only orgs (see showAssignments). */}
+        {showAssignments && (
+          <>
+            <div className="mb-3 flex items-center gap-3">
+              <div className="border-border flex-1 border-t" />
+              <div className="flex shrink-0 items-center gap-2">
+                <Type
+                  small
+                  muted
+                  className="font-mono text-xs tracking-wide uppercase"
+                >
+                  Assignments
+                </Type>
+                {assignments.length > 0 && (
+                  <span className="bg-muted text-muted-foreground rounded-full px-1.5 py-0.5 text-xs font-medium tabular-nums">
+                    {assignments.length}
+                  </span>
+                )}
+              </div>
+              <div className="border-border flex-1 border-t" />
+            </div>
+            <div className="mb-3 flex items-center justify-between gap-4">
+              <Type small muted className="max-w-md">
+                Controls delivery to devices running the Speakeasy agent.
+                Marketplace installs (Claude, Cursor, Codex) receive every
+                published plugin regardless.
+              </Type>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setIsAssignmentsOpen(true)}
+              >
+                <Button.LeftIcon>
+                  <Icon name="users" className="h-4 w-4" />
+                </Button.LeftIcon>
+                <Button.Text>Manage assignments</Button.Text>
+              </Button>
+            </div>
+            <div className="mb-8">
+              {assignments.length === 0 ? (
+                <Stack
+                  gap={2}
+                  className="border-border rounded-xl border py-8"
+                  align="center"
+                  justify="center"
+                >
+                  <Type variant="body" muted>
+                    Not assigned to anyone yet
+                  </Type>
+                  <Type small muted>
+                    Assign this plugin to roles, users, or emails to deliver it
+                    to their devices.
+                  </Type>
+                </Stack>
+              ) : (
+                <PluginAssignmentsList
+                  assignments={assignments}
+                  roleByUrn={roleByUrn}
+                  memberByUrn={memberByUrn}
+                />
+              )}
+            </div>
+          </>
+        )}
+
         {/* Skills section — no plugin support yet, coming soon */}
         <div className="mb-3 flex items-center gap-3">
           <div className="border-border flex-1 border-t" />
@@ -714,6 +815,17 @@ export default function PluginDetail(): JSX.Element | null {
           onOpenChange={setIsPublishDialogOpen}
           onPublish={handlePublish}
           isPending={publishMutation.isPending}
+        />
+        <PluginAssignmentsSheet
+          pluginId={pluginId!}
+          pluginName={plugin.name}
+          assignments={assignments}
+          open={isAssignmentsOpen}
+          onOpenChange={setIsAssignmentsOpen}
+          onSaved={() => {
+            void invalidateAll();
+            offerPublish("Assignments updated");
+          }}
         />
       </Page.Body>
     </Page>
