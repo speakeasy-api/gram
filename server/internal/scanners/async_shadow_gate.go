@@ -3,11 +3,10 @@ package scanners
 import (
 	"context"
 	"log/slog"
-	"maps"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hashicorp/golang-lru/v2/expirable"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -39,14 +38,7 @@ type AsyncShadowGate struct {
 	flags  feature.Provider
 	db     repo.DBTX
 
-	now   func() time.Time
-	mu    sync.Mutex
-	cache map[uuid.UUID]asyncShadowFlagGroups
-}
-
-type asyncShadowFlagGroups struct {
-	personProperties map[string]string
-	expiresAt        time.Time
+	cache *expirable.LRU[uuid.UUID, map[string]string]
 }
 
 func NewAsyncShadowGate(logger *slog.Logger, flags feature.Provider, db repo.DBTX) *AsyncShadowGate {
@@ -54,9 +46,7 @@ func NewAsyncShadowGate(logger *slog.Logger, flags feature.Provider, db repo.DBT
 		logger: logger,
 		flags:  flags,
 		db:     db,
-		now:    time.Now,
-		mu:     sync.Mutex{},
-		cache:  make(map[uuid.UUID]asyncShadowFlagGroups),
+		cache:  expirable.NewLRU[uuid.UUID, map[string]string](asyncShadowFlagGroupMaxSize, nil, asyncShadowFlagGroupCacheTTL),
 	}
 }
 
@@ -88,15 +78,9 @@ func (g *AsyncShadowGate) Decide(ctx context.Context, projectID, chatMessageID s
 }
 
 func (g *AsyncShadowGate) personProperties(ctx context.Context, projectID uuid.UUID) (map[string]string, bool) {
-	now := g.now()
-
-	g.mu.Lock()
-	if cached, ok := g.cache[projectID]; ok && now.Before(cached.expiresAt) {
-		props := cloneStringMap(cached.personProperties)
-		g.mu.Unlock()
+	if props, ok := g.cache.Get(projectID); ok {
 		return props, true
 	}
-	g.mu.Unlock()
 
 	row, err := repo.New(g.db).GetProjectFlagGroups(ctx, projectID)
 	if err != nil {
@@ -109,21 +93,6 @@ func (g *AsyncShadowGate) personProperties(ctx context.Context, projectID uuid.U
 		"project_slug":      row.ProjectSlug,
 	}
 
-	g.mu.Lock()
-	if len(g.cache) >= asyncShadowFlagGroupMaxSize {
-		g.cache = make(map[uuid.UUID]asyncShadowFlagGroups)
-	}
-	g.cache[projectID] = asyncShadowFlagGroups{
-		personProperties: cloneStringMap(props),
-		expiresAt:        now.Add(asyncShadowFlagGroupCacheTTL),
-	}
-	g.mu.Unlock()
-
+	g.cache.Add(projectID, props)
 	return props, true
-}
-
-func cloneStringMap(in map[string]string) map[string]string {
-	out := make(map[string]string, len(in))
-	maps.Copy(out, in)
-	return out
 }

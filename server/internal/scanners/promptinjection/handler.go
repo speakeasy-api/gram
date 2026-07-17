@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
@@ -43,6 +44,13 @@ func NewHandler(logger *slog.Logger, meterProvider metric.MeterProvider, realSca
 func (h *Handler) Handle(ctx context.Context, m *riskv1.PromptInjectionAnalysis, _ gcp.MessageMetadata) error {
 	gateReason := h.gate.Decide(ctx, m.GetProjectId(), m.GetChatMessageId())
 	engine := gateReason.Engine()
+	trace.SpanFromContext(ctx).SetAttributes(
+		attr.RiskScanRequestID(m.GetRequestId()),
+		attr.MessageID(m.GetChatMessageId()),
+		attr.AuthOrganizationID(m.GetOrganizationId()),
+		attr.RiskScanEngine(engine),
+		attr.RiskScanGateReason(gateReason),
+	)
 
 	scanner := h.stubScanner
 	if engine == scanners.AsyncScanEngineReal {
@@ -55,7 +63,7 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.PromptInjectionAnalysis,
 		return fmt.Errorf("scan prompt injection: %w", err)
 	}
 
-	published, ruleIDs, err := scanners.PublishFindings(ctx, h.logger, h.findingsPub, scanners.FindingMetadata{
+	_, _, err = scanners.PublishFindings(ctx, h.logger, h.findingsPub, scanners.FindingMetadata{
 		RequestID:         m.GetRequestId(),
 		ChatMessageID:     m.GetChatMessageId(),
 		ProjectID:         m.GetProjectId(),
@@ -69,17 +77,6 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.PromptInjectionAnalysis,
 	}
 
 	h.metrics.RecordHandled(ctx, m.GetOrganizationId(), Source, engine, scanners.AsyncScanOutcomeOK, gateReason)
-	h.logger.InfoContext(ctx, "prompt injection scan complete", attr.SlogValueAny(map[string]any{
-		"request_id":      m.GetRequestId(),
-		"chat_message_id": m.GetChatMessageId(),
-		"org_id":          m.GetOrganizationId(),
-		"engine":          engine,
-		"gate_reason":     string(gateReason),
-		"detections":      len(findings),
-		"published":       published,
-		"rule_ids":        ruleIDs,
-	}))
-
 	return nil
 }
 
