@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
@@ -23,7 +24,7 @@ func TestUpsertWithTxCreatesConfigGeneration(t *testing.T) {
 	require.True(t, result.CreatedNewGeneration)
 	require.NotNil(t, result.Row)
 	require.Equal(t, result.Row.ID, result.Config.ID)
-	require.Equal(t, watermark.UTC().Add(usagePollIntervalFor(ProviderCursor)), result.Config.NextPollAfter)
+	require.Equal(t, watermark.UTC().Add(pollIntervalForSchedule(ScheduleCursor)), result.Config.NextPollAfter)
 	require.Equal(t, watermark, result.Config.PollWatermarkAt)
 
 	require.Equal(t, int64(1), countAIIntegrationConfigs(t, ctx, conn, orgID, false))
@@ -62,6 +63,57 @@ func TestUpsertWithTxKeyReplacementCreatesNewConfigGeneration(t *testing.T) {
 	require.Equal(t, int64(2), countAIIntegrationConfigs(t, ctx, conn, orgID, true))
 }
 
+func TestUpsertWithTxStartsAllProviderSchedules(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+
+	extOrgID := "org_ext_1"
+	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderAnthropicCompliance, "anthropic-key", true, true, &extOrgID, nil)
+
+	require.Equal(t, map[string]string{
+		ScheduleAnthropicCompliance:     SyncKindCursor,
+		ScheduleAnthropicAnalyticsUsage: SyncKindTime,
+		ScheduleAnthropicAnalyticsCost:  SyncKindTime,
+	}, listSyncSchedules(t, ctx, conn, created.Config.ID))
+}
+
+func TestUpsertWithTxStartsSingleCursorSchedule(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+
+	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderCursor, "cursor-key", true, true, nil, nil)
+
+	require.Equal(t, map[string]string{
+		ScheduleCursor: SyncKindTime,
+	}, listSyncSchedules(t, ctx, conn, created.Config.ID))
+}
+
+func TestListUsagePollCandidatesReturnsEveryDueSchedule(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+
+	extOrgID := "org_ext_1"
+	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderAnthropicCompliance, "anthropic-key", true, true, &extOrgID, nil)
+
+	candidates, err := store.ListUsagePollCandidates(ctx, time.Now().Add(time.Minute), 10)
+	require.NoError(t, err)
+	require.Len(t, candidates, 3)
+
+	schedules := make(map[string]string, len(candidates))
+	for _, candidate := range candidates {
+		require.Equal(t, created.Config.ID, candidate.ID)
+		require.Equal(t, ProviderAnthropicCompliance, candidate.Provider)
+		schedules[candidate.Schedule] = candidate.Kind
+	}
+	require.Equal(t, map[string]string{
+		ScheduleAnthropicCompliance:     SyncKindCursor,
+		ScheduleAnthropicAnalyticsUsage: SyncKindTime,
+		ScheduleAnthropicAnalyticsCost:  SyncKindTime,
+	}, schedules)
+}
 func TestRecordUsagePollFailureStoresErrorAsData(t *testing.T) {
 	t.Parallel()
 
@@ -101,6 +153,19 @@ func upsertConfigWithTx(
 		return err
 	}))
 	return result
+}
+
+func listSyncSchedules(t *testing.T, ctx context.Context, conn *pgxpool.Pool, configID uuid.UUID) map[string]string {
+	t.Helper()
+
+	rows, err := repo.New(conn).ListSyncSchedules(ctx, configID)
+	require.NoError(t, err)
+
+	schedules := map[string]string{}
+	for _, row := range rows {
+		schedules[row.Schedule] = row.Kind
+	}
+	return schedules
 }
 
 func countAIIntegrationConfigs(t *testing.T, ctx context.Context, conn *pgxpool.Pool, orgID string, includeDeleted bool) int64 {

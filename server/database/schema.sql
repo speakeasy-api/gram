@@ -2898,6 +2898,10 @@ CREATE TABLE IF NOT EXISTS ai_integration_syncs (
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   ai_integration_config_id uuid NOT NULL,
+  -- Discriminator for the sync pipeline.
+  schedule TEXT NOT NULL,
+  -- Checkpoint kind ('cursor' or 'time').
+  kind TEXT NOT NULL,
   poll_watermark_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   last_cursor_id TEXT,
   next_poll_after timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -2910,8 +2914,8 @@ CREATE TABLE IF NOT EXISTS ai_integration_syncs (
   CONSTRAINT ai_integration_syncs_config_id_fkey FOREIGN KEY (ai_integration_config_id) REFERENCES ai_integration_configs (id) ON DELETE CASCADE
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS ai_integration_syncs_config_id_key
-  ON ai_integration_syncs (ai_integration_config_id);
+CREATE UNIQUE INDEX IF NOT EXISTS ai_integration_syncs_config_id_schedule_key
+  ON ai_integration_syncs (ai_integration_config_id, schedule);
 
 CREATE TABLE IF NOT EXISTS principal_grants (
   id uuid NOT NULL DEFAULT generate_uuidv7(),

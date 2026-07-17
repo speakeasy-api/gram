@@ -1,6 +1,7 @@
 package activities
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,13 +10,39 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/testsuite"
 
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	anthropicapi "github.com/speakeasy-api/gram/server/internal/thirdparty/anthropic"
 	cursorapi "github.com/speakeasy-api/gram/server/internal/thirdparty/cursor"
 )
+
+func TestPollAIDataInputRoundTripsThroughTemporal(t *testing.T) {
+	t.Parallel()
+
+	input := PollAIDataInput{
+		ConfigID: "22222222-2222-2222-2222-222222222222",
+		Schedule: aiintegrations.ScheduleAnthropicAnalyticsCost,
+		EndTime:  time.Date(2026, 7, 16, 20, 0, 0, 0, time.UTC),
+	}
+	echo := func(_ context.Context, decoded PollAIDataInput) (PollAIDataInput, error) {
+		return decoded, nil
+	}
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestActivityEnvironment()
+	env.RegisterActivityWithOptions(echo, activity.RegisterOptions{Name: "DecodePollAIDataInput"})
+
+	value, err := env.ExecuteActivity("DecodePollAIDataInput", input)
+	require.NoError(t, err)
+
+	var actual PollAIDataInput
+	require.NoError(t, value.Get(&actual))
+	require.Equal(t, input, actual)
+}
 
 func TestPollRejectedByProviderMatchesPermanentProviderFailures(t *testing.T) {
 	t.Parallel()

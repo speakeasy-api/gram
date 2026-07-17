@@ -35,9 +35,10 @@ func NewPollCursorUsageMetrics(
 	telemetryLogger *telemetry.Logger,
 	guardianPolicy *guardian.Policy,
 ) *PollCursorUsageMetrics {
+	store := aiintegrations.NewStore(logger, db, encryptionClient)
 	return &PollCursorUsageMetrics{
-		integrations: aiintegrations.NewStore(logger, db, encryptionClient),
-		usagePoller: aiintegrations.NewUsagePollService(telemetryLogger, guardianPolicy, func(ctx context.Context, page int) {
+		integrations: store,
+		usagePoller: aiintegrations.NewUsagePollService(store, telemetryLogger, guardianPolicy, func(ctx context.Context, page int) {
 			activity.RecordHeartbeat(ctx, map[string]any{
 				"page": page,
 			})
@@ -71,7 +72,7 @@ func (p *PollCursorUsageMetrics) Do(ctx context.Context, configID string) (err e
 		}
 	}()
 
-	cfg, err := p.integrations.GetUsagePollConfig(ctx, id)
+	cfg, err := p.integrations.GetUsagePollConfig(ctx, id, aiintegrations.ScheduleCursor)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to load ai integration configuration")
 	}

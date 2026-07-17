@@ -417,6 +417,11 @@ const (
 	CursorUsageEventHashKey = attribute.Key("cursor.event_hash")
 	CursorChargedCentsKey   = attribute.Key("cursor.charged_cents")
 
+	// ClaudeChatEventHashKey fingerprints one Admin Analytics report row
+	// (aggregation key + values) so consumers needing exact-once sums can
+	// dedupe re-ingested windows by (gram_project_id, claude_chat.event_hash).
+	ClaudeChatEventHashKey = attribute.Key("claude_chat.event_hash")
+
 	// CodexUsageToolTokensKey stores Codex's tool_token_count verbatim for
 	// fidelity. It equals input + output, so it is intentionally not summed
 	// into any total downstream.
@@ -445,6 +450,7 @@ const (
 	GitHubUsernameKey = attribute.Key("gram.github.username")
 
 	AIIntegrationConfigIDKey           = attribute.Key("gram.ai_integration.config_id")
+	AIIntegrationSyncScheduleKey       = attribute.Key("gram.ai_integration.sync_schedule")
 	AIIntegrationUsagePollNextAfterKey = attribute.Key("gram.ai_integration.usage_poll.next_after")
 
 	ResilienceBreakerStateKey           = attribute.Key("gram.circuit_breaker.state")
@@ -1807,6 +1813,13 @@ func SlogGitHubUsername(v string) slog.Attr      { return slog.String(string(Git
 func AIIntegrationConfigID(v string) attribute.KeyValue { return AIIntegrationConfigIDKey.String(v) }
 func SlogAIIntegrationConfigID(v string) slog.Attr {
 	return slog.String(string(AIIntegrationConfigIDKey), v)
+}
+
+func AIIntegrationSyncSchedule(v string) attribute.KeyValue {
+	return AIIntegrationSyncScheduleKey.String(v)
+}
+func SlogAIIntegrationSyncSchedule(v string) slog.Attr {
+	return slog.String(string(AIIntegrationSyncScheduleKey), v)
 }
 
 func AIIntegrationUsagePollNextAfter(v time.Time) attribute.KeyValue {
