@@ -23,6 +23,7 @@ import (
 	platformlogs "github.com/speakeasy-api/gram/server/internal/platformtools/logs"
 	platformmemory "github.com/speakeasy-api/gram/server/internal/platformtools/memory"
 	platformrisk "github.com/speakeasy-api/gram/server/internal/platformtools/risk"
+	platformskills "github.com/speakeasy-api/gram/server/internal/platformtools/skills"
 	platformtriggers "github.com/speakeasy-api/gram/server/internal/platformtools/triggers"
 	platformusers "github.com/speakeasy-api/gram/server/internal/platformtools/users"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
@@ -177,6 +178,17 @@ func ManagedAssistantRiskTools(riskSvc platformrisk.RiskService) []platformtools
 func ManagedAssistantDeploymentsTools(deploymentsSvc platformdeployments.DeploymentsService) []platformtools.ExternalTool {
 	return []platformtools.ExternalTool{
 		{Executor: platformdeployments.NewGetDeploymentLogsTool(deploymentsSvc), RequiredFeature: ""},
+	}
+}
+
+// ManagedAssistantSkillsTools returns read-only skill management tools for the
+// project's managed assistant.
+func ManagedAssistantSkillsTools(skillsSvc platformskills.SkillsService) []platformtools.ExternalTool {
+	return []platformtools.ExternalTool{
+		{Executor: platformskills.NewListTool(skillsSvc), RequiredFeature: ""},
+		{Executor: platformskills.NewGetTool(skillsSvc), RequiredFeature: ""},
+		{Executor: platformskills.NewListVersionsTool(skillsSvc), RequiredFeature: ""},
+		{Executor: platformskills.NewListDistributionsTool(skillsSvc), RequiredFeature: ""},
 	}
 }
 
