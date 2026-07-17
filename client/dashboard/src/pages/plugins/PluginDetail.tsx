@@ -4,6 +4,7 @@ import { MCPStatusIndicator } from "@/components/mcp/MCPStatusIndicator";
 import { RequireScope } from "@/components/require-scope";
 import { ToolCollectionBadge } from "@/components/tool-collection-badge";
 import { Button as UiButton } from "@/components/ui/button";
+import { CopyButton } from "@/components/ui/copy-button";
 import { Dialog } from "@/components/ui/dialog";
 import { DotCard } from "@/components/ui/dot-card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -981,9 +982,16 @@ function PublishFreshnessIndicator({
     rows.push({
       label: "Current version",
       value: (
-        <Badge variant="information">
-          <Badge.Text className="font-mono">{cleanVersion}</Badge.Text>
-        </Badge>
+        <div className="flex items-center gap-1">
+          <Badge variant="information">
+            <Badge.Text className="font-mono">{cleanVersion}</Badge.Text>
+          </Badge>
+          <CopyButton
+            size="inline"
+            text={cleanVersion}
+            tooltip="Copy version"
+          />
+        </div>
       ),
     });
   }
