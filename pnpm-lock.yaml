@@ -503,11 +503,11 @@ importers:
         specifier: ^0.11.0
         version: 0.11.0
       '@logtape/logtape':
-        specifier: ^1.3.11
-        version: 1.3.11
+        specifier: ^2.2.4
+        version: 2.2.4
       '@logtape/pretty':
         specifier: ^1.3.11
-        version: 1.3.11(@logtape/logtape@1.3.11)
+        version: 1.3.11(@logtape/logtape@2.2.4)
       '@modelcontextprotocol/sdk':
         specifier: 'catalog:'
         version: 1.29.0(zod@4.4.3)
@@ -1527,8 +1527,8 @@ packages:
   '@kurkle/color@0.3.4':
     resolution: {integrity: sha512-M5UknZPHRu3DEDWoipU6sE8PdkZ6Z/S+v4dD+Ke8IaNlpdSQah50lz1KtcFBa2vsdOnwbbnxJwVM4wty6udA5w==}
 
-  '@logtape/logtape@1.3.11':
-    resolution: {integrity: sha512-mxkQOyySbjNGweavPudypBf0qZJxLOTXl2NAXYnsZF/ds5dQpTLA7YMSJbc8uFWlTkG+YjAnVL8tQWivIVPOJg==}
+  '@logtape/logtape@2.2.4':
+    resolution: {integrity: sha512-2rALzv9m4ibE5FyB8/FMm5MPMMlK7ujgy3ufricVKIxj6e7SZbw4w6J16/fRAsXgdDlOXPUA0aa6XoEQvdlKxw==}
 
   '@logtape/pretty@1.3.11':
     resolution: {integrity: sha512-PzCGM8Uv0usfz/0J97TOTE0/Ymip6a1kY+bIR/ldq72vNrgjfbDGJLo2F8j5ECSZ6h8HKfNDmKjIaSBQgG9JOQ==}
@@ -8388,11 +8388,11 @@ snapshots:
 
   '@kurkle/color@0.3.4': {}
 
-  '@logtape/logtape@1.3.11': {}
+  '@logtape/logtape@2.2.4': {}
 
-  '@logtape/pretty@1.3.11(@logtape/logtape@1.3.11)':
+  '@logtape/pretty@1.3.11(@logtape/logtape@2.2.4)':
     dependencies:
-      '@logtape/logtape': 1.3.11
+      '@logtape/logtape': 2.2.4
 
   '@manypkg/find-root@1.1.0':
     dependencies:
