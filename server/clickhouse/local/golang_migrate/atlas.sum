@@ -1,4 +1,4 @@
-h1:1oUXFuuh6w4ZIBiGeO3VJu0bpace40EpFHDxtLfaYTQ=
+h1:fAqeVJmr9blNigWPP9I6rKA+7K8EZ8pouMQU+CKyTpc=
 20251127155815_initial_golang_migrate.up.sql h1:fkATa14aucJEoldFi1VgW7TRT8gyC6NGe1Hq/OzXVuI=
 20251208142630_add-tool-logs-table.up.sql h1:cGJCiWBvLPFwOlpx0jYYLgdPZD21+gKSF/x4mVksBcI=
 20251209104438_add-id-col-to-tool-logs-table.up.sql h1:+Ubsl1ZKfeCZL9dBhohUnkBksKZj6nwdZSXm7WwowaE=
@@ -63,4 +63,4 @@ h1:1oUXFuuh6w4ZIBiGeO3VJu0bpace40EpFHDxtLfaYTQ=
 20260714173525_drop-tum-breakdown-summaries.up.sql h1:bN2z1+CUm9cttkIMubc0en+gp7viCi4ojcCACI8rhtU=
 20260714200951_shadow-mcp-server-name-override.up.sql h1:O6ZXprNwT+7pVXUmO6pkPoy+SFpCh4+zSH3E61ODGnQ=
 20260714200952_add-risk-findings.up.sql h1:RBBGniqX3KuAlZdyXFC/x/PPrVj8gUWqTBMGWKytQhA=
-20260717083846_add-risk-findings-exclusion-fields.up.sql h1:rW+JDFWFgP/pahwcGvOa+Zgydh3MrsgASM0coqL85gM=
+20260717083846_add-risk-findings-exclusion-fields.up.sql h1:9PmfgWmscSsydpGzc13/NZQiFfoaitotBAvoKRhUuLg=
