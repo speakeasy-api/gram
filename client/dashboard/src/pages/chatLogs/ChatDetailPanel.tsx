@@ -57,9 +57,9 @@ import { AccountTypeBadge } from "@/components/account-type-badge";
 import { personalAccountEmail } from "@/components/observe/account-display-utils";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { useRBAC } from "@/hooks/useRBAC";
-import { useIsPlatformAdmin } from "@/contexts/Auth";
+import { useIsPlatformAdmin, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
-import { resolveChatOwner } from "@/lib/chat-owner";
+import { chatOwnerLabel } from "@/lib/chat-owner";
 import { handleError, toError } from "@/lib/errors";
 import {
   ExclusionEditor,
@@ -781,6 +781,7 @@ function ChatDetailPanel({
   dimNonRisk: dimNonRiskProp = false,
 }: ChatDetailPanelProps) {
   const client = useSdkClient();
+  const { user } = useSession();
   const isPlatformAdmin = useIsPlatformAdmin();
   const { hasScope } = useRBAC();
   const canManageChat = isPlatformAdmin || hasScope("org:admin");
@@ -860,9 +861,14 @@ function ChatDetailPanel({
   const chat = transcript.chat ?? active.chat;
   const chatMessages = active.messages;
   const { data: membersData } = useMembers();
-  const owner = chat ? resolveChatOwner(membersData?.members, chat) : undefined;
-  const resolvedUserLabel = owner ? owner.name || owner.email : undefined;
-  const userLabel = resolvedUserLabel ?? chat?.externalUserId ?? "anonymous";
+  const userLabel = chat
+    ? chatOwnerLabel(
+        membersData?.members,
+        chat,
+        user,
+        personalAccountEmail(chat),
+      )
+    : "anonymous";
   // Only the primary (or risk) initial load blanks the whole panel; a search
   // re-fetch updates the transcript in place — its loading shows in the search
   // bar and as a "Searching…" empty state instead.
@@ -1124,12 +1130,7 @@ function ChatDetailPanel({
     else transcript.loadRest();
   }, [windowed, transcript]);
 
-  // Personal-account sessions label turns with the account's own email.
-  // Otherwise use the resolved organization member instead of an opaque
-  // external provider identifier.
-  const userLabelOverride = chat
-    ? (personalAccountEmail(chat) ?? resolvedUserLabel)
-    : undefined;
+  const userLabelOverride = chat ? userLabel : undefined;
 
   const rowCtx = useMemo<RowContext>(
     () => ({

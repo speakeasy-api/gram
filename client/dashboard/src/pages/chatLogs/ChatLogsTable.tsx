@@ -3,40 +3,15 @@ import { personalAccountEmail } from "@/components/observe/account-display-utils
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
 import { Dialog } from "@/components/ui/dialog";
 import { SimpleTooltip } from "@/components/ui/tooltip";
-import { resolveChatOwner } from "@/lib/chat-owner";
+import { chatOwnerLabel } from "@/lib/chat-owner";
 import { cn } from "@/lib/utils";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { useSession } from "@/contexts/Auth";
-import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { Button, Icon } from "@speakeasy-api/moonshine";
 import { format } from "date-fns";
 import { useCallback, useState } from "react";
-
-// Label for a session's owner. Personal-account sessions show the account's own
-// email (the session's user fields carry the attributed employee's WORK email,
-// which hides which account was actually used — the adjacent AccountTypeIcon
-// marks it personal). Otherwise the caller's own sessions show "You" (matched by
-// internal user id, or by external user id when it equals their email —
-// seeded/dashboard chats carry the email there). For other users, resolve the
-// chat's internal user id against the org members loaded by access.listMembers.
-// Unresolved external users fall back to their external id or "anonymous".
-function ownerLabel(
-  chat: ChatOverview,
-  user: { id: string; email: string },
-  members: AccessMember[] | undefined,
-): string {
-  const accountEmail = personalAccountEmail(chat);
-  if (accountEmail) return accountEmail;
-  const isMe =
-    (!!chat.userId && chat.userId === user.id) ||
-    (!!chat.externalUserId && chat.externalUserId === user.email);
-  if (isMe) return "You";
-  const member = resolveChatOwner(members, chat);
-  if (member) return member.name || member.email;
-  return chat.externalUserId || "anonymous";
-}
 
 interface ChatLogsTableProps {
   chats: ChatOverview[];
@@ -275,7 +250,12 @@ export function ChatLogsTable({
                       <span className="flex items-center gap-1.5">
                         <AccountTypeIcon accountType={chat.accountType} />
                         <span className="max-w-[120px] truncate">
-                          {ownerLabel(chat, user, membersData?.members)}
+                          {chatOwnerLabel(
+                            membersData?.members,
+                            chat,
+                            user,
+                            personalAccountEmail(chat),
+                          )}
                         </span>
                       </span>
                       {source && (
