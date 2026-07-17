@@ -12,8 +12,13 @@ import { Type } from "@/components/ui/type";
 import { useViewMode } from "@/components/ui/use-view-mode";
 import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 import { useRoutes } from "@/routes";
+import { useGetMcpServerActivity } from "@gram/client/react-query/getMcpServerActivity.js";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
+import {
+  indexMcpActivity,
+  mcpActivityStatus,
+} from "@/components/mcp/mcp-activity";
 import { Badge, Button, Icon } from "@speakeasy-api/moonshine";
 import { Plus } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -104,11 +109,35 @@ function MCPOverview() {
     undefined,
     { throwOnError: false },
   );
+  // Per-server tool-call activity powers the subtle "never used" / "no recent
+  // calls" markers. It's purely decorative: the backend 404s when observability
+  // is disabled for the org, so a failed or absent fetch simply hides the
+  // markers rather than degrading the listing.
+  const { data: activityResult, refetch: refetchActivity } =
+    useGetMcpServerActivity(
+      { gramProject, getMcpServerActivityPayload: {} },
+      undefined,
+      { throwOnError: false },
+    );
+  const activityByTarget = useMemo(
+    () => indexMcpActivity(activityResult?.activity),
+    [activityResult],
+  );
+  const recentWindowDays = activityResult?.recentWindowDays ?? 14;
+  // Resolve a card's activity marker. Returns undefined (hide the marker) when
+  // the activity fetch hasn't resolved, when observability is disabled, or when
+  // the server has no matchable identifier — we only ever flag a server once we
+  // can confirm it has (or hasn't) received tool calls.
+  const activityStatusFor = (targetId: string | undefined) => {
+    if (!activityResult || !targetId) return undefined;
+    return mcpActivityStatus(activityByTarget.get(targetId));
+  };
   const handleRefresh = () => {
     void toolsets.refetch();
     void refetchMcpServers();
     void refetchEndpoints();
     void refetchPlugins();
+    void refetchActivity();
   };
   const isRefreshing =
     isFetchingMcpServers || isFetchingEndpoints || toolsets.isFetching;
@@ -350,7 +379,12 @@ function MCPOverview() {
               ) : (
                 <>
                   {filteredToolsets.map((toolset) => (
-                    <MCPCard key={toolset.id} toolset={toolset} />
+                    <MCPCard
+                      key={toolset.id}
+                      toolset={toolset}
+                      activityStatus={activityStatusFor(toolset.slug)}
+                      recentWindowDays={recentWindowDays}
+                    />
                   ))}
                   {filteredMcpServers.map((server) => (
                     <MCPServerCard
@@ -359,6 +393,8 @@ function MCPOverview() {
                       endpointCount={
                         endpointCountByServerId.get(server.id) ?? 0
                       }
+                      activityStatus={activityStatusFor(server.slug)}
+                      recentWindowDays={recentWindowDays}
                     />
                   ))}
                 </>
@@ -381,7 +417,12 @@ function MCPOverview() {
               ) : (
                 <>
                   {filteredToolsets.map((toolset) => (
-                    <MCPTableRow key={toolset.id} toolset={toolset} />
+                    <MCPTableRow
+                      key={toolset.id}
+                      toolset={toolset}
+                      activityStatus={activityStatusFor(toolset.slug)}
+                      recentWindowDays={recentWindowDays}
+                    />
                   ))}
                   {filteredMcpServers.map((server) => (
                     <MCPServerTableRow
@@ -390,6 +431,8 @@ function MCPOverview() {
                       endpointCount={
                         endpointCountByServerId.get(server.id) ?? 0
                       }
+                      activityStatus={activityStatusFor(server.slug)}
+                      recentWindowDays={recentWindowDays}
                     />
                   ))}
                 </>

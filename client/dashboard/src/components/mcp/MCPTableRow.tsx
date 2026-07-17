@@ -5,6 +5,8 @@ import { Type } from "@/components/ui/type";
 import { useMcpUrl } from "@/hooks/useToolsetUrl";
 import { useRoutes } from "@/routes";
 import { MCPStatusIndicator } from "./MCPStatusIndicator";
+import { MCPActivityIndicator } from "./MCPActivityIndicator";
+import type { McpActivityStatus } from "./mcp-activity";
 import { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import { AlertTriangleIcon, Link2, Network, Package } from "lucide-react";
@@ -18,8 +20,12 @@ import { Badge } from "@speakeasy-api/moonshine";
 
 export function MCPTableRow({
   toolset,
+  activityStatus,
+  recentWindowDays,
 }: {
   toolset: ToolsetEntry;
+  activityStatus?: McpActivityStatus | null;
+  recentWindowDays?: number;
 }): JSX.Element {
   const routes = useRoutes();
   const { url: mcpUrl } = useMcpUrl(toolset);
@@ -98,6 +104,13 @@ export function MCPTableRow({
               </Badge.LeftIcon>
               <Badge.Text>OAuth Required</Badge.Text>
             </Badge>
+          )}
+          {activityStatus && (
+            <MCPActivityIndicator
+              status={activityStatus}
+              recentWindowDays={recentWindowDays}
+              size="sm"
+            />
           )}
         </div>
       </td>

@@ -32204,6 +32204,111 @@ paths:
             x-speakeasy-react-hook:
                 name: GetHooksSummary
                 type: query
+    /rpc/telemetry.getMcpServerActivity:
+        post:
+            description: Get per-MCP-server tool-call activity for the Distribute MCP listing. Returns, for every MCP server with usage in the lookback window, its total and recent tool-call counts plus the last tool-call time, so the listing can flag servers that have never received a tool call or that have gone quiet.
+            operationId: getMcpServerActivity
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/GetMcpServerActivityPayload'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetMcpServerActivityResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getMcpServerActivity telemetry
+            tags:
+                - telemetry
+            x-speakeasy-name-override: getMcpServerActivity
+            x-speakeasy-react-hook:
+                name: GetMcpServerActivity
+                type: query
     /rpc/telemetry.getObservabilityOverview:
         post:
             description: Get observability overview metrics including time series, tool breakdowns, and summary stats
@@ -46112,6 +46217,38 @@ components:
             properties:
                 metadata:
                     $ref: '#/components/schemas/McpMetadata'
+        GetMcpServerActivityPayload:
+            type: object
+            properties:
+                recent_window_days:
+                    type: integer
+                    description: Size of the recent-activity window in days. A server with tool calls in the overall lookback window but none inside this window is flagged as stale. Defaults to 14.
+                    default: 14
+                    format: int64
+                    minimum: 1
+                    maximum: 90
+            description: Payload for per-MCP-server tool-call activity used by the Distribute MCP listing indicators
+        GetMcpServerActivityResult:
+            type: object
+            properties:
+                activity:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/McpServerActivity'
+                    description: One entry per MCP server (hosted or tunneled) that has received at least one tool call within the lookback window
+                lookback_days:
+                    type: integer
+                    description: The overall lookback window size in days (bounded by telemetry retention)
+                    format: int64
+                recent_window_days:
+                    type: integer
+                    description: The recent-activity window size in days that was applied
+                    format: int64
+            description: Per-MCP-server tool-call activity. Only servers with at least one tool call inside the lookback window are returned; a server absent from the list has never received a tool call (within the telemetry retention window).
+            required:
+                - activity
+                - recent_window_days
+                - lookback_days
         GetMetricsSummaryResult:
             type: object
             properties:
@@ -49011,6 +49148,43 @@ components:
                 - visibility
                 - created_at
                 - updated_at
+        McpServerActivity:
+            type: object
+            properties:
+                last_tool_call_at:
+                    type: string
+                    description: ISO 8601 timestamp of the most recent tool call
+                    format: date-time
+                recent_tool_calls:
+                    type: integer
+                    description: Number of tool calls observed inside the recent-activity window
+                    format: int64
+                target_id:
+                    type: string
+                    description: 'Stable target identifier: toolset slug for hosted servers, MCP server slug for tunneled/remote servers'
+                target_label:
+                    type: string
+                    description: User-facing label for the target
+                target_type:
+                    type: string
+                    description: Tool usage target type
+                    enum:
+                        - hosted_mcp_server
+                        - tunneled_mcp_server
+                        - shadow_mcp_server
+                        - local_tool
+                        - skill
+                total_tool_calls:
+                    type: integer
+                    description: Number of tool calls observed across the whole lookback window
+                    format: int64
+            description: Tool-call activity for one MCP server, keyed by the same target identifier used elsewhere (toolset slug for hosted servers, MCP server slug for tunneled/remote servers)
+            required:
+                - target_type
+                - target_id
+                - target_label
+                - total_tool_calls
+                - recent_tool_calls
         MigrateLegacyGramRegistrationsForm:
             type: object
             properties:
