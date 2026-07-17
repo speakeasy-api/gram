@@ -1,4 +1,4 @@
-import { useAssistantState } from "@assistant-ui/react";
+import { useAuiState } from "@assistant-ui/react";
 
 /**
  * Hook to access the current thread ID from the Elements chat.
@@ -22,7 +22,7 @@ import { useAssistantState } from "@assistant-ui/react";
  * ```
  */
 export function useThreadId(): { threadId: string | null } {
-  const threadId = useAssistantState(
+  const threadId = useAuiState(
     ({ threadListItem }) => threadListItem.remoteId ?? null,
   );
 
