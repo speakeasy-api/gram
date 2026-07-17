@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	projectrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -180,6 +181,31 @@ func createSkill(t *testing.T, ctx context.Context, ti *testInstance, name, desc
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	return result
+}
+
+func createPlugin(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, name string) pluginsrepo.Plugin {
+	t.Helper()
+
+	plugin, err := pluginsrepo.New(ti.conn).CreatePlugin(ctx, pluginsrepo.CreatePluginParams{
+		OrganizationID: ti.authContext.ActiveOrganizationID,
+		ProjectID:      projectID,
+		Name:           name,
+		Slug:           name,
+		Description:    pgtype.Text{},
+	})
+	require.NoError(t, err)
+	return plugin
+}
+
+func deletePlugin(t *testing.T, ctx context.Context, ti *testInstance, plugin pluginsrepo.Plugin) {
+	t.Helper()
+
+	err := pluginsrepo.New(ti.conn).DeletePlugin(ctx, pluginsrepo.DeletePluginParams{
+		ID:             plugin.ID,
+		OrganizationID: plugin.OrganizationID,
+		ProjectID:      plugin.ProjectID,
+	})
+	require.NoError(t, err)
 }
 
 func requireOopsCode(t *testing.T, err error, code oops.Code) {

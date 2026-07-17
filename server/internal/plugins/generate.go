@@ -37,12 +37,24 @@ type PluginServerInfo struct {
 	EnvConfigs []ServerEnvConfig
 }
 
+// PluginSkillInfo is a skill distributed to a plugin, resolved to the manifest
+// content the plugin package carries (the distribution's pinned version when
+// set, otherwise the skill's latest valid version).
+type PluginSkillInfo struct {
+	// Name is the skill's normalized spec name (lowercase alphanumerics and
+	// single hyphens); it becomes the skill's directory name in the package.
+	Name    string
+	Content string
+}
+
 // PluginInfo contains the data needed to generate packages for a single plugin.
 type PluginInfo struct {
 	Name        string
 	Slug        string
 	Description string
 	Servers     []PluginServerInfo
+	// Skills are emitted into each platform plugin's skills/ directory.
+	Skills []PluginSkillInfo
 }
 
 // GenerateConfig holds org-level configuration for package generation.
@@ -919,6 +931,8 @@ func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p Pl
 	}
 	files[path.Join(subdir, ".mcp.json")] = mcpJSON
 
+	emitPluginSkills(files, subdir, p)
+
 	return nil
 }
 
@@ -1652,7 +1666,45 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 	}
 	files[path.Join(subdir, ".mcp.json")] = mcpJSON
 
+	emitPluginSkills(files, subdir, p)
+
 	return nil
+}
+
+// emitPluginSkills writes the plugin's distributed skills as
+// skills/<name>/SKILL.md under the platform plugin directory — the layout
+// Claude Code, Cursor, and Codex all load plugin skills from. Names are
+// normalized at skill creation, but they become filesystem paths in a
+// published repo — refuse anything that isn't a plain lowercase slug rather
+// than trust the invariant across the DB boundary.
+func emitPluginSkills(files map[string][]byte, subdir string, p PluginInfo) {
+	for _, sk := range p.Skills {
+		if !validSkillDirName(sk.Name) {
+			continue
+		}
+		files[path.Join(subdir, "skills", sk.Name, "SKILL.md")] = []byte(sk.Content)
+	}
+}
+
+// validSkillDirName reports whether a skill name is safe to use as a package
+// directory: 1-64 chars of lowercase alphanumerics and single interior
+// hyphens, mirroring the skill spec's name rules.
+func validSkillDirName(name string) bool {
+	if len(name) == 0 || len(name) > 64 || name[0] == '-' || name[len(name)-1] == '-' {
+		return false
+	}
+	previousHyphen := false
+	for _, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z' || r >= '0' && r <= '9':
+			previousHyphen = false
+		case r == '-' && !previousHyphen:
+			previousHyphen = true
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func generateCursorPluginInDir(files map[string][]byte, subdir, name string, p PluginInfo, cfg GenerateConfig) error {
@@ -1701,6 +1753,8 @@ func generateCursorPluginInDir(files map[string][]byte, subdir, name string, p P
 		return fmt.Errorf("marshal mcp.json: %w", err)
 	}
 	files[path.Join(subdir, "mcp.json")] = mcpJSON
+
+	emitPluginSkills(files, subdir, p)
 
 	return nil
 }
