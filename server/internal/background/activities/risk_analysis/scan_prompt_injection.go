@@ -40,7 +40,7 @@ func (a *AnalyzeBatch) publishPromptInjectionScanRequests(ctx context.Context, a
 	createdAt := time.Now().UTC().Format(time.RFC3339)
 	publishResults := make([]gcp.PublishResult, 0, len(messages))
 	for _, msg := range messages {
-		if !a.asyncShadowEnabled(ctx, msg.ID.String()) {
+		if !a.asyncShadowEnabled(ctx, args.OrganizationID, args.ProjectID, msg.ID.String()) {
 			continue
 		}
 

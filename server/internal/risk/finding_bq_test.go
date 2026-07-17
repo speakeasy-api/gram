@@ -668,7 +668,7 @@ func (panicProvider) IsFlagEnabled(context.Context, feature.Flag, string, map[st
 	panic("IsFlagEnabled should not be called")
 }
 
-func (panicProvider) IsFlagEnabledLocal(context.Context, feature.Flag, string, map[string]string) (bool, error) {
+func (panicProvider) IsFlagEnabledLocal(context.Context, feature.Flag, string, map[string]string, map[string]string) (bool, error) {
 	panic("IsFlagEnabledLocal should not be called")
 }
 
@@ -683,7 +683,7 @@ func (p errProvider) IsFlagEnabled(context.Context, feature.Flag, string, map[st
 	return false, p.err
 }
 
-func (p errProvider) IsFlagEnabledLocal(context.Context, feature.Flag, string, map[string]string) (bool, error) {
+func (p errProvider) IsFlagEnabledLocal(context.Context, feature.Flag, string, map[string]string, map[string]string) (bool, error) {
 	return false, p.err
 }
 

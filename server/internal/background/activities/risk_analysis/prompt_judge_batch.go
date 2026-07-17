@@ -122,7 +122,7 @@ func (a *AnalyzeBatch) publishPromptPolicyScanRequests(ctx context.Context, args
 	publishResults := make([]gcp.PublishResult, 0, len(indices))
 	for _, idx := range indices {
 		msg := messages[idx]
-		if !a.asyncShadowEnabled(ctx, msg.ID.String()) {
+		if !a.asyncShadowEnabled(ctx, args.OrganizationID, args.ProjectID, msg.ID.String()) {
 			continue
 		}
 

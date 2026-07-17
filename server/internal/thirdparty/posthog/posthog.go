@@ -114,7 +114,7 @@ func (p *Posthog) IsFlagEnabled(ctx context.Context, flag feature.Flag, distinct
 	return string(j) == "true", nil
 }
 
-func (p *Posthog) IsFlagEnabledLocal(ctx context.Context, flag feature.Flag, distinctID string, groups map[string]string) (bool, error) {
+func (p *Posthog) IsFlagEnabledLocal(ctx context.Context, flag feature.Flag, distinctID string, groups, personProperties map[string]string) (bool, error) {
 	if p.disabled {
 		p.logger.InfoContext(ctx, "posthog is disabled, returning false")
 		return false, nil
@@ -123,11 +123,21 @@ func (p *Posthog) IsFlagEnabledLocal(ctx context.Context, flag feature.Flag, dis
 		return false, nil
 	}
 
+	var phPersonProperties posthog.Properties
+	if len(personProperties) > 0 {
+		phPersonProperties = posthog.NewProperties()
+		for key, value := range personProperties {
+			phPersonProperties.Set(key, value)
+		}
+	}
+	sendFeatureFlagEvents := false
 	flagState, err := p.client.IsFeatureEnabled(posthog.FeatureFlagPayload{
-		Key:                 string(flag),
-		DistinctId:          distinctID,
-		Groups:              posthogGroups(groups),
-		OnlyEvaluateLocally: true,
+		Key:                   string(flag),
+		DistinctId:            distinctID,
+		Groups:                posthogGroups(groups),
+		PersonProperties:      phPersonProperties,
+		OnlyEvaluateLocally:   true,
+		SendFeatureFlagEvents: &sendFeatureFlagEvents,
 	})
 	if err != nil {
 		var inconclusive *posthog.InconclusiveMatchError

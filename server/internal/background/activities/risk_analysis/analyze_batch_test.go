@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -50,6 +52,55 @@ func (j *recordingPromptJudge) Evaluate(_ context.Context, in promptpolicy.Input
 		CompletionTokens: 0,
 		TotalTokens:      0,
 	}, nil
+}
+
+type localFlagCall struct {
+	flag             feature.Flag
+	distinctID       string
+	groups           map[string]string
+	personProperties map[string]string
+}
+
+type recordingLocalFlags struct {
+	feature.InMemory
+	mu    sync.Mutex
+	calls []localFlagCall
+}
+
+func (f *recordingLocalFlags) IsFlagEnabledLocal(ctx context.Context, flag feature.Flag, distinctID string, groups, personProperties map[string]string) (bool, error) {
+	f.mu.Lock()
+	f.calls = append(f.calls, localFlagCall{
+		flag:             flag,
+		distinctID:       distinctID,
+		groups:           copyStringMap(groups),
+		personProperties: copyStringMap(personProperties),
+	})
+	f.mu.Unlock()
+
+	on, err := f.IsFlagEnabled(ctx, flag, distinctID, groups)
+	if err != nil {
+		return false, fmt.Errorf("check in-memory flag: %w", err)
+	}
+	return on, nil
+}
+
+func (f *recordingLocalFlags) Calls() []localFlagCall {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	out := make([]localFlagCall, len(f.calls))
+	copy(out, f.calls)
+	return out
+}
+
+func copyStringMap(in map[string]string) map[string]string {
+	if in == nil {
+		return nil
+	}
+
+	out := make(map[string]string, len(in))
+	maps.Copy(out, in)
+	return out
 }
 
 // newPresidioPub returns a mock presidio publisher that accepts any publish
@@ -255,7 +306,9 @@ func TestAnalyzeBatch_PromptInjectionShadowSamplingGate(t *testing.T) {
 			conn := cloneDB(t)
 			td := seedTestData(t, conn, true)
 			msgIDs := seedMessages(t, conn, td, 3)
-			flags := &feature.InMemory{}
+			flagGroups, err := riskrepo.New(conn).GetProjectFlagGroups(t.Context(), td.projectID)
+			require.NoError(t, err)
+			flags := &recordingLocalFlags{}
 			for _, idx := range tc.enabled {
 				flags.SetFlag(feature.FlagRiskAsyncScanShadow, msgIDs[idx].String(), true)
 			}
@@ -300,6 +353,23 @@ func TestAnalyzeBatch_PromptInjectionShadowSamplingGate(t *testing.T) {
 			var result risk_analysis.AnalyzeBatchResult
 			require.NoError(t, val.Get(&result))
 			require.Len(t, *published, tc.wantPublished)
+			calls := flags.Calls()
+			require.Len(t, calls, len(msgIDs))
+			gotDistinctIDs := make([]string, 0, len(calls))
+			wantDistinctIDs := make([]string, 0, len(msgIDs))
+			for _, msgID := range msgIDs {
+				wantDistinctIDs = append(wantDistinctIDs, msgID.String())
+			}
+			for _, call := range calls {
+				gotDistinctIDs = append(gotDistinctIDs, call.distinctID)
+				assert.Equal(t, feature.FlagRiskAsyncScanShadow, call.flag)
+				assert.Nil(t, call.groups)
+				assert.Equal(t, map[string]string{
+					"organization_slug": flagGroups.OrganizationSlug,
+					"project_slug":      flagGroups.ProjectSlug,
+				}, call.personProperties)
+			}
+			assert.ElementsMatch(t, wantDistinctIDs, gotDistinctIDs)
 		})
 	}
 }
@@ -337,7 +407,9 @@ func TestAnalyzeBatch_PromptPolicyShadowSamplingGate(t *testing.T) {
 			})
 			require.NoError(t, err)
 			msgIDs := seedMessages(t, conn, td, 2)
-			flags := &feature.InMemory{}
+			flagGroups, err := riskrepo.New(conn).GetProjectFlagGroups(t.Context(), td.projectID)
+			require.NoError(t, err)
+			flags := &recordingLocalFlags{}
 			flags.SetFlag(feature.FlagPromptPolicies, td.orgID, true)
 			for _, idx := range tc.enabled {
 				flags.SetFlag(feature.FlagRiskAsyncScanShadow, msgIDs[idx].String(), true)
@@ -383,6 +455,23 @@ func TestAnalyzeBatch_PromptPolicyShadowSamplingGate(t *testing.T) {
 			var result risk_analysis.AnalyzeBatchResult
 			require.NoError(t, val.Get(&result))
 			require.Len(t, *published, tc.wantPublished)
+			calls := flags.Calls()
+			require.Len(t, calls, len(msgIDs))
+			gotDistinctIDs := make([]string, 0, len(calls))
+			wantDistinctIDs := make([]string, 0, len(msgIDs))
+			for _, msgID := range msgIDs {
+				wantDistinctIDs = append(wantDistinctIDs, msgID.String())
+			}
+			for _, call := range calls {
+				gotDistinctIDs = append(gotDistinctIDs, call.distinctID)
+				assert.Equal(t, feature.FlagRiskAsyncScanShadow, call.flag)
+				assert.Nil(t, call.groups)
+				assert.Equal(t, map[string]string{
+					"organization_slug": flagGroups.OrganizationSlug,
+					"project_slug":      flagGroups.ProjectSlug,
+				}, call.personProperties)
+			}
+			assert.ElementsMatch(t, wantDistinctIDs, gotDistinctIDs)
 		})
 	}
 }
