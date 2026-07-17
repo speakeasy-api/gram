@@ -135,33 +135,11 @@ WHERE NOT EXISTS (SELECT 1 FROM updated)
   AND NOT EXISTS (SELECT 1 FROM inserted)
 LIMIT 1;
 
--- name: GetSyncScheduleBackfillStatus :one
-SELECT count(*)::bigint AS primary_syncs_pending
-FROM ai_integration_syncs s
-JOIN ai_integration_configs c ON c.id = s.ai_integration_config_id
-WHERE c.project_id = @project_id
-  AND (s.schedule IS NULL OR s.kind IS NULL);
-
--- BackfillSyncSchedulesBatch fills only existing primary rows. Phase 2 keeps
--- the config-only unique index, so secondary schedules are deliberately
--- deferred until the later index transition.
--- name: BackfillSyncSchedulesBatch :many
-WITH candidate_configs AS MATERIALIZED (
-  SELECT c.id, c.provider
-  FROM ai_integration_configs c
-  WHERE c.project_id = @project_id
-    AND c.id > @after_config_id
-    AND EXISTS (
-      SELECT 1
-      FROM ai_integration_syncs s
-      WHERE s.ai_integration_config_id = c.id
-        AND (s.schedule = c.provider OR s.schedule IS NULL)
-        AND (s.schedule IS NULL OR s.kind IS NULL)
-    )
-  ORDER BY c.id
-  LIMIT @limit_count
-),
-updated AS (
+-- BackfillSyncSchedules is run manually in production after the compatible
+-- application deploy. It labels every existing primary sync row in one
+-- idempotent statement.
+-- name: BackfillSyncSchedules :one
+WITH updated AS (
   UPDATE ai_integration_syncs s
   SET schedule = COALESCE(s.schedule, c.provider),
       kind = COALESCE(
@@ -172,21 +150,14 @@ updated AS (
         END
       ),
       updated_at = clock_timestamp()
-  FROM candidate_configs c
+  FROM ai_integration_configs c
   WHERE s.ai_integration_config_id = c.id
     AND (s.schedule = c.provider OR s.schedule IS NULL)
     AND (s.schedule IS NULL OR s.kind IS NULL)
-  RETURNING s.ai_integration_config_id
+  RETURNING s.id
 )
-SELECT
-    c.id AS ai_integration_config_id
-  , EXISTS (
-      SELECT 1
-      FROM updated
-      WHERE updated.ai_integration_config_id = c.id
-    ) AS updated_primary
-FROM candidate_configs c
-ORDER BY c.id;
+SELECT count(*)::bigint AS primary_syncs_updated
+FROM updated;
 
 -- Test-only fixtures for transitional sync-row behavior.
 -- name: ClearSyncScheduleDiscriminatorsForTest :exec

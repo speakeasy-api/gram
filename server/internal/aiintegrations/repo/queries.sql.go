@@ -31,23 +31,8 @@ func (q *Queries) AdvanceUsagePollCursor(ctx context.Context, arg AdvanceUsagePo
 	return err
 }
 
-const backfillSyncSchedulesBatch = `-- name: BackfillSyncSchedulesBatch :many
-WITH candidate_configs AS MATERIALIZED (
-  SELECT c.id, c.provider
-  FROM ai_integration_configs c
-  WHERE c.project_id = $1
-    AND c.id > $2
-    AND EXISTS (
-      SELECT 1
-      FROM ai_integration_syncs s
-      WHERE s.ai_integration_config_id = c.id
-        AND (s.schedule = c.provider OR s.schedule IS NULL)
-        AND (s.schedule IS NULL OR s.kind IS NULL)
-    )
-  ORDER BY c.id
-  LIMIT $3
-),
-updated AS (
+const backfillSyncSchedules = `-- name: BackfillSyncSchedules :one
+WITH updated AS (
   UPDATE ai_integration_syncs s
   SET schedule = COALESCE(s.schedule, c.provider),
       kind = COALESCE(
@@ -58,55 +43,24 @@ updated AS (
         END
       ),
       updated_at = clock_timestamp()
-  FROM candidate_configs c
+  FROM ai_integration_configs c
   WHERE s.ai_integration_config_id = c.id
     AND (s.schedule = c.provider OR s.schedule IS NULL)
     AND (s.schedule IS NULL OR s.kind IS NULL)
-  RETURNING s.ai_integration_config_id
+  RETURNING s.id
 )
-SELECT
-    c.id AS ai_integration_config_id
-  , EXISTS (
-      SELECT 1
-      FROM updated
-      WHERE updated.ai_integration_config_id = c.id
-    ) AS updated_primary
-FROM candidate_configs c
-ORDER BY c.id
+SELECT count(*)::bigint AS primary_syncs_updated
+FROM updated
 `
 
-type BackfillSyncSchedulesBatchParams struct {
-	ProjectID     uuid.UUID
-	AfterConfigID uuid.UUID
-	LimitCount    int32
-}
-
-type BackfillSyncSchedulesBatchRow struct {
-	AiIntegrationConfigID uuid.UUID
-	UpdatedPrimary        bool
-}
-
-// BackfillSyncSchedulesBatch fills only existing primary rows. Phase 2 keeps
-// the config-only unique index, so secondary schedules are deliberately
-// deferred until the later index transition.
-func (q *Queries) BackfillSyncSchedulesBatch(ctx context.Context, arg BackfillSyncSchedulesBatchParams) ([]BackfillSyncSchedulesBatchRow, error) {
-	rows, err := q.db.Query(ctx, backfillSyncSchedulesBatch, arg.ProjectID, arg.AfterConfigID, arg.LimitCount)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []BackfillSyncSchedulesBatchRow
-	for rows.Next() {
-		var i BackfillSyncSchedulesBatchRow
-		if err := rows.Scan(&i.AiIntegrationConfigID, &i.UpdatedPrimary); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
+// BackfillSyncSchedules is run manually in production after the compatible
+// application deploy. It labels every existing primary sync row in one
+// idempotent statement.
+func (q *Queries) BackfillSyncSchedules(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, backfillSyncSchedules)
+	var primary_syncs_updated int64
+	err := row.Scan(&primary_syncs_updated)
+	return primary_syncs_updated, err
 }
 
 const clearSyncScheduleDiscriminatorsForTest = `-- name: ClearSyncScheduleDiscriminatorsForTest :exec
@@ -424,21 +378,6 @@ func (q *Queries) GetPrimarySyncDiscriminatorsForTest(ctx context.Context, arg G
 	var i GetPrimarySyncDiscriminatorsForTestRow
 	err := row.Scan(&i.ID, &i.Schedule, &i.Kind)
 	return i, err
-}
-
-const getSyncScheduleBackfillStatus = `-- name: GetSyncScheduleBackfillStatus :one
-SELECT count(*)::bigint AS primary_syncs_pending
-FROM ai_integration_syncs s
-JOIN ai_integration_configs c ON c.id = s.ai_integration_config_id
-WHERE c.project_id = $1
-  AND (s.schedule IS NULL OR s.kind IS NULL)
-`
-
-func (q *Queries) GetSyncScheduleBackfillStatus(ctx context.Context, projectID uuid.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, getSyncScheduleBackfillStatus, projectID)
-	var primary_syncs_pending int64
-	err := row.Scan(&primary_syncs_pending)
-	return primary_syncs_pending, err
 }
 
 const getUsagePollConfigByID = `-- name: GetUsagePollConfigByID :one
