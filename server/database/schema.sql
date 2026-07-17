@@ -2028,7 +2028,8 @@ CREATE TABLE IF NOT EXISTS user_accounts (
   -- across employees (as it is for a Claude enterprise org). Only OAuth-
   -- authenticated accounts carry one; NULL for a company-credential account (an
   -- API key, gateway/proxy, Bedrock, or Vertex), whose entity key is the
-  -- session email instead (see user_accounts_org_provider_email_key).
+  -- resolved employee — or the session email until one resolves (see
+  -- user_accounts_org_provider_company_user_key / _org_provider_email_key).
   external_account_uuid TEXT,
   -- The provider's tagged account id (Claude `user.account_id`, e.g. user_01…).
   external_account_id TEXT,
@@ -2075,13 +2076,23 @@ CREATE UNIQUE INDEX IF NOT EXISTS user_accounts_org_provider_external_account_uu
 ON user_accounts (organization_id, provider, external_account_uuid)
 WHERE deleted_at IS NULL;
 
--- Entity key for company-credential accounts (no provider account UUID): one
--- account per normalized session email per provider. Rows on this key are only
--- written by ingest, which normalizes the email before upserting, so a plain
--- column index suffices (no lower() expression needed).
+-- Entity keys for company-credential accounts (no provider account UUID).
+-- A resolved account keys on the owning employee — one company-credential
+-- account per employee per provider — so device-bridge attribution and email
+-- aliases converge on a single account. (NULL user_id rows never collide in a
+-- unique index, so unresolved rows pass through this key untouched.)
+CREATE UNIQUE INDEX IF NOT EXISTS user_accounts_org_provider_company_user_key
+ON user_accounts (organization_id, provider, user_id)
+WHERE external_account_uuid IS NULL AND deleted_at IS NULL;
+
+-- An account whose employee is not (yet) resolved keys on the session email
+-- instead; ingest promotes such a row to the employee key in place when the
+-- email later resolves. Rows on this key are only written by ingest, which
+-- normalizes the email before upserting, so a plain column index suffices
+-- (no lower() expression needed).
 CREATE UNIQUE INDEX IF NOT EXISTS user_accounts_org_provider_email_key
 ON user_accounts (organization_id, provider, email)
-WHERE external_account_uuid IS NULL AND deleted_at IS NULL;
+WHERE external_account_uuid IS NULL AND user_id IS NULL AND deleted_at IS NULL;
 
 -- The dashboard lists an employee's accounts by (organization_id, user_id).
 CREATE INDEX IF NOT EXISTS user_accounts_organization_id_user_id_idx

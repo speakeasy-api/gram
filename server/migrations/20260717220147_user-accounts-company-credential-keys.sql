@@ -1,0 +1,8 @@
+-- atlas:txmode none
+
+-- Modify "user_accounts" table
+ALTER TABLE "user_accounts" ALTER COLUMN "external_account_uuid" DROP NOT NULL;
+-- Create index "user_accounts_org_provider_company_user_key" to table: "user_accounts"
+CREATE UNIQUE INDEX CONCURRENTLY "user_accounts_org_provider_company_user_key" ON "user_accounts" ("organization_id", "provider", "user_id") WHERE ((external_account_uuid IS NULL) AND (deleted_at IS NULL));
+-- Create index "user_accounts_org_provider_email_key" to table: "user_accounts"
+CREATE UNIQUE INDEX CONCURRENTLY "user_accounts_org_provider_email_key" ON "user_accounts" ("organization_id", "provider", "email") WHERE ((external_account_uuid IS NULL) AND (user_id IS NULL) AND (deleted_at IS NULL));
