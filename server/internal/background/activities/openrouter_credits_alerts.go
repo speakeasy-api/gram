@@ -299,13 +299,17 @@ func (a *MaybeSendOpenRouterCreditsAlerts) sendOne(
 
 	// OpenRouter credits reset at calendar-month boundaries, so the delivered
 	// marker must survive until shortly after this month ends and then get out
-	// of the way of next month's ladder.
+	// of the way of next month's ladder. The email is already out the door, so
+	// the extension must survive activity cancellation — losing it would lapse
+	// the short reservation and re-send the same threshold within the month.
 	_, cycleEnd := usage.CurrentBillingCycle(now, 1)
 	ttl := cycleEnd.Sub(now) + openRouterCreditsAlertGrace
-	if err := a.cache.Expire(ctx, openRouterCreditsAlertKey(c.orgID, c.keyType, c.threshold), ttl); err != nil {
+	expireCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
+	if err := a.cache.Expire(expireCtx, openRouterCreditsAlertKey(c.orgID, c.keyType, c.threshold), ttl); err != nil {
 		// Worst case the short reservation lapses and the same threshold
 		// re-sends within the month — log so repeats are explicable.
-		logger.ErrorContext(ctx, "failed to extend openrouter credits alert reservation", attr.SlogError(err))
+		logger.ErrorContext(expireCtx, "failed to extend openrouter credits alert reservation", attr.SlogError(err))
 	}
 
 	if a.alertsSent != nil {
