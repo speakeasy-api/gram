@@ -190,7 +190,7 @@ func TestMaybeSyncAnthropicAnalyticsFirstSyncAdvancesWatermark(t *testing.T) {
 
 	cfg := createAnthropicComplianceConfig(t, ctx, conn, store, orgID)
 
-	pollers.syncBoth(ctx, cfg, endTime)
+	pollers.syncBoth(t, ctx, cfg, endTime)
 
 	// One finality probe plus one window fetch per endpoint.
 	require.Equal(t, 2, api.usageRequests())
@@ -213,13 +213,7 @@ func TestMaybeSyncAnthropicAnalyticsFirstSyncAdvancesWatermark(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, endTime.Truncate(time.Minute), state.WatermarkAt.UTC())
 		require.Empty(t, state.LastPollError)
-		require.Equal(t, endTime.Add(anthropicAnalyticsPollInterval), state.NextPollAfter.UTC())
 	}
-
-	// Not due yet: a second invocation at the same time must not hit the API.
-	pollers.syncBoth(ctx, cfg, endTime)
-	require.Equal(t, 2, api.usageRequests())
-	require.Equal(t, 2, api.costRequests())
 }
 
 func TestMaybeSyncAnthropicAnalyticsChunksBacklogIntoWindows(t *testing.T) {
@@ -240,7 +234,7 @@ func TestMaybeSyncAnthropicAnalyticsChunksBacklogIntoWindows(t *testing.T) {
 	backlogStart := endTime.Add(-72 * time.Hour).Truncate(time.Minute)
 	require.NoError(t, store.AdvanceSchedulePollWatermark(ctx, cfg.ID, ScheduleAnthropicAnalyticsUsage, backlogStart))
 
-	pollers.syncBoth(ctx, cfg, endTime)
+	pollers.syncBoth(t, ctx, cfg, endTime)
 
 	// 72h of backlog at a 24h-per-request cap is 3 usage windows, plus the
 	// finality probe. The independent cost schedule does probe + one window.
@@ -271,7 +265,7 @@ func TestMaybeSyncAnthropicAnalyticsPullsOnlyUpToDataRefreshedAt(t *testing.T) {
 
 	cfg := createAnthropicComplianceConfig(t, ctx, conn, store, orgID)
 
-	pollers.syncBoth(ctx, cfg, endTime)
+	pollers.syncBoth(t, ctx, cfg, endTime)
 
 	require.Equal(t, 2, api.usageRequests(), "one probe plus one window")
 	window := api.usageQueries()[1]
@@ -299,17 +293,12 @@ func TestMaybeSyncAnthropicAnalyticsRecordsForbiddenAsFailure(t *testing.T) {
 
 	cfg := createAnthropicComplianceConfig(t, ctx, conn, store, orgID)
 
-	pollers.syncBoth(ctx, cfg, endTime)
-
-	// Both schedules record their own failure state.
-	for _, schedule := range []string{ScheduleAnthropicAnalyticsUsage, ScheduleAnthropicAnalyticsCost} {
-		state, err := store.EnsureTimeSyncSchedule(ctx, cfg.ID, schedule)
-		require.NoError(t, err)
-		require.True(t, state.WatermarkAt.IsZero())
-		require.Contains(t, state.LastPollError, "read:analytics")
-		require.Equal(t, int32(1), state.ConsecutiveFailures)
-		require.Equal(t, endTime.Add(anthropicAnalyticsPollInterval), state.NextPollAfter.UTC())
-	}
+	usageCfg, err := store.GetUsagePollConfig(ctx, cfg.ID, ScheduleAnthropicAnalyticsUsage)
+	require.NoError(t, err)
+	costCfg, err := store.GetUsagePollConfig(ctx, cfg.ID, ScheduleAnthropicAnalyticsCost)
+	require.NoError(t, err)
+	require.ErrorContains(t, pollers.usage.Sync(ctx, usageCfg, endTime), "read:analytics")
+	require.ErrorContains(t, pollers.cost.Sync(ctx, costCfg, endTime), "read:analytics")
 }
 
 func TestMaybeSyncAnthropicAnalyticsCostFailureDoesNotBlockUsage(t *testing.T) {
@@ -338,7 +327,12 @@ func TestMaybeSyncAnthropicAnalyticsCostFailureDoesNotBlockUsage(t *testing.T) {
 	pollers := newTestAnalyticsPollers(t, store, server.URL)
 	cfg := createAnthropicComplianceConfig(t, ctx, conn, store, orgID)
 
-	pollers.syncBoth(ctx, cfg, endTime)
+	usageCfg, err := store.GetUsagePollConfig(ctx, cfg.ID, ScheduleAnthropicAnalyticsUsage)
+	require.NoError(t, err)
+	costCfg, err := store.GetUsagePollConfig(ctx, cfg.ID, ScheduleAnthropicAnalyticsCost)
+	require.NoError(t, err)
+	require.NoError(t, pollers.usage.Sync(ctx, usageCfg, endTime))
+	require.ErrorContains(t, pollers.cost.Sync(ctx, costCfg, endTime), "read:analytics")
 
 	usageState, err := store.EnsureTimeSyncSchedule(ctx, cfg.ID, ScheduleAnthropicAnalyticsUsage)
 	require.NoError(t, err)
@@ -348,8 +342,6 @@ func TestMaybeSyncAnthropicAnalyticsCostFailureDoesNotBlockUsage(t *testing.T) {
 	costState, err := store.EnsureTimeSyncSchedule(ctx, cfg.ID, ScheduleAnthropicAnalyticsCost)
 	require.NoError(t, err)
 	require.True(t, costState.WatermarkAt.IsZero())
-	require.Contains(t, costState.LastPollError, "read:analytics")
-	require.Equal(t, int32(1), costState.ConsecutiveFailures)
 }
 
 func testAnalyticsConfig() Config {
@@ -367,11 +359,17 @@ func testAnalyticsConfig() Config {
 type testAnalyticsPollers struct {
 	usage *AnthropicAnalyticsPoller
 	cost  *AnthropicAnalyticsPoller
+	store *Store
 }
 
-func (p testAnalyticsPollers) syncBoth(ctx context.Context, cfg Config, endTime time.Time) {
-	p.usage.MaybeSync(ctx, cfg, endTime)
-	p.cost.MaybeSync(ctx, cfg, endTime)
+func (p testAnalyticsPollers) syncBoth(t *testing.T, ctx context.Context, cfg Config, endTime time.Time) {
+	t.Helper()
+	usageCfg, err := p.store.GetUsagePollConfig(ctx, cfg.ID, ScheduleAnthropicAnalyticsUsage)
+	require.NoError(t, err)
+	costCfg, err := p.store.GetUsagePollConfig(ctx, cfg.ID, ScheduleAnthropicAnalyticsCost)
+	require.NoError(t, err)
+	require.NoError(t, p.usage.Sync(ctx, usageCfg, endTime))
+	require.NoError(t, p.cost.Sync(ctx, costCfg, endTime))
 }
 
 func newTestAnalyticsPollers(t *testing.T, store *Store, baseURL string) testAnalyticsPollers {
@@ -384,11 +382,11 @@ func newTestAnalyticsPollers(t *testing.T, store *Store, baseURL string) testAna
 	telemetryLogger := telemetry.NewStub(logger)
 	heartbeat := func(ctx context.Context, scope string, page int) {}
 
-	usage := NewAnthropicUsageAnalyticsPoller(logger, store, policy, telemetryLogger, heartbeat)
+	usage := NewAnthropicUsageAnalyticsPoller(store, policy, telemetryLogger, heartbeat)
 	usage.baseURL = baseURL
-	cost := NewAnthropicCostAnalyticsPoller(logger, store, policy, telemetryLogger, heartbeat)
+	cost := NewAnthropicCostAnalyticsPoller(store, policy, telemetryLogger, heartbeat)
 	cost.baseURL = baseURL
-	return testAnalyticsPollers{usage: usage, cost: cost}
+	return testAnalyticsPollers{usage: usage, cost: cost, store: store}
 }
 
 func createAnthropicComplianceConfig(t *testing.T, ctx context.Context, conn *pgxpool.Pool, store *Store, orgID string) Config {

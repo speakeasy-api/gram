@@ -73,6 +73,62 @@ func (q *Queries) InsertTelemetryLogsStaging(ctx context.Context, args []InsertT
 	return q.insertTelemetryLogsInto(ctx, "telemetry_logs_staging", args)
 }
 
+// InsertAIIntegrationTelemetryLogs inserts one provider response page and
+// waits for ClickHouse to process it before returning. The deterministic token
+// deduplicates concurrent/retried inserts on replicated engines; callers also
+// perform an event-hash existence check for non-replicated MergeTree engines.
+func (q *Queries) InsertAIIntegrationTelemetryLogs(ctx context.Context, args []InsertTelemetryLogParams, deduplicationToken string) error {
+	ctx = clickhouse.Context(ctx,
+		clickhouse.WithAsync(true),
+		clickhouse.WithSettings(clickhouse.Settings{
+			"insert_deduplication_token": deduplicationToken,
+		}),
+	)
+	return q.insertTelemetryLogsIntoContext(ctx, "telemetry_logs", args)
+}
+
+const aiIntegrationEventHashExpr = "multiIf(toString(attributes.cursor.event_hash) != '', toString(attributes.cursor.event_hash), toString(attributes.claude_chat.event_hash))"
+
+// ListExistingAIIntegrationEventHashes returns hashes already committed for a
+// project and event-time range. Time scoping lets ClickHouse prune telemetry
+// partitions before evaluating the JSON hash expression.
+func (q *Queries) ListExistingAIIntegrationEventHashes(ctx context.Context, projectID string, minTimeUnixNano, maxTimeUnixNano int64, hashes []string) (map[string]struct{}, error) {
+	if len(hashes) == 0 {
+		return map[string]struct{}{}, nil
+	}
+
+	sb := sq.Select(aiIntegrationEventHashExpr + " AS event_hash").
+		Distinct().
+		From("telemetry_logs").
+		Where(squirrel.Eq{"gram_project_id": projectID}).
+		Where(squirrel.GtOrEq{"time_unix_nano": minTimeUnixNano}).
+		Where(squirrel.LtOrEq{"time_unix_nano": maxTimeUnixNano}).
+		Where(squirrel.Eq{aiIntegrationEventHashExpr: hashes})
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building ai integration event hash query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("querying ai integration event hashes: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	existing := make(map[string]struct{}, len(hashes))
+	for rows.Next() {
+		var hash string
+		if err := rows.Scan(&hash); err != nil {
+			return nil, fmt.Errorf("scanning ai integration event hash: %w", err)
+		}
+		existing[hash] = struct{}{}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating ai integration event hashes: %w", err)
+	}
+	return existing, nil
+}
+
 // InsertPromotedTelemetryLogs moves staged rows into telemetry_logs, one
 // insert per row, each carrying a deterministic insert_deduplication_token
 // derived from the row id. The token is a no-cost backstop on a replicated/
@@ -93,11 +149,14 @@ func (q *Queries) InsertPromotedTelemetryLogs(ctx context.Context, args []Insert
 }
 
 func (q *Queries) insertTelemetryLogsInto(ctx context.Context, table string, args []InsertTelemetryLogParams) error {
+	ctx = clickhouse.Context(ctx, clickhouse.WithAsync(false))
+	return q.insertTelemetryLogsIntoContext(ctx, table, args)
+}
+
+func (q *Queries) insertTelemetryLogsIntoContext(ctx context.Context, table string, args []InsertTelemetryLogParams) error {
 	if len(args) == 0 {
 		return nil
 	}
-
-	ctx = clickhouse.Context(ctx, clickhouse.WithAsync(false))
 
 	builder := sq.Insert(table).
 		Columns(

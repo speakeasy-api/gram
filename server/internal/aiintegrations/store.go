@@ -52,9 +52,9 @@ type syncSchedule struct {
 	kind     string
 }
 
-// syncSchedulesFor lists every sync schedule a provider's configs run. The
-// first entry is the provider's primary schedule — the one driven by the
-// usage poll coordinator and surfaced on Config.
+// syncSchedulesFor lists every independent sync schedule a provider's configs
+// run. The first entry is the provider's primary schedule surfaced on
+// config-level management API reads.
 func syncSchedulesFor(provider string) []syncSchedule {
 	switch provider {
 	case ProviderAnthropicCompliance:
@@ -83,13 +83,17 @@ const (
 	anthropicAnalyticsInitialLookback = 24 * time.Hour
 )
 
-// usagePollIntervalFor returns the delay between polls for a provider.
-// Unknown providers fall back to the cursor interval.
-func usagePollIntervalFor(provider string) time.Duration {
-	if provider == ProviderAnthropicCompliance {
+// pollIntervalForSchedule returns the delay between runs of one independent
+// sync schedule. Unknown schedules fall back to the Cursor interval.
+func pollIntervalForSchedule(schedule string) time.Duration {
+	switch schedule {
+	case ScheduleAnthropicCompliance:
 		return anthropicComplianceUsagePollInterval
+	case ScheduleAnthropicAnalyticsUsage, ScheduleAnthropicAnalyticsCost:
+		return anthropicAnalyticsPollInterval
+	default:
+		return cursorUsagePollInterval
 	}
-	return cursorUsagePollInterval
 }
 
 type Store struct {
@@ -124,6 +128,8 @@ type UsagePollCandidate struct {
 	OrganizationID   string
 	OrganizationSlug string
 	Provider         string
+	Schedule         string
+	Kind             string
 }
 
 type UpsertResult struct {
@@ -263,7 +269,7 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 	}
 	if resetPollWatermarkAt != nil {
 		syncRow.PollWatermarkAt = conv.ToPGTimestamptz(*resetPollWatermarkAt)
-		syncRow.NextPollAfter = conv.ToPGTimestamptz(resetPollWatermarkAt.UTC().Add(usagePollIntervalFor(provider)))
+		syncRow.NextPollAfter = conv.ToPGTimestamptz(resetPollWatermarkAt.UTC().Add(pollIntervalForSchedule(provider)))
 		syncRow.LastPollError = pgtype.Text{String: "", Valid: false}
 		syncRow.LastPollFailedAt = pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
 		syncRow.LastPollSuccessAt = pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
@@ -353,13 +359,18 @@ func (s *Store) ListUsagePollCandidates(ctx context.Context, pollDueBefore time.
 			OrganizationID:   row.OrganizationID,
 			OrganizationSlug: row.OrganizationSlug,
 			Provider:         row.Provider,
+			Schedule:         row.Schedule,
+			Kind:             row.Kind,
 		})
 	}
 	return candidates, nil
 }
 
-func (s *Store) GetUsagePollConfig(ctx context.Context, configID uuid.UUID) (Config, error) {
-	row, err := s.repo.GetUsagePollConfigByID(ctx, configID)
+func (s *Store) GetUsagePollConfig(ctx context.Context, configID uuid.UUID, schedule string) (Config, error) {
+	row, err := s.repo.GetUsagePollConfigByID(ctx, repo.GetUsagePollConfigByIDParams{
+		AiIntegrationConfigID: configID,
+		Schedule:              schedule,
+	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return Config{}, oops.E(oops.CodeNotFound, err, "ai integration usage poll config not found")
@@ -370,6 +381,9 @@ func (s *Store) GetUsagePollConfig(ctx context.Context, configID uuid.UUID) (Con
 	if err != nil {
 		return Config{}, err
 	}
+	if schedule != ScheduleAnthropicCompliance && !cfg.PollWatermarkAt.After(epochTime()) {
+		cfg.PollWatermarkAt = time.Time{}
+	}
 	return cfg, nil
 }
 
@@ -378,7 +392,7 @@ func (s *Store) RecordUsagePollSuccess(ctx context.Context, configID uuid.UUID, 
 		AiIntegrationConfigID: configID,
 		Schedule:              provider,
 		PollWatermarkAt:       conv.ToPGTimestamptz(t),
-		NextPollAfter:         conv.ToPGTimestamptz(t.UTC().Add(usagePollIntervalFor(provider))),
+		NextPollAfter:         conv.ToPGTimestamptz(t.UTC().Add(pollIntervalForSchedule(provider))),
 		LastCursorID:          conv.ToPGTextEmpty(lastCursor),
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to record ai integration usage poll success")
@@ -447,18 +461,18 @@ func (s *Store) AdvanceSchedulePollWatermark(ctx context.Context, configID uuid.
 
 // RecordSchedulePollSuccess reschedules a sync and clears failure state
 // without touching the watermark, which advances incrementally mid-sync.
-func (s *Store) RecordSchedulePollSuccess(ctx context.Context, configID uuid.UUID, schedule string, t time.Time, pollInterval time.Duration) error {
+func (s *Store) RecordSchedulePollSuccess(ctx context.Context, configID uuid.UUID, schedule string, t time.Time) error {
 	if err := s.repo.RecordPollSuccessKeepWatermark(ctx, repo.RecordPollSuccessKeepWatermarkParams{
 		AiIntegrationConfigID: configID,
 		Schedule:              schedule,
-		NextPollAfter:         conv.ToPGTimestamptz(t.UTC().Add(pollInterval)),
+		NextPollAfter:         conv.ToPGTimestamptz(t.UTC().Add(pollIntervalForSchedule(schedule))),
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to record ai integration sync schedule poll success")
 	}
 	return nil
 }
 
-func (s *Store) RecordSchedulePollFailure(ctx context.Context, configID uuid.UUID, schedule string, t time.Time, pollInterval time.Duration, cause error) error {
+func (s *Store) RecordSchedulePollFailure(ctx context.Context, configID uuid.UUID, schedule string, t time.Time, cause error) error {
 	var errStr string
 	if cause != nil {
 		errStr = cause.Error()
@@ -467,7 +481,7 @@ func (s *Store) RecordSchedulePollFailure(ctx context.Context, configID uuid.UUI
 	if err := s.repo.RecordUsagePollFailure(ctx, repo.RecordUsagePollFailureParams{
 		AiIntegrationConfigID: configID,
 		Schedule:              schedule,
-		NextPollAfter:         conv.ToPGTimestamptz(t.UTC().Add(pollInterval)),
+		NextPollAfter:         conv.ToPGTimestamptz(t.UTC().Add(pollIntervalForSchedule(schedule))),
 		LastPollError:         conv.ToPGTextEmpty(conv.TruncateString(errStr, maxUsagePollErrorMessage)),
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to record ai integration sync schedule poll failure")
@@ -476,20 +490,7 @@ func (s *Store) RecordSchedulePollFailure(ctx context.Context, configID uuid.UUI
 }
 
 func (s *Store) RecordUsagePollFailure(ctx context.Context, configID uuid.UUID, provider string, t time.Time, cause error) error {
-	var errStr string
-	if cause != nil {
-		errStr = cause.Error()
-	}
-
-	if err := s.repo.RecordUsagePollFailure(ctx, repo.RecordUsagePollFailureParams{
-		AiIntegrationConfigID: configID,
-		Schedule:              provider,
-		NextPollAfter:         conv.ToPGTimestamptz(t.UTC().Add(usagePollIntervalFor(provider))),
-		LastPollError:         conv.ToPGTextEmpty(conv.TruncateString(errStr, maxUsagePollErrorMessage)),
-	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to record ai integration usage poll failure")
-	}
-	return nil
+	return s.RecordSchedulePollFailure(ctx, configID, provider, t, cause)
 }
 
 // epochTime is the never-synced watermark sentinel and the "due immediately"

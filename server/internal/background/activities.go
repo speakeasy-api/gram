@@ -294,8 +294,8 @@ func (a *Activities) GetAIIntegrationsCandidates(ctx context.Context, input acti
 	return candidates, nil
 }
 
-func (a *Activities) PollAIData(ctx context.Context, configID string) error {
-	return a.pollAIData.Do(ctx, configID)
+func (a *Activities) PollAIData(ctx context.Context, input activities.PollAIDataInput) error {
+	return a.pollAIData.Do(ctx, input)
 }
 
 func (a *Activities) RefreshBillingUsage(ctx context.Context, orgIDs []string) error {

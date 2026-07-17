@@ -72,7 +72,7 @@ func (p *PollCursorUsageMetrics) Do(ctx context.Context, configID string) (err e
 		}
 	}()
 
-	cfg, err := p.integrations.GetUsagePollConfig(ctx, id)
+	cfg, err := p.integrations.GetUsagePollConfig(ctx, id, aiintegrations.ScheduleCursor)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to load ai integration configuration")
 	}

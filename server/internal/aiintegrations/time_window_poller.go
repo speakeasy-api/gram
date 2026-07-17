@@ -3,38 +3,62 @@ package aiintegrations
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"time"
 
-	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/google/uuid"
+	"golang.org/x/sync/errgroup"
+
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
-// timeWindowSource fetches one provider report for a time-kind sync schedule.
-// Implementations own the provider API client, pagination, rate limiting, and
-// the mapping from provider rows to telemetry log rows.
+const (
+	timeWindowPageBufferSize  = 1
+	timeWindowHeartbeatPeriod = 10 * time.Second
+)
+
+type timeWindowPage struct {
+	Rows     []telemetry.LogParams
+	NextPage string
+	HasMore  bool
+}
+
+// timeWindowSource adapts one provider report to the shared time-window
+// poller. Implementations make one API call and map one response page. The
+// poller owns pagination, rate-limit waits, heartbeats, writes, and durable
+// watermark advancement.
 type timeWindowSource interface {
 	// UpperBound returns the exclusive upper bound for pulls ending at
 	// endTime, e.g. a provider finalization watermark like Anthropic's
 	// data_refreshed_at. Sources whose data is immediately final return
 	// endTime.
 	UpperBound(ctx context.Context, endTime time.Time) (time.Time, error)
-	// FetchWindow returns the telemetry rows for the [start, end) window.
-	FetchWindow(ctx context.Context, start, end time.Time) ([]telemetry.LogParams, error)
+	// FetchPage fetches one response page for the fixed window. page is empty
+	// for the first request and otherwise the opaque value returned by the
+	// preceding response.
+	FetchPage(ctx context.Context, start, end time.Time, page string) (timeWindowPage, error)
+	// RetryAfter translates a provider rate-limit error into a requested wait.
+	// A zero duration asks the poller to apply its default delay.
+	RetryAfter(err error) (time.Duration, bool)
+}
+
+type timeWindowCheckpointStore interface {
+	AdvanceSchedulePollWatermark(ctx context.Context, configID uuid.UUID, schedule string, watermark time.Time) error
+}
+
+type telemetryBulkLogger interface {
+	LogBulkDeduplicated(ctx context.Context, params []telemetry.LogParams) error
 }
 
 // timeWindowPoller drives a time-kind sync schedule: it walks the range from
 // the schedule's watermark to the source's upper bound one window at a time,
-// bulk-writes each window's rows, and advances the watermark after each
-// durable write so a mid-sync crash re-fetches at most one window.
+// pipelines page fetches with page-sized bulk writes, and advances the
+// watermark only after every page in a window is durable.
 type timeWindowPoller struct {
-	store           *Store
-	telemetryLogger *telemetry.Logger
+	store           timeWindowCheckpointStore
+	telemetryLogger telemetryBulkLogger
 	schedule        string
-	// pollInterval is the delay between polls, applied by maybeSync when it
-	// records an outcome.
-	pollInterval time.Duration
+	heartbeat       func(ctx context.Context, page int)
 	// initialLookback bounds the first window for a schedule that has never
 	// synced (zero watermark).
 	initialLookback time.Duration
@@ -47,7 +71,8 @@ type timeWindowPoller struct {
 }
 
 func (p *timeWindowPoller) sync(ctx context.Context, cfg Config, watermarkAt time.Time, source timeWindowSource, endTime time.Time) error {
-	upperBound, err := source.UpperBound(ctx, endTime)
+	p.heartbeat(ctx, 0)
+	upperBound, err := p.upperBound(ctx, source, endTime)
 	if err != nil {
 		return fmt.Errorf("fetch %s upper bound: %w", p.schedule, err)
 	}
@@ -65,14 +90,8 @@ func (p *timeWindowPoller) sync(ctx context.Context, cfg Config, watermarkAt tim
 			windowEnd = windowStart.Add(p.maxWindow)
 		}
 
-		rows, err := source.FetchWindow(ctx, windowStart, windowEnd)
-		if err != nil {
-			return fmt.Errorf("fetch %s window: %w", p.schedule, err)
-		}
-		if len(rows) > 0 {
-			if err := p.telemetryLogger.LogBulk(ctx, rows); err != nil {
-				return oops.E(oops.CodeUnexpected, err, "insert ai integration telemetry logs")
-			}
+		if err := p.fetchAndWriteWindow(ctx, source, windowStart, windowEnd); err != nil {
+			return err
 		}
 
 		if err := p.store.AdvanceSchedulePollWatermark(ctx, cfg.ID, p.schedule, windowEnd); err != nil {
@@ -83,35 +102,119 @@ func (p *timeWindowPoller) sync(ctx context.Context, cfg Config, watermarkAt tim
 	return nil
 }
 
-// maybeSync runs the schedule when due and records the outcome on its sync
-// row. Failures are recorded and logged but never returned: secondary
-// schedules must not block the primary sync sharing the poll activity.
-// classifyErr, when set, rewrites errors before they are logged and recorded
-// (e.g. to explain provider access requirements).
-func (p *timeWindowPoller) maybeSync(ctx context.Context, logger *slog.Logger, cfg Config, source timeWindowSource, endTime time.Time, classifyErr func(error) error) {
-	logger = logger.With(attr.SlogAIIntegrationSyncSchedule(p.schedule))
-
-	state, err := p.store.EnsureTimeSyncSchedule(ctx, cfg.ID, p.schedule)
-	if err != nil {
-		logger.ErrorContext(ctx, "failed to load ai integration sync schedule", attr.SlogError(err))
-		return
-	}
-	if state.NextPollAfter.After(endTime) {
-		return
-	}
-
-	if err := p.sync(ctx, cfg, state.WatermarkAt, source, endTime); err != nil {
-		if classifyErr != nil {
-			err = classifyErr(err)
+func (p *timeWindowPoller) upperBound(ctx context.Context, source timeWindowSource, endTime time.Time) (time.Time, error) {
+	for {
+		upperBound, err := source.UpperBound(ctx, endTime)
+		if err == nil {
+			return upperBound, nil
 		}
-		logger.WarnContext(ctx, "ai integration sync schedule failed", attr.SlogError(err))
-		if recordErr := p.store.RecordSchedulePollFailure(ctx, cfg.ID, p.schedule, endTime, p.pollInterval, err); recordErr != nil {
-			logger.ErrorContext(ctx, "failed to record ai integration sync schedule poll failure", attr.SlogError(recordErr))
-		}
-		return
-	}
 
-	if err := p.store.RecordSchedulePollSuccess(ctx, cfg.ID, p.schedule, endTime, p.pollInterval); err != nil {
-		logger.ErrorContext(ctx, "failed to record ai integration sync schedule poll success", attr.SlogError(err))
+		retryAfter, retry := source.RetryAfter(err)
+		if !retry {
+			return time.Time{}, err
+		}
+		if err := p.waitForRetry(ctx, retryAfter, 0); err != nil {
+			return time.Time{}, err
+		}
+		p.heartbeat(ctx, 0)
 	}
+}
+
+// fetchAndWriteWindow overlaps fetching page N+1 with writing page N. A
+// provider fetch failure is delivered through fetchDone instead of being
+// returned directly from the producer goroutine so the writer can finish any
+// already-fetched pages before the error cancels the errgroup context.
+func (p *timeWindowPoller) fetchAndWriteWindow(ctx context.Context, source timeWindowSource, start, end time.Time) error {
+	group, groupCtx := errgroup.WithContext(ctx)
+	pages := make(chan timeWindowPage, timeWindowPageBufferSize)
+	fetchDone := make(chan error, 1)
+
+	group.Go(func() error {
+		var fetchErr error
+		defer close(pages)
+		defer func() {
+			fetchDone <- fetchErr
+			close(fetchDone)
+		}()
+
+		pageToken := ""
+		for pageNum := 1; ; pageNum++ {
+			p.heartbeat(groupCtx, pageNum)
+
+			var page timeWindowPage
+			for {
+				page, fetchErr = source.FetchPage(groupCtx, start, end, pageToken)
+				if fetchErr == nil {
+					break
+				}
+
+				retryAfter, retry := source.RetryAfter(fetchErr)
+				if !retry {
+					fetchErr = fmt.Errorf("fetch %s page %d: %w", p.schedule, pageNum, fetchErr)
+					return nil
+				}
+				if fetchErr = p.waitForRetry(groupCtx, retryAfter, pageNum); fetchErr != nil {
+					fetchErr = fmt.Errorf("wait to retry %s page %d: %w", p.schedule, pageNum, fetchErr)
+					return nil
+				}
+				p.heartbeat(groupCtx, pageNum)
+			}
+
+			select {
+			case <-groupCtx.Done():
+				fetchErr = groupCtx.Err()
+				return nil
+			case pages <- page:
+			}
+
+			if !page.HasMore {
+				return nil
+			}
+			if page.NextPage == "" {
+				fetchErr = fmt.Errorf("fetch %s page %d: provider returned has_more without a next page", p.schedule, pageNum)
+				return nil
+			}
+			pageToken = page.NextPage
+		}
+	})
+
+	group.Go(func() error {
+		for page := range pages {
+			if len(page.Rows) == 0 {
+				continue
+			}
+			if err := p.telemetryLogger.LogBulkDeduplicated(groupCtx, page.Rows); err != nil {
+				return oops.E(oops.CodeUnexpected, err, "insert ai integration telemetry page")
+			}
+		}
+		if err := <-fetchDone; err != nil {
+			return err
+		}
+		return nil
+	})
+
+	if err := group.Wait(); err != nil {
+		return fmt.Errorf("process %s window: %w", p.schedule, err)
+	}
+	return nil
+}
+
+func (p *timeWindowPoller) waitForRetry(ctx context.Context, retryAfter time.Duration, page int) error {
+	if retryAfter <= 0 {
+		retryAfter = time.Minute
+	}
+	retryAfter += time.Duration(time.Now().UnixNano() % int64(time.Second))
+
+	deadline := time.Now().Add(retryAfter)
+	for remaining := time.Until(deadline); remaining > 0; remaining = time.Until(deadline) {
+		p.heartbeat(ctx, page)
+		timer := time.NewTimer(min(remaining, timeWindowHeartbeatPeriod))
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return context.Cause(ctx)
+		case <-timer.C:
+		}
+	}
+	return nil
 }

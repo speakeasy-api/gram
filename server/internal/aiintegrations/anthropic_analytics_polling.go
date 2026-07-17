@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -15,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	anthropicapi "github.com/speakeasy-api/gram/server/internal/thirdparty/anthropic"
 )
@@ -55,7 +55,7 @@ const (
 
 // anthropicAnalyticsSourceFactory builds the report-specific source for one
 // sync, bound to that sync's API client and config.
-type anthropicAnalyticsSourceFactory func(client *anthropicapi.Client, cfg Config, heartbeat func(ctx context.Context, scope string, page int)) timeWindowSource
+type anthropicAnalyticsSourceFactory func(client *anthropicapi.Client, cfg Config) timeWindowSource
 
 // AnthropicAnalyticsPoller ingests one Admin Analytics report — usage or
 // cost — from the Anthropic API into telemetry_logs, where the
@@ -66,7 +66,6 @@ type anthropicAnalyticsSourceFactory func(client *anthropicapi.Client, cfg Confi
 // (user, minute, model) without any session linkage — the Compliance API
 // import owns session content.
 type AnthropicAnalyticsPoller struct {
-	logger          *slog.Logger
 	store           *Store
 	guardianPolicy  *guardian.Policy
 	telemetryLogger *telemetry.Logger
@@ -81,35 +80,32 @@ type AnthropicAnalyticsPoller struct {
 // NewAnthropicUsageAnalyticsPoller ingests the user_usage_report (token
 // counts) as the anthropic_analytics_usage schedule.
 func NewAnthropicUsageAnalyticsPoller(
-	logger *slog.Logger,
 	store *Store,
 	guardianPolicy *guardian.Policy,
 	telemetryLogger *telemetry.Logger,
 	heartbeat func(ctx context.Context, scope string, page int),
 ) *AnthropicAnalyticsPoller {
-	return newAnthropicAnalyticsPoller(logger, store, guardianPolicy, telemetryLogger, heartbeat, ScheduleAnthropicAnalyticsUsage,
-		func(client *anthropicapi.Client, cfg Config, heartbeat func(ctx context.Context, scope string, page int)) timeWindowSource {
-			return &anthropicUsageReportSource{client: client, cfg: cfg, heartbeat: heartbeat}
+	return newAnthropicAnalyticsPoller(store, guardianPolicy, telemetryLogger, heartbeat, ScheduleAnthropicAnalyticsUsage,
+		func(client *anthropicapi.Client, cfg Config) timeWindowSource {
+			return &anthropicUsageReportSource{client: client, cfg: cfg}
 		})
 }
 
 // NewAnthropicCostAnalyticsPoller ingests the user_cost_report (spend) as
 // the anthropic_analytics_cost schedule.
 func NewAnthropicCostAnalyticsPoller(
-	logger *slog.Logger,
 	store *Store,
 	guardianPolicy *guardian.Policy,
 	telemetryLogger *telemetry.Logger,
 	heartbeat func(ctx context.Context, scope string, page int),
 ) *AnthropicAnalyticsPoller {
-	return newAnthropicAnalyticsPoller(logger, store, guardianPolicy, telemetryLogger, heartbeat, ScheduleAnthropicAnalyticsCost,
-		func(client *anthropicapi.Client, cfg Config, heartbeat func(ctx context.Context, scope string, page int)) timeWindowSource {
-			return &anthropicCostReportSource{client: client, cfg: cfg, heartbeat: heartbeat}
+	return newAnthropicAnalyticsPoller(store, guardianPolicy, telemetryLogger, heartbeat, ScheduleAnthropicAnalyticsCost,
+		func(client *anthropicapi.Client, cfg Config) timeWindowSource {
+			return &anthropicCostReportSource{client: client, cfg: cfg}
 		})
 }
 
 func newAnthropicAnalyticsPoller(
-	logger *slog.Logger,
 	store *Store,
 	guardianPolicy *guardian.Policy,
 	telemetryLogger *telemetry.Logger,
@@ -121,7 +117,6 @@ func newAnthropicAnalyticsPoller(
 		panic("ai integration analytics poller requires heartbeat")
 	}
 	return &AnthropicAnalyticsPoller{
-		logger:          logger.With(attr.SlogComponent("aiintegrations.anthropic_analytics")),
 		store:           store,
 		guardianPolicy:  guardianPolicy,
 		telemetryLogger: telemetryLogger,
@@ -132,33 +127,32 @@ func newAnthropicAnalyticsPoller(
 	}
 }
 
-// MaybeSync runs the report's schedule when due and records the outcome on
-// its own sync row. Failures are recorded and logged but never returned:
-// analytics ingestion must not block the compliance import sharing the poll
-// activity, and each report fails independently of the other. Non-Enterprise
-// organizations (or keys without the read:analytics scope) get a 403 from
-// the API and simply accumulate failure state until access is granted.
-func (p *AnthropicAnalyticsPoller) MaybeSync(ctx context.Context, cfg Config, endTime time.Time) {
+// Sync ingests one Admin Analytics report schedule. Its caller runs this in a
+// dedicated Temporal workflow, so errors are returned for independent retries
+// and failure recording. Non-Enterprise organizations (or keys without the
+// read:analytics scope) receive a classified access error.
+func (p *AnthropicAnalyticsPoller) Sync(ctx context.Context, cfg Config, endTime time.Time) error {
 	if cfg.Provider != ProviderAnthropicCompliance {
-		return
+		return oops.E(oops.CodeInvalid, nil, "unsupported ai integration provider for anthropic analytics: %s", cfg.Provider)
 	}
 
-	logger := p.logger.With(
-		attr.SlogOrganizationID(cfg.OrganizationID),
-		attr.SlogAIIntegrationConfigID(cfg.ID.String()),
-	)
 	client := anthropicapi.New(p.guardianPolicy, anthropicapi.WithAPIKey(cfg.APIKey), anthropicapi.WithBaseURL(p.baseURL))
 
 	runner := &timeWindowPoller{
 		store:           p.store,
 		telemetryLogger: p.telemetryLogger,
 		schedule:        p.schedule,
-		pollInterval:    anthropicAnalyticsPollInterval,
+		heartbeat: func(ctx context.Context, page int) {
+			p.heartbeat(ctx, p.schedule, page)
+		},
 		initialLookback: anthropicAnalyticsInitialLookback,
 		maxWindow:       anthropicAnalyticsMaxWindow,
 		granularity:     time.Minute,
 	}
-	runner.maybeSync(ctx, logger, cfg, p.newSource(client, cfg, p.heartbeat), endTime, classifyAnthropicAnalyticsErr)
+	if err := runner.sync(ctx, cfg, cfg.PollWatermarkAt, p.newSource(client, cfg), endTime); err != nil {
+		return classifyAnthropicAnalyticsErr(err)
+	}
+	return nil
 }
 
 // classifyAnthropicAnalyticsErr rewrites auth failures so the stored poll
@@ -205,13 +199,11 @@ func analyticsWindowParams(start, end time.Time, page string) anthropicapi.UserA
 // late-arriving events for up to 30 days; restatements behind the watermark
 // are deliberately not re-read for now.)
 type anthropicUsageReportSource struct {
-	client    *anthropicapi.Client
-	cfg       Config
-	heartbeat func(ctx context.Context, scope string, page int)
+	client *anthropicapi.Client
+	cfg    Config
 }
 
 func (src *anthropicUsageReportSource) UpperBound(ctx context.Context, endTime time.Time) (time.Time, error) {
-	src.heartbeat(ctx, "analytics_usage_probe", 1)
 	page, err := src.client.GetUserUsageReport(ctx, analyticsProbeParams(endTime))
 	if err != nil {
 		return time.Time{}, err //nolint:wrapcheck // Preserve HTTPError for the access-denied classification upstream.
@@ -223,34 +215,38 @@ func (src *anthropicUsageReportSource) UpperBound(ctx context.Context, endTime t
 	return refreshedAt.UTC(), nil
 }
 
-func (src *anthropicUsageReportSource) FetchWindow(ctx context.Context, start, end time.Time) ([]telemetry.LogParams, error) {
-	var rows []anthropicapi.UserUsageRow
-	page := ""
-	for pageNum := 1; ; pageNum++ {
-		src.heartbeat(ctx, "analytics_usage", pageNum)
-		res, err := src.client.GetUserUsageReport(ctx, analyticsWindowParams(start, end, page))
-		if err != nil {
-			return nil, err //nolint:wrapcheck // Preserve HTTPError for the access-denied classification upstream.
-		}
-		rows = append(rows, res.Data...)
-
-		if !res.HasMore || res.NextPage == "" {
-			return buildClaudeChatUsageRows(src.cfg, rows)
-		}
-		page = res.NextPage
+func (src *anthropicUsageReportSource) FetchPage(ctx context.Context, start, end time.Time, pageToken string) (timeWindowPage, error) {
+	res, err := src.client.GetUserUsageReport(ctx, analyticsWindowParams(start, end, pageToken))
+	if err != nil {
+		return timeWindowPage{}, err //nolint:wrapcheck // Preserve HTTPError for access-denied and rate-limit handling upstream.
 	}
+	rows, err := buildClaudeChatUsageRows(src.cfg, res.Data)
+	if err != nil {
+		return timeWindowPage{}, err
+	}
+	return timeWindowPage{
+		Rows:     rows,
+		NextPage: res.NextPage,
+		HasMore:  res.HasMore,
+	}, nil
+}
+
+func (src *anthropicUsageReportSource) RetryAfter(err error) (time.Duration, bool) {
+	var httpErr *anthropicapi.HTTPError
+	if !errors.As(err, &httpErr) || httpErr.StatusCode != http.StatusTooManyRequests {
+		return 0, false
+	}
+	return 0, true
 }
 
 // anthropicCostReportSource pulls the user_cost_report for the
 // anthropic_analytics_cost schedule, mirroring the usage source.
 type anthropicCostReportSource struct {
-	client    *anthropicapi.Client
-	cfg       Config
-	heartbeat func(ctx context.Context, scope string, page int)
+	client *anthropicapi.Client
+	cfg    Config
 }
 
 func (src *anthropicCostReportSource) UpperBound(ctx context.Context, endTime time.Time) (time.Time, error) {
-	src.heartbeat(ctx, "analytics_cost_probe", 1)
 	page, err := src.client.GetUserCostReport(ctx, analyticsProbeParams(endTime))
 	if err != nil {
 		return time.Time{}, err //nolint:wrapcheck // Preserve HTTPError for the access-denied classification upstream.
@@ -262,22 +258,28 @@ func (src *anthropicCostReportSource) UpperBound(ctx context.Context, endTime ti
 	return refreshedAt.UTC(), nil
 }
 
-func (src *anthropicCostReportSource) FetchWindow(ctx context.Context, start, end time.Time) ([]telemetry.LogParams, error) {
-	var rows []anthropicapi.UserCostRow
-	page := ""
-	for pageNum := 1; ; pageNum++ {
-		src.heartbeat(ctx, "analytics_cost", pageNum)
-		res, err := src.client.GetUserCostReport(ctx, analyticsWindowParams(start, end, page))
-		if err != nil {
-			return nil, err //nolint:wrapcheck // Preserve HTTPError for the access-denied classification upstream.
-		}
-		rows = append(rows, res.Data...)
-
-		if !res.HasMore || res.NextPage == "" {
-			return buildClaudeChatCostRows(src.cfg, rows)
-		}
-		page = res.NextPage
+func (src *anthropicCostReportSource) FetchPage(ctx context.Context, start, end time.Time, pageToken string) (timeWindowPage, error) {
+	res, err := src.client.GetUserCostReport(ctx, analyticsWindowParams(start, end, pageToken))
+	if err != nil {
+		return timeWindowPage{}, err //nolint:wrapcheck // Preserve HTTPError for access-denied and rate-limit handling upstream.
 	}
+	rows, err := buildClaudeChatCostRows(src.cfg, res.Data)
+	if err != nil {
+		return timeWindowPage{}, err
+	}
+	return timeWindowPage{
+		Rows:     rows,
+		NextPage: res.NextPage,
+		HasMore:  res.HasMore,
+	}, nil
+}
+
+func (src *anthropicCostReportSource) RetryAfter(err error) (time.Duration, bool) {
+	var httpErr *anthropicapi.HTTPError
+	if !errors.As(err, &httpErr) || httpErr.StatusCode != http.StatusTooManyRequests {
+		return 0, false
+	}
+	return 0, true
 }
 
 // buildClaudeChatUsageRows converts usage-report rows into

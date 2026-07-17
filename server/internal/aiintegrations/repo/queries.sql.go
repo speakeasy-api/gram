@@ -181,8 +181,8 @@ type GetConfigByOrgAndProviderRow struct {
 }
 
 // The primary sync schedule shares its name with the config's provider, so
-// config-level reads join on s.schedule = c.provider. Secondary schedules
-// (e.g. anthropic_analytics) are read by their own queries.
+// config-level management reads join on s.schedule = c.provider. Background
+// polling loads the specific schedule selected by the coordinator.
 func (q *Queries) GetConfigByOrgAndProvider(ctx context.Context, arg GetConfigByOrgAndProviderParams) (GetConfigByOrgAndProviderRow, error) {
 	row := q.db.QueryRow(ctx, getConfigByOrgAndProvider, arg.OrganizationID, arg.Provider)
 	var i GetConfigByOrgAndProviderRow
@@ -243,12 +243,17 @@ SELECT
   , s.created_at AS sync_created_at
   , s.updated_at AS sync_updated_at
 FROM ai_integration_configs c
-JOIN ai_integration_syncs s ON s.ai_integration_config_id = c.id AND s.schedule = c.provider
-WHERE c.id = $1
+JOIN ai_integration_syncs s ON s.ai_integration_config_id = c.id AND s.schedule = $1
+WHERE c.id = $2
   AND c.enabled IS TRUE
   AND c.deleted IS FALSE
   AND c.api_key_encrypted IS NOT NULL
 `
+
+type GetUsagePollConfigByIDParams struct {
+	Schedule              string
+	AiIntegrationConfigID uuid.UUID
+}
 
 type GetUsagePollConfigByIDRow struct {
 	CreatedAt              pgtype.Timestamptz
@@ -275,8 +280,8 @@ type GetUsagePollConfigByIDRow struct {
 	SyncUpdatedAt          pgtype.Timestamptz
 }
 
-func (q *Queries) GetUsagePollConfigByID(ctx context.Context, aiIntegrationConfigID uuid.UUID) (GetUsagePollConfigByIDRow, error) {
-	row := q.db.QueryRow(ctx, getUsagePollConfigByID, aiIntegrationConfigID)
+func (q *Queries) GetUsagePollConfigByID(ctx context.Context, arg GetUsagePollConfigByIDParams) (GetUsagePollConfigByIDRow, error) {
+	row := q.db.QueryRow(ctx, getUsagePollConfigByID, arg.Schedule, arg.AiIntegrationConfigID)
 	var i GetUsagePollConfigByIDRow
 	err := row.Scan(
 		&i.CreatedAt,
@@ -492,14 +497,16 @@ SELECT
   , c.organization_id
   , om.slug AS organization_slug
   , c.provider
+  , s.schedule
+  , s.kind
 FROM ai_integration_syncs s
-JOIN ai_integration_configs c ON c.id = s.ai_integration_config_id AND s.schedule = c.provider
+JOIN ai_integration_configs c ON c.id = s.ai_integration_config_id
 JOIN organization_metadata om ON om.id = c.organization_id
 WHERE c.enabled IS TRUE
   AND c.deleted IS FALSE
   AND c.api_key_encrypted IS NOT NULL
   AND s.next_poll_after <= $1
-ORDER BY s.next_poll_after ASC, c.organization_id ASC, c.provider ASC
+ORDER BY s.next_poll_after ASC, c.organization_id ASC, s.schedule ASC
 LIMIT $2
 `
 
@@ -513,6 +520,8 @@ type ListUsagePollCandidatesRow struct {
 	OrganizationID   string
 	OrganizationSlug string
 	Provider         string
+	Schedule         string
+	Kind             string
 }
 
 func (q *Queries) ListUsagePollCandidates(ctx context.Context, arg ListUsagePollCandidatesParams) ([]ListUsagePollCandidatesRow, error) {
@@ -529,6 +538,8 @@ func (q *Queries) ListUsagePollCandidates(ctx context.Context, arg ListUsagePoll
 			&i.OrganizationID,
 			&i.OrganizationSlug,
 			&i.Provider,
+			&i.Schedule,
+			&i.Kind,
 		); err != nil {
 			return nil, err
 		}
@@ -559,9 +570,9 @@ type RecordPollSuccessKeepWatermarkParams struct {
 }
 
 // RecordPollSuccessKeepWatermark reschedules a sync and clears failure state
-// without touching the watermark or cursor. Used by schedules that advance
-// poll_watermark_at incrementally mid-sync (e.g. anthropic_analytics) rather
-// than once at the end of a successful poll.
+// without touching the watermark or cursor. Used by time-kind schedules,
+// whose time-window poller advances poll_watermark_at after each complete
+// window.
 func (q *Queries) RecordPollSuccessKeepWatermark(ctx context.Context, arg RecordPollSuccessKeepWatermarkParams) error {
 	_, err := q.db.Exec(ctx, recordPollSuccessKeepWatermark, arg.NextPollAfter, arg.AiIntegrationConfigID, arg.Schedule)
 	return err

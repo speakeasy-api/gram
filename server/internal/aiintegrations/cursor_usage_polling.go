@@ -5,11 +5,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
-
-	"golang.org/x/sync/errgroup"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -19,11 +18,7 @@ import (
 	cursorapi "github.com/speakeasy-api/gram/server/internal/thirdparty/cursor"
 )
 
-const (
-	cursorUsageMetricsURN       = "cursor:usage:metrics"
-	cursorHeartbeatInterval     = 10 * time.Second
-	cursorUsageEventsBufferSize = 1500
-)
+const cursorUsageMetricsURN = "cursor:usage:metrics"
 
 type UsagePollService struct {
 	store           *Store
@@ -59,92 +54,73 @@ func (s *UsagePollService) SyncCursorUsage(ctx context.Context, cfg Config, endT
 		store:           s.store,
 		telemetryLogger: s.telemetryLogger,
 		schedule:        ScheduleCursor,
-		pollInterval:    cursorUsagePollInterval,
+		heartbeat:       s.heartbeat,
 		initialLookback: initialUsagePollLookback,
 		maxWindow:       0,
 		granularity:     0,
 	}
-	return poller.sync(ctx, cfg, cfg.PollWatermarkAt, &cursorUsageSource{svc: s, cfg: cfg}, endTime)
+	source := &cursorUsageSource{
+		client: cursorapi.New(s.guardianPolicy, cursorapi.WithAPIKey(cfg.APIKey)),
+		svc:    s,
+		cfg:    cfg,
+	}
+	return poller.sync(ctx, cfg, cfg.PollWatermarkAt, source, endTime)
 }
 
-// cursorUsageSource adapts Cursor's usage events API to the time-window
-// poller. The stored watermark is the completed inclusive end of the previous
-// window, so fetches start one millisecond past the window start.
+// cursorUsageSource adapts one Cursor usage-events response page to the
+// time-window poller. The stored watermark is the completed inclusive end of
+// the previous window, so fetches start one millisecond past the window start.
 type cursorUsageSource struct {
-	svc *UsagePollService
-	cfg Config
+	client *cursorapi.Client
+	svc    *UsagePollService
+	cfg    Config
 }
 
 func (src *cursorUsageSource) UpperBound(_ context.Context, endTime time.Time) (time.Time, error) {
 	return endTime, nil
 }
 
-func (src *cursorUsageSource) FetchWindow(ctx context.Context, start, end time.Time) ([]telemetry.LogParams, error) {
-	return src.svc.fetchCursorUsageWindow(ctx, src.cfg, start, end)
+func (src *cursorUsageSource) FetchPage(ctx context.Context, start, end time.Time, pageToken string) (timeWindowPage, error) {
+	pageNum := 1
+	if pageToken != "" {
+		parsed, err := strconv.Atoi(pageToken)
+		if err != nil {
+			return timeWindowPage{}, fmt.Errorf("parse cursor usage page %q: %w", pageToken, err)
+		}
+		pageNum = parsed
+	}
+
+	page, err := src.client.FetchUsageEventsPage(ctx, cursorapi.FetchUsageEventsPageParams{
+		Start: start.Add(time.Millisecond),
+		End:   end,
+		Page:  pageNum,
+	})
+	if err != nil {
+		return timeWindowPage{}, fmt.Errorf("fetch cursor usage events page: %w", err)
+	}
+
+	rows := make([]telemetry.LogParams, 0, len(page.Events))
+	for _, event := range page.Events {
+		rows = append(rows, src.svc.buildCursorUsageEvent(src.cfg, event))
+	}
+
+	nextPage := ""
+	if page.HasNextPage {
+		nextPage = strconv.Itoa(pageNum + 1)
+	}
+	return timeWindowPage{
+		Rows:     rows,
+		NextPage: nextPage,
+		HasMore:  page.HasNextPage,
+	}, nil
 }
 
-func (s *UsagePollService) fetchCursorUsageWindow(ctx context.Context, cfg Config, start, end time.Time) ([]telemetry.LogParams, error) {
-	g, gctx := errgroup.WithContext(ctx)
-	rawEvents := make(chan cursorapi.UsageEvent, cursorUsageEventsBufferSize)
-	fetchErr := make(chan error, 1)
-	apiClient := cursorapi.New(s.guardianPolicy, cursorapi.WithAPIKey(cfg.APIKey))
-
-	// Cursor includes both time bounds, so advance past our stored inclusive watermark.
-	startTime := start.Add(time.Millisecond)
-	g.Go(func() (err error) {
-		defer close(rawEvents)
-		defer func() {
-			fetchErr <- err
-			close(fetchErr)
-		}()
-
-		for pageNum := 1; ; {
-			s.heartbeat(gctx, pageNum)
-
-			page, err := apiClient.FetchUsageEventsPage(gctx, cursorapi.FetchUsageEventsPageParams{
-				Start: startTime,
-				End:   end,
-				Page:  pageNum,
-			})
-			if err != nil {
-				var rateLimitErr *cursorapi.RateLimitError
-				if errors.As(err, &rateLimitErr) {
-					sleepFor := calculateCursorRateLimitSleep(rateLimitErr.RetryAfter)
-					if err := s.sleep(gctx, sleepFor, pageNum); err != nil {
-						return oops.E(oops.CodeUnexpected, err, "sleep after cursor rate limit")
-					}
-					continue
-				}
-				return oops.E(oops.CodeUnexpected, err, "fetch cursor usage events page")
-			}
-
-			for _, event := range page.Events {
-				select {
-				case <-gctx.Done():
-					return gctx.Err()
-				case rawEvents <- event:
-				}
-			}
-
-			if !page.HasNextPage {
-				return nil
-			}
-			pageNum++
-		}
-	})
-
-	logParams := make([]telemetry.LogParams, 0)
-	g.Go(func() error {
-		for event := range rawEvents {
-			logParams = append(logParams, s.buildCursorUsageEvent(cfg, event))
-		}
-		return <-fetchErr
-	})
-
-	if err := g.Wait(); err != nil {
-		return nil, err //nolint:wrapcheck // Preserve the original goroutine error for callers.
+func (src *cursorUsageSource) RetryAfter(err error) (time.Duration, bool) {
+	var rateLimitErr *cursorapi.RateLimitError
+	if !errors.As(err, &rateLimitErr) {
+		return 0, false
 	}
-	return logParams, nil
+	return rateLimitErr.RetryAfter, true
 }
 
 func (s *UsagePollService) buildCursorUsageEvent(cfg Config, event cursorapi.UsageEvent) telemetry.LogParams {
@@ -180,28 +156,6 @@ func (s *UsagePollService) buildCursorUsageEvent(cfg Config, event cursorapi.Usa
 			attr.CursorChargedCentsKey:                 event.ChargedCents,
 		},
 	}
-}
-
-func (s *UsagePollService) sleep(ctx context.Context, d time.Duration, page int) error {
-	deadline := time.Now().Add(d)
-	for remaining := time.Until(deadline); remaining > 0; remaining = time.Until(deadline) {
-		s.heartbeat(ctx, page)
-		select {
-		case <-ctx.Done():
-			return ctx.Err() //nolint:wrapcheck // Preserve context cancellation sentinel errors for callers.
-		case <-time.After(min(remaining, cursorHeartbeatInterval)):
-		}
-	}
-	return nil
-}
-
-func calculateCursorRateLimitSleep(retryAfter time.Duration) time.Duration {
-	if retryAfter <= 0 {
-		retryAfter = time.Minute
-	}
-
-	jitter := time.Duration(time.Now().UnixNano() % int64(time.Second))
-	return retryAfter + jitter
 }
 
 func generateCursorUsageEventHash(event cursorapi.UsageEvent) string {
