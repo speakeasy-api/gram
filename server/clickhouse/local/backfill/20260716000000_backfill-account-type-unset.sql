@@ -40,13 +40,9 @@
 --
 -- MECHANICS: account_type is part of the sorting key, so the "(unset)" bucket
 -- rows cannot be UPDATEd in place. Instead we stage replacement rows as
--- generation 3 (hidden), re-derived from telemetry_logs with the corrected
+-- generation 2 (hidden), re-derived from telemetry_logs with the corrected
 -- account_type, then flip visibility: hide the project's generation-0/1
--- account_type = '' rows in the covered window, reveal generation 3.
--- Generation 3 is DEDICATED to this backfill — live MV rows are generation 2
--- (or 0 before the gen2 MV migration), so staged rows never share a
--- generation with anything else: the guards, the reveal, and the rollback all
--- select exactly the staged rows and nothing more. Existing
+-- account_type = '' rows in the covered window, reveal generation 2. Existing
 -- team/personal rows are never touched — the staged team rows simply coexist
 -- with them and the query layer's -Merge aggregation combines the states.
 --
@@ -67,7 +63,7 @@
 --                          re-confirms). Claude rows after the bound are
 --                          stamped at ingest and stay untouched.
 --   <OLDEST_STAGED_BUCKET> the one run-time parameter: min(time_bucket) of
---                          generation 3 after step 1 (step 2 tells you) —
+--                          generation 2 after step 1 (step 2 tells you) —
 --                          bounds the hide flip so any history the raw logs
 --                          cannot re-derive stays visible. Prod verification
 --                          confirmed the org's history begins well inside the
@@ -128,7 +124,7 @@ WHERE gram_project_id = toUUID('<PROJECT_ID>')
 --   generation 2, is_active 1 — live MV rows since that migration deployed
 --                               (their presence CONFIRMS the migration
 --                               precondition);
---   no generation 3 rows (a prior staging attempt) yet.
+--   no generation 2 HIDDEN rows (a prior staging attempt) yet.
 -- Anything else: stop and reconcile before proceeding.
 -- ============================================================================
 
@@ -163,27 +159,39 @@ FROM (
 -- sync if the MV changes before this runs.
 --
 -- STAGING IS NOT IDEMPOTENT: a second run of the INSERT merges duplicate
--- aggregate states into the same generation-3 keys and doubles the staged
+-- aggregate states into the same generation-2 keys and doubles the staged
 -- spend. Two ENFORCING guards prevent that: the throwIf below errors when
--- generation-3 rows already exist (aborting a piped multi-statement run
--- before the INSERT), and the INSERT's own WHERE repeats the check as a
+-- staged generation-2 rows already exist (aborting a piped multi-statement
+-- run before the INSERT), and the INSERT's own WHERE repeats the check as a
 -- scalar-subquery predicate so a re-run inserts 0 rows even when the INSERT
--- is executed on its own. Generation 3 belongs to this backfill alone (live
--- MV rows are generation 2), so ANY generation-3 row for the project — hidden
--- or already cut over — means a prior staging attempt, and the guards protect
--- before AND after cutover. If one exists, hard-delete it first
+-- is executed on its own. Both check generation = 2 AND is_active = 0: since
+-- the gen2-attribute-metrics-mv migration, live MV rows are ALSO generation 2
+-- but always active, while staged rows are hidden until cutover — is_active
+-- distinguishes them. Consequently the guards only protect BEFORE cutover; do
+-- not re-run step 1 after the flips (to redo a cut-over backfill, roll back
+-- first — the rollback re-hides the staged window, re-arming the guards). If
+-- a prior staging attempt exists, hard-delete it first
 -- (`ALTER TABLE attribute_metrics_summaries DELETE WHERE gram_project_id =
--- toUUID('<PROJECT_ID>') AND generation = 3 SETTINGS mutations_sync = 2`) and only
--- then re-run the INSERT.
+-- toUUID('<PROJECT_ID>') AND generation = 2 AND is_active = 0 AND time_bucket <
+-- toDateTime('2026-07-16 05:00:00', 'UTC') SETTINGS mutations_sync = 2`) and
+-- only then re-run the INSERT.
+--
+-- Run steps 1 -> 3 in one sitting: until the cutover flips, a staged HIDDEN
+-- generation-2 row can share its full sort key with a late-arriving ACTIVE MV
+-- generation-2 row (same pre-boundary event-time bucket and dimensions), and
+-- a background merge would then pick an arbitrary is_active for the combined
+-- row. The flips resolve any such row; minimizing the staging->cutover window
+-- minimizes the transient.
 -- ============================================================================
 
 SELECT throwIf(
     count() > 0,
-    'generation 3 already staged for this project - hard-delete it before re-staging (see comment above)'
+    'generation 2 already staged for this project - hard-delete it before re-staging (see comment above)'
 ) AS stage_once_guard
 FROM attribute_metrics_summaries
 WHERE gram_project_id = toUUID('<PROJECT_ID>')
-  AND generation = 3;
+  AND generation = 2
+  AND is_active = 0;
 
 INSERT INTO attribute_metrics_summaries (gram_project_id, time_bucket, department_name, job_title, employee_type, division_name, cost_center_name, user_email, model, hook_source, roles, groups, total_chats, total_input_tokens, total_output_tokens, total_tokens, cache_read_input_tokens, cache_creation_input_tokens, total_cost, total_tool_calls, unique_tool_calls, account_type, provider, billing_mode, query_source, skill_name, agent_name, mcp_server_name, mcp_tool_name, generation, is_active)
 WITH
@@ -271,7 +279,7 @@ SELECT
     if(is_claude_api_request, toString(attributes.agent.name), '') AS agent_name,
     if(is_claude_api_request, toString(attributes.mcp_server.name), '') AS mcp_server_name,
     if(is_claude_api_request, toString(attributes.mcp_tool.name), '') AS mcp_tool_name,
-    3 AS generation,
+    2 AS generation,
     0 AS is_active
 FROM telemetry_logs
 WHERE gram_project_id = toUUID('<PROJECT_ID>')
@@ -280,13 +288,14 @@ WHERE gram_project_id = toUUID('<PROJECT_ID>')
   AND account_type = ''
   AND (is_claude_api_request OR is_claude_tool_result OR is_agent_usage_row OR is_agent_tool_call)
   -- Stage-once guard, enforced in the INSERT itself: inserts 0 rows if a
-  -- prior generation-3 staging already exists (generation 3 is dedicated to
-  -- this backfill). See the comment above the throwIf.
+  -- prior generation-2 staging (hidden rows — live MV generation-2 rows are
+  -- always active) already exists. See the comment above the throwIf.
   AND (
       SELECT count()
       FROM attribute_metrics_summaries
       WHERE gram_project_id = toUUID('<PROJECT_ID>')
-        AND generation = 3
+        AND generation = 2
+        AND is_active = 0
   ) = 0
 GROUP BY
     gram_project_id,
@@ -312,7 +321,7 @@ GROUP BY
 
 -- ============================================================================
 -- Step 2 — verify the staged generation in place (hidden, so take your time).
--- Note min(time_bucket) of generation 3: that is <OLDEST_STAGED_BUCKET> for
+-- Note min(time_bucket) of generation 2: that is <OLDEST_STAGED_BUCKET> for
 -- the flips below. Buckets older than it (beyond the raw 90-day horizon) are
 -- deliberately left visible as "(unset)".
 -- ============================================================================
@@ -330,8 +339,8 @@ GROUP BY generation;
 -- split previewed during prod verification (recorded in POC-305).
 SELECT toStartOfDay(time_bucket) AS day,
        round(sumIf(finalizeAggregation(total_cost), generation IN (0, 1) AND account_type = '' AND is_active = 1), 2) AS live_unset_cost,
-       round(sumIf(finalizeAggregation(total_cost), generation = 3), 2) AS staged_cost,
-       round(sumIf(finalizeAggregation(total_cost), generation = 3 AND account_type = 'team'), 2) AS staged_team_cost
+       round(sumIf(finalizeAggregation(total_cost), generation = 2), 2) AS staged_cost,
+       round(sumIf(finalizeAggregation(total_cost), generation = 2 AND account_type = 'team'), 2) AS staged_team_cost
 FROM attribute_metrics_summaries
 WHERE gram_project_id = toUUID('<PROJECT_ID>')
   AND time_bucket < toDateTime('2026-07-16 05:00:00', 'UTC')
@@ -365,12 +374,14 @@ ALTER TABLE attribute_metrics_summaries
       AND time_bucket < toDateTime('2026-07-16 05:00:00', 'UTC')
     SETTINGS mutations_sync = 2;
 
--- Generation 3 holds only this backfill's staged rows, so the reveal needs no
--- further bounds and is the exact inverse of the rollback's re-hide below.
+-- Bounded to the staged window: live MV generation-2 rows are already active
+-- (the flip would be a no-op on them), and the bound keeps this the exact
+-- inverse of the rollback's re-hide below.
 ALTER TABLE attribute_metrics_summaries
     UPDATE is_active = 1
     WHERE gram_project_id = toUUID('<PROJECT_ID>')
-      AND generation = 3
+      AND generation = 2
+      AND time_bucket < toDateTime('2026-07-16 05:00:00', 'UTC')
     SETTINGS mutations_sync = 2;
 
 -- Verify, then spot-check the affected org's Costs page account-type
@@ -392,19 +403,22 @@ GROUP BY account_type;
 -- step-0c end state: generation 1 visible before 2026-07-14 (the 20260713
 -- runbook's cutoff), generation 0 visible from it (generation-0 rows before it
 -- were already hidden by that runbook's cutover and must stay hidden). To
--- retry a corrected backfill afterwards, hard-delete generation 3 for the
+-- retry a corrected backfill afterwards, hard-delete generation 2 for the
 -- project (`ALTER TABLE attribute_metrics_summaries DELETE WHERE
--- gram_project_id = toUUID('<PROJECT_ID>') AND generation = 3 SETTINGS
+-- gram_project_id = toUUID('<PROJECT_ID>') AND generation = 2 SETTINGS
 -- mutations_sync = 2`) and start over from step 1.
 -- ============================================================================
 
--- Generation 3 holds only this backfill's staged rows, so the re-hide is
--- EXACTLY lossless: no live MV row (generation 2, or 0/1 history) is touched.
+-- The re-hide is bounded to the staged window so live MV generation-2 rows
+-- (post-boundary buckets) stay visible. The few late-arriving MV generation-2
+-- rows with PRE-boundary event-time buckets get hidden along with the staged
+-- rows — a tiny bounded undercount while rolled back, the safe direction.
 --
 -- ALTER TABLE attribute_metrics_summaries
 --     UPDATE is_active = 0
 --     WHERE gram_project_id = toUUID('<PROJECT_ID>')
---       AND generation = 3
+--       AND generation = 2
+--       AND time_bucket < toDateTime('2026-07-16 05:00:00', 'UTC')
 --     SETTINGS mutations_sync = 2;
 --
 -- ALTER TABLE attribute_metrics_summaries

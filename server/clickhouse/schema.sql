@@ -499,11 +499,11 @@ CREATE TABLE IF NOT EXISTS attribute_metrics_summaries (
     --
     -- generation is an IMMUTABLE sort-key discriminator separating coexisting
     -- data generations: 0 = MV rows ingested before 2026-07-17, 1 = the
-    -- 2026-07 full re-derive backfill, 2 = live MV ingestion since 2026-07-17
-    -- (the MV stamps its own generation so fresh rows are immune to backfill
-    -- cutover flips, which target other generations), 3 = the 2026-07
-    -- account-type unset->team backfill (POC-305); future backfills
-    -- increment. Because it is part of
+    -- 2026-07 full re-derive backfill, 2 = the current generation — both the
+    -- 2026-07 account-type unset->team backfill (POC-305) and live MV
+    -- ingestion since then (the MV stamps the current generation so fresh
+    -- rows are immune to that backfill's generation-0/1 cutover flips; future
+    -- backfills increment). Because it is part of
     -- the sorting key, a backfill row never merges with the original row for
     -- the same logical key — the two generations coexist untouched, which is
     -- what makes rollback lossless. Sort-key columns cannot be ALTER UPDATEd,
@@ -661,12 +661,11 @@ SELECT
     if(is_claude_api_request, toString(attributes.mcp_server.name), '') AS mcp_server_name,
     if(is_claude_api_request, toString(attributes.mcp_tool.name), '') AS mcp_tool_name,
 
-    -- Rollback machinery: MV rows are stamped with the MV's own generation (2
-    -- since 2026-07-17; see the generation column comment) and active.
-    -- Emitting a dedicated generation makes fresh ingestion immune to
-    -- backfill cutover flips, which target other generations (the POC-305
-    -- backfill stages as 3 and hides 0/1). These are emitted explicitly (as
-    -- constants) rather than
+    -- Rollback machinery: MV rows are stamped with the CURRENT generation (2
+    -- since the 2026-07 account-type backfill; see the generation column
+    -- comment) and active. Emitting the current generation makes fresh
+    -- ingestion immune to that backfill's cutover flips, which only target
+    -- generations 0/1. These are emitted explicitly (as constants) rather than
     -- relying on column defaults — a TO-table MV inserts positionally with no
     -- column list, so the SELECT must produce every target column or ingestion
     -- fails with a column-count mismatch. Constants need no GROUP BY entry.
