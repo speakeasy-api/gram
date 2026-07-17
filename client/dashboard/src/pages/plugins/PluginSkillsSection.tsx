@@ -274,7 +274,7 @@ function PluginSkillCard({
     <DotCard
       className="cursor-pointer"
       onClick={() => {
-        void navigate(`${routes.skills.href()}?skill=${distribution.skillId}`);
+        void navigate(routes.skills.detail.href(distribution.skillId));
       }}
       icon={<Sparkles className="text-muted-foreground h-8 w-8" />}
     >

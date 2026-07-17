@@ -16,6 +16,7 @@ import ChatSessions from "./pages/chatLogs/ChatLogs";
 import { ChatConversation, ChatHome, ChatRoot } from "./pages/chat/Chat";
 import Skills from "./pages/Skills";
 import SkillsList from "./pages/skills/SkillsList";
+import SkillDetail from "./pages/skills/SkillDetail";
 import Deployment from "./pages/deployments/deployment/Deployment";
 import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
 import UserSessions from "./pages/org/UserSessions";
@@ -344,6 +345,13 @@ const ROUTE_STRUCTURE = {
     icon: "terminal",
     component: Skills,
     indexComponent: SkillsList,
+    subPages: {
+      detail: {
+        title: "Skill",
+        url: ":skillId",
+        component: SkillDetail,
+      },
+    },
   },
   mcp: {
     title: "MCP",

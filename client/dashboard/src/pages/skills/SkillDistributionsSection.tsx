@@ -1,21 +1,12 @@
 import { RequireScope } from "@/components/require-scope";
 import { ErrorAlert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { useProject } from "@/contexts/Auth";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import { useRoutes } from "@/routes";
 import type { SkillDistribution } from "@gram/client/models/components/skilldistribution.js";
-import { useDistributeSkillMutation } from "@gram/client/react-query/distributeSkill.js";
-import { usePlugins } from "@gram/client/react-query/plugins.js";
 import {
   invalidateAllSkillDistributions,
   useSkillDistributionsInfinite,
@@ -24,13 +15,14 @@ import { useUndistributeSkillMutation } from "@gram/client/react-query/undistrib
 import { Badge } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
 
 /**
  * Lists the plugins an individual skill is distributed to and lets writers
- * add or revoke plugin distributions from the skill sheet.
+ * revoke plugin distributions. Adding distributions happens through the
+ * plugin banner at the top of the skill detail page.
  */
 export function SkillDistributionsSection({
   skillId,
@@ -45,12 +37,7 @@ export function SkillDistributionsSection({
     undefined,
     { throwOnError: false },
   );
-  const pluginsQuery = usePlugins(undefined, undefined, {
-    throwOnError: false,
-  });
-  const distribute = useDistributeSkillMutation();
   const undistribute = useUndistributeSkillMutation();
-  const [selectedPluginId, setSelectedPluginId] = useState("");
 
   const distributions = useMemo(
     () =>
@@ -59,31 +46,6 @@ export function SkillDistributionsSection({
       ) ?? [],
     [distributionsQuery.data?.pages],
   );
-  const availablePlugins = useMemo(() => {
-    const distributedPluginIds = new Set(distributions.map((d) => d.pluginId));
-    return (pluginsQuery.data?.plugins ?? []).filter(
-      (plugin) => !distributedPluginIds.has(plugin.id),
-    );
-  }, [distributions, pluginsQuery.data?.plugins]);
-
-  const handleDistribute = async (): Promise<void> => {
-    if (!selectedPluginId) return;
-    try {
-      await distribute.mutateAsync({
-        request: {
-          distributeSkillRequestBody: {
-            id: skillId,
-            pluginId: selectedPluginId,
-          },
-        },
-      });
-      await invalidateAllSkillDistributions(queryClient);
-      setSelectedPluginId("");
-      toast.success("Skill distributed to plugin");
-    } catch (_err) {
-      toast.error("Unable to distribute skill");
-    }
-  };
 
   const handleUndistribute = async (
     distribution: SkillDistribution,
@@ -115,19 +77,15 @@ export function SkillDistributionsSection({
 
   return (
     <div className="space-y-3">
-      <Type small muted>
-        Distributed skills ship inside the plugin package and reach everyone who
-        installs the plugin.
-      </Type>
-
       {distributions.length === 0 ? (
-        <div className="border-border rounded-lg border border-dashed p-4">
+        <div className="border-border rounded-xl border border-dashed p-6">
           <Type small muted>
-            Not distributed to any plugins yet.
+            Not distributed to any plugins yet. Use the banner above to
+            distribute this skill.
           </Type>
         </div>
       ) : (
-        <ul className="border-border divide-y rounded-lg border">
+        <ul className="border-border bg-card divide-y overflow-hidden rounded-xl border">
           {distributions.map((distribution) => (
             <li
               key={distribution.id}
@@ -187,21 +145,6 @@ export function SkillDistributionsSection({
             : "Load more distributions"}
         </Button>
       )}
-
-      <RequireScope
-        scope="skill:write"
-        resourceId={project.id}
-        level="component"
-      >
-        <DistributeControl
-          availablePlugins={availablePlugins}
-          isLoadingPlugins={pluginsQuery.isPending}
-          selectedPluginId={selectedPluginId}
-          onSelect={setSelectedPluginId}
-          isDistributing={distribute.isPending}
-          onDistribute={() => void handleDistribute()}
-        />
-      </RequireScope>
     </div>
   );
 }
@@ -219,53 +162,4 @@ function VersionTrackingBadge({
     );
   }
   return <Badge variant="information">Latest</Badge>;
-}
-
-function DistributeControl({
-  availablePlugins,
-  isLoadingPlugins,
-  selectedPluginId,
-  onSelect,
-  isDistributing,
-  onDistribute,
-}: {
-  availablePlugins: { id: string; name: string }[];
-  isLoadingPlugins: boolean;
-  selectedPluginId: string;
-  onSelect: (pluginId: string) => void;
-  isDistributing: boolean;
-  onDistribute: () => void;
-}): JSX.Element {
-  if (isLoadingPlugins) {
-    return <Skeleton className="h-9 w-full" />;
-  }
-  if (availablePlugins.length === 0) {
-    return (
-      <Type small muted>
-        No more plugins to distribute to. Create a plugin to carry this skill.
-      </Type>
-    );
-  }
-  return (
-    <div className="flex items-center gap-2">
-      <Select value={selectedPluginId} onValueChange={onSelect}>
-        <SelectTrigger className="w-full sm:w-64">
-          <SelectValue placeholder="Select a plugin" />
-        </SelectTrigger>
-        <SelectContent>
-          {availablePlugins.map((plugin) => (
-            <SelectItem key={plugin.id} value={plugin.id}>
-              {plugin.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Button
-        disabled={!selectedPluginId || isDistributing}
-        onClick={onDistribute}
-      >
-        {isDistributing ? "Distributing..." : "Distribute"}
-      </Button>
-    </div>
-  );
 }
