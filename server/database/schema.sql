@@ -2898,12 +2898,10 @@ CREATE TABLE IF NOT EXISTS ai_integration_syncs (
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   ai_integration_config_id uuid NOT NULL,
-  -- Expand-phase discriminator for the sync pipeline. Nullable until all
-  -- existing rows are backfilled and old writers have drained.
-  schedule TEXT,
-  -- Expand-phase checkpoint kind ('cursor' or 'time'). Nullable until the
-  -- application backfill completes.
-  kind TEXT,
+  -- Discriminator for the sync pipeline.
+  schedule TEXT NOT NULL,
+  -- Checkpoint kind ('cursor' or 'time').
+  kind TEXT NOT NULL,
   poll_watermark_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   last_cursor_id TEXT,
   next_poll_after timestamptz NOT NULL DEFAULT clock_timestamp(),

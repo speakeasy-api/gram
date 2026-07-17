@@ -463,31 +463,12 @@ WHERE s.ai_integration_config_id = c.id
   AND c.project_id = @project_id
   AND s.schedule <> @primary_schedule;
 
--- name: ClearSyncScheduleDiscriminatorsForTest :exec
-UPDATE ai_integration_syncs s
-SET schedule = NULL,
-    kind = NULL
-FROM ai_integration_configs c
-WHERE s.ai_integration_config_id = c.id
-  AND c.id = @ai_integration_config_id
-  AND c.project_id = @project_id
-  AND (s.schedule = c.provider OR s.schedule IS NULL);
-
 -- name: DeleteSyncRowsForTest :exec
 DELETE FROM ai_integration_syncs s
 USING ai_integration_configs c
 WHERE s.ai_integration_config_id = c.id
   AND c.id = @ai_integration_config_id
   AND c.project_id = @project_id;
-
--- name: GetPrimarySyncDiscriminatorsForTest :one
-SELECT s.id, s.schedule, s.kind
-FROM ai_integration_syncs s
-JOIN ai_integration_configs c ON c.id = s.ai_integration_config_id
-WHERE c.id = @ai_integration_config_id
-  AND c.project_id = @project_id
-  AND (s.schedule = c.provider OR s.schedule IS NULL)
-LIMIT 1;
 
 -- name: CountSyncRowsForTest :one
 SELECT count(*)::bigint

@@ -189,27 +189,6 @@ func (q *Queries) BackfillSyncSchedulesBatch(ctx context.Context, arg BackfillSy
 	return items, nil
 }
 
-const clearSyncScheduleDiscriminatorsForTest = `-- name: ClearSyncScheduleDiscriminatorsForTest :exec
-UPDATE ai_integration_syncs s
-SET schedule = NULL,
-    kind = NULL
-FROM ai_integration_configs c
-WHERE s.ai_integration_config_id = c.id
-  AND c.id = $1
-  AND c.project_id = $2
-  AND (s.schedule = c.provider OR s.schedule IS NULL)
-`
-
-type ClearSyncScheduleDiscriminatorsForTestParams struct {
-	AiIntegrationConfigID uuid.UUID
-	ProjectID             uuid.UUID
-}
-
-func (q *Queries) ClearSyncScheduleDiscriminatorsForTest(ctx context.Context, arg ClearSyncScheduleDiscriminatorsForTestParams) error {
-	_, err := q.db.Exec(ctx, clearSyncScheduleDiscriminatorsForTest, arg.AiIntegrationConfigID, arg.ProjectID)
-	return err
-}
-
 const countConfigsByOrganization = `-- name: CountConfigsByOrganization :one
 SELECT count(*)
 FROM ai_integration_configs
@@ -361,8 +340,8 @@ type EnsurePrimarySyncRow struct {
 	CreatedAt             pgtype.Timestamptz
 	UpdatedAt             pgtype.Timestamptz
 	AiIntegrationConfigID uuid.UUID
-	Schedule              pgtype.Text
-	Kind                  pgtype.Text
+	Schedule              string
+	Kind                  string
 	PollWatermarkAt       pgtype.Timestamptz
 	LastCursorID          pgtype.Text
 	NextPollAfter         pgtype.Timestamptz
@@ -557,34 +536,6 @@ func (q *Queries) GetFirstProjectByOrganization(ctx context.Context, organizatio
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
-}
-
-const getPrimarySyncDiscriminatorsForTest = `-- name: GetPrimarySyncDiscriminatorsForTest :one
-SELECT s.id, s.schedule, s.kind
-FROM ai_integration_syncs s
-JOIN ai_integration_configs c ON c.id = s.ai_integration_config_id
-WHERE c.id = $1
-  AND c.project_id = $2
-  AND (s.schedule = c.provider OR s.schedule IS NULL)
-LIMIT 1
-`
-
-type GetPrimarySyncDiscriminatorsForTestParams struct {
-	AiIntegrationConfigID uuid.UUID
-	ProjectID             uuid.UUID
-}
-
-type GetPrimarySyncDiscriminatorsForTestRow struct {
-	ID       uuid.UUID
-	Schedule pgtype.Text
-	Kind     pgtype.Text
-}
-
-func (q *Queries) GetPrimarySyncDiscriminatorsForTest(ctx context.Context, arg GetPrimarySyncDiscriminatorsForTestParams) (GetPrimarySyncDiscriminatorsForTestRow, error) {
-	row := q.db.QueryRow(ctx, getPrimarySyncDiscriminatorsForTest, arg.AiIntegrationConfigID, arg.ProjectID)
-	var i GetPrimarySyncDiscriminatorsForTestRow
-	err := row.Scan(&i.ID, &i.Schedule, &i.Kind)
-	return i, err
 }
 
 const getSyncScheduleBackfillStatus = `-- name: GetSyncScheduleBackfillStatus :one

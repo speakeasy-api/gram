@@ -92,32 +92,6 @@ func TestUpsertWithTxStartsSingleCursorSchedule(t *testing.T) {
 	}, listSyncSchedules(t, ctx, conn, created.Config.ID))
 }
 
-func TestUpsertWithTxFillsExistingPrimarySyncDiscriminators(t *testing.T) {
-	t.Parallel()
-
-	ctx, conn, store, orgID := newStoreTestDB(t)
-
-	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderCursor, "cursor-key", true, true, nil, nil)
-	original := getPrimarySyncDiscriminators(t, ctx, conn, created.Config)
-	require.NoError(t, repo.New(conn).ClearSyncScheduleDiscriminatorsForTest(ctx, repo.ClearSyncScheduleDiscriminatorsForTestParams{
-		AiIntegrationConfigID: created.Config.ID,
-		ProjectID:             created.Config.ProjectID,
-	}))
-
-	loaded, _, err := store.loadForOrgAndProviderRow(ctx, orgID, ProviderCursor)
-	require.NoError(t, err)
-	require.Equal(t, created.Config.ID, loaded.ID)
-
-	updated := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderCursor, "", false, false, nil, nil)
-	require.Equal(t, created.Config.ID, updated.Config.ID)
-
-	syncRow := getPrimarySyncDiscriminators(t, ctx, conn, updated.Config)
-	require.Equal(t, original.ID, syncRow.ID)
-	require.Equal(t, ProviderCursor, syncRow.Schedule.String)
-	require.Equal(t, SyncKindTime, syncRow.Kind.String)
-	require.Equal(t, int64(1), countSyncRows(t, ctx, conn, updated.Config))
-}
-
 func TestEnsurePrimarySyncHandlesConcurrentFirstWriters(t *testing.T) {
 	t.Parallel()
 
@@ -199,16 +173,12 @@ func TestSyncScheduleBackfillPopulatesPrimaryAndAnthropicAnalyticsSchedules(t *t
 		ProjectID:             created.Config.ProjectID,
 		PrimarySchedule:       conv.ToPGText(ScheduleAnthropicCompliance),
 	}))
-	require.NoError(t, queries.ClearSyncScheduleDiscriminatorsForTest(ctx, repo.ClearSyncScheduleDiscriminatorsForTestParams{
-		AiIntegrationConfigID: created.Config.ID,
-		ProjectID:             created.Config.ProjectID,
-	}))
 
 	backfiller := NewSyncScheduleBackfiller(conn, created.Config.ProjectID)
 	before, err := backfiller.Status(ctx)
 	require.NoError(t, err)
 	require.Equal(t, SyncScheduleBackfillStatus{
-		PrimarySyncsPending:   1,
+		PrimarySyncsPending:   0,
 		AnalyticsSyncsPending: 2,
 	}, before)
 
@@ -216,7 +186,7 @@ func TestSyncScheduleBackfillPopulatesPrimaryAndAnthropicAnalyticsSchedules(t *t
 	require.NoError(t, err)
 	require.Equal(t, SyncScheduleBackfillBatch{
 		ConfigsProcessed:          1,
-		PrimarySyncsUpdated:       1,
+		PrimarySyncsUpdated:       0,
 		AnalyticsSchedulesCreated: 2,
 		LastConfigID:              created.Config.ID,
 	}, batch)
@@ -306,17 +276,6 @@ func countAIIntegrationConfigs(t *testing.T, ctx context.Context, conn *pgxpool.
 	})
 	require.NoError(t, err)
 	return count
-}
-
-func getPrimarySyncDiscriminators(t *testing.T, ctx context.Context, conn *pgxpool.Pool, cfg Config) repo.GetPrimarySyncDiscriminatorsForTestRow {
-	t.Helper()
-
-	row, err := repo.New(conn).GetPrimarySyncDiscriminatorsForTest(ctx, repo.GetPrimarySyncDiscriminatorsForTestParams{
-		AiIntegrationConfigID: cfg.ID,
-		ProjectID:             cfg.ProjectID,
-	})
-	require.NoError(t, err)
-	return row
 }
 
 func countSyncRows(t *testing.T, ctx context.Context, conn *pgxpool.Pool, cfg Config) int64 {
