@@ -55,7 +55,7 @@
     }
   },
   "dependencies": {
-    "@clack/prompts": "^0.11.0",
+    "@clack/prompts": "^1.7.0",
     "@logtape/logtape": "^2.2.4",
     "@logtape/pretty": "^2.2.4",
     "@stricli/core": "^1.2.8",
