@@ -15,6 +15,14 @@ overrides:
           import: "github.com/google/uuid"
           type: "NullUUID"
         nullable: true
+      - column: ai_integration_syncs.schedule
+        go_type:
+          import: github.com/jackc/pgx/v5/pgtype
+          type: Text
+      - column: ai_integration_syncs.kind
+        go_type:
+          import: github.com/jackc/pgx/v5/pgtype
+          type: Text
       - column: http_tool_definitions.response_filter
         go_type:
           import: github.com/speakeasy-api/gram/server/internal/tools/repo/models
