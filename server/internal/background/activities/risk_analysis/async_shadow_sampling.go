@@ -10,9 +10,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
-func (a *AnalyzeBatch) asyncShadowEnabled(ctx context.Context, orgID string, projectID uuid.UUID, chatMessageID string) bool {
+func (a *AnalyzeBatch) asyncShadowPersonProperties(ctx context.Context, orgID string, projectID uuid.UUID) (map[string]string, bool) {
 	if a.flags == nil {
-		return false
+		return nil, false
 	}
 
 	groups, err := repo.New(a.db).GetProjectFlagGroups(ctx, projectID)
@@ -21,15 +21,22 @@ func (a *AnalyzeBatch) asyncShadowEnabled(ctx context.Context, orgID string, pro
 			attr.SlogError(err),
 			attr.SlogOrganizationID(orgID),
 			attr.SlogProjectID(projectID.String()),
-			attr.SlogMessageID(chatMessageID),
 		)
+		return nil, false
+	}
+
+	return map[string]string{
+		"organization_slug": groups.OrganizationSlug,
+		"project_slug":      groups.ProjectSlug,
+	}, true
+}
+
+func (a *AnalyzeBatch) asyncShadowEnabled(ctx context.Context, orgID string, projectID uuid.UUID, chatMessageID string, personProperties map[string]string) bool {
+	if a.flags == nil {
 		return false
 	}
 
-	on, err := a.flags.IsFlagEnabledLocal(ctx, feature.FlagRiskAsyncScanShadow, chatMessageID, nil, map[string]string{
-		"organization_slug": groups.OrganizationSlug,
-		"project_slug":      groups.ProjectSlug,
-	})
+	on, err := a.flags.IsFlagEnabledLocal(ctx, feature.FlagRiskAsyncScanShadow, chatMessageID, nil, personProperties)
 	if err != nil {
 		a.logger.ErrorContext(ctx, "async shadow flag local evaluation failed",
 			attr.SlogError(err),
