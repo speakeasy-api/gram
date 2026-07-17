@@ -135,30 +135,6 @@ WHERE NOT EXISTS (SELECT 1 FROM updated)
   AND NOT EXISTS (SELECT 1 FROM inserted)
 LIMIT 1;
 
--- BackfillSyncSchedules is run manually in production after the compatible
--- application deploy. It labels every existing primary sync row in one
--- idempotent statement.
--- name: BackfillSyncSchedules :one
-WITH updated AS (
-  UPDATE ai_integration_syncs s
-  SET schedule = COALESCE(s.schedule, c.provider),
-      kind = COALESCE(
-        s.kind,
-        CASE c.provider
-          WHEN 'anthropic_compliance' THEN 'cursor'
-          ELSE 'time'
-        END
-      ),
-      updated_at = clock_timestamp()
-  FROM ai_integration_configs c
-  WHERE s.ai_integration_config_id = c.id
-    AND (s.schedule = c.provider OR s.schedule IS NULL)
-    AND (s.schedule IS NULL OR s.kind IS NULL)
-  RETURNING s.id
-)
-SELECT count(*)::bigint AS primary_syncs_updated
-FROM updated;
-
 -- Test-only fixtures for transitional sync-row behavior.
 -- name: ClearSyncScheduleDiscriminatorsForTest :exec
 UPDATE ai_integration_syncs s

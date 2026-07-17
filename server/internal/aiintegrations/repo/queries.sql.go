@@ -31,38 +31,6 @@ func (q *Queries) AdvanceUsagePollCursor(ctx context.Context, arg AdvanceUsagePo
 	return err
 }
 
-const backfillSyncSchedules = `-- name: BackfillSyncSchedules :one
-WITH updated AS (
-  UPDATE ai_integration_syncs s
-  SET schedule = COALESCE(s.schedule, c.provider),
-      kind = COALESCE(
-        s.kind,
-        CASE c.provider
-          WHEN 'anthropic_compliance' THEN 'cursor'
-          ELSE 'time'
-        END
-      ),
-      updated_at = clock_timestamp()
-  FROM ai_integration_configs c
-  WHERE s.ai_integration_config_id = c.id
-    AND (s.schedule = c.provider OR s.schedule IS NULL)
-    AND (s.schedule IS NULL OR s.kind IS NULL)
-  RETURNING s.id
-)
-SELECT count(*)::bigint AS primary_syncs_updated
-FROM updated
-`
-
-// BackfillSyncSchedules is run manually in production after the compatible
-// application deploy. It labels every existing primary sync row in one
-// idempotent statement.
-func (q *Queries) BackfillSyncSchedules(ctx context.Context) (int64, error) {
-	row := q.db.QueryRow(ctx, backfillSyncSchedules)
-	var primary_syncs_updated int64
-	err := row.Scan(&primary_syncs_updated)
-	return primary_syncs_updated, err
-}
-
 const clearSyncScheduleDiscriminatorsForTest = `-- name: ClearSyncScheduleDiscriminatorsForTest :exec
 UPDATE ai_integration_syncs s
 SET schedule = NULL,
