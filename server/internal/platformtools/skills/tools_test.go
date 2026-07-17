@@ -84,3 +84,28 @@ func TestToolsForwardReadFiltersWithoutAuthOverrides(t *testing.T) {
 	require.Nil(t, svc.listDistributionsPayload.ApikeyToken)
 	require.Nil(t, svc.listDistributionsPayload.ProjectSlugInput)
 }
+
+func TestToolsRejectInvalidLimits(t *testing.T) {
+	t.Parallel()
+
+	svc := &stubSkillsService{}
+	env := toolconfig.ToolCallEnv{
+		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
+		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
+		OAuthToken: "",
+		GramEmail:  "",
+	}
+	var out bytes.Buffer
+
+	err := NewListTool(svc).Call(t.Context(), env, bytes.NewBufferString(`{"limit":-1}`), &out)
+	require.ErrorContains(t, err, "limit must be between 1 and 200")
+	require.Nil(t, svc.listPayload)
+
+	err = NewListVersionsTool(svc).Call(t.Context(), env, bytes.NewBufferString(`{"id":"skill-id","limit":-1}`), &out)
+	require.ErrorContains(t, err, "limit must be between 1 and 50")
+	require.Nil(t, svc.listVersionsPayload)
+
+	err = NewListDistributionsTool(svc).Call(t.Context(), env, bytes.NewBufferString(`{"limit":-1}`), &out)
+	require.ErrorContains(t, err, "limit must be between 1 and 50")
+	require.Nil(t, svc.listDistributionsPayload)
+}

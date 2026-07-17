@@ -46,6 +46,9 @@ func (t *List) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Re
 	if input.Limit == 0 {
 		input.Limit = 50
 	}
+	if input.Limit < 1 || input.Limit > 200 {
+		return fmt.Errorf("limit must be between 1 and 200")
+	}
 
 	result, err := t.skills.List(ctx, &genskills.ListPayload{
 		Cursor:           input.Cursor,
@@ -153,6 +156,9 @@ func (t *ListVersions) Call(ctx context.Context, _ toolconfig.ToolCallEnv, paylo
 	if input.Limit == 0 {
 		input.Limit = 20
 	}
+	if input.Limit < 1 || input.Limit > 50 {
+		return fmt.Errorf("limit must be between 1 and 50")
+	}
 
 	result, err := t.skills.ListVersions(ctx, &genskills.ListVersionsPayload{
 		ID:               input.ID,
@@ -212,6 +218,9 @@ func (t *ListDistributions) Call(ctx context.Context, _ toolconfig.ToolCallEnv, 
 	}
 	if input.Limit == 0 {
 		input.Limit = 20
+	}
+	if input.Limit < 1 || input.Limit > 50 {
+		return fmt.Errorf("limit must be between 1 and 50")
 	}
 
 	result, err := t.skills.ListDistributions(ctx, &genskills.ListDistributionsPayload{
