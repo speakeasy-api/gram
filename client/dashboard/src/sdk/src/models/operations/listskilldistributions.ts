@@ -29,6 +29,14 @@ export type ListSkillDistributionsSecurity = {
 
 export type ListSkillDistributionsRequest = {
   /**
+   * Only return distributions of this skill.
+   */
+  skillId?: string | undefined;
+  /**
+   * Only return distributions carried by this plugin.
+   */
+  pluginId?: string | undefined;
+  /**
    * Cursor for the next page of skill distributions.
    */
   cursor?: string | undefined;
@@ -161,6 +169,8 @@ export function listSkillDistributionsSecurityToJSON(
 
 /** @internal */
 export type ListSkillDistributionsRequest$Outbound = {
+  skill_id?: string | undefined;
+  plugin_id?: string | undefined;
   cursor?: string | undefined;
   limit: number;
   "Gram-Session"?: string | undefined;
@@ -174,6 +184,8 @@ export const ListSkillDistributionsRequest$outboundSchema: z.ZodMiniType<
   ListSkillDistributionsRequest
 > = z.pipe(
   z.object({
+    skillId: z.optional(z.string()),
+    pluginId: z.optional(z.string()),
     cursor: z.optional(z.string()),
     limit: z._default(z.int(), 20),
     gramSession: z.optional(z.string()),
@@ -182,6 +194,8 @@ export const ListSkillDistributionsRequest$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      skillId: "skill_id",
+      pluginId: "plugin_id",
       gramSession: "Gram-Session",
       gramKey: "Gram-Key",
       gramProject: "Gram-Project",

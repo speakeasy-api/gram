@@ -1,5 +1,17 @@
 # server
 
+## 0.90.0
+
+### Minor Changes
+
+- e98f891: Give the Project Assistant read-only platform tools to list project skills, inspect the latest skill content, review version history, and inspect plugin distributions.
+- bdf8c48: Skills can now be distributed to plugins. New management endpoints let you attach a skill to a plugin (tracking the latest valid version or pinning a specific one), revoke a distribution, and list a project's active distributions. Deleting a plugin or archiving a skill automatically revokes the affected distributions. Distributed skills ship inside the published plugin packages for Claude Code, Cursor, and Codex, and distribution changes mark the plugin as having unpublished changes so the next publish or marketplace auto-sync picks them up.
+
+### Patch Changes
+
+- ca1e87f: Add a production runbook to backfill an org's historical "(unset)" account-type spend as team on attribute_metrics_summaries (POC-305), staged as generation 2 via the generation/is_active tombstone machinery. Ships with a ClickHouse migration that atomically swaps attribute_metrics_summaries_mv's query in place (ALTER TABLE ... MODIFY QUERY, no ingestion gap) so live ingestion is also stamped generation 2 — the backfill and fresh rows share one generation, immune to the generation-0/1 cutover flips, converging on a single live generation once the old ones are cleaned up.
+- f83c87f: Manage skill distributions from the dashboard. Skills now open as a dedicated detail page with an at-a-glance sidebar, section navigation, and a plugin distribution banner for distributing the skill to plugins and revoking distributions. The plugin detail page's Skills section replaces the coming-soon placeholder with the actual list of skills the plugin carries, including add and remove controls. Skill distributions can now also be listed filtered by skill or plugin.
+
 ## 0.89.0
 
 ### Minor Changes

@@ -61,9 +61,17 @@ export type SkillDistribution = {
    */
   resolvedVersionId: string;
   /**
+   * The display name of the distributed skill.
+   */
+  skillDisplayName: string;
+  /**
    * The distributed skill ID.
    */
   skillId: string;
+  /**
+   * The canonical name of the distributed skill.
+   */
+  skillName: string;
   /**
    * When the distribution configuration last changed.
    */
@@ -93,7 +101,9 @@ export const SkillDistribution$inboundSchema: z.ZodMiniType<
     plugin_name: z.string(),
     project_id: z.string(),
     resolved_version_id: z.string(),
+    skill_display_name: z.string(),
     skill_id: z.string(),
+    skill_name: z.string(),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
@@ -108,7 +118,9 @@ export const SkillDistribution$inboundSchema: z.ZodMiniType<
       "plugin_name": "pluginName",
       "project_id": "projectId",
       "resolved_version_id": "resolvedVersionId",
+      "skill_display_name": "skillDisplayName",
       "skill_id": "skillId",
+      "skill_name": "skillName",
       "updated_at": "updatedAt",
     });
   }),

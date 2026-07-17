@@ -1943,6 +1943,8 @@ func DecodeListDistributionsRequest(mux goahttp.Muxer, decoder func(*http.Reques
 	return func(r *http.Request) (*skills.ListDistributionsPayload, error) {
 		var payload *skills.ListDistributionsPayload
 		var (
+			skillID          *string
+			pluginID         *string
 			cursor           *string
 			limit            int
 			sessionToken     *string
@@ -1951,6 +1953,20 @@ func DecodeListDistributionsRequest(mux goahttp.Muxer, decoder func(*http.Reques
 			err              error
 		)
 		qp := r.URL.Query()
+		skillIDRaw := qp.Get("skill_id")
+		if skillIDRaw != "" {
+			skillID = &skillIDRaw
+		}
+		if skillID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("skill_id", *skillID, goa.FormatUUID))
+		}
+		pluginIDRaw := qp.Get("plugin_id")
+		if pluginIDRaw != "" {
+			pluginID = &pluginIDRaw
+		}
+		if pluginID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("plugin_id", *pluginID, goa.FormatUUID))
+		}
 		cursorRaw := qp.Get("cursor")
 		if cursorRaw != "" {
 			cursor = &cursorRaw
@@ -1988,7 +2004,7 @@ func DecodeListDistributionsRequest(mux goahttp.Muxer, decoder func(*http.Reques
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListDistributionsPayload(cursor, limit, sessionToken, apikeyToken, projectSlugInput)
+		payload = NewListDistributionsPayload(skillID, pluginID, cursor, limit, sessionToken, apikeyToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -2258,6 +2274,8 @@ func marshalTypesSkillDistributionToSkillDistributionResponseBody(v *types.Skill
 		ID:                v.ID,
 		ProjectID:         v.ProjectID,
 		SkillID:           v.SkillID,
+		SkillName:         v.SkillName,
+		SkillDisplayName:  v.SkillDisplayName,
 		PluginID:          v.PluginID,
 		PluginName:        v.PluginName,
 		PinnedVersionID:   v.PinnedVersionID,

@@ -1970,6 +1970,12 @@ func EncodeListDistributionsRequest(encoder func(*http.Request) goahttp.Encoder)
 			req.Header.Set("Gram-Project", head)
 		}
 		values := req.URL.Query()
+		if p.SkillID != nil {
+			values.Add("skill_id", *p.SkillID)
+		}
+		if p.PluginID != nil {
+			values.Add("plugin_id", *p.PluginID)
+		}
 		if p.Cursor != nil {
 			values.Add("cursor", *p.Cursor)
 		}
@@ -2257,6 +2263,8 @@ func unmarshalSkillDistributionResponseBodyToTypesSkillDistribution(v *SkillDist
 		ID:                *v.ID,
 		ProjectID:         *v.ProjectID,
 		SkillID:           *v.SkillID,
+		SkillName:         *v.SkillName,
+		SkillDisplayName:  *v.SkillDisplayName,
 		PluginID:          *v.PluginID,
 		PluginName:        *v.PluginName,
 		PinnedVersionID:   v.PinnedVersionID,

@@ -1,5 +1,5 @@
 import { useReplayContext } from "@/elements/contexts/ReplayContext";
-import { useAssistantState } from "@assistant-ui/react";
+import { useAuiState } from "@assistant-ui/react";
 import { generateObject } from "ai";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { z } from "zod";
@@ -60,8 +60,8 @@ export function useFollowOnSuggestions(): {
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // Get thread state from assistant-ui
-  const isRunning = useAssistantState(({ thread }) => thread.isRunning);
-  const messages = useAssistantState(({ thread }) => thread.messages);
+  const isRunning = useAuiState(({ thread }) => thread.isRunning);
+  const messages = useAuiState(({ thread }) => thread.messages);
 
   const fetchSuggestions = useCallback(async () => {
     if (!isEnabled || auth.isLoading || !auth.headers) return;

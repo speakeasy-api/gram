@@ -99,12 +99,13 @@ export function recordCassette(messages: readonly ThreadMessage[]): Cassette {
             result: part.result,
           });
           break;
-        // Skip image, file, audio, source, data parts for now
+        // Skip non-replayable rich content for now
         case "image":
         case "file":
         case "audio":
         case "source":
         case "data":
+        case "generative-ui":
           break;
       }
     }

@@ -498,8 +498,12 @@ CREATE TABLE IF NOT EXISTS attribute_metrics_summaries (
     -- https://kb.altinity.com/altinity-kb-queries-and-syntax/delete-via-tombstone-column/):
     --
     -- generation is an IMMUTABLE sort-key discriminator separating coexisting
-    -- data generations: 0 = original/MV-ingested rows, 1 = the 2026-07 full
-    -- re-derive backfill (future backfills increment). Because it is part of
+    -- data generations: 0 = MV rows ingested before 2026-07-17, 1 = the
+    -- 2026-07 full re-derive backfill, 2 = the current generation — both the
+    -- 2026-07 account-type unset->team backfill (POC-305) and live MV
+    -- ingestion since then (the MV stamps the current generation so fresh
+    -- rows are immune to that backfill's generation-0/1 cutover flips; future
+    -- backfills increment). Because it is part of
     -- the sorting key, a backfill row never merges with the original row for
     -- the same logical key — the two generations coexist untouched, which is
     -- what makes rollback lossless. Sort-key columns cannot be ALTER UPDATEd,
@@ -657,12 +661,15 @@ SELECT
     if(is_claude_api_request, toString(attributes.mcp_server.name), '') AS mcp_server_name,
     if(is_claude_api_request, toString(attributes.mcp_tool.name), '') AS mcp_tool_name,
 
-    -- Rollback machinery: MV rows are always generation 0 and active. These are
-    -- emitted explicitly (as constants) rather than relying on column defaults —
-    -- a TO-table MV inserts positionally with no column list, so the SELECT must
-    -- produce every target column or ingestion fails with a column-count
-    -- mismatch. Constants need no GROUP BY entry.
-    toUInt8(0) AS generation,
+    -- Rollback machinery: MV rows are stamped with the CURRENT generation (2
+    -- since the 2026-07 account-type backfill; see the generation column
+    -- comment) and active. Emitting the current generation makes fresh
+    -- ingestion immune to that backfill's cutover flips, which only target
+    -- generations 0/1. These are emitted explicitly (as constants) rather than
+    -- relying on column defaults — a TO-table MV inserts positionally with no
+    -- column list, so the SELECT must produce every target column or ingestion
+    -- fails with a column-count mismatch. Constants need no GROUP BY entry.
+    toUInt8(2) AS generation,
     toUInt8(1) AS is_active
 FROM telemetry_logs
 -- Admit only the three agent surfaces: Claude OTEL api_request/tool_result

@@ -666,7 +666,7 @@ func (s *Service) Distribute(ctx context.Context, payload *gen.DistributePayload
 			if err := dbtx.Commit(ctx); err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "commit unchanged skill distribution transaction").LogError(ctx, logger)
 			}
-			return mv.BuildSkillDistributionView(distribution, plugin.Name, resolvedVersionID), nil
+			return mv.BuildSkillDistributionView(distribution, skill.Name, skill.DisplayName, plugin.Name, resolvedVersionID), nil
 		}
 
 		beforeSnapshot := buildSkillDistributionAuditSnapshot(distribution, existing.ResolvedVersionID)
@@ -696,7 +696,7 @@ func (s *Service) Distribute(ctx context.Context, payload *gen.DistributePayload
 		if err := dbtx.Commit(ctx); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "commit skill distribution update transaction").LogError(ctx, logger)
 		}
-		return mv.BuildSkillDistributionView(distribution, plugin.Name, resolvedVersionID), nil
+		return mv.BuildSkillDistributionView(distribution, skill.Name, skill.DisplayName, plugin.Name, resolvedVersionID), nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return nil, oops.E(oops.CodeUnexpected, err, "get active skill distribution").LogError(ctx, logger)
@@ -729,7 +729,7 @@ func (s *Service) Distribute(ctx context.Context, payload *gen.DistributePayload
 		return nil, oops.E(oops.CodeUnexpected, err, "commit distribute skill transaction").LogError(ctx, logger)
 	}
 
-	return mv.BuildSkillDistributionView(distribution, plugin.Name, resolvedVersionID), nil
+	return mv.BuildSkillDistributionView(distribution, skill.Name, skill.DisplayName, plugin.Name, resolvedVersionID), nil
 }
 
 func (s *Service) Undistribute(ctx context.Context, payload *gen.UndistributePayload) error {
@@ -812,6 +812,15 @@ func (s *Service) ListDistributions(ctx context.Context, payload *gen.ListDistri
 		return nil, err
 	}
 
+	skillID, err := conv.PtrToNullUUID(payload.SkillID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, nil, "invalid skill id")
+	}
+	pluginID, err := conv.PtrToNullUUID(payload.PluginID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, nil, "invalid plugin id")
+	}
+
 	cursorCreatedAt := conv.PtrToPGTimestamptz(nil)
 	cursorID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	if payload.Cursor != nil {
@@ -825,6 +834,8 @@ func (s *Service) ListDistributions(ctx context.Context, payload *gen.ListDistri
 
 	rows, err := repo.New(s.db).ListActiveSkillDistributions(ctx, repo.ListActiveSkillDistributionsParams{
 		ProjectID:       *authCtx.ProjectID,
+		SkillID:         skillID,
+		PluginID:        pluginID,
 		CursorCreatedAt: cursorCreatedAt,
 		CursorID:        cursorID,
 		PageLimit:       conv.SafeInt32(payload.Limit + 1),
