@@ -46,7 +46,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import { Network, Puzzle, Sparkles, Trash2 } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { PluginServer } from "@gram/client/models/components/pluginserver.js";
@@ -390,312 +390,336 @@ export default function PluginDetail(): JSX.Element | null {
           substitutions={{ [pluginId ?? ""]: plugin.name }}
         />
       </Page.Header>
-      <Page.Body>
-        {/* Hero */}
-        <div className="mb-8 flex flex-wrap items-start justify-between gap-6">
-          <div className="flex min-w-0 items-start gap-4">
-            <div className="bg-primary/5 flex h-14 w-14 shrink-0 items-center justify-center rounded-xl dark:bg-neutral-800">
-              <Puzzle className="text-muted-foreground h-7 w-7" />
+      <Page.Body fullWidth noPadding>
+        {/* Hero — full-width grey band, separated from the servers list by a
+            bottom border. Page.Body runs full-width/no-padding so this band
+            reaches the pane edges; the band's own content stays centered in the
+            same max-w-7xl column as the sections below. */}
+        <div className="border-border mb-8 border-b bg-neutral-50 px-8 pt-8 pb-8 dark:bg-neutral-900/40">
+          <div className="mx-auto flex max-w-7xl flex-wrap items-start justify-between gap-6">
+            <div className="flex min-w-0 items-start gap-4">
+              <div className="bg-primary/5 flex h-14 w-14 shrink-0 items-center justify-center rounded-xl dark:bg-neutral-800">
+                <Puzzle className="text-muted-foreground h-7 w-7" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <h1 className="text-2xl font-bold">{plugin.name}</h1>
+                  {isDefaultPlugin && (
+                    <Badge variant="information">
+                      <Badge.Text>Default</Badge.Text>
+                    </Badge>
+                  )}
+                </div>
+                <Type muted small className="mt-1 font-mono">
+                  {plugin.slug}
+                </Type>
+                <Type small className="mt-4 max-w-xl">
+                  {description}
+                </Type>
+                <PublishFreshnessIndicator publishStatus={publishStatus} />
+              </div>
             </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-bold">{plugin.name}</h1>
-                {isDefaultPlugin && (
-                  <Badge variant="information">
-                    <Badge.Text>Default</Badge.Text>
-                  </Badge>
+            <Stack
+              direction="horizontal"
+              gap={2}
+              align="center"
+              className="shrink-0"
+            >
+              <DropdownMenu
+                open={isDownloadMenuOpen}
+                onOpenChange={setIsDownloadMenuOpen}
+              >
+                <DropdownMenuTrigger asChild>
+                  <Button variant="primary">
+                    <Button.Text>Install</Button.Text>
+                    <span className="bg-primary-foreground/25 mx-1 h-4 w-px self-center" />
+                    <Button.RightIcon>
+                      <Icon name="chevron-down" className="h-4 w-4" />
+                    </Button.RightIcon>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onClick={() => {
+                      // Defer until after the dropdown has fully closed to
+                      // avoid a Radix focus-trap/body-lock conflict between
+                      // the closing menu and the opening sheet (same pattern
+                      // as MCPDetails.tsx).
+                      setTimeout(() => setIsInstallSheetOpen(true), 0);
+                    }}
+                    disabled={
+                      !publishStatus?.connected ||
+                      !publishStatus.repoOwner ||
+                      !publishStatus.repoName
+                    }
+                  >
+                    <div className="flex flex-col">
+                      <span>GitHub installation (preferred)</span>
+                      {(!publishStatus?.connected ||
+                        !publishStatus.repoOwner ||
+                        !publishStatus.repoName) && (
+                        <span className="text-muted-foreground text-xs">
+                          Requires marketplace setup
+                        </span>
+                      )}
+                    </div>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => {
+                      void handleDownload("claude");
+                    }}
+                  >
+                    Download as zip — Claude
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      void handleDownload("cursor");
+                    }}
+                  >
+                    Download as zip — Cursor
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      void handleDownload("codex");
+                    }}
+                  >
+                    Download as zip — Codex
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              {publishStatus?.connected &&
+                publishStatus.repoOwner &&
+                publishStatus.repoName && (
+                  <InstallInstructionsDialog
+                    open={isInstallSheetOpen}
+                    onOpenChange={setIsInstallSheetOpen}
+                    repoOwner={publishStatus.repoOwner}
+                    repoName={publishStatus.repoName}
+                    marketplaceUrl={publishStatus.marketplaceUrl}
+                    candidatePlugins={[
+                      {
+                        name: plugin.name,
+                        slug: plugin.slug,
+                        description: plugin.description,
+                      },
+                    ]}
+                  />
+                )}
+              <PublishStatusControl
+                publishStatus={publishStatus}
+                isPending={publishMutation.isPending}
+                onRepublish={() => handlePublish([])}
+                onOpenDialog={() => setIsPublishDialogOpen(true)}
+              />
+              {/* Low-frequency, destructive-leaning actions are tucked behind an
+                overflow menu so the hero bar stays down to the two primary
+                actions (Install / Publish) and doesn't wrap on narrow widths. */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="secondary" aria-label="More actions">
+                    <Button.Icon>
+                      <Icon name="ellipsis" className="h-4 w-4" />
+                    </Button.Icon>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => setIsEditOpen(true)}>
+                    Edit name
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="text-destructive focus:text-destructive"
+                    onClick={() => setIsDeleteOpen(true)}
+                  >
+                    Delete plugin
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </Stack>
+          </div>
+        </div>
+
+        {/* Everything below the hero re-centers in the max-w-7xl column that
+            Page.Body would normally provide (disabled here via fullWidth). */}
+        <div className="mx-auto w-full max-w-7xl px-8 pb-24">
+          {/* Servers section */}
+          <div className="mb-3 flex items-center gap-3">
+            <div className="border-border flex-1 border-t" />
+            <Type
+              small
+              muted
+              className="shrink-0 font-mono text-xs tracking-wide uppercase"
+            >
+              MCP Servers
+            </Type>
+            <div className="border-border flex-1 border-t" />
+          </div>
+          <div className="mb-3 flex justify-end">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setIsAddServerOpen(true)}
+            >
+              <Button.LeftIcon>
+                <Icon name="plus" className="h-4 w-4" />
+              </Button.LeftIcon>
+              <Button.Text>Add Server</Button.Text>
+            </Button>
+          </div>
+          <div className="mb-8">
+            {servers.length === 0 ? (
+              <Stack
+                gap={2}
+                className="border-border rounded-xl border py-8"
+                align="center"
+                justify="center"
+              >
+                <Type variant="body" muted>
+                  No servers added yet
+                </Type>
+              </Stack>
+            ) : (
+              <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+                {servers.map((server) => (
+                  <PluginServerCard
+                    key={server.id}
+                    server={server}
+                    toolset={
+                      server.toolsetId
+                        ? toolsetById.get(server.toolsetId)
+                        : undefined
+                    }
+                    mcpServer={
+                      server.mcpServerId
+                        ? mcpServerById.get(server.mcpServerId)
+                        : undefined
+                    }
+                    isLoading={isLoadingServers}
+                    onRemove={() => handleRemoveServer(server)}
+                    lastPublishedAt={publishStatus?.lastPublishedAt}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Assignments only affect device-agent delivery, so the section is
+            hidden for marketplace-only orgs (see showAssignments). */}
+          {showAssignments && (
+            <>
+              <div className="mb-3 flex items-center gap-3">
+                <div className="border-border flex-1 border-t" />
+                <div className="flex shrink-0 items-center gap-2">
+                  <Type
+                    small
+                    muted
+                    className="font-mono text-xs tracking-wide uppercase"
+                  >
+                    Assignments
+                  </Type>
+                  {assignments.length > 0 && (
+                    <span className="bg-muted text-muted-foreground rounded-full px-1.5 py-0.5 text-xs font-medium tabular-nums">
+                      {assignments.length}
+                    </span>
+                  )}
+                </div>
+                <div className="border-border flex-1 border-t" />
+              </div>
+              <div className="mb-3 flex items-center justify-between gap-4">
+                <Type small muted className="max-w-md">
+                  Controls delivery to devices running the Speakeasy agent.
+                  Marketplace installs (Claude, Cursor, Codex) receive every
+                  published plugin regardless.
+                </Type>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setIsAssignmentsOpen(true)}
+                >
+                  <Button.LeftIcon>
+                    <Icon name="users" className="h-4 w-4" />
+                  </Button.LeftIcon>
+                  <Button.Text>Manage assignments</Button.Text>
+                </Button>
+              </div>
+              <div className="mb-8">
+                {assignments.length === 0 ? (
+                  <Stack
+                    gap={2}
+                    className="border-border rounded-xl border py-8"
+                    align="center"
+                    justify="center"
+                  >
+                    <Type variant="body" muted>
+                      Not assigned to anyone yet
+                    </Type>
+                    <Type small muted>
+                      Assign this plugin to roles, users, or emails to deliver
+                      it to their devices.
+                    </Type>
+                  </Stack>
+                ) : (
+                  <PluginAssignmentsList
+                    assignments={assignments}
+                    roleByUrn={roleByUrn}
+                    memberByUrn={memberByUrn}
+                  />
                 )}
               </div>
-              <Type muted small className="mt-1 font-mono">
-                {plugin.slug}
-              </Type>
-              <Type small className="mt-4 max-w-xl">
-                {description}
-              </Type>
-              <PublishFreshnessIndicator publishStatus={publishStatus} />
-            </div>
-          </div>
-          <Stack
-            direction="horizontal"
-            gap={2}
-            align="center"
-            className="shrink-0"
-          >
-            <DropdownMenu
-              open={isDownloadMenuOpen}
-              onOpenChange={setIsDownloadMenuOpen}
-            >
-              <DropdownMenuTrigger asChild>
-                <Button variant="primary">
-                  <Button.Text>Install</Button.Text>
-                  <span className="bg-primary-foreground/25 mx-1 h-4 w-px self-center" />
-                  <Button.RightIcon>
-                    <Icon name="chevron-down" className="h-4 w-4" />
-                  </Button.RightIcon>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  onClick={() => {
-                    // Defer until after the dropdown has fully closed to
-                    // avoid a Radix focus-trap/body-lock conflict between
-                    // the closing menu and the opening sheet (same pattern
-                    // as MCPDetails.tsx).
-                    setTimeout(() => setIsInstallSheetOpen(true), 0);
-                  }}
-                  disabled={
-                    !publishStatus?.connected ||
-                    !publishStatus.repoOwner ||
-                    !publishStatus.repoName
-                  }
-                >
-                  <div className="flex flex-col">
-                    <span>GitHub installation (preferred)</span>
-                    {(!publishStatus?.connected ||
-                      !publishStatus.repoOwner ||
-                      !publishStatus.repoName) && (
-                      <span className="text-muted-foreground text-xs">
-                        Requires marketplace setup
-                      </span>
-                    )}
-                  </div>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() => {
-                    void handleDownload("claude");
-                  }}
-                >
-                  Download as zip — Claude
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => {
-                    void handleDownload("cursor");
-                  }}
-                >
-                  Download as zip — Cursor
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => {
-                    void handleDownload("codex");
-                  }}
-                >
-                  Download as zip — Codex
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            {publishStatus?.connected &&
-              publishStatus.repoOwner &&
-              publishStatus.repoName && (
-                <InstallInstructionsDialog
-                  open={isInstallSheetOpen}
-                  onOpenChange={setIsInstallSheetOpen}
-                  repoOwner={publishStatus.repoOwner}
-                  repoName={publishStatus.repoName}
-                  marketplaceUrl={publishStatus.marketplaceUrl}
-                  candidatePlugins={[
-                    {
-                      name: plugin.name,
-                      slug: plugin.slug,
-                      description: plugin.description,
-                    },
-                  ]}
-                />
-              )}
-            <PublishStatusControl
-              publishStatus={publishStatus}
-              isPending={publishMutation.isPending}
-              onRepublish={() => handlePublish([])}
-              onOpenDialog={() => setIsPublishDialogOpen(true)}
-            />
-            <Button variant="secondary" onClick={() => setIsEditOpen(true)}>
-              Edit name
-            </Button>
-            <Button
-              variant="destructive-primary"
-              onClick={() => setIsDeleteOpen(true)}
-            >
-              Delete
-            </Button>
-          </Stack>
-        </div>
-
-        {/* Servers section */}
-        <div className="mb-3 flex items-center gap-3">
-          <div className="border-border flex-1 border-t" />
-          <Type
-            small
-            muted
-            className="shrink-0 font-mono text-xs tracking-wide uppercase"
-          >
-            MCP Servers
-          </Type>
-          <div className="border-border flex-1 border-t" />
-        </div>
-        <div className="mb-3 flex justify-end">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => setIsAddServerOpen(true)}
-          >
-            <Button.LeftIcon>
-              <Icon name="plus" className="h-4 w-4" />
-            </Button.LeftIcon>
-            <Button.Text>Add Server</Button.Text>
-          </Button>
-        </div>
-        <div className="mb-8">
-          {servers.length === 0 ? (
-            <Stack
-              gap={2}
-              className="border-border rounded-xl border py-8"
-              align="center"
-              justify="center"
-            >
-              <Type variant="body" muted>
-                No servers added yet
-              </Type>
-            </Stack>
-          ) : (
-            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-              {servers.map((server) => (
-                <PluginServerCard
-                  key={server.id}
-                  server={server}
-                  toolset={
-                    server.toolsetId
-                      ? toolsetById.get(server.toolsetId)
-                      : undefined
-                  }
-                  mcpServer={
-                    server.mcpServerId
-                      ? mcpServerById.get(server.mcpServerId)
-                      : undefined
-                  }
-                  isLoading={isLoadingServers}
-                  onRemove={() => handleRemoveServer(server)}
-                  lastPublishedAt={publishStatus?.lastPublishedAt}
-                />
-              ))}
-            </div>
+            </>
           )}
-        </div>
 
-        {/* Assignments only affect device-agent delivery, so the section is
-            hidden for marketplace-only orgs (see showAssignments). */}
-        {showAssignments && (
-          <>
-            <div className="mb-3 flex items-center gap-3">
-              <div className="border-border flex-1 border-t" />
-              <div className="flex shrink-0 items-center gap-2">
+          {/* Skills ride the same publish flow as servers, so changes offer a
+            republish. Orgs without the skills feature keep the teaser. */}
+          {productFeatures?.skillsEnabled ? (
+            <RequireScope
+              scope="skill:read"
+              resourceId={project.id}
+              level="section"
+            >
+              <PluginSkillsSection
+                pluginId={pluginId!}
+                onMutated={(message) => offerPublish(message)}
+              />
+            </RequireScope>
+          ) : (
+            <>
+              <div className="mb-3 flex items-center gap-3">
+                <div className="border-border flex-1 border-t" />
                 <Type
                   small
                   muted
-                  className="font-mono text-xs tracking-wide uppercase"
+                  className="shrink-0 font-mono text-xs tracking-wide uppercase"
                 >
-                  Assignments
+                  Skills
                 </Type>
-                {assignments.length > 0 && (
-                  <span className="bg-muted text-muted-foreground rounded-full px-1.5 py-0.5 text-xs font-medium tabular-nums">
-                    {assignments.length}
-                  </span>
-                )}
+                <div className="border-border flex-1 border-t" />
               </div>
-              <div className="border-border flex-1 border-t" />
-            </div>
-            <div className="mb-3 flex items-center justify-between gap-4">
-              <Type small muted className="max-w-md">
-                Controls delivery to devices running the Speakeasy agent.
-                Marketplace installs (Claude, Cursor, Codex) receive every
-                published plugin regardless.
-              </Type>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => setIsAssignmentsOpen(true)}
-              >
-                <Button.LeftIcon>
-                  <Icon name="users" className="h-4 w-4" />
-                </Button.LeftIcon>
-                <Button.Text>Manage assignments</Button.Text>
-              </Button>
-            </div>
-            <div className="mb-8">
-              {assignments.length === 0 ? (
-                <Stack
-                  gap={2}
-                  className="border-border rounded-xl border py-8"
-                  align="center"
-                  justify="center"
-                >
-                  <Type variant="body" muted>
-                    Not assigned to anyone yet
-                  </Type>
-                  <Type small muted>
-                    Assign this plugin to roles, users, or emails to deliver it
-                    to their devices.
-                  </Type>
-                </Stack>
-              ) : (
-                <PluginAssignmentsList
-                  assignments={assignments}
-                  roleByUrn={roleByUrn}
-                  memberByUrn={memberByUrn}
-                />
-              )}
-            </div>
-          </>
-        )}
-
-        {/* Skills ride the same publish flow as servers, so changes offer a
-            republish. Orgs without the skills feature keep the teaser. */}
-        {productFeatures?.skillsEnabled ? (
-          <RequireScope
-            scope="skill:read"
-            resourceId={project.id}
-            level="section"
-          >
-            <PluginSkillsSection
-              pluginId={pluginId!}
-              onMutated={(message) => offerPublish(message)}
-            />
-          </RequireScope>
-        ) : (
-          <>
-            <div className="mb-3 flex items-center gap-3">
-              <div className="border-border flex-1 border-t" />
-              <Type
-                small
-                muted
-                className="shrink-0 font-mono text-xs tracking-wide uppercase"
-              >
-                Skills
-              </Type>
-              <div className="border-border flex-1 border-t" />
-            </div>
-            <div className="mb-8">
-              <div className="border-border flex items-center gap-4 rounded-xl border border-dashed p-6 opacity-60">
-                <div className="bg-muted flex h-14 w-14 shrink-0 items-center justify-center rounded-xl">
-                  <Sparkles className="text-muted-foreground h-7 w-7" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <Type variant="subheading" as="div">
-                      Skills
-                    </Type>
-                    <Badge variant="neutral">
-                      <Badge.Text>Coming soon</Badge.Text>
-                    </Badge>
+              <div className="mb-8">
+                <div className="border-border flex items-center gap-4 rounded-xl border border-dashed p-6 opacity-60">
+                  <div className="bg-muted flex h-14 w-14 shrink-0 items-center justify-center rounded-xl">
+                    <Sparkles className="text-muted-foreground h-7 w-7" />
                   </div>
-                  <Type small muted>
-                    Bundle reusable skills alongside your MCP servers in this
-                    plugin.
-                  </Type>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Type variant="subheading" as="div">
+                        Skills
+                      </Type>
+                      <Badge variant="neutral">
+                        <Badge.Text>Coming soon</Badge.Text>
+                      </Badge>
+                    </div>
+                    <Type small muted>
+                      Bundle reusable skills alongside your MCP servers in this
+                      plugin.
+                    </Type>
+                  </div>
                 </div>
               </div>
-            </div>
-          </>
-        )}
+            </>
+          )}
+        </div>
 
         {/* Edit Dialog */}
         <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
@@ -901,7 +925,7 @@ function PublishStatusControl({
         {isPending
           ? "Publishing..."
           : hasUnpublishedChanges
-            ? "Publish changes"
+            ? "Sync changes"
             : "Sync"}
       </Button.Text>
     </Button>
@@ -929,37 +953,66 @@ function PublishFreshnessIndicator({
   const hasUnpublishedChanges = publishStatus.upToDate === false;
   const isUpToDate = publishStatus.upToDate === true;
 
-  const lastPublished = publishStatus.lastPublishedAt ? (
-    <Type muted small>
-      Published{" "}
-      {formatDistanceToNow(publishStatus.lastPublishedAt, {
-        addSuffix: true,
-      })}
-    </Type>
-  ) : null;
+  // Each row is omitted when its value is unknown rather than guessed. The
+  // live version is rendered in its own mono cell so the long timestamp-based
+  // patch (e.g. 0.1.1783944246) can't collide with adjacent text.
+  const rows: { label: string; value: JSX.Element }[] = [];
 
-  // Absent when the live version can't be determined (e.g. nothing published
-  // yet, or a transient GitHub read failure) — omit rather than guess.
-  const liveVersion = publishStatus.liveVersion ? (
-    <Type muted small className="font-mono">
-      Current version {publishStatus.liveVersion}
-    </Type>
-  ) : null;
+  if (publishStatus.lastPublishedAt) {
+    rows.push({
+      label: "Last published",
+      value: (
+        <Type small>
+          {formatDistanceToNow(publishStatus.lastPublishedAt, {
+            addSuffix: true,
+          })}
+        </Type>
+      ),
+    });
+  }
+
+  // Manifest versions come straight from GitHub and occasionally carry a stray
+  // BOM / zero-width / control char that renders as a tofu box — strip anything
+  // outside the semver charset before display.
+  const cleanVersion = publishStatus.liveVersion
+    ?.replace(/[^\w.\-+]/g, "")
+    .trim();
+  if (cleanVersion) {
+    rows.push({
+      label: "Current version",
+      value: (
+        <Badge variant="information">
+          <Badge.Text className="font-mono">{cleanVersion}</Badge.Text>
+        </Badge>
+      ),
+    });
+  }
+
+  if (hasUnpublishedChanges || isUpToDate) {
+    rows.push({
+      label: "Sync status",
+      value: hasUnpublishedChanges ? (
+        <Badge variant="warning">Requires syncing</Badge>
+      ) : (
+        <Badge variant="success">Up to date</Badge>
+      ),
+    });
+  }
 
   // Freshness unknown and nothing published yet — nothing meaningful to show.
-  if (!hasUnpublishedChanges && !isUpToDate && !lastPublished && !liveVersion)
-    return null;
+  if (rows.length === 0) return null;
 
   return (
-    <Stack direction="horizontal" gap={2} align="center" className="mt-4">
-      {hasUnpublishedChanges ? (
-        <Badge variant="warning">Unpublished changes</Badge>
-      ) : isUpToDate ? (
-        <Badge variant="success">Up to date</Badge>
-      ) : null}
-      {lastPublished}
-      {liveVersion}
-    </Stack>
+    <div className="mt-4 grid w-fit grid-cols-[max-content_1fr] items-center gap-x-8 gap-y-2">
+      {rows.map((row) => (
+        <Fragment key={row.label}>
+          <Type muted small>
+            {row.label}
+          </Type>
+          <div>{row.value}</div>
+        </Fragment>
+      ))}
+    </div>
   );
 }
 
