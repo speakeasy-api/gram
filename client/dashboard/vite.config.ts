@@ -152,6 +152,39 @@ export default defineConfig(({ command }) => {
   //                               playground.
 
   return {
+    experimental: {
+      // Static assets can be served through a CDN.
+      // The CDN hostname may be env-specific but this build is env-agnostic
+      // (one image is promoted dev -> prod), so instead of baking a CDN origin
+      // in via `base`, the dashboard's nginx rewrites the /assets/ URLs in
+      // index.html to the CDN host at serve time (see nginx.conf) and every
+      // other URL follows from the module that references it:
+      //
+      //   - html: keep the default root-absolute /assets/... URLs so the
+      //     nginx sub_filter can match and rewrite them.
+      //   - js/css: emit URLs relative to import.meta.url so chunk imports,
+      //     lazy-load preloads, and fonts/images referenced from CSS resolve
+      //     against whatever origin the module graph was loaded from — the
+      //     CDN when enabled, same-origin otherwise.
+      //   - workers: keep the default root-absolute URLs. Browsers reject
+      //     cross-origin new Worker(), so worker scripts must load from the
+      //     app origin even when everything else is on the CDN (CSP's
+      //     worker-src 'self' also depends on this). Detected by filename:
+      //     every worker entry (monaco's *.worker, @pierre/diffs' worker.js)
+      //     has "worker" in its emitted basename — keep it that way when
+      //     adding new workers.
+      renderBuiltUrl(filename, { hostType, type }) {
+        const isWorkerAsset = /(^|\/)[^/]*worker[^/]*\.js$/.test(filename);
+        if (
+          type === "asset" &&
+          !isWorkerAsset &&
+          (hostType === "js" || hostType === "css")
+        ) {
+          return { relative: true };
+        }
+        return undefined;
+      },
+    },
     define: {
       __GRAM_SERVER_URL__: JSON.stringify(serverUrl),
       __PLAYGROUND_PROXY_URL__: JSON.stringify(isDev ? siteUrl : undefined),
