@@ -152,6 +152,45 @@ type workosOrgEvent struct {
 	OrganizationID string `json:"organization_id"`
 }
 
+// postCommitEffects describes side effects an event handler requests while
+// its transaction is open. The activity runs them after commit, best-effort:
+// failures are logged and never retried, so every effect must be safe to lose
+// (the database is the source of truth). The zero value requests nothing.
+type postCommitEffects struct {
+	// updateWorkOSExternalID writes a Gram org ID back to the WorkOS
+	// organization's external_id.
+	updateWorkOSExternalID *workosOrgExternalIDUpdate
+	// invalidateUserInfoCacheUserID is the Gram user ID whose cached user
+	// info to drop after deprovisioning, so org-access checks observe the
+	// change without waiting out the cache TTL.
+	invalidateUserInfoCacheUserID string
+}
+
+func (p *ProcessWorkOSOrganizationEvents) runPostCommitEffects(ctx context.Context, logger *slog.Logger, effects postCommitEffects) {
+	if update := effects.updateWorkOSExternalID; update != nil {
+		if err := p.workosClient.UpdateOrganizationExternalID(ctx, update.workosOrgID, update.externalID); err != nil {
+			logger.WarnContext(ctx, "failed to update WorkOS organization external ID", attr.SlogError(err))
+		}
+	}
+
+	if userID := effects.invalidateUserInfoCacheUserID; userID != "" {
+		if err := p.userInfoCache.Delete(ctx, sessions.CachedUserInfo{
+			UserID:             userID,
+			Admin:              false,
+			Email:              "",
+			DisplayName:        nil,
+			PhotoURL:           nil,
+			UserPylonSignature: nil,
+			Organizations:      nil,
+		}); err != nil {
+			logger.WarnContext(ctx, "failed to invalidate user info cache after deprovisioning",
+				attr.SlogError(err),
+				attr.SlogUserID(userID),
+			)
+		}
+	}
+}
+
 func (p *ProcessWorkOSOrganizationEvents) handlePage(ctx context.Context, logger *slog.Logger, workosOrgID string, page []events.Event) (string, error) {
 	var lastEventID string
 	for _, event := range page {
@@ -192,7 +231,7 @@ func (p *ProcessWorkOSOrganizationEvents) handleEvent(ctx context.Context, logge
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	externalIDUpdate, invalidateUserID, err := handleOrganizationEvent(ctx, logger, dbtx, event)
+	effects, err := handleOrganizationEvent(ctx, logger, dbtx, event)
 	if err != nil {
 		return "", err
 	}
@@ -208,76 +247,46 @@ func (p *ProcessWorkOSOrganizationEvents) handleEvent(ctx context.Context, logge
 		return "", fmt.Errorf("commit transaction: %w", err)
 	}
 
-	if externalIDUpdate != nil {
-		if err := p.workosClient.UpdateOrganizationExternalID(ctx, externalIDUpdate.workosOrgID, externalIDUpdate.externalID); err != nil {
-			logger.WarnContext(ctx, "failed to update WorkOS organization external ID", attr.SlogError(err))
-		}
-	}
-
-	if invalidateUserID != "" {
-		// Best-effort: the DB is the source of truth and the cache expires on
-		// its own TTL, so a failed invalidation only delays deprovisioning
-		// from taking effect on cached org-access checks.
-		if err := p.userInfoCache.Delete(ctx, sessions.CachedUserInfo{
-			UserID:             invalidateUserID,
-			Admin:              false,
-			Email:              "",
-			DisplayName:        nil,
-			PhotoURL:           nil,
-			UserPylonSignature: nil,
-			Organizations:      nil,
-		}); err != nil {
-			logger.WarnContext(ctx, "failed to invalidate user info cache after deprovisioning",
-				attr.SlogError(err),
-				attr.SlogUserID(invalidateUserID),
-			)
-		}
-	}
+	p.runPostCommitEffects(ctx, logger, effects)
 
 	return event.ID, nil
 }
 
 // handleOrganizationEvent dispatches a WorkOS event scoped to a specific
 // organization to its handler. Each handler is responsible for the
-// ShouldProcessEvent guard against duplicate apply. The second return value
-// is the Gram user ID whose organization access was deprovisioned by the
-// event (empty when none) so the caller can invalidate cached user info
-// after the transaction commits.
-func handleOrganizationEvent(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) (*workosOrgExternalIDUpdate, string, error) {
+// ShouldProcessEvent guard against duplicate apply. The returned effects are
+// run by the caller after the transaction commits.
+func handleOrganizationEvent(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) (postCommitEffects, error) {
+	var none postCommitEffects
+
 	switch event.Event {
 	case string(workos.EventKindOrganizationCreated), string(workos.EventKindOrganizationUpdated):
-		externalIDUpdate, err := handleOrganizationUpsert(ctx, logger, dbtx, event)
-		return externalIDUpdate, "", err
+		return handleOrganizationUpsert(ctx, logger, dbtx, event)
 	case string(workos.EventKindOrganizationDeleted):
-		return nil, "", handleOrganizationDeleted(ctx, logger, dbtx, event)
+		return none, handleOrganizationDeleted(ctx, logger, dbtx, event)
 	case string(workos.EventKindOrganizationRoleCreated), string(workos.EventKindOrganizationRoleUpdated):
-		return nil, "", handleRoleUpsert(ctx, logger, dbtx, event)
+		return none, handleRoleUpsert(ctx, logger, dbtx, event)
 	case string(workos.EventKindOrganizationRoleDeleted):
-		return nil, "", handleRoleDeleted(ctx, logger, dbtx, event)
-	case string(workos.EventKindOrganizationMembershipCreated), string(workos.EventKindOrganizationMembershipUpdated):
-		deprovisionedUserID, err := handleOrganizationMembershipUpsert(ctx, logger, dbtx, event)
-		return nil, deprovisionedUserID, err
-	case string(workos.EventKindOrganizationMembershipDeleted):
-		deprovisionedUserID, err := handleOrganizationMembershipDeleted(ctx, logger, dbtx, event)
-		return nil, deprovisionedUserID, err
+		return none, handleRoleDeleted(ctx, logger, dbtx, event)
+	case string(workos.EventKindOrganizationMembershipCreated), string(workos.EventKindOrganizationMembershipUpdated), string(workos.EventKindOrganizationMembershipDeleted):
+		return handleOrganizationMembershipEvent(ctx, logger, dbtx, event)
 	case string(workos.EventKindConnectionActivated):
-		return nil, "", handleSSOConnectionChange(ctx, logger, dbtx, event, true)
+		return none, handleSSOConnectionChange(ctx, logger, dbtx, event, true)
 	case string(workos.EventKindConnectionDeactivated), string(workos.EventKindConnectionDeleted):
-		return nil, "", handleSSOConnectionChange(ctx, logger, dbtx, event, false)
+		return none, handleSSOConnectionChange(ctx, logger, dbtx, event, false)
 	case string(workos.EventKindDirectorySyncActivated):
-		return nil, "", handleDSyncChange(ctx, logger, dbtx, event, true)
+		return none, handleDSyncChange(ctx, logger, dbtx, event, true)
 	case string(workos.EventKindDirectorySyncDeleted):
-		return nil, "", handleDSyncChange(ctx, logger, dbtx, event, false)
+		return none, handleDSyncChange(ctx, logger, dbtx, event, false)
 	case string(workos.EventKindDirectorySyncUserCreated), string(workos.EventKindDirectorySyncUserUpdated), string(workos.EventKindDirectorySyncUserDeleted):
-		deprovisionedUserID, err := handleDirectoryUserEvent(ctx, logger, dbtx, event)
-		return nil, deprovisionedUserID, err
+		return handleDirectoryUserEvent(ctx, logger, dbtx, event)
 	case string(workos.EventKindDirectorySyncGroupCreated), string(workos.EventKindDirectorySyncGroupUpdated), string(workos.EventKindDirectorySyncGroupDeleted):
-		return nil, "", handleDirectoryGroupEvent(ctx, logger, dbtx, event)
+		return none, handleDirectoryGroupEvent(ctx, logger, dbtx, event)
 	case string(workos.EventKindDirectorySyncGroupUserAdded), string(workos.EventKindDirectorySyncGroupUserRemoved):
-		return nil, "", handleDirectoryGroupMembershipEvent(ctx, logger, dbtx, event)
+		return none, handleDirectoryGroupMembershipEvent(ctx, logger, dbtx, event)
 	}
 
-	return nil, "", oops.Permanent(fmt.Errorf("unhandled workos organization event type: %s", event.Event))
+	return none, oops.Permanent(fmt.Errorf("unhandled workos organization event type: %s", event.Event))
 }
 
 // workosOrganizationEventPayload is the relevant subset of an
@@ -315,10 +324,12 @@ type resolvedWorkOSOrganization struct {
 //
 // WorkOS owns name/workos_id/cursor metadata, but never updates an existing
 // Gram slug. New org slugs are chosen once and uniqued locally.
-func handleOrganizationUpsert(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) (*workosOrgExternalIDUpdate, error) {
+func handleOrganizationUpsert(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) (postCommitEffects, error) {
+	var effects postCommitEffects
+
 	var payload workosOrganizationEventPayload
 	if err := json.Unmarshal(event.Data, &payload); err != nil {
-		return nil, oops.Permanent(fmt.Errorf("unmarshal organization event payload: %w", err))
+		return effects, oops.Permanent(fmt.Errorf("unmarshal organization event payload: %w", err))
 	}
 
 	repo := orgrepo.New(dbtx)
@@ -326,14 +337,14 @@ func handleOrganizationUpsert(ctx context.Context, logger *slog.Logger, dbtx dat
 	resolved, err := resolveOrgForWorkOSEvent(ctx, repo, payload)
 	switch {
 	case err != nil:
-		return nil, err
+		return effects, err
 	case resolved.isNew:
 		if err := createOrganizationFromWorkOSEvent(ctx, repo, payload, event.ID, resolved.organizationID); err != nil {
-			return nil, err
+			return effects, err
 		}
 	default:
 		if err := updateOrganizationFromWorkOSEvent(ctx, repo, resolved.row, payload, event.ID); err != nil {
-			return nil, err
+			return effects, err
 		}
 	}
 
@@ -343,15 +354,15 @@ func handleOrganizationUpsert(ctx context.Context, logger *slog.Logger, dbtx dat
 	// row exists this backstop would otherwise resolve it as existing and skip
 	// seeding forever. EnableRBACTx is idempotent, so re-asserting here is safe.
 	if err := productfeatures.EnableRBACTx(ctx, dbtx, resolved.organizationID); err != nil {
-		return nil, fmt.Errorf("enable RBAC for organization %q from workos event: %w", payload.ID, err)
+		return effects, fmt.Errorf("enable RBAC for organization %q from workos event: %w", payload.ID, err)
 	}
 
 	if resolved.needsExternalIDUpdate {
-		// The WorkOS write happens after commit in handleEvent so the remote
-		// external_id never points at an org row that failed to persist locally.
-		return &workosOrgExternalIDUpdate{workosOrgID: payload.ID, externalID: resolved.organizationID}, nil
+		// The WorkOS write happens after commit so the remote external_id
+		// never points at an org row that failed to persist locally.
+		effects.updateWorkOSExternalID = &workosOrgExternalIDUpdate{workosOrgID: payload.ID, externalID: resolved.organizationID}
 	}
-	return nil, nil
+	return effects, nil
 }
 
 func resolveOrgForWorkOSEvent(ctx context.Context, repo *orgrepo.Queries, payload workosOrganizationEventPayload) (resolvedWorkOSOrganization, error) {
