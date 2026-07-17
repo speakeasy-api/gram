@@ -3762,6 +3762,13 @@ CREATE INDEX IF NOT EXISTS risk_results_project_found_idx
 ON risk_results (project_id, created_at DESC)
 WHERE found IS TRUE AND excluded_at IS NULL AND false_positive_at IS NULL;
 
+-- Serves the risk overview window scan (GetRiskOverviewCounts): counts every
+-- scanned message in a project's created_at window regardless of found state,
+-- so the partial _project_found_idx cannot help. Range-scans just the window;
+-- trailing chat_message_id enables an index-only distinct for messages_scanned.
+CREATE INDEX IF NOT EXISTS risk_results_project_created_msg_idx
+ON risk_results (project_id, created_at, chat_message_id);
+
 -- Narrows the exclusion sweeps (exact/rule_id/source) by project + policy +
 -- rule. The verbatim match column is intentionally NOT indexed: it can exceed
 -- the btree row-size limit (2704 bytes), and the sweep queries apply
