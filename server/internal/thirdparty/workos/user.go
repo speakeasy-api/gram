@@ -145,7 +145,9 @@ func (wc *Client) UpdateUserExternalID(ctx context.Context, workosUserID, extern
 	return nil
 }
 
-// ListUserMemberships returns all organization memberships for a user across all orgs.
+// ListUserMemberships returns all active organization memberships for a user
+// across all orgs. Inactive memberships (e.g. SCIM-deactivated users) are
+// excluded so login-time syncs never re-provision deactivated access.
 // This is more efficient than calling GetOrgMembership per org since it batches the lookup.
 func (wc *Client) ListUserMemberships(ctx context.Context, userID string) ([]Member, error) {
 	var all []Member
@@ -155,7 +157,7 @@ func (wc *Client) ListUserMemberships(ctx context.Context, userID string) ([]Mem
 		resp, err := wc.um.ListOrganizationMemberships(ctx, usermanagement.ListOrganizationMembershipsOpts{
 			OrganizationID: "",
 			UserID:         userID,
-			Statuses:       nil,
+			Statuses:       []usermanagement.OrganizationMembershipStatus{usermanagement.Active},
 			Limit:          100,
 			Order:          "",
 			Before:         "",
@@ -258,7 +260,9 @@ func (wc *Client) DeleteOrganizationMembership(ctx context.Context, membershipID
 	return nil
 }
 
-// ListOrgMemberships returns all organization memberships for an org.
+// ListOrgMemberships returns all active organization memberships for an org.
+// Inactive memberships (e.g. SCIM-deactivated users) are excluded so backfill
+// and reconcile syncs never re-provision deactivated access.
 func (wc *Client) ListOrgMemberships(ctx context.Context, orgID string) ([]Member, error) {
 	var all []Member
 	after := ""
@@ -269,7 +273,7 @@ func (wc *Client) ListOrgMemberships(ctx context.Context, orgID string) ([]Membe
 			Limit:          100,
 			After:          after,
 			UserID:         "",
-			Statuses:       nil,
+			Statuses:       []usermanagement.OrganizationMembershipStatus{usermanagement.Active},
 			Order:          "",
 			Before:         "",
 		})
