@@ -218,6 +218,8 @@ export function setSkillDistributionsData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
+      skillId?: string | undefined;
+      pluginId?: string | undefined;
       cursor?: string | undefined;
       limit?: number | undefined;
       gramSession?: string | undefined;
@@ -236,6 +238,8 @@ export function invalidateSkillDistributions(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
+      skillId?: string | undefined;
+      pluginId?: string | undefined;
       cursor?: string | undefined;
       limit?: number | undefined;
       gramSession?: string | undefined;

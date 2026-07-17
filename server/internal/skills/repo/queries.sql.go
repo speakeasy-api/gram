@@ -606,6 +606,8 @@ func (q *Queries) GetValidSkillVersion(ctx context.Context, arg GetValidSkillVer
 const listActiveSkillDistributions = `-- name: ListActiveSkillDistributions :many
 SELECT
   sd.id, sd.project_id, sd.skill_id, sd.pinned_version_id, sd.plugin_id, sd.channel, sd.created_by_user_id, sd.revoked_at, sd.created_at, sd.updated_at,
+  s.name AS skill_name,
+  s.display_name AS skill_display_name,
   pl.name AS plugin_name,
   resolved.id AS resolved_version_id
 FROM skill_distributions sd
@@ -626,19 +628,23 @@ JOIN LATERAL (
 WHERE sd.project_id = $1
   AND sd.channel = 'plugin'
   AND sd.revoked_at IS NULL
+  AND ($2::uuid IS NULL OR sd.skill_id = $2::uuid)
+  AND ($3::uuid IS NULL OR sd.plugin_id = $3::uuid)
   AND (
-    $2::timestamptz IS NULL
+    $4::timestamptz IS NULL
     OR (sd.created_at, sd.id) > (
-      $2::timestamptz,
-      $3::uuid
+      $4::timestamptz,
+      $5::uuid
     )
   )
 ORDER BY sd.created_at ASC, sd.id ASC
-LIMIT $4
+LIMIT $6
 `
 
 type ListActiveSkillDistributionsParams struct {
 	ProjectID       uuid.UUID
+	SkillID         uuid.NullUUID
+	PluginID        uuid.NullUUID
 	CursorCreatedAt pgtype.Timestamptz
 	CursorID        uuid.NullUUID
 	PageLimit       int32
@@ -646,6 +652,8 @@ type ListActiveSkillDistributionsParams struct {
 
 type ListActiveSkillDistributionsRow struct {
 	SkillDistribution SkillDistribution
+	SkillName         string
+	SkillDisplayName  string
 	PluginName        string
 	ResolvedVersionID uuid.UUID
 }
@@ -653,6 +661,8 @@ type ListActiveSkillDistributionsRow struct {
 func (q *Queries) ListActiveSkillDistributions(ctx context.Context, arg ListActiveSkillDistributionsParams) ([]ListActiveSkillDistributionsRow, error) {
 	rows, err := q.db.Query(ctx, listActiveSkillDistributions,
 		arg.ProjectID,
+		arg.SkillID,
+		arg.PluginID,
 		arg.CursorCreatedAt,
 		arg.CursorID,
 		arg.PageLimit,
@@ -675,6 +685,8 @@ func (q *Queries) ListActiveSkillDistributions(ctx context.Context, arg ListActi
 			&i.SkillDistribution.RevokedAt,
 			&i.SkillDistribution.CreatedAt,
 			&i.SkillDistribution.UpdatedAt,
+			&i.SkillName,
+			&i.SkillDisplayName,
 			&i.PluginName,
 			&i.ResolvedVersionID,
 		); err != nil {

@@ -258,6 +258,8 @@ var _ = Service("skills", func() {
 		Description("List active plugin skill distributions for the current project.")
 
 		Payload(func() {
+			Attribute("skill_id", String, "Only return distributions of this skill.", func() { Format(FormatUUID) })
+			Attribute("plugin_id", String, "Only return distributions carried by this plugin.", func() { Format(FormatUUID) })
 			Attribute("cursor", String, "Cursor for the next page of skill distributions.")
 			Attribute("limit", Int, "The number of skill distributions to return per page.", func() {
 				Default(20)
@@ -273,6 +275,8 @@ var _ = Service("skills", func() {
 
 		HTTP(func() {
 			GET("/rpc/skills.listDistributions")
+			Param("skill_id")
+			Param("plugin_id")
 			Param("cursor")
 			Param("limit")
 			security.SessionHeader()
@@ -403,6 +407,8 @@ var SkillDistribution = Type("SkillDistribution", func() {
 	Attribute("id", String, "The distribution ID.", func() { Format(FormatUUID) })
 	Attribute("project_id", String, "The project that owns the distribution.", func() { Format(FormatUUID) })
 	Attribute("skill_id", String, "The distributed skill ID.", func() { Format(FormatUUID) })
+	Attribute("skill_name", String, "The canonical name of the distributed skill.")
+	Attribute("skill_display_name", String, "The display name of the distributed skill.")
 	Attribute("plugin_id", String, "The plugin that carries the skill.", func() { Format(FormatUUID) })
 	Attribute("plugin_name", String, "The name of the plugin that carries the skill.")
 	Attribute("pinned_version_id", String, "The pinned version, absent when tracking the latest valid version.", func() { Format(FormatUUID) })
@@ -412,7 +418,7 @@ var SkillDistribution = Type("SkillDistribution", func() {
 	Attribute("created_at", String, "When the distribution was created.", func() { Format(FormatDateTime) })
 	Attribute("updated_at", String, "When the distribution configuration last changed.", func() { Format(FormatDateTime) })
 
-	Required("id", "project_id", "skill_id", "plugin_id", "plugin_name", "resolved_version_id", "channel", "created_by_user_id", "created_at", "updated_at")
+	Required("id", "project_id", "skill_id", "skill_name", "skill_display_name", "plugin_id", "plugin_name", "resolved_version_id", "channel", "created_by_user_id", "created_at", "updated_at")
 })
 
 var ListSkillDistributionsResult = Type("ListSkillDistributionsResult", func() {

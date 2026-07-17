@@ -402,8 +402,28 @@ func BuildUndistributePayload(skillsUndistributeBody string, skillsUndistributeS
 
 // BuildListDistributionsPayload builds the payload for the skills
 // listDistributions endpoint from CLI flags.
-func BuildListDistributionsPayload(skillsListDistributionsCursor string, skillsListDistributionsLimit string, skillsListDistributionsSessionToken string, skillsListDistributionsApikeyToken string, skillsListDistributionsProjectSlugInput string) (*skills.ListDistributionsPayload, error) {
+func BuildListDistributionsPayload(skillsListDistributionsSkillID string, skillsListDistributionsPluginID string, skillsListDistributionsCursor string, skillsListDistributionsLimit string, skillsListDistributionsSessionToken string, skillsListDistributionsApikeyToken string, skillsListDistributionsProjectSlugInput string) (*skills.ListDistributionsPayload, error) {
 	var err error
+	var skillID *string
+	{
+		if skillsListDistributionsSkillID != "" {
+			skillID = &skillsListDistributionsSkillID
+			err = goa.MergeErrors(err, goa.ValidateFormat("skill_id", *skillID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var pluginID *string
+	{
+		if skillsListDistributionsPluginID != "" {
+			pluginID = &skillsListDistributionsPluginID
+			err = goa.MergeErrors(err, goa.ValidateFormat("plugin_id", *pluginID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
 	var cursor *string
 	{
 		if skillsListDistributionsCursor != "" {
@@ -449,6 +469,8 @@ func BuildListDistributionsPayload(skillsListDistributionsCursor string, skillsL
 		}
 	}
 	v := &skills.ListDistributionsPayload{}
+	v.SkillID = skillID
+	v.PluginID = pluginID
 	v.Cursor = cursor
 	v.Limit = limit
 	v.SessionToken = sessionToken

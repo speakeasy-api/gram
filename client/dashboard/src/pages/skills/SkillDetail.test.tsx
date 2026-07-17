@@ -7,12 +7,12 @@ import {
 } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { SkillSheet } from "./SkillSheet";
+import SkillDetail from "./SkillDetail";
 
 const testState = vi.hoisted(() => ({
   queryClient: { id: "query-client" },
   archive: { mutateAsync: vi.fn(), isPending: false },
-  onOpenChange: vi.fn(),
+  navigate: vi.fn(),
   invalidateSkills: vi.fn().mockResolvedValue(undefined),
   invalidateSkill: vi.fn().mockResolvedValue(undefined),
   invalidateVersions: vi.fn().mockResolvedValue(undefined),
@@ -43,6 +43,28 @@ const testState = vi.hoisted(() => ({
 }));
 
 vi.mock("@/contexts/Auth", () => ({ useProject: () => ({ id: "project_a" }) }));
+vi.mock("react-router", () => ({
+  Link: ({ children }: { children: ReactNode }) => <a>{children}</a>,
+  useLocation: () => ({ hash: "", pathname: "/skills/skill_a" }),
+  useNavigate: () => testState.navigate,
+  useParams: () => ({ skillId: "skill_a" }),
+}));
+vi.mock("@/routes", () => ({
+  useRoutes: () => ({
+    skills: {
+      href: () => "/skills",
+      Link: ({ children }: { children: ReactNode }) => <>{children}</>,
+      detail: { href: (id: string) => `/skills/${id}` },
+    },
+    plugins: { detail: { href: (id: string) => `/plugins/${id}` } },
+  }),
+}));
+vi.mock("./SkillPluginBanner", () => ({
+  SkillPluginBanner: () => null,
+}));
+vi.mock("./SkillDistributionsSection", () => ({
+  SkillDistributionsSection: () => null,
+}));
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => testState.queryClient,
 }));
@@ -107,8 +129,22 @@ vi.mock("@/elements/components/Markdown", () => ({
   Markdown: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 vi.mock("./SkillManifestDialog", () => ({ SkillManifestDialog: () => null }));
+vi.mock("@/components/page-layout", () => {
+  const Wrapper = ({ children }: { children?: ReactNode }) => (
+    <div>{children}</div>
+  );
+  return {
+    Page: Object.assign(Wrapper, {
+      Header: Object.assign(Wrapper, { Breadcrumbs: () => null }),
+      Body: Wrapper,
+    }),
+  };
+});
 vi.mock("@speakeasy-api/moonshine", () => ({
   Badge: ({ children }: { children: ReactNode }) => <span>{children}</span>,
+  Button: ({ children }: { children: ReactNode }) => (
+    <button>{children}</button>
+  ),
   Icon: () => <span />,
   Table: ({
     columns,
@@ -136,20 +172,9 @@ vi.mock("sonner", () => ({
   toast: { success: testState.toastSuccess, error: testState.toastError },
 }));
 
-function renderSheet(): void {
-  render(
-    <SkillSheet
-      skillId="skill_a"
-      onOpenChange={(open) => {
-        testState.onOpenChange(open);
-      }}
-    />,
-  );
-}
-
 beforeEach(() => {
   testState.archive.mutateAsync.mockReset();
-  testState.onOpenChange.mockReset();
+  testState.navigate.mockReset();
   testState.invalidateSkills.mockClear();
   testState.invalidateSkill.mockClear();
   testState.invalidateVersions.mockClear();
@@ -163,11 +188,11 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
-describe("SkillSheet", () => {
+describe("SkillDetail", () => {
   it("project-scopes every write affordance", () => {
-    renderSheet();
+    render(<SkillDetail />);
     const gates = screen.getAllByTestId("write-gate");
-    expect(gates).toHaveLength(1);
+    expect(gates.length).toBeGreaterThan(0);
     for (const gate of gates) {
       expect(gate.getAttribute("data-scope")).toBe("skill:write");
       expect(gate.getAttribute("data-resource-id")).toBe("project_a");
@@ -191,7 +216,7 @@ describe("SkillSheet", () => {
         ],
       },
     ];
-    renderSheet();
+    render(<SkillDetail />);
     expect(
       screen.getByText(
         (_, element) =>
@@ -204,7 +229,7 @@ describe("SkillSheet", () => {
   it("keeps loaded versions visible and retries a next-page failure explicitly", () => {
     testState.isFetchNextPageError = true;
     testState.versionError = new Error("next page failed");
-    renderSheet();
+    render(<SkillDetail />);
 
     expect(screen.getByText("Version table")).toBeTruthy();
     expect(screen.getByText("Unable to load more versions.")).toBeTruthy();
@@ -212,9 +237,9 @@ describe("SkillSheet", () => {
     expect(testState.fetchNextPage).toHaveBeenCalledOnce();
   });
 
-  it("archives with the exact wrapper, closes the sheet, and invalidates all skill caches", async () => {
+  it("archives with the exact wrapper, navigates back, and invalidates all skill caches", async () => {
     testState.archive.mutateAsync.mockResolvedValue(undefined);
-    renderSheet();
+    render(<SkillDetail />);
     fireEvent.click(screen.getByRole("button", { name: "Archive" }));
     fireEvent.click(screen.getByRole("button", { name: "Archive skill" }));
 
@@ -223,7 +248,7 @@ describe("SkillSheet", () => {
         request: { archiveSkillRequestBody: { id: "skill_a" } },
       });
     });
-    expect(testState.onOpenChange).toHaveBeenCalledWith(false);
+    expect(testState.navigate).toHaveBeenCalledWith("/skills");
     expect(testState.invalidateSkills).toHaveBeenCalledWith(
       testState.queryClient,
     );

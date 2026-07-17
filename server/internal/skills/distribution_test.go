@@ -100,6 +100,26 @@ func TestSkillDistributionMultiPluginEdges(t *testing.T) {
 	listed, err := ti.service.ListDistributions(ctx, &gen.ListDistributionsPayload{Cursor: nil, Limit: 50, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
 	require.Len(t, listed.Distributions, 2)
+	require.Equal(t, "multi-plugin-skill", listed.Distributions[0].SkillName)
+
+	pluginID := pluginA.ID.String()
+	byPlugin, err := ti.service.ListDistributions(ctx, &gen.ListDistributionsPayload{PluginID: &pluginID, Cursor: nil, Limit: 50, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.Len(t, byPlugin.Distributions, 1)
+	require.Equal(t, tracked.ID, byPlugin.Distributions[0].ID)
+
+	bySkill, err := ti.service.ListDistributions(ctx, &gen.ListDistributionsPayload{SkillID: &created.Skill.ID, Cursor: nil, Limit: 50, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.Len(t, bySkill.Distributions, 2)
+
+	otherSkillID := uuid.New().String()
+	byOtherSkill, err := ti.service.ListDistributions(ctx, &gen.ListDistributionsPayload{SkillID: &otherSkillID, Cursor: nil, Limit: 50, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.Empty(t, byOtherSkill.Distributions)
+
+	badFilter := "not-a-uuid"
+	_, err = ti.service.ListDistributions(ctx, &gen.ListDistributionsPayload{SkillID: &badFilter, Cursor: nil, Limit: 50, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	requireOopsCode(t, err, oops.CodeBadRequest)
 
 	// Revoking one edge leaves the other plugin's distribution active.
 	require.NoError(t, ti.service.Undistribute(ctx, &gen.UndistributePayload{ID: created.Skill.ID, PluginID: pluginA.ID.String(), SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil}))
