@@ -104,13 +104,16 @@ func TestManagedAssistantDeploymentsToolsExposesCatalog(t *testing.T) {
 func TestManagedAssistantSkillsToolsExposesCatalog(t *testing.T) {
 	t.Parallel()
 
-	got := toolNames(ManagedAssistantSkillsTools(nil))
+	tools := ManagedAssistantSkillsTools(nil)
 	require.ElementsMatch(t, []string{
 		"platform_list_skills",
 		"platform_get_skill",
 		"platform_list_skill_versions",
 		"platform_list_skill_distributions",
-	}, got)
+	}, toolNames(tools))
+	for _, tool := range tools {
+		require.Equal(t, "skills", tool.RequiredFeature)
+	}
 }
 
 func toolNames(tools []platformtools.ExternalTool) []string {

@@ -185,10 +185,10 @@ func ManagedAssistantDeploymentsTools(deploymentsSvc platformdeployments.Deploym
 // project's managed assistant.
 func ManagedAssistantSkillsTools(skillsSvc platformskills.SkillsService) []platformtools.ExternalTool {
 	return []platformtools.ExternalTool{
-		{Executor: platformskills.NewListTool(skillsSvc), RequiredFeature: ""},
-		{Executor: platformskills.NewGetTool(skillsSvc), RequiredFeature: ""},
-		{Executor: platformskills.NewListVersionsTool(skillsSvc), RequiredFeature: ""},
-		{Executor: platformskills.NewListDistributionsTool(skillsSvc), RequiredFeature: ""},
+		{Executor: platformskills.NewListTool(skillsSvc), RequiredFeature: "skills"},
+		{Executor: platformskills.NewGetTool(skillsSvc), RequiredFeature: "skills"},
+		{Executor: platformskills.NewListVersionsTool(skillsSvc), RequiredFeature: "skills"},
+		{Executor: platformskills.NewListDistributionsTool(skillsSvc), RequiredFeature: "skills"},
 	}
 }
 
