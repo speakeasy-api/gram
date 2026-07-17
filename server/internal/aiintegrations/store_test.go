@@ -186,7 +186,7 @@ func TestListUsagePollCandidatesReturnsEveryDueSchedule(t *testing.T) {
 	}, schedules)
 }
 
-func TestSyncScheduleBackfillPopulatesPrimaryAndAnthropicAnalyticsSchedules(t *testing.T) {
+func TestBackfillSyncSchedulesIsIdempotent(t *testing.T) {
 	t.Parallel()
 
 	ctx, conn, store, orgID := newStoreTestDB(t)
@@ -204,43 +204,20 @@ func TestSyncScheduleBackfillPopulatesPrimaryAndAnthropicAnalyticsSchedules(t *t
 		ProjectID:             created.Config.ProjectID,
 	}))
 
-	backfiller := NewSyncScheduleBackfiller(conn, created.Config.ProjectID)
-	before, err := backfiller.Status(ctx)
+	result, err := queries.BackfillSyncSchedules(ctx)
 	require.NoError(t, err)
-	require.Equal(t, SyncScheduleBackfillStatus{
-		PrimarySyncsPending:   1,
-		AnalyticsSyncsPending: 2,
-	}, before)
-
-	batch, err := backfiller.BackfillBatch(ctx, uuid.Nil, 10)
-	require.NoError(t, err)
-	require.Equal(t, SyncScheduleBackfillBatch{
-		ConfigsProcessed:          1,
-		PrimarySyncsUpdated:       1,
-		AnalyticsSchedulesCreated: 2,
-		LastConfigID:              created.Config.ID,
-	}, batch)
-
-	after, err := backfiller.Status(ctx)
-	require.NoError(t, err)
-	require.Equal(t, SyncScheduleBackfillStatus{
-		PrimarySyncsPending:   0,
-		AnalyticsSyncsPending: 0,
-	}, after)
+	require.Equal(t, int64(1), result.PrimarySyncsUpdated)
+	require.Equal(t, int64(2), result.AnalyticsSchedulesCreated)
 	require.Equal(t, map[string]string{
 		ScheduleAnthropicCompliance:     SyncKindCursor,
 		ScheduleAnthropicAnalyticsUsage: SyncKindTime,
 		ScheduleAnthropicAnalyticsCost:  SyncKindTime,
 	}, listSyncSchedules(t, ctx, conn, created.Config.ID))
 
-	rerun, err := backfiller.BackfillBatch(ctx, uuid.Nil, 10)
+	rerun, err := queries.BackfillSyncSchedules(ctx)
 	require.NoError(t, err)
-	require.Equal(t, SyncScheduleBackfillBatch{
-		ConfigsProcessed:          0,
-		PrimarySyncsUpdated:       0,
-		AnalyticsSchedulesCreated: 0,
-		LastConfigID:              uuid.Nil,
-	}, rerun)
+	require.Equal(t, int64(0), rerun.PrimarySyncsUpdated)
+	require.Equal(t, int64(0), rerun.AnalyticsSchedulesCreated)
 }
 
 func TestRecordUsagePollFailureStoresErrorAsData(t *testing.T) {

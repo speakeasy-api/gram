@@ -324,82 +324,11 @@ SET poll_watermark_at = @poll_watermark_at,
 WHERE ai_integration_config_id = @ai_integration_config_id
   AND schedule = @schedule;
 
--- GetSyncScheduleBackfillStatus reports remaining work for one project.
--- Primary rows need discriminators populated; active Anthropic configs also
--- need independent usage and cost schedules.
--- name: GetSyncScheduleBackfillStatus :one
-WITH expected_anthropic_schedules AS (
-  SELECT
-      c.id AS ai_integration_config_id
-    , expected.schedule
-  FROM ai_integration_configs c
-  CROSS JOIN unnest(ARRAY[
-      'anthropic_analytics_usage'::text
-    , 'anthropic_analytics_cost'::text
-  ]) AS expected(schedule)
-  WHERE c.project_id = @project_id
-    AND c.provider = 'anthropic_compliance'
-    AND c.deleted IS FALSE
-)
-SELECT
-    (
-      SELECT count(*)
-      FROM ai_integration_syncs s
-      JOIN ai_integration_configs c ON c.id = s.ai_integration_config_id
-      WHERE c.project_id = @project_id
-        AND (s.schedule = c.provider OR s.schedule IS NULL)
-        AND (s.schedule IS NULL OR s.kind IS NULL)
-    )::bigint AS primary_syncs_pending
-  , (
-      SELECT count(*)
-      FROM expected_anthropic_schedules expected
-      LEFT JOIN ai_integration_syncs s
-        ON s.ai_integration_config_id = expected.ai_integration_config_id
-       AND s.schedule = expected.schedule
-      WHERE s.id IS NULL
-    )::bigint AS analytics_syncs_pending;
-
--- BackfillSyncSchedulesBatch is the resumable, project-scoped application data
--- migration. Re-running from the zero UUID is safe: discriminator writes are
--- fill-only and secondary inserts use the composite unique index.
--- name: BackfillSyncSchedulesBatch :many
-WITH candidate_configs AS MATERIALIZED (
-  SELECT
-      c.id
-    , c.provider
-  FROM ai_integration_configs c
-  WHERE c.project_id = @project_id
-    AND c.id > @after_config_id
-    AND (
-      EXISTS (
-        SELECT 1
-        FROM ai_integration_syncs s
-        WHERE s.ai_integration_config_id = c.id
-          AND (s.schedule = c.provider OR s.schedule IS NULL)
-          AND (s.schedule IS NULL OR s.kind IS NULL)
-      )
-      OR (
-        c.provider = 'anthropic_compliance'
-        AND c.deleted IS FALSE
-        AND EXISTS (
-          SELECT 1
-          FROM unnest(ARRAY[
-              'anthropic_analytics_usage'::text
-            , 'anthropic_analytics_cost'::text
-          ]) AS expected(schedule)
-          WHERE NOT EXISTS (
-            SELECT 1
-            FROM ai_integration_syncs s
-            WHERE s.ai_integration_config_id = c.id
-              AND s.schedule = expected.schedule
-          )
-        )
-      )
-    )
-  ORDER BY c.id
-  LIMIT @limit_count
-),
-updated_primary AS (
+-- BackfillSyncSchedules is a one-off statement run manually in production.
+-- It labels existing primary rows and creates the independent Anthropic
+-- analytics schedules. Both operations are idempotent.
+-- name: BackfillSyncSchedules :one
+WITH updated_primary AS (
   UPDATE ai_integration_syncs s
   SET schedule = COALESCE(s.schedule, c.provider),
       kind = COALESCE(
@@ -410,11 +339,11 @@ updated_primary AS (
         END
       ),
       updated_at = clock_timestamp()
-  FROM candidate_configs c
+  FROM ai_integration_configs c
   WHERE s.ai_integration_config_id = c.id
     AND (s.schedule = c.provider OR s.schedule IS NULL)
     AND (s.schedule IS NULL OR s.kind IS NULL)
-  RETURNING s.ai_integration_config_id
+  RETURNING s.id
 ),
 inserted_analytics AS (
   INSERT INTO ai_integration_syncs (
@@ -430,29 +359,19 @@ inserted_analytics AS (
     , 'time'
     , TIMESTAMPTZ '1970-01-01 00:00:00+00'
     , TIMESTAMPTZ '1970-01-01 00:00:00+00'
-  FROM candidate_configs c
+  FROM ai_integration_configs c
   CROSS JOIN unnest(ARRAY[
       'anthropic_analytics_usage'::text
     , 'anthropic_analytics_cost'::text
   ]) AS expected(schedule)
   WHERE c.provider = 'anthropic_compliance'
+    AND c.deleted IS FALSE
   ON CONFLICT (ai_integration_config_id, schedule) DO NOTHING
-  RETURNING ai_integration_config_id
+  RETURNING id
 )
 SELECT
-    c.id AS ai_integration_config_id
-  , EXISTS (
-      SELECT 1
-      FROM updated_primary updated
-      WHERE updated.ai_integration_config_id = c.id
-    ) AS updated_primary
-  , (
-      SELECT count(*)
-      FROM inserted_analytics inserted
-      WHERE inserted.ai_integration_config_id = c.id
-    )::bigint AS inserted_analytics
-FROM candidate_configs c
-ORDER BY c.id;
+    (SELECT count(*) FROM updated_primary)::bigint AS primary_syncs_updated
+  , (SELECT count(*) FROM inserted_analytics)::bigint AS analytics_schedules_created;
 
 -- Test-only fixtures for transitional sync-row behavior.
 -- name: DeleteSecondarySyncSchedulesForTest :exec
