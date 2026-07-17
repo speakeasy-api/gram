@@ -1,10 +1,10 @@
+import { useRiskCreateCustomDetectionRuleMutation } from "@gram/client/react-query/riskCreateCustomDetectionRule.js";
+import { useRiskDeleteCustomDetectionRuleMutation } from "@gram/client/react-query/riskDeleteCustomDetectionRule.js";
 import {
   invalidateAllRiskListCustomDetectionRules,
-  useRiskCreateCustomDetectionRuleMutation,
-  useRiskDeleteCustomDetectionRuleMutation,
   useRiskListCustomDetectionRules,
-  useRiskUpdateCustomDetectionRuleMutation,
-} from "@gram/client/react-query";
+} from "@gram/client/react-query/riskListCustomDetectionRules.js";
+import { useRiskUpdateCustomDetectionRuleMutation } from "@gram/client/react-query/riskUpdateCustomDetectionRule.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { DETECTION_RULES, type RuleCategory } from "./policy-data";
 
@@ -36,6 +36,7 @@ const CATEGORY_DEFAULT_SEVERITY: Record<RuleCategory, SeverityLevel> = {
   shadow_mcp: "medium",
   destructive_tool: "medium",
   cli_destructive: "medium",
+  account_identity: "medium",
   custom: "medium",
 };
 
@@ -59,11 +60,13 @@ const CATEGORY_RULE_DESCRIPTION: Record<RuleCategory, string> = {
   off_policy:
     "Classifier-backed detector for requests that fall outside the organization's acceptable-use policy.",
   shadow_mcp:
-    "Detects MCP tool calls in Cursor and Claude Code that didn't originate from a Speakeasy-issued MCP server. Requires Speakeasy hooks on the agent.",
+    "Detects MCP tool calls in Cursor, Claude Code, and Codex that didn't originate from a Speakeasy-issued MCP server. Requires Speakeasy hooks on the agent.",
   destructive_tool:
-    "Flags tool calls whose Gram tool definition is annotated as destructive. Requires Speakeasy hooks and Gram-issued tool metadata.",
+    "Flags tool calls whose Speakeasy tool definition is annotated as destructive. Requires Speakeasy hooks and Speakeasy-issued tool metadata.",
   cli_destructive:
     "Pattern detector for destructive shell, git, database, and cloud CLI invocations passed through tool arguments.",
+  account_identity:
+    "Flags sessions authenticated with a personal AI account or an email domain outside the policy's approved list, using the account attribution captured by session ingest.",
   custom:
     "Organization-defined regex pattern. Matches anywhere in the scanned payload.",
 };

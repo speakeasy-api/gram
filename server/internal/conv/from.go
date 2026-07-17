@@ -399,6 +399,17 @@ func ClampedUintToInt32(v uint) (out int32, clamped bool) {
 	return int32(v), false
 }
 
+// ClampedUint32ToInt converts a uint32 to an int, clamping the value to
+// math.MaxInt if it exceeds the platform's maximum int value, which is only
+// possible on 32-bit builds. The second return value indicates whether
+// clamping occurred.
+func ClampedUint32ToInt(v uint32) (out int, clamped bool) {
+	if uint64(v) > uint64(math.MaxInt) {
+		return math.MaxInt, true
+	}
+	return int(v), false
+}
+
 // ClampedIntToUint8 converts an int to a uint8, clamping the value to
 // math.MaxUint8 if it exceeds the maximum value for uint8, and to 0 if it is
 // negative. The second return value indicates whether clamping occurred.

@@ -7,13 +7,11 @@ import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { useSdkClient } from "@/contexts/Sdk";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
-import { type DateRangePreset } from "@gram-ai/elements";
+import { type DateRangePreset } from "@/elements";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
-import type { RiskResult } from "@gram/client/models/components";
-import {
-  useRiskOverview,
-  useRiskRuleBreakdown,
-} from "@gram/client/react-query/index.js";
+import type { RiskResult } from "@gram/client/models/components/riskresult.js";
+import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
+import { useRiskRuleBreakdown } from "@gram/client/react-query/riskRuleBreakdown.js";
 import { Icon } from "@speakeasy-api/moonshine";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import {

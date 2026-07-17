@@ -1,10 +1,11 @@
 import { useSdkClient } from "@/contexts/Sdk";
-import {
-  ExternalMCPServerEntry,
-  ExternalMCPTool,
-} from "@gram/client/models/components";
-import { queryKeyListMCPCatalog } from "@gram/client/react-query";
+import { normalizeRemoteUrl } from "@/pages/catalog/remotes";
+import { ExternalMCPServerEntry } from "@gram/client/models/components/externalmcpserverentry.js";
+import { ExternalMCPTool } from "@gram/client/models/components/externalmcptool.js";
+import { queryKeyListMCPCatalog } from "@gram/client/react-query/listMCPCatalog.js";
+import { useRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.js";
 import { useQuery } from "@tanstack/react-query";
+import { useCallback, useMemo } from "react";
 
 interface ServerMeta {
   "com.pulsemcp/server"?: {
@@ -43,7 +44,11 @@ export type PulseMCPServer = Omit<ExternalMCPServerEntry, "meta"> & {
 // sorting, and filtering all happen client-side. An optional `search` is still
 // forwarded so callers that only need a specific server (e.g. the detail page)
 // can narrow the response.
-function useListMCPCatalogImpl(search?: string, registryId?: string) {
+function useListMCPCatalogImpl(
+  search?: string,
+  registryId?: string,
+  enabled = true,
+) {
   const client = useSdkClient();
 
   return useQuery({
@@ -57,12 +62,46 @@ function useListMCPCatalogImpl(search?: string, registryId?: string) {
         registryId: registryId || undefined,
       }),
     staleTime: 5 * 60 * 1000, // 5 minutes - won't refetch if data is fresh
+    enabled,
   });
 }
 
 export function useListMCPCatalog(
   search?: string,
   registryId?: string,
+  // Callers that only need the catalog conditionally (e.g. only for
+  // external-MCP-backed toolsets) can defer the fetch entirely rather than
+  // always paying for it on mount.
+  enabled = true,
 ): ReturnType<typeof useListMCPCatalogImpl> {
-  return useListMCPCatalogImpl(search, registryId);
+  return useListMCPCatalogImpl(search, registryId, enabled);
+}
+
+/**
+ * Informational "already installed" check for catalog entries: true when a
+ * remote MCP server with one of the entry's endpoint URLs already exists in
+ * the project. Installing again is always allowed and just creates another
+ * server, so this only drives indicators, never blocking.
+ */
+export function useIsCatalogServerInstalled(): (
+  server: PulseMCPServer,
+) => boolean {
+  const { data: remoteServersData } = useRemoteMcpServers();
+  const installedUrls = useMemo(
+    () =>
+      new Set(
+        (remoteServersData?.remoteMcpServers ?? []).map((server) =>
+          normalizeRemoteUrl(server.url),
+        ),
+      ),
+    [remoteServersData?.remoteMcpServers],
+  );
+
+  return useCallback(
+    (server: PulseMCPServer) =>
+      (server.remotes ?? []).some((remote) =>
+        installedUrls.has(normalizeRemoteUrl(remote.url)),
+      ),
+    [installedUrls],
+  );
 }

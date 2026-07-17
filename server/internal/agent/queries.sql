@@ -1,14 +1,15 @@
 -- name: GetAgentPluginSet :many
 -- Returns the device agent's full plugin set for an org, marketplace-first.
 --
--- The base is every *published* marketplace in the org (a
--- plugin_github_connections row with a marketplace_token), so a marketplace —
--- and its always-required observability plugin, synthesized in the view layer —
--- is returned for every published project. Every non-deleted plugin in those
--- projects is LEFT JOINed on top and returned to every org member: per-principal
--- assignment scoping is intentionally disabled for now (see DNO-239) and will be
--- reinstated once RBAC-backed assignment management ships. Projects with no
--- plugins still yield one row with null plugin columns.
+-- The base is the org's *published* marketplaces (plugin_github_connections rows
+-- with a marketplace_token), scoped so the device agent isn't flooded with every
+-- project: the org's default project always appears (marketplace + its
+-- always-required observability plugin, synthesized in the view layer) as the
+-- org-wide baseline, while a non-default project appears only when the caller has
+-- a matching assignment there. Plugins whose assignment principal_urn matches the
+-- caller's resolved principal set (email, user:<id>, user:all, role:<...>, or the
+-- org wildcard) are LEFT JOINed on top; the default project still yields one row
+-- with null plugin columns when the caller has no assignment there.
 --
 -- Each project resolves to a marketplace name the way the publish path does:
 -- the per-project override (project_marketplace_settings.marketplace_name) when
@@ -27,6 +28,10 @@ SELECT
   om.name AS organization_name,
   pgc.marketplace_token,
   pgc.updated_at AS marketplace_updated_at,
+  -- The hooks subtree may be pinned by the rollout gate under a pre-rename org
+  -- name; the view derives the observability slug from this snapshot so devices
+  -- install the plugin that actually exists in the published repo.
+  pgc.published_hooks_config,
   pms.marketplace_name AS marketplace_name_override,
   -- The org's default project (oldest, by id ASC over ALL non-deleted projects,
   -- not just published ones) keeps the bare org-derived marketplace name; others
@@ -58,6 +63,50 @@ LEFT JOIN project_marketplace_settings pms
 LEFT JOIN plugins p
   ON p.project_id = pr.id
   AND p.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1 FROM plugin_assignments pa
+    WHERE pa.plugin_id = p.id
+      AND pa.organization_id = @organization_id
+      AND pa.principal_urn = ANY(@principal_urns::text[])
+  )
 WHERE pr.organization_id = @organization_id
   AND pgc.marketplace_token IS NOT NULL
+  AND (
+    -- The org's default project (oldest, by id ASC) is the org-wide baseline:
+    -- always surface its marketplace + observability, even when the caller has no
+    -- assignment there. Pinned to @organization_id (uncorrelated) so Postgres
+    -- evaluates it once; the same subquery backs the is_default_project column.
+    pr.id = (
+      SELECT p2.id
+      FROM projects p2
+      WHERE p2.organization_id = @organization_id
+        AND p2.deleted IS FALSE
+      ORDER BY p2.id ASC
+      LIMIT 1
+    )
+    -- A non-default project surfaces only when the caller has a matching assigned
+    -- plugin there (the LEFT JOIN produced a non-null plugin row); otherwise its
+    -- marketplace and observability plugin are just noise for this user.
+    OR p.id IS NOT NULL
+  )
 ORDER BY pr.id, p.slug;
+
+-- name: UpsertDeviceAgentSync :exec
+-- Best-effort record that the device agent for @email in @organization_id polled.
+-- The ON CONFLICT WHERE guard caps writes to at most once per minute per
+-- (org, email) so the agent's ~60s poll cadence doesn't create write spikes,
+-- mirroring how api_keys.last_accessed_at is throttled.
+INSERT INTO device_agent_syncs (organization_id, email)
+VALUES (@organization_id, @email)
+ON CONFLICT (organization_id, email) DO UPDATE
+SET last_seen_at = clock_timestamp()
+  , updated_at   = clock_timestamp()
+WHERE device_agent_syncs.last_seen_at < clock_timestamp() - interval '1 minute';
+
+-- name: ListDeviceAgentSyncs :many
+-- Lists every distinct email seen polling the device agent for an org, most
+-- recently active first, for the dashboard's device-agent users view.
+SELECT organization_id, email, first_seen_at, last_seen_at
+FROM device_agent_syncs
+WHERE organization_id = @organization_id
+ORDER BY last_seen_at DESC;

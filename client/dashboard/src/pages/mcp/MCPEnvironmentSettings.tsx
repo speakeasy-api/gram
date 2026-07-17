@@ -1,3 +1,4 @@
+import { EnvironmentVariableDialog } from "@/components/environments/EnvironmentVariableDialog";
 import { useExternalMcpOAuthConfigStatus } from "@/components/sources/sources-hooks";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -13,17 +14,19 @@ import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariable
 import { ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG } from "@/lib/externalMcpUserSessions";
 import { Toolset } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
-import type { McpEnvironmentConfigInput } from "@gram/client/models/components";
+import type { McpEnvironmentConfigInput } from "@gram/client/models/components/mcpenvironmentconfiginput.js";
+import { useCreateEnvironmentMutation } from "@gram/client/react-query/createEnvironment.js";
 import {
   invalidateAllGetMcpMetadata,
-  invalidateAllListEnvironments,
-  invalidateAllToolset,
-  useCreateEnvironmentMutation,
   useGetMcpMetadata,
+} from "@gram/client/react-query/getMcpMetadata.js";
+import {
+  invalidateAllListEnvironments,
   useListEnvironments,
-  useMcpMetadataSetMutation,
-  useUpdateEnvironmentMutation,
-} from "@gram/client/react-query";
+} from "@gram/client/react-query/listEnvironments.js";
+import { useMcpMetadataSetMutation } from "@gram/client/react-query/mcpMetadataSet.js";
+import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
+import { useUpdateEnvironmentMutation } from "@gram/client/react-query/updateEnvironment.js";
 import { Badge, Button, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle, Link, Plus, Shield } from "lucide-react";
@@ -43,7 +46,21 @@ import {
   EnvVarState,
   EnvironmentVariable,
   getValueForEnvironment,
+  hasEntryInEnvironment,
+  isSecretInEnvironment,
 } from "./environmentVariableUtils";
+import {
+  ConvertToUserSessionsButton,
+  ToolsetAuthenticationSection,
+} from "./ToolsetAuthenticationSection";
+import {
+  getOAuthParadigm,
+  isUserSessionIssuerWired,
+  type OAuthParadigm,
+  toolsetAuthSurface,
+  type ToolsetConvertAction,
+  toolsetConvertAction,
+} from "./toolsetAuthSurface";
 import { useEnvironmentVariables } from "./useEnvironmentVariables";
 import { shouldRenderWireUserSessionIssuerModal } from "./wire-user-session-issuer/rendering";
 import { WireUserSessionIssuerModal } from "./wire-user-session-issuer/WireUserSessionIssuerModal";
@@ -112,7 +129,7 @@ export function MCPAuthenticationTab({
       vars
         .map((v) => {
           const valuesHash = v.environmentValues
-            .map((ev) => `${ev.environmentSlug}=${ev.value}`)
+            .map((ev) => `${ev.environmentSlug}=${ev.value}:${ev.isSecret}`)
             .sort()
             .join("|");
           return `${v.key}:${v.state}:${valuesHash}`;
@@ -163,9 +180,28 @@ export function MCPAuthenticationTab({
   // Track which variable's header name is being edited
   const [editingHeaderId, setEditingHeaderId] = useState<string | null>(null);
 
-  // Track editing state for required variables (value and header display name)
+  // The variable whose value is open in the edit dialog, if any. The dialog
+  // saves to the environment itself, so this never joins the editing state the
+  // Save button drains. The environment slug is captured at click time: the
+  // selected view can change under an open dialog (the attached-environment
+  // effect moves it on a metadata refetch), and the save must hit the
+  // environment the user saw.
+  const [editingValueVar, setEditingValueVar] = useState<{
+    envVar: EnvironmentVariable;
+    environmentSlug: string;
+  } | null>(null);
+
+  // The variable whose stored value is pending delete confirmation. The slug
+  // is captured at click time for the same reason as above.
+  const [deletingValueVar, setDeletingValueVar] = useState<{
+    name: string;
+    environmentSlug: string;
+  } | null>(null);
+
+  // Track editing state for required variables. Values are saved by the
+  // dialog as soon as it is submitted, so only the header display name, which
+  // lives in MCP metadata alongside the mode, is staged for the Save button.
   type EditingState = {
-    value: string;
     headerDisplayName?: string;
   };
   const [editingState, setEditingState] = useState<Map<string, EditingState>>(
@@ -184,6 +220,13 @@ export function MCPAuthenticationTab({
         action: "environment_variable_updated",
         toolset_slug: toolset.slug,
       });
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to update environment variables",
+      );
     },
   });
 
@@ -314,7 +357,12 @@ export function MCPAuthenticationTab({
   };
 
   const handleAddVariables = (
-    entries: Array<{ key: string; value: string; state: EnvVarState }>,
+    entries: Array<{
+      key: string;
+      value: string;
+      state: EnvVarState;
+      isSecret: boolean;
+    }>,
   ) => {
     // Deduplicate by key, keeping the last entry for each key
     const deduped = Array.from(
@@ -332,6 +380,7 @@ export function MCPAuthenticationTab({
             entriesToUpdate: systemEntries.map((e) => ({
               name: e.key,
               value: e.value,
+              isSecret: e.isSecret,
             })),
             entriesToRemove: [],
           },
@@ -396,31 +445,6 @@ export function MCPAuthenticationTab({
     mcpMetadata,
   );
 
-  // Handle value change for variables
-  const handleValueChange = (id: string, newValue: string) => {
-    const envVar = envVars.find((v) => v.id === id);
-    if (!envVar) return;
-
-    const newEditingState = new Map(editingState);
-    const current = editingState.get(id);
-
-    // Always keep the entry in editing state (even if empty) to prevent focus loss
-    newEditingState.set(id, {
-      value: newValue,
-      headerDisplayName: current?.headerDisplayName,
-    });
-    setEditingState(newEditingState);
-  };
-
-  // Get editing value for a variable (either from editing state or from environmentValues)
-  const getEditingValue = (envVar: EnvironmentVariable): string => {
-    if (editingState.has(envVar.id)) {
-      return editingState.get(envVar.id)!.value;
-    }
-    // Show the value for the currently selected environment
-    return getValueForEnvironment(envVar, selectedEnvironmentView);
-  };
-
   // Get header display name for a variable
   const getHeaderDisplayName = (envVar: EnvironmentVariable): string => {
     if (
@@ -437,21 +461,7 @@ export function MCPAuthenticationTab({
   const handleHeaderDisplayNameChange = (id: string, newName: string) => {
     const current = editingState.get(id);
     const newEditingState = new Map(editingState);
-
-    if (current) {
-      newEditingState.set(id, { ...current, headerDisplayName: newName });
-    } else {
-      // Initialize editing state with current values
-      const envVar = envVars.find((v) => v.id === id);
-      if (!envVar) return;
-
-      const value = getEditingValue(envVar);
-      newEditingState.set(id, {
-        value,
-        headerDisplayName: newName,
-      });
-    }
-
+    newEditingState.set(id, { ...current, headerDisplayName: newName });
     setEditingState(newEditingState);
   };
 
@@ -472,27 +482,9 @@ export function MCPAuthenticationTab({
       return true;
     }
 
-    // Check if user has entered a value in the editing state
+    // Check if the header display name changed
     if (editingState.has(envVar.id)) {
       const editing = editingState.get(envVar.id)!;
-
-      // For variables without existing config, any value entry counts as an edit
-      if (!entry && editing.value) {
-        return true;
-      }
-
-      // For existing configs, check if value changed (including clearing)
-      if (envVar.state === "system") {
-        const currentValue = getValueForEnvironment(
-          envVar,
-          selectedEnvironmentView,
-        );
-        if (editing.value !== currentValue) {
-          return true;
-        }
-      }
-
-      // Check if header display name changed
       const originalHeaderName = entry?.headerDisplayName || "";
       if (
         editing.headerDisplayName !== undefined &&
@@ -547,9 +539,6 @@ export function MCPAuthenticationTab({
         },
       ]),
     );
-    const entriesToUpdate: Array<{ name: string; value: string }> = [];
-    const entriesToRemove: string[] = [];
-
     // Process all variables and collect updates
     for (const envVar of varsToSave) {
       const editing = editingState.get(envVar.id);
@@ -574,17 +563,6 @@ export function MCPAuthenticationTab({
           ? newHeaderName
           : existingEntry?.headerDisplayName,
       });
-
-      // Collect environment variable values for system state
-      if (envVar.state === "system") {
-        const value = getEditingValue(envVar);
-        if (value) {
-          entriesToUpdate.push({ name: envVar.key, value });
-        } else {
-          // Value was cleared - remove from environment
-          entriesToRemove.push(envVar.key);
-        }
-      }
     }
 
     // Get target environment
@@ -598,19 +576,6 @@ export function MCPAuthenticationTab({
     }
 
     try {
-      // Update environment variables if there are any changes
-      if (entriesToUpdate.length > 0 || entriesToRemove.length > 0) {
-        await updateEnvironmentMutation.mutateAsync({
-          request: {
-            slug: selectedEnvironmentView,
-            updateEnvironmentRequestBody: {
-              entriesToUpdate,
-              entriesToRemove,
-            },
-          },
-        });
-      }
-
       // Update MCP metadata with all environment entries
       const environmentConfigsToSave = Array.from(updatedEntriesMap.values());
       await setMcpMetadataMutation.mutateAsync({
@@ -671,18 +636,32 @@ export function MCPAuthenticationTab({
 
     // Initialize or update editing state to track the state change
     const newEditingState = new Map(editingState);
-    const currentValue = getValueForEnvironment(
-      envVar,
-      selectedEnvironmentView,
-    );
-    const currentHeaderName = getHeaderDisplayName(envVar);
-
     newEditingState.set(id, {
-      value: currentValue,
-      headerDisplayName: currentHeaderName,
+      headerDisplayName: getHeaderDisplayName(envVar),
     });
 
     setEditingState(newEditingState);
+  };
+
+  // Deleting the stored value is how a variable goes back to unset. A variable
+  // the toolset advertises keeps its row and reads "Not set"; a custom one is
+  // only listed because it has a stored value, so its row goes away with it.
+  // A secret's value is unrecoverable once deleted, so it confirms first, like
+  // the environment page.
+  const confirmDeleteValue = (target: {
+    name: string;
+    environmentSlug: string;
+  }) => {
+    updateEnvironmentMutation.mutate({
+      request: {
+        slug: target.environmentSlug,
+        updateEnvironmentRequestBody: {
+          entriesToUpdate: [],
+          entriesToRemove: [target.name],
+        },
+      },
+    });
+    setDeletingValueVar(null);
   };
 
   const handleSetDefaultEnvironment = () => {
@@ -784,7 +763,18 @@ export function MCPAuthenticationTab({
                   editingHeaderId={editingHeaderId}
                   hasUnsavedChanges={hasUnsavedChanges(envVar)}
                   onStateChange={handleStateChange}
-                  onValueChange={handleValueChange}
+                  onEditValue={(v) =>
+                    setEditingValueVar({
+                      envVar: v,
+                      environmentSlug: selectedEnvironmentView,
+                    })
+                  }
+                  onDeleteValue={(v) =>
+                    setDeletingValueVar({
+                      name: v.key,
+                      environmentSlug: selectedEnvironmentView,
+                    })
+                  }
                   onEditHeaderName={setEditingHeaderId}
                   onHeaderDisplayNameChange={handleHeaderDisplayNameChange}
                   onHeaderBlur={() => setEditingHeaderId(null)}
@@ -817,6 +807,72 @@ export function MCPAuthenticationTab({
           </div>
         </div>
       </PageSection>
+
+      {/* Edit the stored value of a single variable */}
+      {editingValueVar && (
+        <EnvironmentVariableDialog
+          open
+          onOpenChange={(isOpen) => {
+            if (!isOpen) setEditingValueVar(null);
+          }}
+          environmentSlug={editingValueVar.environmentSlug}
+          entry={{
+            name: editingValueVar.envVar.key,
+            value: getValueForEnvironment(
+              editingValueVar.envVar,
+              editingValueVar.environmentSlug,
+            ),
+            isSecret: isSecretInEnvironment(
+              editingValueVar.envVar,
+              editingValueVar.environmentSlug,
+            ),
+          }}
+          entryStored={hasEntryInEnvironment(
+            editingValueVar.envVar,
+            editingValueVar.environmentSlug,
+          )}
+          existingNames={[]}
+          onSaved={() => {
+            void invalidateAllListEnvironments(queryClient);
+            setEditingValueVar(null);
+          }}
+        />
+      )}
+
+      {/* Confirm deleting a stored value */}
+      <Dialog
+        open={deletingValueVar !== null}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) setDeletingValueVar(null);
+        }}
+      >
+        <Dialog.Content>
+          <Dialog.Header>
+            <Dialog.Title>Delete Variable</Dialog.Title>
+            <Dialog.Description>
+              Are you sure you want to delete{" "}
+              <strong>{deletingValueVar?.name}</strong>? This action is
+              permanent.
+            </Dialog.Description>
+          </Dialog.Header>
+          <Dialog.Footer>
+            <Button
+              variant="tertiary"
+              onClick={() => setDeletingValueVar(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive-primary"
+              onClick={() => {
+                if (deletingValueVar) confirmDeleteValue(deletingValueVar);
+              }}
+            >
+              Delete
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
 
       {/* Add New Variable Sheet */}
       <AddVariableSheet
@@ -881,22 +937,47 @@ export function MCPAuthenticationTab({
   );
 }
 
-type OAuthParadigm = "external" | "gram" | "proxy";
-
-function getOAuthParadigm(toolset: Toolset): OAuthParadigm | null {
-  if (toolset.externalOauthServer) return "external";
-  if (!toolset.oauthProxyServer) return null;
-  return toolset.oauthProxyServer.oauthProxyProviders?.[0]?.providerType ===
-    "gram"
-    ? "gram"
-    : "proxy";
-}
-
 type OAuthSectionProps = {
   toolset: Toolset;
 };
 
+/**
+ * Dispatches between the user-sessions surface and the legacy OAuth section
+ * by the toolset's auth state (see toolsetAuthSurface). A wired issuer or a
+ * clean slate gets the shared section; legacy OAuth keeps the old UI plus a
+ * convert path.
+ */
 function OAuthSection({ toolset }: OAuthSectionProps) {
+  const telemetry = useTelemetry();
+  const oauthParadigm = getOAuthParadigm(toolset);
+  const surface = toolsetAuthSurface({
+    flagEnabled:
+      telemetry.isFeatureEnabled(ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG) ??
+      false,
+    userSessionIssuerWired: isUserSessionIssuerWired(toolset),
+    oauthParadigm,
+  });
+
+  if (surface === "manage" || surface === "attach") {
+    return <ToolsetAuthenticationSection toolset={toolset} />;
+  }
+  return (
+    <LegacyOAuthSection
+      toolset={toolset}
+      convertAction={
+        surface === "legacy" ? toolsetConvertAction(oauthParadigm) : null
+      }
+    />
+  );
+}
+
+function LegacyOAuthSection({
+  toolset,
+  convertAction,
+}: OAuthSectionProps & {
+  /** Migration entry point to render; null when the flag is off. */
+  convertAction: ToolsetConvertAction | null;
+}) {
   const [isOAuthModalOpen, setIsOAuthModalOpen] = useState(false);
   const [isEditOAuthModalOpen, setIsEditOAuthModalOpen] = useState(false);
   const [isGramOAuthModalOpen, setIsGramOAuthModalOpen] = useState(false);
@@ -905,8 +986,6 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
     isWireUserSessionIssuerModalOpen,
     setIsWireUserSessionIssuerModalOpen,
   ] = useState(false);
-
-  const telemetry = useTelemetry();
 
   const { data: environmentsData } = useListEnvironments();
   const environments = environmentsData?.environments ?? [];
@@ -944,23 +1023,14 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
     ? "Enable the MCP server to configure OAuth"
     : "This MCP server does not require the OAuth authorization code flow";
 
-  // userSessionIssuerSlug is populated by the toolsets read path when the
-  // OAuth-Proxy → user-sessions migration has produced a user_session_issuer
-  // for this toolset.
+  // Flag holders with a wired issuer never reach this component (the
+  // dispatcher sends them to the manage surface), but non-holders can land
+  // here wired, so the legacy display still handles it.
   const userSessionIssuerWired = !!toolset.userSessionIssuerSlug;
-  // The migration entry point appears for both OAuth Proxy paradigms (custom
-  // and gram-managed): both produce a user_session_issuer, even though
-  // gram-managed skips the remote_session_* pair. External-OAuth toolsets
-  // have nothing to port. Gated to feature-flag holders, and hidden once a
-  // user_session_issuer is already wired (nothing left to migrate).
-  const showWireUserSessionIssuer =
-    (telemetry.isFeatureEnabled(ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG) ??
-      false) &&
-    !userSessionIssuerWired &&
-    (oauthParadigm === "proxy" || oauthParadigm === "gram");
-  // Once the user_session_issuer is wired, the OAuth-proxy CLIENT_ID/SECRET
-  // it was cloned from is no longer the live credential — hide Configure to
-  // avoid steering operators back into the legacy paradigm.
+  // Wire-modal covers both OAuth Proxy paradigms (custom and gram-managed).
+  const showWireUserSessionIssuer = convertAction === "wire-modal";
+  // Once wired, the cloned CLIENT_ID/SECRET is no longer live — hide Configure
+  // so operators aren't steered back into the legacy paradigm.
   const hideConfigureButton = userSessionIssuerWired;
 
   return (
@@ -985,6 +1055,9 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
             >
               <Button.Text>Wire User Session Issuer</Button.Text>
             </Button>
+          )}
+          {convertAction === "attach-sheet" && (
+            <ConvertToUserSessionsButton toolset={toolset} />
           )}
           {!hideConfigureButton && (
             <Tooltip>

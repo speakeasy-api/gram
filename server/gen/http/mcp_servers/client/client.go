@@ -29,6 +29,10 @@ type Client struct {
 	// listMcpServers endpoint.
 	ListMcpServersDoer goahttp.Doer
 
+	// ListMcpServersForOrg Doer is the HTTP client used to make requests to the
+	// listMcpServersForOrg endpoint.
+	ListMcpServersForOrgDoer goahttp.Doer
+
 	// UpdateMcpServer Doer is the HTTP client used to make requests to the
 	// updateMcpServer endpoint.
 	UpdateMcpServerDoer goahttp.Doer
@@ -61,17 +65,18 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		CreateMcpServerDoer: doer,
-		GetMcpServerDoer:    doer,
-		ListMcpServersDoer:  doer,
-		UpdateMcpServerDoer: doer,
-		ListToolFiltersDoer: doer,
-		DeleteMcpServerDoer: doer,
-		RestoreResponseBody: restoreBody,
-		scheme:              scheme,
-		host:                host,
-		decoder:             dec,
-		encoder:             enc,
+		CreateMcpServerDoer:      doer,
+		GetMcpServerDoer:         doer,
+		ListMcpServersDoer:       doer,
+		ListMcpServersForOrgDoer: doer,
+		UpdateMcpServerDoer:      doer,
+		ListToolFiltersDoer:      doer,
+		DeleteMcpServerDoer:      doer,
+		RestoreResponseBody:      restoreBody,
+		scheme:                   scheme,
+		host:                     host,
+		decoder:                  dec,
+		encoder:                  enc,
 	}
 }
 
@@ -142,6 +147,30 @@ func (c *Client) ListMcpServers() goa.Endpoint {
 		resp, err := c.ListMcpServersDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("mcpServers", "listMcpServers", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListMcpServersForOrg returns an endpoint that makes HTTP requests to the
+// mcpServers service listMcpServersForOrg server.
+func (c *Client) ListMcpServersForOrg() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListMcpServersForOrgRequest(c.encoder)
+		decodeResponse = DecodeListMcpServersForOrgResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListMcpServersForOrgRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListMcpServersForOrgDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("mcpServers", "listMcpServersForOrg", err)
 		}
 		return decodeResponse(resp)
 	}

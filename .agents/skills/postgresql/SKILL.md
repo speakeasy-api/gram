@@ -34,7 +34,8 @@ Reference these guidelines when:
 
 - **Data Integrity and Data Types:**
   - Use appropriate data types for columns to ensure data integrity (e.g., `INTEGER`, `VARCHAR`, `TIMESTAMP`).
-  - Use constraints (e.g., `NOT NULL`, `UNIQUE`, `CHECK`, `FOREIGN KEY`) to enforce data integrity.
+  - Use constraints (e.g., `NOT NULL`, `FOREIGN KEY`) to enforce data integrity but not for UNIQUE-ness — that is enforced with unique indexes.
+  - Do not use `CHECK` constraints for pure enumeration / value validation (e.g. `CHECK (status IN ('active', 'inactive'))`). Validate allowed values in application code, where they can evolve without a migration. **Exception:** keep `CHECK`s that are structural to the Class Table Inheritance (CTI) pattern, e.g. pinning a subtype's discriminator (`CHECK (provider = 'aws_kms')`) so the composite foreign key back to the supertype enforces 1:1 semantics.
   - Define primary keys for all tables.
   - Use foreign keys to establish relationships between tables.
   - Utilize domains to enforce data type constraints reusable across multiple columns.
@@ -45,6 +46,7 @@ Reference these guidelines when:
   - Avoid over-indexing, as it can slow down write operations.
   - Consider using partial indexes for specific query patterns.
   - Use appropriate index types (e.g., `B-tree`, `Hash`, `GIN`, `GiST`) based on the data and query requirements.
+  - When a unique key exists mainly to be a foreign-key target (e.g. a composite `(organization_id, id)` key that a tenant-scoped child composite-FKs to for tenancy pinning), declare it as a `CREATE UNIQUE INDEX`, not a table-level `UNIQUE` constraint. Postgres accepts a non-partial, plain-column unique index as an FK target. This matters when adding the key to an existing table: `ALTER TABLE ... ADD CONSTRAINT ... UNIQUE` takes an `ACCESS EXCLUSIVE` lock and builds the index synchronously, whereas a `CREATE UNIQUE INDEX` (which Atlas automatically emits as `CONCURRENTLY` per its `concurrent_index` policy) does not. Trade-off: a concurrent index makes the migration non-transactional (Atlas emits `-- atlas:txmode none` for you), so keep such migrations minimal.
 
 - **Schema evolution:**
   - Use expand-contract pattern instead of removing existing columns from a schema. Introduce new columns instead when appropriate.

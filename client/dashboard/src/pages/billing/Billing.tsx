@@ -11,12 +11,10 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { ProductTier, useProductTier } from "@/hooks/useProductTier";
 import { getServerURL } from "@/lib/utils";
-import { TierLimits } from "@gram/client/models/components";
-import {
-  useGetCreditUsage,
-  useGetPeriodUsage,
-  useGetUsageTiers,
-} from "@gram/client/react-query";
+import { TierLimits } from "@gram/client/models/components/tierlimits.js";
+import { useGetCreditUsage } from "@gram/client/react-query/getCreditUsage.js";
+import { useGetPeriodUsage } from "@gram/client/react-query/getPeriodUsage.js";
+import { useGetUsageTiers } from "@gram/client/react-query/getUsageTiers.js";
 import { PolarEmbedCheckout } from "@polar-sh/checkout/embed";
 import { Button, cn, Stack } from "@speakeasy-api/moonshine";
 import { Info } from "lucide-react";

@@ -5,13 +5,15 @@ import { Type } from "@/components/ui/type";
 import { ManualSetupBadge } from "@/pages/catalog/ManualSetupBadge";
 import { useSdkClient } from "@/contexts/Sdk";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
-import { PulseMCPServer, useListMCPCatalog } from "@/pages/catalog/hooks";
-import { useRoutes } from "@/routes";
 import {
-  useLatestDeployment,
-  useListToolsets,
-  useMcpRegistriesGetServerDetails,
-} from "@gram/client/react-query";
+  PulseMCPServer,
+  useIsCatalogServerInstalled,
+  useListMCPCatalog,
+} from "@/pages/catalog/hooks";
+import { useRoutes } from "@/routes";
+import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
+import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
+import { useMcpRegistriesGetServerDetails } from "@gram/client/react-query/mcpRegistriesGetServerDetails.js";
 import { Badge, Button, Stack } from "@speakeasy-api/moonshine";
 import { useMutation } from "@tanstack/react-query";
 import {
@@ -138,8 +140,8 @@ export default function CatalogDetail(): JSX.Element {
     );
   }, [deployment?.externalMcps, server]);
 
-  // Also consider origin-backed toolsets as installed, matching the rule
-  // used by useExternalMcpReleaseWorkflow for fork detection.
+  // Also consider origin-backed toolsets as installed — legacy installs
+  // created toolsets stamped with the catalog origin.
   const hasOriginMatch = useMemo(() => {
     if (!server) return false;
     return (toolsetsResult?.toolsets ?? []).some(
@@ -148,7 +150,14 @@ export default function CatalogDetail(): JSX.Element {
     );
   }, [toolsetsResult?.toolsets, server]);
 
-  const isInstalled = !!existingExternalMcp || hasOriginMatch;
+  // New installs are remote MCP servers, matched back to the catalog entry by
+  // endpoint URL.
+  const isInstalledByUrl = useIsCatalogServerInstalled();
+
+  const isInstalled =
+    !!existingExternalMcp ||
+    hasOriginMatch ||
+    (!!server && isInstalledByUrl(server));
 
   if (isLoading) {
     return (
@@ -290,7 +299,7 @@ export default function CatalogDetail(): JSX.Element {
                       )}
                       <Button size="md" onClick={() => setShowAddDialog(true)}>
                         <Plus className="h-4 w-4" />
-                        <Button.Text>Install as fork</Button.Text>
+                        <Button.Text>Add another</Button.Text>
                       </Button>
                     </Stack>
                   ) : (
@@ -528,7 +537,7 @@ function ToolCard({ tool }: { tool: Tool }) {
               {tool.annotations?.title || tool.name}
             </Type>
             {tool.annotations?.readOnlyHint && (
-              <Badge variant="neutral" className="text-xs">
+              <Badge variant="neutral" background className="text-xs">
                 Read-only
               </Badge>
             )}
@@ -542,6 +551,13 @@ function ToolCard({ tool }: { tool: Tool }) {
               !tool.annotations?.readOnlyHint && (
                 <Badge variant="information" className="text-xs">
                   Idempotent
+                </Badge>
+              )}
+            {!tool.annotations?.readOnlyHint &&
+              !tool.annotations?.destructiveHint &&
+              !tool.annotations?.idempotentHint && (
+                <Badge variant="information" background className="text-xs">
+                  Write
                 </Badge>
               )}
           </Stack>

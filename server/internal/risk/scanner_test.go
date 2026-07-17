@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -44,7 +45,7 @@ type instrumentedPIIScanner struct {
 	slowStartOnce sync.Once
 }
 
-func (l *instrumentedPIIScanner) AnalyzeBatch(ctx context.Context, texts []string, entities []string, _ float64, _ func()) ([][]risk_analysis.Finding, error) {
+func (l *instrumentedPIIScanner) AnalyzeBatch(ctx context.Context, texts []string, entities []string, _ float64, _ func()) ([][]scanners.Finding, error) {
 	l.callCount.Add(1)
 	cur := l.inflight.Add(1)
 	defer l.inflight.Add(-1)
@@ -66,9 +67,9 @@ func (l *instrumentedPIIScanner) AnalyzeBatch(ctx context.Context, texts []strin
 				case <-time.After(500 * time.Millisecond):
 				}
 			}
-			out := make([][]risk_analysis.Finding, len(texts))
+			out := make([][]scanners.Finding, len(texts))
 			for i := range texts {
-				out[i] = []risk_analysis.Finding{{
+				out[i] = []scanners.Finding{{
 					RuleID:      l.findOnEntity,
 					Description: l.findOnEntity,
 					Match:       "x",
@@ -91,7 +92,7 @@ func (l *instrumentedPIIScanner) AnalyzeBatch(ctx context.Context, texts []strin
 		return nil, fmt.Errorf("context canceled: %w", ctx.Err())
 	}
 
-	return make([][]risk_analysis.Finding, len(texts)), nil
+	return make([][]scanners.Finding, len(texts)), nil
 }
 
 // insertPresidioBlockPolicy inserts a single enforcing policy with
@@ -174,6 +175,7 @@ func TestScanner_FanOutAcrossPoliciesIsConcurrent(t *testing.T) {
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		ti.conn,
+		newTestCustomRuleAnalyzer(t, ti.conn),
 		pii,
 		nil,
 		nil,
@@ -210,6 +212,7 @@ func TestScanner_ScanForEnforcement_SkipsGrantResolutionWhenNoPolicies(t *testin
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		ti.conn,
+		newTestCustomRuleAnalyzer(t, ti.conn),
 		nil,
 		nil,
 		nil,
@@ -247,6 +250,7 @@ func TestScanner_FirstMatchCancelsSiblings(t *testing.T) {
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		ti.conn,
+		newTestCustomRuleAnalyzer(t, ti.conn),
 		pii,
 		nil,
 		nil,
@@ -318,6 +322,7 @@ func TestScanner_CustomDetectionRuleEnforcement(t *testing.T) {
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		ti.conn,
+		newTestCustomRuleAnalyzer(t, ti.conn),
 		nil,
 		nil,
 		nil,
@@ -335,6 +340,82 @@ func TestScanner_CustomDetectionRuleEnforcement(t *testing.T) {
 	require.Equal(t, "ACME token", result.Description)
 }
 
+// TestScanner_ScanForEnforcement_BlockWinsOverWarn guards the block > warn
+// precedence in the enforcement fan-out: when both a block and a warn policy
+// match the same input, the hard deny must win regardless of which scan
+// goroutine finishes first. Before the precedence fix the first finisher won,
+// so a matching block could be silently downgraded to a challenge.
+func TestScanner_ScanForEnforcement_BlockWinsOverWarn(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	require.NotNil(t, authCtx.ProjectID)
+
+	repo := riskrepo.New(ti.conn)
+	// Two custom rules whose regexes both match the same token, so both the warn
+	// and block policy below fire on one scan.
+	for _, ruleID := range []string{"custom.warn_token", "custom.block_token"} {
+		_, err := repo.CreateCustomDetectionRule(ctx, riskrepo.CreateCustomDetectionRuleParams{
+			ProjectID:      *authCtx.ProjectID,
+			OrganizationID: authCtx.ActiveOrganizationID,
+			RuleID:         ruleID,
+			Title:          ruleID,
+			Description:    ruleID,
+			DetectionExpr:  pgtype.Text{String: `content.matchRegex("ACME-[A-Z0-9]{8}")`, Valid: true},
+			Severity:       "high",
+		})
+		require.NoError(t, err)
+	}
+
+	newPolicy := func(name, action, ruleID string) {
+		id := uuid.New()
+		_, err := repo.CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
+			ID:                   id,
+			ProjectID:            *authCtx.ProjectID,
+			OrganizationID:       authCtx.ActiveOrganizationID,
+			Name:                 name,
+			Sources:              []string{},
+			PresidioEntities:     nil,
+			PromptInjectionRules: nil,
+			DisabledRules:        nil,
+			CustomRuleIds:        []string{ruleID},
+			MessageTypes:         nil,
+			Enabled:              true,
+			Action:               action,
+			AudienceType:         "everyone",
+			AutoName:             false,
+			UserMessage:          pgtype.Text{},
+		})
+		require.NoError(t, err)
+		grantRiskPolicyToAllUsers(t, ti, ctx, authCtx.ActiveOrganizationID, id)
+	}
+	newPolicy("warn policy", "warn", "custom.warn_token")
+	newPolicy("block policy", "block", "custom.block_token")
+
+	scanner, err := risk.NewScanner(
+		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
+		ti.conn,
+		newTestCustomRuleAnalyzer(t, ti.conn),
+		nil,
+		nil,
+		nil,
+		nil,
+		testCELEngine(t),
+	)
+	require.NoError(t, err)
+
+	// Repeat to shake out the nondeterministic fan-out ordering the fix guards.
+	for range 25 {
+		result, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "deploy ACME-ABC12345 now", message.User, "")
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Equal(t, "block", result.Action, "block must take precedence over a concurrently-matching warn")
+		require.Equal(t, "block policy", result.PolicyName)
+	}
+}
+
 func TestScanner_RespectsMessageTypes(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
@@ -347,6 +428,7 @@ func TestScanner_RespectsMessageTypes(t *testing.T) {
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		ti.conn,
+		newTestCustomRuleAnalyzer(t, ti.conn),
 		pii,
 		nil,
 		nil,

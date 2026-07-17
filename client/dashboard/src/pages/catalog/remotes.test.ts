@@ -1,9 +1,15 @@
 import type {
   ExternalMCPRemote,
   TransportType,
-} from "@gram/client/models/components";
+} from "@gram/client/models/components/externalmcpremote.js";
 import { describe, expect, it } from "vitest";
-import { dedupeRemotesByUrl, filterToHttpRemotes } from "./remotes";
+import {
+  catalogHeadersForRemoteUrl,
+  collectibleHeaders,
+  dedupeRemotesByUrl,
+  filterToHttpRemotes,
+  normalizeRemoteUrl,
+} from "./remotes";
 import type { PulseMCPServer } from "./hooks";
 
 function remote(
@@ -122,5 +128,99 @@ describe("filterToHttpRemotes", () => {
   it("returns undefined remotes when server has no remotes", () => {
     const result = filterToHttpRemotes(server([]));
     expect(result.remotes).toEqual([]);
+  });
+});
+
+describe("collectibleHeaders", () => {
+  it("always drops the Authorization header", () => {
+    const r = remote("https://x.example/mcp", "streamable-http", [
+      "Authorization",
+      "X-API-Key",
+    ]);
+    expect(collectibleHeaders(r).map((h) => h.name)).toEqual(["X-API-Key"]);
+  });
+
+  it("matches the Authorization header case-insensitively", () => {
+    const r = remote("https://x.example/mcp", "streamable-http", [
+      "authorization",
+    ]);
+    expect(collectibleHeaders(r)).toEqual([]);
+  });
+
+  it("returns an empty list for a remote without headers", () => {
+    const r = remote("https://x.example/mcp");
+    expect(collectibleHeaders(r)).toEqual([]);
+  });
+});
+
+describe("normalizeRemoteUrl", () => {
+  it("strips trailing slashes", () => {
+    expect(normalizeRemoteUrl("https://x.example/mcp/")).toBe(
+      "https://x.example/mcp",
+    );
+    expect(normalizeRemoteUrl("https://x.example/mcp///")).toBe(
+      "https://x.example/mcp",
+    );
+  });
+
+  it("leaves canonical URLs unchanged", () => {
+    expect(normalizeRemoteUrl("https://x.example/mcp")).toBe(
+      "https://x.example/mcp",
+    );
+  });
+});
+
+describe("catalogHeadersForRemoteUrl", () => {
+  it("finds headers for a matching URL across servers", () => {
+    const servers = [
+      server([remote("https://a.example/mcp")]),
+      server([
+        remote("https://b.example/mcp", "streamable-http", ["X-API-Key"]),
+      ]),
+    ];
+    expect(
+      catalogHeadersForRemoteUrl(servers, "https://b.example/mcp").map(
+        (h) => h.name,
+      ),
+    ).toEqual(["X-API-Key"]);
+  });
+
+  it("matches URLs regardless of trailing slashes", () => {
+    const servers = [
+      server([remote("https://a.example/mcp/", "streamable-http", ["X-Key"])]),
+    ];
+    expect(
+      catalogHeadersForRemoteUrl(servers, "https://a.example/mcp"),
+    ).toHaveLength(1);
+  });
+
+  it("prefers the first same-URL variant that carries headers", () => {
+    const bare = remote("https://a.example/mcp");
+    const withHeaders = remote("https://a.example/mcp", "streamable-http", [
+      "X-API-Key",
+    ]);
+    const servers = [server([bare]), server([withHeaders])];
+    expect(
+      catalogHeadersForRemoteUrl(servers, "https://a.example/mcp"),
+    ).toHaveLength(1);
+  });
+
+  it("excludes the Authorization header regardless of DCR support", () => {
+    const r = remote("https://a.example/mcp", "streamable-http", [
+      "Authorization",
+    ]);
+    const servers = [server([r]), { ...server([r]), supportsDcr: true }];
+    expect(
+      catalogHeadersForRemoteUrl(servers, "https://a.example/mcp"),
+    ).toEqual([]);
+  });
+
+  it("returns an empty list when nothing matches", () => {
+    expect(
+      catalogHeadersForRemoteUrl(
+        [server([remote("https://a.example/mcp")])],
+        "https://other.example/mcp",
+      ),
+    ).toEqual([]);
   });
 });

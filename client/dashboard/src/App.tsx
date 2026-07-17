@@ -1,10 +1,9 @@
 import "@speakeasy-api/moonshine/moonshine.css";
 import "./App.css"; // Import this second to override certain values in moonshine.css
 
-import { NuqsAdapter } from "nuqs/adapters/react-router/v7";
+import { NuqsAdapter } from "nuqs/adapters/react-router/v8";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider as LocalTooltipProvider } from "@/components/ui/tooltip";
-import { FontTexture, WebGLCanvas } from "@/components/webgl";
 import {
   MoonshineConfigProvider,
   TooltipProvider,
@@ -39,13 +38,14 @@ import { usePageTitle } from "./hooks/use-page-title";
 import { PREFERRED_THEME_STORAGE_KEY } from "./lib/local-storage-keys";
 import CliCallback from "./pages/cli/CliCallback";
 import ShadowMCPRequestAccess from "./pages/shadow-mcp/RequestAccess";
+import RiskPolicyChallengeAcknowledge from "./pages/risk-policy-challenge/Acknowledge";
 import { BlockPage } from "./pages/blocks/BlockDetail";
 import SwitchOrg from "./pages/demo/SwitchOrg";
 import { AppRoute, useRoutes, useOrgRoutes } from "./routes";
 
 export default function App(): JSX.Element {
   // Initialize from storage so React/Moonshine match the theme the pre-paint
-  // inline script (in index.html) already applied to <html> — avoids a flash.
+  // script (loaded from index.html) already applied to <html> — avoids a flash.
   const [theme, setTheme] = useState<"light" | "dark">(() => {
     try {
       return localStorage.getItem(PREFERRED_THEME_STORAGE_KEY) === "dark"
@@ -129,10 +129,6 @@ function AppContent() {
    * 4. Authenticated user is redirected back to the component.
    */
   const cliFlow = useCliAuthFlow();
-  const location = useLocation();
-
-  // Only render WebGL canvas during onboarding
-  const isOnboarding = location.pathname.includes("/onboarding");
 
   if (cliFlow) {
     return (
@@ -143,6 +139,7 @@ function AppContent() {
         organizationId={cliFlow.organizationId}
         codeChallenge={cliFlow.codeChallenge}
         codeChallengeMethod={cliFlow.codeChallengeMethod}
+        callbackMethod={cliFlow.callbackMethod}
       />
     );
   }
@@ -150,12 +147,6 @@ function AppContent() {
   return (
     <AuthProvider>
       <ProjectProvider>
-        {isOnboarding && (
-          <>
-            <WebGLCanvas />
-            <FontTexture />
-          </>
-        )}
         <RouteProvider />
         <PlatformAdminToolbar />
       </ProjectProvider>
@@ -244,13 +235,13 @@ const RouteProvider = () => {
     const projectActions = projectSlug
       ? projectNavRoutes
           .filter(
-            ({ route, scope }) =>
+            ({ route, scope, resourceId }) =>
               !route.external &&
               route.component &&
               route.title &&
               // Mirror the sidebar's per-page scope gating so the palette never
               // offers (nor navigates to) pages the user can't access.
-              hasAnyScope(scope),
+              hasAnyScope(scope, resourceId),
           )
           .map(({ route }) =>
             routeToNavAction(route, "Pages", `nav-page-${route.url || "home"}`),
@@ -309,6 +300,10 @@ const RouteProvider = () => {
         <Route
           path="/risk-policy-bypass/request"
           element={<ShadowMCPRequestAccess />}
+        />
+        <Route
+          path="/risk-policy-challenge/acknowledge"
+          element={<RiskPolicyChallengeAcknowledge />}
         />
         <Route path="/blocks/:id" element={<BlockPage />} />
         <Route path="/" element={<LoginCheck />}>
@@ -434,6 +429,7 @@ type LocalAuthFlow = {
   organizationId: string | null;
   codeChallenge: string | null;
   codeChallengeMethod: string | null;
+  callbackMethod: "get" | "post";
 };
 
 function useCliAuthFlow(): LocalAuthFlow | null {
@@ -447,6 +443,7 @@ function useCliAuthFlow(): LocalAuthFlow | null {
   const organizationId = searchParams.get("organization_id");
   const codeChallenge = searchParams.get("code_challenge");
   const codeChallengeMethod = searchParams.get("code_challenge_method");
+  const callbackMethod = searchParams.get("callback_method");
 
   if (location.pathname === "/" && fromCli && cliCallbackUrl) {
     return {
@@ -456,6 +453,7 @@ function useCliAuthFlow(): LocalAuthFlow | null {
       organizationId,
       codeChallenge,
       codeChallengeMethod,
+      callbackMethod: callbackMethod === "post" ? "post" : "get",
     };
   }
 

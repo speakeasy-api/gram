@@ -2,6 +2,7 @@ import { Icon, type IconName } from "@speakeasy-api/moonshine";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { formatCompact } from "@/lib/format";
 import { getValueColor, ThresholdConfig } from "./chartUtils";
+import { Loader2 } from "lucide-react";
 import { Link } from "react-router";
 
 type AccentColor = "red" | "orange" | "yellow" | "green" | "blue" | "purple";
@@ -14,6 +15,8 @@ export type MetricCardProps = {
   previousValue?: number;
   format?: "compact" | "number" | "currency" | "percent" | "ms" | "seconds";
   icon?: IconName;
+  /** Replaces the icon with a spinner while cached data refreshes in the background. */
+  isRefreshing?: boolean;
   invertDelta?: boolean;
   thresholds?: ThresholdConfig;
   comparisonLabel?: string;
@@ -32,6 +35,7 @@ export function MetricCard(props: MetricCardProps): JSX.Element {
     previousValue = 0,
     format = "compact",
     icon,
+    isRefreshing = false,
     invertDelta = false,
     thresholds,
     comparisonLabel,
@@ -94,7 +98,14 @@ export function MetricCard(props: MetricCardProps): JSX.Element {
         </div>
         {icon && (
           <div className="bg-muted/50 rounded-lg p-2">
-            <Icon name={icon} className="text-muted-foreground size-4" />
+            {isRefreshing ? (
+              <Loader2
+                aria-label={`Refreshing ${title}`}
+                className="text-muted-foreground size-4 animate-spin"
+              />
+            ) : (
+              <Icon name={icon} className="text-muted-foreground size-4" />
+            )}
           </div>
         )}
       </div>

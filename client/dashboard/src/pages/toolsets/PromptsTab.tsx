@@ -5,8 +5,8 @@ import { Cards } from "@/components/ui/card";
 import { Type } from "@/components/ui/type";
 import { Toolset } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
-import { PromptTemplate } from "@gram/client/models/components";
-import { useUpdateToolsetMutation } from "@gram/client/react-query";
+import { PromptTemplate } from "@gram/client/models/components/prompttemplate.js";
+import { useUpdateToolsetMutation } from "@gram/client/react-query/updateToolset.js";
 import { Button, Stack } from "@speakeasy-api/moonshine";
 import { useState } from "react";
 import { PromptTemplateCard } from "../prompts/Prompts";
@@ -62,7 +62,7 @@ export function PromptsTabContent({
     return (
       <EmptyState
         heading="No prompts yet"
-        description="Add prompt templates to this MCP server."
+        description="Prompt templates are ready-made prompts your MCP server offers to connected clients like Claude Desktop or Cursor, so users can start a common task without typing it out themselves."
         nonEmptyProjectCTA={
           <RequireScope scope="mcp:write" level="component">
             <Stack gap={2} direction="horizontal">

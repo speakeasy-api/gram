@@ -24,6 +24,13 @@ func (q *Queries) AcquireAssistantAdvisoryLock(ctx context.Context, assistantID 
 	return err
 }
 
+type AddAssistantMcpServersParams struct {
+	AssistantID   uuid.UUID
+	McpServerID   uuid.UUID
+	EnvironmentID uuid.NullUUID
+	ProjectID     uuid.UUID
+}
+
 type AddAssistantToolsetsParams struct {
 	AssistantID   uuid.UUID
 	ToolsetID     uuid.UUID
@@ -229,6 +236,22 @@ func (q *Queries) ClaimNextPendingEvent(ctx context.Context, arg ClaimNextPendin
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const clearAssistantMcpServers = `-- name: ClearAssistantMcpServers :exec
+DELETE FROM assistant_mcp_servers
+WHERE assistant_id = $1
+  AND project_id = $2
+`
+
+type ClearAssistantMcpServersParams struct {
+	AssistantID uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+func (q *Queries) ClearAssistantMcpServers(ctx context.Context, arg ClearAssistantMcpServersParams) error {
+	_, err := q.db.Exec(ctx, clearAssistantMcpServers, arg.AssistantID, arg.ProjectID)
+	return err
 }
 
 const clearAssistantToolsets = `-- name: ClearAssistantToolsets :exec
@@ -1125,7 +1148,7 @@ func (q *Queries) InsertAssistantThreadEvent(ctx context.Context, arg InsertAssi
 	return id, err
 }
 
-const listActiveAssistantRuntimesForImageRecycle = `-- name: ListActiveAssistantRuntimesForImageRecycle :many
+const listActiveAssistantRuntimes = `-- name: ListActiveAssistantRuntimes :many
 SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.backend, r.backend_metadata_json, r.state, r.warm_until
 FROM assistant_runtimes r
 WHERE r.state = $1
@@ -1143,7 +1166,7 @@ WHERE r.state = $1
 ORDER BY r.updated_at ASC
 `
 
-type ListActiveAssistantRuntimesForImageRecycleRow struct {
+type ListActiveAssistantRuntimesRow struct {
 	ID                  uuid.UUID
 	AssistantThreadID   uuid.UUID
 	AssistantID         uuid.UUID
@@ -1154,22 +1177,20 @@ type ListActiveAssistantRuntimesForImageRecycleRow struct {
 	WarmUntil           pgtype.Timestamptz
 }
 
-// Returns live v2 runtime rows that carry backend metadata so a deploy-time
-// sweep can roll their machines onto the current runtime image. Only `active`
-// rows qualify: `starting` rows are mid-boot and already pull the current
-// image, while expiring/stopped rows are torn down or recycled lazily on the
-// next admission. Rows orphaned by a deleted assistant are excluded: they
-// belong to the deleted-assistant janitor, and recycling them would bump
-// updated_at and postpone the inactivity-based reap.
-func (q *Queries) ListActiveAssistantRuntimesForImageRecycle(ctx context.Context, activeState string) ([]ListActiveAssistantRuntimesForImageRecycleRow, error) {
-	rows, err := q.db.Query(ctx, listActiveAssistantRuntimesForImageRecycle, activeState)
+// Returns live v2 runtime rows that carry backend metadata for runtime
+// reconciliation sweeps. Only `active` rows qualify: `starting` rows are
+// mid-boot, while expiring/stopped rows are already being torn down or await
+// re-admission. Rows orphaned by a deleted assistant belong to the
+// deleted-assistant janitor and are excluded here.
+func (q *Queries) ListActiveAssistantRuntimes(ctx context.Context, activeState string) ([]ListActiveAssistantRuntimesRow, error) {
+	rows, err := q.db.Query(ctx, listActiveAssistantRuntimes, activeState)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListActiveAssistantRuntimesForImageRecycleRow
+	var items []ListActiveAssistantRuntimesRow
 	for rows.Next() {
-		var i ListActiveAssistantRuntimesForImageRecycleRow
+		var i ListActiveAssistantRuntimesRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.AssistantThreadID,
@@ -1690,6 +1711,82 @@ func (q *Queries) ListWarmPendingThreads(ctx context.Context, arg ListWarmPendin
 			return nil, err
 		}
 		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const loadAssistantMcpServers = `-- name: LoadAssistantMcpServers :many
+SELECT
+  ams.assistant_id,
+  ams.mcp_server_id,
+  ms.slug AS server_slug,
+  ms.visibility,
+  COALESCE((
+    SELECT me.slug
+    FROM mcp_endpoints me
+    WHERE me.mcp_server_id = ms.id
+      AND me.custom_domain_id IS NULL
+      AND me.deleted IS FALSE
+    ORDER BY me.created_at
+    LIMIT 1
+  ), '')::text AS endpoint_slug,
+  ams.environment_id,
+  e.slug AS environment_slug
+FROM assistant_mcp_servers ams
+JOIN mcp_servers ms ON ms.id = ams.mcp_server_id AND ms.deleted IS FALSE
+LEFT JOIN environments e ON e.id = ams.environment_id
+WHERE ams.assistant_id = ANY($1::UUID[])
+  AND ams.project_id = $2
+ORDER BY ams.created_at
+`
+
+type LoadAssistantMcpServersParams struct {
+	AssistantIds []uuid.UUID
+	ProjectID    uuid.UUID
+}
+
+type LoadAssistantMcpServersRow struct {
+	AssistantID     uuid.UUID
+	McpServerID     uuid.UUID
+	ServerSlug      pgtype.Text
+	Visibility      string
+	EndpointSlug    string
+	EnvironmentID   uuid.NullUUID
+	EnvironmentSlug pgtype.Text
+}
+
+// Hydrates assistant_mcp_servers with the fronting mcp_servers row, its
+// Gram-hosted endpoint slug (custom_domain_id IS NULL), and the bound
+// environment. Soft-deleted servers are skipped so the runtime never targets a
+// dead endpoint; a row whose server has no Gram-hosted endpoint yields a NULL
+// endpoint_slug and is filtered out in Go. Visibility is returned rather than
+// filtered here so API reads still show disabled attachments while the runtime
+// resolver skips them. Mirrors LoadAssistantToolsets: one read supplies
+// everything dispatch needs to build the MCP URL.
+func (q *Queries) LoadAssistantMcpServers(ctx context.Context, arg LoadAssistantMcpServersParams) ([]LoadAssistantMcpServersRow, error) {
+	rows, err := q.db.Query(ctx, loadAssistantMcpServers, arg.AssistantIds, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LoadAssistantMcpServersRow
+	for rows.Next() {
+		var i LoadAssistantMcpServersRow
+		if err := rows.Scan(
+			&i.AssistantID,
+			&i.McpServerID,
+			&i.ServerSlug,
+			&i.Visibility,
+			&i.EndpointSlug,
+			&i.EnvironmentID,
+			&i.EnvironmentSlug,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -2448,6 +2545,68 @@ func (q *Queries) ResolveEnvironmentsForWrite(ctx context.Context, arg ResolveEn
 	for rows.Next() {
 		var i ResolveEnvironmentsForWriteRow
 		if err := rows.Scan(&i.ID, &i.Slug); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const resolveMcpServersForWrite = `-- name: ResolveMcpServersForWrite :many
+SELECT
+  ms.id,
+  ms.slug,
+  ms.visibility,
+  (ms.tunneled_mcp_server_id IS NOT NULL)::bool AS tunneled,
+  EXISTS (
+    SELECT 1
+    FROM mcp_endpoints me
+    WHERE me.mcp_server_id = ms.id
+      AND me.custom_domain_id IS NULL
+      AND me.deleted IS FALSE
+  ) AS has_gram_endpoint
+FROM mcp_servers ms
+WHERE ms.project_id = $1
+  AND ms.slug = ANY($2::TEXT[])
+  AND ms.deleted IS FALSE
+`
+
+type ResolveMcpServersForWriteParams struct {
+	ProjectID uuid.UUID
+	Slugs     []string
+}
+
+type ResolveMcpServersForWriteRow struct {
+	ID              uuid.UUID
+	Slug            pgtype.Text
+	Visibility      string
+	Tunneled        bool
+	HasGramEndpoint bool
+}
+
+// Besides resolving slugs to ids, this returns everything attach-time
+// validation needs to reject servers the assistant runtime cannot reach:
+// the backend kind (tunnelled servers have no serving path), visibility,
+// and whether a Gram-hosted endpoint exists to build the /mcp/{slug} URL.
+func (q *Queries) ResolveMcpServersForWrite(ctx context.Context, arg ResolveMcpServersForWriteParams) ([]ResolveMcpServersForWriteRow, error) {
+	rows, err := q.db.Query(ctx, resolveMcpServersForWrite, arg.ProjectID, arg.Slugs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ResolveMcpServersForWriteRow
+	for rows.Next() {
+		var i ResolveMcpServersForWriteRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Slug,
+			&i.Visibility,
+			&i.Tunneled,
+			&i.HasGramEndpoint,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

@@ -1,4 +1,4 @@
-import { useListDeployments } from "@gram/client/react-query";
+import { useListDeployments } from "@gram/client/react-query/listDeployments.js";
 import { useMemo } from "react";
 
 type ListDeploymentsResult = ReturnType<typeof useListDeployments>;

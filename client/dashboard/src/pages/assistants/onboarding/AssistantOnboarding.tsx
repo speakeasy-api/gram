@@ -9,8 +9,8 @@ import {
   GramElementsProvider,
   useThreadId,
   type MCPServerEntry,
-} from "@gram-ai/elements";
-import { useListToolsets } from "@gram/client/react-query";
+} from "@/elements";
+import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate.js";
 import { ResizablePanel, useMoonshineConfig } from "@speakeasy-api/moonshine";
 import { Loader2 } from "lucide-react";
@@ -62,6 +62,21 @@ export function EditAssistantOnboarding(): JSX.Element {
       <OnboardingShell />
     </AssistantDraftProvider>
   );
+}
+
+// Elements namespaces tools as `<name>__<tool>` when more than one MCP entry
+// is configured, and completion providers reject tool names over 64
+// characters, so overlong entry names are truncated with a deterministic
+// FNV-1a suffix (mirrors the runtime-side capRuntimeMCPServerID).
+function capMcpEntryName(name: string): string {
+  const maxLen = 24;
+  if (name.length <= maxLen) return name;
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < name.length; i++) {
+    hash ^= name.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return `${name.slice(0, maxLen - 9)}-${hash.toString(16).padStart(8, "0")}`;
 }
 
 function OnboardingShell() {
@@ -142,25 +157,36 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
 
   const { data: toolsetsData } = useListToolsets();
   const mcps = useMemo<MCPServerEntry[] | undefined>(() => {
-    const refs = draft.assistant?.toolsets;
-    if (!refs?.length) return undefined;
     const fallbackEnv = draft.assistantEnv?.slug;
     const toolsetBySlug = new Map(
       (toolsetsData?.toolsets ?? []).map((t) => [t.slug, t]),
     );
     const entries: MCPServerEntry[] = [];
-    for (const ref of refs) {
+    for (const ref of draft.assistant?.toolsets ?? []) {
       const toolset = toolsetBySlug.get(ref.toolsetSlug);
       if (!toolset) continue;
       entries.push({
         url: internalMcpUrl({ slug: project.slug }, toolset),
-        name: toolset.slug,
+        name: capMcpEntryName(toolset.slug),
         environment: ref.environmentSlug ?? fallbackEnv,
+      });
+    }
+    // Directly-attached MCP servers (no backing toolset) connect through the
+    // same Gram-hosted /mcp/{endpoint} path the assistant runtime dials. No
+    // fallback environment: most remote servers carry their own connection
+    // auth, so only an explicitly bound environment is sent.
+    for (const ref of draft.assistant?.mcpServers ?? []) {
+      if (!ref.endpointSlug) continue;
+      entries.push({
+        url: `${getServerURL()}/mcp/${ref.endpointSlug}`,
+        name: capMcpEntryName(ref.mcpServerSlug),
+        environment: ref.environmentSlug,
       });
     }
     return entries.length ? entries : undefined;
   }, [
     draft.assistant?.toolsets,
+    draft.assistant?.mcpServers,
     draft.assistantEnv?.slug,
     toolsetsData?.toolsets,
     project.slug,
@@ -207,6 +233,10 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
       toolsets: draft.assistant.toolsets.map((t) => ({
         slug: t.toolsetSlug,
         environmentSlug: t.environmentSlug ?? null,
+      })),
+      mcpServers: (draft.assistant.mcpServers ?? []).map((m) => ({
+        slug: m.mcpServerSlug,
+        environmentSlug: m.environmentSlug ?? null,
       })),
     };
   }

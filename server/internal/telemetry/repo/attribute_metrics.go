@@ -34,7 +34,15 @@ var attributeMeasureSelects = []string{
 	"sumIfMerge(total_tokens) AS m_total_tokens",
 	"sumIfMerge(cache_read_input_tokens) AS m_cache_read_input_tokens",
 	"sumIfMerge(cache_creation_input_tokens) AS m_cache_creation_input_tokens",
-	"countIfMerge(total_tool_calls) AS m_total_tool_calls",
+	// Transitional fallback (expand-contract): rows written before the
+	// unique_tool_calls column existed carry only the default empty state, so
+	// uniqExactIfMerge resolves to 0 on them even when total_tool_calls has
+	// counted calls. Fall back to the legacy row count for such groups until
+	// the backfiller has rebuilt history; then this collapses to a plain
+	// uniqExactIfMerge and total_tool_calls can be contracted. Groups mixing
+	// pre- and post-migration buckets undercount (only new rows contribute
+	// unique states) — accepted as transitional, resolved by the backfill.
+	"if(uniqExactIfMerge(unique_tool_calls) = 0, countIfMerge(total_tool_calls), uniqExactIfMerge(unique_tool_calls)) AS m_total_tool_calls",
 	"uniqExactIfMerge(total_chats) AS m_total_chats",
 }
 
@@ -310,6 +318,9 @@ func (q *Queries) QueryAttributeMetricsTable(ctx context.Context, arg AttributeM
 		Columns(attributeMeasureSelects...).
 		Column(squirrel.Expr(attributeDimensionValuesExpr(arg.GroupBy))).
 		From("attribute_metrics_summaries").
+		// Exclude tombstoned rows (soft-deleted backfill data; see the
+		// is_active column comment in server/clickhouse/schema.sql).
+		Where("is_active = 1").
 		Where(squirrel.Eq{"gram_project_id": arg.ProjectIDs}).
 		Where("time_bucket >= toStartOfHour(fromUnixTimestamp64Nano(?))", arg.TimeStart).
 		Where("time_bucket <= toStartOfHour(fromUnixTimestamp64Nano(?))", arg.TimeEnd)
@@ -374,6 +385,9 @@ func (q *Queries) QueryAttributeMetricsTimeseries(ctx context.Context, arg Attri
 		Column(groupExpr+" AS group_value").
 		Columns(attributeMeasureSelects...).
 		From("attribute_metrics_summaries").
+		// Exclude tombstoned rows (soft-deleted backfill data; see the
+		// is_active column comment in server/clickhouse/schema.sql).
+		Where("is_active = 1").
 		Where(squirrel.Eq{"gram_project_id": arg.ProjectIDs}).
 		Where("time_bucket >= toStartOfHour(fromUnixTimestamp64Nano(?))", arg.TimeStart).
 		Where("time_bucket <= toStartOfHour(fromUnixTimestamp64Nano(?))", arg.TimeEnd)

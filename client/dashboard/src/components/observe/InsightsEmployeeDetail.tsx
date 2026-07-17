@@ -32,15 +32,13 @@ import { telemetryGetEmployeeDataFlowGraph } from "@gram/client/funcs/telemetryG
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
 import { telemetryGetUserMetricsSummary } from "@gram/client/funcs/telemetryGetUserMetricsSummary";
 import { telemetrySearchUsers } from "@gram/client/funcs/telemetrySearchUsers";
-import type {
-  EmployeeDataFlowNode,
-  GetEmployeeDataFlowGraphResult,
-  GetObservabilityOverviewResult,
-  ProjectSummary,
-  TimeSeriesBucket,
-  UserAccount,
-  UserSummary,
-} from "@gram/client/models/components";
+import type { EmployeeDataFlowNode } from "@gram/client/models/components/employeedataflownode.js";
+import type { GetEmployeeDataFlowGraphResult } from "@gram/client/models/components/getemployeedataflowgraphresult.js";
+import type { GetObservabilityOverviewResult } from "@gram/client/models/components/getobservabilityoverviewresult.js";
+import type { ProjectSummary } from "@gram/client/models/components/projectsummary.js";
+import type { TimeSeriesBucket } from "@gram/client/models/components/timeseriesbucket.js";
+import type { UserAccount } from "@gram/client/models/components/useraccount.js";
+import type { UserSummary } from "@gram/client/models/components/usersummary.js";
 import { AccountRow } from "@/components/observe/account-display";
 import { providerLabel } from "@/components/observe/account-display-utils";
 import {
@@ -50,19 +48,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  useGramContext,
-  useListChats,
-  useMembers,
-  useUserSessions,
-} from "@gram/client/react-query";
-import { useRiskOverview } from "@gram/client/react-query/index.js";
+import { useGramContext } from "@gram/client/react-query/_context.js";
+import { useMembers } from "@gram/client/react-query/members.js";
+import { useUserSessions } from "@gram/client/react-query/userSessions.js";
+import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
 import { unwrapAsync } from "@gram/client/types/fp";
 import {
   TimeRangePicker,
   type DateRangePreset,
   getPresetRange,
-} from "@gram-ai/elements";
+} from "@/elements";
 import { useSlugs } from "@/contexts/Sdk";
 import { formatDateRangeLabel } from "@/components/observe/useDateRangeFilter";
 import {
@@ -234,19 +229,6 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
     }
     return `${routes.logs.href()}?${params.toString()}`;
   }, [customRange, dateRange, employeeEmailFilter, from, routes.logs, to]);
-  const agentSessionsQuery = useListChats(
-    {
-      search: employeeEmailFilter ?? undefined,
-      from,
-      to,
-      limit: 1,
-    },
-    undefined,
-    {
-      enabled: employeeEmailFilter != null,
-      throwOnError: false,
-    },
-  );
   const riskEventsHref = useMemo(() => {
     const params = new URLSearchParams();
     if (employeeEmailFilter) {
@@ -560,12 +542,7 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
                 />
                 <MetricCard
                   title="Agent Sessions"
-                  value={agentSessionsQuery.data?.total ?? 0}
-                  displayValue={
-                    agentSessionsQuery.isLoading || agentSessionsQuery.isError
-                      ? "-"
-                      : undefined
-                  }
+                  value={summary?.totalChats ?? 0}
                   icon="message-square"
                   subtext={`Over ${rangeLabel}`}
                   link={agentSessionsHref}
@@ -702,7 +679,14 @@ function EmployeeSessions({ userId }: { userId: string }): JSX.Element {
   return (
     <section className="bg-card border-border rounded-lg border p-5">
       <div className="mb-3 flex items-center justify-between">
-        <span className="text-sm font-semibold">Active MCP Connections</span>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold">Active MCP Connections</span>
+          {!isPending && !isError && sessions.length > 0 && (
+            <span className="text-muted-foreground text-xs">
+              {sessions.length}
+            </span>
+          )}
+        </div>
         <div className="bg-muted/50 rounded-lg p-2">
           <Icon name="key-round" className="text-muted-foreground size-4" />
         </div>
@@ -722,7 +706,7 @@ function EmployeeSessions({ userId }: { userId: string }): JSX.Element {
           No active sessions
         </span>
       ) : (
-        <ul className="divide-border divide-y rounded-md border">
+        <ul className="divide-border max-h-80 divide-y overflow-y-auto rounded-md border">
           {sessions.map((s) => (
             <SessionRow
               key={s.id}
@@ -1094,7 +1078,7 @@ const SERVER_CLASS_BADGE_META: Record<
   gram: {
     variant: "information",
     icon: Boxes,
-    tooltip: "Gram-hosted MCP server",
+    tooltip: "Speakeasy-hosted MCP server",
   },
   external: {
     variant: "warning",
@@ -1640,7 +1624,11 @@ function AccountsCard({ accounts }: { accounts: UserAccount[] }) {
             />
           ))
         ) : (
-          <p className="text-muted-foreground text-sm">No linked accounts</p>
+          <p className="text-muted-foreground text-sm">
+            No AI accounts detected yet. As this employee is seen using AI tools
+            (Claude, Codex, Cursor), the team and personal accounts they sign in
+            with are linked automatically and appear here.
+          </p>
         )}
       </div>
     </section>
@@ -1989,7 +1977,7 @@ function formatServerLabel(node: DataFlowSourceNode) {
     const shortId = node.label.slice(0, 8);
     const prefix =
       serverClass === "gram"
-        ? "Gram server"
+        ? "Speakeasy server"
         : serverClass === "local"
           ? "Local server"
           : "MCP server";

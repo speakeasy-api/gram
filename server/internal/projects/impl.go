@@ -25,26 +25,31 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	envrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/projects/repo"
+	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type Service struct {
-	tracer   trace.Tracer
-	logger   *slog.Logger
-	db       *pgxpool.Pool
-	repo     *repo.Queries
-	envRepo  *envrepo.Queries
-	sessions *sessions.Manager
-	auth     *auth.Auth
-	authz    *authz.Engine
-	audit    *audit.Logger
+	tracer               trace.Tracer
+	logger               *slog.Logger
+	db                   *pgxpool.Pool
+	repo                 *repo.Queries
+	envRepo              *envrepo.Queries
+	sessions             *sessions.Manager
+	auth                 *auth.Auth
+	authz                *authz.Engine
+	audit                *audit.Logger
+	temporalEnv          *tenv.Environment
+	pluginsGitHubEnabled bool
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -56,19 +61,23 @@ func NewService(
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
+	temporalEnv *tenv.Environment,
+	pluginsGitHubEnabled bool,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("projects"))
 
 	return &Service{
-		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/projects"),
-		logger:   logger,
-		db:       db,
-		repo:     repo.New(db),
-		envRepo:  envrepo.New(db),
-		sessions: sessions,
-		auth:     auth.New(logger, db, sessions, authzEngine),
-		authz:    authzEngine,
-		audit:    auditLogger,
+		tracer:               tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/projects"),
+		logger:               logger,
+		db:                   db,
+		repo:                 repo.New(db),
+		envRepo:              envrepo.New(db),
+		sessions:             sessions,
+		auth:                 auth.New(logger, db, sessions, authzEngine),
+		authz:                authzEngine,
+		audit:                auditLogger,
+		temporalEnv:          temporalEnv,
+		pluginsGitHubEnabled: pluginsGitHubEnabled,
 	}
 }
 
@@ -186,6 +195,29 @@ func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectP
 		return nil, oops.E(oops.CodeUnexpected, err, "error creating default environment").LogError(ctx, s.logger)
 	}
 
+	// Provision the project's Default plugin through the shared helper so it
+	// takes the same create-and-seed path (including the org-wildcard audience
+	// default) as the lazy-heal callers — no separate seeding to drift.
+	ensured, err := plugins.EnsureDefaultPlugin(ctx, dbtx, payload.OrganizationID, prj.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error creating default plugin").LogError(ctx, s.logger)
+	}
+
+	if ensured.Created {
+		if err := s.audit.LogPluginCreate(ctx, dbtx, audit.LogPluginCreateEvent{
+			OrganizationID:   payload.OrganizationID,
+			ProjectID:        prj.ID,
+			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName: authCtx.Email,
+			ActorSlug:        nil,
+			PluginID:         ensured.Plugin.ID,
+			PluginName:       ensured.Plugin.Name,
+			PluginSlug:       ensured.Plugin.Slug,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "error creating default plugin audit log").LogError(ctx, s.logger)
+		}
+	}
+
 	if err := s.audit.LogProjectCreate(ctx, dbtx, audit.LogProjectCreateEvent{
 		OrganizationID: payload.OrganizationID,
 		ProjectID:      prj.ID,
@@ -202,6 +234,24 @@ func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectP
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error saving project creation").LogError(ctx, s.logger)
+	}
+
+	// Best-effort: the marketplace repo isn't required for the project to
+	// exist. No GitHub collaborators are added here — we don't have a
+	// customer GitHub username yet; that's supplied later via the dashboard
+	// publish/marketplace-settings flow. Uses a non-cancelable derived ctx so
+	// the request returning (or its caller disconnecting) right after commit
+	// can't drop the enqueue.
+	if s.pluginsGitHubEnabled {
+		enqueueCtx := context.WithoutCancel(ctx)
+		if _, err := background.ExecutePluginInitialPublishWorkflow(enqueueCtx, s.temporalEnv, plugins.PublishProjectInput{
+			ProjectID:       prj.ID,
+			CreatedByUserID: authCtx.UserID,
+			CommitMessage:   "Initial marketplace publish",
+			SkipIfUnchanged: false,
+		}); err != nil {
+			s.logger.WarnContext(ctx, "failed to enqueue initial plugin publish", attr.SlogError(err))
+		}
 	}
 
 	project := &gen.CreateProjectResult{

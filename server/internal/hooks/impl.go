@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -56,6 +57,21 @@ type Service struct {
 	serverURL          *url.URL
 	siteURL            *url.URL
 	jwtSecret          string
+	// nowFunc supplies the event timestamp for ingest paths that stamp
+	// server-side because the client sends none (the Cursor hook, and the
+	// Codex/OTEL fallbacks). Injectable so tests can pin telemetry event time
+	// relative to the attribute_metrics_summaries MV cutoff. Defaults to
+	// time.Now via NewService; access through now() for nil-safety.
+	nowFunc func() time.Time
+}
+
+// now returns the current time via the injected clock, falling back to
+// time.Now when unset (e.g. a zero-value Service).
+func (s *Service) now() time.Time {
+	if s.nowFunc != nil {
+		return s.nowFunc()
+	}
+	return time.Now()
 }
 
 type authorizer interface {
@@ -99,8 +115,14 @@ type SessionMetadata struct {
 	// UserAccountID is the user_accounts row id for this session's account, set
 	// once the account entity has been upserted.
 	UserAccountID string
-	GramOrgID     string
-	ProjectID     string
+	// ObservedUserEmail is the email the AI account itself reported (Claude
+	// OTEL user.email) — the value persisted on user_accounts.email. Kept
+	// separate from UserEmail, the authenticated actor, so adopting cached
+	// attribution never rewrites the canonical user identity; telemetry
+	// carries it as the gram.account_email attribute.
+	ObservedUserEmail string
+	GramOrgID         string
+	ProjectID         string
 }
 
 // HookSpecificOutput is the structure for hook-specific output in responses
@@ -165,6 +187,7 @@ func NewService(
 		serverURL:          serverURL,
 		siteURL:            siteURL,
 		jwtSecret:          jwtSecret,
+		nowFunc:            time.Now,
 	}
 }
 

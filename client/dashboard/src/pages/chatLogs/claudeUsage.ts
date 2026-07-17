@@ -1,8 +1,6 @@
-import type {
-  ChatMessage,
-  ClaudeToolUsage,
-  ClaudeTurnUsage,
-} from "@gram/client/models/components";
+import type { ChatMessage } from "@gram/client/models/components/chatmessage.js";
+import type { ClaudeToolUsage } from "@gram/client/models/components/claudetoolusage.js";
+import type { ClaudeTurnUsage } from "@gram/client/models/components/claudeturnusage.js";
 
 export type ClaudeUsageMatch = {
   turn: ClaudeTurnUsage;
@@ -91,6 +89,12 @@ export function buildClaudeUsageByMessageId({
   }
 
   return result;
+}
+
+export function buildClaudeTurnByPromptId(
+  turns: ClaudeTurnUsage[],
+): Map<string, ClaudeTurnUsage> {
+  return new Map(turns.map((turn) => [turn.promptId, turn]));
 }
 
 export function buildClaudeToolUsageByToolUseId(

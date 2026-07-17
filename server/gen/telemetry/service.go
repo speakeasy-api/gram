@@ -45,6 +45,10 @@ type Service interface {
 	// filters (e.g. group by department_name, then drill in by filtering
 	// department_name and grouping by role).
 	Query(context.Context, *QueryPayload) (res *QueryResult, err error)
+	// Org-scoped daily usage details for the billing page, computed in one pass:
+	// the tokens-under-management daily token-type split (observed agent traffic;
+	// cache reads excluded) and per-dimension breakdowns over the same population.
+	QueryTumDetails(context.Context, *QueryTumDetailsPayload) (res *TumDetailsResult, err error)
 	// Org-scoped list of individual chat sessions for a slice of usage, filtered
 	// by the same allowlisted dimensions as telemetry.query. Returns per-session
 	// cost, token, and tool metrics with cursor pagination.
@@ -88,7 +92,7 @@ const ServiceName = "telemetry"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [19]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getProjectOverview", "query", "listSessions", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "listToolUsageTraces", "getToolUsageFilterOptions", "listHooksTraces"}
+var MethodNames = [20]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getProjectOverview", "query", "queryTumDetails", "listSessions", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "listToolUsageTraces", "getToolUsageFilterOptions", "listHooksTraces"}
 
 // CaptureEventPayload is the payload type of the telemetry service
 // captureEvent method.
@@ -681,6 +685,9 @@ type ListToolUsageTracesPayload struct {
 	// Optional account type filter ('team' or 'personal'). 'team' includes
 	// unclassified traces.
 	AccountType *string
+	// Trace outcomes to include (error, success, blocked, pending). Empty means
+	// all.
+	Statuses []ToolUsageStatus
 	// Free-text attribute search string from the q URL param. Matches useful
 	// identifier attributes such as Gram URN, conversation ID, and trigger
 	// instance ID.
@@ -935,6 +942,18 @@ type QuerySeries struct {
 	GroupValue string
 	// Time buckets in ascending order, gap-filled with zeros.
 	Points []*QueryPoint
+}
+
+// QueryTumDetailsPayload is the payload type of the telemetry service
+// queryTumDetails method.
+type QueryTumDetailsPayload struct {
+	SessionToken *string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+	// Optional project to scope to; defaults to every project in the organization.
+	ProjectID *string
 }
 
 // Aggregated usage summary for a role
@@ -1366,6 +1385,9 @@ type ToolUsageShadowServerFilterOption struct {
 	EventCount int64
 }
 
+// Tool usage trace outcome
+type ToolUsageStatus string
+
 // Tool usage aggregation target kind
 type ToolUsageTargetKind string
 
@@ -1608,6 +1630,70 @@ type TopUser struct {
 	UserType string
 	// Number of messages (session mode) or tool calls (tool_call mode)
 	ActivityCount int64
+}
+
+// Per-dimension billed token breakdown for the usage details table
+type TumDetailsBreakdown struct {
+	// The breakdown dimension key (model, hook_source, provider, account_type,
+	// email, division_name, department_name, role, project_id) — the public
+	// telemetry dimension identifiers, so the same keys work as telemetry.query
+	// filters. project_id rows carry project UUIDs; clients map them to names.
+	Key string
+	// Top values by tokens in descending order, with the remainder rolled into
+	// 'Other'
+	Rows []*TumDetailsBreakdownRow
+}
+
+// One value of a breakdown dimension with its billed token usage over the range
+type TumDetailsBreakdownRow struct {
+	// The dimension value; empty for rows recorded before the dimension existed
+	Value string
+	// Billed tokens for this value over the range
+	TotalTokens int64
+	// Daily tokens aligned to the result's points buckets
+	Series []int64
+}
+
+// One UTC day of billing usage details
+type TumDetailsPoint struct {
+	// Bucket start time in Unix nanoseconds (string for JS precision)
+	BucketTimeUnixNano string
+	// Observed input tokens (cache reads excluded)
+	InputTokens int64
+	// Observed output tokens
+	OutputTokens int64
+	// Observed cache-write tokens — prompt content entering the provider cache,
+	// counted once
+	CacheCreationTokens int64
+	// Tokens under management: input + output + cache writes
+	TotalTokens int64
+}
+
+// TumDetailsResult is the result type of the telemetry service queryTumDetails
+// method.
+type TumDetailsResult struct {
+	// Timeseries bucket width in seconds. Always 86400 — the details are bucketed
+	// daily.
+	IntervalSeconds int64
+	// Gap-filled daily buckets in ascending time order
+	Points []*TumDetailsPoint
+	// Whole-range totals
+	Totals *TumDetailsTotals
+	// Billed token usage per breakdown dimension
+	Breakdowns []*TumDetailsBreakdown
+}
+
+// Whole-range totals for the billing usage details
+type TumDetailsTotals struct {
+	// Observed input tokens (cache reads excluded)
+	InputTokens int64
+	// Observed output tokens
+	OutputTokens int64
+	// Observed cache-write tokens — prompt content entering the provider cache,
+	// counted once
+	CacheCreationTokens int64
+	// Tokens under management: input + output + cache writes
+	TotalTokens int64
 }
 
 // A linked AI account for a user. The identity is (provider, email): the same

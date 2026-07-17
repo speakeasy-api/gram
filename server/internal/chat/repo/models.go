@@ -40,6 +40,7 @@ type ChatMessage struct {
 	ToolOutcomeNotes  pgtype.Text
 	ContentHash       []byte
 	Generation        int32
+	Replayed          bool
 	CreatedAt         pgtype.Timestamptz
 	RiskAnalyzedAt    pgtype.Timestamptz
 }

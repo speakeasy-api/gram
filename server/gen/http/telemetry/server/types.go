@@ -202,6 +202,17 @@ type QueryRequestBody struct {
 	SortBy *string `form:"sort_by,omitempty" json:"sort_by,omitempty" xml:"sort_by,omitempty"`
 }
 
+// QueryTumDetailsRequestBody is the type of the "telemetry" service
+// "queryTumDetails" endpoint HTTP request body.
+type QueryTumDetailsRequestBody struct {
+	// Start time in ISO 8601 format
+	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
+	// End time in ISO 8601 format
+	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
+	// Optional project to scope to; defaults to every project in the organization.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+}
+
 // ListSessionsRequestBody is the type of the "telemetry" service
 // "listSessions" endpoint HTTP request body.
 type ListSessionsRequestBody struct {
@@ -297,6 +308,9 @@ type ListToolUsageTracesRequestBody struct {
 	// Optional account type filter ('team' or 'personal'). 'team' includes
 	// unclassified traces.
 	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
+	// Trace outcomes to include (error, success, blocked, pending). Empty means
+	// all.
+	Statuses []string `form:"statuses,omitempty" json:"statuses,omitempty" xml:"statuses,omitempty"`
 	// Free-text attribute search string from the q URL param. Matches useful
 	// identifier attributes such as Gram URN, conversation ID, and trigger
 	// instance ID.
@@ -449,6 +463,20 @@ type QueryResponseBody struct {
 	Table []*QueryRowResponseBody `form:"table" json:"table" xml:"table"`
 	// One series per group value (aligned with table rows), each gap-filled.
 	Timeseries []*QuerySeriesResponseBody `form:"timeseries" json:"timeseries" xml:"timeseries"`
+}
+
+// QueryTumDetailsResponseBody is the type of the "telemetry" service
+// "queryTumDetails" endpoint HTTP response body.
+type QueryTumDetailsResponseBody struct {
+	// Timeseries bucket width in seconds. Always 86400 — the details are bucketed
+	// daily.
+	IntervalSeconds int64 `form:"interval_seconds" json:"interval_seconds" xml:"interval_seconds"`
+	// Gap-filled daily buckets in ascending time order
+	Points []*TumDetailsPointResponseBody `form:"points" json:"points" xml:"points"`
+	// Whole-range totals
+	Totals *TumDetailsTotalsResponseBody `form:"totals" json:"totals" xml:"totals"`
+	// Billed token usage per breakdown dimension
+	Breakdowns []*TumDetailsBreakdownResponseBody `form:"breakdowns" json:"breakdowns" xml:"breakdowns"`
 }
 
 // ListSessionsResponseBody is the type of the "telemetry" service
@@ -2586,6 +2614,190 @@ type QueryGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// QueryTumDetailsUnauthorizedResponseBody is the type of the "telemetry"
+// service "queryTumDetails" endpoint HTTP response body for the "unauthorized"
+// error.
+type QueryTumDetailsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// QueryTumDetailsForbiddenResponseBody is the type of the "telemetry" service
+// "queryTumDetails" endpoint HTTP response body for the "forbidden" error.
+type QueryTumDetailsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// QueryTumDetailsBadRequestResponseBody is the type of the "telemetry" service
+// "queryTumDetails" endpoint HTTP response body for the "bad_request" error.
+type QueryTumDetailsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// QueryTumDetailsNotFoundResponseBody is the type of the "telemetry" service
+// "queryTumDetails" endpoint HTTP response body for the "not_found" error.
+type QueryTumDetailsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// QueryTumDetailsConflictResponseBody is the type of the "telemetry" service
+// "queryTumDetails" endpoint HTTP response body for the "conflict" error.
+type QueryTumDetailsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// QueryTumDetailsUnsupportedMediaResponseBody is the type of the "telemetry"
+// service "queryTumDetails" endpoint HTTP response body for the
+// "unsupported_media" error.
+type QueryTumDetailsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// QueryTumDetailsInvalidResponseBody is the type of the "telemetry" service
+// "queryTumDetails" endpoint HTTP response body for the "invalid" error.
+type QueryTumDetailsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// QueryTumDetailsInvariantViolationResponseBody is the type of the "telemetry"
+// service "queryTumDetails" endpoint HTTP response body for the
+// "invariant_violation" error.
+type QueryTumDetailsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// QueryTumDetailsUnexpectedResponseBody is the type of the "telemetry" service
+// "queryTumDetails" endpoint HTTP response body for the "unexpected" error.
+type QueryTumDetailsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// QueryTumDetailsGatewayErrorResponseBody is the type of the "telemetry"
+// service "queryTumDetails" endpoint HTTP response body for the
+// "gateway_error" error.
+type QueryTumDetailsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ListSessionsUnauthorizedResponseBody is the type of the "telemetry" service
 // "listSessions" endpoint HTTP response body for the "unauthorized" error.
 type ListSessionsUnauthorizedResponseBody struct {
@@ -4557,6 +4769,58 @@ type QueryPointResponseBody struct {
 	Measures *QueryMeasuresResponseBody `form:"measures" json:"measures" xml:"measures"`
 }
 
+// TumDetailsPointResponseBody is used to define fields on response body types.
+type TumDetailsPointResponseBody struct {
+	// Bucket start time in Unix nanoseconds (string for JS precision)
+	BucketTimeUnixNano string `form:"bucket_time_unix_nano" json:"bucket_time_unix_nano" xml:"bucket_time_unix_nano"`
+	// Observed input tokens (cache reads excluded)
+	InputTokens int64 `form:"input_tokens" json:"input_tokens" xml:"input_tokens"`
+	// Observed output tokens
+	OutputTokens int64 `form:"output_tokens" json:"output_tokens" xml:"output_tokens"`
+	// Observed cache-write tokens — prompt content entering the provider cache,
+	// counted once
+	CacheCreationTokens int64 `form:"cache_creation_tokens" json:"cache_creation_tokens" xml:"cache_creation_tokens"`
+	// Tokens under management: input + output + cache writes
+	TotalTokens int64 `form:"total_tokens" json:"total_tokens" xml:"total_tokens"`
+}
+
+// TumDetailsTotalsResponseBody is used to define fields on response body types.
+type TumDetailsTotalsResponseBody struct {
+	// Observed input tokens (cache reads excluded)
+	InputTokens int64 `form:"input_tokens" json:"input_tokens" xml:"input_tokens"`
+	// Observed output tokens
+	OutputTokens int64 `form:"output_tokens" json:"output_tokens" xml:"output_tokens"`
+	// Observed cache-write tokens — prompt content entering the provider cache,
+	// counted once
+	CacheCreationTokens int64 `form:"cache_creation_tokens" json:"cache_creation_tokens" xml:"cache_creation_tokens"`
+	// Tokens under management: input + output + cache writes
+	TotalTokens int64 `form:"total_tokens" json:"total_tokens" xml:"total_tokens"`
+}
+
+// TumDetailsBreakdownResponseBody is used to define fields on response body
+// types.
+type TumDetailsBreakdownResponseBody struct {
+	// The breakdown dimension key (model, hook_source, provider, account_type,
+	// email, division_name, department_name, role, project_id) — the public
+	// telemetry dimension identifiers, so the same keys work as telemetry.query
+	// filters. project_id rows carry project UUIDs; clients map them to names.
+	Key string `form:"key" json:"key" xml:"key"`
+	// Top values by tokens in descending order, with the remainder rolled into
+	// 'Other'
+	Rows []*TumDetailsBreakdownRowResponseBody `form:"rows" json:"rows" xml:"rows"`
+}
+
+// TumDetailsBreakdownRowResponseBody is used to define fields on response body
+// types.
+type TumDetailsBreakdownRowResponseBody struct {
+	// The dimension value; empty for rows recorded before the dimension existed
+	Value string `form:"value" json:"value" xml:"value"`
+	// Billed tokens for this value over the range
+	TotalTokens int64 `form:"total_tokens" json:"total_tokens" xml:"total_tokens"`
+	// Daily tokens aligned to the result's points buckets
+	Series []int64 `form:"series" json:"series" xml:"series"`
+}
+
 // SessionSummaryResponseBody is used to define fields on response body types.
 type SessionSummaryResponseBody struct {
 	// Chat session ID
@@ -5339,6 +5603,42 @@ func NewQueryResponseBody(res *telemetry.QueryResult) *QueryResponseBody {
 		}
 	} else {
 		body.Timeseries = []*QuerySeriesResponseBody{}
+	}
+	return body
+}
+
+// NewQueryTumDetailsResponseBody builds the HTTP response body from the result
+// of the "queryTumDetails" endpoint of the "telemetry" service.
+func NewQueryTumDetailsResponseBody(res *telemetry.TumDetailsResult) *QueryTumDetailsResponseBody {
+	body := &QueryTumDetailsResponseBody{
+		IntervalSeconds: res.IntervalSeconds,
+	}
+	if res.Points != nil {
+		body.Points = make([]*TumDetailsPointResponseBody, len(res.Points))
+		for i, val := range res.Points {
+			if val == nil {
+				body.Points[i] = nil
+				continue
+			}
+			body.Points[i] = marshalTelemetryTumDetailsPointToTumDetailsPointResponseBody(val)
+		}
+	} else {
+		body.Points = []*TumDetailsPointResponseBody{}
+	}
+	if res.Totals != nil {
+		body.Totals = marshalTelemetryTumDetailsTotalsToTumDetailsTotalsResponseBody(res.Totals)
+	}
+	if res.Breakdowns != nil {
+		body.Breakdowns = make([]*TumDetailsBreakdownResponseBody, len(res.Breakdowns))
+		for i, val := range res.Breakdowns {
+			if val == nil {
+				body.Breakdowns[i] = nil
+				continue
+			}
+			body.Breakdowns[i] = marshalTelemetryTumDetailsBreakdownToTumDetailsBreakdownResponseBody(val)
+		}
+	} else {
+		body.Breakdowns = []*TumDetailsBreakdownResponseBody{}
 	}
 	return body
 }
@@ -7248,6 +7548,147 @@ func NewQueryGatewayErrorResponseBody(res *goa.ServiceError) *QueryGatewayErrorR
 	return body
 }
 
+// NewQueryTumDetailsUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "queryTumDetails" endpoint of the "telemetry" service.
+func NewQueryTumDetailsUnauthorizedResponseBody(res *goa.ServiceError) *QueryTumDetailsUnauthorizedResponseBody {
+	body := &QueryTumDetailsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewQueryTumDetailsForbiddenResponseBody builds the HTTP response body from
+// the result of the "queryTumDetails" endpoint of the "telemetry" service.
+func NewQueryTumDetailsForbiddenResponseBody(res *goa.ServiceError) *QueryTumDetailsForbiddenResponseBody {
+	body := &QueryTumDetailsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewQueryTumDetailsBadRequestResponseBody builds the HTTP response body from
+// the result of the "queryTumDetails" endpoint of the "telemetry" service.
+func NewQueryTumDetailsBadRequestResponseBody(res *goa.ServiceError) *QueryTumDetailsBadRequestResponseBody {
+	body := &QueryTumDetailsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewQueryTumDetailsNotFoundResponseBody builds the HTTP response body from
+// the result of the "queryTumDetails" endpoint of the "telemetry" service.
+func NewQueryTumDetailsNotFoundResponseBody(res *goa.ServiceError) *QueryTumDetailsNotFoundResponseBody {
+	body := &QueryTumDetailsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewQueryTumDetailsConflictResponseBody builds the HTTP response body from
+// the result of the "queryTumDetails" endpoint of the "telemetry" service.
+func NewQueryTumDetailsConflictResponseBody(res *goa.ServiceError) *QueryTumDetailsConflictResponseBody {
+	body := &QueryTumDetailsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewQueryTumDetailsUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "queryTumDetails" endpoint of the "telemetry" service.
+func NewQueryTumDetailsUnsupportedMediaResponseBody(res *goa.ServiceError) *QueryTumDetailsUnsupportedMediaResponseBody {
+	body := &QueryTumDetailsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewQueryTumDetailsInvalidResponseBody builds the HTTP response body from the
+// result of the "queryTumDetails" endpoint of the "telemetry" service.
+func NewQueryTumDetailsInvalidResponseBody(res *goa.ServiceError) *QueryTumDetailsInvalidResponseBody {
+	body := &QueryTumDetailsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewQueryTumDetailsInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "queryTumDetails" endpoint of the "telemetry"
+// service.
+func NewQueryTumDetailsInvariantViolationResponseBody(res *goa.ServiceError) *QueryTumDetailsInvariantViolationResponseBody {
+	body := &QueryTumDetailsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewQueryTumDetailsUnexpectedResponseBody builds the HTTP response body from
+// the result of the "queryTumDetails" endpoint of the "telemetry" service.
+func NewQueryTumDetailsUnexpectedResponseBody(res *goa.ServiceError) *QueryTumDetailsUnexpectedResponseBody {
+	body := &QueryTumDetailsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewQueryTumDetailsGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "queryTumDetails" endpoint of the "telemetry" service.
+func NewQueryTumDetailsGatewayErrorResponseBody(res *goa.ServiceError) *QueryTumDetailsGatewayErrorResponseBody {
+	body := &QueryTumDetailsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListSessionsUnauthorizedResponseBody builds the HTTP response body from
 // the result of the "listSessions" endpoint of the "telemetry" service.
 func NewListSessionsUnauthorizedResponseBody(res *goa.ServiceError) *ListSessionsUnauthorizedResponseBody {
@@ -8692,6 +9133,19 @@ func NewQueryPayload(body *QueryRequestBody, sessionToken *string) *telemetry.Qu
 	return v
 }
 
+// NewQueryTumDetailsPayload builds a telemetry service queryTumDetails
+// endpoint payload.
+func NewQueryTumDetailsPayload(body *QueryTumDetailsRequestBody, sessionToken *string) *telemetry.QueryTumDetailsPayload {
+	v := &telemetry.QueryTumDetailsPayload{
+		From:      *body.From,
+		To:        *body.To,
+		ProjectID: body.ProjectID,
+	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
 // NewListSessionsPayload builds a telemetry service listSessions endpoint
 // payload.
 func NewListSessionsPayload(body *ListSessionsRequestBody, sessionToken *string) *telemetry.ListSessionsPayload {
@@ -8884,6 +9338,12 @@ func NewListToolUsageTracesPayload(body *ListToolUsageTracesRequestBody, apikeyT
 		v.HookSources = make([]string, len(body.HookSources))
 		for i, val := range body.HookSources {
 			v.HookSources[i] = val
+		}
+	}
+	if body.Statuses != nil {
+		v.Statuses = make([]telemetry.ToolUsageStatus, len(body.Statuses))
+		for i, val := range body.Statuses {
+			v.Statuses[i] = telemetry.ToolUsageStatus(val)
 		}
 	}
 	if body.Filters != nil {
@@ -9259,6 +9719,27 @@ func ValidateQueryRequestBody(body *QueryRequestBody) (err error) {
 	return
 }
 
+// ValidateQueryTumDetailsRequestBody runs the validations defined on
+// QueryTumDetailsRequestBody
+func ValidateQueryTumDetailsRequestBody(body *QueryTumDetailsRequestBody) (err error) {
+	if body.From == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("from", "body"))
+	}
+	if body.To == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("to", "body"))
+	}
+	if body.From != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
+	}
+	if body.To != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	return
+}
+
 // ValidateListSessionsRequestBody runs the validations defined on
 // ListSessionsRequestBody
 func ValidateListSessionsRequestBody(body *ListSessionsRequestBody) (err error) {
@@ -9389,8 +9870,8 @@ func ValidateGetToolUsageSummaryRequestBody(body *GetToolUsageSummaryRequestBody
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
 	}
 	for _, e := range body.TargetTypes {
-		if !(e == "hosted_mcp_server" || e == "shadow_mcp_server" || e == "local_tool" || e == "skill") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
+		if !(e == "hosted_mcp_server" || e == "tunneled_mcp_server" || e == "shadow_mcp_server" || e == "local_tool" || e == "skill") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunneled_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
 		}
 	}
 	for _, e := range body.UserFilters {
@@ -9419,8 +9900,8 @@ func ValidateListToolUsageTracesRequestBody(body *ListToolUsageTracesRequestBody
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
 	}
 	for _, e := range body.TargetTypes {
-		if !(e == "hosted_mcp_server" || e == "shadow_mcp_server" || e == "local_tool" || e == "skill") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
+		if !(e == "hosted_mcp_server" || e == "tunneled_mcp_server" || e == "shadow_mcp_server" || e == "local_tool" || e == "skill") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunneled_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
 		}
 	}
 	for _, e := range body.UserFilters {
@@ -9428,6 +9909,11 @@ func ValidateListToolUsageTracesRequestBody(body *ListToolUsageTracesRequestBody
 			if err2 := ValidateToolUsageUserFilterRequestBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	for _, e := range body.Statuses {
+		if !(e == "error" || e == "success" || e == "blocked" || e == "pending") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.statuses[*]", e, []any{"error", "success", "blocked", "pending"}))
 		}
 	}
 	for _, e := range body.Filters {

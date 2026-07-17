@@ -19,31 +19,91 @@ import { DEFAULT_MODEL } from "@/lib/models";
 import { Tool } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import { useHideInsightsDock } from "@/components/insights-context";
-import { Confirm } from "@gram/client/models/components";
+import { Confirm } from "@gram/client/models/components/upsertglobaltoolvariationform.js";
+import { queryKeyInstance } from "@gram/client/react-query/instance.js";
 import {
-  invalidateAllToolset,
-  invalidateTemplate,
-  queryKeyInstance,
   queryKeyListToolsets,
   useListToolsets,
-  useUpdateToolsetMutation,
-} from "@gram/client/react-query/index.js";
+} from "@gram/client/react-query/listToolsets.js";
+import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
+import { invalidateTemplate } from "@gram/client/react-query/template.js";
+import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
+import { useUpdateToolsetMutation } from "@gram/client/react-query/updateToolset.js";
 import { ResizablePanel } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { MessageCircle, Plus, ScrollTextIcon } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { ChatProvider } from "./ChatContext";
 import { useChatContext } from "./useChatContext";
-import { ChatConfig } from "./ChatWindow";
 import { EditToolDialog, ToolUpdatePayload } from "./EditToolDialog";
 import { ManageToolsDialog } from "./ManageToolsDialog";
 import { PlaygroundAuth } from "./PlaygroundAuth";
 import { PlaygroundConfigPanel } from "./PlaygroundConfigPanel";
 import { PlaygroundElements } from "./PlaygroundElements";
 import { PlaygroundLogsPanel } from "./PlaygroundLogsPanel";
+import { PlaygroundRemoteChat } from "./PlaygroundRemoteChat";
 import { ShareChatButton } from "./ShareChatButton";
+import { useRemoteMcpConnection } from "./useRemoteMcpConnection";
+
+// A single selectable server in the playground. Toolset-backed and
+// remote-MCP-backed servers share one flat picker; the `kind` discriminant only
+// drives how we connect (and which controls appear), never how it's labeled.
+type PlaygroundServerRef =
+  | { kind: "toolset"; key: string; name: string; toolsetSlug: string }
+  | {
+      kind: "remote";
+      key: string;
+      name: string;
+      mcpServerId: string;
+      isIssuerGated: boolean;
+    };
+
+const toolsetServerKey = (slug: string) => `toolset:${slug}`;
+const remoteServerKey = (mcpServerId: string) => `remote:${mcpServerId}`;
+
+// Merges toolset-backed servers (from listToolsets) with remote-MCP-backed
+// servers (the remoteMcpServerId subset of mcpServers) into one sorted list.
+// Neither source overlaps the other, so nothing is double-counted.
+function usePlaygroundServers(): {
+  servers: PlaygroundServerRef[];
+  isLoading: boolean;
+} {
+  const { data: toolsetsData, isLoading: isLoadingToolsets } =
+    useListToolsets();
+  const { data: mcpServersData, isLoading: isLoadingMcpServers } =
+    useMcpServers();
+
+  const servers = useMemo<PlaygroundServerRef[]>(() => {
+    const toolsetServers: PlaygroundServerRef[] = (
+      toolsetsData?.toolsets ?? []
+    ).map((toolset) => ({
+      kind: "toolset",
+      key: toolsetServerKey(toolset.slug),
+      name: toolset.name,
+      toolsetSlug: toolset.slug,
+    }));
+
+    const remoteServers: PlaygroundServerRef[] = (
+      mcpServersData?.mcpServers ?? []
+    )
+      .filter((server) => !!server.remoteMcpServerId)
+      .map((server) => ({
+        kind: "remote",
+        key: remoteServerKey(server.id),
+        name: server.name ?? server.slug ?? "Remote MCP server",
+        mcpServerId: server.id,
+        isIssuerGated: !!server.userSessionIssuerId,
+      }));
+
+    return [...toolsetServers, ...remoteServers].sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
+  }, [toolsetsData, mcpServersData]);
+
+  return { servers, isLoading: isLoadingToolsets || isLoadingMcpServers };
+}
 
 function PlaygroundEmptyState({ onCreate }: { onCreate: () => void }) {
   return (
@@ -84,13 +144,24 @@ export default function Playground(): JSX.Element {
   );
 }
 
+/** Resolve the initially-selected server key from URL params. */
+function initialServerKey(searchParams: URLSearchParams): string | null {
+  const mcpServer = searchParams.get("mcpServer");
+  if (mcpServer) return remoteServerKey(mcpServer);
+  const toolset = searchParams.get("toolset");
+  if (toolset) return toolsetServerKey(toolset);
+  return null;
+}
+
 function PlaygroundInner() {
   const [searchParams] = useSearchParams();
   const chat = useChatContext();
   const routes = useRoutes();
 
-  const [selectedToolset, setSelectedToolset] = useState<string | null>(
-    searchParams.get("toolset") ?? null,
+  const { servers, isLoading: isLoadingServers } = usePlaygroundServers();
+
+  const [selectedKey, setSelectedKey] = useState<string | null>(() =>
+    initialServerKey(searchParams),
   );
   const [selectedEnvironment, setSelectedEnvironment] = useState<string | null>(
     searchParams.get("environment") ?? null,
@@ -103,32 +174,50 @@ function PlaygroundInner() {
     string | undefined
   >(undefined);
 
-  const { data: toolsetsData } = useListToolsets();
-  const toolsets = toolsetsData?.toolsets;
+  const selectedServer = useMemo(
+    () => servers.find((s) => s.key === selectedKey) ?? null,
+    [servers, selectedKey],
+  );
 
-  // We use a ref so that we can hot-swap the toolset and environment without causing a re-render
-  const chatConfigRef = useRef({
-    toolsetSlug: selectedToolset,
-    environmentSlug: selectedEnvironment,
-    isOnboarding: false,
-  });
+  // Auto-select the first server once the list loads and nothing is chosen.
+  useEffect(() => {
+    if (!selectedKey && servers[0]) {
+      setSelectedKey(servers[0].key);
+    }
+  }, [servers, selectedKey]);
 
-  chatConfigRef.current = {
-    toolsetSlug: selectedToolset,
-    environmentSlug: selectedEnvironment,
-    isOnboarding: false,
-  };
+  const selectedToolsetSlug =
+    selectedServer?.kind === "toolset" ? selectedServer.toolsetSlug : "";
 
-  useRegisterToolsetTelemetry({
-    toolsetSlug: selectedToolset ?? "",
-  });
+  useRegisterToolsetTelemetry({ toolsetSlug: selectedToolsetSlug });
   useRegisterEnvironmentTelemetry({
     environmentSlug: selectedEnvironment ?? "",
   });
 
-  // If toolsets have loaded and there are none, show full-page empty state
-  // If toolsets have loaded and there are none, show full-page empty state
-  if (toolsets !== undefined && !toolsets.length) {
+  const handleSelectServer = (key: string) => {
+    setSelectedKey(key);
+    // Reset the environment; the toolset panel re-defaults it for toolset servers.
+    setSelectedEnvironment(null);
+    setPlaygroundEnvironmentSlug(undefined);
+  };
+
+  const serverSelector = (
+    <Select value={selectedKey ?? undefined} onValueChange={handleSelectServer}>
+      <SelectTrigger size="sm" className="w-full">
+        <SelectValue placeholder="Select MCP" />
+      </SelectTrigger>
+      <SelectContent>
+        {servers.map((server) => (
+          <SelectItem key={server.key} value={server.key}>
+            {server.name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+
+  // Toolsets have loaded and there are none: full-page empty state.
+  if (!isLoadingServers && servers.length === 0) {
     return (
       <Page>
         <Page.Header>
@@ -156,6 +245,13 @@ function PlaygroundInner() {
     </Button>
   );
 
+  const additionalActions = (
+    <div className="flex w-full items-center justify-end px-4">
+      <ShareChatButton />
+      {logsButton}
+    </div>
+  );
+
   return (
     <Page>
       <Page.Header>
@@ -167,40 +263,70 @@ function PlaygroundInner() {
           className="[&>[role='separator']]:bg-neutral-softest [&>[role='separator']]:hover:bg-primary h-full [&>[role='separator']]:relative [&>[role='separator']]:w-px [&>[role='separator']]:border-0 [&>[role='separator']]:before:absolute [&>[role='separator']]:before:inset-y-0 [&>[role='separator']]:before:-right-1 [&>[role='separator']]:before:-left-1 [&>[role='separator']]:before:cursor-col-resize"
         >
           <ResizablePanel.Pane minSize={20} defaultSize={25}>
-            <ToolsetPanel
-              configRef={chatConfigRef}
-              setSelectedToolset={setSelectedToolset}
-              setSelectedEnvironment={setSelectedEnvironment}
-              temperature={temperature}
-              setTemperature={setTemperature}
-              model={model}
-              setModel={setModel}
-              maxTokens={maxTokens}
-              setMaxTokens={setMaxTokens}
-              onPlaygroundEnvironmentSlug={setPlaygroundEnvironmentSlug}
-            />
+            {selectedServer?.kind === "toolset" && (
+              <ToolsetPanel
+                toolsetSlug={selectedServer.toolsetSlug}
+                serverSelector={serverSelector}
+                setSelectedEnvironment={setSelectedEnvironment}
+                temperature={temperature}
+                setTemperature={setTemperature}
+                model={model}
+                setModel={setModel}
+                maxTokens={maxTokens}
+                setMaxTokens={setMaxTokens}
+                onPlaygroundEnvironmentSlug={setPlaygroundEnvironmentSlug}
+              />
+            )}
+            {selectedServer?.kind === "remote" && (
+              <RemoteServerPanel
+                mcpServerId={selectedServer.mcpServerId}
+                isIssuerGated={selectedServer.isIssuerGated}
+                serverSelector={serverSelector}
+                temperature={temperature}
+                setTemperature={setTemperature}
+                model={model}
+                setModel={setModel}
+                maxTokens={maxTokens}
+                setMaxTokens={setMaxTokens}
+              />
+            )}
           </ResizablePanel.Pane>
           <ResizablePanel.Pane minSize={35} order={0}>
             <div className="flex h-full flex-col">
-              <PlaygroundElements
-                toolsetSlug={selectedToolset}
-                environmentSlug={selectedEnvironment}
-                model={model}
-                playgroundEnvironmentSlug={playgroundEnvironmentSlug}
-                additionalActions={
-                  <div className="flex w-full items-center justify-end px-4">
-                    <ShareChatButton />
-                    {logsButton}
-                  </div>
-                }
-              />
+              {!selectedServer && (
+                <div className="flex h-full items-center justify-center">
+                  <Type muted>Select an MCP server to start chatting</Type>
+                </div>
+              )}
+              {selectedServer?.kind === "toolset" && (
+                <PlaygroundElements
+                  toolsetSlug={selectedServer.toolsetSlug}
+                  environmentSlug={selectedEnvironment}
+                  model={model}
+                  playgroundEnvironmentSlug={playgroundEnvironmentSlug}
+                  additionalActions={additionalActions}
+                />
+              )}
+              {selectedServer?.kind === "remote" && (
+                <PlaygroundRemoteChat
+                  mcpServerId={selectedServer.mcpServerId}
+                  isIssuerGated={selectedServer.isIssuerGated}
+                  environmentSlug={selectedEnvironment}
+                  model={model}
+                  additionalActions={additionalActions}
+                />
+              )}
             </div>
           </ResizablePanel.Pane>
           {showLogs && (
             <ResizablePanel.Pane minSize={20} defaultSize={30}>
               <PlaygroundLogsPanel
                 chatId={chat.id}
-                toolsetSlug={selectedToolset ?? undefined}
+                toolsetSlug={
+                  selectedServer?.kind === "toolset"
+                    ? selectedServer.toolsetSlug
+                    : undefined
+                }
                 onClose={() => setShowLogs(false)}
               />
             </ResizablePanel.Pane>
@@ -211,9 +337,19 @@ function PlaygroundInner() {
   );
 }
 
+interface PanelConfigProps {
+  serverSelector: React.ReactNode;
+  temperature: number;
+  setTemperature: (temp: number) => void;
+  model: string;
+  setModel: (model: string) => void;
+  maxTokens: number;
+  setMaxTokens: (tokens: number) => void;
+}
+
 function ToolsetPanel({
-  configRef,
-  setSelectedToolset,
+  toolsetSlug,
+  serverSelector,
   setSelectedEnvironment,
   temperature,
   setTemperature,
@@ -222,16 +358,9 @@ function ToolsetPanel({
   maxTokens,
   setMaxTokens,
   onPlaygroundEnvironmentSlug,
-}: {
-  configRef: ChatConfig;
-  setSelectedToolset: (toolset: string) => void;
+}: PanelConfigProps & {
+  toolsetSlug: string;
   setSelectedEnvironment: (environment: string) => void;
-  temperature: number;
-  setTemperature: (temp: number) => void;
-  model: string;
-  setModel: (model: string) => void;
-  maxTokens: number;
-  setMaxTokens: (tokens: number) => void;
   onPlaygroundEnvironmentSlug?: (slug: string | undefined) => void;
 }) {
   const [showManageToolsDialog, setShowManageToolsDialog] = useState(false);
@@ -240,17 +369,11 @@ function ToolsetPanel({
   >();
   const [editingTool, setEditingTool] = useState<Tool | null>(null);
 
-  const { data: toolsetsData } = useListToolsets();
   const client = useSdkClient();
   const updateToolsetMutation = useUpdateToolsetMutation();
   const queryClient = useQueryClient();
 
-  const toolsets = toolsetsData?.toolsets;
-
-  const selectedToolset = configRef.current.toolsetSlug;
-
-  const { data: toolset } = useToolset(selectedToolset ?? undefined);
-
+  const { data: toolset } = useToolset(toolsetSlug);
   const { data: deployment } = useLatestDeployment();
 
   const documentIdToName = useMemo(() => {
@@ -274,56 +397,36 @@ function ToolsetPanel({
   }, [deployment]);
 
   useEffect(() => {
-    if (toolsets?.[0] && configRef.current.toolsetSlug === null) {
-      setSelectedToolset(toolsets[0].slug);
-      if (toolsets[0].defaultEnvironmentSlug) {
-        setSelectedEnvironment(toolsets[0].defaultEnvironmentSlug);
-      }
-    }
-  }, [toolsets, configRef, setSelectedToolset, setSelectedEnvironment]);
-
-  useEffect(() => {
-    if (
-      configRef.current.environmentSlug === null &&
-      toolset?.defaultEnvironmentSlug
-    ) {
+    if (toolset?.defaultEnvironmentSlug) {
       setSelectedEnvironment(toolset.defaultEnvironmentSlug);
     }
-  }, [configRef, setSelectedEnvironment, toolset]);
+  }, [setSelectedEnvironment, toolset]);
 
   // Track which tools are selected for bulk actions
   const [enabledTools, setEnabledTools] = useState<Set<string>>(new Set());
 
+  const invalidateToolset = () => {
+    void queryClient.invalidateQueries({ queryKey: queryKeyListToolsets({}) });
+    void queryClient.invalidateQueries({
+      queryKey: queryKeyInstance({ toolsetSlug }),
+    });
+  };
+
   // Handler for adding tools to the toolset
   const handleAddTools = (toolUrns: string[]) => {
     if (!toolset) return;
-    const currentUrns = toolset.toolUrns || [];
-    const updatedUrns = [...currentUrns, ...toolUrns];
+    const updatedUrns = [...(toolset.toolUrns || []), ...toolUrns];
 
     updateToolsetMutation.mutate(
       {
         request: {
           slug: toolset.slug,
-          updateToolsetRequestBody: {
-            toolUrns: updatedUrns,
-          },
+          updateToolsetRequestBody: { toolUrns: updatedUrns },
         },
       },
       {
         onSuccess: () => {
-          // Invalidate both toolsets and instance queries to refresh the UI
-          void queryClient.invalidateQueries({
-            queryKey: queryKeyListToolsets({}),
-          });
-          if (selectedToolset) {
-            // Use partial query key (toolsetSlug only) to match all instances
-            // of this toolset, regardless of environment
-            void queryClient.invalidateQueries({
-              queryKey: queryKeyInstance({
-                toolsetSlug: selectedToolset,
-              }),
-            });
-          }
+          invalidateToolset();
           toast.success(
             `Added ${toolUrns.length} tool${toolUrns.length !== 1 ? "s" : ""}`,
           );
@@ -338,33 +441,20 @@ function ToolsetPanel({
   // Handler for removing tools from the toolset
   const handleRemoveTools = (toolUrns: string[]) => {
     if (!toolset) return;
-    const currentUrns = toolset.toolUrns || [];
-    const updatedUrns = currentUrns.filter((urn) => !toolUrns.includes(urn));
+    const updatedUrns = (toolset.toolUrns || []).filter(
+      (urn) => !toolUrns.includes(urn),
+    );
 
     updateToolsetMutation.mutate(
       {
         request: {
           slug: toolset.slug,
-          updateToolsetRequestBody: {
-            toolUrns: updatedUrns,
-          },
+          updateToolsetRequestBody: { toolUrns: updatedUrns },
         },
       },
       {
         onSuccess: () => {
-          // Invalidate both toolsets and instance queries to refresh the UI
-          void queryClient.invalidateQueries({
-            queryKey: queryKeyListToolsets({}),
-          });
-          if (selectedToolset) {
-            // Use partial query key (toolsetSlug only) to match all instances
-            // of this toolset, regardless of environment
-            void queryClient.invalidateQueries({
-              queryKey: queryKeyInstance({
-                toolsetSlug: selectedToolset,
-              }),
-            });
-          }
+          invalidateToolset();
           toast.success(
             `Removed ${toolUrns.length} tool${toolUrns.length !== 1 ? "s" : ""}`,
           );
@@ -400,21 +490,10 @@ function ToolsetPanel({
 
     // Invalidate to refresh tool data in the sidebar
     void invalidateAllToolset(queryClient);
-    if (selectedToolset) {
-      void queryClient.invalidateQueries({
-        queryKey: queryKeyInstance({ toolsetSlug: selectedToolset }),
-      });
-    }
+    void queryClient.invalidateQueries({
+      queryKey: queryKeyInstance({ toolsetSlug }),
+    });
   };
-
-  // Transient state: toolsets exist but none is selected yet. The auto-select
-  // useEffect below picks the first toolset on the next render — render
-  // nothing for that single frame rather than flashing a misleading
-  // "No MCP servers yet" message. The truly-empty case is handled by the
-  // parent PlaygroundInner early-return.
-  if (toolsets !== undefined && !configRef.current.toolsetSlug) {
-    return null;
-  }
 
   return (
     <>
@@ -438,23 +517,7 @@ function ToolsetPanel({
         onModelChange={setModel}
         maxTokens={maxTokens}
         onMaxTokensChange={setMaxTokens}
-        toolsetSelector={
-          <Select
-            value={selectedToolset ?? undefined}
-            onValueChange={setSelectedToolset}
-          >
-            <SelectTrigger size="sm" className="w-full">
-              <SelectValue placeholder="Select MCP" />
-            </SelectTrigger>
-            <SelectContent>
-              {toolsets?.map((ts) => (
-                <SelectItem key={ts.slug} value={ts.slug}>
-                  {ts.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        }
+        toolsetSelector={serverSelector}
         authSettings={
           toolset ? (
             <PlaygroundAuth
@@ -477,10 +540,6 @@ function ToolsetPanel({
               }
             : undefined
         }
-        onToolsetUpdate={(updates) => {
-          // TODO: Wire this up to update toolset
-          console.log("Update toolset:", updates);
-        }}
         documentIdToName={documentIdToName}
         functionIdToName={functionIdToName}
         onOpenToolsModal={() => {
@@ -536,5 +595,49 @@ function ToolsetPanel({
         }}
       />
     </>
+  );
+}
+
+/**
+ * Left panel for a remote-MCP-backed server: the shared selector, a read-only
+ * live tool list, and model settings. Tool curation, auth, and env config are
+ * absent — those affordances don't apply to a proxied upstream.
+ */
+function RemoteServerPanel({
+  mcpServerId,
+  isIssuerGated,
+  serverSelector,
+  temperature,
+  setTemperature,
+  model,
+  setModel,
+  maxTokens,
+  setMaxTokens,
+}: PanelConfigProps & {
+  mcpServerId: string;
+  isIssuerGated: boolean;
+}) {
+  const { tools } = useRemoteMcpConnection(mcpServerId, isIssuerGated);
+
+  const remoteTools = useMemo(
+    () =>
+      Object.entries(tools ?? {}).map(([name, tool]) => ({
+        name,
+        description: tool.description,
+      })),
+    [tools],
+  );
+
+  return (
+    <PlaygroundConfigPanel
+      remoteTools={remoteTools}
+      temperature={temperature}
+      onTemperatureChange={setTemperature}
+      model={model}
+      onModelChange={setModel}
+      maxTokens={maxTokens}
+      onMaxTokensChange={setMaxTokens}
+      toolsetSelector={serverSelector}
+    />
   );
 }

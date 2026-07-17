@@ -332,6 +332,31 @@ var _ = Service("telemetry", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "TelemetryQuery", "type": "query"}`)
 	})
 
+	Method("queryTumDetails", func() {
+		Description("Org-scoped daily usage details for the billing page, computed in one pass: the tokens-under-management daily token-type split (observed agent traffic; cache reads excluded) and per-dimension breakdowns over the same population.")
+
+		// Org-scoped like telemetry.query; project_id optionally narrows the
+		// slice to one of the caller's projects.
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(TelemetryWindowPayload)
+			security.SessionPayload()
+		})
+
+		Result(TumDetailsResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.queryTumDetails")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "queryTumDetails")
+		Meta("openapi:extension:x-speakeasy-name-override", "queryTumDetails")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "TelemetryQueryTumDetails", "type": "query"}`)
+	})
+
 	Method("listSessions", func() {
 		Description("Org-scoped list of individual chat sessions for a slice of usage, filtered by the same allowlisted dimensions as telemetry.query. Returns per-session cost, token, and tool metrics with cursor pagination.")
 
@@ -1400,6 +1425,84 @@ var QueryFilter = Type("QueryFilter", func() {
 	Required("dimension", "values")
 })
 
+// TelemetryWindowPayload is an org-scoped time window with an optional
+// project filter, named neutrally so future window-shaped endpoints can
+// share it without the generated SDK surfacing one endpoint's payload under
+// another's name (queryTumDetails is the current consumer).
+var TelemetryWindowPayload = Type("TelemetryWindowPayload", func() {
+	Description("An org-scoped time window, optionally narrowed to one project")
+
+	Attribute("from", String, "Start time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T10:00:00Z")
+	})
+	Attribute("to", String, "End time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-26T10:00:00Z")
+	})
+	Attribute("project_id", String, "Optional project to scope to; defaults to every project in the organization.", func() {
+		Format(FormatUUID)
+	})
+
+	Required("from", "to")
+})
+
+// The per-metric fields shared by the daily points and the range totals.
+// Every measure describes the observed agent traffic (the tokens-under-
+// management population) with cache reads excluded, so total_tokens =
+// input + output + cache_creation.
+func tumDetailsMeasures() {
+	Attribute("input_tokens", Int64, "Observed input tokens (cache reads excluded)")
+	Attribute("output_tokens", Int64, "Observed output tokens")
+	Attribute("cache_creation_tokens", Int64, "Observed cache-write tokens — prompt content entering the provider cache, counted once")
+	Attribute("total_tokens", Int64, "Tokens under management: input + output + cache writes")
+	Required("input_tokens", "output_tokens", "cache_creation_tokens", "total_tokens")
+}
+
+var TumDetailsPoint = Type("TumDetailsPoint", func() {
+	Description("One UTC day of billing usage details")
+
+	Attribute("bucket_time_unix_nano", String, "Bucket start time in Unix nanoseconds (string for JS precision)")
+	tumDetailsMeasures()
+	Required("bucket_time_unix_nano")
+})
+
+var TumDetailsTotals = Type("TumDetailsTotals", func() {
+	Description("Whole-range totals for the billing usage details")
+
+	tumDetailsMeasures()
+})
+
+var TumDetailsBreakdownRow = Type("TumDetailsBreakdownRow", func() {
+	Description("One value of a breakdown dimension with its billed token usage over the range")
+
+	Attribute("value", String, "The dimension value; empty for rows recorded before the dimension existed")
+	Attribute("total_tokens", Int64, "Billed tokens for this value over the range")
+	Attribute("series", ArrayOf(Int64), "Daily tokens aligned to the result's points buckets")
+
+	Required("value", "total_tokens", "series")
+})
+
+var TumDetailsBreakdown = Type("TumDetailsBreakdown", func() {
+	Description("Per-dimension billed token breakdown for the usage details table")
+
+	Attribute("key", String, "The breakdown dimension key (model, hook_source, provider, account_type, email, division_name, department_name, role, project_id) — the public telemetry dimension identifiers, so the same keys work as telemetry.query filters. project_id rows carry project UUIDs; clients map them to names.")
+	Attribute("rows", ArrayOf(TumDetailsBreakdownRow), "Top values by tokens in descending order, with the remainder rolled into 'Other'")
+
+	Required("key", "rows")
+})
+
+var TumDetailsResult = Type("TumDetailsResult", func() {
+	Description("Result of the billing usage details query. Everything derives from the tokens-under-management population — observed agent traffic with cache reads excluded — computed live from the telemetry aggregate. Matches the billed totals for cycles billed under this definition; cycles finalized before the observed-traffic redefinition serve immutable snapshot totals on the usage endpoint that can differ from this live compute.")
+
+	Attribute("interval_seconds", Int64, "Timeseries bucket width in seconds. Always 86400 — the details are bucketed daily.")
+	Attribute("points", ArrayOf(TumDetailsPoint), "Gap-filled daily buckets in ascending time order")
+	Attribute("totals", TumDetailsTotals, "Whole-range totals")
+	Attribute("breakdowns", ArrayOf(TumDetailsBreakdown), "Billed token usage per breakdown dimension")
+
+	Required("interval_seconds", "points", "totals", "breakdowns")
+})
+
 var QueryMeasures = Type("QueryMeasures", func() {
 	Description("Aggregated measure values for a group or time bucket")
 
@@ -1807,12 +1910,17 @@ var GetHooksSummaryResult = Type("GetHooksSummaryResult", func() {
 
 var ToolUsageTargetType = Type("ToolUsageTargetType", String, func() {
 	Description("Tool usage target type")
-	Enum("hosted_mcp_server", "shadow_mcp_server", "local_tool", "skill")
+	Enum("hosted_mcp_server", "tunneled_mcp_server", "shadow_mcp_server", "local_tool", "skill")
 })
 
 var ToolUsageTargetKind = Type("ToolUsageTargetKind", String, func() {
 	Description("Tool usage aggregation target kind")
 	Enum("server", "local_tools", "skill")
+})
+
+var ToolUsageStatus = Type("ToolUsageStatus", String, func() {
+	Description("Tool usage trace outcome")
+	Enum("error", "success", "blocked", "pending")
 })
 
 var ToolUsageUserKind = Type("ToolUsageUserKind", String, func() {
@@ -1884,6 +1992,7 @@ var ListToolUsageTracesPayload = Type("ListToolUsageTracesPayload", func() {
 	Attribute("user_filters", ArrayOf(ToolUsageUserFilter), "Typed user identities to include")
 	Attribute("hook_sources", ArrayOf(String), "Hook plugin sources to include. Direct hosted MCP calls have no hook source and are excluded when this filter is set.")
 	Attribute("account_type", String, "Optional account type filter ('team' or 'personal'). 'team' includes unclassified traces.")
+	Attribute("statuses", ArrayOf(ToolUsageStatus), "Trace outcomes to include (error, success, blocked, pending). Empty means all.")
 	Attribute("query", String, "Free-text attribute search string from the q URL param. Matches useful identifier attributes such as Gram URN, conversation ID, and trigger instance ID.")
 	Attribute("filters", ArrayOf(LogFilter), "Arbitrary attribute filter conditions from the af URL param")
 	Attribute("cursor", String, "Cursor for pagination")

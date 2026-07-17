@@ -2,14 +2,10 @@ import { useProject, useSession } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { internalMcpUrl } from "@/hooks/useToolsetUrl";
 import { getServerURL } from "@/lib/utils";
-import type {
-  ElementsConfig,
-  MCPServerEntry,
-  ToolsFilter,
-} from "@gram-ai/elements";
+import type { ElementsConfig, MCPServerEntry, ToolsFilter } from "@/elements";
 import { chatSessionsCreate } from "@gram/client/funcs/chatSessionsCreate";
-import { useGramContext } from "@gram/client/react-query";
-import { useListToolsets } from "@gram/client/react-query/index.js";
+import { useGramContext } from "@gram/client/react-query/_context.js";
+import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useCallback, useMemo } from "react";
 
 interface ObservabilityMcpConfigOptions {

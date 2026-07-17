@@ -9,7 +9,7 @@ import { useTelemetry } from "@/contexts/Telemetry";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useRoutes } from "@/routes";
 import { Environment } from "@gram/client/models/components/environment.js";
-import { useCreateEnvironmentMutation } from "@gram/client/react-query/index.js";
+import { useCreateEnvironmentMutation } from "@gram/client/react-query/createEnvironment.js";
 import { ArrowRight, Blocks, Plus } from "lucide-react";
 import { useState } from "react";
 import { Outlet } from "react-router";
@@ -89,7 +89,7 @@ function EnvironmentsInner() {
         </Page.Section.Description>
         <Page.Section.CTA>
           {environments.length > 0 && (
-            <RequireScope scope="project:write" level="component">
+            <RequireScope scope="environment:write" level="component">
               <Button onClick={() => setCreateEnvironmentDialogOpen(true)}>
                 <Button.LeftIcon>
                   <Plus className="h-4 w-4" />
@@ -112,7 +112,7 @@ function EnvironmentsInner() {
                 Environments let you store configuration and secrets that can be
                 shared across multiple MCP servers.
               </Type>
-              <RequireScope scope="project:write" level="component">
+              <RequireScope scope="environment:write" level="component">
                 <Button onClick={() => setCreateEnvironmentDialogOpen(true)}>
                   <Button.LeftIcon>
                     <Plus className="h-4 w-4" />

@@ -1,22 +1,23 @@
 import { useNoToolsetsConfigured } from "@/hooks/useObservabilityMcpConfig";
 import { useServerAssistantTransport } from "@/hooks/useServerAssistantTransport";
-import { useListChats } from "@gram/client/react-query";
+import { useListChats } from "@gram/client/react-query/listChats.js";
+import { useMembers } from "@gram/client/react-query/members.js";
 import { SortBy, SortOrder } from "@gram/client/models/operations/listchats";
 import { cn, isMacPlatform } from "@/lib/utils";
 import speakeasyIcon from "@/assets/speakeasy-icon.svg";
 import { useAssistantRuntime } from "@assistant-ui/react";
-import type {
-  ElementsConfig,
-  ElementsTransportFactory,
-} from "@gram-ai/elements";
+import type { ElementsConfig, ElementsTransportFactory } from "@/elements";
 import {
   ActiveChatTitle,
   Chat,
   ChatHistory,
   GramElementsProvider,
   useThreadId,
-} from "@gram-ai/elements";
+} from "@/elements";
 import { stripMessageContextFraming } from "@/lib/projectAssistantTranscript";
+import { AssistantMarkdownLink } from "@/components/AssistantMarkdownLink";
+import { useAssistantLinkResolver } from "@/lib/assistantEntityLinks";
+import { useSession } from "@/contexts/Auth";
 import {
   INSIGHTS_DOCK_CONTENT_VT_CLASS,
   INSIGHTS_DOCK_VT_CLASS,
@@ -183,6 +184,18 @@ const CHAT_FULLPAGE_COMPOSER_CSS = `
   :host-context(.gram-chat-fullpage) .aui-composer-wrapper {
     padding-bottom: 1.25rem;
   }
+`;
+
+// Assistant replies render links with Moonshine's <Link> (class
+// `text-link-primary`), but Moonshine's stylesheet — which carries the rule
+// `.text-link-primary { color: var(--text-link-primary) }` — isn't loaded in
+// the Elements shadow root, so the class has no effect and the link inherits
+// the body text color. Color the link directly with the Moonshine brand blue
+// (light/dark); the inner text span inherits it.
+const CHAT_LINK_CSS = `
+  .gram-elements a.text-link-primary { color: #1e5aae; }
+  .gram-elements.dark a.text-link-primary,
+  .dark .gram-elements a.text-link-primary { color: #619aea; }
 `;
 
 function DockSubmitButton() {
@@ -643,6 +656,9 @@ export function InsightsProvider({
     text: string;
     nonce: number;
   } | null>(null);
+  // Turns the assistant's `gram:<entity>` references into clickable links into
+  // the dashboard, opened in a new tab. Rendered via Moonshine's <Link>.
+  const resolveAssistantLink = useAssistantLinkResolver();
   // React `key` on the shared GramElementsProvider — bumped to start a
   // brand-new conversation ("New", "Explore with AI", a fresh docked send).
   // switchToNewThread on the long-lived shared runtime trips an assistant-ui
@@ -731,6 +747,59 @@ export function InsightsProvider({
     recentChat !== undefined &&
     Date.now() - recentChat.lastMessageTimestamp.getTime() < CONTINUE_WINDOW_MS;
 
+  // Resolves a chat's creator to a name/email/avatar for Elements' history
+  // list, from the org member list the dashboard already has cached — no
+  // extra request, and avoids the cross-origin auth mismatch a direct fetch
+  // from inside Elements would hit (its request headers are scoped to the
+  // chat API, not `access.listMembers`).
+  const { data: membersData } = useMembers();
+  const resolveCreator = useCallback(
+    ({
+      userId,
+      externalUserId,
+    }: {
+      userId?: string;
+      externalUserId?: string;
+    }) => {
+      if (!userId && !externalUserId) return undefined;
+      // Chats started from the dashboard itself have no `userId` at capture
+      // time and stash the caller's email in `externalUserId` instead — fall
+      // back to an email match so those still resolve to a member.
+      const member = membersData?.members.find(
+        (m) =>
+          m.id === userId || (!!externalUserId && m.email === externalUserId),
+      );
+      return (
+        member && {
+          name: member.name,
+          email: member.email,
+          photoUrl: member.photoUrl,
+        }
+      );
+    },
+    [membersData],
+  );
+
+  // The backend only lets a chat's creator send into it (see
+  // CheckDashboardChatOwnership) — admins can still open others' chats via
+  // their chat:read grant, so hide the composer for those rather than let a
+  // send 404. Chats started from the dashboard stash the caller's email in
+  // externalUserId instead of userId (see resolveCreator above).
+  const { user } = useSession();
+  const isOwnChat = useCallback(
+    ({
+      userId,
+      externalUserId,
+    }: {
+      userId?: string;
+      externalUserId?: string;
+    }) => {
+      if (!userId && !externalUserId) return true;
+      return userId === user.id || externalUserId === user.email;
+    },
+    [user.id, user.email],
+  );
+
   // Mount the shared runtime only where it's actually used: a chat route (the
   // page owns the chat) or the open dock — and only where the dock is shown.
   // Pages with their own chat runtime (Playground, Elements, assistant
@@ -818,6 +887,11 @@ export function InsightsProvider({
       // chart identity) into outgoing user messages — see `wrappedTransport`
       // above.
       transport: wrappedTransport,
+      // Link entity references in assistant replies to their dashboard pages
+      // (new tab). `resolveLink` maps the `gram:` scheme to routes;
+      // `linkComponent` renders every link with Moonshine's <Link>.
+      resolveLink: resolveAssistantLink,
+      linkComponent: AssistantMarkdownLink,
       // Edit relies on assistant-ui's local branch rewriting, which the
       // server-side assistant transport can't honour — hide the affordance
       // rather than ship a control that silently no-ops.
@@ -838,6 +912,8 @@ export function InsightsProvider({
         // framing block (needed for replay, noise for display). Strip it — and
         // drop framing-only turns — before Elements renders the transcript.
         transformChatMessage: stripMessageContextFraming,
+        resolveCreator,
+        isOwnChat,
       },
       api: {
         ...mcpConfig.api,
@@ -864,7 +940,8 @@ export function InsightsProvider({
         customCss:
           DOCK_PANEL_COMPOSER_CSS +
           CHAT_MARKDOWN_CSS +
-          CHAT_FULLPAGE_COMPOSER_CSS,
+          CHAT_FULLPAGE_COMPOSER_CSS +
+          CHAT_LINK_CSS,
       },
     }),
     [
@@ -875,6 +952,9 @@ export function InsightsProvider({
       theme,
       wrappedTransport,
       managedAssistantId,
+      resolveAssistantLink,
+      resolveCreator,
+      isOwnChat,
     ],
   );
 

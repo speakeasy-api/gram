@@ -39,7 +39,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 		if err != nil && outcome == hookMetricOutcomeAccepted {
 			outcome = hookMetricOutcomeFailure
 		}
-		s.metrics.RecordHookEventDuration(ctx, "cursor", logHookEventName, outcome, orgSlug, time.Since(start))
+		s.metrics.RecordHookEventDuration(ctx, "cursor", logHookEventName, outcome, cursorHookDecision(res), orgSlug, time.Since(start))
 	}()
 
 	logger := s.logger.With(
@@ -85,7 +85,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 	// re-sends the same token: the decision still re-runs so the user stays
 	// blocked, but tagging the context as a duplicate suppresses the duplicate
 	// writes in recordCursorHook.
-	if !s.claimHookIdempotency(ctx, conv.PtrValOr(payload.IdempotencyKey, "")) {
+	if !s.claimHookIdempotency(ctx, conv.PtrValOr(payload.IdempotencyKey, ""), false) {
 		ctx = withHookDuplicate(ctx)
 	}
 
@@ -103,7 +103,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 			ID:    actorUserID,
 			Email: userEmail,
 		},
-	}, time.Now())
+	}, s.now())
 	if err != nil {
 		return nil, fmt.Errorf("normalize cursor hook event: %w", err)
 	}
@@ -125,7 +125,21 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 		// beforeMCPExecution fires for MCP-routed (non-local) tool calls. Run
 		// the risk scanner first (block-only today), then fall through to the
 		// shadow-MCP guard so unapproved toolsets are still blocked.
-		if scanResult := s.scanMCPRequestForEnforcement(ctx, ev); scanResult != nil {
+		// Acknowledged warn is excluded from the enforcement block so it falls
+		// through to the shadow-MCP guard below: an ack clears the risk
+		// challenge but must never bypass unapproved-toolset validation.
+		if scanResult := s.scanMCPRequestForEnforcement(ctx, ev); scanResult != nil && (scanResult.Action != "warn" ||
+			!s.warnAcknowledged(ctx, ev.Event, scanResult, ev.ToolName)) {
+			if scanResult.Action == "warn" {
+				if agentReason, userReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, ev.ToolName); ok {
+					blockReason = fmt.Sprintf("Speakeasy challenged this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
+					result.Permission = new("deny")
+					// Human-facing link → UserMessage; authoritative no-link reason → AgentMessage.
+					result.UserMessage = &userReason
+					result.AgentMessage = &agentReason
+					break
+				}
+			}
 			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
 			blockReason = auditReason
@@ -211,6 +225,20 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 			break
 		}
 		if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil {
+			if scanResult.Action == "warn" && s.warnAcknowledged(ctx, ev.Event, scanResult, ev.ToolName) {
+				result.Permission = new("allow")
+				break
+			}
+			if scanResult.Action == "warn" {
+				if agentReason, userReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, ev.ToolName); ok {
+					blockReason = fmt.Sprintf("Speakeasy challenged this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
+					result.Permission = new("deny")
+					// Human-facing link → UserMessage; authoritative no-link reason → AgentMessage.
+					result.UserMessage = &userReason
+					result.AgentMessage = &agentReason
+					break
+				}
+			}
 			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
 			blockReason = auditReason
@@ -235,7 +263,11 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 			result.Permission = new("allow")
 		}
 	case *hookevents.UserPromptSubmit:
-		if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil {
+		// A warn (challenge) is never hard-denied at prompt submit: there is no
+		// confirmation primitive here, and denying would diverge from the
+		// Claude/Codex prompt paths. Let it through — the follow-on tool call
+		// carrying the match is where a warn is challenged.
+		if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil && scanResult.Action != "warn" {
 			auditReason := fmt.Sprintf("Speakeasy blocked this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
 			blockReason = auditReason
@@ -286,6 +318,7 @@ func (s *Service) recordCursorHook(ctx context.Context, payload *gen.CursorPaylo
 		AccountType:         "",
 		BillingMode:         "",
 		UserAccountID:       "",
+		ObservedUserEmail:   "",
 		GramOrgID:           orgID,
 		ProjectID:           projectID,
 	}
@@ -382,7 +415,7 @@ func (s *Service) writeCursorHookToClickHouse(ctx context.Context, payload *gen.
 
 	if s.telemetryLogger != nil {
 		s.telemetryLogger.Log(ctx, telemetry.LogParams{
-			Timestamp:  time.Now(),
+			Timestamp:  s.now(),
 			ToolInfo:   toolInfo,
 			UserInfo:   telemetry.UserInfoByIDAndEmail(userID, userEmail),
 			Attributes: attrs,
@@ -465,7 +498,7 @@ func (s *Service) writeCursorMetricsToClickHouse(ctx context.Context, payload *g
 	}
 
 	s.telemetryLogger.Log(ctx, telemetry.LogParams{
-		Timestamp:  time.Now(),
+		Timestamp:  s.now(),
 		ToolInfo:   toolInfo,
 		UserInfo:   telemetry.UserInfoByID(userID),
 		Attributes: attrs,
@@ -682,6 +715,8 @@ func (s *Service) writeCursorToolCallRequestToPG(ctx context.Context, payload *g
 	}
 
 	msgParams := chatRepo.CreateChatMessageParams{
+		Replayed:         false,
+		CreatedAt:        conv.PtrToPGTimestamptz(nil),
 		ChatID:           chatID,
 		ProjectID:        projectID,
 		Role:             "assistant",
@@ -750,6 +785,8 @@ func (s *Service) writeCursorToolCallResultToPG(ctx context.Context, payload *ge
 	}
 
 	msgParams := chatRepo.CreateChatMessageParams{
+		Replayed:         false,
+		CreatedAt:        conv.PtrToPGTimestamptz(nil),
 		ChatID:           chatID,
 		ProjectID:        projectID,
 		Role:             "tool",
@@ -797,6 +834,8 @@ func (s *Service) persistCursorAgentResponse(ctx context.Context, payload *gen.C
 	chatID := sessionIDToUUID(*payload.ConversationID)
 
 	msgParams := chatRepo.CreateChatMessageParams{
+		Replayed:         false,
+		CreatedAt:        conv.PtrToPGTimestamptz(nil),
 		ChatID:           chatID,
 		ProjectID:        projectID,
 		Role:             "assistant",
@@ -860,6 +899,8 @@ func (s *Service) persistCursorUserPrompt(ctx context.Context, payload *gen.Curs
 	}
 
 	msgParams := chatRepo.CreateChatMessageParams{
+		Replayed:         false,
+		CreatedAt:        conv.PtrToPGTimestamptz(nil),
 		ChatID:           chatID,
 		ProjectID:        parsedProjectID,
 		Role:             "user",

@@ -4,8 +4,9 @@ import {
   smoothData,
   unixNanoToDate,
 } from "@/components/chart/chartUtils";
+import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
 import { formatCompact } from "@/lib/format";
-import type { TimeSeriesBucket } from "@gram/client/models/components";
+import type { TimeSeriesBucket } from "@gram/client/models/components/timeseriesbucket.js";
 import {
   BarElement,
   CategoryScale,
@@ -122,6 +123,9 @@ export function ToolCallsTimeSeriesChart({
             usePointStyle: true,
             padding: 16,
             font: { size: 11 },
+            // Keep the trend line rendered on the chart, just don't clutter
+            // the legend with a redundant "Total Trend" entry.
+            filter: (legendItem) => legendItem.text !== "Total Trend",
           },
         },
         tooltip: {
@@ -167,9 +171,10 @@ export function ToolCallsTimeSeriesChart({
       hasData={hasData}
     >
       {!hasData ? (
-        <div className="text-muted-foreground flex h-[260px] items-center justify-center text-sm">
-          No tool calls for the selected time range
-        </div>
+        <WidgetEmptyState
+          message="No tool calls for the selected time range"
+          className="h-[260px]"
+        />
       ) : (
         <div style={{ height }}>
           {/* `<Chart>` (not `<Bar>`) because this mixes a stacked bar series

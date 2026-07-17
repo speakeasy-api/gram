@@ -1,28 +1,18 @@
-import type { McpServer, ToolsetEntry } from "@gram/client/models/components";
+import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import type { Plugin } from "@gram/client/models/components/plugin.js";
+import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import {
   defineFilters,
+  type FilterOption,
   type FilterValues,
   type OptionsById,
 } from "@/components/filters";
 
-/**
- * Filters for the MCP listing, which merges two backend collections — Hosted
- * (toolset-backed) and Remote (`mcp_servers`) — into one grid. The two types
- * carry different fields, so each row is classified into a common set of facets
- * ({@link McpFacets}) and matched uniformly against the selected filter values.
- *
- * Auth was intentionally left out: the toolset *list* shape (`ToolsetEntry`)
- * does not carry `userSessionIssuerId`/`oauthEnablementMetadata` (only the full
- * `Toolset` detail does), so an auth filter couldn't be applied to Hosted rows
- * without silently mis-hiding them. Status + Source are available on both.
- *
- * Both dimensions are multiselect (OR within a dimension, AND across). Params
- * (`status`/`source`) are new, so they don't collide with anything the page
- * reads today.
- */
+// No auth facet: hosted list rows lack issuer/OAuth fields, so filtering would hide valid rows.
 export const MCP_FILTERS = defineFilters([
   { id: "status", label: "Status", kind: "multiselect" },
   { id: "source", label: "Source", kind: "multiselect" },
+  { id: "plugins", label: "Included in plugins", kind: "multiselect" },
 ]);
 
 export const MCP_FILTER_OPTIONS: OptionsById = {
@@ -35,52 +25,109 @@ export const MCP_FILTER_OPTIONS: OptionsById = {
     { value: "catalog", label: "Catalog" },
     { value: "custom", label: "Custom" },
     { value: "remote", label: "Remote URL" },
+    { value: "tunneled", label: "Tunneled" },
   ],
+  // `plugins` is org data, so its options are supplied at render time via
+  // pluginFilterOptions().
 };
 
 export interface McpFacets {
   status: "public" | "private" | "disabled";
-  source: "catalog" | "custom" | "remote";
+  source: "catalog" | "custom" | "remote" | "tunneled";
+  /** IDs of the plugins this server is a member of. */
+  pluginIds: string[];
 }
 
-/** Classify a Hosted (toolset-backed) row. */
-export function toolsetFacets(toolset: ToolsetEntry): McpFacets {
+/**
+ * Plugin membership is stored on the plugin (`plugin.servers[]`), not on the
+ * server, and a plugin server is backed by *either* a toolset (Hosted MCP) or
+ * an mcp_server row (Remote/Tunneled). Invert that into per-collection lookups
+ * so each listing row can resolve its plugins in O(1).
+ */
+export interface PluginMembership {
+  byToolsetId: Map<string, string[]>;
+  byMcpServerId: Map<string, string[]>;
+}
+
+export function pluginMembership(plugins: Plugin[]): PluginMembership {
+  const byToolsetId = new Map<string, string[]>();
+  const byMcpServerId = new Map<string, string[]>();
+
+  const push = (map: Map<string, string[]>, key: string, pluginId: string) => {
+    const existing = map.get(key);
+    if (existing) existing.push(pluginId);
+    else map.set(key, [pluginId]);
+  };
+
+  for (const plugin of plugins) {
+    for (const server of plugin.servers ?? []) {
+      if (server.toolsetId) push(byToolsetId, server.toolsetId, plugin.id);
+      if (server.mcpServerId)
+        push(byMcpServerId, server.mcpServerId, plugin.id);
+    }
+  }
+
+  return { byToolsetId, byMcpServerId };
+}
+
+export function pluginFilterOptions(plugins: Plugin[]): FilterOption[] {
+  return plugins.map((plugin) => ({ value: plugin.id, label: plugin.name }));
+}
+
+export function toolsetFacets(
+  toolset: ToolsetEntry,
+  membership: PluginMembership,
+): McpFacets {
   const status = !toolset.mcpEnabled
     ? "disabled"
     : toolset.mcpIsPublic
       ? "public"
       : "private";
-  // A registry specifier means the toolset was imported from the catalog;
-  // otherwise it's built from the project's own sources (OpenAPI, functions).
+  // registrySpecifier is the only list-row signal that a hosted MCP came from catalog.
   const source = toolset.origin?.registrySpecifier ? "catalog" : "custom";
-  return { status, source };
+  return {
+    status,
+    source,
+    pluginIds: membership.byToolsetId.get(toolset.id) ?? [],
+  };
 }
 
-/** Classify a Remote (`mcp_servers`-backed) row. */
-export function mcpServerFacets(server: McpServer): McpFacets {
+export function mcpServerFacets(
+  server: McpServer,
+  membership: PluginMembership,
+): McpFacets {
   const status =
     server.visibility === "public"
       ? "public"
       : server.visibility === "private"
         ? "private"
         : "disabled";
-  return { status, source: "remote" };
+  return {
+    status,
+    source: server.tunneledMcpServerId ? "tunneled" : "remote",
+    pluginIds: membership.byMcpServerId.get(server.id) ?? [],
+  };
 }
 
-/** Whether a classified row passes the active filter selection. */
 export function matchesMcpFilters(
   facets: McpFacets,
   values: FilterValues<typeof MCP_FILTERS>,
 ): boolean {
   return (
     (values.status.length === 0 || values.status.includes(facets.status)) &&
-    (values.source.length === 0 || values.source.includes(facets.source))
+    (values.source.length === 0 || values.source.includes(facets.source)) &&
+    // A server matches if it belongs to *any* of the selected plugins.
+    (values.plugins.length === 0 ||
+      facets.pluginIds.some((id) => values.plugins.includes(id)))
   );
 }
 
-/** Whether any MCP filter is active (drives empty-state copy + the bar). */
 export function hasActiveMcpFilters(
   values: FilterValues<typeof MCP_FILTERS>,
 ): boolean {
-  return values.status.length > 0 || values.source.length > 0;
+  return (
+    values.status.length > 0 ||
+    values.source.length > 0 ||
+    values.plugins.length > 0
+  );
 }

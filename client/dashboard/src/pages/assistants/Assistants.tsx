@@ -1,4 +1,3 @@
-import { TopUpCTA, UsageProgress } from "@/components/billing/usage-controls";
 import { Page } from "@/components/page-layout";
 import { getGradientColors } from "@/components/gradient-colors";
 import { RequireScope } from "@/components/require-scope";
@@ -10,28 +9,24 @@ import { Badge } from "@/components/ui/badge";
 import { DotCard } from "@/components/ui/dot-card";
 import { Action, MoreActions } from "@/components/ui/more-actions";
 import { SearchBar } from "@/components/ui/search-bar";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   PageTabsTrigger,
   Tabs,
   TabsContent,
   TabsList,
 } from "@/components/ui/tabs";
-import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { UpdatedAt } from "@/components/updated-at";
-import { useProductTier } from "@/hooks/useProductTier";
 import { useRoutes } from "@/routes";
 import { Assistant } from "@gram/client/models/components/assistant.js";
+import { useAssistantsDeleteMutation } from "@gram/client/react-query/assistantsDelete.js";
 import {
   invalidateAllAssistantsList,
-  useAssistantsDeleteMutation,
   useAssistantsList,
-  useGetPeriodUsage,
-} from "@gram/client/react-query/index.js";
+} from "@gram/client/react-query/assistantsList.js";
 import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { Bot, Boxes, Cpu, Info, Plus } from "lucide-react";
+import { Bot, Boxes, Cpu, Plus } from "lucide-react";
 import { parseAsStringLiteral, useQueryState } from "nuqs";
 import { MouseEvent, useMemo, useState } from "react";
 import { Outlet } from "react-router";
@@ -186,7 +181,6 @@ export default function AssistantsIndex(): JSX.Element {
             className="mt-6 flex w-full flex-col gap-4"
           >
             {content}
-            <UsageSection />
           </TabsContent>
           <TabsContent value="triggers" className="mt-6 w-full">
             <TriggersPanel />
@@ -238,52 +232,6 @@ function AssistantsBody({
         <AssistantCard key={assistant.id} assistant={assistant} />
       ))}
     </div>
-  );
-}
-
-function UsageSection() {
-  const productTier = useProductTier();
-  const { data: periodUsage, isError } = useGetPeriodUsage(
-    undefined,
-    undefined,
-    { throwOnError: false },
-  );
-
-  if (isError) return null;
-
-  return (
-    <Page.Section>
-      <Page.Section.Title>Assistant Credits</Page.Section.Title>
-      <Page.Section.Description>
-        Credits consumed by assistant runs this billing period. Each turn debits
-        credits based on the underlying model's cost.
-      </Page.Section.Description>
-      <RequireScope scope="org:admin" level="section">
-        <TopUpCTA />
-      </RequireScope>
-      <Page.Section.Body>
-        <Stack gap={3} className="mb-6">
-          <Stack direction="horizontal" align="center" gap={1}>
-            <Type variant="body" className="font-medium">
-              Credits
-            </Type>
-            <SimpleTooltip tooltip="Credits track model usage across assistants and chat. 1 credit ≈ $1 of model cost.">
-              <Info className="text-muted-foreground h-4 w-4" />
-            </SimpleTooltip>
-          </Stack>
-          {periodUsage ? (
-            <UsageProgress
-              value={periodUsage.credits}
-              included={periodUsage.includedCredits || 1}
-              overageIncrement={periodUsage.includedCredits || 1}
-              noMax={productTier === "enterprise"}
-            />
-          ) : (
-            <Skeleton className="h-4 w-full" />
-          )}
-        </Stack>
-      </Page.Section.Body>
-    </Page.Section>
   );
 }
 

@@ -4,20 +4,20 @@ import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
-import type { ChatOverview } from "@gram/client/models/components";
+import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
 import {
   AccountType,
   HasRisk,
   SortBy,
   SortOrder as ApiSortOrder,
 } from "@gram/client/models/operations/listchats";
+import { useAssistantsGet } from "@gram/client/react-query/assistantsGet.js";
+import { useChatDeleteMutation } from "@gram/client/react-query/chatDelete.js";
+import { useListChatSources } from "@gram/client/react-query/listChatSources.js";
 import {
-  useChatDeleteMutation,
   invalidateAllListChats,
-  useAssistantsGet,
   useListChats,
-  useListChatSources,
-} from "@gram/client/react-query";
+} from "@gram/client/react-query/listChats.js";
 import { formatPlatform } from "@/lib/formatPlatform";
 import { Badge } from "@/components/ui/badge";
 import { Alert, Button, Icon } from "@speakeasy-api/moonshine";
@@ -34,7 +34,7 @@ import {
   type OptionsById,
 } from "@/components/filters";
 import { Page } from "@/components/page-layout";
-import { type DateRangePreset, getPresetRange } from "@gram-ai/elements";
+import { type DateRangePreset, getPresetRange } from "@/elements";
 import { isValidPreset } from "@/components/observe/observeFilterUtils";
 
 type SortField = "chronological" | "messageCount";

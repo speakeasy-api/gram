@@ -4,9 +4,6 @@ import type {
   SelectorDisposition,
 } from "@gram/client/models/components/selector.js";
 
-export { Scope };
-export type { Selector };
-
 /** Derive role slug from name the same way the server does (conv.ToSlug + "org-" prefix). */
 export function toRoleSlug(name: string): string {
   let slug = name
@@ -27,8 +24,15 @@ export type ResourceType =
   | "project"
   | "mcp"
   | "environment"
+  | "skill"
   | "risk_policy"
   | "chat";
+
+export function isProjectSelectableResourceType(
+  resourceType: ResourceType,
+): boolean {
+  return resourceType === "project" || resourceType === "skill";
+}
 
 /** The 4 MCP tool annotation hint keys. */
 export type AnnotationHint =

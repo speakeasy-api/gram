@@ -6,8 +6,6 @@ import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { useGrants } from "@gram/client/react-query/grants.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-export { Scope };
-
 /**
  * Derive the resource kind from a scope's family prefix.
  * Mirrors the server-side ResourceKindForScope in authz/selector.go.
@@ -17,6 +15,7 @@ export function resourceKindForScope(scope: string): string {
   if (scope.startsWith("remote-mcp:") || scope.startsWith("mcp:")) return "mcp";
   if (scope.startsWith("org:")) return "org";
   if (scope.startsWith("environment:")) return "environment";
+  if (scope.startsWith("skill:")) return "skill";
   if (scope.startsWith("risk_policy:")) return "risk_policy";
   if (scope.startsWith("chat:")) return "chat";
   return "*";
@@ -41,6 +40,107 @@ export function selectorMatches(
     if (grantVal !== "*" && grantVal !== checkVal) return false;
   }
   return true;
+}
+
+/** Mirrors Selector.StrictMatches for exclusion grants. */
+export function selectorMatchesStrict(
+  grantSelector: Record<string, string>,
+  checkSelector: Record<string, string>,
+): boolean {
+  for (const [key, grantVal] of Object.entries(grantSelector)) {
+    const checkVal = checkSelector[key];
+    if (checkVal === undefined) return false;
+    if (grantVal !== "*" && grantVal !== checkVal) return false;
+  }
+  return true;
+}
+
+/** Direct exclusion scope plus its one-step server scope expansions. */
+const exclusionScopesByScope: Partial<Record<Scope, readonly string[]>> = {
+  "org:read": ["org:blocked_read"],
+  "org:admin": ["org:blocked_admin", "org:blocked_read"],
+  "project:read": ["project:blocked_read"],
+  "project:write": ["project:blocked_write", "project:blocked_read"],
+  "mcp:read": ["mcp:blocked_read", "mcp:blocked_connect"],
+  "mcp:write": ["mcp:blocked_write", "mcp:blocked_read", "mcp:blocked_connect"],
+  "mcp:connect": ["mcp:blocked_connect"],
+  "environment:read": ["environment:blocked_read"],
+  "environment:write": [
+    "environment:blocked_write",
+    "environment:blocked_read",
+  ],
+  "skill:read": ["skill:blocked_read"],
+  "skill:write": ["skill:blocked_write", "skill:blocked_read"],
+  "risk_policy:evaluate": ["risk_policy:bypass"],
+};
+
+export function exclusionScopesForScope(scope: Scope): readonly string[] {
+  return exclusionScopesByScope[scope] ?? [];
+}
+
+interface EffectiveGrant {
+  scope?: string;
+  selectors?: Array<Record<string, string>>;
+  subScopes?: string[];
+  effect?: string;
+}
+
+function grantSelectorsMatch(
+  grant: EffectiveGrant,
+  check: Record<string, string>,
+  strict: boolean,
+): boolean {
+  if (!grant.selectors) return true;
+  const matches = strict ? selectorMatchesStrict : selectorMatches;
+  return grant.selectors.some((selector) => matches(selector, check));
+}
+
+/** Pure equivalent of hasScope for loaded effective grants. */
+export function hasScopeInGrants(
+  grants: EffectiveGrant[],
+  scope: Scope,
+  resourceId?: string,
+): boolean {
+  const allowCheck: Record<string, string> = {
+    resourceKind: resourceKindForScope(scope),
+  };
+  if (resourceId) allowCheck.resourceId = resourceId;
+  // Unscoped allows are existential, but strict exclusions must distinguish
+  // unrestricted wildcards from exclusions for one concrete resource.
+  const exclusionCheck = resourceId
+    ? allowCheck
+    : { ...allowCheck, resourceId: "*" };
+
+  const exclusionScopes = exclusionScopesForScope(scope);
+  let hasAllow = false;
+
+  for (const grant of grants) {
+    const effect = grant.effect || "allow";
+
+    const isLegacyDeny = effect === "deny" && grant.scope === scope;
+    const isExclusion =
+      effect === "allow" &&
+      grant.scope !== undefined &&
+      exclusionScopes.includes(grant.scope);
+    if (
+      (isLegacyDeny || isExclusion) &&
+      grantSelectorsMatch(grant, exclusionCheck, true)
+    ) {
+      return false;
+    }
+
+    const scopeMatches =
+      grant.scope === scope || grant.subScopes?.includes(scope);
+    if (
+      effect === "allow" &&
+      scopeMatches &&
+      grantSelectorsMatch(grant, allowCheck, false)
+    ) {
+      hasAllow = true;
+    }
+  }
+
+  return hasAllow;
 }
 
 /**
@@ -90,28 +190,10 @@ function useRBACImpl() {
   }, [data?.grants]);
 
   /**
-   * Check if a grant's scope matches the required scope.
-   * For allow grants, sub-scope inheritance applies (e.g. org:admin implies org:read).
-   * For deny grants, only exact scope match — deny must not cascade to child scopes.
-   */
-  const grantMatchesScope = useCallback(
-    (
-      grant: { scope?: string; effect?: string; subScopes?: string[] },
-      scope: Scope,
-    ): boolean => {
-      if (grant.scope === scope) return true;
-      const effect = grant.effect || "allow";
-      return effect === "allow" && !!grant.subScopes?.includes(scope);
-    },
-    [],
-  );
-
-  /**
    * Check if the user has a given scope, optionally scoped to a resource ID.
    *
-   * Uses deny-wins semantics: if any matching deny grant exists, access is
-   * denied regardless of allow grants. Otherwise, at least one matching allow
-   * grant must exist.
+   * Uses exclusion-wins semantics: matching internal exclusion grants (and
+   * legacy deny-effect grants) override matching allow grants.
    *
    * - If RBAC is disabled, always returns true.
    * - If grants haven't loaded yet, returns false (safe default).
@@ -123,32 +205,9 @@ function useRBACImpl() {
       if (!isRbacEnabled) return true;
       if (!grants) return false;
 
-      const check: Record<string, string> = {
-        resourceKind: resourceKindForScope(scope),
-      };
-      if (resourceId) check.resourceId = resourceId;
-
-      let hasAllow = false;
-
-      for (const grant of grants) {
-        if (!grantMatchesScope(grant, scope)) continue;
-
-        const effect = (grant as { effect?: string }).effect || "allow";
-
-        // Check if selectors match
-        const selectorsMatch = !grant.selectors
-          ? true
-          : grant.selectors.some((s) => selectorMatches(s, check));
-
-        if (!selectorsMatch) continue;
-
-        if (effect === "deny") return false;
-        hasAllow = true;
-      }
-
-      return hasAllow;
+      return hasScopeInGrants(grants, scope, resourceId);
     },
-    [isRbacEnabled, grants, grantMatchesScope],
+    [isRbacEnabled, grants],
   );
 
   /**

@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link as RouterLink, useLocation, useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
+import { useRiskCreatePolicyMutation } from "@gram/client/react-query/riskCreatePolicy.js";
 import {
   invalidateAllRiskListPolicies,
-  useRiskCreatePolicyMutation,
   useRiskListPolicies,
-  useRiskPoliciesDeleteMutation,
-  useRiskPoliciesUpdateMutation,
-} from "@gram/client/react-query/index.js";
+} from "@gram/client/react-query/riskListPolicies.js";
+import { useRiskPoliciesDeleteMutation } from "@gram/client/react-query/riskPoliciesDelete.js";
+import { useRiskPoliciesUpdateMutation } from "@gram/client/react-query/riskPoliciesUpdate.js";
 import { invalidateAllRiskPoliciesStatus } from "@gram/client/react-query/riskPoliciesStatus.js";
 import {
   ShieldCheck,
@@ -141,6 +141,11 @@ const DEFAULTS: Record<RuleCategory, CategoryConfig> = {
     action: "flag",
     messageTypes: new Set(["tool_request"]),
   },
+  account_identity: {
+    enabled: false,
+    action: "flag",
+    messageTypes: new Set(["user_message"]),
+  },
   custom: {
     enabled: false,
     action: "flag",
@@ -159,7 +164,7 @@ const MESSAGE_TYPES: PolicyMessageType[] = [
 // values are validated before entering local state — an unknown value would
 // otherwise crash `formatMessageTypes` (POLICY_MESSAGE_TYPE_META[t].label).
 function isPolicyAction(value: unknown): value is PolicyAction {
-  return value === "flag" || value === "block";
+  return value === "flag" || value === "block" || value === "warn";
 }
 
 function isPolicyMessageType(value: unknown): value is PolicyMessageType {
@@ -629,7 +634,7 @@ export function ConfigurePoliciesStep({
                       })
                     }
                     disabled={!activeConfig.enabled || isShadowMcp}
-                    className="grid grid-cols-2 gap-2"
+                    className="grid grid-cols-3 gap-2"
                   >
                     <ActionRadio
                       value="flag"
@@ -637,6 +642,13 @@ export function ConfigurePoliciesStep({
                       description="Record a finding, let the call through"
                       disabled={!activeConfig.enabled || isShadowMcp}
                       selected={activeConfig.action === "flag"}
+                    />
+                    <ActionRadio
+                      value="warn"
+                      label="Warn & confirm"
+                      description="Warn the user; they must acknowledge before it proceeds"
+                      disabled={!activeConfig.enabled || isShadowMcp}
+                      selected={activeConfig.action === "warn"}
                     />
                     <ActionRadio
                       value="block"
@@ -878,12 +890,14 @@ const ACTION_PILL_VARIANT: Record<
   "destructive" | "warning" | "neutral"
 > = {
   block: "destructive",
-  flag: "warning",
+  warn: "warning",
+  flag: "neutral",
   off: "neutral",
 };
 
 const ACTION_PILL_LABEL: Record<ActionPillKind, string> = {
   block: "Block",
+  warn: "Warn",
   flag: "Flag",
   off: "Off",
 };

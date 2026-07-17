@@ -94,18 +94,35 @@ func loadConfigFromFile(c *cli.Context, flags []cli.Flag) error {
 	return cfgLoader(c)
 }
 
-func newGuardianPolicy(c *cli.Context, tracerProvider trace.TracerProvider) (policy *guardian.Policy, err error) {
+func newGuardianPolicy(c *cli.Context, logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider) (policy *guardian.Policy, err error) {
+	breaker := guardian.NewNoopBreaker(logger, meterProvider)
+	limiter := guardian.NewNoopLimiter(logger, meterProvider)
+
 	// In local development, allow loopback addresses for internal tool-to-tool communication
 	if c.String("environment") == "local" {
-		policy, err = guardian.NewUnsafePolicy(tracerProvider, []string{}) // Allow all traffic for local development
+		policy, err = guardian.NewUnsafePolicy(
+			tracerProvider,
+			[]string{}, // Allow all traffic for local development
+			guardian.WithBreaker(breaker),
+			guardian.WithLimiter(limiter),
+		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create unsafe http guardian policy: %w", err)
 		}
 	} else {
-		policy = guardian.NewDefaultPolicy(tracerProvider)
+		policy = guardian.NewDefaultPolicy(
+			tracerProvider,
+			guardian.WithBreaker(breaker),
+			guardian.WithLimiter(limiter),
+		)
 	}
 	if s := c.StringSlice("disallowed-cidr-blocks"); s != nil {
-		policy, err = guardian.NewUnsafePolicy(tracerProvider, s)
+		policy, err = guardian.NewUnsafePolicy(
+			tracerProvider,
+			s,
+			guardian.WithBreaker(breaker),
+			guardian.WithLimiter(limiter),
+		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create unsafe http guardian policy: %w", err)
 		}
@@ -331,7 +348,7 @@ type temporalClientOptions struct {
 	taskQueue    string
 }
 
-func newTemporalClient(logger *slog.Logger, opts temporalClientOptions) (*temporal.Environment, func(context.Context) error, error) {
+func newTemporalClient(logger *slog.Logger, meterProvider metric.MeterProvider, opts temporalClientOptions) (*temporal.Environment, func(context.Context) error, error) {
 	var nilShutdownFunc = noopShutdown
 	if opts.address == "" || opts.namespace == "" {
 		return nil, nilShutdownFunc, nil
@@ -364,7 +381,11 @@ func newTemporalClient(logger *slog.Logger, opts temporalClientOptions) (*tempor
 	}
 
 	interceptors = append(interceptors, tracingInterceptor)
-	clientOptions.MetricsHandler = opentelemetry.NewMetricsHandler(opentelemetry.MetricsHandlerOptions{})
+	clientOptions.MetricsHandler = opentelemetry.NewMetricsHandler(opentelemetry.MetricsHandlerOptions{
+		// Bind Temporal to the post-SetupOTelSDK meter so counters export as delta counts.
+		// Otherwise Datadog .as_rate() monitors can stick until the worker restarts.
+		Meter: meterProvider.Meter("temporal-sdk-go"),
+	})
 
 	clientOptions.Interceptors = interceptors
 
@@ -496,9 +517,8 @@ func newBillingProvider(
 // the dev-idp's mock-workos emulator without changing any wiring.
 func workosClientOpts(c *cli.Context) workos.ClientOpts {
 	return workos.ClientOpts{
-		Endpoint:   c.String("workos-endpoint"),
-		HTTPClient: nil,
-		ClientID:   c.String("idp-client-id"),
+		Endpoint: c.String("workos-endpoint"),
+		ClientID: c.String("idp-client-id"),
 	}
 }
 
@@ -777,6 +797,7 @@ func newTriggersApp(
 	telemetryLogger *telemetry.Logger,
 	auditLogger *audit.Logger,
 	serverURL *url.URL,
+	siteURL *url.URL,
 	slackClient *slack_client.SlackClient,
 ) *bgtriggers.App {
 	envEntries := environments.NewEnvironmentEntries(logger, db, enc, nil)
@@ -808,6 +829,7 @@ func newTriggersApp(
 		}),
 		auditLogger,
 		serverURL,
+		siteURL,
 		slackClient,
 		bgtriggers.NewNoopDispatcher(logger),
 	)

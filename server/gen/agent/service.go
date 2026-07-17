@@ -27,6 +27,10 @@ type Service interface {
 	// each tool's syncer decides how to render it into that tool's native
 	// configuration.
 	GetPlugins(context.Context, *GetPluginsPayload) (res *GetPluginsResult, err error)
+	// List users in the current organization who are actively running the
+	// Speakeasy device agent, attributed by the email each agent reports on sync.
+	// Dashboard-only; requires an org admin session.
+	ListSyncedUsers(context.Context, *ListSyncedUsersPayload) (res *ListSyncedUsersResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -49,7 +53,7 @@ const ServiceName = "agent"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [1]string{"getPlugins"}
+var MethodNames = [2]string{"getPlugins", "listSyncedUsers"}
 
 type AgentMarketplace struct {
 	// Stable identifier for the marketplace, used as its key when the agent
@@ -74,10 +78,10 @@ type AgentPlugin struct {
 // GetPluginsPayload is the payload type of the agent service getPlugins method.
 type GetPluginsPayload struct {
 	ApikeyToken *string
-	// Email address of the enrolled user. Required when authenticating with an
-	// org-scoped agent install key (the MDM zero-touch path); ignored for a
+	// Email address of the enrolled user. Authoritative when authenticating with
+	// an org-scoped agent install key (the MDM zero-touch path); ignored for a
 	// per-user key, whose owner is the enrolled user.
-	Email *string
+	Email string
 }
 
 // GetPluginsResult is the result type of the agent service getPlugins method.
@@ -91,6 +95,29 @@ type GetPluginsResult struct {
 	// Plugins the agent should enable. Each entry references one of the
 	// marketplaces above by name.
 	Plugins []*AgentPlugin
+}
+
+// ListSyncedUsersPayload is the payload type of the agent service
+// listSyncedUsers method.
+type ListSyncedUsersPayload struct {
+	SessionToken *string
+}
+
+// ListSyncedUsersResult is the result type of the agent service
+// listSyncedUsers method.
+type ListSyncedUsersResult struct {
+	// Emails seen syncing the device agent, most recently active first.
+	Users []*SyncedAgentUser
+}
+
+type SyncedAgentUser struct {
+	// Email the device agent reported on sync. Resolve against org members for
+	// display.
+	Email string
+	// First time this email was seen syncing the device agent.
+	FirstSeenAt string
+	// Most recent time this email was seen syncing the device agent.
+	LastSeenAt string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

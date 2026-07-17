@@ -10,7 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
+	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
 )
 
 // --- Real positives: PII that should be detected ---
@@ -211,7 +212,7 @@ func TestCombinedScanners_BothSourcesAppear(t *testing.T) {
 	// Message with both a secret (AWS key) and PII (email)
 	content := "Here is my AWS key: AKIAIOSFODNN7REALKEY and my email is alice@globex.com"
 
-	gitleaksFindings, err := risk_analysis.ScanWithGitleaks(content)
+	gitleaksFindings, err := gitleaks.NewScanner().Scan(t.Context(), content)
 	require.NoError(t, err)
 
 	presidioResults, err := client.AnalyzeBatch(t.Context(), []string{content}, nil, 0, nil)
@@ -271,7 +272,7 @@ func TestPresidio_StressBatch(t *testing.T) {
 
 // --- Helpers ---
 
-func findingRuleIDs(findings []risk_analysis.Finding) []string {
+func findingRuleIDs(findings []scanners.Finding) []string {
 	ids := make([]string, len(findings))
 	for i, f := range findings {
 		ids[i] = f.RuleID
@@ -279,8 +280,8 @@ func findingRuleIDs(findings []risk_analysis.Finding) []string {
 	return ids
 }
 
-func filterHighConfidence(findings []risk_analysis.Finding, threshold float64) []risk_analysis.Finding {
-	var out []risk_analysis.Finding
+func filterHighConfidence(findings []scanners.Finding, threshold float64) []scanners.Finding {
+	var out []scanners.Finding
 	for _, f := range findings {
 		if f.Confidence >= threshold {
 			out = append(out, f)
@@ -289,8 +290,8 @@ func filterHighConfidence(findings []risk_analysis.Finding, threshold float64) [
 	return out
 }
 
-func filterBySource(findings []risk_analysis.Finding, source string) []risk_analysis.Finding {
-	var out []risk_analysis.Finding
+func filterBySource(findings []scanners.Finding, source string) []scanners.Finding {
+	var out []scanners.Finding
 	for _, f := range findings {
 		if strings.EqualFold(f.Source, source) {
 			out = append(out, f)

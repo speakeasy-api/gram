@@ -24,16 +24,16 @@ func BuildCreateMcpServerPayload(mcpServersCreateMcpServerBody string, mcpServer
 	{
 		err = json.Unmarshal([]byte(mcpServersCreateMcpServerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tool_variations_group_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tool_variations_group_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tunneled_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }'")
 		}
 		if body.EnvironmentID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.environment_id", *body.EnvironmentID, goa.FormatUUID))
 		}
-		if body.UserSessionIssuerID != nil {
-			err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
-		}
 		if body.RemoteMcpServerID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_mcp_server_id", *body.RemoteMcpServerID, goa.FormatUUID))
+		}
+		if body.TunneledMcpServerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.tunneled_mcp_server_id", *body.TunneledMcpServerID, goa.FormatUUID))
 		}
 		if body.ToolsetID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))
@@ -69,8 +69,8 @@ func BuildCreateMcpServerPayload(mcpServersCreateMcpServerBody string, mcpServer
 	v := &mcpservers.CreateMcpServerPayload{
 		Name:                  body.Name,
 		EnvironmentID:         body.EnvironmentID,
-		UserSessionIssuerID:   body.UserSessionIssuerID,
 		RemoteMcpServerID:     body.RemoteMcpServerID,
+		TunneledMcpServerID:   body.TunneledMcpServerID,
 		ToolsetID:             body.ToolsetID,
 		ToolVariationsGroupID: body.ToolVariationsGroupID,
 		Visibility:            types.McpServerVisibility(body.Visibility),
@@ -132,13 +132,23 @@ func BuildGetMcpServerPayload(mcpServersGetMcpServerID string, mcpServersGetMcpS
 
 // BuildListMcpServersPayload builds the payload for the mcpServers
 // listMcpServers endpoint from CLI flags.
-func BuildListMcpServersPayload(mcpServersListMcpServersRemoteMcpServerID string, mcpServersListMcpServersToolsetID string, mcpServersListMcpServersSessionToken string, mcpServersListMcpServersApikeyToken string, mcpServersListMcpServersProjectSlugInput string) (*mcpservers.ListMcpServersPayload, error) {
+func BuildListMcpServersPayload(mcpServersListMcpServersRemoteMcpServerID string, mcpServersListMcpServersTunneledMcpServerID string, mcpServersListMcpServersToolsetID string, mcpServersListMcpServersSessionToken string, mcpServersListMcpServersApikeyToken string, mcpServersListMcpServersProjectSlugInput string) (*mcpservers.ListMcpServersPayload, error) {
 	var err error
 	var remoteMcpServerID *string
 	{
 		if mcpServersListMcpServersRemoteMcpServerID != "" {
 			remoteMcpServerID = &mcpServersListMcpServersRemoteMcpServerID
 			err = goa.MergeErrors(err, goa.ValidateFormat("remote_mcp_server_id", *remoteMcpServerID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var tunneledMcpServerID *string
+	{
+		if mcpServersListMcpServersTunneledMcpServerID != "" {
+			tunneledMcpServerID = &mcpServersListMcpServersTunneledMcpServerID
+			err = goa.MergeErrors(err, goa.ValidateFormat("tunneled_mcp_server_id", *tunneledMcpServerID, goa.FormatUUID))
 			if err != nil {
 				return nil, err
 			}
@@ -174,10 +184,26 @@ func BuildListMcpServersPayload(mcpServersListMcpServersRemoteMcpServerID string
 	}
 	v := &mcpservers.ListMcpServersPayload{}
 	v.RemoteMcpServerID = remoteMcpServerID
+	v.TunneledMcpServerID = tunneledMcpServerID
 	v.ToolsetID = toolsetID
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildListMcpServersForOrgPayload builds the payload for the mcpServers
+// listMcpServersForOrg endpoint from CLI flags.
+func BuildListMcpServersForOrgPayload(mcpServersListMcpServersForOrgSessionToken string) (*mcpservers.ListMcpServersForOrgPayload, error) {
+	var sessionToken *string
+	{
+		if mcpServersListMcpServersForOrgSessionToken != "" {
+			sessionToken = &mcpServersListMcpServersForOrgSessionToken
+		}
+	}
+	v := &mcpservers.ListMcpServersForOrgPayload{}
+	v.SessionToken = sessionToken
 
 	return v, nil
 }
@@ -190,17 +216,17 @@ func BuildUpdateMcpServerPayload(mcpServersUpdateMcpServerBody string, mcpServer
 	{
 		err = json.Unmarshal([]byte(mcpServersUpdateMcpServerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tool_variations_group_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tool_variations_group_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tunneled_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if body.EnvironmentID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.environment_id", *body.EnvironmentID, goa.FormatUUID))
 		}
-		if body.UserSessionIssuerID != nil {
-			err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
-		}
 		if body.RemoteMcpServerID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_mcp_server_id", *body.RemoteMcpServerID, goa.FormatUUID))
+		}
+		if body.TunneledMcpServerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.tunneled_mcp_server_id", *body.TunneledMcpServerID, goa.FormatUUID))
 		}
 		if body.ToolsetID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))
@@ -237,8 +263,8 @@ func BuildUpdateMcpServerPayload(mcpServersUpdateMcpServerBody string, mcpServer
 		ID:                    body.ID,
 		Name:                  body.Name,
 		EnvironmentID:         body.EnvironmentID,
-		UserSessionIssuerID:   body.UserSessionIssuerID,
 		RemoteMcpServerID:     body.RemoteMcpServerID,
+		TunneledMcpServerID:   body.TunneledMcpServerID,
 		ToolsetID:             body.ToolsetID,
 		ToolVariationsGroupID: body.ToolVariationsGroupID,
 		Visibility:            types.McpServerVisibility(body.Visibility),

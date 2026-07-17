@@ -5,11 +5,10 @@ import { Type } from "@/components/ui/type";
 import { useMcpUrl } from "@/hooks/useToolsetUrl";
 import { useRoutes } from "@/routes";
 import { MCPStatusIndicator } from "./MCPStatusIndicator";
-import { ToolsetEntry } from "@gram/client/models/components";
-import { useLatestDeployment } from "@gram/client/react-query";
+import { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
+import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import { AlertTriangleIcon, Link2, Network, Package } from "lucide-react";
 import { useMemo } from "react";
-import { useNavigate } from "react-router";
 import {
   useCatalogIconMap,
   useExternalMcpOAuthConfigStatus,
@@ -23,7 +22,6 @@ export function MCPTableRow({
   toolset: ToolsetEntry;
 }): JSX.Element {
   const routes = useRoutes();
-  const navigate = useNavigate();
   const { url: mcpUrl } = useMcpUrl(toolset);
   const catalogIconMap = useCatalogIconMap();
   const { data: deploymentResult } = useLatestDeployment();
@@ -31,7 +29,7 @@ export function MCPTableRow({
 
   const handleClick = () => {
     if (oauthStatus === "required-unconfigured") {
-      void navigate(`${routes.mcp.details.href(toolset.slug)}#authentication`);
+      routes.mcp.details.authentication.goTo(toolset.slug);
     } else {
       routes.mcp.details.goTo(toolset.slug);
     }

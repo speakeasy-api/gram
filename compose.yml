@@ -99,8 +99,6 @@ services:
       CLICKHOUSE_USER: gram
       CLICKHOUSE_PASSWORD: gram
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
-    mem_limit: 2g
-    memswap_limit: 2g
     volumes:
       - clickhouse_data:/var/lib/clickhouse
     ulimits:
@@ -155,19 +153,46 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
-  mcp-registry:
-    profiles: [local-registry]
-    image: ghcr.io/modelcontextprotocol/registry:1.3.10
+
+  tunnel-postgres-mcp:
+    profiles: [tunnel]
+    image: gram-postgres-mcp-streamable:07eb329c8c48
+    build:
+      context: https://github.com/crystaldba/postgres-mcp.git#07eb329c8c48e49640e0d1b5b35465d4d024c3ee
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
-      MCP_REGISTRY_DATABASE_URL: postgresql://mcp_registry:mcp_registry@mcp-registry-db:5432/mcp_registry
-      MCP_REGISTRY_JWT_PRIVATE_KEY: ffb75d70bdacadee50324c5f93b04e5674b1df37b4e234e603e5c08500eb0740
-      MCP_REGISTRY_ENABLE_ANONYMOUS_AUTH: "true"
-    ports:
-      - "${LOCAL_MCP_REGISTRY_PORT}:8080"
+      DATABASE_URI: postgresql://${DB_USER}:${DB_PASSWORD}@gram-db:5432/${DB_NAME}
+    command:
+      [
+        "--access-mode=unrestricted",
+        "--transport=streamable-http",
+        "--streamable-http-host=0.0.0.0",
+        "--streamable-http-port=9000",
+      ]
     depends_on:
-      mcp-registry-db:
+      gram-db:
         condition: service_healthy
+
+  tunnel-agent:
+    profiles: [tunnel]
+    image: golang:1.26.4-bookworm
+    restart: unless-stopped
+    network_mode: "service:tunnel-postgres-mcp"
+    working_dir: /workspace
+    volumes:
+      - .:/workspace:ro
+    environment:
+      TUNNEL_GATEWAY_URL: ${TUNNEL_AGENT_GATEWAY_URL:-ws://host.docker.internal:8090/connect}
+      TUNNEL_KEY: ${TUNNEL_LOCAL_KEY:-}
+      TUNNEL_LOCAL_MCP_URL: http://127.0.0.1:9000/mcp
+      TUNNEL_SERVICE_VERSION: 0.3.0
+      TUNNEL_METADATA: '{"environment":"local","server":"postgres-mcp","database":"gram","transport":"streamable-http"}'
+    command: ["go", "run", "./tunnel/cmd/tunnel-agent"]
+    depends_on:
+      tunnel-postgres-mcp:
+        condition: service_started
 
 volumes:
   postgres_data:

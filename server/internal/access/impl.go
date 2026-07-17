@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strings"
 	"time"
 
@@ -28,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/database"
+	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -60,6 +62,8 @@ type Service struct {
 	audit           *audit.Logger
 	jwtSecret       string
 	accessStore     accesscontrol.Store
+	emailSvc        *email.Service
+	siteURL         url.URL
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -77,6 +81,8 @@ func NewService(
 	auditLogger *audit.Logger,
 	jwtSecret string,
 	accessStore accesscontrol.Store,
+	emailSvc *email.Service,
+	siteURL url.URL,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("access"))
 
@@ -92,6 +98,8 @@ func NewService(
 		audit:           auditLogger,
 		jwtSecret:       jwtSecret,
 		accessStore:     accessStore,
+		emailSvc:        emailSvc,
+		siteURL:         siteURL,
 	}
 }
 
@@ -257,6 +265,10 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 		{scope: authz.ScopeEnvironmentBlockedRead, description: "Store exceptions for environment read access.", resourceType: "environment"},
 		{scope: authz.ScopeEnvironmentWrite, description: "Add, edit, clone, and remove environments within the project.", resourceType: "environment"},
 		{scope: authz.ScopeEnvironmentBlockedWrite, description: "Store exceptions for environment write access.", resourceType: "environment"},
+		{scope: authz.ScopeSkillRead, description: "View skills within the project.", resourceType: "skill"},
+		{scope: authz.ScopeSkillBlockedRead, description: "Store exceptions for skill read access.", resourceType: "skill"},
+		{scope: authz.ScopeSkillWrite, description: "Create and modify skills within the project.", resourceType: "skill"},
+		{scope: authz.ScopeSkillBlockedWrite, description: "Store exceptions for skill write access.", resourceType: "skill"},
 		{scope: authz.ScopeRiskPolicyEvaluate, description: "Evaluate risk policies.", resourceType: "risk_policy"},
 		{scope: authz.ScopeRiskPolicyBypass, description: "Bypass risk policies.", resourceType: "risk_policy"},
 		{scope: authz.ScopeChatRead, description: "Read every member's agent session transcripts and reveal the secret values flagged in Risk Events. Members can always read their own sessions, no one else's; this grant adds access to everyone else's sessions and to unmasking flagged secrets.", resourceType: "chat"},
@@ -535,6 +547,8 @@ func userVisibleScopeGrants() []*gen.ListRoleGrant {
 		{Scope: string(authz.ScopeMCPConnect), Selectors: nil},
 		{Scope: string(authz.ScopeEnvironmentRead), Selectors: nil},
 		{Scope: string(authz.ScopeEnvironmentWrite), Selectors: nil},
+		{Scope: string(authz.ScopeSkillRead), Selectors: nil},
+		{Scope: string(authz.ScopeSkillWrite), Selectors: nil},
 		{Scope: string(authz.ScopeRiskPolicyEvaluate), Selectors: nil},
 		{Scope: string(authz.ScopeRiskPolicyBypass), Selectors: nil},
 		{Scope: string(authz.ScopeChatRead), Selectors: nil},

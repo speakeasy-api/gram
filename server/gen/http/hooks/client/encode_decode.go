@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 
 	hooks "github.com/speakeasy-api/gram/server/gen/hooks"
 	goahttp "goa.design/goa/v3/http"
@@ -779,6 +780,11 @@ func EncodeIngestRequest(encoder func(*http.Request) goahttp.Encoder) func(*http
 			head := *p.IdempotencyKey
 			req.Header.Set("Idempotency-Key", head)
 		}
+		if p.Replayed != nil {
+			head := *p.Replayed
+			headStr := strconv.FormatBool(head)
+			req.Header.Set("X-Gram-Replayed", headStr)
+		}
 		body := NewIngestRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
 			return goahttp.ErrEncodingError("hooks", "ingest", err)
@@ -1445,6 +1451,7 @@ func marshalHooksHookIngestSourceToHookIngestSourceRequestBody(v *hooks.HookInge
 		AdapterVersion: v.AdapterVersion,
 		RawEventName:   v.RawEventName,
 		Hostname:       v.Hostname,
+		UserEmail:      v.UserEmail,
 	}
 
 	return res
@@ -1494,6 +1501,16 @@ func marshalHooksHookIngestDataToHookIngestDataRequestBody(v *hooks.HookIngestDa
 	if v.Mcp != nil {
 		res.Mcp = marshalHooksHookMCPDataToHookMCPDataRequestBody(v.Mcp)
 	}
+	if v.McpInventory != nil {
+		res.McpInventory = make([]*HookMCPDataRequestBody, len(v.McpInventory))
+		for i, val := range v.McpInventory {
+			if val == nil {
+				res.McpInventory[i] = nil
+				continue
+			}
+			res.McpInventory[i] = marshalHooksHookMCPDataToHookMCPDataRequestBody(val)
+		}
+	}
 	if v.Usage != nil {
 		res.Usage = marshalHooksHookUsageDataToHookUsageDataRequestBody(v.Usage)
 	}
@@ -1505,6 +1522,16 @@ func marshalHooksHookIngestDataToHookIngestDataRequestBody(v *hooks.HookIngestDa
 	}
 	if v.Notification != nil {
 		res.Notification = marshalHooksHookNotificationDataToHookNotificationDataRequestBody(v.Notification)
+	}
+	if v.McpAttribution != nil {
+		res.McpAttribution = make([]*HookMCPAttributionEntryRequestBody, len(v.McpAttribution))
+		for i, val := range v.McpAttribution {
+			if val == nil {
+				res.McpAttribution[i] = nil
+				continue
+			}
+			res.McpAttribution[i] = marshalHooksHookMCPAttributionEntryToHookMCPAttributionEntryRequestBody(val)
+		}
 	}
 
 	return res
@@ -1626,6 +1653,22 @@ func marshalHooksHookNotificationDataToHookNotificationDataRequestBody(v *hooks.
 	return res
 }
 
+// marshalHooksHookMCPAttributionEntryToHookMCPAttributionEntryRequestBody
+// builds a value of type *HookMCPAttributionEntryRequestBody from a value of
+// type *hooks.HookMCPAttributionEntry.
+func marshalHooksHookMCPAttributionEntryToHookMCPAttributionEntryRequestBody(v *hooks.HookMCPAttributionEntry) *HookMCPAttributionEntryRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &HookMCPAttributionEntryRequestBody{
+		RequestID: v.RequestID,
+		McpServer: v.McpServer,
+		McpTool:   v.McpTool,
+	}
+
+	return res
+}
+
 // marshalHookIngestSourceRequestBodyToHooksHookIngestSource builds a value of
 // type *hooks.HookIngestSource from a value of type
 // *HookIngestSourceRequestBody.
@@ -1635,6 +1678,7 @@ func marshalHookIngestSourceRequestBodyToHooksHookIngestSource(v *HookIngestSour
 		AdapterVersion: v.AdapterVersion,
 		RawEventName:   v.RawEventName,
 		Hostname:       v.Hostname,
+		UserEmail:      v.UserEmail,
 	}
 
 	return res
@@ -1684,6 +1728,16 @@ func marshalHookIngestDataRequestBodyToHooksHookIngestData(v *HookIngestDataRequ
 	if v.Mcp != nil {
 		res.Mcp = marshalHookMCPDataRequestBodyToHooksHookMCPData(v.Mcp)
 	}
+	if v.McpInventory != nil {
+		res.McpInventory = make([]*hooks.HookMCPData, len(v.McpInventory))
+		for i, val := range v.McpInventory {
+			if val == nil {
+				res.McpInventory[i] = nil
+				continue
+			}
+			res.McpInventory[i] = marshalHookMCPDataRequestBodyToHooksHookMCPData(val)
+		}
+	}
 	if v.Usage != nil {
 		res.Usage = marshalHookUsageDataRequestBodyToHooksHookUsageData(v.Usage)
 	}
@@ -1695,6 +1749,16 @@ func marshalHookIngestDataRequestBodyToHooksHookIngestData(v *HookIngestDataRequ
 	}
 	if v.Notification != nil {
 		res.Notification = marshalHookNotificationDataRequestBodyToHooksHookNotificationData(v.Notification)
+	}
+	if v.McpAttribution != nil {
+		res.McpAttribution = make([]*hooks.HookMCPAttributionEntry, len(v.McpAttribution))
+		for i, val := range v.McpAttribution {
+			if val == nil {
+				res.McpAttribution[i] = nil
+				continue
+			}
+			res.McpAttribution[i] = marshalHookMCPAttributionEntryRequestBodyToHooksHookMCPAttributionEntry(val)
+		}
 	}
 
 	return res
@@ -1811,6 +1875,22 @@ func marshalHookNotificationDataRequestBodyToHooksHookNotificationData(v *HookNo
 		Type:    v.Type,
 		Title:   v.Title,
 		Message: v.Message,
+	}
+
+	return res
+}
+
+// marshalHookMCPAttributionEntryRequestBodyToHooksHookMCPAttributionEntry
+// builds a value of type *hooks.HookMCPAttributionEntry from a value of type
+// *HookMCPAttributionEntryRequestBody.
+func marshalHookMCPAttributionEntryRequestBodyToHooksHookMCPAttributionEntry(v *HookMCPAttributionEntryRequestBody) *hooks.HookMCPAttributionEntry {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.HookMCPAttributionEntry{
+		RequestID: v.RequestID,
+		McpServer: v.McpServer,
+		McpTool:   v.McpTool,
 	}
 
 	return res

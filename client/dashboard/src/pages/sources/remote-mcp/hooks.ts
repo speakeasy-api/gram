@@ -1,23 +1,18 @@
 import { useFetcher } from "@/contexts/Fetcher";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
-import {
-  buildUserSessionResourceSlug,
-  DEFAULT_USER_SESSION_DURATION_HOURS,
-} from "@/lib/externalMcpUserSessions";
 import { formatRemoteMcpDisplay } from "@/lib/sources";
-import { randomSlugSuffix } from "@/lib/slug";
-import type {
-  McpServer,
-  RemoteMcpServer,
-} from "@gram/client/models/components";
 import {
-  invalidateAllMcpEndpoints,
-  invalidateAllMcpServers,
-  invalidateAllRemoteMcpServers,
-  invalidateAllRemoteSessionClients,
-  invalidateAllRemoteSessionIssuers,
-  invalidateAllUserSessionIssuers,
-} from "@gram/client/react-query/index.js";
+  createDefaultMcpEndpoint,
+  DEFAULT_ENDPOINT_FAILED_MESSAGE,
+} from "@/lib/mcpEndpoints";
+import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import type { RemoteMcpServer } from "@gram/client/models/components/remotemcpserver.js";
+import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
+import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
+import { invalidateAllRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.js";
+import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
+import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
+import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
 import {
   useMutation,
   useQueryClient,
@@ -27,94 +22,7 @@ import { toast } from "sonner";
 import {
   autoConfigureRemoteMcpAuth,
   type AutoConfigureAuthResult,
-  pointMcpServerAtUserSessionIssuer,
 } from "./autoConfigureAuth";
-
-type SdkClient = ReturnType<typeof useSdkClient>;
-
-const DEFAULT_ENDPOINT_FAILED_MESSAGE =
-  "MCP server created, but the default endpoint failed. Add one from the server page.";
-
-const USER_SESSION_ISSUER_FAILED_MESSAGE =
-  "MCP server created, but its login issuer couldn't be set up. Configure authentication from the server's Authentication tab.";
-
-// Mint a remote-backed server's one permanent user_session_issuer and link it
-// while the server stays disabled, making it gateable. Best-effort: on failure
-// the server is left parked (disabled, no USI) with only a warning, since auth
-// can still be configured by hand. A half-built link (USI created but server
-// update failed) is rolled back so it doesn't leak an orphan issuer.
-async function linkUserSessionIssuer(
-  client: SdkClient,
-  mcpServer: McpServer,
-): Promise<McpServer> {
-  let createdUserSessionIssuerId: string | undefined;
-  try {
-    const userSessionIssuer = await client.userSessionIssuers.create({
-      createUserSessionIssuerForm: {
-        slug: buildUserSessionResourceSlug(mcpServer.slug ?? "mcp"),
-        authnChallengeMode: "interactive",
-        sessionDurationHours: DEFAULT_USER_SESSION_DURATION_HOURS,
-      },
-    });
-    createdUserSessionIssuerId = userSessionIssuer.id;
-
-    return await pointMcpServerAtUserSessionIssuer(
-      client,
-      mcpServer,
-      userSessionIssuer.id,
-      "disabled",
-    );
-  } catch (error) {
-    if (createdUserSessionIssuerId) {
-      try {
-        await client.userSessionIssuers.delete({
-          id: createdUserSessionIssuerId,
-        });
-      } catch (cleanupError) {
-        console.info(
-          "Failed to clean up user session issuer after link failure.",
-          { userSessionIssuerId: createdUserSessionIssuerId, cleanupError },
-        );
-      }
-    }
-    console.info("Failed to link a user session issuer to the MCP server.", {
-      mcpServerId: mcpServer.id,
-      error,
-    });
-    toast.warning(USER_SESSION_ISSUER_FAILED_MESSAGE);
-    return mcpServer;
-  }
-}
-
-// Auto-provisions a default platform MCP endpoint for a freshly created
-// mcp_server backed by a remote source, so the user doesn't have to create one
-// by hand afterwards. Platform endpoint slugs (no custom domain) must be
-// prefixed with the org slug; a short random suffix keeps them unique.
-//
-// Best-effort: a failure here leaves the source intact and only surfaces a
-// warning. The endpoint is a convenience and can always be added later from
-// the server detail page, so it should never roll back the source.
-async function createDefaultMcpEndpoint(
-  client: SdkClient,
-  mcpServer: McpServer,
-  orgSlug: string | undefined,
-): Promise<void> {
-  if (!orgSlug) {
-    toast.warning(DEFAULT_ENDPOINT_FAILED_MESSAGE);
-    return;
-  }
-
-  try {
-    await client.mcpEndpoints.create({
-      createMcpEndpointForm: {
-        mcpServerId: mcpServer.id,
-        slug: `${orgSlug}-${randomSlugSuffix()}`,
-      },
-    });
-  } catch {
-    toast.warning(DEFAULT_ENDPOINT_FAILED_MESSAGE);
-  }
-}
 
 export type CreateRemoteMcpSourceVariables = {
   name?: string | undefined;
@@ -144,7 +52,6 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
           name,
           url,
           transportType: "streamable-http",
-          headers: [],
         },
       });
 
@@ -179,27 +86,24 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
           : new Error(String(linkError));
       }
 
-      // Link the server's permanent USI before auto-config so auto-config only
-      // has to attach a client under it.
-      const issuerLinkedMcpServer = await linkUserSessionIssuer(
-        client,
-        mcpServer,
-      );
-
       const authAutoConfig = await autoConfigureRemoteMcpAuth({
         client,
         authedFetch,
         remoteMcpServer,
-        mcpServer: issuerLinkedMcpServer,
+        mcpServer,
       });
       const configuredMcpServer =
         authAutoConfig.status === "configured"
           ? authAutoConfig.mcpServer
-          : issuerLinkedMcpServer;
+          : mcpServer;
 
       // Pre-stage a default endpoint so the user doesn't have to create one
       // before the server can serve. Best-effort: never rolls back the source.
-      await createDefaultMcpEndpoint(client, configuredMcpServer, orgSlug);
+      if (orgSlug) {
+        await createDefaultMcpEndpoint(client, configuredMcpServer, orgSlug);
+      } else {
+        toast.warning(DEFAULT_ENDPOINT_FAILED_MESSAGE);
+      }
 
       return {
         remoteMcpServer,
@@ -257,6 +161,8 @@ export function useLinkMcpServerToRemote(): UseMutationResult<
 
   return useMutation({
     mutationFn: async ({ remoteMcpServer }) => {
+      // Auto-config of the upstream client is intentionally left to the
+      // Authentication tab here.
       const mcpServer = await client.mcpServers.create({
         createMcpServerForm: {
           name: formatRemoteMcpDisplay(remoteMcpServer),
@@ -265,13 +171,12 @@ export function useLinkMcpServerToRemote(): UseMutationResult<
         },
       });
 
-      // Mirror the create flow: give the re-linked server its permanent USI so
-      // it behaves like a freshly-created one. Auto-config of the upstream
-      // client is intentionally left to the Authentication tab here.
-      await linkUserSessionIssuer(client, mcpServer);
-
       // Mirror the create flow: pre-stage a default endpoint. Best-effort.
-      await createDefaultMcpEndpoint(client, mcpServer, orgSlug);
+      if (orgSlug) {
+        await createDefaultMcpEndpoint(client, mcpServer, orgSlug);
+      } else {
+        toast.warning(DEFAULT_ENDPOINT_FAILED_MESSAGE);
+      }
     },
     onSuccess: async () => {
       await Promise.all([
@@ -304,10 +209,19 @@ export function useDeleteRemoteMcpSource(): UseMutationResult<
   return useMutation({
     mutationFn: async ({ remoteMcpServerId, mcpServerIds }) => {
       // Soft-delete each linked mcp_server first; the server-side handler
-      // cascades to its mcp_endpoints. Sequential keeps error surfacing simple
-      // — if one fails partway through we want to know which.
-      for (const id of mcpServerIds) {
-        await client.mcpServers.delete({ id });
+      // cascades to its mcp_endpoints. The deletes are independent, so run
+      // them concurrently and surface any failure before touching the source.
+      const results = await Promise.allSettled(
+        mcpServerIds.map((id) => client.mcpServers.delete({ id })),
+      );
+      const failed = results.find(
+        (result): result is PromiseRejectedResult =>
+          result.status === "rejected",
+      );
+      if (failed) {
+        throw failed.reason instanceof Error
+          ? failed.reason
+          : new Error(String(failed.reason));
       }
 
       await client.remoteMcp.deleteServer({ id: remoteMcpServerId });
@@ -317,6 +231,7 @@ export function useDeleteRemoteMcpSource(): UseMutationResult<
         invalidateAllRemoteMcpServers(queryClient, { refetchType: "all" }),
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
         invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
+        invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
       ]);
     },
   });

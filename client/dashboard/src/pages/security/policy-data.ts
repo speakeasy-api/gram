@@ -1,4 +1,4 @@
-export type PolicyAction = "flag" | "block";
+export type PolicyAction = "flag" | "block" | "warn";
 
 export type PolicyMessageType =
   | "user_message"
@@ -18,12 +18,22 @@ export type RuleCategory =
   | "shadow_mcp"
   | "destructive_tool"
   | "cli_destructive"
+  | "account_identity"
   | "custom";
 
 export type DetectionRule = {
   id: string;
   title: string;
-  source: "gitleaks" | "presidio" | "prompt_injection" | "llm_judge";
+  source:
+    | "gitleaks"
+    | "presidio"
+    | "prompt_injection"
+    | "llm_judge"
+    | "account_identity";
+  // Optional per-rule explanation shown under the title in the policy form's
+  // Customize sheet. Use when the title alone doesn't make clear what
+  // enabling the rule flags (most rules are self-describing and omit it).
+  description?: string;
   // When true the rule is kept in the catalog so legacy risk_results still
   // resolve their human-readable title via risk-utils.ts, but it is hidden
   // from the policy create/edit form so users cannot select it on new
@@ -81,7 +91,7 @@ export const RULE_CATEGORY_META: Record<
   shadow_mcp: {
     label: "Shadow MCP",
     description:
-      "Tool calls in Cursor and Claude Code that don't come from a Speakeasy-issued MCP server. Requires Speakeasy hooks to be installed on the agent.",
+      "Tool calls in Cursor, Claude Code, and Codex that don't come from a Speakeasy-issued MCP server. Requires Speakeasy hooks to be installed on the agent.",
     icon: "shield-off",
   },
   destructive_tool: {
@@ -95,6 +105,12 @@ export const RULE_CATEGORY_META: Record<
     description:
       "Tool calls whose arguments match a curated set of destructive shell, git, database, or cloud CLI patterns (rm -rf, git push --force, DROP TABLE, kubectl delete ns, ...). Applies to native Bash / run_terminal_cmd as well as MCP-routed tools whose arguments carry destructive content.",
     icon: "terminal",
+  },
+  account_identity: {
+    label: "Non-Corporate Accounts",
+    description:
+      "Sessions authenticated with a personal AI account or an email domain outside the approved list. Uses the account attribution captured by session ingest.",
+    icon: "user-x",
   },
   custom: {
     label: "Custom Rules",
@@ -1558,10 +1574,8 @@ export const DETECTION_RULES: Record<RuleCategory, DetectionRule[]> = {
       hidden: true,
     },
   ],
-  // prompt_injection is enabled at the category level; whether the L1 LLM
-  // judge runs on top of the L0 regex/keyword heuristics is selected per-org
-  // via the prompt-injection-use-classifier feature flag, not by the policy
-  // author.
+  // prompt_injection is enabled at the category level; the judge is selected
+  // by category, not by individual rule.
   prompt_injection: [],
   off_policy: [
     {
@@ -1588,5 +1602,21 @@ export const DETECTION_RULES: Record<RuleCategory, DetectionRule[]> = {
   shadow_mcp: [],
   destructive_tool: [],
   cli_destructive: [],
+  account_identity: [
+    {
+      id: "identity.personal_account",
+      title: "Personal AI account",
+      description:
+        "When on, flags any session signed in with a personal AI account (e.g. an individual Claude plan) instead of your organization's team account. Needs no configuration.",
+      source: "account_identity",
+    },
+    {
+      id: "identity.unapproved_domain",
+      title: "Unapproved email domain",
+      description:
+        "When on, flags any session whose AI-account email domain is not in the approved email domains list. Does nothing until at least one approved domain is added.",
+      source: "account_identity",
+    },
+  ],
   custom: [],
 };

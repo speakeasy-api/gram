@@ -21,6 +21,9 @@ type Service interface {
 	CreateRiskPolicy(context.Context, *CreateRiskPolicyPayload) (res *types.RiskPolicy, err error)
 	// List all risk analysis policies for the current project.
 	ListRiskPolicies(context.Context, *ListRiskPoliciesPayload) (res *ListRiskPoliciesResult, err error)
+	// List the built-in exclusion library (known-safe values suppressed before
+	// they reach exclusions), grouped by category.
+	ListBuiltinExclusions(context.Context, *ListBuiltinExclusionsPayload) (res *ListBuiltinExclusionsResult, err error)
 	// Get a risk analysis policy by ID.
 	GetRiskPolicy(context.Context, *GetRiskPolicyPayload) (res *types.RiskPolicy, err error)
 	// Update a risk analysis policy.
@@ -67,6 +70,17 @@ type Service interface {
 	// Create or refresh a risk policy bypass request from a signed request URL
 	// token.
 	CreateRiskPolicyBypassRequest(context.Context, *CreateRiskPolicyBypassRequestPayload) (res *RiskPolicyBypassRequest, err error)
+	// Acknowledge a risk policy warn/challenge from a warning-link token. Records
+	// the acknowledgement so the user's retried action proceeds; self-service (no
+	// admin approval).
+	AcknowledgeRiskPolicyChallenge(context.Context, *AcknowledgeRiskPolicyChallengePayload) (res *AcknowledgeRiskPolicyChallengeResult, err error)
+	// Fetch the details of a risk policy warn/challenge from a warning-link token,
+	// WITHOUT acknowledging it. Powers the approval page (shows what was flagged
+	// and Approve/Deny actions).
+	GetRiskPolicyChallenge(context.Context, *GetRiskPolicyChallengePayload) (res *GetRiskPolicyChallengeResult, err error)
+	// Decline a risk policy warn/challenge from a warning-link token: invalidate
+	// the link and mark the challenge declined. The blocked action stays blocked.
+	DeclineRiskPolicyChallenge(context.Context, *DeclineRiskPolicyChallengePayload) (res *DeclineRiskPolicyChallengeResult, err error)
 	// Get a tool call block by its risk result ID for the durable block page.
 	GetRiskBlock(context.Context, *GetRiskBlockPayload) (res *RiskBlock, err error)
 	// Record thumbs-up/thumbs-down feedback for a tool call block from the block
@@ -109,11 +123,36 @@ type Service interface {
 	// JSON-schema constrained response so the dashboard can prefill the create
 	// form.
 	SuggestCustomDetectionRule(context.Context, *SuggestCustomDetectionRulePayload) (res *SuggestCustomDetectionRuleResult, err error)
+	// Suggest a risk exclusion (match_type, match_value, filters) from a
+	// natural-language prompt describing findings an operator wants to stop
+	// flagging. Calls the configured LLM with a JSON-schema constrained response
+	// so the dashboard can prefill the create exclusion form.
+	SuggestExclusion(context.Context, *SuggestExclusionPayload) (res *SuggestExclusionResult, err error)
 	// Run a single detection rule against pasted sample text and return any
 	// matches. Reuses the same scanner code (gitleaks, Presidio, prompt-injection,
 	// custom regex) that the analyzer runs in production so the playground match
 	// shape mirrors the chat-message path.
 	TestDetectionRule(context.Context, *TestDetectionRulePayload) (res *TestDetectionRuleResult, err error)
+	// Replay a prompt_based guardrail against a single chat session and return the
+	// LLM judge's per-message verdict. The guardrail (prompt + judge config +
+	// message-type scope + CEL scope) is passed inline so the policy-eval
+	// workbench can evaluate an unsaved draft before a policy exists. This path is
+	// read-only: it never writes risk_results, publishes to the outbox, or
+	// enforces. It exists purely to tune a guardrail against real transcripts.
+	// Judges only the chat's latest generation; message-type scoping and CEL scope
+	// predicates are both applied.
+	EvaluatePromptGuardrail(context.Context, *EvaluatePromptGuardrailPayload) (res *PromptGuardrailEvalResult, err error)
+	// Record (or replace) the current reviewer's ground-truth verdict for one chat
+	// session under a prompt-based policy. This is the durable regression set the
+	// eval workbench scores the live guardrail against. Upserts: a reviewer has at
+	// most one verdict per session per policy.
+	SaveRiskEvalReview(context.Context, *SaveRiskEvalReviewPayload) (res *types.RiskPolicyEvalReview, err error)
+	// List the active regression set for a prompt-based policy: every reviewer's
+	// current ground-truth verdicts.
+	ListRiskEvalReviews(context.Context, *ListRiskEvalReviewsPayload) (res *ListRiskEvalReviewsResult, err error)
+	// Remove the current reviewer's verdict for one session (the toggle-off path).
+	// A reviewer can only clear their own verdict.
+	DeleteRiskEvalReview(context.Context, *DeleteRiskEvalReviewPayload) (err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -136,7 +175,26 @@ const ServiceName = "risk"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [34]string{"createRiskPolicy", "listRiskPolicies", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "unmaskRiskResult", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "compileExpr", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "getRiskBlock", "submitRiskBlockFeedback", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "testDetectionRule"}
+var MethodNames = [43]string{"createRiskPolicy", "listRiskPolicies", "listBuiltinExclusions", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "unmaskRiskResult", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "compileExpr", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "acknowledgeRiskPolicyChallenge", "getRiskPolicyChallenge", "declineRiskPolicyChallenge", "getRiskBlock", "submitRiskBlockFeedback", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "suggestExclusion", "testDetectionRule", "evaluatePromptGuardrail", "saveRiskEvalReview", "listRiskEvalReviews", "deleteRiskEvalReview"}
+
+// AcknowledgeRiskPolicyChallengePayload is the payload type of the risk
+// service acknowledgeRiskPolicyChallenge method.
+type AcknowledgeRiskPolicyChallengePayload struct {
+	SessionToken *string
+	// Acknowledgement token generated when a warn policy challenged the action.
+	AckToken string
+}
+
+// AcknowledgeRiskPolicyChallengeResult is the result type of the risk service
+// acknowledgeRiskPolicyChallenge method.
+type AcknowledgeRiskPolicyChallengeResult struct {
+	// Whether the challenge is now acknowledged.
+	Acknowledged bool
+	// The policy that issued the warning.
+	PolicyName *string
+	// RFC3339 time until which the acknowledgement suppresses re-challenge.
+	ExpiresAt *string
+}
 
 // ApproveRiskPolicyBypassRequestPayload is the payload type of the risk
 // service approveRiskPolicyBypassRequest method.
@@ -149,6 +207,28 @@ type ApproveRiskPolicyBypassRequestPayload struct {
 	// Principal URNs to grant bypass access to. Defaults to the requester when
 	// omitted.
 	GrantedPrincipalUrns []string
+}
+
+// A named group of built-in exclusion rules.
+type BuiltinExclusionCategory struct {
+	// Human category label, e.g. "Test credit cards".
+	Label string
+	// The rules in this category.
+	Entries []*BuiltinExclusionEntry
+}
+
+// One rule in the built-in exclusion library. Deliberately omits internal
+// detection-engine identifiers (sources, rule ids) so they are not exposed to
+// end users.
+type BuiltinExclusionEntry struct {
+	// Stable rule id.
+	ID string
+	// Label surfaced when this rule suppresses a finding.
+	Reason string
+	// Human rationale for why these values are known-safe.
+	Description string
+	// Example values — published test/documentation data, never real secrets.
+	Samples []string
 }
 
 // CompileExprPayload is the payload type of the risk service compileExpr
@@ -233,6 +313,10 @@ type CreateRiskPolicyPayload struct {
 	// Prompt-injection detection rule ids to enable in addition to the heuristic
 	// baseline.
 	PromptInjectionRules []string
+	// For the account_identity source: corporate email domains considered
+	// approved. Sessions whose AI-account email domain is not listed are flagged.
+	// Empty/omitted leaves the domain rule inert.
+	ApprovedEmailDomains []string
 	// Canonical rule_ids the user has unchecked within otherwise-enabled
 	// categories. Matching findings are dropped at scan time.
 	DisabledRules []string
@@ -250,7 +334,7 @@ type CreateRiskPolicyPayload struct {
 	ScopeExempt *string
 	// Whether the policy is active.
 	Enabled *bool
-	// Policy action: flag or block.
+	// Policy action: flag, warn (challenge), or block.
 	Action string
 	// Policy audience type: everyone or targeted.
 	AudienceType string
@@ -267,6 +351,24 @@ type CreateRiskPolicyPayload struct {
 	Prompt *string
 	// For prompt_based policies: per-policy LLM-judge model configuration.
 	ModelConfig *types.RiskPolicyModelConfig
+	// CVSS-style severity (0.1-10) assigned to findings this policy produces. Omit
+	// to apply the default (5).
+	Score float64
+}
+
+// DeclineRiskPolicyChallengePayload is the payload type of the risk service
+// declineRiskPolicyChallenge method.
+type DeclineRiskPolicyChallengePayload struct {
+	SessionToken *string
+	// Acknowledgement token generated when a warn policy challenged the action.
+	AckToken string
+}
+
+// DeclineRiskPolicyChallengeResult is the result type of the risk service
+// declineRiskPolicyChallenge method.
+type DeclineRiskPolicyChallengeResult struct {
+	// Whether the challenge is now declined.
+	Declined bool
 }
 
 // DeleteCustomDetectionRulePayload is the payload type of the risk service
@@ -277,6 +379,18 @@ type DeleteCustomDetectionRulePayload struct {
 	ProjectSlugInput *string
 	// The custom detection rule ID.
 	ID string
+}
+
+// DeleteRiskEvalReviewPayload is the payload type of the risk service
+// deleteRiskEvalReview method.
+type DeleteRiskEvalReviewPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The policy the verdict belongs to.
+	PolicyID string
+	// The chat session whose verdict to clear.
+	ChatID string
 }
 
 // DeleteRiskExclusionPayload is the payload type of the risk service
@@ -307,6 +421,32 @@ type DenyRiskPolicyBypassRequestPayload struct {
 	ProjectSlugInput *string
 	// The bypass request ID.
 	ID string
+}
+
+// EvaluatePromptGuardrailPayload is the payload type of the risk service
+// evaluatePromptGuardrail method.
+type EvaluatePromptGuardrailPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The chat session to replay the guardrail against.
+	ChatID string
+	// The guardrail prompt the LLM judge evaluates each in-scope message against.
+	Prompt string
+	// Optional per-policy LLM-judge model configuration. Omit for the default
+	// judge model.
+	ModelConfig *types.RiskPolicyModelConfig
+	// Message types to judge (user_message, assistant_message, tool_request,
+	// tool_response), matching a policy's message_types. When empty or omitted,
+	// judges all supported types.
+	MessageTypes []string
+	// CEL scope predicate: the replay judges a message only when this boolean
+	// expression is true (in addition to message_types). Omit/empty means all
+	// messages are in scope.
+	ScopeInclude *string
+	// CEL exemption predicate: the replay skips a message when this boolean
+	// expression is true. Omit/empty means no inline exemption.
+	ScopeExempt *string
 }
 
 // ExprCompileResult is the result type of the risk service compileExpr method.
@@ -346,6 +486,29 @@ type GetRiskOverviewPayload struct {
 	From *string
 	// Exclusive end of the overview window. Defaults to now.
 	To *string
+}
+
+// GetRiskPolicyChallengePayload is the payload type of the risk service
+// getRiskPolicyChallenge method.
+type GetRiskPolicyChallengePayload struct {
+	SessionToken *string
+	// Acknowledgement token generated when a warn policy challenged the action.
+	AckToken string
+}
+
+// GetRiskPolicyChallengeResult is the result type of the risk service
+// getRiskPolicyChallenge method.
+type GetRiskPolicyChallengeResult struct {
+	// The policy that issued the warning.
+	PolicyName *string
+	// The tool the challenge applies to, if any.
+	ToolName *string
+	// Human-facing challenge message describing what was flagged.
+	Message string
+	// RFC3339 time the acknowledgement link expires.
+	ExpiresAt *string
+	// Whether this challenge has already been acknowledged.
+	Acknowledged bool
 }
 
 // GetRiskPolicyPayload is the payload type of the risk service getRiskPolicy
@@ -398,6 +561,23 @@ type GetRiskUserBreakdownPayload struct {
 	To *string
 }
 
+// ListBuiltinExclusionsPayload is the payload type of the risk service
+// listBuiltinExclusions method.
+type ListBuiltinExclusionsPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// ListBuiltinExclusionsResult is the result type of the risk service
+// listBuiltinExclusions method.
+type ListBuiltinExclusionsResult struct {
+	// Catalog checksum/version, for provenance.
+	Version string
+	// The library grouped by category.
+	Categories []*BuiltinExclusionCategory
+}
+
 // ListCustomDetectionRulesPayload is the payload type of the risk service
 // listCustomDetectionRules method.
 type ListCustomDetectionRulesPayload struct {
@@ -419,6 +599,23 @@ type ListRiskCategoriesPayload struct {
 	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
+}
+
+// ListRiskEvalReviewsPayload is the payload type of the risk service
+// listRiskEvalReviews method.
+type ListRiskEvalReviewsPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The policy whose review set to list.
+	PolicyID string
+}
+
+// ListRiskEvalReviewsResult is the result type of the risk service
+// listRiskEvalReviews method.
+type ListRiskEvalReviewsResult struct {
+	// The active review set for the policy.
+	Reviews []*types.RiskPolicyEvalReview
 }
 
 // ListRiskExclusionsPayload is the payload type of the risk service
@@ -516,6 +713,12 @@ type ListRiskResultsForAgentPayload struct {
 	// keeping the most recent occurrence. Useful when the same secret is detected
 	// many times within a single message body.
 	UniqueMatch *bool
+	// If true, only return findings from chats that are not linked to an
+	// assistant. Useful for surfacing events that are missing user attribution.
+	NonAssistant *bool
+	// Optional assistant ID; only return findings from chats linked to this
+	// assistant.
+	AssistantID *string
 	// Filter results to messages created at or after this timestamp (ISO 8601).
 	From *string
 	// Filter results to messages created strictly before this timestamp (ISO 8601).
@@ -559,6 +762,12 @@ type ListRiskResultsPayload struct {
 	// keeping the most recent occurrence. Useful when the same secret is detected
 	// many times within a single message body.
 	UniqueMatch *bool
+	// If true, only return findings from chats that are not linked to an
+	// assistant. Useful for surfacing events that are missing user attribution.
+	NonAssistant *bool
+	// Optional assistant ID; only return findings from chats linked to this
+	// assistant.
+	AssistantID *string
 	// Filter results to messages created at or after this timestamp (ISO 8601).
 	From *string
 	// Filter results to messages created strictly before this timestamp (ISO 8601).
@@ -578,6 +787,54 @@ type ListRiskResultsResult struct {
 	TotalCount int64
 	// Cursor for the next page of results.
 	NextCursor *string
+}
+
+// PromptGuardrailEvalResult is the result type of the risk service
+// evaluatePromptGuardrail method.
+type PromptGuardrailEvalResult struct {
+	// The chat session that was replayed.
+	ChatID string
+	// True when the guardrail flagged at least one in-scope message.
+	Flagged bool
+	// Number of in-scope messages the judge evaluated.
+	JudgedCount int
+	// Total OpenRouter cost across in-scope judge calls, in USD.
+	TotalCostUsd float64
+	// Aggregate judge latency overhead across in-scope messages, computed as the
+	// sum of per-message judge latencies.
+	TotalLatencyMs int64
+	// Per-message verdicts for in-scope messages, ordered by seq.
+	Verdicts []*PromptGuardrailMessageVerdict
+}
+
+// The LLM judge's verdict for one in-scope message in the replayed session.
+type PromptGuardrailMessageVerdict struct {
+	// The chat message ID.
+	MessageID string
+	// Message sequence within the chat generation, ascending.
+	Seq int64
+	// The judged message type (user_message, assistant_message, tool_request,
+	// tool_response).
+	MessageType string
+	// Tool name for a single-call tool_request message; empty otherwise.
+	ToolName *string
+	// True when the guardrail flagged this message.
+	Matched bool
+	// Judge confidence in [0,1]; 0 when not matched.
+	Confidence float64
+	// One-sentence judge rationale; empty when not matched.
+	Rationale string
+	// Wall-clock latency for judging this message, in milliseconds.
+	LatencyMs int64
+	// OpenRouter cost for judging this message, in USD. Zero when cost was not
+	// returned.
+	CostUsd float64
+	// Prompt tokens billed for this judge call.
+	PromptTokens int
+	// Completion tokens billed for this judge call.
+	CompletionTokens int
+	// Total tokens billed for this judge call.
+	TotalTokens int
 }
 
 // RevokeRiskPolicyBypassRequestPayload is the payload type of the risk service
@@ -776,6 +1033,20 @@ type RiskUserBreakdownResult struct {
 	Rules []*RiskRuleBreakdownEntry
 }
 
+// SaveRiskEvalReviewPayload is the payload type of the risk service
+// saveRiskEvalReview method.
+type SaveRiskEvalReviewPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The prompt-based policy the verdict belongs to.
+	PolicyID string
+	// The chat session being judged.
+	ChatID string
+	// The reviewer's ground-truth verdict for this session.
+	Verdict string
+}
+
 // SubmitRiskBlockFeedbackPayload is the payload type of the risk service
 // submitRiskBlockFeedback method.
 type SubmitRiskBlockFeedbackPayload struct {
@@ -815,6 +1086,31 @@ type SuggestCustomDetectionRuleResult struct {
 	Regex string
 	// Suggested severity level.
 	Severity string
+}
+
+// SuggestExclusionPayload is the payload type of the risk service
+// suggestExclusion method.
+type SuggestExclusionPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Natural-language description of the findings to stop flagging.
+	Prompt string
+	// Built-in and custom rule ids the suggestion may reference in rule_id filters.
+	KnownRuleIds []string
+}
+
+// SuggestExclusionResult is the result type of the risk service
+// suggestExclusion method.
+type SuggestExclusionResult struct {
+	// How match_value is interpreted (exact, regex, rule_id, source, entity_type).
+	MatchType string
+	// The value matched against findings, interpreted per match_type.
+	MatchValue string
+	// Only apply within this rule_id. Empty means any.
+	RuleIDFilter *string
+	// Only apply within this source. Empty means any.
+	SourceFilter *string
 }
 
 type TestDetectionRuleMatch struct {
@@ -954,6 +1250,9 @@ type UpdateRiskPolicyPayload struct {
 	// Prompt-injection detection rule ids to enable in addition to the heuristic
 	// baseline.
 	PromptInjectionRules []string
+	// For the account_identity source: corporate email domains considered
+	// approved. Omit to preserve the current list; send an empty array to clear it.
+	ApprovedEmailDomains []string
 	// Canonical rule_ids the user has unchecked within otherwise-enabled
 	// categories. Matching findings are dropped at scan time.
 	DisabledRules []string
@@ -971,7 +1270,7 @@ type UpdateRiskPolicyPayload struct {
 	ScopeExempt *string
 	// Whether the policy is active.
 	Enabled *bool
-	// Policy action: flag or block.
+	// Policy action: flag, warn (challenge), or block.
 	Action *string
 	// Policy audience type: everyone or targeted. Omit to preserve the current
 	// audience type.
@@ -990,6 +1289,9 @@ type UpdateRiskPolicyPayload struct {
 	// For prompt_based policies: per-policy LLM-judge model configuration. Omit to
 	// preserve the current value.
 	ModelConfig *types.RiskPolicyModelConfig
+	// CVSS-style severity (0.1-10) assigned to findings this policy produces. Omit
+	// to preserve the current value.
+	Score *float64
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

@@ -62,6 +62,7 @@ SELECT
     om.id AS organization_id,
     om.slug AS organization_slug,
     om.gram_account_type,
+    k.key_type,
     k.monthly_credits,
     k.key AS api_key
 FROM organization_metadata om

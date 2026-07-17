@@ -10,6 +10,7 @@ const SOURCE_TO_CATEGORY: ReadonlyMap<string, RuleCategory> = new Map<
   ["prompt_injection", "prompt_injection"],
   ["llm_judge", "prompt_policy"],
   ["cli_destructive", "cli_destructive"],
+  ["account_identity", "account_identity"],
   // Scanner-source fallbacks: when a rule_id doesn't carry its category
   // prefix (e.g. gitleaks' bare "generic-api-key"), classify by source so
   // we never leak the scanner name to the UI. Keep in sync with the Go
@@ -37,6 +38,33 @@ export function getRuleTitleFallback(ruleId: string | undefined): string {
   if (!ruleId) return "-";
   return RULE_ID_TO_TITLE.get(ruleId) ?? humanizeRuleId(ruleId);
 }
+
+// ── Severity (CVSS-style) ────────────────────────────────────────────────────
+// A policy carries a decimal severity score (0.1–10). Findings resolve their
+// rating from the owning policy's score at read time. Bands mirror the CVSS
+// qualitative scale, minus the "None" band — the lowest rating is Low.
+export type SeverityRating = "low" | "medium" | "high" | "critical";
+
+const SEVERITY_BANDS: { min: number; rating: SeverityRating }[] = [
+  { min: 9.0, rating: "critical" },
+  { min: 7.0, rating: "high" },
+  { min: 4.0, rating: "medium" },
+  { min: 0, rating: "low" },
+];
+
+export function scoreToRating(score: number): SeverityRating {
+  for (const band of SEVERITY_BANDS) {
+    if (score >= band.min) return band.rating;
+  }
+  return "low";
+}
+
+export const SEVERITY_RATING_LABEL: Record<SeverityRating, string> = {
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  critical: "Critical",
+};
 
 export function getCategoryForFinding(
   source?: string,

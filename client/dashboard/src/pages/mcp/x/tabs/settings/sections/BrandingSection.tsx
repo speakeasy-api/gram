@@ -8,12 +8,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
-import type { McpServer } from "@gram/client/models/components";
-import {
-  invalidateAllGetMcpServer,
-  invalidateAllMcpServers,
-  useUpdateMcpServerMutation,
-} from "@gram/client/react-query/index.js";
+import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import { invalidateAllGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
+import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
+import { useUpdateMcpServerMutation } from "@gram/client/react-query/updateMcpServer.js";
 import { Button } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
@@ -60,9 +58,9 @@ export function BrandingSection({
             id: mcpServer.id,
             name: trimmedDraft,
             remoteMcpServerId: mcpServer.remoteMcpServerId ?? undefined,
+            tunneledMcpServerId: mcpServer.tunneledMcpServerId ?? undefined,
             toolsetId: mcpServer.toolsetId ?? undefined,
             environmentId: mcpServer.environmentId ?? undefined,
-            userSessionIssuerId: mcpServer.userSessionIssuerId ?? undefined,
             toolVariationsGroupId: mcpServer.toolVariationsGroupId ?? undefined,
             visibility: mcpServer.visibility,
           },

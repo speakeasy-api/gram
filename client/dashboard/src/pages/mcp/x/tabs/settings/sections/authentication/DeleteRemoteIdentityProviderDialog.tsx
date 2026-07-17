@@ -1,11 +1,9 @@
 import { Input } from "@/components/ui/input";
 import { Type } from "@/components/ui/type";
 import { useSdkClient } from "@/contexts/Sdk";
-import type { RemoteSessionIssuer } from "@gram/client/models/components";
-import {
-  invalidateAllRemoteSessionClients,
-  invalidateAllRemoteSessionIssuers,
-} from "@gram/client/react-query/index.js";
+import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
+import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
+import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { Alert, Button, Dialog } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
@@ -91,8 +89,11 @@ function DeleteRemoteIdentityProviderDialogBody({
         }
         cursor = page.result.nextCursor || undefined;
       } while (cursor);
+      // Detach, not delete: the client may back other servers' issuers.
       for (const id of clientIds) {
-        await client.remoteSessionClients.delete({ id });
+        await client.remoteSessionClients.detachUserSessionIssuer({
+          attachUserSessionIssuerForm: { id, userSessionIssuerId },
+        });
       }
       await Promise.all([
         invalidateAllRemoteSessionClients(queryClient, { refetchType: "all" }),

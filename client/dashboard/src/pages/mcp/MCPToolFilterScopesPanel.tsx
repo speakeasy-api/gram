@@ -8,10 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Type } from "@/components/ui/type";
 import { toolVariationsGroupDisplayName } from "@/lib/toolVariationGroups";
 import { cn } from "@/lib/utils";
-import {
-  ListToolFiltersResult,
-  ToolFilterTool,
-} from "@gram/client/models/components";
+import { ListToolFiltersResult } from "@gram/client/models/components/listtoolfiltersresult.js";
+import { ToolFilterTool } from "@gram/client/models/components/toolfiltertool.js";
 import { Stack } from "@speakeasy-api/moonshine";
 
 // Sentinel value identifying the "available only without filtering" grouping in

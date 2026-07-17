@@ -50,6 +50,18 @@ func TestRedactMatch_ShadowMCPIgnoresSalt(t *testing.T) {
 		"shadow_mcp match should pass through verbatim regardless of orgID")
 }
 
+func TestRedactMatch_AccountIdentityIgnoresSalt(t *testing.T) {
+	t.Parallel()
+
+	const email = "jane@gmail.com"
+	match := email
+
+	got := redactMatch("account_identity", &match, "any-org-id")
+
+	require.Equal(t, email, got,
+		"account_identity match should pass through verbatim regardless of orgID")
+}
+
 func TestRedactMatch_EmptyMatchCollapses(t *testing.T) {
 	t.Parallel()
 

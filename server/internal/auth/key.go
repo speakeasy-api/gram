@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -40,6 +41,49 @@ const (
 	// re-provisioning.
 	APIKeyScopeAgentUser APIKeyScope = iota
 )
+
+// PluginAPIKeyNamePrefix is reserved for keys minted by plugin distribution
+// flows. Historical user-created keys may still carry this prefix, so callers
+// classifying org-wide hook keys must verify the token/name minting marker.
+const PluginAPIKeyNamePrefix = "plugins-"
+
+// IsOrgWidePluginHooksAPIKey recognizes keys minted by plugin publish and
+// observability-download flows. The generated name embeds the first six token
+// characters while keyPrefix stores the first five, so authentication can
+// verify minting provenance instead of trusting a formerly-unrestricted name.
+func IsOrgWidePluginHooksAPIKey(name, key, keyPrefix string) bool {
+	var suffix string
+	switch {
+	case strings.HasPrefix(name, PluginAPIKeyNamePrefix+"hooks-download-"):
+		suffix = strings.TrimPrefix(name, PluginAPIKeyNamePrefix+"hooks-download-")
+	case strings.HasPrefix(name, PluginAPIKeyNamePrefix+"hooks-"):
+		suffix = strings.TrimPrefix(name, PluginAPIKeyNamePrefix+"hooks-")
+	default:
+		return false
+	}
+
+	parts := strings.Split(suffix, "-")
+	if len(parts) != 3 || len(parts[0]) != 8 || len(parts[1]) != 6 || len(parts[2]) != 6 {
+		return false
+	}
+	const timestampLayout = "20060102-150405"
+	timestamp := parts[0] + "-" + parts[1]
+	parsedTimestamp, err := time.Parse(timestampLayout, timestamp)
+	if err != nil || parsedTimestamp.Format(timestampLayout) != timestamp {
+		return false
+	}
+	for _, char := range parts[2] {
+		if (char < '0' || char > '9') && (char < 'a' || char > 'f') {
+			return false
+		}
+	}
+
+	tokenMarker := parts[2]
+	return len(key) > len(keyPrefix) &&
+		strings.HasPrefix(key, keyPrefix) &&
+		strings.HasSuffix(keyPrefix, tokenMarker[:5]) &&
+		key[len(keyPrefix)] == tokenMarker[5]
+}
 
 var APIKeyScopes = map[string]APIKeyScope{
 	"invalid":    APIKeyScopeInvalid,
@@ -190,6 +234,8 @@ func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []s
 		UserID:                apiKey.CreatedByUserID,
 		Email:                 &apiKey.Email,
 		APIKeyID:              apiKey.ID.String(),
+		APIKeyName:            apiKey.Name,
+		OrgWidePluginHooksKey: IsOrgWidePluginHooksAPIKey(apiKey.Name, key, apiKey.KeyPrefix),
 		ProjectID:             projectID,
 		OrganizationSlug:      org.Slug,
 		AccountType:           org.GramAccountType,

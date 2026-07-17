@@ -2,9 +2,85 @@ import path from "node:path";
 import fs from "node:fs";
 import process from "node:process";
 
-import { defineConfig } from "vite";
+import { defineConfig, normalizePath, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+
+// Manually grouped vendor chunks. CAUTION: never group a package whose dist
+// contains a top-level `await import(...)` (check before adding). Grouping
+// pulls the package's shared internals into the group chunk, so the awaited
+// sub-module ends up statically importing the very chunk that is suspended
+// awaiting it — a silent module-evaluation deadlock that blank-screens the
+// app. This took prod down for @speakeasy-api/moonshine (its dist top-level
+// awaits ./speakeasy-logo-*.mjs), which is why it is absent from this list;
+// Rolldown's automatic chunking handles it without creating the cycle.
+const manualChunkGroups: [string, string[]][] = [
+  ["lucide-react", ["lucide-react"]],
+  [
+    "externals",
+    [
+      "posthog-js",
+      "react",
+      "react-dom",
+      "react-error-boundary",
+      "react-router",
+      "sonner",
+      "zod",
+    ],
+  ],
+];
+
+const themeInitPath = path.resolve(__dirname, "src/theme-init.ts");
+const themeInitScriptPattern =
+  /<script src="\/src\/theme-init\.ts"\s*><\/script>/;
+
+function themeInitPlugin(): Plugin {
+  return {
+    name: "theme-init",
+    apply: "build",
+    buildStart() {
+      this.emitFile({
+        type: "chunk",
+        id: themeInitPath,
+        name: "theme-init",
+      });
+    },
+    transformIndexHtml: {
+      order: "post",
+      handler(html, context) {
+        if (!context.bundle) {
+          this.error("Theme bootstrap output bundle is unavailable");
+        }
+
+        const normalizedThemeInitPath = normalizePath(themeInitPath);
+        const themeInitChunk = Object.values(context.bundle).find(
+          (output) =>
+            output.type === "chunk" &&
+            output.facadeModuleId !== null &&
+            normalizePath(output.facadeModuleId) === normalizedThemeInitPath,
+        );
+        if (!themeInitChunk) {
+          this.error("Could not find the emitted theme bootstrap chunk");
+        }
+        if (!themeInitScriptPattern.test(html)) {
+          this.error("Could not find the theme bootstrap script in index.html");
+        }
+
+        return html.replace(
+          themeInitScriptPattern,
+          `<script src="/${themeInitChunk.fileName}"></script>`,
+        );
+      },
+    },
+  };
+}
+
+function packagePathRegex(packages: string[]): RegExp {
+  const alternatives = packages.map((pkg) =>
+    pkg.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replaceAll("/", "[\\\\/]"),
+  );
+  return new RegExp(`node_modules[\\\\/](?:${alternatives.join("|")})[\\\\/]`);
+}
 // https://vite.dev/config/
 export default defineConfig(({ command }) => {
   const isDev = command === "serve";
@@ -37,6 +113,21 @@ export default defineConfig(({ command }) => {
   if (isDev && !serverUrl) {
     throw new Error("GRAM_SERVER_URL must be set in development");
   }
+  const devProxyServerUrl = process.env["GRAM_SERVER_BACKEND_URL"] || serverUrl;
+
+  const allowedHosts = new Set(["localhost", "127.0.0.1", "devbox"]);
+  for (const hostname of (process.env["VITE_DEV_HOSTNAMES"] || "").split(",")) {
+    const trimmed = hostname.trim();
+    if (trimmed) allowedHosts.add(trimmed);
+  }
+
+  const devProxyTarget = devProxyServerUrl
+    ? {
+        target: devProxyServerUrl,
+        changeOrigin: true,
+        secure: false,
+      }
+    : undefined;
 
   // Two build-time constants, separated so MCP configs / callback URLs /
   // anything operator-facing always report the server's authoritative URL,
@@ -52,36 +143,76 @@ export default defineConfig(({ command }) => {
   //                               playground.
 
   return {
+    experimental: {
+      // Static assets can be served through a CDN.
+      // The CDN hostname may be env-specific but this build is env-agnostic
+      // (one image is promoted dev -> prod), so instead of baking a CDN origin
+      // in via `base`, the dashboard's nginx rewrites the /assets/ URLs in
+      // index.html to the CDN host at serve time (see nginx.conf) and every
+      // other URL follows from the module that references it:
+      //
+      //   - html: keep the default root-absolute /assets/... URLs so the
+      //     nginx sub_filter can match and rewrite them.
+      //   - js/css: emit URLs relative to import.meta.url so chunk imports,
+      //     lazy-load preloads, and fonts/images referenced from CSS resolve
+      //     against whatever origin the module graph was loaded from — the
+      //     CDN when enabled, same-origin otherwise.
+      //   - workers: keep the default root-absolute URLs. Browsers reject
+      //     cross-origin new Worker(), so worker scripts must load from the
+      //     app origin even when everything else is on the CDN (CSP's
+      //     worker-src 'self' also depends on this). Detected by filename:
+      //     every worker entry (monaco's *.worker, @pierre/diffs' worker.js)
+      //     has "worker" in its emitted basename — keep it that way when
+      //     adding new workers.
+      renderBuiltUrl(filename, { hostType, type }) {
+        const isWorkerAsset = /(^|\/)[^/]*worker[^/]*\.js$/.test(filename);
+        if (
+          (type === "asset" || type === "public") &&
+          !isWorkerAsset &&
+          (hostType === "js" || hostType === "css")
+        ) {
+          return { relative: true };
+        }
+        return undefined;
+      },
+    },
     define: {
       __GRAM_SERVER_URL__: JSON.stringify(serverUrl),
       __PLAYGROUND_PROXY_URL__: JSON.stringify(isDev ? siteUrl : undefined),
       __GRAM_GIT_SHA__: JSON.stringify(process.env["GRAM_GIT_SHA"] || ""),
+      // Default Gram API URL baked into the inlined elements code
+      // (src/elements/lib/api.ts); config.api.url overrides it at runtime.
+      __GRAM_API_URL__: JSON.stringify(process.env["GRAM_API_URL"] || ""),
     },
     build: {
-      target: "es2022",
       sourcemap: true,
-      rollupOptions: {
+      // Fonts must stay as standalone asset files — inlining them as base64
+      // bloats the CSS bundle and defeats CDN caching of the font files.
+      // Returning undefined keeps Vite's default inlining behavior for
+      // everything else.
+      assetsInlineLimit(filePath) {
+        if (/\.(?:woff2?|ttf|otf|eot)$/i.test(filePath)) {
+          return false;
+        }
+        return undefined;
+      },
+      rolldownOptions: {
         input: {
           main: path.resolve(__dirname, "index.html"),
         },
         output: {
-          manualChunks: {
-            "lucide-react": ["lucide-react"],
-            moonshine: ["@speakeasy-api/moonshine"],
-            three: [
-              "@react-three/drei",
-              "@react-three/fiber",
-              "@react-three/postprocessing",
-              "three",
-            ],
-            externals: [
-              "posthog-js",
-              "react",
-              "react-dom",
-              "react-error-boundary",
-              "react-router",
-              "sonner",
-              "zod",
+          codeSplitting: {
+            groups: [
+              // Generated SDK source (aliased as @gram/client) goes into its
+              // own chunk so app-code changes don't churn its hash.
+              {
+                name: "gram-sdk",
+                test: /[\\/]src[\\/]sdk[\\/]/,
+              },
+              ...manualChunkGroups.map(([name, packages]) => ({
+                name,
+                test: packagePathRegex(packages),
+              })),
             ],
           },
         },
@@ -89,39 +220,48 @@ export default defineConfig(({ command }) => {
     },
     worker: {
       format: "es",
-    },
-    esbuild: {
-      target: "es2022",
+      // The worker bundles are pure vendor code (monaco's ts.worker map alone
+      // is ~16MB, ~28MB across all workers) that we never debug in production,
+      // so skip their sourcemaps while keeping maps for app code. This must be
+      // an outputOptions hook: Vite hard-sets `sourcemap` to build.sourcemap
+      // AFTER spreading worker.rolldownOptions.output, so the plain option is
+      // silently ignored, while plugin outputOptions hooks run last.
+      plugins: () => [
+        {
+          name: "drop-worker-sourcemaps",
+          outputOptions(options) {
+            return { ...options, sourcemap: false };
+          },
+        },
+      ],
     },
     optimizeDeps: {
       include: ["monaco-editor"],
-      esbuildOptions: {
-        target: "es2022",
-      },
     },
     server: {
       host: true,
-      allowedHosts: ["localhost", "127.0.0.1", "devbox"],
+      allowedHosts: [...allowedHosts],
       https: key && cert ? { key, cert } : void 0,
       // Setting these up to side-step cors issues experienced during
       // development. Specifically, the Vercel AI SDK does not forward cookies
       // (Eg: gram_session) to the server.
-      proxy: serverUrl
+      proxy: devProxyTarget
         ? {
-            "/rpc": serverUrl,
-            "/chat": serverUrl,
-            "/mcp": serverUrl,
-            "/oauth": serverUrl,
-            "/oauth-external": serverUrl,
-            "/.well-known": serverUrl,
-            "/v1": serverUrl,
+            "/rpc": devProxyTarget,
+            "/chat": devProxyTarget,
+            "/mcp": devProxyTarget,
+            "/oauth": devProxyTarget,
+            "/oauth-external": devProxyTarget,
+            "/.well-known": devProxyTarget,
+            "/v1": devProxyTarget,
           }
         : undefined,
     },
-    plugins: [react(), tailwindcss()],
+    plugins: [themeInitPlugin(), react(), tailwindcss()],
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./src"),
+        "@gram/client": path.resolve(__dirname, "./src/sdk/src"),
         // Ensure single instances of React and related packages across all dependencies
         react: path.resolve(__dirname, "node_modules/react"),
         "react-dom": path.resolve(__dirname, "node_modules/react-dom"),

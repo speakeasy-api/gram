@@ -102,6 +102,39 @@ func (l *Logger) checkToolIOLogsEnabled(ctx context.Context, organizationID stri
 	return enabled
 }
 
+// maxScrubbedSkillNameLen bounds the skill name a scrubbed row may retain:
+// real skill names are short identifiers, and the carve-out must not become a
+// channel for bulky payloads past the tool IO scrub.
+const maxScrubbedSkillNameLen = 128
+
+// scrubbedSkillArguments returns the minimal arguments JSON a scrubbed Skill
+// row may keep ({"skill": <name>}), or "" for non-skill rows, unparsable
+// arguments, and implausibly long names.
+func scrubbedSkillArguments(attrs map[attr.Key]any) string {
+	if name, _ := attrs[attr.ToolNameKey].(string); name != "Skill" {
+		return ""
+	}
+	raw, _ := attrs[attr.GenAIToolCallArgumentsKey].(string)
+	if raw == "" {
+		return ""
+	}
+	var parsed struct {
+		Skill string `json:"skill"`
+	}
+	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+		return ""
+	}
+	skill := strings.TrimSpace(parsed.Skill)
+	if skill == "" || len(skill) > maxScrubbedSkillNameLen {
+		return ""
+	}
+	minimal, err := json.Marshal(map[string]string{"skill": skill})
+	if err != nil {
+		return ""
+	}
+	return string(minimal)
+}
+
 func (l *Logger) Log(ctx context.Context, params LogParams) {
 	if err := l.LogBulk(ctx, []LogParams{params}); err != nil {
 		l.logger.ErrorContext(ctx, "failed to insert telemetry log", attr.SlogError(err))
@@ -109,13 +142,38 @@ func (l *Logger) Log(ctx context.Context, params LogParams) {
 }
 
 func (l *Logger) LogBulk(ctx context.Context, params []LogParams) error {
+	logParams := l.buildBulkParams(ctx, params)
+	if len(logParams) == 0 {
+		return nil
+	}
+	if err := repo.New(l.chConn).InsertTelemetryLogs(l.shutdownCtx(), logParams); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "insert telemetry logs")
+	}
+	return nil
+}
+
+// LogBulkStaging writes rows to telemetry_logs_staging instead of
+// telemetry_logs — the holding pen for Claude api_request rows with redacted
+// (custom) MCP attribution. Rows go through the exact same feature checks,
+// scrubbing, and hydration as LogBulk, so a promoted row is byte-identical to
+// what a direct insert would have produced apart from the patched attribution.
+func (l *Logger) LogBulkStaging(ctx context.Context, params []LogParams) error {
+	logParams := l.buildBulkParams(ctx, params)
+	if len(logParams) == 0 {
+		return nil
+	}
+	if err := repo.New(l.chConn).InsertTelemetryLogsStaging(l.shutdownCtx(), logParams); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "insert staged telemetry logs")
+	}
+	return nil
+}
+
+func (l *Logger) buildBulkParams(ctx context.Context, params []LogParams) []repo.InsertTelemetryLogParams {
 	if len(params) == 0 {
 		return nil
 	}
 
 	shutdownCtx := l.shutdownCtx()
-
-	chRepo := repo.New(l.chConn)
 
 	logParams := make([]repo.InsertTelemetryLogParams, 0, len(params))
 	logsEnabledByOrg := make(map[string]bool)
@@ -143,9 +201,17 @@ func (l *Logger) LogBulk(ctx context.Context, params []LogParams) error {
 		}
 
 		// Scrub tool IO content if the feature is disabled for this organization.
+		// Skill rows keep only the skill name: ClickHouse materializes
+		// skill_name from the arguments JSON, so a full delete would erase the
+		// activation from skill analytics — while any extra invocation args
+		// are still tool IO and get dropped.
 		if !toolIOEnabled {
+			skillArgs := scrubbedSkillArguments(param.Attributes)
 			delete(param.Attributes, attr.GenAIToolCallArgumentsKey)
 			delete(param.Attributes, attr.GenAIToolCallResultKey)
+			if skillArgs != "" {
+				param.Attributes[attr.GenAIToolCallArgumentsKey] = skillArgs
+			}
 		}
 
 		param = l.hydrateUserInfo(shutdownCtx, param)
@@ -158,13 +224,7 @@ func (l *Logger) LogBulk(ctx context.Context, params []LogParams) error {
 		logParams = append(logParams, *logParam)
 	}
 
-	if len(logParams) == 0 {
-		return nil
-	}
-	if err := chRepo.InsertTelemetryLogs(shutdownCtx, logParams); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "insert telemetry logs")
-	}
-	return nil
+	return logParams
 }
 
 // hydrateUserInfo fills the directory-derived parts of the row's UserInfo

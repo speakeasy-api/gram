@@ -1,4 +1,4 @@
-import type { ChatMessage } from "@gram/client/models/components";
+import type { ChatMessage } from "@gram/client/models/components/chatmessage.js";
 import {
   getTraceEntryType,
   parseToolCalls,
@@ -323,10 +323,54 @@ export type DisplayItem =
       createdAt?: Date;
     }
   | { type: "row"; id: string; row: TranscriptRow }
+  /** A run of consecutive tool rows, collapsed into one expandable group so a
+   * long chain of back-to-back tool calls doesn't flood the transcript. */
+  | { type: "toolGroup"; id: string; rows: ToolRow[] }
   /** Keyset-pagination affordance at the top/bottom of the loaded window. */
   | { type: "loadMore"; id: string; dir: "older" | "newer" }
   /** Un-loaded span between two disjoint risk segments (risk-focused view). */
   | { type: "serverGap"; id: string; afterSeq: number };
+
+/** The transcript row(s) a display item carries: the single row for a `row`
+ * item, every member of a `toolGroup`, or none for structural items (headers,
+ * dividers, load/gap markers). Lets callers locate a finding/search match
+ * whether it sits in a standalone row or inside a collapsed tool group. */
+export function displayItemRows(item: DisplayItem): TranscriptRow[] {
+  if (item.type === "row") return [item.row];
+  if (item.type === "toolGroup") return item.rows;
+  return [];
+}
+
+/** Below this, a run of consecutive tool rows stays as individual rows — a lone
+ * tool call is already its own collapsed card, so only coalesce actual runs. */
+const MIN_TOOLS_TO_GROUP = 2;
+
+/** Fold maximal runs of adjacent tool rows into a single `toolGroup` item. Runs
+ * as a post-pass over the built items so anything between two tool rows (a turn
+ * header, a generation divider, a risk gap marker) breaks the run — groups never
+ * span turns or hide a gap affordance. */
+function coalesceToolGroups(items: DisplayItem[]): DisplayItem[] {
+  const out: DisplayItem[] = [];
+  let run: ToolRow[] = [];
+  const flush = () => {
+    if (run.length >= MIN_TOOLS_TO_GROUP) {
+      out.push({ type: "toolGroup", id: `toolgroup-${run[0]!.id}`, rows: run });
+    } else {
+      for (const r of run) out.push({ type: "row", id: r.id, row: r });
+    }
+    run = [];
+  };
+  for (const item of items) {
+    if (item.type === "row" && item.row.kind === "tool") {
+      run.push(item.row);
+    } else {
+      flush();
+      out.push(item);
+    }
+  }
+  flush();
+  return out;
+}
 
 /** The row's display-order anchor seq. Gap anchors are message seqs; for a tool
  * row use the assistant call's seq (its position in the list), not the
@@ -428,5 +472,5 @@ export function buildDisplayItems({
 
   if (hasMoreAfter)
     items.push({ type: "loadMore", id: "load-newer", dir: "newer" });
-  return items;
+  return coalesceToolGroups(items);
 }

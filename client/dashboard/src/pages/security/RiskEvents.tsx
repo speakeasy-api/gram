@@ -8,12 +8,11 @@ import { Page } from "@/components/page-layout";
 import { useSdkClient } from "@/contexts/Sdk";
 import { cn } from "@/lib/utils";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
-import { getPresetRange } from "@gram-ai/elements";
-import type { RiskResult } from "@gram/client/models/components";
-import {
-  useRiskListPolicies,
-  useRiskOverview,
-} from "@gram/client/react-query/index.js";
+import { getPresetRange } from "@/elements";
+import type { RiskResult } from "@gram/client/models/components/riskresult.js";
+import { useAssistantsList } from "@gram/client/react-query/assistantsList.js";
+import { useRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
+import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
 import { Button, Icon } from "@speakeasy-api/moonshine";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -23,14 +22,16 @@ import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import {
   CategoryLabel,
+  EventMatchDialog,
   MaskedMatch,
   RevealAllProvider,
   RevealAllToggle,
   RuleLabel,
+  SeverityScore,
 } from "./risk-ui";
 
 const RISK_EVENTS_GRID =
-  "grid grid-cols-[172px_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1.25fr)_minmax(0,1.1fr)_110px] gap-3";
+  "grid grid-cols-[172px_minmax(0,0.9fr)_88px_minmax(0,1fr)_minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1.25fr)_minmax(0,1.1fr)_110px] gap-3";
 
 // Strongly-typed filter schema for Risk Events. `policy_id` and the date range
 // are pinned (always visible in the bar); the rest live behind "More filters".
@@ -52,7 +53,13 @@ const RISK_FILTERS = defineFilters([
     placeholder: "User contains...",
   },
   { id: "unique", label: "Unique matches only", kind: "boolean" },
+  { id: "assistant", label: "Assistant", kind: "select" },
 ]);
+
+// Sentinel option value for the assistant filter meaning "chats with no
+// assistant link" — maps to the API's non_assistant flag rather than an
+// assistant_id. Assistant ids are UUIDs, so this can't collide.
+const NO_ASSISTANT = "none";
 
 export default function RiskEvents(): JSX.Element {
   const client = useSdkClient();
@@ -66,6 +73,14 @@ export default function RiskEvents(): JSX.Element {
   const ruleFilter = values.rule_id;
   const userFilter = values.user_id;
   const uniqueOnly = values.unique;
+  // "No assistant" pre-selects the non-assistant events (the API's
+  // non_assistant flag); any other value scopes to that assistant's chats.
+  const assistantFilter = values.assistant ?? "";
+  const nonAssistantOnly = assistantFilter === NO_ASSISTANT;
+  const assistantId =
+    assistantFilter && assistantFilter !== NO_ASSISTANT
+      ? assistantFilter
+      : undefined;
 
   // The date range maps to the endpoint's from/to. A null preset with no custom
   // range means "all time" (no from/to sent) — Risk Events' previous behavior.
@@ -120,6 +135,17 @@ export default function RiskEvents(): JSX.Element {
     return m;
   }, [policies]);
 
+  // Findings surface their owning policy's severity score, resolved by
+  // risk_policy_id at read time (score is a policy attribute, not stored on the
+  // finding).
+  const policyScoreById = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const policy of policies) {
+      m.set(policy.id, policy.score);
+    }
+    return m;
+  }, [policies]);
+
   // The policy currently selected in the filter, if any. When it's disabled the
   // list still returns its historical findings (the backend drops the
   // enabled-only filter for explicit policy selections), so we surface a notice
@@ -131,6 +157,17 @@ export default function RiskEvents(): JSX.Element {
   const viewingInactivePolicy =
     selectedPolicy != null && selectedPolicy.enabled === false;
 
+  // Powers the assistant filter options; "No assistant" is always offered so
+  // findings missing user attribution can be surfaced even before any
+  // assistant exists in the project.
+  const { data: assistantsData } = useAssistantsList(undefined, undefined, {
+    throwOnError: false,
+  });
+  const assistants = useMemo(
+    () => assistantsData?.assistants ?? [],
+    [assistantsData?.assistants],
+  );
+
   // Page-supplied option lists for the schema's select/text dimensions.
   // Disabled policies stay selectable — they hold historical findings — but are
   // labelled "(inactive)" so the distinction is clear in the dropdown.
@@ -141,8 +178,12 @@ export default function RiskEvents(): JSX.Element {
         value: p.id,
       })),
       rule_id: ruleSuggestions.map((r) => ({ label: r, value: r })),
+      assistant: [
+        { label: "No assistant", value: NO_ASSISTANT },
+        ...assistants.map((a) => ({ label: a.name, value: a.id })),
+      ],
     }),
-    [policies, ruleSuggestions],
+    [policies, ruleSuggestions, assistants],
   );
 
   const fromIso = from?.toISOString();
@@ -152,7 +193,15 @@ export default function RiskEvents(): JSX.Element {
   // don't stay at a stale offset and miss the newly filtered results.
   useEffect(() => {
     containerRef.current?.scrollTo({ top: 0 });
-  }, [policyFilter, ruleFilter, userFilter, uniqueOnly, fromIso, toIso]);
+  }, [
+    policyFilter,
+    ruleFilter,
+    userFilter,
+    uniqueOnly,
+    assistantFilter,
+    fromIso,
+    toIso,
+  ]);
 
   const resultsQuery = useInfiniteQuery({
     queryKey: [
@@ -163,6 +212,7 @@ export default function RiskEvents(): JSX.Element {
       ruleFilter,
       userFilter,
       uniqueOnly,
+      assistantFilter,
       fromIso,
       toIso,
     ],
@@ -174,6 +224,8 @@ export default function RiskEvents(): JSX.Element {
         ruleId: ruleFilter || undefined,
         userId: userFilter || undefined,
         uniqueMatch: uniqueOnly || undefined,
+        nonAssistant: nonAssistantOnly || undefined,
+        assistantId,
         from,
         to,
       });
@@ -241,7 +293,7 @@ export default function RiskEvents(): JSX.Element {
           </>
         }
         header={
-          <div className="min-w-[1120px]">
+          <div className="min-w-[1200px]">
             <RiskEventsHeader />
           </div>
         }
@@ -269,13 +321,14 @@ export default function RiskEvents(): JSX.Element {
         scrollRef={containerRef}
         onScroll={handleScroll}
         surfaceClassName="overflow-x-auto"
-        contentClassName="min-w-[1120px]"
+        contentClassName="min-w-[1200px]"
       >
         <RiskEventsRows
           error={resultsQuery.error}
           isLoading={isInitialLoading}
           results={results}
           policyNameById={policyNameById}
+          policyScoreById={policyScoreById}
           scrollRef={containerRef}
           onSelectChat={setSelectedChatId}
         />
@@ -294,7 +347,7 @@ function InactivePolicyNotice({
   policyName: string | undefined;
 }) {
   return (
-    <div className="flex shrink-0 items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-8 py-2 text-sm text-amber-700 dark:text-amber-400">
+    <div className="flex shrink-0 items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-5 py-2 text-sm text-amber-700 dark:text-amber-400">
       <History className="size-4 shrink-0" />
       <span>
         {policyName ? (
@@ -316,11 +369,12 @@ function RiskEventsHeader() {
     <div
       className={cn(
         RISK_EVENTS_GRID,
-        "bg-muted/30 text-muted-foreground shrink-0 items-center border-b px-8 py-2.5 text-xs font-medium tracking-wide uppercase",
+        "bg-muted/30 text-muted-foreground shrink-0 items-center border-b px-5 py-2.5 text-xs font-medium tracking-wide uppercase",
       )}
     >
       <div className="min-w-0">Timestamp</div>
       <div className="min-w-0">Category</div>
+      <div className="min-w-0">Severity</div>
       <div className="min-w-0">Rule</div>
       <div className="min-w-0">Session Name</div>
       <div className="min-w-0">User</div>
@@ -336,6 +390,7 @@ function RiskEventsRows({
   isLoading,
   results,
   policyNameById,
+  policyScoreById,
   scrollRef,
   onSelectChat,
 }: {
@@ -343,6 +398,7 @@ function RiskEventsRows({
   isLoading: boolean;
   results: RiskResult[];
   policyNameById: Map<string, string>;
+  policyScoreById: Map<string, number>;
   scrollRef: RefObject<HTMLDivElement | null>;
   onSelectChat: (chatId: string | null) => void;
 }) {
@@ -414,6 +470,7 @@ function RiskEventsRows({
             <RiskEventsRow
               result={result}
               policyName={policyNameById.get(result.policyId)}
+              policyScore={policyScoreById.get(result.policyId)}
               onSelectChat={onSelectChat}
             />
           </div>
@@ -426,13 +483,24 @@ function RiskEventsRows({
 function RiskEventsRow({
   result,
   policyName,
+  policyScore,
   onSelectChat,
 }: {
   result: RiskResult;
   policyName: string | undefined;
+  policyScore: number | undefined;
   onSelectChat: (chatId: string | null) => void;
 }) {
   const isShadowMCP = result.source === "shadow_mcp";
+  const isEventSource =
+    result.source === "llm_judge" || result.source === "prompt_injection";
+
+  // A row click opens the chat only when the gesture both starts and ends inside
+  // the row. This rejects the stray click Radix's outside-dismiss sends here:
+  // closing the View-event dialog by clicking its overlay fires pointerdown on
+  // the (portaled) overlay, which unmounts, so the trailing click lands on a row
+  // cell and would otherwise open the chat.
+  const pointerDownInsideRef = useRef(false);
 
   const handleShare = useCallback(
     async (e: React.MouseEvent) => {
@@ -456,15 +524,36 @@ function RiskEventsRow({
       tabIndex={result.chatId ? 0 : undefined}
       className={cn(
         RISK_EVENTS_GRID,
-        "hover:bg-muted/30 w-full items-center border-b px-8 py-3 text-left text-sm transition-colors",
+        "hover:bg-muted/30 w-full items-center border-b px-5 py-3 text-left text-sm transition-colors",
         !result.chatId && "cursor-default",
       )}
-      onClick={() => {
+      onPointerDown={(e) => {
+        pointerDownInsideRef.current = e.currentTarget.contains(
+          e.target as Node,
+        );
+      }}
+      onClick={(e) => {
+        const startedInside = pointerDownInsideRef.current;
+        pointerDownInsideRef.current = false;
+        // Ignore the trailing click from an outside-dismiss (pointerdown never
+        // landed on the row).
+        if (!startedInside) return;
+        // The row wraps its own interactive controls (match reveal, the
+        // View-event dialog trigger, copy-link); a click on one of those must
+        // not also open the chat. stopPropagation on those children doesn't
+        // reliably stop this handler under React's event delegation, so guard on
+        // the real target too.
+        if ((e.target as HTMLElement).closest("button, a")) return;
         if (result.chatId) {
           onSelectChat(result.chatId);
         }
       }}
       onKeyDown={(e) => {
+        // Only the row itself activates on Enter/Space. Key events bubbling up
+        // from a focused child control (match reveal, the event dialog trigger,
+        // copy-link) must reach that control instead — preventing them here
+        // would swallow the control's own activation and wrongly open the chat.
+        if (e.target !== e.currentTarget) return;
         if (!result.chatId) return;
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
@@ -478,6 +567,9 @@ function RiskEventsRow({
       <div className="min-w-0 truncate">
         <CategoryLabel source={result.source} ruleId={result.ruleId} />
       </div>
+      <div className="min-w-0">
+        <SeverityScore score={policyScore} />
+      </div>
       <div className="min-w-0 truncate">
         <RuleLabel source={result.source} ruleId={result.ruleId} />
       </div>
@@ -488,6 +580,11 @@ function RiskEventsRow({
           <span className="font-mono text-xs" title={result.matchRedacted}>
             {result.matchRedacted}
           </span>
+        ) : isEventSource ? (
+          <EventMatchDialog
+            resultId={result.id}
+            matchRedacted={result.matchRedacted}
+          />
         ) : (
           <MaskedMatch
             resultId={result.id}
@@ -532,7 +629,7 @@ function RiskEventsFooter({
   onLoadMore: () => void;
 }) {
   return (
-    <div className="bg-muted/30 text-muted-foreground flex shrink-0 items-center justify-between gap-4 border-t px-8 py-3 text-sm">
+    <div className="bg-muted/30 text-muted-foreground flex shrink-0 items-center justify-between gap-4 border-t px-5 py-3 text-sm">
       <span>
         Showing {count.toLocaleString()} of {totalCount.toLocaleString()}{" "}
         {totalCount === 1 ? "finding" : "findings"}

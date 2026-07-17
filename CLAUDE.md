@@ -6,6 +6,18 @@ This document provides an overview of the key directories in the Gram project to
 If you've just cloned this repository, then consider running `./zero --agent` to get your development environment set up.
 </tip>
 
+## Customer Data Is Confidential
+
+<important>
+
+Never include customer-identifying information in anything that gets committed or pushed: customer names, organization ids, project ids, external account ids, emails, or revenue/spend figures. This applies to EVERY surface that leaves the machine — branch names, commit messages, PR titles and bodies, file contents, file NAMES, changesets, test fixtures, and code comments. This repository is public, and pushed data propagates to surfaces that cannot be scrubbed afterwards: pull request refs outlive branch deletion, CI logs embed PR titles, and review bots ingest full diffs.
+
+- Use placeholders (`<PROJECT_ID>`, `<ORG_ID>`, "the customer") in runbooks, migrations, docs, and tests — even when hardcoding a real value would be more convenient. Keep concrete values in internal systems (e.g. Linear) and fill them in at execution time.
+- Ticket ids (e.g. ABC-123) are fine; ticket URLs whose slugs embed a customer name are not.
+- Before committing or pushing, check every surface: branch name, commit message, changed file contents and names, changeset text, PR title/body.
+
+</important>
+
 ## Key Directories
 
 <structure>
@@ -15,13 +27,12 @@ If you've just cloned this repository, then consider running `./zero --agent` to
   - `mise.local.toml`: Local environment variable overrides for development. This file is ignored by git and should not be committed.
   - `.mise-tasks/**/*.{mts,sh}`: Useful tasks for working with the project
   - `go.mod`: Go module definition for the entire project
-  - `mprocs.yaml`: Process manager config for `madprocs` — runs all local services (mock-idp, server, worker, dashboard, elements) in a single terminal with a tabbed UI. Run `madprocs` to start the TUI, or use `madprocs status|logs|start|stop|restart <proc>` from the CLI. Use `/madprocs` slash command for agent-assisted process control.
+  - `pitchfork.toml`: Process manager config for `pitchfork` — runs all local services (mock-idp, server, worker, dashboard) in a single terminal with a tabbed UI. Use `pitchfork list|status|logs|start|stop|restart <daemon>` from the CLI.
   - `server/`: Main backend service codebase
   - `cli/`: Command-line interface for Gram that users use to interact with the Gram service
   - `functions/`: Serverless function runner powering the Gram Functions feature
   - `ts-framework/functions/`: TypeScript SDK for function authors (`Gram.tool()` API, manifest generation, MCP passthrough)
-  - `client/`: Frontend React application for Gram
-  - `elements/`: Frontend React application for Gram Elements, a chat interface that integrates with Gram MCP servers.
+  - `client/`: Frontend React application for Gram. Gram Elements — a chat interface that integrates with Gram MCP servers — lives inside it at `client/dashboard/src/elements/`.
 
 </structure>
 
@@ -54,8 +65,9 @@ Contains the main application code for the Gram server:
 
 - `mise go:tidy`: Run `go mod tidy` across the codebase
 - `mise build:server`: Build the server binary
+- `mise build:tunnel-gateway`: Build the tunnel gateway binary
 - `mise lint:server`: Run linters on the server code
-- `mise start:server --dev-single-process`: Run the server locally
+- `mise run start`: Run the process manager that spins up local servers (server, worker, idp, ...)
 - `hk fix`: Runs formatters across changed files in the current branch.
 
 </commands>
@@ -72,6 +84,16 @@ The main frontend application lives in `client/dashboard/` (not `client/` direct
 
 </commands>
 
+### Dashboard browser automation
+
+Use the `gram-playwright-cli` skill and `mise run playwright` for routine dashboard inspection, page interaction, console or network debugging, and screenshots. The mise task uses the repository Playwright config, installs Chromium when missing, and writes ignored artifacts to `.playwright-cli/`.
+
+Use `pr-demo-gif` when a user-visible change needs a shareable PR screenshot, GIF recording, or PR comment. It builds on the same `mise run playwright` workflow and adds the capture and publishing steps. Do not use `npm`, `npx`, or `yarn` for either workflow.
+
+### Testing assistants locally
+
+`.mcp.json` registers the `assistants-dev` MCP server (`server/cmd/dev-mcp`), which drives the local management API without the dashboard UI. It logs into the local stack on its own (dev-idp auto-approves), so no setup is needed beyond a running dev stack. Use its tools — assistant CRUD, `run_turn` (send a message and wait for the assistant's reply), `load_chat`, and trigger CRUD — to exercise assistant runtime changes end to end. `whoami` lists the available project slugs.
+
 ### Database Migrations
 
 Migration rules live in the `postgresql` skill (`.agents/skills/postgresql/SKILL.md`, "Database migrations" section). Activate that skill any time you touch `server/migrations/`, `atlas.sum`, or `server/database/schema.sql`.
@@ -81,7 +103,7 @@ Migration rules live in the `postgresql` skill (`.agents/skills/postgresql/SKILL
 The `mise` tasks listed in this guide should be used where building, testing or linting is needed. The commands can take arguments directly and don't need a `--` separator. For example, to run the server in development mode, use:
 
 ```
-mise start:server --dev-single-process
+mise run start
 ```
 
 <important>
@@ -105,8 +127,8 @@ Activate a skill when your task falls within its scope.
 | --------------------------------- | ------------------------------------------------------------------------------- |
 | `golang`                          | Writing or editing Go code                                                      |
 | `postgresql`                      | Creating migrations, writing SQLc queries, or changing the database schema      |
-| `clickhouse`                      | Working with ClickHouse queries in the `server/` package                        |
-| `frontend`                        | Working on the React frontends in `client/` or `elements/`                      |
+| `clickhouse`                      | Working with ClickHouse queries, schema, or migrations in the `server/` package |
+| `frontend`                        | Working on the React frontend in `client/`                                      |
 | `vercel-react-best-practices`     | Optimizing React performance, reviewing components for best practices           |
 | `gram-functions`                  | Understanding or modifying the Gram Functions serverless execution feature      |
 | `gram-management-api`             | Designing or modifying management API endpoints (Goa design, impl)              |
@@ -119,15 +141,26 @@ Activate a skill when your task falls within its scope.
 | `glint`                           | Authoring or editing analyzers in the `glint/` go/analysis package              |
 | `mise-tasks`                      | Creating or editing mise task scripts in `.mise-tasks/`                         |
 | `jaeger`                          | Testing backend endpoints locally and inspecting traces via Jaeger API          |
+| `pitchfork`                       | Starting/stopping/restarting local dev services or querying their logs          |
 | `datadog`                         | Investigating errors, performance, incidents, or telemetry via Datadog          |
 | `datadog-insights`                | Running the full Gram production health digest and posting it to Slack          |
-| `madprocs`                        | Controlling local dev processes via mprocs (start, stop, restart, logs)         |
-| `pr`                              | Creating a Pull Request for current changes                                     |
 | `spec`                            | Interviewing user in-depth to produce a detailed spec before building           |
 | `page-toolbar`                    | Dashboard list page search, filters, sort, or view controls                     |
+| `gram-playwright-cli`             | Browser automation, dashboard inspection, screenshots, and page interaction     |
+| `pr`                              | Creating a Pull Request for current changes                                     |
+| `pr-demo-gif`                     | Recording a demo GIF of a user-visible frontend change for a PR comment         |
 
 # Plan Mode
 
 - Make the plan extremely concise. Sacrifice grammar for the sake of concision.
 - Identify any of the skills above that are relevant to the task so you can activate when implementing.
 - At the end of each plan, give me a list of unresolved questions to answer, if any.
+
+## Cursor Cloud specific instructions
+
+Full environment setup is handled by `./zero --agent` (idempotent — re-run any time to reconcile): it installs tools/deps, generates keys/TLS + the dev-idp RSA key, starts the Docker infra, and runs the Postgres + ClickHouse migrations and finally starts all local services. Run it per session after starting the Docker daemon. It is deliberately NOT the startup update script — that stays minimal (`mise install` / `mise run install`), because starting infra and running migrations are too heavy and failure-prone for pod boot. Non-obvious caveats:
+
+- **Docker daemon must be running first.** There is no systemd auto-start, so run `sudo service docker start` before `./zero --agent`. Docker is configured with the `fuse-overlayfs` storage driver and `iptables-legacy`.
+- **`mise` provides all tooling** (`~/.local/bin/mise`). Resolution is automatic inside `mise run` / `mise exec` and mise tasks (including `.mts` Node scripts) — no PATH hacks needed. For bare tool calls, shims are on `PATH` via `mise activate` in `~/.bashrc` (interactive) and via `~/.bash_env` referenced by `BASH_ENV` (non-interactive _script_ shells). Bash does NOT source `BASH_ENV` for `bash -c`, so in that context prefer `mise exec` / `mise run` (or `export PATH="$HOME/.local/bin:$PATH"`).
+- **Login is credential-less** (`GRAM_IDP_MODE=mock-workos`): click "Login", no username/password.
+- **Pitchfork manages services**: Either use the pitchfork mcp if running or fall back to the `pitchfork` CLI. These both give you access to service health and logs.

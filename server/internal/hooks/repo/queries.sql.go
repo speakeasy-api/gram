@@ -19,7 +19,7 @@ WITH latest_user_message AS (
   WHERE chat_messages.chat_id = $2
     AND (chat_messages.project_id IS NULL OR chat_messages.project_id = $3::uuid)
     AND chat_messages.role = 'user'
-  ORDER BY chat_messages.seq DESC
+  ORDER BY chat_messages.created_at DESC, chat_messages.seq DESC
   LIMIT 1
 )
 UPDATE chat_messages
@@ -391,6 +391,36 @@ func (q *Queries) InsertToolCallBlock(ctx context.Context, arg InsertToolCallBlo
 		arg.UserID,
 	)
 	return err
+}
+
+const linkChatUserAccount = `-- name: LinkChatUserAccount :execrows
+UPDATE chats
+SET user_account_id = $1
+  , updated_at = NOW()
+WHERE id = $2
+  AND project_id = $3
+  AND user_account_id IS NULL
+  AND deleted IS FALSE
+`
+
+type LinkChatUserAccountParams struct {
+	UserAccountID uuid.NullUUID
+	ID            uuid.UUID
+	ProjectID     uuid.UUID
+}
+
+// Backfills the chat -> user_accounts link for a session whose chat row was
+// created before account attribution landed. A chat is created once, on the
+// session's first persisted message, so a first prompt that beats the first
+// OTEL export would otherwise leave the chat unlinked forever (and the
+// account-identity risk rules blind to it). Fill-once: never overwrites a
+// link that chat creation or an earlier backfill already set.
+func (q *Queries) LinkChatUserAccount(ctx context.Context, arg LinkChatUserAccountParams) (int64, error) {
+	result, err := q.db.Exec(ctx, linkChatUserAccount, arg.UserAccountID, arg.ID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const listHooksServerNameOverrides = `-- name: ListHooksServerNameOverrides :many

@@ -46,6 +46,21 @@ RETURNING id;
 -- name: UpdateClaudeCodeSessionTimestamp :exec
 UPDATE chats SET updated_at = NOW() WHERE id = @id AND project_id = @project_id;
 
+-- name: LinkChatUserAccount :execrows
+-- Backfills the chat -> user_accounts link for a session whose chat row was
+-- created before account attribution landed. A chat is created once, on the
+-- session's first persisted message, so a first prompt that beats the first
+-- OTEL export would otherwise leave the chat unlinked forever (and the
+-- account-identity risk rules blind to it). Fill-once: never overwrites a
+-- link that chat creation or an earlier backfill already set.
+UPDATE chats
+SET user_account_id = @user_account_id
+  , updated_at = NOW()
+WHERE id = @id
+  AND project_id = @project_id
+  AND user_account_id IS NULL
+  AND deleted IS FALSE;
+
 -- name: UpsertUserAccount :one
 -- Records the external AI provider account observed for a session, keyed by the
 -- provider's stable per-account id. COALESCE on conflict keeps a previously
@@ -220,7 +235,7 @@ WITH latest_user_message AS (
   WHERE chat_messages.chat_id = sqlc.arg(chat_id)
     AND (chat_messages.project_id IS NULL OR chat_messages.project_id = sqlc.arg(project_id)::uuid)
     AND chat_messages.role = 'user'
-  ORDER BY chat_messages.seq DESC
+  ORDER BY chat_messages.created_at DESC, chat_messages.seq DESC
   LIMIT 1
 )
 UPDATE chat_messages

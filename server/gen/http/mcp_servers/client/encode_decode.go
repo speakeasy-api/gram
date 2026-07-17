@@ -546,6 +546,9 @@ func EncodeListMcpServersRequest(encoder func(*http.Request) goahttp.Encoder) fu
 		if p.RemoteMcpServerID != nil {
 			values.Add("remote_mcp_server_id", *p.RemoteMcpServerID)
 		}
+		if p.TunneledMcpServerID != nil {
+			values.Add("tunneled_mcp_server_id", *p.TunneledMcpServerID)
+		}
 		if p.ToolsetID != nil {
 			values.Add("toolset_id", *p.ToolsetID)
 		}
@@ -749,6 +752,237 @@ func DecodeListMcpServersResponse(decoder func(*http.Response) goahttp.Decoder, 
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("mcpServers", "listMcpServers", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildListMcpServersForOrgRequest instantiates a HTTP request object with
+// method and path set to call the "mcpServers" service "listMcpServersForOrg"
+// endpoint
+func (c *Client) BuildListMcpServersForOrgRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListMcpServersForOrgMcpServersPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("mcpServers", "listMcpServersForOrg", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListMcpServersForOrgRequest returns an encoder for requests sent to
+// the mcpServers listMcpServersForOrg server.
+func EncodeListMcpServersForOrgRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*mcpservers.ListMcpServersForOrgPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("mcpServers", "listMcpServersForOrg", "*mcpservers.ListMcpServersForOrgPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeListMcpServersForOrgResponse returns a decoder for responses returned
+// by the mcpServers listMcpServersForOrg endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeListMcpServersForOrgResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListMcpServersForOrgResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListMcpServersForOrgResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "listMcpServersForOrg", err)
+			}
+			err = ValidateListMcpServersForOrgResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "listMcpServersForOrg", err)
+			}
+			res := NewListMcpServersForOrgListMcpServersResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListMcpServersForOrgUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "listMcpServersForOrg", err)
+			}
+			err = ValidateListMcpServersForOrgUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "listMcpServersForOrg", err)
+			}
+			return nil, NewListMcpServersForOrgUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListMcpServersForOrgForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "listMcpServersForOrg", err)
+			}
+			err = ValidateListMcpServersForOrgForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "listMcpServersForOrg", err)
+			}
+			return nil, NewListMcpServersForOrgForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListMcpServersForOrgBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "listMcpServersForOrg", err)
+			}
+			err = ValidateListMcpServersForOrgBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "listMcpServersForOrg", err)
+			}
+			return nil, NewListMcpServersForOrgBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListMcpServersForOrgNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "listMcpServersForOrg", err)
+			}
+			err = ValidateListMcpServersForOrgNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "listMcpServersForOrg", err)
+			}
+			return nil, NewListMcpServersForOrgNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListMcpServersForOrgConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "listMcpServersForOrg", err)
+			}
+			err = ValidateListMcpServersForOrgConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "listMcpServersForOrg", err)
+			}
+			return nil, NewListMcpServersForOrgConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListMcpServersForOrgUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "listMcpServersForOrg", err)
+			}
+			err = ValidateListMcpServersForOrgUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "listMcpServersForOrg", err)
+			}
+			return nil, NewListMcpServersForOrgUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListMcpServersForOrgInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "listMcpServersForOrg", err)
+			}
+			err = ValidateListMcpServersForOrgInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "listMcpServersForOrg", err)
+			}
+			return nil, NewListMcpServersForOrgInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListMcpServersForOrgInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpServers", "listMcpServersForOrg", err)
+				}
+				err = ValidateListMcpServersForOrgInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpServers", "listMcpServersForOrg", err)
+				}
+				return nil, NewListMcpServersForOrgInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListMcpServersForOrgUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpServers", "listMcpServersForOrg", err)
+				}
+				err = ValidateListMcpServersForOrgUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpServers", "listMcpServersForOrg", err)
+				}
+				return nil, NewListMcpServersForOrgUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("mcpServers", "listMcpServersForOrg", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListMcpServersForOrgGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "listMcpServersForOrg", err)
+			}
+			err = ValidateListMcpServersForOrgGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "listMcpServersForOrg", err)
+			}
+			return nil, NewListMcpServersForOrgGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("mcpServers", "listMcpServersForOrg", resp.StatusCode, string(body))
 		}
 	}
 }
@@ -1480,6 +1714,7 @@ func unmarshalMcpServerResponseBodyToTypesMcpServer(v *McpServerResponseBody) *t
 		EnvironmentID:         v.EnvironmentID,
 		UserSessionIssuerID:   v.UserSessionIssuerID,
 		RemoteMcpServerID:     v.RemoteMcpServerID,
+		TunneledMcpServerID:   v.TunneledMcpServerID,
 		ToolsetID:             v.ToolsetID,
 		ToolVariationsGroupID: v.ToolVariationsGroupID,
 		Visibility:            types.McpServerVisibility(*v.Visibility),

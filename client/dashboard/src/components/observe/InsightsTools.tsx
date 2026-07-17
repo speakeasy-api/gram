@@ -31,18 +31,16 @@ import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { useServerNameMappings } from "@/hooks/useServerNameMappings";
 import { cn } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
-import { getPresetRange, type DateRangePreset } from "@gram-ai/elements";
+import { getPresetRange, type DateRangePreset } from "@/elements";
 import { telemetryGetToolUsageFilterOptions } from "@gram/client/funcs/telemetryGetToolUsageFilterOptions";
 import { telemetryGetToolUsageSummary } from "@gram/client/funcs/telemetryGetToolUsageSummary";
-import type {
-  GetToolUsageSummaryResult,
-  ToolUsageTargetTimeSeriesPoint,
-  ToolUsageTargetToolBreakdownRow,
-  ToolUsageUserSummary,
-  ToolUsageUserTimeSeriesPoint,
-  ToolUsageUsersByTargetRow,
-} from "@gram/client/models/components";
-import { useGramContext } from "@gram/client/react-query";
+import type { GetToolUsageSummaryResult } from "@gram/client/models/components/gettoolusagesummaryresult.js";
+import type { ToolUsageTargetTimeSeriesPoint } from "@gram/client/models/components/toolusagetargettimeseriespoint.js";
+import type { ToolUsageTargetToolBreakdownRow } from "@gram/client/models/components/toolusagetargettoolbreakdownrow.js";
+import type { ToolUsageUsersByTargetRow } from "@gram/client/models/components/toolusageusersbytargetrow.js";
+import type { ToolUsageUserSummary } from "@gram/client/models/components/toolusageusersummary.js";
+import type { ToolUsageUserTimeSeriesPoint } from "@gram/client/models/components/toolusageusertimeseriespoint.js";
+import { useGramContext } from "@gram/client/react-query/_context.js";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { Badge, Icon } from "@speakeasy-api/moonshine";
 import { ChartCard } from "@/components/chart/ChartCard";
@@ -129,7 +127,7 @@ const COLLAPSED_BAR_CHART_MAX_ROWS = 6;
 const BAR_THICKNESS = { collapsed: 18, expanded: 24 };
 const BAR_ROW_HEIGHT = { collapsed: 18, expanded: 24 };
 const BAR_ROW_SPACER = { collapsed: 8, expanded: 12 };
-const BAR_BORDER_RADIUS = 5;
+const BAR_BORDER_RADIUS = 0;
 const LINE_CHART_HEIGHT = { collapsed: 250, expanded: 600 };
 
 function displayTargetLabel(

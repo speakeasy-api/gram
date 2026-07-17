@@ -27,7 +27,7 @@ import { DEFAULT_MODEL } from "@/lib/models";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { extractStreamError } from "@/lib/chat-error";
 import { CustomChatTransport } from "@/lib/CustomChatTransport";
-import { describeStreamError } from "@gram-ai/elements";
+import { describeStreamError } from "@/elements";
 import {
   asTools,
   filterFunctionTools,
@@ -36,7 +36,7 @@ import {
 } from "@/lib/toolTypes";
 import { getPlaygroundMcpBaseURL } from "@/lib/utils";
 import { useChat } from "@ai-sdk/react";
-import { useInstance } from "@gram/client/react-query/index.js";
+import { useInstance } from "@gram/client/react-query/instance.js";
 import {
   jsonSchema,
   lastAssistantMessageIsCompleteWithToolCalls,

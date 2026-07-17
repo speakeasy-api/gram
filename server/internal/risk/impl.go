@@ -18,6 +18,7 @@ import (
 	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -37,9 +38,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -47,7 +50,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/customrules"
+	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
+	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -99,11 +107,18 @@ type Service struct {
 	// so the dashboard sees the exact same matcher output the worker
 	// produces during chat-message analysis. Optional: when nil the
 	// playground returns an "unsupported" response for that scanner family.
-	piiScanner ra.PIIScanner
-	piScanner  *ra.PromptInjectionScanner
+	piiScanner      ra.PIIScanner
+	piScanner       *promptinjection.Scanner
+	gitleaksScanner *gitleaks.Scanner
 	// celEng is the shared CEL env, injected at construction; used to compile
 	// and validate scope/detection expressions. nil in the lightweight observer.
-	celEng *celenv.Engine
+	celEng         *celenv.Engine
+	builtinPresets *presetlib.Library
+	// promptJudge replays an inline guardrail against a chat session for the
+	// policy-eval workbench (EvaluatePromptGuardrail). It is the same LLM judge
+	// the realtime scanner uses. Optional: when nil the eval endpoint returns
+	// un-matched verdicts (judge unavailable).
+	promptJudge promptpolicy.Evaluator
 }
 
 var _ chat.MessageObserver = (*Service)(nil)
@@ -136,8 +151,11 @@ func NewObserver(
 		jwtSecret:        "",
 		piiScanner:       nil,
 		piScanner:        nil,
+		gitleaksScanner:  nil,
 		flags:            nil,
 		celEng:           nil,
+		builtinPresets:   nil,
+		promptJudge:      nil,
 	}
 }
 
@@ -156,9 +174,11 @@ func NewService(
 	cacheImpl cache.Cache,
 	jwtSecret string,
 	piiScanner ra.PIIScanner,
-	piScanner *ra.PromptInjectionScanner,
+	piScanner *promptinjection.Scanner,
 	flags feature.Provider,
 	celEng *celenv.Engine,
+	builtinPresets *presetlib.Library,
+	promptJudge promptpolicy.Evaluator,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("risk"))
 
@@ -179,8 +199,11 @@ func NewService(
 		jwtSecret:        jwtSecret,
 		piiScanner:       piiScanner,
 		piScanner:        piScanner,
+		gitleaksScanner:  gitleaks.NewScanner(),
 		flags:            flags,
 		celEng:           celEng,
+		builtinPresets:   builtinPresets,
+		promptJudge:      promptJudge,
 	}
 }
 
@@ -355,6 +378,16 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "build analyzer config").LogError(ctx, s.logger)
 	}
+	if len(payload.ApprovedEmailDomains) > 0 {
+		domains, err := validateApprovedEmailDomains(payload.ApprovedEmailDomains)
+		if err != nil {
+			return nil, err
+		}
+		analyzerConfig, err = ra.WithApprovedEmailDomains(analyzerConfig, domains)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "build analyzer config").LogError(ctx, s.logger)
+		}
+	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -384,6 +417,8 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		UserMessage:          conv.PtrToPGTextEmpty(payload.UserMessage),
 		Prompt:               prompt,
 		ModelConfig:          modelConfig,
+		// Create payload applies the Goa Default(5), so Score always carries a value.
+		Score: pgtype.Float8{Float64: payload.Score, Valid: true},
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create risk policy").LogError(ctx, s.logger)
@@ -445,6 +480,46 @@ func (s *Service) ListRiskPolicies(ctx context.Context, payload *gen.ListRiskPol
 	}
 
 	return &gen.ListRiskPoliciesResult{Policies: policies}, nil
+}
+
+// ListBuiltinExclusions returns the built-in exclusion library grouped by
+// category. The catalog is static, embedded reference data (see presetlib), so
+// this is a read gated by org admin with no project data access.
+func (s *Service) ListBuiltinExclusions(ctx context.Context, _ *gen.ListBuiltinExclusionsPayload) (*gen.ListBuiltinExclusionsResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	categories := make([]*gen.BuiltinExclusionCategory, 0)
+	index := make(map[string]int)
+	for _, e := range s.builtinPresets.Entries() {
+		label := cmp.Or(e.Category, "Other")
+		idx, seen := index[label]
+		if !seen {
+			idx = len(categories)
+			index[label] = idx
+			categories = append(categories, &gen.BuiltinExclusionCategory{Label: label, Entries: nil})
+		}
+		// Deliberately omit engine-internal fields (sources, rule ids, matcher
+		// type) — the library is presented to end users without detection-engine
+		// details.
+		categories[idx].Entries = append(categories[idx].Entries, &gen.BuiltinExclusionEntry{
+			ID:          e.ID,
+			Reason:      e.Reason,
+			Description: e.Description,
+			Samples:     e.Samples,
+		})
+	}
+
+	return &gen.ListBuiltinExclusionsResult{
+		Version:    s.builtinPresets.Version(),
+		Categories: categories,
+	}, nil
 }
 
 func (s *Service) GetRiskPolicy(ctx context.Context, payload *gen.GetRiskPolicyPayload) (*types.RiskPolicy, error) {
@@ -528,6 +603,18 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	analyzerConfig := current.AnalyzerConfig
 	if payload.PresidioScoreThreshold != nil {
 		updated, err := ra.WithPresidioScoreThreshold(current.AnalyzerConfig, payload.PresidioScoreThreshold)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "build analyzer config").LogError(ctx, s.logger)
+		}
+		analyzerConfig = updated
+	}
+	// Omit to preserve; send (possibly empty, to clear) to replace.
+	if payload.ApprovedEmailDomains != nil {
+		domains, err := validateApprovedEmailDomains(payload.ApprovedEmailDomains)
+		if err != nil {
+			return nil, err
+		}
+		updated, err := ra.WithApprovedEmailDomains(analyzerConfig, domains)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "build analyzer config").LogError(ctx, s.logger)
 		}
@@ -710,6 +797,9 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		UserMessage:          userMessage,
 		Prompt:               prompt,
 		ModelConfig:          modelConfig,
+		// Omit (nil) preserves the current score; the query COALESCEs to the
+		// existing column value. Never contributes to the version bump.
+		Score: conv.PtrToPGFloat8(payload.Score),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "update risk policy").LogError(ctx, s.logger)
@@ -936,7 +1026,8 @@ func (s *Service) ListRiskResults(ctx context.Context, payload *gen.ListRiskResu
 
 // redactResultMatchInPlace clears a result's raw match/spans and populates
 // match_redacted in their place, reusing the same fingerprint format (and
-// shadow_mcp passthrough carve-out) as redactMatch/redactRiskResult below.
+// shadow_mcp/account_identity passthrough carve-out) as
+// redactMatch/redactRiskResult below.
 // Spans aren't given a redacted counterpart here because nothing on this
 // (non-agent) redacted path renders them.
 func redactResultMatchInPlace(r *types.RiskResult, orgID string) {
@@ -975,11 +1066,18 @@ func (s *Service) listRiskResultsRaw(ctx context.Context, payload *gen.ListRiskR
 		}
 		return s.listResultsByChat(ctx, *authCtx.ProjectID, *payload.ChatID, cursor, pageSize, totalCount)
 	}
-	// The by-policy listing includes disabled policies (historical findings),
-	// so its count is computed inside listResultsByPolicy with the same
-	// semantics rather than from the enabled-only project aggregate.
+	// A policy filter is applied alongside the other filters rather than
+	// short-circuiting to a separate listing, so combinations like
+	// policy_id + rule_id are honored. When set, the count is scoped to that
+	// policy (and includes disabled policies for historical findings) to match
+	// the list query's semantics.
+	var policyIDInput *string
 	if payload.PolicyID != nil && *payload.PolicyID != "" {
-		return s.listResultsByPolicy(ctx, *authCtx.ProjectID, *payload.PolicyID, cursor, pageSize)
+		policyIDInput = payload.PolicyID
+	}
+	policyID, err := conv.PtrToNullUUID(policyIDInput)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid policy ID")
 	}
 
 	category := ""
@@ -998,6 +1096,18 @@ func (s *Service) listRiskResultsRaw(ctx context.Context, payload *gen.ListRiskR
 	if payload.UniqueMatch != nil {
 		uniqueMatch = *payload.UniqueMatch
 	}
+	nonAssistant := false
+	if payload.NonAssistant != nil {
+		nonAssistant = *payload.NonAssistant
+	}
+	var assistantIDInput *string
+	if payload.AssistantID != nil && *payload.AssistantID != "" {
+		assistantIDInput = payload.AssistantID
+	}
+	assistantID, err := conv.PtrToNullUUID(assistantIDInput)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid assistant ID")
+	}
 	fromTime, err := parseOptionalTimestamptz(payload.From)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid from").LogError(ctx, s.logger)
@@ -1006,11 +1116,20 @@ func (s *Service) listRiskResultsRaw(ctx context.Context, payload *gen.ListRiskR
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid to").LogError(ctx, s.logger)
 	}
-	totalCount, err := s.repo.CountAllFindings(ctx, *authCtx.ProjectID)
+
+	var totalCount int64
+	if policyID.Valid {
+		totalCount, err = s.repo.CountRiskResultsByProjectAndPolicy(ctx, repo.CountRiskResultsByProjectAndPolicyParams{
+			ProjectID:    *authCtx.ProjectID,
+			RiskPolicyID: policyID.UUID,
+		})
+	} else {
+		totalCount, err = s.repo.CountAllFindings(ctx, *authCtx.ProjectID)
+	}
 	if err != nil {
 		totalCount = 0
 	}
-	return s.listResultsByProject(ctx, *authCtx.ProjectID, cursor, pageSize, totalCount, category, ruleID, userID, uniqueMatch, fromTime, toTime)
+	return s.listResultsByProject(ctx, *authCtx.ProjectID, cursor, pageSize, totalCount, policyID, category, ruleID, userID, uniqueMatch, nonAssistant, assistantID, fromTime, toTime)
 }
 
 func parseOptionalTimestamptz(raw *string) (pgtype.Timestamptz, error) {
@@ -1048,6 +1167,8 @@ func (s *Service) ListRiskResultsForAgent(ctx context.Context, payload *gen.List
 		RuleID:           payload.RuleID,
 		UserID:           payload.UserID,
 		UniqueMatch:      payload.UniqueMatch,
+		NonAssistant:     payload.NonAssistant,
+		AssistantID:      payload.AssistantID,
 		From:             payload.From,
 		To:               payload.To,
 		Cursor:           payload.Cursor,
@@ -1168,10 +1289,12 @@ func redactRiskResult(r *types.RiskResult, orgID string) *types.RiskResultRedact
 	}
 }
 
-// redactMatch encodes a match value as `<redacted len=N sha=XXXXXXXX>` for
-// non-shadow_mcp sources, or passes it through verbatim for shadow_mcp.
-// A nil/empty match collapses to `<redacted len=0>` without a sha component
-// so the absence of a finding payload is distinguishable from a real hash.
+// redactMatch encodes a match value as `<redacted len=N sha=XXXXXXXX>`,
+// except for shadow_mcp and account_identity findings whose match passes
+// through verbatim: an MCP server URL or an account email IS the report, not
+// a secret. A nil/empty match collapses to `<redacted len=0>` without a sha
+// component so the absence of a finding payload is distinguishable from a
+// real hash.
 //
 // The hash is salted by orgID with a NUL separator so two different orgs
 // holding the same secret produce different fingerprints — defense in depth
@@ -1181,7 +1304,7 @@ func redactMatch(source string, match *string, orgID string) string {
 	if match == nil || *match == "" {
 		return "<redacted len=0>"
 	}
-	if source == shadowmcp.SourceShadowMCP {
+	if source == shadowmcp.SourceShadowMCP || source == ra.SourceAccountIdentity {
 		return *match
 	}
 	var buf []byte
@@ -1254,13 +1377,22 @@ func (s *Service) GetRiskOverview(ctx context.Context, payload *gen.GetRiskOverv
 	}
 
 	window := riskOverviewWindowParams(from, to)
-	counts, err := s.repo.GetRiskOverviewCounts(ctx, repo.GetRiskOverviewCountsParams{
+	scanCounts, err := s.repo.GetRiskOverviewScanCounts(ctx, repo.GetRiskOverviewScanCountsParams{
 		ProjectID: *authCtx.ProjectID,
 		FromTime:  window.from,
 		ToTime:    window.to,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "get risk overview counts").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "get risk overview scan counts").LogError(ctx, s.logger)
+	}
+
+	findingCounts, err := s.repo.GetRiskOverviewFindingCounts(ctx, repo.GetRiskOverviewFindingCountsParams{
+		ProjectID: *authCtx.ProjectID,
+		FromTime:  window.from,
+		ToTime:    window.to,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get risk overview finding counts").LogError(ctx, s.logger)
 	}
 
 	userRows, err := s.repo.ListRiskOverviewTopUsers(ctx, repo.ListRiskOverviewTopUsersParams{
@@ -1330,10 +1462,10 @@ func (s *Service) GetRiskOverview(ctx context.Context, payload *gen.GetRiskOverv
 	return &gen.RiskOverviewResult{
 		From:               from.UTC().Format(time.RFC3339),
 		To:                 to.UTC().Format(time.RFC3339),
-		MessagesScanned:    counts.MessagesScanned,
-		Findings:           counts.Findings,
-		FlaggedSessions:    counts.FlaggedSessions,
-		ActivePolicies:     counts.ActivePolicies,
+		MessagesScanned:    scanCounts.MessagesScanned,
+		Findings:           findingCounts.Findings,
+		FlaggedSessions:    findingCounts.FlaggedSessions,
+		ActivePolicies:     scanCounts.ActivePolicies,
 		TopCategories:      topCategories,
 		TopUsers:           topUsers,
 		TopRules:           topRules,
@@ -1454,7 +1586,7 @@ func (s *Service) listResultsByChat(ctx context.Context, projectID uuid.UUID, ra
 	var nextCursor *riskResultsCursor
 	for i, row := range rows {
 		cid := row.ChatID.String()
-		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.BlockID, row.ChatMessageID, &cid, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.Spans, row.MessageCreatedAt))
+		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.BlockID, row.ChatMessageID, &cid, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.Spans, row.MessageCreatedAt, row.Replayed))
 		if i == pageSize {
 			nextCursor = &riskResultsCursor{MessageCreatedAt: row.MessageCreatedAt.Time, ID: row.ID}
 		}
@@ -1462,51 +1594,19 @@ func (s *Service) listResultsByChat(ctx context.Context, projectID uuid.UUID, ra
 	return s.paginateResults(results, nextCursor, pageSize, totalCount), nil
 }
 
-func (s *Service) listResultsByPolicy(ctx context.Context, projectID uuid.UUID, rawPolicyID string, cursor *riskResultsCursor, pageSize int) (*gen.ListRiskResultsResult, error) {
-	policyID, err := uuid.Parse(rawPolicyID)
-	if err != nil {
-		return nil, oops.C(oops.CodeInvalid)
-	}
-	totalCount, err := s.repo.CountRiskResultsByProjectAndPolicy(ctx, repo.CountRiskResultsByProjectAndPolicyParams{
-		ProjectID:    projectID,
-		RiskPolicyID: policyID,
-	})
-	if err != nil {
-		totalCount = 0
-	}
-	cursorCreatedAt, cursorID := cursorToParams(cursor)
-	rows, err := s.repo.ListRiskResultsByProjectAndPolicy(ctx, repo.ListRiskResultsByProjectAndPolicyParams{
-		ProjectID:              projectID,
-		RiskPolicyID:           policyID,
-		CursorMessageCreatedAt: cursorCreatedAt,
-		CursorID:               cursorID,
-		PageLimit:              conv.SafeInt32(pageSize + 1),
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list risk results by policy").LogError(ctx, s.logger)
-	}
-	results := make([]*types.RiskResult, 0, len(rows))
-	var nextCursor *riskResultsCursor
-	for i, row := range rows {
-		chatID := row.ChatID.String()
-		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.BlockID, row.ChatMessageID, &chatID, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.Spans, row.MessageCreatedAt))
-		if i == pageSize {
-			nextCursor = &riskResultsCursor{MessageCreatedAt: row.MessageCreatedAt.Time, ID: row.ID}
-		}
-	}
-	return s.paginateResults(results, nextCursor, pageSize, totalCount), nil
-}
-
-func (s *Service) listResultsByProject(ctx context.Context, projectID uuid.UUID, cursor *riskResultsCursor, pageSize int, totalCount int64, category string, ruleID string, userID string, uniqueMatch bool, fromTime, toTime pgtype.Timestamptz) (*gen.ListRiskResultsResult, error) {
+func (s *Service) listResultsByProject(ctx context.Context, projectID uuid.UUID, cursor *riskResultsCursor, pageSize int, totalCount int64, policyID uuid.NullUUID, category string, ruleID string, userID string, uniqueMatch bool, nonAssistant bool, assistantID uuid.NullUUID, fromTime, toTime pgtype.Timestamptz) (*gen.ListRiskResultsResult, error) {
 	cursorCreatedAt, cursorID := cursorToParams(cursor)
 	rows, err := s.repo.ListRiskResultsByProjectFound(ctx, repo.ListRiskResultsByProjectFoundParams{
 		ProjectID:              projectID,
+		PolicyID:               policyID,
 		FromTime:               fromTime,
 		ToTime:                 toTime,
 		Category:               category,
 		RuleID:                 ruleID,
 		UserID:                 userID,
 		UniqueMatch:            uniqueMatch,
+		NonAssistant:           nonAssistant,
+		AssistantID:            assistantID,
 		CursorMessageCreatedAt: cursorCreatedAt,
 		CursorID:               cursorID,
 		PageLimit:              conv.SafeInt32(pageSize + 1),
@@ -1518,7 +1618,7 @@ func (s *Service) listResultsByProject(ctx context.Context, projectID uuid.UUID,
 	var nextCursor *riskResultsCursor
 	for i, row := range rows {
 		chatID := row.ChatID.String()
-		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.BlockID, row.ChatMessageID, &chatID, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.Spans, row.MessageCreatedAt))
+		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.BlockID, row.ChatMessageID, &chatID, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.Spans, row.MessageCreatedAt, row.Replayed))
 		if i == pageSize {
 			nextCursor = &riskResultsCursor{MessageCreatedAt: row.MessageCreatedAt.Time, ID: row.ID}
 		}
@@ -1976,12 +2076,67 @@ func (s *Service) SuggestCustomDetectionRule(ctx context.Context, payload *gen.S
 		return heuristicCustomRuleSuggestion(prompt, payload.ExistingRuleIds), nil
 	}
 
-	suggestion, err := s.suggestCustomRuleViaLLM(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), prompt, payload.ExistingRuleIds)
+	suggestion, err := s.suggestCustomRuleViaLLM(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID, conv.PtrValOr(authCtx.Email, ""), prompt, payload.ExistingRuleIds)
 	if err != nil {
 		s.logger.WarnContext(ctx, "openrouter suggestion failed; returning heuristic suggestion", attr.SlogError(err))
 		return heuristicCustomRuleSuggestion(prompt, payload.ExistingRuleIds), nil
 	}
 	return suggestion, nil
+}
+
+// SuggestExclusion turns a natural-language description of findings an
+// operator wants to stop flagging into a structured exclusion suggestion
+// (match_type, match_value, filters), validated with the same gate the
+// create/update exclusion handlers use (RE2 compile, 512-char cap). The
+// exclusion form serializes the result into its criteria expression via the
+// existing client-side mapping. Falls back to an editable exact-match
+// prefill when the LLM is unavailable, mirroring
+// SuggestCustomDetectionRule's heuristic fallback.
+func (s *Service) SuggestExclusion(ctx context.Context, payload *gen.SuggestExclusionPayload) (*gen.SuggestExclusionResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	prompt := strings.TrimSpace(payload.Prompt)
+	if prompt == "" {
+		return nil, oops.E(oops.CodeInvalid, nil, "prompt is required")
+	}
+
+	if s.completionClient == nil {
+		s.logger.WarnContext(ctx, "completion client not configured; returning heuristic exclusion suggestion")
+		return heuristicExclusionSuggestion(prompt), nil
+	}
+
+	suggestion, err := s.suggestExclusionViaLLM(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID, conv.PtrValOr(authCtx.Email, ""), prompt, payload.KnownRuleIds)
+	if err != nil {
+		s.logger.WarnContext(ctx, "openrouter exclusion suggestion failed; returning heuristic suggestion", attr.SlogError(err))
+		return heuristicExclusionSuggestion(prompt), nil
+	}
+	return suggestion, nil
+}
+
+// exclusionSuggestionResult wraps structured exclusion fields in the
+// suggestExclusion result type.
+func exclusionSuggestionResult(matchType, matchValue, ruleIDFilter, sourceFilter string) *gen.SuggestExclusionResult {
+	return &gen.SuggestExclusionResult{
+		MatchType:    matchType,
+		MatchValue:   matchValue,
+		RuleIDFilter: conv.PtrEmpty(ruleIDFilter),
+		SourceFilter: conv.PtrEmpty(sourceFilter),
+	}
+}
+
+// heuristicExclusionSuggestion is the deterministic fallback when the LLM is
+// unavailable: treat the prompt as the literal value to suppress. Usually
+// wrong as-is, but it prefills an editable expression rather than dead-ending
+// the operator (mirrors heuristicCustomRuleSuggestion).
+func heuristicExclusionSuggestion(prompt string) *gen.SuggestExclusionResult {
+	return exclusionSuggestionResult("exact", strings.TrimSpace(prompt), "", "")
 }
 
 // heuristicCustomRuleSuggestion is the deterministic fallback when the LLM
@@ -2128,7 +2283,7 @@ func validateScopeExpr(eng *celenv.Engine, expr *string) error {
 	return validateExpr(eng, *expr)
 }
 
-func (s *Service) suggestCustomRuleViaLLM(ctx context.Context, orgID, projectID, userPrompt string, existingIDs []string) (*gen.SuggestCustomDetectionRuleResult, error) {
+func (s *Service) suggestCustomRuleViaLLM(ctx context.Context, orgID, projectID, userID, userEmail, userPrompt string, existingIDs []string) (*gen.SuggestCustomDetectionRuleResult, error) {
 	systemPrompt := `You are a security-rules assistant for a runtime risk detection product.
 
 Given a single natural-language description of what an operator wants to detect, return a JSON object the dashboard uses to prefill a "create custom detection rule" form. The rule matches an agent message via a CEL (Common Expression Language) boolean expression in "detection_expr".
@@ -2202,15 +2357,20 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 
 	temperature := 0.2
 	response, err := s.completionClient.GetObjectCompletion(suggestCtx, openrouter.ObjectCompletionRequest{
-		OrgID:          orgID,
-		ProjectID:      projectID,
-		Model:          "",
-		SystemPrompt:   systemPrompt,
-		Prompt:         userMessage,
-		Temperature:    &temperature,
-		UsageSource:    billing.ModelUsageSourceGram,
-		UserID:         "",
+		OrgID:        orgID,
+		ProjectID:    projectID,
+		Model:        "",
+		SystemPrompt: systemPrompt,
+		Prompt:       userMessage,
+		Temperature:  &temperature,
+		UsageSource:  billing.ModelUsageSourceGram,
+		KeyType:      openrouter.KeyTypeInternal,
+		KeySlot:      "",
+		// The admin who asked for the suggestion — this completion is
+		// user-initiated, so usage attributes to them, not "(unset)". (cubic)
+		UserID:         userID,
 		ExternalUserID: "",
+		UserEmail:      userEmail,
 		HTTPMetadata:   nil,
 		JSONSchema:     &jsonSchema,
 	})
@@ -2269,10 +2429,129 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 	}, nil
 }
 
+// Match types the exclusion suggestion may return; mirrors the enum the
+// create/update exclusion payloads accept (shared.RiskExclusionMatchTypeEnum).
+var exclusionMatchTypeAllow = map[string]bool{
+	"exact":       true,
+	"regex":       true,
+	"rule_id":     true,
+	"source":      true,
+	"entity_type": true,
+}
+
+func (s *Service) suggestExclusionViaLLM(ctx context.Context, orgID, projectID, userID, userEmail, userPrompt string, knownRuleIDs []string) (*gen.SuggestExclusionResult, error) {
+	systemPrompt := `You are a security-rules assistant for a runtime risk detection product.
+
+Given a single natural-language description of findings an operator wants to stop flagging, return a JSON object the dashboard uses to prefill a "create exclusion" form. An exclusion suppresses matching findings retroactively and going forward.
+
+Each finding carries: the matched text ("match", e.g. the detected email address or token), the id of the rule that flagged it ("rule_id", e.g. "pii.email_address", "secret.aws_access_token", "custom.acme_token"), and the detector source ("source", e.g. "gitleaks", "presidio", "prompt_injection", "custom").
+
+Fields:
+- "match_type": how match_value is compared, one of:
+  - "exact"       — the finding's matched text equals match_value. Use when the operator names one specific value.
+  - "regex"       — match_value is an RE2 regex (max 512 chars) matched against the finding's matched text. Use for families of values (test accounts, sandbox tokens, name variants). No lookarounds or backreferences (unsupported in RE2).
+  - "rule_id"     — suppress every finding from the rule id in match_value.
+  - "source"      — suppress every finding from the detector source in match_value.
+  - "entity_type" — suppress a Presidio PII entity type; match_value is the UPPER_SNAKE entity name (e.g. "EMAIL_ADDRESS").
+- "match_value": the value compared per match_type.
+- "rule_id_filter": only suppress when the finding's rule_id equals this — use it to narrow an exact/regex match to one rule. Empty string means any rule.
+- "source_filter": only suppress when the finding's source equals this. Empty string means any source.
+
+Prefer the narrowest exclusion that satisfies the request: an exact value over a regex, and set rule_id_filter when the operator names a specific rule or data type. The known rule ids are provided for choosing rule_id values and filters.
+
+Output ONLY the JSON object. No prose, no markdown fences.`
+
+	knownList := strings.Join(knownRuleIDs, ", ")
+	if knownList == "" {
+		knownList = "(none)"
+	}
+	userMessage := fmt.Sprintf("Operator request: %s\n\nKnown rule ids: %s", userPrompt, knownList)
+
+	strict := false
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"match_type":     map[string]any{"type": "string", "enum": []string{"exact", "regex", "rule_id", "source", "entity_type"}},
+			"match_value":    map[string]any{"type": "string", "minLength": 1, "maxLength": exclusionRegexMaxLength},
+			"rule_id_filter": map[string]any{"type": "string", "maxLength": 200},
+			"source_filter":  map[string]any{"type": "string", "maxLength": 200},
+		},
+		"required":             []string{"match_type", "match_value", "rule_id_filter", "source_filter"},
+		"additionalProperties": false,
+	}
+
+	jsonSchema := or.ChatJSONSchemaConfig{
+		Name:        "risk_exclusion_suggestion",
+		Schema:      schema,
+		Description: nil,
+		Strict:      optionalnullable.From(&strict),
+	}
+
+	suggestCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
+	temperature := 0.2
+	response, err := s.completionClient.GetObjectCompletion(suggestCtx, openrouter.ObjectCompletionRequest{
+		OrgID:        orgID,
+		ProjectID:    projectID,
+		Model:        "",
+		SystemPrompt: systemPrompt,
+		Prompt:       userMessage,
+		Temperature:  &temperature,
+		UsageSource:  billing.ModelUsageSourceGram,
+		KeyType:      openrouter.KeyTypeInternal,
+		KeySlot:      "",
+		// The admin who asked for the suggestion — this completion is
+		// user-initiated, so usage attributes to them, not "(unset)".
+		UserID:         userID,
+		ExternalUserID: "",
+		UserEmail:      userEmail,
+		HTTPMetadata:   nil,
+		JSONSchema:     &jsonSchema,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("openrouter object completion: %w", err)
+	}
+	if response == nil || response.Message == nil {
+		return nil, fmt.Errorf("empty completion response")
+	}
+
+	raw := strings.TrimSpace(openrouter.GetText(*response.Message))
+	if raw == "" {
+		return nil, fmt.Errorf("empty completion content")
+	}
+
+	var parsed struct {
+		MatchType    string `json:"match_type"`
+		MatchValue   string `json:"match_value"`
+		RuleIDFilter string `json:"rule_id_filter"`
+		SourceFilter string `json:"source_filter"`
+	}
+	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+		return nil, fmt.Errorf("parse llm response: %w", err)
+	}
+
+	parsed.MatchType = strings.ToLower(strings.TrimSpace(parsed.MatchType))
+	parsed.MatchValue = strings.TrimSpace(parsed.MatchValue)
+	parsed.RuleIDFilter = strings.TrimSpace(parsed.RuleIDFilter)
+	parsed.SourceFilter = strings.TrimSpace(parsed.SourceFilter)
+
+	if !exclusionMatchTypeAllow[parsed.MatchType] {
+		return nil, fmt.Errorf("model returned invalid match_type %q", parsed.MatchType)
+	}
+	// Same gate the create/update exclusion handlers apply: non-empty value,
+	// and a regex must compile (RE2) and fit the length cap.
+	if err := validateExclusionMatchValue(parsed.MatchType, parsed.MatchValue); err != nil {
+		return nil, fmt.Errorf("model returned invalid match_value: %w", err)
+	}
+
+	return exclusionSuggestionResult(parsed.MatchType, parsed.MatchValue, parsed.RuleIDFilter, parsed.SourceFilter), nil
+}
+
 // TestDetectionRule runs a single detection rule against pasted sample text
 // and returns its matches. The handler dispatches to the same scanners the
 // worker uses during chat-message analysis (gitleaks for secrets.*, the
-// configured PIIScanner for pii.*, the PromptInjectionScanner for
+// configured PIIScanner for pii.*, the prompt-injection scanner for
 // prompt_injection.*, and a regex matcher for custom.*) so the playground
 // output mirrors what would be recorded as a risk_result in production.
 //
@@ -2312,8 +2591,348 @@ func (s *Service) TestDetectionRule(ctx context.Context, payload *gen.TestDetect
 	}
 }
 
+// EvaluatePromptGuardrail replays an inline guardrail without persisting findings.
+func (s *Service) EvaluatePromptGuardrail(ctx context.Context, payload *gen.EvaluatePromptGuardrailPayload) (*gen.PromptGuardrailEvalResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	prompt := strings.TrimSpace(payload.Prompt)
+	if prompt == "" {
+		return nil, oops.E(oops.CodeInvalid, nil, "prompt is required")
+	}
+	chatID, err := uuid.Parse(payload.ChatID)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid chat_id")
+	}
+	projectID := *authCtx.ProjectID
+
+	modelConfig, err := marshalModelConfig(payload.ModelConfig)
+	if err != nil {
+		return nil, err
+	}
+	cfg := promptpolicy.ParseConfig(modelConfig)
+
+	return s.evaluateGuardrailForChat(
+		ctx,
+		projectID,
+		authCtx.ActiveOrganizationID,
+		chatID,
+		prompt,
+		cfg,
+		payload.MessageTypes,
+		conv.PtrValOr(payload.ScopeInclude, ""),
+		conv.PtrValOr(payload.ScopeExempt, ""),
+	)
+}
+
+func (s *Service) evaluateGuardrailForChat(
+	ctx context.Context,
+	projectID uuid.UUID,
+	orgID string,
+	chatID uuid.UUID,
+	prompt string,
+	cfg promptpolicy.Config,
+	messageTypes []string,
+	includeCEL string,
+	exemptCEL string,
+) (*gen.PromptGuardrailEvalResult, error) {
+	// GetChat filters soft-deleted chats.
+	chatRepo := chatrepo.New(s.db)
+	chatRow, err := chatRepo.GetChat(ctx, chatID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, err, "chat not found")
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "load chat").LogError(ctx, s.logger)
+	case chatRow.ProjectID != projectID:
+		return nil, oops.C(oops.CodeNotFound)
+	}
+
+	rows, err := chatRepo.ListLatestGenerationChatMessages(ctx, chatrepo.ListLatestGenerationChatMessagesParams{
+		ChatID:    chatID,
+		ProjectID: projectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load chat messages").LogError(ctx, s.logger)
+	}
+
+	messages := make([]ra.EvalMessage, len(rows))
+	for i, row := range rows {
+		messages[i] = ra.EvalMessage{
+			ID:        row.ID,
+			Role:      row.Role,
+			Content:   row.Content,
+			ToolCalls: row.ToolCalls,
+		}
+	}
+
+	verdicts, err := ra.EvalPromptGuardrail(
+		ctx,
+		s.logger,
+		s.promptJudge,
+		s.celEng,
+		orgID,
+		projectID.String(),
+		prompt,
+		cfg,
+		messages,
+		messageTypes,
+		includeCEL,
+		exemptCEL,
+	)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid scope expression")
+	}
+
+	out := make([]*gen.PromptGuardrailMessageVerdict, 0, len(verdicts))
+	flagged := false
+	totalCostUSD := 0.0
+	var totalLatencyMs int64
+	for _, v := range verdicts {
+		row := rows[v.Index]
+		if v.Matched {
+			flagged = true
+		}
+		totalCostUSD += v.CostUSD
+		totalLatencyMs += v.LatencyMs
+		out = append(out, &gen.PromptGuardrailMessageVerdict{
+			MessageID:        row.ID.String(),
+			Seq:              row.Seq,
+			MessageType:      v.Type,
+			ToolName:         conv.PtrEmpty(v.ToolName),
+			Matched:          v.Matched,
+			Confidence:       v.Confidence,
+			Rationale:        v.Rationale,
+			LatencyMs:        v.LatencyMs,
+			CostUsd:          v.CostUSD,
+			PromptTokens:     v.PromptTokens,
+			CompletionTokens: v.CompletionTokens,
+			TotalTokens:      v.TotalTokens,
+		})
+	}
+
+	return &gen.PromptGuardrailEvalResult{
+		ChatID:         chatID.String(),
+		Flagged:        flagged,
+		JudgedCount:    len(out),
+		TotalCostUsd:   totalCostUSD,
+		TotalLatencyMs: totalLatencyMs,
+		Verdicts:       out,
+	}, nil
+}
+
+// SaveRiskEvalReview records one review verdict in the policy regression set.
+func (s *Service) SaveRiskEvalReview(ctx context.Context, payload *gen.SaveRiskEvalReviewPayload) (*types.RiskPolicyEvalReview, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	policyID, err := uuid.Parse(payload.PolicyID)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid policy_id")
+	}
+	chatID, err := uuid.Parse(payload.ChatID)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid chat_id")
+	}
+	projectID := *authCtx.ProjectID
+
+	policy, err := s.requirePromptPolicy(ctx, policyID, projectID)
+	if err != nil {
+		return nil, err
+	}
+
+	chatBelongs, err := s.repo.RiskEvalChatBelongsToProject(ctx, repo.RiskEvalChatBelongsToProjectParams{
+		ChatID:    chatID,
+		ProjectID: projectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "validate eval review chat").LogError(ctx, s.logger)
+	}
+	if !chatBelongs {
+		return nil, oops.E(oops.CodeNotFound, nil, "chat not found")
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin eval review save").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	q := repo.New(dbtx)
+
+	row, err := q.UpsertRiskPolicyEvalReview(ctx, repo.UpsertRiskPolicyEvalReviewParams{
+		ProjectID:         projectID,
+		OrganizationID:    authCtx.ActiveOrganizationID,
+		RiskPolicyID:      policyID,
+		RiskPolicyVersion: policy.Version,
+		ChatID:            chatID,
+		Verdict:           payload.Verdict,
+		ReviewedBy:        authCtx.UserID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "save eval review").LogError(ctx, s.logger)
+	}
+
+	if err := s.audit.LogRiskPolicyEvalReviewSave(ctx, dbtx, audit.LogRiskPolicyEvalReviewEvent{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ProjectID:        projectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+		RiskPolicyID:     policy.ID,
+		RiskPolicyName:   policy.Name,
+		Metadata: &audit.RiskPolicyEvalReviewMetadata{
+			ReviewID:   row.ID.String(),
+			ChatID:     chatID.String(),
+			Verdict:    row.Verdict,
+			ReviewedBy: row.ReviewedBy,
+		},
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log eval review save").LogError(ctx, s.logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit eval review save").LogError(ctx, s.logger)
+	}
+	return evalReviewToType(row), nil
+}
+
+// ListRiskEvalReviews returns the active regression set for a policy: every
+// reviewer's current verdicts.
+func (s *Service) ListRiskEvalReviews(ctx context.Context, payload *gen.ListRiskEvalReviewsPayload) (*gen.ListRiskEvalReviewsResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	policyID, err := uuid.Parse(payload.PolicyID)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid policy_id")
+	}
+
+	rows, err := s.repo.ListRiskPolicyEvalReviews(ctx, repo.ListRiskPolicyEvalReviewsParams{
+		ProjectID:    *authCtx.ProjectID,
+		RiskPolicyID: policyID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list eval reviews").LogError(ctx, s.logger)
+	}
+
+	reviews := make([]*types.RiskPolicyEvalReview, 0, len(rows))
+	for _, row := range rows {
+		reviews = append(reviews, evalReviewToType(row))
+	}
+	return &gen.ListRiskEvalReviewsResult{Reviews: reviews}, nil
+}
+
+// DeleteRiskEvalReview clears the current reviewer's verdict.
+func (s *Service) DeleteRiskEvalReview(ctx context.Context, payload *gen.DeleteRiskEvalReviewPayload) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return err
+	}
+
+	policyID, err := uuid.Parse(payload.PolicyID)
+	if err != nil {
+		return oops.E(oops.CodeInvalid, err, "invalid policy_id")
+	}
+	chatID, err := uuid.Parse(payload.ChatID)
+	if err != nil {
+		return oops.E(oops.CodeInvalid, err, "invalid chat_id")
+	}
+	projectID := *authCtx.ProjectID
+
+	policy, err := s.requirePromptPolicy(ctx, policyID, projectID)
+	if err != nil {
+		return err
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "begin eval review delete").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	q := repo.New(dbtx)
+
+	row, err := q.SoftDeleteRiskPolicyEvalReview(ctx, repo.SoftDeleteRiskPolicyEvalReviewParams{
+		ProjectID:    projectID,
+		RiskPolicyID: policyID,
+		ChatID:       chatID,
+		ReviewedBy:   authCtx.UserID,
+	})
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return oops.E(oops.CodeUnexpected, err, "delete eval review").LogError(ctx, s.logger)
+	}
+	if err == nil {
+		if err := s.audit.LogRiskPolicyEvalReviewDelete(ctx, dbtx, audit.LogRiskPolicyEvalReviewEvent{
+			OrganizationID:   authCtx.ActiveOrganizationID,
+			ProjectID:        projectID,
+			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName: authCtx.Email,
+			ActorSlug:        nil,
+			RiskPolicyID:     policy.ID,
+			RiskPolicyName:   policy.Name,
+			Metadata: &audit.RiskPolicyEvalReviewMetadata{
+				ReviewID:   row.ID.String(),
+				ChatID:     chatID.String(),
+				Verdict:    row.Verdict,
+				ReviewedBy: row.ReviewedBy,
+			},
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "log eval review delete").LogError(ctx, s.logger)
+		}
+	}
+	if err := dbtx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "commit eval review delete").LogError(ctx, s.logger)
+	}
+	return nil
+}
+
+// requirePromptPolicy loads a policy scoped to the project and verifies it is
+// prompt_based (the only kind evals apply to). Returns not-found when missing.
+func (s *Service) requirePromptPolicy(ctx context.Context, policyID, projectID uuid.UUID) (repo.RiskPolicy, error) {
+	policy, err := s.repo.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{ID: policyID, ProjectID: projectID})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return repo.RiskPolicy{}, oops.E(oops.CodeNotFound, err, "policy not found")
+	case err != nil:
+		return repo.RiskPolicy{}, oops.E(oops.CodeUnexpected, err, "load policy").LogError(ctx, s.logger)
+	case policy.PolicyType != ra.PolicyTypePromptBased:
+		return repo.RiskPolicy{}, oops.E(oops.CodeInvalid, nil, "evals apply only to prompt_based policies")
+	}
+	return policy, nil
+}
+
+func evalReviewToType(row repo.RiskPolicyEvalReview) *types.RiskPolicyEvalReview {
+	return &types.RiskPolicyEvalReview{
+		ID:            row.ID.String(),
+		PolicyID:      row.RiskPolicyID.String(),
+		PolicyVersion: row.RiskPolicyVersion,
+		ChatID:        row.ChatID.String(),
+		Verdict:       row.Verdict,
+		ReviewedBy:    row.ReviewedBy,
+		CreatedAt:     row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:     row.UpdatedAt.Time.Format(time.RFC3339),
+	}
+}
+
 func (s *Service) testGitleaksRule(ctx context.Context, ruleID, text string) (*gen.TestDetectionRuleResult, error) {
-	findings, err := ra.ScanWithGitleaks(text)
+	findings, err := s.gitleaksScanner.Scan(ctx, text)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "run gitleaks").LogError(ctx, s.logger)
 	}
@@ -2372,10 +2991,7 @@ func (s *Service) testPromptInjectionRule(ctx context.Context, orgID, projectID,
 			Reason:    new("Prompt-injection scanner is not configured on this server."),
 		}, nil
 	}
-	// A rule-test preview runs the deterministic, free L0 heuristics only; the
-	// billable LLM-judge L1 engine is not invoked on a test click (l1Enabled=false),
-	// so the structured message is unused here and carries just the sample text.
-	findings, err := s.piScanner.Scan(ctx, text, orgID, projectID, ra.NewJudgeMessage(message.User, "", text), false)
+	findings, err := s.piScanner.Scan(ctx, text, orgID, projectID, "", judgemessage.New(message.User, "", text))
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "run prompt-injection scanner").LogError(ctx, s.logger)
 	}
@@ -2433,7 +3049,7 @@ func (s *Service) testCustomRule(ruleID, detectionExpr, text string) (*gen.TestD
 	}, nil
 }
 
-func findingToMatch(f ra.Finding) *gen.TestDetectionRuleMatch {
+func findingToMatch(f scanners.Finding) *gen.TestDetectionRuleMatch {
 	return &gen.TestDetectionRuleMatch{
 		RuleID:      f.RuleID,
 		Description: new(f.Description),
@@ -2477,6 +3093,7 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 		Sources:                row.Sources,
 		PresidioEntities:       row.PresidioEntities,
 		PresidioScoreThreshold: ra.PresidioScoreThresholdPtr(row.AnalyzerConfig),
+		ApprovedEmailDomains:   ra.ApprovedEmailDomainsFromConfig(row.AnalyzerConfig),
 		PromptInjectionRules:   row.PromptInjectionRules,
 		DisabledRules:          row.DisabledRules,
 		CustomRuleIds:          row.CustomRuleIds,
@@ -2491,6 +3108,7 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 		UserMessage:            conv.FromPGText[string](row.UserMessage),
 		Prompt:                 conv.FromPGText[string](row.Prompt),
 		ModelConfig:            unmarshalModelConfig(row.ModelConfig),
+		Score:                  row.Score,
 		Version:                row.Version,
 		CreatedAt:              row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:              row.UpdatedAt.Time.Format(time.RFC3339),
@@ -2511,6 +3129,7 @@ func policyRowSnapshotWithAudience(row repo.RiskPolicy, audiencePrincipalURNs []
 		Sources:                row.Sources,
 		PresidioEntities:       row.PresidioEntities,
 		PresidioScoreThreshold: ra.PresidioScoreThresholdPtr(row.AnalyzerConfig),
+		ApprovedEmailDomains:   ra.ApprovedEmailDomainsFromConfig(row.AnalyzerConfig),
 		PromptInjectionRules:   row.PromptInjectionRules,
 		DisabledRules:          row.DisabledRules,
 		CustomRuleIds:          row.CustomRuleIds,
@@ -2525,6 +3144,7 @@ func policyRowSnapshotWithAudience(row repo.RiskPolicy, audiencePrincipalURNs []
 		UserMessage:            conv.FromPGText[string](row.UserMessage),
 		Prompt:                 conv.FromPGText[string](row.Prompt),
 		ModelConfig:            unmarshalModelConfig(row.ModelConfig),
+		Score:                  row.Score,
 		Version:                row.Version,
 		CreatedAt:              row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:              row.UpdatedAt.Time.Format(time.RFC3339),
@@ -2590,6 +3210,8 @@ func (s *Service) generatePolicyName(ctx context.Context, orgID, projectID strin
 		Model:                     "",
 		Stream:                    false,
 		UsageSource:               billing.ModelUsageSourceGram,
+		KeyType:                   openrouter.KeyTypeInternal,
+		KeySlot:                   "",
 		UserID:                    "",
 		ExternalUserID:            "",
 		UserEmail:                 "",
@@ -2667,6 +3289,8 @@ func sourcesToCategoryLabels(sources []string) []string {
 			out = append(out, "Destructive CLI Command")
 		case ra.SourcePromptInjection:
 			out = append(out, "Prompt Injection")
+		case ra.SourceAccountIdentity:
+			out = append(out, "Non-Corporate Account")
 		}
 	}
 	return out
@@ -2693,8 +3317,11 @@ func (s *Service) fallbackPolicyName(sources, customRuleTitles []string, action 
 	}
 
 	actionLabel := "Scanner"
-	if action == "block" {
+	switch action {
+	case "block":
 		actionLabel = "Blocker"
+	case "warn":
+		actionLabel = "Warner"
 	}
 
 	return strings.Join(parts, " & ") + " " + actionLabel
@@ -2732,6 +3359,8 @@ func (s *Service) generatePromptPolicyName(ctx context.Context, orgID, projectID
 		Model:                     "",
 		Stream:                    false,
 		UsageSource:               billing.ModelUsageSourceGram,
+		KeyType:                   openrouter.KeyTypeInternal,
+		KeySlot:                   "",
 		UserID:                    "",
 		ExternalUserID:            "",
 		UserEmail:                 "",
@@ -2760,17 +3389,17 @@ func (s *Service) generatePromptPolicyName(ctx context.Context, orgID, projectID
 
 func validateAction(action string) error {
 	switch action {
-	case "flag", "block":
+	case "flag", "block", "warn":
 		return nil
 	default:
-		return oops.E(oops.CodeInvalid, nil, "action must be one of: flag, block")
+		return oops.E(oops.CodeInvalid, nil, "action must be one of: flag, warn, block")
 	}
 }
 
 func validateSources(sources []string) error {
 	for _, src := range sources {
 		switch src {
-		case ra.SourceGitleaks, ra.SourcePresidio, shadowmcp.SourceShadowMCP, shadowmcp.SourceDestructiveTool, ra.SourceCLIDestructive, ra.SourcePromptInjection:
+		case ra.SourceGitleaks, ra.SourcePresidio, shadowmcp.SourceShadowMCP, shadowmcp.SourceDestructiveTool, ra.SourceCLIDestructive, ra.SourcePromptInjection, ra.SourceAccountIdentity:
 		default:
 			return oops.E(oops.CodeInvalid, nil, "source %q is not a recognized policy source", src)
 		}
@@ -2779,15 +3408,44 @@ func validateSources(sources []string) error {
 }
 
 func validateSourceAction(sources []string, action string) error {
-	if action != "block" {
+	// warn (challenge) can end in a block, so it is subject to the same
+	// flag-only-source constraint as block: only "flag" is unconstrained.
+	if action == "flag" {
 		return nil
 	}
-	for _, src := range []string{shadowmcp.SourceDestructiveTool, ra.SourceCLIDestructive} {
+	for _, src := range []string{shadowmcp.SourceDestructiveTool, ra.SourceCLIDestructive, ra.SourceAccountIdentity} {
 		if slices.Contains(sources, src) {
 			return oops.E(oops.CodeInvalid, nil, "source %q supports flagging only", src)
 		}
 	}
 	return nil
+}
+
+// approvedDomainFormat matches a plausible DNS domain: LDH (letters, digits,
+// hyphen) labels joined by dots, at least two labels.
+var approvedDomainFormat = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$`)
+
+// validateApprovedEmailDomains normalizes the account_identity domain
+// allowlist (lowercase, trimmed, optional leading "@" stripped, deduped) and
+// rejects entries that are not plausible domains.
+func validateApprovedEmailDomains(domains []string) ([]string, error) {
+	out := make([]string, 0, len(domains))
+	seen := make(map[string]struct{}, len(domains))
+	for _, raw := range domains {
+		domain := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(raw)), "@")
+		if domain == "" {
+			continue
+		}
+		if !approvedDomainFormat.MatchString(domain) {
+			return nil, oops.E(oops.CodeInvalid, nil, "approved email domain %q is not a valid domain", raw)
+		}
+		if _, ok := seen[domain]; ok {
+			continue
+		}
+		seen[domain] = struct{}{}
+		out = append(out, domain)
+	}
+	return out, nil
 }
 
 func validatePolicyName(name string) error {
@@ -2815,7 +3473,8 @@ func payloadHasPromptPolicyDetectionConfig(payload *gen.UpdateRiskPolicyPayload)
 		len(payload.PresidioEntities) > 0 ||
 		len(payload.PromptInjectionRules) > 0 ||
 		len(payload.DisabledRules) > 0 ||
-		len(payload.CustomRuleIds) > 0
+		len(payload.CustomRuleIds) > 0 ||
+		len(payload.ApprovedEmailDomains) > 0
 }
 
 func payloadHasCreatePromptPolicyDetectionConfig(payload *gen.CreateRiskPolicyPayload) bool {
@@ -2823,7 +3482,8 @@ func payloadHasCreatePromptPolicyDetectionConfig(payload *gen.CreateRiskPolicyPa
 		len(payload.PresidioEntities) > 0 ||
 		len(payload.PromptInjectionRules) > 0 ||
 		len(payload.DisabledRules) > 0 ||
-		len(payload.CustomRuleIds) > 0
+		len(payload.CustomRuleIds) > 0 ||
+		len(payload.ApprovedEmailDomains) > 0
 }
 
 func createPolicyDetectionField(policyType string, values []string) []string {
@@ -2962,6 +3622,7 @@ func foundRowToResult(
 	source string, ruleID, description, match pgtype.Text,
 	startPos, endPos pgtype.Int4,
 	confidence pgtype.Float8, tags []string, spans []byte, createdAt pgtype.Timestamptz,
+	replayed bool,
 ) *types.RiskResult {
 	return &types.RiskResult{
 		ID:            id.String(),
@@ -2985,6 +3646,7 @@ func foundRowToResult(
 		// for callers ListRiskResults decides shouldn't see raw match/spans.
 		MatchRedacted: nil,
 		CreatedAt:     createdAt.Time.Format(time.RFC3339),
+		Replayed:      replayed,
 	}
 }
 

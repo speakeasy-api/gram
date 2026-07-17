@@ -1,57 +1,45 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "tw-shimmer";
-/* Scan the elements package so Tailwind generates the utility classes its
- * compiled components use (e.g. the dark slate JSON viewer) — they live in
- * node_modules and aren't picked up by the default dashboard-src scan. */
-@source "../node_modules/@gram-ai/elements/dist";
 @reference "../node_modules/@speakeasy-api/moonshine/src/global.css";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
 @font-face {
   font-family: "Diatype";
-  src: url("/fonts/diatype/ABCDiatype-Regular.woff2") format("woff2");
+  src: url("./fonts/diatype/ABCDiatype-Regular.woff2") format("woff2");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
   font-family: "Diatype";
-  src: url("/fonts/diatype/ABCDiatype-Light.woff2") format("woff2");
+  src: url("./fonts/diatype/ABCDiatype-Light.woff2") format("woff2");
   font-weight: 300;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
   font-family: "Diatype Mono";
-  src: url("/fonts/diatype-mono/ABCDiatypeMono-Regular.woff2") format("woff2");
+  src: url("./fonts/diatype-mono/ABCDiatypeMono-Regular.woff2") format("woff2");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
   font-family: "Diatype Mono";
-  src: url("/fonts/diatype-mono/ABCDiatypeMono-Light.woff2") format("woff2");
+  src: url("./fonts/diatype-mono/ABCDiatypeMono-Light.woff2") format("woff2");
   font-weight: 300;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
   font-family: "Tobias";
-  src: url("/fonts/tobias/Tobias-Thin.woff2") format("woff2");
+  src: url("./fonts/tobias/Tobias-Thin.woff2") format("woff2");
   font-weight: 100;
   font-style: normal;
   font-display: swap;
 }
-@font-face {
-  font-family: "speakeasyAscii";
-  src: url("/fonts/speakeasy/speakeasy-ascii.woff2") format("woff2");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
 :root {
   --optional-label: "optional";
 
@@ -257,6 +245,47 @@
   }
   100% {
     background-position: -200% center;
+  }
+}
+
+@keyframes brand-gradient-color-drift {
+  0% {
+    transform: translateX(-14%);
+    opacity: 0;
+  }
+  5%,
+  95% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(30%);
+    opacity: 0;
+  }
+}
+
+.brand-gradient-line {
+  position: relative;
+  overflow: hidden;
+}
+
+.brand-gradient-line::after {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  left: -18%;
+  width: 130%;
+  background: linear-gradient(
+    90deg,
+    var(--gradient-brand-primary-colors)
+  );
+  filter: brightness(1.08) saturate(1.02);
+  animation: brand-gradient-color-drift 750ms ease-in-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-gradient-line::after {
+    animation: none;
+    opacity: 0;
   }
 }
 

@@ -1,4 +1,6 @@
 import { Badge } from "@/components/ui/badge";
+import { TableRowContextMenu } from "@/components/table-row-context-menu";
+import type { Action } from "@/components/ui/more-actions";
 import { Type } from "@/components/ui/type";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -10,12 +12,12 @@ import {
   DropdownMenuTrigger,
   Table,
 } from "@speakeasy-api/moonshine";
+import { useRiskDeleteExclusionMutation } from "@gram/client/react-query/riskDeleteExclusion.js";
 import {
   invalidateAllRiskListExclusions,
-  useRiskDeleteExclusionMutation,
   useRiskListExclusions,
-  useRiskUpdateExclusionMutation,
-} from "@gram/client/react-query/index.js";
+} from "@gram/client/react-query/riskListExclusions.js";
+import { useRiskUpdateExclusionMutation } from "@gram/client/react-query/riskUpdateExclusion.js";
 import type { RiskExclusion } from "@gram/client/models/components/riskexclusion.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import { useQueryClient } from "@tanstack/react-query";
@@ -24,6 +26,7 @@ import type { JSX, ReactNode } from "react";
 import { Ellipsis, Plus } from "lucide-react";
 import { serializeExclusionExpression } from "./exclusion-expression";
 import { ExclusionSheet, type ExclusionSheetState } from "./exclusion-sheet";
+import { BuiltinLibrary } from "./builtin-library";
 
 export type { ExclusionSheetState } from "./exclusion-sheet";
 
@@ -71,6 +74,20 @@ export function ExclusionsTab({
       },
     });
   };
+
+  const exclusionActions = (exclusion: RiskExclusion): Action[] => [
+    {
+      label: "Edit",
+      onClick: () => onSheetChange({ mode: "edit", exclusion }),
+    },
+    {
+      label: "Delete",
+      destructive: true,
+      onClick: () => {
+        deleteMutation.mutate({ request: { id: exclusion.id } });
+      },
+    },
+  ];
 
   const columns: Column<RiskExclusion>[] = [
     {
@@ -130,12 +147,7 @@ export function ExclusionsTab({
       width: "0.3fr",
       render: (exclusion) => (
         <div onClick={(e) => e.stopPropagation()}>
-          <ExclusionActionsMenu
-            onEdit={() => onSheetChange({ mode: "edit", exclusion })}
-            onDelete={() => {
-              deleteMutation.mutate({ request: { id: exclusion.id } });
-            }}
-          />
+          <ExclusionActionsMenu actions={exclusionActions(exclusion)} />
         </div>
       ),
     },
@@ -157,12 +169,21 @@ export function ExclusionsTab({
         data={exclusions}
         rowKey={(exclusion) => exclusion.id}
         onRowClick={(exclusion) => onSheetChange({ mode: "edit", exclusion })}
+        renderRow={(exclusion, rowElement) => (
+          <TableRowContextMenu
+            key={exclusion.id}
+            actions={exclusionActions(exclusion)}
+          >
+            {rowElement}
+          </TableRowContextMenu>
+        )}
       />
     );
   }
 
   return (
     <>
+      <BuiltinLibrary />
       {body}
       <ExclusionSheet
         state={sheet}
@@ -174,13 +195,7 @@ export function ExclusionsTab({
   );
 }
 
-function ExclusionActionsMenu({
-  onEdit,
-  onDelete,
-}: {
-  onEdit: () => void;
-  onDelete: () => void;
-}): JSX.Element {
+function ExclusionActionsMenu({ actions }: { actions: Action[] }): JSX.Element {
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
@@ -191,22 +206,22 @@ function ExclusionActionsMenu({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuItem
-          className="cursor-pointer"
-          onSelect={() => {
-            setTimeout(onEdit, 0);
-          }}
-        >
-          Edit
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          className="text-destructive focus:text-destructive cursor-pointer"
-          onSelect={() => {
-            setTimeout(onDelete, 0);
-          }}
-        >
-          Delete
-        </DropdownMenuItem>
+        {actions.map((action) => (
+          <DropdownMenuItem
+            key={action.label}
+            disabled={action.disabled}
+            className={
+              action.destructive
+                ? "text-destructive focus:text-destructive cursor-pointer"
+                : "cursor-pointer"
+            }
+            onSelect={() => {
+              setTimeout(action.onClick, 0);
+            }}
+          >
+            {action.label}
+          </DropdownMenuItem>
+        ))}
       </DropdownMenuContent>
     </DropdownMenu>
   );

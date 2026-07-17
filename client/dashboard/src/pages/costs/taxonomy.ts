@@ -1,4 +1,4 @@
-import { Dimension } from "@gram/client/models/components";
+import { Dimension } from "@gram/client/models/components/queryfilter.js";
 import { providerLabel } from "@/components/observe/account-display-utils";
 
 // Shared cost-taxonomy config + helpers, used by both the CostsExplorer
@@ -47,6 +47,8 @@ const CHAIN: DimMeta[] = [
 // Every axis the user can pivot to at any level (dynamic taxonomy). The Claude
 // attribution cuts (MCP Server/Tool, Skill, Subagent) are appended last so they
 // never preempt the org-hierarchy default at the root (see defaultGroupBy).
+// Exported so breakdownCopy's test can assert its grammar table covers every
+// axis — a new pivot with unreviewed copy should fail the suite, not ship.
 export const PIVOTS: DimMeta[] = [
   ...CHAIN,
   { dim: Dimension.JobTitle, label: "Job Title" },
@@ -82,6 +84,45 @@ export function collectionLabel(dim: Dimension): string | null {
   return COLLECTION_LABELS[dim] ?? null;
 }
 
+// Plural label for a breakdown dimension, for prose that counts its groups
+// ("across 8 Job Titles"). Attribution dims already carry a hand-written plural;
+// every other label pluralizes with a bare "s". Not for SESSIONS_AXIS — its
+// label is already plural, and the sessions list isn't a counted breakdown.
+export function pluralLabel(dim: Dimension): string {
+  return COLLECTION_LABELS[dim] ?? `${LABELS[dim] ?? "Group"}s`;
+}
+
+// The Moonshine Badge variant for an entity's type chip. Moonshine ships five
+// variants and two are spoken for — `destructive` reads as an error, `warning`
+// (amber) is the Preview release badge — so the taxonomy's dimensions group into
+// the three that remain, by what kind of thing the entity is:
+//
+//   information (brand blue) — who spent it: the org/people hierarchy
+//   neutral                  — what ran it: the agent/model/account runtime
+//   success (emerald)        — what it used: the Claude attribution cuts
+//
+// The variant names are hooks rather than literal semantics here (the same
+// reasoning as ReleaseStageBadge); grouping beats an arbitrary colour per
+// dimension, since a reader can learn three families but not fifteen.
+const PEOPLE_DIMS = new Set<Dimension>([
+  Dimension.DivisionName,
+  Dimension.DepartmentName,
+  Dimension.Email,
+  Dimension.JobTitle,
+  Dimension.EmployeeType,
+  Dimension.CostCenterName,
+  Dimension.Role,
+]);
+
+export type EntityBadgeVariant = "neutral" | "information" | "success";
+
+export function entityBadgeVariant(dim: Dimension | null): EntityBadgeVariant {
+  if (dim == null) return "neutral"; // the project root
+  if (PEOPLE_DIMS.has(dim)) return "information";
+  if (isAttributionDim(dim)) return "success";
+  return "neutral";
+}
+
 // The most granular grouping axes — an Agent or a Model is an endpoint, not
 // something you break down further. Drilling a row here jumps straight to that
 // slice's individual sessions (the SESSIONS_AXIS list) instead of another
@@ -115,16 +156,81 @@ export function isAttributionDim(dim: Dimension): boolean {
   return ATTRIBUTION_DIMS.has(dim);
 }
 
-// A nested attribution cut and the parent it must sit under. MCP Tool only makes
-// sense scoped to an MCP Server (a tool call always belongs to a server), so it
-// is offered as a breakdown axis only once its parent is pinned in the drill
-// path. Skill, by contrast, is a valid root cut ("skills run outside a
-// subagent") so it has no required parent.
-const PIVOT_PARENT: Partial<Record<Dimension, Dimension>> = {
-  [Dimension.McpToolName]: Dimension.McpServerName,
+// ── Datasets ────────────────────────────────────────────────────────────────
+// A "dataset" is a narrow slice of the overall spend rather than a breakdown of
+// it: the Claude attribution lenses (MCP calls, Subagent runs, Skill runs), each
+// isolating a subset of turns. They live in their own top-right selector instead
+// of the breakdown dropdown because they aren't true breakdown axes. `all` — the
+// full project spend — is the default and keeps the org/attribute breakdowns.
+export const DATASET_PARAM = "dataset";
+const DATASETS = ["all", "mcp", "subagents", "skills"] as const;
+export type Dataset = (typeof DATASETS)[number];
+
+export function isDataset(value: string | null | undefined): value is Dataset {
+  return value != null && (DATASETS as readonly string[]).includes(value);
+}
+
+// Per-dataset config: the selector label, the attribution dimensions you can
+// break the slice down by (the first is the default axis on entry), and any
+// parent a nested dim must sit under before it's offered as a breakdown. The
+// `parent` map is dataset-scoped: a Skill is a child of a Subagent here
+// (Subagent → Skill), yet a valid root cut in the standalone Skills dataset.
+type DatasetMeta = {
+  label: string;
+  dims: Dimension[];
+  parent: Partial<Record<Dimension, Dimension>>;
 };
-export function pivotParent(dim: Dimension): Dimension | null {
-  return PIVOT_PARENT[dim] ?? null;
+const DATASET_META: Record<Dataset, DatasetMeta> = {
+  all: { label: "All spend", dims: [], parent: {} },
+  mcp: {
+    label: "MCP",
+    dims: [Dimension.McpServerName, Dimension.McpToolName],
+    parent: { [Dimension.McpToolName]: Dimension.McpServerName },
+  },
+  subagents: {
+    label: "Subagents",
+    dims: [Dimension.AgentName, Dimension.SkillName],
+    parent: { [Dimension.SkillName]: Dimension.AgentName },
+  },
+  skills: { label: "Skills", dims: [Dimension.SkillName], parent: {} },
+};
+
+export const DATASET_OPTIONS: { value: Dataset; label: string }[] =
+  DATASETS.map((ds) => ({ value: ds, label: DATASET_META[ds].label }));
+
+// The dataset an attribution dimension belongs to — used to promote the `all`
+// view into the right dataset when a drill lands on an attribution cut (e.g. a
+// "Spend by MCP server" mix-card row). Non-attribution dims stay in `all`.
+const DIM_DATASET: Partial<Record<Dimension, Dataset>> = {
+  [Dimension.McpServerName]: "mcp",
+  [Dimension.McpToolName]: "mcp",
+  [Dimension.AgentName]: "subagents",
+  [Dimension.SkillName]: "skills",
+};
+export function datasetForDim(dim: Dimension): Dataset {
+  return DIM_DATASET[dim] ?? "all";
+}
+
+// The non-attribution breakdown axes — the `all` dataset's pivots. Attribution
+// dims are excluded here; they're only reachable inside their own dataset.
+const BASE_PIVOTS: DimMeta[] = PIVOTS.filter((p) => !isAttributionDim(p.dim));
+
+// The breakdown axes offered inside a dataset: the base org/attribute pivots for
+// `all`, or the dataset's own attribution dims otherwise.
+export function datasetPivots(ds: Dataset): DimMeta[] {
+  if (ds === "all") return BASE_PIVOTS;
+  const dims = new Set(DATASET_META[ds].dims);
+  return PIVOTS.filter((p) => dims.has(p.dim));
+}
+
+// The parent a nested breakdown dim must sit under within a dataset (so MCP Tool
+// only appears once MCP Server is pinned, Skill once its Subagent is). Null when
+// the dim is a valid root cut for the dataset.
+export function datasetPivotParent(
+  ds: Dataset,
+  dim: Dimension,
+): Dimension | null {
+  return DATASET_META[ds].parent[dim] ?? null;
 }
 
 // Levels that surface the "Most costly sessions" widget: the org root and the
@@ -268,20 +374,48 @@ export function defaultGroupBy(
   const last = path[path.length - 1];
   if (last) return nextDimension(last.dim) ?? last.dim;
   if (available && available.size > 0) {
-    const hit = PIVOTS.find((p) => available.has(p.dim));
+    // Attribution cuts are excluded here — they belong to their own dataset, so
+    // the `all` root never defaults to one.
+    const hit = BASE_PIVOTS.find((p) => available.has(p.dim));
     if (hit) return hit.dim;
   }
   return CHAIN[0]!.dim;
 }
 
-// Human label for an entity value: title-cased name for emails, the raw value
-// otherwise. Shared by the profile header and the breadcrumb substitutions.
+// The breakdown axis a node defaults to within a dataset: the dataset's primary
+// dim at its root, otherwise the natural drill child (same as `all`).
+export function datasetDefaultGroupBy(
+  ds: Dataset,
+  path: Crumb[],
+  available?: Set<Dimension>,
+): Dimension {
+  if (ds === "all") return defaultGroupBy(path, available);
+  const last = path[path.length - 1];
+  if (last) return nextDimension(last.dim) ?? last.dim;
+  return DATASET_META[ds].dims[0]!;
+}
+
+// Human label for an entity value, for the breadcrumb trail and the assistant's
+// grounding context. A user stays their address: both callers need to identify
+// one person exactly, and "Adam" doesn't — two people can share a first name,
+// and the assistant can't ground on a name it can't resolve. The friendly
+// title-cased form belongs to the hero, which pairs it with the address anyway
+// (see prettyName in EntityProfile).
 export function displayName(dim: Dimension, value: string): string {
   if (value === "") return "(unset)";
   if (dim === Dimension.Provider) return providerLabel(value);
   if (dim === Dimension.AccountType) {
     return value.charAt(0).toUpperCase() + value.slice(1);
   }
+  return value;
+}
+
+// The conversational form of an entity's value, for the hero and for prose that
+// talks about it ("Adam's claude-code spend"). A user becomes the name inside
+// their address; everything else is already conversational. Distinct from
+// displayName, which stays exact because the breadcrumb and the assistant have
+// to identify one person rather than read naturally.
+export function friendlyName(dim: Dimension, value: string): string {
   if (dim === Dimension.Email && value.includes("@")) {
     const local = value.split("@")[0] ?? value;
     return local
@@ -290,5 +424,5 @@ export function displayName(dim: Dimension, value: string): string {
       .map((w) => w[0]!.toUpperCase() + w.slice(1))
       .join(" ");
   }
-  return value;
+  return displayName(dim, value);
 }

@@ -217,6 +217,7 @@ func newTestClientForServer(t *testing.T, server *httptest.Server) *ChatClient {
 		testenv.NewLogger(t),
 		guardianPolicy,
 		&mockProvisioner{apiKey: "test-api-key"},
+		&PlatformKeyResolver{Provisioner: &mockProvisioner{apiKey: "test-api-key"}},
 		&mockMessageCaptureStrategy{},
 		&mockUsageTrackingStrategy{},
 		&mockChatTitleGenerator{},

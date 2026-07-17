@@ -46,9 +46,7 @@ func EncodeGetPluginsRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 			req.Header.Set("Gram-Key", head)
 		}
 		values := req.URL.Query()
-		if p.Email != nil {
-			values.Add("email", *p.Email)
-		}
+		values.Add("email", p.Email)
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -253,6 +251,236 @@ func DecodeGetPluginsResponse(decoder func(*http.Response) goahttp.Decoder, rest
 	}
 }
 
+// BuildListSyncedUsersRequest instantiates a HTTP request object with method
+// and path set to call the "agent" service "listSyncedUsers" endpoint
+func (c *Client) BuildListSyncedUsersRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListSyncedUsersAgentPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("agent", "listSyncedUsers", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListSyncedUsersRequest returns an encoder for requests sent to the
+// agent listSyncedUsers server.
+func EncodeListSyncedUsersRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*agent.ListSyncedUsersPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("agent", "listSyncedUsers", "*agent.ListSyncedUsersPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeListSyncedUsersResponse returns a decoder for responses returned by
+// the agent listSyncedUsers endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeListSyncedUsersResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListSyncedUsersResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListSyncedUsersResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "listSyncedUsers", err)
+			}
+			err = ValidateListSyncedUsersResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "listSyncedUsers", err)
+			}
+			res := NewListSyncedUsersResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListSyncedUsersUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "listSyncedUsers", err)
+			}
+			err = ValidateListSyncedUsersUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "listSyncedUsers", err)
+			}
+			return nil, NewListSyncedUsersUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListSyncedUsersForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "listSyncedUsers", err)
+			}
+			err = ValidateListSyncedUsersForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "listSyncedUsers", err)
+			}
+			return nil, NewListSyncedUsersForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListSyncedUsersBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "listSyncedUsers", err)
+			}
+			err = ValidateListSyncedUsersBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "listSyncedUsers", err)
+			}
+			return nil, NewListSyncedUsersBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListSyncedUsersNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "listSyncedUsers", err)
+			}
+			err = ValidateListSyncedUsersNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "listSyncedUsers", err)
+			}
+			return nil, NewListSyncedUsersNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListSyncedUsersConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "listSyncedUsers", err)
+			}
+			err = ValidateListSyncedUsersConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "listSyncedUsers", err)
+			}
+			return nil, NewListSyncedUsersConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListSyncedUsersUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "listSyncedUsers", err)
+			}
+			err = ValidateListSyncedUsersUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "listSyncedUsers", err)
+			}
+			return nil, NewListSyncedUsersUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListSyncedUsersInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "listSyncedUsers", err)
+			}
+			err = ValidateListSyncedUsersInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "listSyncedUsers", err)
+			}
+			return nil, NewListSyncedUsersInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListSyncedUsersInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agent", "listSyncedUsers", err)
+				}
+				err = ValidateListSyncedUsersInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agent", "listSyncedUsers", err)
+				}
+				return nil, NewListSyncedUsersInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListSyncedUsersUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agent", "listSyncedUsers", err)
+				}
+				err = ValidateListSyncedUsersUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agent", "listSyncedUsers", err)
+				}
+				return nil, NewListSyncedUsersUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("agent", "listSyncedUsers", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListSyncedUsersGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "listSyncedUsers", err)
+			}
+			err = ValidateListSyncedUsersGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "listSyncedUsers", err)
+			}
+			return nil, NewListSyncedUsersGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("agent", "listSyncedUsers", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalAgentMarketplaceResponseBodyToAgentAgentMarketplace builds a value
 // of type *agent.AgentMarketplace from a value of type
 // *AgentMarketplaceResponseBody.
@@ -271,6 +499,19 @@ func unmarshalAgentPluginResponseBodyToAgentAgentPlugin(v *AgentPluginResponseBo
 	res := &agent.AgentPlugin{
 		Slug:            *v.Slug,
 		MarketplaceName: *v.MarketplaceName,
+	}
+
+	return res
+}
+
+// unmarshalSyncedAgentUserResponseBodyToAgentSyncedAgentUser builds a value of
+// type *agent.SyncedAgentUser from a value of type
+// *SyncedAgentUserResponseBody.
+func unmarshalSyncedAgentUserResponseBodyToAgentSyncedAgentUser(v *SyncedAgentUserResponseBody) *agent.SyncedAgentUser {
+	res := &agent.SyncedAgentUser{
+		Email:       *v.Email,
+		FirstSeenAt: *v.FirstSeenAt,
+		LastSeenAt:  *v.LastSeenAt,
 	}
 
 	return res

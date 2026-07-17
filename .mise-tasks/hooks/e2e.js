@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node
+#!/usr/bin/env -S node --import tsx
 //MISE description="Run provider hook E2E checks against a local Gram server"
 //MISE dir="{{ config_root }}"
 //USAGE flag "--project <slug>" default="default" help="Project slug to test against."
@@ -6,8 +6,8 @@
 //USAGE flag "--suites <list>" default="capture,shadow-mcp,ratchet" help="Comma-separated feature suites to run: capture,shadow-mcp,ratchet."
 //USAGE flag "--timeout-seconds <seconds>" default="180" help="Timeout per provider scenario."
 //USAGE flag "--poll-seconds <seconds>" default="90" help="How long to poll Gram telemetry and database evidence."
-//USAGE flag "--keep-artifacts" help="Keep the temp workspace and downloaded plugin artifacts."
-//USAGE flag "--skip-download" help="Use provider plugin dirs supplied through GRAM_HOOKS_E2E_<PROVIDER>_PLUGIN_DIR."
+//USAGE flag "--keep-artifacts" help="Keep the temp workspace and built plugin artifacts."
+//USAGE flag "--skip-build" help="Skip building plugins; use dirs supplied through GRAM_HOOKS_E2E_<PROVIDER>_PLUGIN_DIR."
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import http from "node:http";
@@ -15,9 +15,9 @@ import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { intro, log, outro } from "@clack/prompts";
-import { GramCore } from "@gram/client/core.js";
-import { authInfo } from "@gram/client/funcs/authInfo.js";
-import { keysCreate } from "@gram/client/funcs/keysCreate.js";
+import { GramCore } from "#gram/client/core.js";
+import { authInfo } from "#gram/client/funcs/authInfo.js";
+import { keysCreate } from "#gram/client/funcs/keysCreate.js";
 const VALID_PROVIDERS = new Set(["claude", "cursor", "codex"]);
 const VALID_SUITES = new Set(["capture", "shadow-mcp", "ratchet"]);
 const SOURCE_ALIASES = {
@@ -71,7 +71,7 @@ function parseArgs(argv) {
     timeoutSeconds: Number(args["timeout-seconds"] ?? 180),
     pollSeconds: Number(args["poll-seconds"] ?? 90),
     keepArtifacts: Boolean(args["keep-artifacts"]),
-    skipDownload: Boolean(args["skip-download"]),
+    skipBuild: Boolean(args["skip-build"] ?? args["skip-download"]),
   };
 }
 function fail(message) {
@@ -279,10 +279,14 @@ async function runProcess(command, args, opts = {}) {
     child.stdin.end();
   });
 }
+// session_capture gates hook ingest; logs gates telemetry_logs writes — the
+// evidence checks read both, so provision both.
 async function enableSessionCapture(organizationId) {
   const sql = `
     INSERT INTO organization_features (organization_id, feature_name)
-    VALUES ('${sqlString(organizationId)}', 'session_capture')
+    VALUES
+      ('${sqlString(organizationId)}', 'session_capture'),
+      ('${sqlString(organizationId)}', 'logs')
     ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;
   `;
   const res = await runProcess("psql", psqlArgs(sql));
@@ -293,48 +297,51 @@ async function enableSessionCapture(organizationId) {
 function sqlString(value) {
   return value.replaceAll("'", "''");
 }
-async function downloadProviderPlugin(args) {
-  const pluginDir = path.join(args.artifactsDir, "plugins", args.provider);
-  await fs.mkdir(pluginDir, { recursive: true });
-  if (process.env[`GRAM_HOOKS_E2E_${args.provider.toUpperCase()}_PLUGIN_DIR`]) {
+// buildHookBinary compiles the speakeasy-hooks binary once per run. Every
+// provider plugin drives this one binary; there is no server-side plugin
+// download anymore. The binary must live outside the workspace tree on a
+// plain temp path: Cursor refuses to execute hook binaries from some
+// locations.
+let hookBinaryPath = null;
+async function buildHookBinary(artifactsDir) {
+  if (hookBinaryPath) {
+    return hookBinaryPath;
+  }
+  const binary = path.join(artifactsDir, "bin", "speakeasy-hooks");
+  await fs.mkdir(path.dirname(binary), { recursive: true });
+  await runChecked("go", [
+    "build",
+    "-o",
+    binary,
+    "./hooks/cmd/speakeasy-hooks",
+  ]);
+  hookBinaryPath = binary;
+  return binary;
+}
+async function buildProviderPlugin(args) {
+  // Codex has no plugin layout for hooks: the config installs directly into
+  // the isolated Codex home (hooks.json next to config.toml).
+  const pluginDir =
+    args.provider === "codex"
+      ? args.codexEnv.CODEX_HOME
+      : path.join(args.artifactsDir, "plugins", args.provider);
+  if (
+    args.provider !== "codex" &&
+    process.env[`GRAM_HOOKS_E2E_${args.provider.toUpperCase()}_PLUGIN_DIR`]
+  ) {
     return process.env[
       `GRAM_HOOKS_E2E_${args.provider.toUpperCase()}_PLUGIN_DIR`
     ];
   }
-  const url = new URL(
-    `${args.serverURL}/rpc/plugins.downloadObservabilityPlugin`,
-  );
-  url.searchParams.set("platform", args.provider);
-  const res = await fetchOrFail(
-    url,
-    {
-      headers: {
-        Accept: "application/zip",
-        "Gram-Session": args.session.sessionId,
-        "Gram-Project": args.projectSlug,
-      },
-    },
-    `download ${args.provider} observability plugin`,
-  );
-  if (!res.ok) {
-    fail(
-      `downloadObservabilityPlugin(${args.provider}) failed: ${res.status} ${await res.text()}`,
-    );
-  }
-  const zipPath = path.join(
-    args.artifactsDir,
-    `${args.provider}-observability.zip`,
-  );
-  await fs.writeFile(zipPath, Buffer.from(await res.arrayBuffer()));
-  await runChecked("unzip", ["-q", "-o", zipPath, "-d", pluginDir]);
-  if (args.provider === "codex") {
-    if (!args.codexEnv) {
-      fail(
-        "internal error: codex plugin install requires isolated Codex environment",
-      );
-    }
-    await installCodexPlugin(pluginDir, args.codexEnv);
-  }
+  const binary = await buildHookBinary(args.artifactsDir);
+  await runChecked(binary, [
+    "install",
+    `--provider=${args.provider}`,
+    `--dir=${pluginDir}`,
+    `--server-url=${args.serverURL}`,
+    `--project=${args.projectSlug}`,
+    `--binary=${binary}`,
+  ]);
   return pluginDir;
 }
 async function runChecked(command, args, opts = {}) {
@@ -343,66 +350,6 @@ async function runChecked(command, args, opts = {}) {
     fail(`${res.command} failed:\n${res.stderr || res.stdout}`);
   }
   return res;
-}
-async function installCodexPlugin(pluginDir, env) {
-  const installScript = path.join(pluginDir, "install.sh");
-  try {
-    await fs.access(installScript);
-  } catch {
-    fail(`Codex plugin did not include ${installScript}`);
-  }
-  await runChecked("bash", [installScript], {
-    cwd: pluginDir,
-    env,
-    timeoutMs: 60_000,
-  });
-  await normalizeCodexConfig(env.HOME);
-  const { marketplace, plugin } = await readCodexPluginIdentity(pluginDir);
-  await runChecked(
-    "codex",
-    ["plugin", "add", `${plugin}@${marketplace}`, "--json"],
-    {
-      cwd: pluginDir,
-      env,
-      timeoutMs: 60_000,
-    },
-  );
-  await mirrorCodexPluginCommandPath(pluginDir, env, marketplace, plugin);
-  await normalizeCodexConfig(env.HOME);
-}
-async function readCodexPluginIdentity(pluginDir) {
-  const marketplacePath = path.join(
-    pluginDir,
-    ".agents",
-    "plugins",
-    "marketplace.json",
-  );
-  const marketplaceManifest = JSON.parse(
-    await fs.readFile(marketplacePath, "utf8"),
-  );
-  const marketplace = marketplaceManifest.name;
-  const plugin = marketplaceManifest.plugins?.[0]?.name;
-  if (!marketplace || !plugin) {
-    fail(`invalid Codex marketplace manifest at ${marketplacePath}`);
-  }
-  return { marketplace, plugin };
-}
-async function mirrorCodexPluginCommandPath(
-  pluginDir,
-  env,
-  marketplace,
-  plugin,
-) {
-  const target = path.join(
-    env.CODEX_HOME,
-    ".tmp",
-    "marketplaces",
-    marketplace,
-    plugin,
-  );
-  await fs.rm(target, { recursive: true, force: true });
-  await fs.mkdir(path.dirname(target), { recursive: true });
-  await fs.cp(pluginDir, target, { recursive: true });
 }
 async function prepareCodexEnv(rootDir) {
   const home = path.join(rootDir, "codex-home");
@@ -458,92 +405,6 @@ async function writeIsolatedCodexConfig(home) {
       "",
     ].join("\n"),
   );
-}
-async function normalizeCodexConfig(home) {
-  const configPath = path.join(home, ".codex", "config.toml");
-  let content = "";
-  try {
-    content = await fs.readFile(configPath, "utf8");
-  } catch (err) {
-    if (
-      !(
-        err &&
-        typeof err === "object" &&
-        "code" in err &&
-        err.code === "ENOENT"
-      )
-    ) {
-      throw err;
-    }
-  }
-  const lines = content.split(/\r?\n/);
-  const out = [];
-  let inFeatures = false;
-  let sawFeatures = false;
-  let sawHooks = false;
-  let sawPluginHooks = false;
-  let sawHooksState = false;
-  const flushFeatures = () => {
-    if (!inFeatures) {
-      return;
-    }
-    if (!sawHooks) {
-      out.push("hooks = true");
-    }
-    if (!sawPluginHooks) {
-      out.push("plugin_hooks = true");
-    }
-  };
-  for (const line of lines) {
-    if (/^\s*features\.(hooks|plugin_hooks)\s*=/.test(line)) {
-      continue;
-    }
-    const header = line.match(/^\s*\[([^\]]+)\]\s*$/);
-    if (header) {
-      flushFeatures();
-      const table = header[1].trim();
-      inFeatures = table === "features";
-      if (inFeatures) {
-        sawFeatures = true;
-        sawHooks = false;
-        sawPluginHooks = false;
-      }
-      if (table === "hooks.state") {
-        if (sawHooksState) {
-          continue;
-        }
-        sawHooksState = true;
-        out.push("[hooks.state]");
-        continue;
-      }
-      out.push(line);
-      continue;
-    }
-    if (inFeatures && /^\s*hooks\s*=/.test(line)) {
-      if (!sawHooks) {
-        out.push("hooks = true");
-        sawHooks = true;
-      }
-      continue;
-    }
-    if (inFeatures && /^\s*plugin_hooks\s*=/.test(line)) {
-      if (!sawPluginHooks) {
-        out.push("plugin_hooks = true");
-        sawPluginHooks = true;
-      }
-      continue;
-    }
-    out.push(line);
-  }
-  flushFeatures();
-  if (!sawFeatures) {
-    if (out.length > 0 && out[out.length - 1] !== "") {
-      out.push("");
-    }
-    out.push("[features]", "hooks = true", "plugin_hooks = true");
-  }
-  await fs.mkdir(path.dirname(configPath), { recursive: true });
-  await fs.writeFile(configPath, out.join("\n").replace(/\n{3,}/g, "\n\n"));
 }
 async function prepareShadowMCPFixture(rootDir, runId) {
   const fixtureDir = path.join(rootDir, "shadow-mcp");
@@ -1157,6 +1018,69 @@ async function prepareCursorProjectHooks(pluginDir, workdir) {
   await fs.mkdir(targetDir, { recursive: true });
   await fs.writeFile(targetPath, JSON.stringify(hooks, null, 2));
 }
+// Cursor is the only provider whose hook payloads carry usage totals, and its
+// headless agent never fires the stop hook, so drive the installed stop
+// command directly with recorded-shape payloads. Both pricing shapes matter:
+// API-priced sessions report a cost while subscription sessions report
+// tokens only.
+async function runCursorSyntheticUsage(args) {
+  const hooksPath = path.join(args.pluginDir, "hooks", "hooks.json");
+  const hooks = JSON.parse(await fs.readFile(hooksPath, "utf8"));
+  const entry = (hooks.hooks?.stop ?? [])[0];
+  if (!entry || typeof entry.command !== "string") {
+    fail(`cursor hooks.json has no stop command at ${hooksPath}`);
+  }
+  const escapedPluginDir = args.pluginDir.replace(/(["\\$`])/g, "\\$1");
+  const command = entry.command.replaceAll(
+    "$CURSOR_PLUGIN_ROOT",
+    escapedPluginDir,
+  );
+  const base = {
+    hook_event_name: "stop",
+    workspace_roots: [args.workdir],
+    cwd: args.workdir,
+    model: "e2e-synthetic",
+    status: "completed",
+    loop_count: 1,
+  };
+  const payloads = [
+    {
+      label: "api-pricing",
+      body: {
+        ...base,
+        conversation_id: `${args.runId}-usage-api`,
+        generation_id: `${args.runId}-usage-api-gen`,
+        input_tokens: 1200,
+        output_tokens: 345,
+        cache_read_tokens: 800,
+        cache_write_tokens: 60,
+        cost: 0.0123,
+      },
+    },
+    {
+      label: "subscription",
+      body: {
+        ...base,
+        conversation_id: `${args.runId}-usage-plan`,
+        generation_id: `${args.runId}-usage-plan-gen`,
+        input_tokens: 900,
+        output_tokens: 210,
+      },
+    },
+  ];
+  const results = [];
+  for (const payload of payloads) {
+    const res = await runProcess("sh", ["-c", command], {
+      cwd: args.workdir,
+      input: JSON.stringify(payload.body),
+      timeoutMs: args.timeoutMs,
+    });
+    res.provider = "cursor";
+    res.label = payload.label;
+    results.push(res);
+  }
+  return results;
+}
 async function clickhouseQuery(query) {
   const host = process.env.CLICKHOUSE_HOST ?? "127.0.0.1";
   const port = process.env.CLICKHOUSE_HTTP_PORT ?? "8123";
@@ -1574,15 +1498,37 @@ function featureChecks(provider, evidence, chats, opts = {}) {
         ? "Codex does not expose a distinct failed-tool hook event in this driver"
         : "missing after failure scenario",
   });
+  const usageBlocks = evidence
+    .filter((r) => r.event === "usage.reported")
+    .map((r) => {
+      try {
+        return JSON.parse(String(r.attrs ?? ""))?.gen_ai?.usage ?? null;
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
+  const usageWithCost = usageBlocks.some(
+    (u) => u.input_tokens > 0 && u.output_tokens > 0 && u.cost > 0,
+  );
+  const usageTokensOnly = usageBlocks.some(
+    (u) => u.input_tokens > 0 && u.output_tokens > 0 && u.cost === undefined,
+  );
   checks.push({
     provider,
     feature: "usage.reported",
-    status: events.has("usage.reported") ? "PASS" : "SKIP",
-    detail: events.has("usage.reported")
-      ? "observed canonical usage event"
-      : provider === "cursor"
-        ? "Cursor Agent headless does not emit a stop/usage hook"
-        : "not emitted as a canonical unified event by this provider scenario",
+    status:
+      provider === "cursor"
+        ? usageWithCost && usageTokensOnly
+          ? "PASS"
+          : "FAIL"
+        : "SKIP",
+    detail:
+      provider === "cursor"
+        ? usageWithCost && usageTokensOnly
+          ? "synthetic stop payloads recorded token attrs for both pricing shapes"
+          : `usage evidence incomplete: with-cost=${usageWithCost} tokens-only=${usageTokensOnly} rows=${usageBlocks.length}`
+        : "provider hook payloads carry no usage totals",
   });
   checks.push({
     provider,
@@ -1617,7 +1563,7 @@ function featureChecks(provider, evidence, chats, opts = {}) {
         ? "provider rows load in one chat generation"
         : `chat rows split across generations: ${splitGenerationChats.join("; ")}`,
   });
-  if (provider === "claude") {
+  if (provider === "claude" || provider === "codex") {
     const skillName = opts.skillName;
     const skillActivated = evidence.some(
       (r) =>
@@ -1631,11 +1577,13 @@ function featureChecks(provider, evidence, chats, opts = {}) {
       feature: "skill.activated",
       status: skillActivated ? "PASS" : skillName ? "FAIL" : "SKIP",
       detail: skillActivated
-        ? `observed Claude activation of ${skillName ?? "a skill"}`
+        ? `observed ${provider} activation of ${skillName ?? "a skill"}`
         : skillName
           ? `no skill.activated telemetry for ${skillName}; events=${[...events].join(", ") || "(none)"}`
           : "not triggered by the current real-driver scenarios",
     });
+  }
+  if (provider === "claude") {
     checks.push({
       provider,
       feature: "notification.reported",
@@ -1846,9 +1794,9 @@ function shadowMCPChecks(provider, phase, res, evidence, blocks, extra = {}) {
   });
   return checks;
 }
-async function prepareSkillFixture(workdir, runId) {
+async function prepareSkillFixture(skillsRoot, runId, provider) {
   const skillName = `gram-hooks-e2e-skill-${runId.split("-").pop()}`;
-  const skillDir = path.join(workdir, ".claude", "skills", skillName);
+  const skillDir = path.join(skillsRoot, skillName);
   await fs.mkdir(skillDir, { recursive: true });
   await fs.writeFile(
     path.join(skillDir, "SKILL.md"),
@@ -1860,21 +1808,54 @@ async function prepareSkillFixture(workdir, runId) {
       "",
       "# Gram hooks E2E skill probe",
       "",
-      `Once activated, reply with exactly: GRAM_HOOKS_E2E_OK ${runId} claude skill`,
+      `Once activated, reply with exactly: GRAM_HOOKS_E2E_OK ${runId} ${provider} skill`,
       "",
     ].join("\n"),
   );
-  return { skillName };
+  return { skillName, skillDir };
 }
-function skillPrompt(runId, skillName) {
+// Codex has no Skill tool: the sender infers activation from a $name prompt
+// mention (validated against the skill roots on disk) or from a reader tool
+// touching .../skills/<name>/SKILL.md. The prompt covers both arms.
+function skillPrompt(runId, skillName, provider, skillDir) {
+  if (provider === "codex") {
+    return [
+      `Gram hooks E2E skill run ${runId} for codex.`,
+      `Use the $${skillName} skill: read ${path.join(skillDir, "SKILL.md")} and follow its instructions.`,
+      `Then reply with exactly: GRAM_HOOKS_E2E_OK ${runId} codex skill`,
+    ].join(" ");
+  }
   return [
     `Gram hooks E2E skill run ${runId} for claude.`,
     `Run the Gram hooks E2E skill probe by invoking the Skill tool with skill "${skillName}".`,
     `After the ${skillName} skill is activated, reply with exactly: GRAM_HOOKS_E2E_OK ${runId} claude skill`,
   ].join(" ");
 }
-async function runClaudeSkillScenario(args) {
-  const prompt = skillPrompt(args.runId, args.skillName);
+async function runSkillScenario(args) {
+  const prompt = skillPrompt(
+    args.runId,
+    args.skillName,
+    args.provider,
+    args.skillDir,
+  );
+  if (args.provider === "codex") {
+    const res = await runProcess(
+      "codex",
+      [
+        "exec",
+        "--json",
+        "--cd",
+        args.workdir,
+        "--skip-git-repo-check",
+        "--dangerously-bypass-hook-trust",
+        "--dangerously-bypass-approvals-and-sandbox",
+        prompt,
+      ],
+      { cwd: args.workdir, env: args.env, timeoutMs: args.timeoutMs },
+    );
+    res.provider = "codex";
+    return res;
+  }
   const sessionId = crypto.randomUUID();
   const res = await runProcess(
     "claude",
@@ -1966,7 +1947,7 @@ async function runRatchetSuite(args) {
 
 async function runCaptureSuite(args) {
   const commandResults = [];
-  let claudeSkillName = null;
+  const skillNamesByProvider = new Map();
   for (const provider of args.providers) {
     for (const scenario of ["success", "failure"]) {
       log.info(`${provider}: running capture ${scenario} scenario`);
@@ -1995,30 +1976,66 @@ async function runCaptureSuite(args) {
         fail(`${provider} ${scenario} scenario timed out`);
       }
     }
-    if (provider === "claude") {
-      const skill = await prepareSkillFixture(args.workdir, args.runId);
-      claudeSkillName = skill.skillName;
-      log.info("claude: running capture skill-activation scenario");
-      const skillRes = await runClaudeSkillScenario({
-        pluginDir: args.pluginDirs.get("claude"),
+    if (provider === "cursor") {
+      log.info("cursor: dispatching synthetic stop payloads for usage capture");
+      const usageResults = await runCursorSyntheticUsage({
+        pluginDir: args.pluginDirs.get("cursor"),
+        workdir: args.workdir,
+        runId: args.runId,
+        timeoutMs: args.timeoutSeconds * 1000,
+      });
+      for (const res of usageResults) {
+        commandResults.push(res);
+        await writeCommandArtifacts(
+          args.artifactsDir,
+          "cursor",
+          `capture-usage-${res.label}`,
+          res,
+        );
+        if (res.exitCode !== 0) {
+          fail(
+            `cursor synthetic usage dispatch (${res.label}) failed:\n${res.stderr || res.stdout}`,
+          );
+        }
+        if (res.timedOut) {
+          fail(`cursor synthetic usage dispatch (${res.label}) timed out`);
+        }
+      }
+    }
+    if (provider === "claude" || provider === "codex") {
+      // Codex validates $name mentions against the skill roots on disk;
+      // CODEX_HOME/skills is the only root the isolated env controls
+      // regardless of the hook process cwd.
+      const skillsRoot =
+        provider === "codex"
+          ? path.join(args.codexEnv.CODEX_HOME, "skills")
+          : path.join(args.workdir, ".claude", "skills");
+      const skill = await prepareSkillFixture(skillsRoot, args.runId, provider);
+      skillNamesByProvider.set(provider, skill.skillName);
+      log.info(`${provider}: running capture skill-activation scenario`);
+      const skillRes = await runSkillScenario({
+        provider,
+        pluginDir: args.pluginDirs.get(provider),
         workdir: args.workdir,
         runId: args.runId,
         skillName: skill.skillName,
+        skillDir: skill.skillDir,
+        env: provider === "codex" ? args.codexEnv : undefined,
         timeoutMs: args.timeoutSeconds * 1000,
       });
       commandResults.push(skillRes);
       await writeCommandArtifacts(
         args.artifactsDir,
-        "claude",
+        provider,
         "capture-skill",
         skillRes,
       );
       if (skillRes.timedOut) {
-        fail("claude skill-activation scenario timed out");
+        fail(`${provider} skill-activation scenario timed out`);
       }
       if (skillRes.exitCode !== 0) {
         fail(
-          `claude skill-activation scenario failed:\n${skillRes.stderr || skillRes.stdout}`,
+          `${provider} skill-activation scenario failed:\n${skillRes.stderr || skillRes.stdout}`,
         );
       }
     }
@@ -2032,13 +2049,13 @@ async function runCaptureSuite(args) {
   });
   const checks = [];
   for (const provider of args.providers) {
-    const skillName = provider === "claude" ? claudeSkillName : null;
+    const skillName = skillNamesByProvider.get(provider) ?? null;
     // Cursor Agent headless does not reliably emit afterAgentResponse
     // (featureChecks marks it SKIP), so don't burn the whole poll window
     // waiting for it.
     const requiredEvents = [
       "prompt.submitted",
-      ...(provider === "cursor" ? [] : ["assistant.responded"]),
+      ...(provider === "cursor" ? ["usage.reported"] : ["assistant.responded"]),
       "tool.requested",
       "tool.completed",
     ];
@@ -2056,7 +2073,15 @@ async function runCaptureSuite(args) {
         ),
       (rows) => {
         const events = new Set(rows.map((r) => r.event));
-        return requiredEvents.every((e) => events.has(e));
+        if (!requiredEvents.every((e) => events.has(e))) {
+          return false;
+        }
+        // Cursor's two synthetic stop payloads (with-cost and tokens-only)
+        // land as independent ClickHouse rows; featureChecks needs both.
+        return (
+          provider !== "cursor" ||
+          rows.filter((r) => r.event === "usage.reported").length >= 2
+        );
       },
     );
     const chats = await poll(
@@ -2405,24 +2430,23 @@ async function main() {
     for (const provider of args.providers) {
       const envDir =
         process.env[`GRAM_HOOKS_E2E_${provider.toUpperCase()}_PLUGIN_DIR`];
-      if (args.skipDownload && !envDir) {
+      // Codex hooks install into the fresh isolated Codex home, so there is
+      // no prebuilt plugin dir to substitute.
+      if (args.skipBuild && !envDir && provider !== "codex") {
         fail(
-          `--skip-download requires GRAM_HOOKS_E2E_${provider.toUpperCase()}_PLUGIN_DIR`,
+          `--skip-build requires GRAM_HOOKS_E2E_${provider.toUpperCase()}_PLUGIN_DIR`,
         );
       }
-      const pluginDir = args.skipDownload
-        ? envDir
-        : await downloadProviderPlugin({
-            serverURL,
-            session,
-            projectSlug: args.project,
-            provider,
-            artifactsDir,
-            codexEnv,
-          });
-      if (args.skipDownload && provider === "codex") {
-        await installCodexPlugin(pluginDir, codexEnv);
-      }
+      const pluginDir =
+        args.skipBuild && provider !== "codex"
+          ? envDir
+          : await buildProviderPlugin({
+              serverURL,
+              projectSlug: args.project,
+              provider,
+              artifactsDir,
+              codexEnv,
+            });
       pluginDirs.set(provider, pluginDir);
       log.info(`${provider}: using plugin ${pluginDir}`);
     }

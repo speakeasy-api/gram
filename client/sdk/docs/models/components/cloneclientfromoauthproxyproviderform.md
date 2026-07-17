@@ -1,0 +1,25 @@
+# CloneClientFromOAuthProxyProviderForm
+
+Form for cloning an oauth_proxy_provider's client credentials into a new remote_session_client. The caller supplies the existing oauth_proxy_provider and the remote_session_issuer to register the new client with, plus zero or more user_session_issuers to attach it to.
+
+## Example Usage
+
+```typescript
+import { CloneClientFromOAuthProxyProviderForm } from "@gram/client/models/components/cloneclientfromoauthproxyproviderform.js";
+
+let value: CloneClientFromOAuthProxyProviderForm = {
+  oauthProxyProviderId: "482bc080-023b-4c4f-9971-0f6ec9d47a26",
+  remoteSessionIssuerId: "2a54f3c0-1c9c-47e7-a479-7af92c644553",
+};
+```
+
+## Fields
+
+| Field                     | Type                                                                                                                                                               | Required           | Description                                                                                                                                            |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `audience`                | _string_                                                                                                                                                           | :heavy_minus_sign: | Optional upstream OAuth audience to send on the authorize redirect and token exchange for the cloned client.                                           |
+| `oauthProxyProviderId`    | _string_                                                                                                                                                           | :heavy_check_mark: | The oauth_proxy_provider to read client_id / client_secret from. Must live in the caller's project.                                                    |
+| `remoteSessionIssuerId`   | _string_                                                                                                                                                           | :heavy_check_mark: | The remote_session_issuer the new client is registered with.                                                                                           |
+| `scope`                   | _string_[]                                                                                                                                                         | :heavy_minus_sign: | Explicit upstream OAuth scopes the dance should request for the cloned client. Omit to fall back to the issuer's scopes_supported.                     |
+| `tokenEndpointAuthMethod` | [components.CloneClientFromOAuthProxyProviderFormTokenEndpointAuthMethod](../../models/components/cloneclientfromoauthproxyproviderformtokenendpointauthmethod.md) | :heavy_minus_sign: | How the cloned client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.                                            |
+| `userSessionIssuerIds`    | _string_[]                                                                                                                                                         | :heavy_minus_sign: | The user_session_issuers to attach the new client to via the join table. Omit or pass an empty array to clone a standalone client with no attachments. |

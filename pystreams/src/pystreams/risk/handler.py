@@ -10,9 +10,16 @@ from asyncer import asyncify
 from gram.risk.v1 import finding_pb2, presidio_analysis_pb2
 from gram_infra.pubsub import PublishResult
 from gram_infra.pubsub.subscriber import MessageMetadata
+from opentelemetry import trace
 
+from pystreams import attr
 from pystreams.risk import metrics
-from pystreams.risk.scanner import DEFAULT_SCORE_THRESHOLD, Detection, Scanner
+from pystreams.risk.scanner import (
+    DEFAULT_SCORE_THRESHOLD,
+    Detection,
+    Scanner,
+    ScanSlotTimeout,
+)
 
 # Source label stamped on every finding this handler emits, so all findings
 # from the Presidio path are attributed identically downstream.
@@ -62,6 +69,16 @@ class PresidioHandler:
         # Zero/unset on the request means "use the default floor".
         score_threshold = message.score_threshold or DEFAULT_SCORE_THRESHOLD
 
+        # Stamp the exact input size on the delivery span (the traced-receiver
+        # span is current here). A size — never content — is safe to record, and
+        # span attributes aren't cardinality-bounded like metric tags, so trace
+        # analytics can scatter per-message duration against exact size and click
+        # through to the pathological payloads. The metrics below carry the same
+        # dimension as a bounded ``size_bucket`` band for dashboards/monitors.
+        content_chars = len(message.content)
+        trace.get_current_span().set_attribute(attr.RISK_CONTENT_CHARS, content_chars)
+        size_bucket = metrics.size_bucket_for(content_chars)
+
         # Time the whole handler end to end and record it as a distribution,
         # tagged with the terminal outcome. The timer starts here and is recorded
         # in the ``finally`` so every path — scan failure, nothing detected, or
@@ -82,6 +99,19 @@ class PresidioHandler:
                     message.content, requested, score_threshold
                 )
                 scan_ms = (time.perf_counter() - scan_started) * 1000
+            except ScanSlotTimeout:
+                # The scan never started: the pool was backlogged for the whole
+                # slot budget and the content was never touched. Unlike the
+                # swallowed failures below this is not a property of the
+                # message, so re-raising to nack is safe (nothing scanned,
+                # nothing published — redelivery duplicates no work) and
+                # correct: the subscription's retry policy backs the message
+                # off (10s..600s) and it lands back here once capacity clears,
+                # instead of being silently dropped unscanned. No log line:
+                # backlog requeues fire in bursts, and the ``requeued`` outcome
+                # recorded in the ``finally`` already carries the signal.
+                outcome = metrics.OUTCOME_REQUEUED
+                raise
             except Exception as exc:
                 # This is best-effort shadow processing, and the PresidioAnalyzer
                 # subscription declares no dead-letter policy. Letting a scan
@@ -94,7 +124,7 @@ class PresidioHandler:
                 # exception *type* is logged: an error string or traceback could
                 # echo the scanned content, which this handler never emits (see the
                 # detection log below).
-                self.logger.error(
+                self.logger.warning(
                     "presidio scan failed",
                     request_id=message.request_id,
                     reply_urn=message.reply_urn,
@@ -157,7 +187,7 @@ class PresidioHandler:
             )
         finally:
             metrics.record_process_duration(
-                time.perf_counter() - process_started, outcome
+                time.perf_counter() - process_started, outcome, size_bucket
             )
 
     def _build_and_dispatch(

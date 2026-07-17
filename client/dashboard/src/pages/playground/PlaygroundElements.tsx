@@ -1,42 +1,19 @@
-import { Button } from "@/components/ui/button";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { Type } from "@/components/ui/type";
-import { useProject, useSession } from "@/contexts/Auth";
+import { useProject } from "@/contexts/Auth";
+import { useSession } from "@/contexts/Auth";
 import { useToolset } from "@/hooks/toolTypes";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
 import { useInternalMcpUrl } from "@/hooks/useToolsetUrl";
 import { useMcpOAuthRequired } from "@/lib/mcpOAuth";
 import type { Toolset } from "@/lib/toolTypes";
-import { getPlaygroundMcpBaseURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
-import {
-  Chat,
-  ChatHistory,
-  GramElementsProvider,
-  type Model,
-} from "@gram-ai/elements";
-import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate.js";
-import {
-  useGetMcpMetadata,
-  useListEnvironments,
-} from "@gram/client/react-query/index.js";
+import { useGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
+import { useListEnvironments } from "@gram/client/react-query/listEnvironments.js";
 import { useMintUserSessionMutation } from "@gram/client/react-query/mintUserSession.js";
-import { useMoonshineConfig } from "@speakeasy-api/moonshine";
 import { useQuery } from "@tanstack/react-query";
-import { AlertCircle, HistoryIcon, ShieldAlert } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
-import { useSearchParams } from "react-router";
-import { toast } from "sonner";
+import { AlertCircle, ShieldAlert } from "lucide-react";
+import { Type } from "@/components/ui/type";
 import { useExternalMcpOAuthStatus } from "./playground-auth-utils";
-import { GramThreadWelcome } from "./PlaygroundElementsOverrides";
-import {
-  PlaygroundMcpAppsProvider,
-  PlaygroundMcpToolFallback,
-} from "./PlaygroundMcpApps";
+import { PlaygroundChat } from "./PlaygroundChat";
 
 interface PlaygroundElementsProps {
   toolsetSlug: string | null;
@@ -48,6 +25,11 @@ interface PlaygroundElementsProps {
   playgroundEnvironmentSlug?: string;
 }
 
+/**
+ * The toolset-backed playground variant: resolves a toolset to its Gram-hosted
+ * `/mcp/<slug>` URL, mints an issuer-gated gateway token, surfaces
+ * missing-auth / OAuth notices, then renders the shared {@link PlaygroundChat}.
+ */
 export function PlaygroundElements({
   toolsetSlug,
   environmentSlug,
@@ -57,13 +39,6 @@ export function PlaygroundElements({
 }: PlaygroundElementsProps): JSX.Element {
   const session = useSession();
   const project = useProject();
-  const createSessionMutation = useChatSessionsCreateMutation();
-  const { theme: resolvedTheme } = useMoonshineConfig();
-  const [historyOpen, setHistoryOpen] = useState(false);
-  const [searchParams] = useSearchParams();
-
-  // Get threadId from URL for shared chat links
-  const initialThreadId = searchParams.get("threadId") ?? undefined;
 
   // Get toolset data to construct MCP URL
   const { data: toolset } = useToolset(toolsetSlug ?? undefined);
@@ -108,51 +83,6 @@ export function PlaygroundElements({
       enabled: oauthRequired,
     });
 
-  // Create getSession function using SDK mutation with session auth
-  const getSession = useCallback(async () => {
-    try {
-      const result = await createSessionMutation.mutateAsync({
-        request: {
-          gramProject: project.id,
-          createRequestBody: {
-            embedOrigin: window.location.origin,
-            expiresAfter: 3600,
-            userIdentifier: session.user.id,
-          },
-        },
-        security: {
-          option1: {
-            sessionHeaderGramSession: session.session,
-            projectSlugHeaderGramProject: project.slug,
-          },
-        },
-      });
-      return result.clientToken;
-    } catch (error) {
-      toast.error("Failed to create session. Please try again.");
-      throw error;
-    }
-  }, [
-    createSessionMutation,
-    session.session,
-    session.user.id,
-    project.id,
-    project.slug,
-  ]);
-
-  const mcpAppSessionQuery = useQuery({
-    queryKey: [
-      "playground-mcp-app-session",
-      project.id,
-      toolsetSlug,
-      environmentSlug,
-      session.user.id,
-    ],
-    queryFn: getSession,
-    enabled: !!mcpUrl && !!toolsetSlug,
-    staleTime: 1000 * 60 * 30,
-  });
-
   // Mint a user-session JWT scoped to the toolset for issuer-gated toolsets.
   // This is what the elements MCP client will send as `Authorization: Bearer`
   // on /mcp/{slug} requests, so the runtime gateway resolves the dashboard
@@ -191,22 +121,6 @@ export function PlaygroundElements({
   });
   const gatewayToken = gatewayTokenQuery.data?.accessToken;
 
-  const effectiveEnvironmentSlug = playgroundEnvironmentSlug ?? environmentSlug;
-
-  const mcpAppHeaders = useMemo(() => {
-    if (!mcpAppSessionQuery.data) {
-      return null;
-    }
-
-    return {
-      "Gram-Chat-Session": mcpAppSessionQuery.data,
-      "Gram-Project": project.slug,
-      ...(effectiveEnvironmentSlug
-        ? { "Gram-Environment": effectiveEnvironmentSlug }
-        : {}),
-    };
-  }, [effectiveEnvironmentSlug, mcpAppSessionQuery.data, project.slug]);
-
   // Don't render until we have a valid MCP URL
   if (!mcpUrl || !toolsetSlug) {
     return (
@@ -226,99 +140,23 @@ export function PlaygroundElements({
   }
 
   return (
-    <GramElementsProvider
-      config={{
-        projectSlug: project.slug,
-        api: {
-          url: getPlaygroundMcpBaseURL(),
-          session: getSession,
-          headers: {
-            "X-Gram-Source": "playground",
-            // Forwarded to /mcp/{slug} so the issuer-gated runtime gate can
-            // resolve the dashboard user's stored upstream credentials.
-            // Requires the elements library to propagate api.headers to MCP
-            // requests (useAuth merges them into the headers it returns).
-            ...(gatewayToken
-              ? { Authorization: `Bearer ${gatewayToken}` }
-              : {}),
-          },
-        },
-        history: {
-          enabled: true,
-          showThreadList: true,
-          initialThreadId,
-        },
-        mcp: mcpUrl,
-        gramEnvironment:
-          playgroundEnvironmentSlug ?? environmentSlug ?? undefined,
-        variant: "standalone",
-        model: {
-          defaultModel: model as Model,
-          showModelPicker: false,
-        },
-        welcome: {
-          title: "Test Your MCP Server",
-          subtitle:
-            "This chat has access to the selected MCP server. Use it to test your tools.",
-          suggestions: [
-            {
-              title: "Explore tools",
-              label: "See what's available",
-              prompt: "What tools does this server have?",
-            },
-          ],
-        },
-        composer: {
-          placeholder: "Send a message...",
-          toolMentions: true,
-        },
-        theme: {
-          colorScheme: resolvedTheme === "dark" ? "dark" : "light",
-          density: "normal",
-          radius: "soft",
-        },
-        components: {
-          ToolFallback: PlaygroundMcpToolFallback,
-          ThreadWelcome: GramThreadWelcome,
-        },
-      }}
-    >
-      <PlaygroundMcpAppsProvider
-        headers={mcpAppHeaders}
-        mcpUrl={mcpUrl}
-        theme={resolvedTheme === "dark" ? "dark" : "light"}
-        toolset={toolset}
-      >
-        <div className="flex h-full min-h-0 flex-col">
-          <div className="border-b-border flex shrink-0 items-center justify-between gap-2 border-b px-4 py-3">
-            <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
-              <PopoverTrigger asChild>
-                <Button size="sm" variant="ghost">
-                  <HistoryIcon className="mr-2 size-4" />
-                  Chat History
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent
-                align="start"
-                className="max-h-96 min-h-fit w-72 overflow-y-scroll p-0"
-              >
-                <ChatHistory className="h-full max-h-96 min-h-fit overflow-y-auto" />
-              </PopoverContent>
-            </Popover>
-            <div className="flex items-center gap-2">{additionalActions}</div>
-          </div>
-          {missingAuthCount > 0 && toolsetSlug && (
-            <AuthWarningBanner
-              missingCount={missingAuthCount}
-              toolsetSlug={toolsetSlug}
-            />
-          )}
-          <div className="min-h-0 flex-1 overflow-hidden">
-            <Chat />
-          </div>
-        </div>
-      </PlaygroundMcpAppsProvider>
-    </GramElementsProvider>
+    <PlaygroundChat
+      mcpUrl={mcpUrl}
+      gatewayToken={gatewayToken}
+      model={model}
+      environmentSlug={environmentSlug}
+      playgroundEnvironmentSlug={playgroundEnvironmentSlug}
+      toolset={toolset}
+      additionalActions={additionalActions}
+      banner={
+        missingAuthCount > 0 ? (
+          <AuthWarningBanner
+            missingCount={missingAuthCount}
+            toolsetSlug={toolsetSlug}
+          />
+        ) : undefined
+      }
+    />
   );
 }
 

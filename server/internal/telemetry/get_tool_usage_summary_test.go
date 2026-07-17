@@ -13,8 +13,11 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	telemetryRepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	tunneledmcpRepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -125,7 +128,7 @@ func TestGetToolUsageSummary_AggregatesHostedShadowLocalAndSkills(t *testing.T) 
 			From: now.Add(-1 * time.Hour).Format(time.RFC3339),
 			To:   now.Add(1 * time.Hour).Format(time.RFC3339),
 		})
-		if !assert.NoError(c, err) {
+		if !assert.NoError(c, err, "cause: %v", errors.Unwrap(err)) {
 			return
 		}
 		if !assert.NotNil(c, res) {
@@ -212,7 +215,7 @@ func TestGetToolUsageSummary_ClassifiesHookObservedHostedMCP(t *testing.T) {
 			From: now.Add(-1 * time.Hour).Format(time.RFC3339),
 			To:   now.Add(1 * time.Hour).Format(time.RFC3339),
 		})
-		if !assert.NoError(c, err) {
+		if !assert.NoError(c, err, "cause: %v", errors.Unwrap(err)) {
 			return
 		}
 		if !assert.NotNil(c, res) {
@@ -225,6 +228,56 @@ func TestGetToolUsageSummary_ClassifiesHookObservedHostedMCP(t *testing.T) {
 		targets := toolUsageTargetsByKey(res.Targets)
 		assert.NotNil(c, targets["hosted_mcp_server:server:hosted-payments"])
 		assert.Nil(c, targets["shadow_mcp_server:server:hosted.example.com"])
+	}, 10*time.Second, 200*time.Millisecond)
+}
+
+func TestGetToolUsageSummary_ClassifiesDirectTunneledMCP(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	fixture := createTunneledMCPServerFixture(t, ctx, ti, tunneledMCPServerFixtureParams{
+		name: "Tunneled Postgres MCP",
+		slug: "postgres-tunnel",
+	})
+	now := time.Now().UTC()
+	insertDirectMCPToolEvent(t, ctx, ti, directMCPToolEventParams{
+		projectID:   projectID,
+		timestamp:   now.Add(-5 * time.Minute),
+		sourceID:    fixture.sourceID.String(),
+		mcpServerID: fixture.mcpServerID.String(),
+		toolName:    "query",
+		userEmail:   "alice@example.com",
+		statusCode:  200,
+	})
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.GetToolUsageSummary(ctx, &gen.GetToolUsageSummaryPayload{
+			From:        now.Add(-1 * time.Hour).Format(time.RFC3339),
+			To:          now.Add(1 * time.Hour).Format(time.RFC3339),
+			TargetTypes: []gen.ToolUsageTargetType{"tunneled_mcp_server"},
+		})
+		if !assert.NoError(c, err, "cause: %v", errors.Unwrap(err)) {
+			return
+		}
+		if !assert.NotNil(c, res) {
+			return
+		}
+		if !assert.Equal(c, int64(1), res.Totals.EventCount) {
+			return
+		}
+
+		targets := toolUsageTargetsByKey(res.Targets)
+		tunneled := targets["tunneled_mcp_server:server:postgres-tunnel"]
+		if assert.NotNil(c, tunneled) {
+			assert.Equal(c, "Tunneled Postgres MCP", tunneled.TargetLabel)
+			assert.Equal(c, int64(1), tunneled.EventCount)
+			assert.Equal(c, int64(1), tunneled.SuccessCount)
+			assert.Equal(c, int64(0), tunneled.FailureCount)
+		}
+		assert.Nil(c, targets["shadow_mcp_server:server:"+fixture.sourceID.String()])
 	}, 10*time.Second, 200*time.Millisecond)
 }
 
@@ -286,7 +339,7 @@ func TestGetToolUsageSummary_FiltersByHookSource(t *testing.T) {
 		var err error
 		result, err = ti.service.GetToolUsageSummary(ctx, payload)
 		return err == nil && result != nil && result.Totals.EventCount == 1
-	}, 2*time.Second, 50*time.Millisecond, "expected only the cowork hook event in the filtered summary")
+	}, 10*time.Second, 200*time.Millisecond, "expected only the cowork hook event in the filtered summary")
 
 	targets := toolUsageTargetsByKey(result.Targets)
 	require.NotNil(t, targets["shadow_mcp_server:server:shadow-db"])
@@ -473,6 +526,116 @@ func insertHostedToolEvent(t *testing.T, ctx context.Context, ti *testInstance, 
 		GramFunctionID:       nil,
 		GramURN:              "tools:http:gram:" + p.toolName,
 		ServiceName:          "gram-http-gateway",
+		ServiceVersion:       nil,
+		GramChatID:           nil,
+	})
+	require.NoError(t, err)
+}
+
+type tunneledMCPServerFixtureParams struct {
+	name string
+	slug string
+}
+
+type tunneledMCPServerFixture struct {
+	sourceID    uuid.UUID
+	mcpServerID uuid.UUID
+}
+
+func createTunneledMCPServerFixture(t *testing.T, ctx context.Context, ti *testInstance, p tunneledMCPServerFixtureParams) tunneledMCPServerFixture {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sourceID := uuid.New()
+	source, err := tunneledmcpRepo.New(ti.conn).CreateServer(ctx, tunneledmcpRepo.CreateServerParams{
+		ID:        sourceID,
+		ProjectID: *authCtx.ProjectID,
+		Name:      p.name,
+		KeyHash:   "test-key-hash-" + sourceID.String(),
+		KeyPrefix: "gram_tunnel_test",
+	})
+	require.NoError(t, err)
+
+	issuer, err := usersessionsrepo.New(ti.conn).CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{
+		ProjectID:          *authCtx.ProjectID,
+		Slug:               "usi-" + uuid.NewString()[:8],
+		AuthnChallengeMode: "interactive",
+		SessionDuration:    pgtype.Interval{Microseconds: time.Hour.Microseconds(), Days: 0, Months: 0, Valid: true},
+	})
+	require.NoError(t, err)
+
+	mcpServerID := uuid.New()
+	server, err := mcpserversRepo.New(ti.conn).CreateMCPServer(ctx, mcpserversRepo.CreateMCPServerParams{
+		ID:                    mcpServerID,
+		ProjectID:             *authCtx.ProjectID,
+		Name:                  pgtype.Text{String: p.name, Valid: true},
+		Slug:                  pgtype.Text{String: p.slug, Valid: true},
+		EnvironmentID:         uuid.NullUUID{},
+		UserSessionIssuerID:   uuid.NullUUID{UUID: issuer.ID, Valid: true},
+		RemoteMcpServerID:     uuid.NullUUID{},
+		TunneledMcpServerID:   uuid.NullUUID{UUID: source.ID, Valid: true},
+		ToolsetID:             uuid.NullUUID{},
+		ToolVariationsGroupID: uuid.NullUUID{},
+		Visibility:            "private",
+	})
+	require.NoError(t, err)
+
+	return tunneledMCPServerFixture{
+		sourceID:    source.ID,
+		mcpServerID: server.ID,
+	}
+}
+
+type directMCPToolEventParams struct {
+	projectID   string
+	timestamp   time.Time
+	sourceID    string
+	mcpServerID string
+	toolName    string
+	userEmail   string
+	statusCode  int
+}
+
+func insertDirectMCPToolEvent(t *testing.T, ctx context.Context, ti *testInstance, p directMCPToolEventParams) {
+	t.Helper()
+
+	attrs := map[string]any{
+		"gram.event.source":              "mcp",
+		"gram.tool.name":                 p.toolName,
+		"gram.tool_call.source":          p.sourceID,
+		"gram.remote_mcp_server.id":      p.sourceID,
+		"gram.mcp_server.id":             p.mcpServerID,
+		"http.response.status_code":      p.statusCode,
+		"http.server.request.duration":   0.05,
+		"user.email":                     p.userEmail,
+		"gen_ai.tool.call.result":        `"ok"`,
+		"gen_ai.tool.call.id":            uuid.New().String(),
+		"gen_ai.conversation.id":         uuid.New().String(),
+		"gen_ai.response.finish_reasons": []string{"tool_calls"},
+	}
+	attrsJSON, err := json.Marshal(attrs)
+	require.NoError(t, err)
+
+	spanID := uuid.New().String()[:16]
+	traceID := strings.ReplaceAll(uuid.New().String(), "-", "")
+	err = ti.chClient.InsertTelemetryLog(ctx, telemetryRepo.InsertTelemetryLogParams{
+		ID:                   uuid.New().String(),
+		TimeUnixNano:         p.timestamp.UnixNano(),
+		ObservedTimeUnixNano: p.timestamp.UnixNano(),
+		SeverityText:         nil,
+		Body:                 "direct MCP tool event",
+		TraceID:              &traceID,
+		SpanID:               &spanID,
+		Attributes:           string(attrsJSON),
+		ResourceAttributes:   "{}",
+		GramProjectID:        p.projectID,
+		GramDeploymentID:     nil,
+		GramFunctionID:       nil,
+		GramURN:              "tools:externalmcp:" + p.sourceID + ":" + p.toolName,
+		ServiceName:          "gram-remote-mcp",
 		ServiceVersion:       nil,
 		GramChatID:           nil,
 	})

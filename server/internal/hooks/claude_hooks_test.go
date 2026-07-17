@@ -36,6 +36,13 @@ func (stubBlockingShadowMCPScanner) HasEnabledShadowMCPPolicy(_ context.Context,
 	return true, nil
 }
 
+func (stubBlockingShadowMCPScanner) HasAcknowledgedChallenge(_ context.Context, _ uuid.UUID, _, _, _, _ string) bool {
+	return false
+}
+
+func (stubBlockingShadowMCPScanner) RecordPolicyChallenge(_ context.Context, _ string, _ uuid.UUID, _, _, _, _, _, _, _ string) {
+}
+
 type userScopedShadowMCPScanner struct {
 	userID string
 }
@@ -53,6 +60,13 @@ func (s userScopedShadowMCPScanner) LookupShadowMCPBlockingPolicy(_ context.Cont
 
 func (s userScopedShadowMCPScanner) HasEnabledShadowMCPPolicy(_ context.Context, _ uuid.UUID) (bool, error) {
 	return true, nil
+}
+
+func (s userScopedShadowMCPScanner) HasAcknowledgedChallenge(_ context.Context, _ uuid.UUID, _, _, _, _ string) bool {
+	return false
+}
+
+func (s userScopedShadowMCPScanner) RecordPolicyChallenge(_ context.Context, _ string, _ uuid.UUID, _, _, _, _, _, _, _ string) {
 }
 
 func TestNormalizeClaudeHookEvent_PrefersAuthContextProjectOverCachedMetadata(t *testing.T) {
@@ -262,9 +276,8 @@ func TestClaude_PreToolUse_DeniesWhenMCPListNotCached(t *testing.T) {
 		"deny reason should tell the user to retry or restart so they aren't stuck guessing")
 }
 
-// Gram-hosted MCP servers (URL host == app.getgram.ai) are the only ones
-// the shadow-MCP guard permits — even a server present in the cache is
-// rejected when its URL points elsewhere.
+// Gram-hosted MCP servers are permitted by the shadow-MCP guard. A server
+// present in the cache is rejected when its URL points elsewhere.
 func TestClaude_PreToolUse_DeniesWhenMatchedServerNotGramHosted(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
@@ -457,7 +470,7 @@ func TestClaude_PreToolUse_DoesNotAllowUnconfiguredServerByIdentityRule(t *testi
 }
 
 // Allow path: a cached entry that resolves the tool's server prefix and
-// points at app.getgram.ai must succeed even under a blocking policy.
+// points at a Gram-hosted URL must succeed even under a blocking policy.
 func TestClaude_PreToolUse_AllowsGramHostedServer(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
@@ -946,6 +959,55 @@ func TestMergeClaudeAuthContextMetadata_AdoptsBridgedOwnerForPersonalAccount(t *
 	assert.Equal(t, "max-org", metadata.ExternalOrgID)
 	assert.Equal(t, "acct-personal", metadata.ExternalAccountUUID)
 	assert.Equal(t, "device-1", metadata.DeviceID)
+	assert.Equal(t, "user-account-id", metadata.UserAccountID)
+}
+
+// TestMergeClaudeAuthContextMetadata_HookEmailWinsOverCachedAccountEmail covers
+// a personal account on an enrolled device: the hook carries the employee's
+// work email while the OTEL cache holds the AI account's own email (a gmail).
+// The employee identity must win — deterministically, not by ingest-order race
+// — while the account identity (which feeds user_accounts / account_email)
+// still rides in from the cache untouched.
+func TestMergeClaudeAuthContextMetadata_HookEmailWinsOverCachedAccountEmail(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	employeeID := "hook-email-wins-employee"
+	workEmail := "hook-email-wins@example.com"
+	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, employeeID, workEmail)
+
+	authMetadata, ok := ti.service.claudeAuthContextMetadata(ctx, "hook_email_wins_session", workEmail)
+	require.True(t, ok)
+	metadata := ti.service.mergeClaudeAuthContextMetadata(ctx, authMetadata, SessionMetadata{
+		SessionID:           "hook_email_wins_session",
+		ServiceName:         "claude-code",
+		UserEmail:           "someone-personal@gmail.com",
+		UserID:              "bridged-employee",
+		Provider:            providerAnthropic,
+		ExternalOrgID:       "max-org",
+		ExternalAccountUUID: "acct-personal",
+		ExternalAccountID:   "user_personal",
+		DeviceID:            "device-1",
+		AccountType:         accountTypePersonal,
+		UserAccountID:       "user-account-id",
+		GramOrgID:           "org_from_cache",
+		ProjectID:           "project_from_cache",
+	})
+
+	// The enrolled work email wins over the account's own report, and resolves
+	// to the employee directly.
+	assert.Equal(t, workEmail, metadata.UserEmail)
+	assert.Equal(t, employeeID, metadata.UserID)
+	// The account's own report stays available on ObservedUserEmail.
+	assert.Equal(t, "someone-personal@gmail.com", metadata.ObservedUserEmail)
+	// Account identity is still carried through from the cached OTEL
+	// attribution, so user_accounts / account_email are unaffected.
+	assert.Equal(t, accountTypePersonal, metadata.AccountType)
+	assert.Equal(t, "acct-personal", metadata.ExternalAccountUUID)
 	assert.Equal(t, "user-account-id", metadata.UserAccountID)
 }
 

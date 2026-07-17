@@ -62,6 +62,11 @@ func QueryTelemetryPath() string {
 	return "/rpc/telemetry.query"
 }
 
+// QueryTumDetailsTelemetryPath returns the URL path to the telemetry service queryTumDetails HTTP endpoint.
+func QueryTumDetailsTelemetryPath() string {
+	return "/rpc/telemetry.queryTumDetails"
+}
+
 // ListSessionsTelemetryPath returns the URL path to the telemetry service listSessions HTTP endpoint.
 func ListSessionsTelemetryPath() string {
 	return "/rpc/telemetry.listSessions"

@@ -44,7 +44,9 @@ required. \
 (lightpanda) is available — prefer `import { withContext } from './browser'` \
 and run page work inside the callback so each invocation gets a fresh, \
 auto-disposed BrowserContext. Use `getBrowser()` from the same module only \
-when you need the raw Browser handle. For LLM-friendly page reading, \
+when you need the raw Browser handle; each call opens a dedicated \
+connection that supports exactly one BrowserContext — never call \
+`newContext()` twice on one handle, and `close()` the handle when done. For LLM-friendly page reading, \
 `import { markdown } from './browser'` and call `markdown(page)` to get \
 `{ title, byline, markdown }`; it runs Readability over the page HTML and \
 serializes to Markdown. Pass `{ readable: false }` for non-article pages \

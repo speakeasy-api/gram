@@ -14,11 +14,9 @@ import (
 // BuildGetPluginsPayload builds the payload for the agent getPlugins endpoint
 // from CLI flags.
 func BuildGetPluginsPayload(agentGetPluginsEmail string, agentGetPluginsApikeyToken string) (*agent.GetPluginsPayload, error) {
-	var email *string
+	var email string
 	{
-		if agentGetPluginsEmail != "" {
-			email = &agentGetPluginsEmail
-		}
+		email = agentGetPluginsEmail
 	}
 	var apikeyToken *string
 	{
@@ -29,6 +27,21 @@ func BuildGetPluginsPayload(agentGetPluginsEmail string, agentGetPluginsApikeyTo
 	v := &agent.GetPluginsPayload{}
 	v.Email = email
 	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
+// BuildListSyncedUsersPayload builds the payload for the agent listSyncedUsers
+// endpoint from CLI flags.
+func BuildListSyncedUsersPayload(agentListSyncedUsersSessionToken string) (*agent.ListSyncedUsersPayload, error) {
+	var sessionToken *string
+	{
+		if agentListSyncedUsersSessionToken != "" {
+			sessionToken = &agentListSyncedUsersSessionToken
+		}
+	}
+	v := &agent.ListSyncedUsersPayload{}
+	v.SessionToken = sessionToken
 
 	return v, nil
 }

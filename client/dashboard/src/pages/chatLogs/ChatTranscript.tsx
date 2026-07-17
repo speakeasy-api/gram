@@ -2,6 +2,7 @@ import {
   type CSSProperties,
   type JSX,
   memo,
+  type ReactNode,
   useCallback,
   useContext,
   useEffect,
@@ -24,18 +25,22 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import {
-  Badge,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
   Icon,
 } from "@speakeasy-api/moonshine";
-import { MessageContent, type SectionMatch, ToolUI } from "@gram-ai/elements";
-import type {
-  ClaudeToolUsage,
-  RiskResult,
-} from "@gram/client/models/components";
+import {
+  MessageContent,
+  type SectionMatch,
+  ToolUI,
+  ToolUIGroup,
+  type ToolUIMetaRow,
+} from "@/elements";
+import type { ClaudeToolUsage } from "@gram/client/models/components/claudetoolusage.js";
+import type { ClaudeTurnUsage } from "@gram/client/models/components/claudeturnusage.js";
+import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import {
   Popover,
   PopoverContent,
@@ -74,10 +79,18 @@ import { QueryHighlight } from "./QueryHighlight";
 import { getCategoryCodeForFinding } from "@/pages/security/risk-utils";
 import { CreateExclusionContext } from "./exclusionContext";
 
+type RowDecoration = {
+  footer?: ReactNode;
+};
+
 interface RowContext {
-  riskResultsByMessage: Map<string, RiskResult[]>;
-  claudeUsageByMessage: Map<string, ClaudeUsageMatch>;
-  claudeToolUsageByToolUseId: Map<string, ClaudeToolUsage>;
+  riskResultsByMessage?: Map<string, RiskResult[]>;
+  claudeUsageByMessage?: Map<string, ClaudeUsageMatch>;
+  claudeToolUsageByToolUseId?: Map<string, ClaudeToolUsage>;
+  /** Turn usage keyed by prompt id — a tool row joins to its turn's cost
+   * through `ClaudeToolUsage.promptId`. */
+  claudeTurnByPromptId?: Map<string, ClaudeTurnUsage>;
+  rowDecoration?: (messageIds: string[]) => RowDecoration | null;
   /** When the session has findings, non-flagged rows are dimmed to spotlight
    * the risky ones. */
   dimNonRisk: boolean;
@@ -87,6 +100,55 @@ interface RowContext {
   /** Chat-level user label, used as the turn-header name when an individual
    * message carries no user id of its own. */
   userLabel?: string;
+  /** Overrides the per-message identity on user turn headers — set when the
+   * session ran on a personal AI account, whose email should label the turns
+   * instead of the attributed employee's work email. */
+  userLabelOverride?: string;
+}
+
+type ResolvedRowContext = Required<
+  Pick<
+    RowContext,
+    | "riskResultsByMessage"
+    | "claudeUsageByMessage"
+    | "claudeToolUsageByToolUseId"
+    | "claudeTurnByPromptId"
+  >
+> &
+  RowContext;
+
+const EMPTY_RISK_RESULTS = new Map<string, RiskResult[]>();
+const EMPTY_CLAUDE_USAGE = new Map<string, ClaudeUsageMatch>();
+const EMPTY_CLAUDE_TOOL_USAGE = new Map<string, ClaudeToolUsage>();
+const EMPTY_CLAUDE_TURNS = new Map<string, ClaudeTurnUsage>();
+
+function applyRowContextDefaults(ctx: RowContext): ResolvedRowContext {
+  return {
+    ...ctx,
+    riskResultsByMessage: ctx.riskResultsByMessage ?? EMPTY_RISK_RESULTS,
+    claudeUsageByMessage: ctx.claudeUsageByMessage ?? EMPTY_CLAUDE_USAGE,
+    claudeToolUsageByToolUseId:
+      ctx.claudeToolUsageByToolUseId ?? EMPTY_CLAUDE_TOOL_USAGE,
+    claudeTurnByPromptId: ctx.claudeTurnByPromptId ?? EMPTY_CLAUDE_TURNS,
+  };
+}
+
+function RowDecorationFooter({
+  decoration,
+  className,
+}: {
+  decoration: RowDecoration | null | undefined;
+  className?: string;
+}) {
+  if (!decoration?.footer) return null;
+  return <div className={className}>{decoration.footer}</div>;
+}
+
+function messageIdsForRow(row: TranscriptRow): string[] {
+  if (row.kind === "message") return [row.message.id];
+  return [row.callMessage?.id, row.resultMessage?.id].filter(
+    (id): id is string => Boolean(id),
+  );
 }
 
 // Fade non-risky rows so the findings stand out.
@@ -153,13 +215,29 @@ function CostBadge({ usage }: { usage: ClaudeUsageMatch }) {
   );
 }
 
-function ToolByteBadge({ bytes }: { bytes: number }) {
-  if (bytes <= 0) return null;
-  return (
-    <Badge variant="neutral" className="shrink-0 text-[10px]">
-      <Badge.Text>{formatByteCount(bytes)}</Badge.Text>
-    </Badge>
-  );
+// The API reports payload size per tool call but cost only per turn (a turn
+// covers every tool it called), so the cost row is labelled accordingly.
+function toolMetaRows({
+  usage,
+  turn,
+}: {
+  usage: ClaudeToolUsage | undefined;
+  turn: ClaudeTurnUsage | undefined;
+}): ToolUIMetaRow[] {
+  if (!usage) return [];
+  const total = usage.inputSizeBytes + usage.resultSizeBytes;
+  const rows: ToolUIMetaRow[] = [];
+  if (total > 0) {
+    rows.push(
+      { label: "Arguments size", value: formatByteCount(usage.inputSizeBytes) },
+      { label: "Output size", value: formatByteCount(usage.resultSizeBytes) },
+      { label: "Total size", value: formatByteCount(total) },
+    );
+  }
+  if (turn) {
+    rows.push({ label: "Turn cost", value: formatUsageCost(turn.costUsd) });
+  }
+  return rows;
 }
 
 // Two letters for the avatar fallback: the first two name parts of an email
@@ -365,7 +443,7 @@ function UserMessageRow({
   activeTextOccurrence,
 }: {
   row: MessageRow;
-  ctx: RowContext;
+  ctx: ResolvedRowContext;
   /** Index of the active search occurrence within this message's text, or null
    * when this row doesn't hold the active occurrence. */
   activeTextOccurrence: number | null;
@@ -377,6 +455,7 @@ function UserMessageRow({
   const flagged = !!results && results.length > 0;
   const sensitive = flagged && resultsAreSensitive(results);
   const { revealed, setRevealed } = useRowReveal(sensitive);
+  const decoration = ctx.rowDecoration?.([message.id]) ?? null;
 
   return (
     <div
@@ -385,7 +464,11 @@ function UserMessageRow({
         dimClass(ctx.dimNonRisk && !flagged),
       )}
     >
-      <div className="bg-muted text-foreground mx-2 max-w-[80%] rounded-xl px-4 py-2 wrap-break-word">
+      <div
+        className={cn(
+          "bg-muted text-foreground mx-2 max-w-[80%] rounded-xl px-4 py-2 wrap-break-word",
+        )}
+      >
         {flagged ? (
           <HighlightedMessageText
             text={text}
@@ -406,6 +489,10 @@ function UserMessageRow({
           </div>
         )}
       </div>
+      <RowDecorationFooter
+        decoration={decoration}
+        className="mx-2 max-w-[80%] pl-4"
+      />
       {(usage || sensitive) && (
         <div className="text-muted-foreground mx-2 flex items-center gap-2 pl-4 text-xs">
           {usage && <CostBadge usage={usage} />}
@@ -431,7 +518,7 @@ function AssistantMessageRow({
   activeTextOccurrence,
 }: {
   row: MessageRow;
-  ctx: RowContext;
+  ctx: ResolvedRowContext;
   /** Index of the active search occurrence within this message's text, or null
    * when this row doesn't hold the active occurrence. */
   activeTextOccurrence: number | null;
@@ -442,10 +529,15 @@ function AssistantMessageRow({
   const flagged = !!results && results.length > 0;
   const sensitive = flagged && resultsAreSensitive(results);
   const { revealed, setRevealed } = useRowReveal(sensitive);
+  const decoration = ctx.rowDecoration?.([message.id]) ?? null;
 
   return (
     <div className={cn("px-4 py-2", dimClass(ctx.dimNonRisk && !flagged))}>
-      <div className="text-foreground mx-2 min-w-0 leading-relaxed wrap-break-word">
+      <div
+        className={cn(
+          "text-foreground mx-2 min-w-0 leading-relaxed wrap-break-word",
+        )}
+      >
         {flagged ? (
           <HighlightedMessageText
             text={text}
@@ -466,6 +558,10 @@ function AssistantMessageRow({
           <MessageContent markdown content={text} />
         )}
       </div>
+      <RowDecorationFooter
+        decoration={decoration}
+        className="mx-2 mt-1 max-w-[80%] pl-4"
+      />
       {/* Turn-level risk count + exclusion live in the turn header now; the row
           keeps only the reveal toggle for an inline masked value. */}
       {sensitive && (
@@ -481,7 +577,13 @@ function AssistantMessageRow({
   );
 }
 
-function SystemMessageRow({ row, ctx }: { row: MessageRow; ctx: RowContext }) {
+function SystemMessageRow({
+  row,
+  ctx,
+}: {
+  row: MessageRow;
+  ctx: ResolvedRowContext;
+}) {
   const text = messageText(row.message.content);
   return (
     <div className={cn("px-4 py-2", dimClass(ctx.dimNonRisk))}>
@@ -508,7 +610,7 @@ function MessageRowView({
   activeTextOccurrence,
 }: {
   row: MessageRow;
-  ctx: RowContext;
+  ctx: ResolvedRowContext;
   activeTextOccurrence: number | null;
 }) {
   switch (row.entryType) {
@@ -535,7 +637,7 @@ function MessageRowView({
 
 function toolResults(
   row: ToolRow,
-  ctx: RowContext,
+  ctx: ResolvedRowContext,
 ): { callResults?: RiskResult[]; resultResults?: RiskResult[] } {
   return {
     callResults: row.callMessage
@@ -579,9 +681,10 @@ function ToolRowView({
   activeNameOccurrence,
   activeArgsOccurrence,
   activeOutputOccurrence,
+  bare = false,
 }: {
   row: ToolRow;
-  ctx: RowContext;
+  ctx: ResolvedRowContext;
   /** This tool holds the active search occurrence → expand it (and remount on
    * toggle so it collapses again when navigation moves to another match). */
   active: boolean;
@@ -591,6 +694,10 @@ function ToolRowView({
   activeArgsOccurrence: number | null;
   /** Active occurrence index within the Output section, or null. */
   activeOutputOccurrence: number | null;
+  /** Render as a flush row inside a ToolUIGroup: the group supplies the card
+   * (border, rounding, inset), so the row drops its own padding and the ToolUI
+   * de-cards itself — mirroring `ToolFallback` in the assistant thread. */
+  bare?: boolean;
 }) {
   const openExclusion = useContext(CreateExclusionContext);
   const name =
@@ -654,16 +761,17 @@ function ToolRowView({
 
   const toolUseId = row.toolCall?.id ?? row.resultMessage?.toolCallId ?? "";
   const usage = ctx.claudeToolUsageByToolUseId.get(toolUseId);
-  const inputBytes = usage?.inputSizeBytes ?? 0;
-  const outputBytes = usage?.resultSizeBytes ?? 0;
+  const turn = usage ? ctx.claudeTurnByPromptId.get(usage.promptId) : undefined;
+  const meta = toolMetaRows({ usage, turn });
+  const decoration = ctx.rowDecoration?.(messageIdsForRow(row)) ?? null;
 
   return (
-    <div className={cn("px-4 py-2.5", dimClass(ctx.dimNonRisk && !flagged))}>
-      {inputBytes + outputBytes > 0 && (
-        <div className="mb-1.5 flex items-center gap-2 pl-1">
-          <ToolByteBadge bytes={inputBytes + outputBytes} />
-        </div>
+    <div
+      className={cn(
+        bare ? "flex w-full flex-col" : "px-4 py-2.5",
+        dimClass(ctx.dimNonRisk && !flagged),
       )}
+    >
       <ToolUI
         // ToolUI expansion is uncontrolled, so key on `toolActive` to remount it:
         // landing on this tool's match opens it; moving to the next match
@@ -677,12 +785,88 @@ function ToolRowView({
         defaultExpanded={flagged || toolActive}
         requestHighlight={requestHighlight}
         resultHighlight={resultHighlight}
+        meta={meta}
         nameQuery={ctx.searchQuery}
         nameActiveOccurrence={activeNameOccurrence}
+        className={bare ? "rounded-none border-0" : undefined}
+      />
+      <RowDecorationFooter
+        decoration={decoration}
+        className="mt-1 max-w-[80%] pl-4"
       />
     </div>
   );
 }
+
+function toolRowFlagged(row: ToolRow, ctx: ResolvedRowContext): boolean {
+  const { callResults, resultResults } = toolResults(row, ctx);
+  return (callResults?.length ?? 0) > 0 || (resultResults?.length ?? 0) > 0;
+}
+
+// A run of consecutive tool calls, collapsed by default behind a single summary
+// so a long tool chain doesn't flood the transcript. Presentation is the shared
+// elements `ToolUIGroup` — the same shell the project assistant thread uses via
+// assistant-ui's ToolGroup slot — so both surfaces stay identical. Only the run
+// DETECTION differs: the assistant gets it from assistant-ui, while this
+// virtualized transcript coalesces runs in the model (`coalesceToolGroups`).
+//
+// A finding or the active search match inside the run pins the group open, so
+// neither is ever hidden behind a collapsed summary. ToolUIGroup owns its
+// expanded state internally, so `groupKey` remounts it when that pin toggles;
+// navigating away collapses it back.
+const ToolGroupView = memo(function ToolGroupView({
+  group,
+  ctx,
+  activeRowId,
+  activeField,
+}: {
+  group: Extract<DisplayItem, { type: "toolGroup" }>;
+  ctx: ResolvedRowContext;
+  /** Row inside THIS group holding the active search occurrence, else null
+   * (resolved by the caller so groups without the match skip re-render on nav). */
+  activeRowId: string | null;
+  /** Field + occurrence index within `activeRowId`, or null. */
+  activeField: ActiveField | null;
+}) {
+  const flaggedCount = useMemo(
+    () => group.rows.filter((r) => toolRowFlagged(r, ctx)).length,
+    [group.rows, ctx],
+  );
+  const forceOpen = flaggedCount > 0 || activeRowId != null;
+  const count = group.rows.length;
+  const title =
+    flaggedCount > 0
+      ? `Executed ${count} tools · ${flaggedCount} flagged`
+      : `Executed ${count} tools`;
+
+  return (
+    <div
+      className={cn(
+        "px-4 py-1.5",
+        dimClass(ctx.dimNonRisk && flaggedCount === 0),
+      )}
+    >
+      <ToolUIGroup
+        key={forceOpen ? "pinned-open" : "collapsible"}
+        title={title}
+        defaultExpanded={forceOpen}
+      >
+        <div className="divide-border divide-y">
+          {group.rows.map((r) => (
+            <RowView
+              key={r.id}
+              row={r}
+              ctx={ctx}
+              active={r.id === activeRowId}
+              activeField={r.id === activeRowId ? activeField : null}
+              bare
+            />
+          ))}
+        </div>
+      </ToolUIGroup>
+    </div>
+  );
+});
 
 function SegmentDivider({ generation }: { generation: number }) {
   return (
@@ -701,10 +885,16 @@ function SegmentDivider({ generation }: { generation: number }) {
 export interface TranscriptPagination {
   hasMoreBefore: boolean;
   hasMoreAfter: boolean;
+  /** Single-page loads driven by scrolling near an edge. */
   onLoadOlder: () => void;
   onLoadNewer: () => void;
   isFetchingOlder: boolean;
   isFetchingNewer: boolean;
+  /** Break-button loads: everything missing in the break's range (all earlier
+   * messages / all remaining messages), not just one page. */
+  onLoadAllOlder: () => void;
+  onLoadAllNewer: () => void;
+  /** Loads the entire un-loaded span after `afterSeq` (windowed views). */
   onLoadGap?: (afterSeq: number) => void;
   isLoadingGap?: (afterSeq: number) => boolean;
   /** Display-item index to bring to the top on first paint, or null to stay at
@@ -727,12 +917,15 @@ export interface TranscriptPagination {
    * else is pale. null when not searching / no matches. */
   activeOccurrence?: {
     itemIndex: number;
+    /** Row within the item holding it — a toolGroup item covers many rows. */
+    rowId: string;
     fieldKey: SearchFieldKey;
     indexInField: number;
   } | null;
 }
 
-/** Edge "load older/newer" affordance + the risk-gap "load in-between" marker. */
+/** A break in the transcript — messages are missing here. Renders a prominent
+ * button that loads every missing message in the break's range. */
 function LoadDivider({
   icon,
   label,
@@ -747,20 +940,20 @@ function LoadDivider({
   const Glyph =
     icon === "up" ? ChevronUp : icon === "down" ? ChevronDown : Ellipsis;
   return (
-    <div className="flex items-center justify-center gap-2 px-4 py-2">
+    <div className="flex items-center justify-center gap-3 px-4 py-3">
       <div className="bg-border h-px flex-1" />
       <button
         type="button"
         disabled={loading}
         onClick={onClick}
-        className="text-muted-foreground hover:text-foreground hover:bg-muted/50 inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition-colors disabled:opacity-60"
+        className="bg-background text-foreground hover:bg-muted inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium shadow-xs transition-colors disabled:cursor-default disabled:opacity-60"
       >
         {loading ? (
-          <Loader2 className="size-3 animate-spin" />
+          <Loader2 className="size-3.5 animate-spin" />
         ) : (
-          <Glyph className="size-3" />
+          <Glyph className="size-3.5" />
         )}
-        {label}
+        {loading ? "Loading messages…" : label}
       </button>
       <div className="bg-border h-px flex-1" />
     </div>
@@ -783,13 +976,16 @@ const RowView = memo(function RowView({
   ctx,
   active,
   activeField,
+  bare = false,
 }: {
   row: TranscriptRow;
-  ctx: RowContext;
+  ctx: ResolvedRowContext;
   /** This row holds the currently-active search occurrence (drives tool expand). */
   active: boolean;
   /** Which field + occurrence in this row is active, or null when none is. */
   activeField: ActiveField | null;
+  /** Render tool cards without the transcript's row padding (inside a group). */
+  bare?: boolean;
 }) {
   if (row.kind === "message") {
     return (
@@ -816,6 +1012,7 @@ const RowView = memo(function RowView({
       activeOutputOccurrence={
         activeField?.key === "output" ? activeField.index : null
       }
+      bare={bare}
     />
   );
 });
@@ -830,7 +1027,7 @@ function DisplayItemView({
   /** This item's position in the display list — matched against the active
    * occurrence's itemIndex to decide if this row holds it. */
   index: number;
-  ctx: RowContext;
+  ctx: ResolvedRowContext;
   pagination: TranscriptPagination;
 }) {
   switch (item.type) {
@@ -840,7 +1037,7 @@ function DisplayItemView({
       return (
         <TurnHeader
           author={item.author}
-          userId={item.userId}
+          userId={ctx.userLabelOverride ?? item.userId}
           userLabel={ctx.userLabel}
           createdAt={item.createdAt}
           results={item.messageIds.flatMap(
@@ -852,23 +1049,23 @@ function DisplayItemView({
       return item.dir === "older" ? (
         <LoadDivider
           icon="up"
-          label="Load older messages"
+          label="Load earlier messages"
           loading={pagination.isFetchingOlder}
-          onClick={pagination.onLoadOlder}
+          onClick={pagination.onLoadAllOlder}
         />
       ) : (
         <LoadDivider
           icon="down"
-          label="Load newer messages"
+          label="Load remaining messages"
           loading={pagination.isFetchingNewer}
-          onClick={pagination.onLoadNewer}
+          onClick={pagination.onLoadAllNewer}
         />
       );
     case "serverGap":
       return (
         <LoadDivider
           icon="ellipsis"
-          label="Load messages in between"
+          label="Load missing messages"
           loading={pagination.isLoadingGap?.(item.afterSeq) ?? false}
           onClick={() => pagination.onLoadGap?.(item.afterSeq)}
         />
@@ -892,12 +1089,29 @@ function DisplayItemView({
         />
       );
     }
+    case "toolGroup": {
+      // Resolve the active occurrence only when it lands inside THIS group;
+      // otherwise null, so the memo skips groups that don't hold the match
+      // during nav churn.
+      const occ = pagination.activeOccurrence;
+      const inGroup = occ != null && occ.itemIndex === index;
+      return (
+        <ToolGroupView
+          group={item}
+          ctx={ctx}
+          activeRowId={inGroup ? occ.rowId : null}
+          activeField={
+            inGroup ? { key: occ.fieldKey, index: occ.indexInField } : null
+          }
+        />
+      );
+    }
   }
 }
 
 export function ChatTranscript({
   items,
-  ctx,
+  ctx: rawCtx,
   pagination,
   emptyMessage = "No messages to display.",
 }: {
@@ -906,6 +1120,7 @@ export function ChatTranscript({
   pagination: TranscriptPagination;
   emptyMessage?: string;
 }): JSX.Element {
+  const ctx = useMemo(() => applyRowContextDefaults(rawCtx), [rawCtx]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const virtualizer = useVirtualizer({
     count: items.length,

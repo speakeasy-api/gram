@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
@@ -62,9 +63,9 @@ func TestConvertPresidioFindings_DropsUSDriverLicense(t *testing.T) {
 	for i, f := range findings {
 		ruleIDs[i] = f.RuleID
 	}
-	assert.NotContains(t, ruleIDs, guard(prefixPII+"us_driver_license"), "US_DRIVER_LICENSE must be dropped")
-	assert.Contains(t, ruleIDs, guard(prefixPII+"person"), "PERSON detection is intended and must survive")
-	assert.Contains(t, ruleIDs, guard(prefixPII+"email_address"))
+	assert.NotContains(t, ruleIDs, scanners.GuardRuleID(prefixPII+"us_driver_license"), "US_DRIVER_LICENSE must be dropped")
+	assert.Contains(t, ruleIDs, scanners.GuardRuleID(prefixPII+"person"), "PERSON detection is intended and must survive")
+	assert.Contains(t, ruleIDs, scanners.GuardRuleID(prefixPII+"email_address"))
 }
 
 // TestIsFindingLevelDropped locks the finding-level gate to US_DRIVER_LICENSE
@@ -412,7 +413,7 @@ func TestPresidioClientThrottleFiresHeartbeatWhileBlocked(t *testing.T) {
 }
 
 type callOutcome struct {
-	results [][]Finding
+	results [][]scanners.Finding
 	err     error
 }
 

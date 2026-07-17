@@ -22,16 +22,19 @@ type Service interface {
 	CreateMcpServer(context.Context, *CreateMcpServerPayload) (res *types.McpServer, err error)
 	// Get an MCP server by ID or slug. Exactly one of id or slug must be provided.
 	GetMcpServer(context.Context, *GetMcpServerPayload) (res *types.McpServer, err error)
-	// List MCP servers for a project. Accepts optional remote_mcp_server_id or
-	// toolset_id filters to scope the result to a single backend; at most one
-	// filter may be supplied since the two backends are mutually exclusive.
+	// List MCP servers for a project. Accepts optional remote_mcp_server_id,
+	// tunneled_mcp_server_id, or toolset_id filters to scope the result to a
+	// single backend; at most one filter may be supplied since the backends are
+	// mutually exclusive.
 	ListMcpServers(context.Context, *ListMcpServersPayload) (res *ListMcpServersResult, err error)
+	// List all MCP servers across the organization
+	ListMcpServersForOrg(context.Context, *ListMcpServersForOrgPayload) (res *ListMcpServersResult, err error)
 	// Update an MCP server. This is a full-record replace for the optional UUID
 	// references: fields omitted from the request become null on the stored
 	// record. name is an exception — omitting it leaves the existing display name
 	// unchanged, while providing it requires a non-empty value and recomputes the
 	// server-side slug. The id and visibility fields are required; exactly one of
-	// remote_mcp_server_id or toolset_id must be provided.
+	// remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be provided.
 	UpdateMcpServer(context.Context, *UpdateMcpServerPayload) (res *types.McpServer, err error)
 	// List the tool filter scopes (tags) available on an MCP server and the tools
 	// under each, including tools excluded from all filters. Exactly one of id or
@@ -64,7 +67,7 @@ const ServiceName = "mcpServers"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [6]string{"createMcpServer", "getMcpServer", "listMcpServers", "updateMcpServer", "listToolFilters", "deleteMcpServer"}
+var MethodNames = [7]string{"createMcpServer", "getMcpServer", "listMcpServers", "listMcpServersForOrg", "updateMcpServer", "listToolFilters", "deleteMcpServer"}
 
 // CreateMcpServerPayload is the payload type of the mcpServers service
 // createMcpServer method.
@@ -76,12 +79,10 @@ type CreateMcpServerPayload struct {
 	Name string
 	// The ID of the environment to associate with the server
 	EnvironmentID *string
-	// The ID of the user session issuer that gates OAuth-based MCP client
-	// authentication. When set, MCP clients are required to authenticate against
-	// this issuer before connecting.
-	UserSessionIssuerID *string
 	// The ID of the remote MCP server to use as the backend
 	RemoteMcpServerID *string
+	// The ID of the tunneled MCP server to use as the backend
+	TunneledMcpServerID *string
 	// The ID of the toolset to use as the backend
 	ToolsetID *string
 	// The ID of the tool variations group enabling MCP tool filtering for this
@@ -113,11 +114,19 @@ type GetMcpServerPayload struct {
 	ProjectSlugInput *string
 }
 
+// ListMcpServersForOrgPayload is the payload type of the mcpServers service
+// listMcpServersForOrg method.
+type ListMcpServersForOrgPayload struct {
+	SessionToken *string
+}
+
 // ListMcpServersPayload is the payload type of the mcpServers service
 // listMcpServers method.
 type ListMcpServersPayload struct {
 	// Filter to MCP servers backed by this remote MCP server
 	RemoteMcpServerID *string
+	// Filter to MCP servers backed by this tunneled MCP server
+	TunneledMcpServerID *string
 	// Filter to MCP servers backed by this toolset
 	ToolsetID        *string
 	SessionToken     *string
@@ -156,11 +165,10 @@ type UpdateMcpServerPayload struct {
 	Name *string
 	// The ID of the environment to associate with the server
 	EnvironmentID *string
-	// The ID of the user session issuer that gates OAuth-based MCP client
-	// authentication. Omit to disable issuer-gated OAuth.
-	UserSessionIssuerID *string
 	// The ID of the remote MCP server to use as the backend
 	RemoteMcpServerID *string
+	// The ID of the tunneled MCP server to use as the backend
+	TunneledMcpServerID *string
 	// The ID of the toolset to use as the backend
 	ToolsetID *string
 	// The ID of the tool variations group enabling MCP tool filtering for this

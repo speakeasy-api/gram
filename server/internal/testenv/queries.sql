@@ -21,6 +21,12 @@ UPDATE risk_results
 SET created_at = @created_at
 WHERE id = @id;
 
+-- name: UpdateRiskPolicyBypassRequestTimestamps :exec
+UPDATE risk_policy_bypass_requests
+SET created_at = @requested_at, updated_at = @requested_at
+WHERE id = @id
+  AND project_id = @project_id;
+
 -- name: ListDeploymentHTTPTools :many
 SELECT *
 FROM http_tool_definitions
@@ -30,6 +36,12 @@ WHERE deployment_id = @deployment_id;
 SELECT *
 FROM function_tool_definitions
 WHERE deployment_id = @deployment_id;
+
+-- name: SetFunctionToolVariables :exec
+UPDATE function_tool_definitions
+SET variables = @variables
+WHERE id = @id
+  AND project_id = @project_id;
 
 -- name: CountFunctionsAccess :one
 SELECT count(id)
@@ -123,3 +135,17 @@ INSERT INTO organization_metadata (
 -- Test-only fixture for seeding membership counts.
 INSERT INTO organization_user_relationships (organization_id, user_id)
 VALUES (@organization_id, sqlc.narg('user_id')::text);
+
+-- name: ForceSoftDeleteUserSessionIssuer :exec
+-- Test-only fixture for defensive paths that handle a dangling soft-delete FK.
+UPDATE user_session_issuers
+SET deleted_at = clock_timestamp()
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
+
+-- name: InsertPluginAssignmentFixture :exec
+-- Test-only fixture: writes a plugin_assignments row with an EXPLICIT
+-- organization_id so tests can seed a cross-tenant/stale assignment that the
+-- org-scoped AddPluginAssignment (INSERT ... SELECT filtered by org) refuses to
+-- create.
+INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn)
+VALUES (@plugin_id, @organization_id, @principal_urn);

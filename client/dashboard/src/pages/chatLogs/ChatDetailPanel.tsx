@@ -2,8 +2,10 @@ import { format, formatDistanceToNow } from "date-fns";
 import {
   ArrowLeft,
   ChevronDown,
+  ChevronsDown,
   ChevronUp,
   Info,
+  Loader2,
   Search,
   Sparkles,
   SlidersHorizontal,
@@ -30,8 +32,10 @@ import {
   DropdownMenuTrigger,
   Icon,
 } from "@speakeasy-api/moonshine";
-import type { ChatOverview, RiskResult } from "@gram/client/models/components";
-import { useSearchLogsMutation } from "@gram/client/react-query";
+import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
+import type { RiskResult } from "@gram/client/models/components/riskresult.js";
+import { useMembers } from "@gram/client/react-query/members.js";
+import { useSearchLogsMutation } from "@gram/client/react-query/searchLogs.js";
 import { useRiskListResults } from "@gram/client/react-query/riskListResults.js";
 import { QueryErrorResetBoundary, useQueryClient } from "@tanstack/react-query";
 import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
@@ -49,9 +53,13 @@ import {
 import { Dialog } from "@/components/ui/dialog";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Switch } from "@/components/ui/switch";
+import { AccountTypeBadge } from "@/components/account-type-badge";
+import { personalAccountEmail } from "@/components/observe/account-display-utils";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { useRBAC } from "@/hooks/useRBAC";
-import { useIsPlatformAdmin } from "@/contexts/Auth";
+import { useIsPlatformAdmin, useSession } from "@/contexts/Auth";
+import { useSdkClient } from "@/contexts/Sdk";
+import { chatOwnerLabel } from "@/lib/chat-owner";
 import { handleError, toError } from "@/lib/errors";
 import {
   ExclusionEditor,
@@ -69,6 +77,7 @@ import {
 import {
   buildDisplayItems,
   buildTranscript,
+  displayItemRows,
   type MessageCategory,
   rowCategory,
   rowHasRiskFlag,
@@ -79,6 +88,7 @@ import {
 import { cn } from "@/lib/utils";
 import {
   buildClaudeToolUsageByToolUseId,
+  buildClaudeTurnByPromptId,
   buildClaudeUsageByMessageId,
   formatTokenCount,
   formatUsageCost,
@@ -118,6 +128,9 @@ type ViewMode = "chat" | "tools" | "exclusion";
 interface Occurrence {
   key: string;
   itemIndex: number;
+  /** Row holding the occurrence. A `toolGroup` item covers many rows, so the
+   * item index alone can't say which one to light up. */
+  rowId: string;
   fieldKey: SearchFieldKey;
   indexInField: number;
 }
@@ -229,11 +242,15 @@ function MetaRow({ label, children }: { label: string; children: ReactNode }) {
 
 function SessionSummary({
   chat,
+  userLabel,
   messageCount,
   toolCount,
+  compact = false,
 }: {
   chat: {
     externalUserId?: string;
+    accountType?: string;
+    accountEmail?: string;
     source?: string;
     createdAt: Date;
     totalCost?: number;
@@ -243,11 +260,14 @@ function SessionSummary({
     lastMessageTimestamp?: Date;
     updatedAt: Date;
   };
+  userLabel: string;
   messageCount: number;
   toolCount: number;
+  compact?: boolean;
 }) {
   const tokens = totalTokensFor(chat);
   const hasCost = chat.totalCost !== undefined && chat.totalCost > 0;
+  const accountEmail = personalAccountEmail(chat);
   const endTime = chat.lastMessageTimestamp ?? chat.updatedAt;
   const duration = Math.round(
     (new Date(endTime).getTime() - new Date(chat.createdAt).getTime()) / 1000,
@@ -260,20 +280,29 @@ function SessionSummary({
           type="button"
           className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm transition-colors"
         >
-          {hasCost && (
-            <span className="tabular-nums">
-              {formatUsageCost(chat.totalCost!)}
+          {compact ? (
+            <span className="inline-flex items-center gap-1.5">
+              <Info className="size-3.5" />
+              Details
             </span>
+          ) : (
+            <>
+              {hasCost && (
+                <span className="tabular-nums">
+                  {formatUsageCost(chat.totalCost!)}
+                </span>
+              )}
+              {hasCost && tokens > 0 && (
+                <span aria-hidden className="text-muted-foreground/40">
+                  |
+                </span>
+              )}
+              {tokens > 0 && <span>{formatTokenCount(tokens)} tokens</span>}
+            </>
           )}
-          {hasCost && tokens > 0 && (
-            <span aria-hidden className="text-muted-foreground/40">
-              |
-            </span>
-          )}
-          {tokens > 0 && <span>{formatTokenCount(tokens)} tokens</span>}
           {/* No cost telemetry for this session (e.g. ClickHouse miss) — show a
               neutral "Details" label so the trigger is never an empty pill. */}
-          {!hasCost && tokens === 0 && (
+          {!compact && !hasCost && tokens === 0 && (
             <span className="inline-flex items-center gap-1.5">
               <Info className="size-3.5" />
               Details
@@ -286,7 +315,15 @@ function SessionSummary({
         <div className="space-y-1">
           <div className="mb-1 text-sm font-semibold">Session details</div>
           <div className="divide-border divide-y">
-            <MetaRow label="User">{chat.externalUserId || "anonymous"}</MetaRow>
+            <MetaRow label="User">{userLabel}</MetaRow>
+            {accountEmail && (
+              <MetaRow label="Account">
+                <span className="inline-flex flex-wrap items-center justify-end gap-1.5">
+                  {accountEmail}
+                  <AccountTypeBadge accountType={chat.accountType} noTooltip />
+                </span>
+              </MetaRow>
+            )}
             {chat.source && (
               <MetaRow label="Source">
                 <span className="inline-flex items-center gap-1.5">
@@ -318,6 +355,63 @@ function SessionSummary({
         </div>
       </PopoverContent>
     </Popover>
+  );
+}
+
+function HeaderMetadataBadge({ children }: { children: ReactNode }) {
+  return (
+    <Badge variant="neutral" className="shrink-0 font-mono text-[10px]">
+      <Badge.Text>{children}</Badge.Text>
+    </Badge>
+  );
+}
+
+function ChatDetailMetadataBadges({
+  chatId,
+  chat,
+  messageCount,
+  toolCount,
+}: {
+  chatId: string;
+  chat: Parameters<typeof SessionSummary>[0]["chat"];
+  messageCount: number;
+  toolCount: number;
+}) {
+  const tokens = totalTokensFor(chat);
+  const hasCost = chat.totalCost !== undefined && chat.totalCost > 0;
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <HeaderMetadataBadge>{getTraceId(chatId)}</HeaderMetadataBadge>
+      <HeaderMetadataBadge>
+        {messageCount.toLocaleString()} messages
+      </HeaderMetadataBadge>
+      {toolCount > 0 && (
+        <HeaderMetadataBadge>
+          {toolCount.toLocaleString()} tool calls
+        </HeaderMetadataBadge>
+      )}
+      {chat.source && (
+        <Badge variant="neutral" className="shrink-0 text-[10px]">
+          <Badge.Text>
+            <span className="inline-flex items-center gap-1.5">
+              <HookSourceIcon source={chat.source} className="size-3" />
+              {chat.source}
+            </span>
+          </Badge.Text>
+        </Badge>
+      )}
+      {hasCost && (
+        <HeaderMetadataBadge>
+          {formatUsageCost(chat.totalCost!)}
+        </HeaderMetadataBadge>
+      )}
+      {tokens > 0 && (
+        <HeaderMetadataBadge>
+          {formatTokenCount(tokens)} tokens
+        </HeaderMetadataBadge>
+      )}
+    </div>
   );
 }
 
@@ -524,9 +618,11 @@ function ThreadSearchBar({
 function ChatDetailHeader({
   chatId,
   chat,
+  userLabel,
   messageCount,
   toolCount,
   canManageChat,
+  compactMetadata,
   showFilter,
   typeFilter,
   onTypeFilterChange,
@@ -541,9 +637,11 @@ function ChatDetailHeader({
 }: {
   chatId: string;
   chat: Parameters<typeof SessionSummary>[0]["chat"] & { title?: string };
+  userLabel: string;
   messageCount: number;
   toolCount: number;
   canManageChat: boolean;
+  compactMetadata: boolean;
   showFilter: boolean;
   typeFilter: ReadonlySet<MessageCategory>;
   onTypeFilterChange: (next: Set<MessageCategory>) => void;
@@ -574,20 +672,26 @@ function ChatDetailHeader({
                   ({format(new Date(chat.createdAt), "yyyy-MM-dd HH:mm")})
                 </span>
               </span>
-              <Badge
-                variant="neutral"
-                className="shrink-0 font-mono text-[10px]"
-              >
-                <Badge.Text>{getTraceId(chatId)}</Badge.Text>
-              </Badge>
+              {compactMetadata ? (
+                <ChatDetailMetadataBadges
+                  chatId={chatId}
+                  chat={chat}
+                  messageCount={messageCount}
+                  toolCount={toolCount}
+                />
+              ) : (
+                <HeaderMetadataBadge>{getTraceId(chatId)}</HeaderMetadataBadge>
+              )}
             </div>
           </SheetDescription>
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <SessionSummary
             chat={chat}
+            userLabel={userLabel}
             messageCount={messageCount}
             toolCount={toolCount}
+            compact={compactMetadata}
           />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -676,6 +780,8 @@ function ChatDetailPanel({
   riskFocus = false,
   dimNonRisk: dimNonRiskProp = false,
 }: ChatDetailPanelProps) {
+  const client = useSdkClient();
+  const { user } = useSession();
   const isPlatformAdmin = useIsPlatformAdmin();
   const { hasScope } = useRBAC();
   const canManageChat = isPlatformAdmin || hasScope("org:admin");
@@ -744,16 +850,25 @@ function ChatDetailPanel({
   const searchTranscript = useWindowedTranscript(chatId, searchActive, {
     query: searchQuery,
   });
-  const active = riskWindowed
-    ? riskTranscript
-    : searchActive
-      ? searchTranscript
-      : transcript;
+  // Risk and search are both server-windowed; only their source differs. The
+  // plain keyset transcript drives loads directly when neither is active.
+  const windowedChoice = riskWindowed ? riskTranscript : searchTranscript;
+  const windowed = riskWindowed || searchActive ? windowedChoice : null;
+  const active = windowed ?? transcript;
   // Prefer the enriched (cost/usage) normal-load chat, but fall back to the
   // active transcript's chat so a windowed view still renders if only that load
   // resolved (otherwise the panel would show "Not found" despite having data).
   const chat = transcript.chat ?? active.chat;
   const chatMessages = active.messages;
+  const { data: membersData } = useMembers();
+  const userLabel = chat
+    ? chatOwnerLabel(
+        membersData?.members,
+        chat,
+        user,
+        personalAccountEmail(chat),
+      )
+    : "anonymous";
   // Only the primary (or risk) initial load blanks the whole panel; a search
   // re-fetch updates the transcript in place — its loading shows in the search
   // bar and as a "Searching…" empty state instead.
@@ -832,6 +947,13 @@ function ChatDetailPanel({
         : [];
     return buildClaudeToolUsageByToolUseId(tools);
   }, [chat?.agentUsage]);
+  const claudeTurnByPromptId = useMemo(() => {
+    const turns =
+      chat?.agentUsage?.type === "claude"
+        ? (chat.agentUsage.claude?.turns ?? [])
+        : [];
+    return buildClaudeTurnByPromptId(turns);
+  }, [chat?.agentUsage]);
 
   const transcriptRows = useMemo(
     () => buildTranscript(chatMessages),
@@ -859,11 +981,7 @@ function ChatDetailPanel({
   }, [transcriptRows, typeFilter, riskyOnly, riskResultsByMessage]);
   const hasMoreBefore = active.hasMoreBefore;
   const hasMoreAfter = active.hasMoreAfter;
-  const windowGaps = riskWindowed
-    ? riskTranscript.gaps
-    : searchActive
-      ? searchTranscript.gaps
-      : undefined;
+  const windowGaps = windowed?.gaps;
   const displayItems = useMemo(
     () =>
       buildDisplayItems({
@@ -880,8 +998,8 @@ function ChatDetailPanel({
   // the top (first message) — even when the session happens to have findings.
   const initialScrollIndex = useMemo(() => {
     if (!dimNonRisk) return null;
-    const idx = displayItems.findIndex(
-      (it) => it.type === "row" && rowIsFlagged(it.row, riskResultsByMessage),
+    const idx = displayItems.findIndex((it) =>
+      displayItemRows(it).some((r) => rowIsFlagged(r, riskResultsByMessage)),
     );
     return idx >= 0 ? idx : null;
   }, [dimNonRisk, displayItems, riskResultsByMessage]);
@@ -895,19 +1013,24 @@ function ChatDetailPanel({
     if (!searchActive) return EMPTY_OCCURRENCES;
     const out: Occurrence[] = [];
     displayItems.forEach((it, itemIndex) => {
-      if (it.type !== "row") return;
-      for (const f of rowSearchFields(
-        it.row,
-        searchQuery,
-        riskResultsByMessage,
-      )) {
-        for (let k = 0; k < f.count; k++) {
-          out.push({
-            key: `${it.id}:${f.key}:${k}`,
-            itemIndex,
-            fieldKey: f.key,
-            indexInField: k,
-          });
+      // Walk every row the item renders — a `toolGroup` holds a whole run of
+      // them, and its members stay searchable while collapsed (a match inside
+      // pins the group open).
+      for (const row of displayItemRows(it)) {
+        for (const f of rowSearchFields(
+          row,
+          searchQuery,
+          riskResultsByMessage,
+        )) {
+          for (let k = 0; k < f.count; k++) {
+            out.push({
+              key: `${it.id}:${row.id}:${f.key}:${k}`,
+              itemIndex,
+              rowId: row.id,
+              fieldKey: f.key,
+              indexInField: k,
+            });
+          }
         }
       }
     });
@@ -942,26 +1065,25 @@ function ChatDetailPanel({
   );
 
   const transcriptPagination = useMemo<TranscriptPagination>(() => {
-    // Risk and search are both server-windowed; only their source differs. The
-    // plain keyset transcript drives edge loads directly when neither is active.
-    const windowed = riskWindowed
-      ? riskTranscript
-      : searchActive
-        ? searchTranscript
-        : null;
     return {
       hasMoreBefore,
       hasMoreAfter,
+      // Scrolling near an edge streams single pages; the break buttons load
+      // everything missing in their range in one action.
       onLoadOlder: () =>
         windowed ? windowed.loadBefore() : transcript.fetchOlder(),
       onLoadNewer: () =>
         windowed ? windowed.loadAfter() : transcript.fetchNewer(),
+      onLoadAllOlder: () =>
+        windowed ? windowed.loadAllBefore() : transcript.fetchOlder(),
+      onLoadAllNewer: () =>
+        windowed ? windowed.loadAllAfter() : transcript.loadRest(),
       isFetchingOlder: windowed
         ? windowed.loadingKey === "before"
         : transcript.isFetchingOlder,
       isFetchingNewer: windowed
         ? windowed.loadingKey === "after"
-        : transcript.isFetchingNewer,
+        : transcript.isFetchingNewer || transcript.isLoadingRest,
       onLoadGap: windowed ? windowed.loadGap : undefined,
       isLoadingGap: windowed
         ? (afterSeq: number) => windowed.loadingKey === `gap:${afterSeq}`
@@ -977,6 +1099,7 @@ function ChatDetailPanel({
       activeOccurrence: activeOccurrence
         ? {
             itemIndex: activeOccurrence.itemIndex,
+            rowId: activeOccurrence.rowId,
             fieldKey: activeOccurrence.fieldKey,
             indexInField: activeOccurrence.indexInField,
           }
@@ -987,31 +1110,49 @@ function ChatDetailPanel({
     hasMoreAfter,
     riskWindowed,
     searchActive,
-    riskTranscript,
-    searchTranscript,
+    windowed,
     transcript,
     initialScrollIndex,
     scrollNonce,
     activeOccurrence,
   ]);
 
+  // "Load all messages": shown whenever part of the conversation isn't loaded
+  // (a paged-out tail, or un-expanded windowed segments/edges). One click
+  // fetches every missing message.
+  const fullyLoaded =
+    !hasMoreBefore && !hasMoreAfter && (windowGaps?.size ?? 0) === 0;
+  const loadingAllMessages = windowed
+    ? windowed.loadingKey === "all"
+    : transcript.isLoadingRest;
+  const loadAllMessages = useCallback(() => {
+    if (windowed) windowed.loadAll();
+    else transcript.loadRest();
+  }, [windowed, transcript]);
+
+  const userLabelOverride = chat ? userLabel : undefined;
+
   const rowCtx = useMemo<RowContext>(
     () => ({
       riskResultsByMessage,
       claudeUsageByMessage,
       claudeToolUsageByToolUseId,
+      claudeTurnByPromptId,
       dimNonRisk,
       searchQuery: searchActive ? searchQuery : undefined,
       userLabel: chat?.externalUserId,
+      userLabelOverride,
     }),
     [
       riskResultsByMessage,
       claudeUsageByMessage,
       claudeToolUsageByToolUseId,
+      claudeTurnByPromptId,
       dimNonRisk,
       searchActive,
       searchQuery,
       chat?.externalUserId,
+      userLabelOverride,
     ],
   );
 
@@ -1099,9 +1240,11 @@ function ChatDetailPanel({
       <ChatDetailHeader
         chatId={chatId}
         chat={chat}
+        userLabel={userLabel}
         messageCount={chat.numMessages}
         toolCount={toolLogs.length}
         canManageChat={canManageChat}
+        compactMetadata={riskFocus}
         showFilter={view === "chat"}
         typeFilter={typeFilter}
         onTypeFilterChange={setTypeFilter}
@@ -1122,10 +1265,12 @@ function ChatDetailPanel({
           )
         }
         onExport={() => {
-          exportTraceDataAsJson({
+          // Fetches the complete transcript server-side — the export must not
+          // depend on which messages the panel happens to have loaded.
+          void exportTraceDataAsJson({
+            client,
             chatId,
             chat,
-            messages: chatMessages,
             telemetryLogLimit: PANEL_TELEMETRY_LOG_LIMIT,
             telemetryLogs: logs,
             riskResults,
@@ -1146,6 +1291,25 @@ function ChatDetailPanel({
           it, so returning lands back at the same scroll position rather than
           re-scrolling to the first finding. */}
       <div className="relative flex flex-1 flex-col overflow-hidden">
+        {!fullyLoaded && (
+          <div className="bg-muted/30 flex items-center justify-center border-b px-4 py-1.5">
+            <button
+              type="button"
+              disabled={loadingAllMessages}
+              onClick={loadAllMessages}
+              className="text-muted-foreground hover:text-foreground inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium transition-colors disabled:cursor-default"
+            >
+              {loadingAllMessages ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <ChevronsDown className="size-3.5" />
+              )}
+              {loadingAllMessages
+                ? "Loading all messages…"
+                : "Load all messages"}
+            </button>
+          </div>
+        )}
         <CreateExclusionContext.Provider
           value={canManageChat ? openExclusion : null}
         >

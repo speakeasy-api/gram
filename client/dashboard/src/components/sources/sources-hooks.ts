@@ -5,7 +5,7 @@ import {
   extractAuthType,
   isPulseMcpServer,
 } from "@/pages/catalog/hooks/serverMetadata";
-import { useLatestDeployment } from "@gram/client/react-query/index.js";
+import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import { useMemo } from "react";
 
 export const useCatalogIconMap = (): Map<string, string> => {
@@ -20,8 +20,12 @@ export const useCatalogIconMap = (): Map<string, string> => {
   }, [catalogData]);
 };
 
-const useCatalogAuthMap = (): Map<string, PulseMcpAuthType> => {
-  const { data: catalogData } = useListMCPCatalog();
+const useCatalogAuthMap = (enabled = true): Map<string, PulseMcpAuthType> => {
+  const { data: catalogData } = useListMCPCatalog(
+    undefined,
+    undefined,
+    enabled,
+  );
 
   return useMemo(() => {
     const result = new Map<string, PulseMcpAuthType>();
@@ -50,14 +54,15 @@ export const useExternalMcpOAuthConfigStatus = (
 ): ExternalMcpOAuthConfigStatus => {
   const { data: toolset } = useToolset(toolsetSlug);
   const { data: deploymentResult } = useLatestDeployment();
-  const serverAuthMap = useCatalogAuthMap();
+  // Cheap check against data we already have (no extra fetch) — only pay
+  // for the catalog fetch below when this toolset could actually need it.
+  const externalMcpUrn = toolset?.toolUrns?.find((urn) =>
+    urn.includes(":externalmcp:"),
+  );
+  const serverAuthMap = useCatalogAuthMap(!!externalMcpUrn);
 
   return useMemo<ExternalMcpOAuthConfigStatus>(() => {
     if (!toolset) return "not-external-mcp";
-
-    const externalMcpUrn = toolset.toolUrns?.find((urn) =>
-      urn.includes(":externalmcp:"),
-    );
     if (!externalMcpUrn) return "not-external-mcp";
 
     const slug = externalMcpUrn.split(":")[2];
@@ -77,5 +82,5 @@ export const useExternalMcpOAuthConfigStatus = (
       toolset.userSessionIssuerSlug
       ? "configured"
       : "required-unconfigured";
-  }, [toolset, deploymentResult, serverAuthMap]);
+  }, [toolset, externalMcpUrn, deploymentResult, serverAuthMap]);
 };

@@ -17,6 +17,11 @@ func ListRiskPoliciesRiskPath() string {
 	return "/rpc/risk.listPolicies"
 }
 
+// ListBuiltinExclusionsRiskPath returns the URL path to the risk service listBuiltinExclusions HTTP endpoint.
+func ListBuiltinExclusionsRiskPath() string {
+	return "/rpc/risk.listBuiltinExclusions"
+}
+
 // GetRiskPolicyRiskPath returns the URL path to the risk service getRiskPolicy HTTP endpoint.
 func GetRiskPolicyRiskPath() string {
 	return "/rpc/risk.getPolicy"
@@ -85,6 +90,21 @@ func GetRiskPolicyStatusRiskPath() string {
 // CreateRiskPolicyBypassRequestRiskPath returns the URL path to the risk service createRiskPolicyBypassRequest HTTP endpoint.
 func CreateRiskPolicyBypassRequestRiskPath() string {
 	return "/rpc/risk.createPolicyBypassRequest"
+}
+
+// AcknowledgeRiskPolicyChallengeRiskPath returns the URL path to the risk service acknowledgeRiskPolicyChallenge HTTP endpoint.
+func AcknowledgeRiskPolicyChallengeRiskPath() string {
+	return "/rpc/risk.acknowledgePolicyChallenge"
+}
+
+// GetRiskPolicyChallengeRiskPath returns the URL path to the risk service getRiskPolicyChallenge HTTP endpoint.
+func GetRiskPolicyChallengeRiskPath() string {
+	return "/rpc/risk.getPolicyChallenge"
+}
+
+// DeclineRiskPolicyChallengeRiskPath returns the URL path to the risk service declineRiskPolicyChallenge HTTP endpoint.
+func DeclineRiskPolicyChallengeRiskPath() string {
+	return "/rpc/risk.declinePolicyChallenge"
 }
 
 // GetRiskBlockRiskPath returns the URL path to the risk service getRiskBlock HTTP endpoint.
@@ -172,7 +192,32 @@ func SuggestCustomDetectionRuleRiskPath() string {
 	return "/rpc/risk.suggestCustomRules"
 }
 
+// SuggestExclusionRiskPath returns the URL path to the risk service suggestExclusion HTTP endpoint.
+func SuggestExclusionRiskPath() string {
+	return "/rpc/risk.suggestExclusion"
+}
+
 // TestDetectionRuleRiskPath returns the URL path to the risk service testDetectionRule HTTP endpoint.
 func TestDetectionRuleRiskPath() string {
 	return "/rpc/risk.testRule"
+}
+
+// EvaluatePromptGuardrailRiskPath returns the URL path to the risk service evaluatePromptGuardrail HTTP endpoint.
+func EvaluatePromptGuardrailRiskPath() string {
+	return "/rpc/riskEvals.evaluate"
+}
+
+// SaveRiskEvalReviewRiskPath returns the URL path to the risk service saveRiskEvalReview HTTP endpoint.
+func SaveRiskEvalReviewRiskPath() string {
+	return "/rpc/riskEvals.saveReview"
+}
+
+// ListRiskEvalReviewsRiskPath returns the URL path to the risk service listRiskEvalReviews HTTP endpoint.
+func ListRiskEvalReviewsRiskPath() string {
+	return "/rpc/riskEvals.listReviews"
+}
+
+// DeleteRiskEvalReviewRiskPath returns the URL path to the risk service deleteRiskEvalReview HTTP endpoint.
+func DeleteRiskEvalReviewRiskPath() string {
+	return "/rpc/riskEvals.deleteReview"
 }

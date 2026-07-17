@@ -18,7 +18,7 @@ func TestRefreshBillingUsageWorkflow_ContinuesAsNewNearRunTimeout(t *testing.T) 
 
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
-	env.SetWorkflowRunTimeout(refreshBillingUsageActivityWorstCaseRetryWindow + refreshBillingUsagesWaitInterval)
+	env.SetWorkflowRunTimeout(refreshBillingUsageBatchWorstCaseRetryWindow + refreshBillingUsagesWaitInterval)
 
 	orgIDs := make([]string, (billingUsagePauseEveryBatches+1)*refreshBillingUsageBatchSize)
 	for i := range orgIDs {
@@ -45,6 +45,28 @@ func TestRefreshBillingUsageWorkflow_ContinuesAsNewNearRunTimeout(t *testing.T) 
 		activity.RegisterOptions{Name: "RefreshBillingUsage"},
 	)
 
+	snapshotCallCount := 0
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, batch []string) error {
+			snapshotCallCount++
+			require.NotEmpty(t, batch)
+			require.LessOrEqual(t, len(batch), refreshBillingUsageBatchSize)
+			return nil
+		},
+		activity.RegisterOptions{Name: "SnapshotBillingCycleUsage"},
+	)
+
+	forwardCallCount := 0
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, batch []string) error {
+			forwardCallCount++
+			require.NotEmpty(t, batch)
+			require.LessOrEqual(t, len(batch), refreshBillingUsageBatchSize)
+			return nil
+		},
+		activity.RegisterOptions{Name: "ForwardTokenUsageToPostHog"},
+	)
+
 	env.ExecuteWorkflow(RefreshBillingUsageWorkflow, RefreshBillingUsageInput{
 		OrgIDs:           nil,
 		StartIndex:       0,
@@ -58,6 +80,8 @@ func TestRefreshBillingUsageWorkflow_ContinuesAsNewNearRunTimeout(t *testing.T) 
 	require.Equal(t, "RefreshBillingUsageWorkflow", continueAsNewErr.WorkflowType.Name)
 	require.Equal(t, 1, getAllCallCount)
 	require.Equal(t, billingUsagePauseEveryBatches, refreshCallCount)
+	require.Equal(t, refreshCallCount, snapshotCallCount, "every batch gets a snapshot activity")
+	require.Equal(t, refreshCallCount, forwardCallCount, "every batch forwards token usage to posthog")
 
 	var nextInput RefreshBillingUsageInput
 	require.NoError(t, converter.GetDefaultDataConverter().FromPayloads(continueAsNewErr.Input, &nextInput))
@@ -101,6 +125,25 @@ func TestRefreshBillingUsageWorkflow_FailingBatchDoesNotAbortRun(t *testing.T) {
 		activity.RegisterOptions{Name: "RefreshBillingUsage"},
 	)
 
+	snapshotCallCount := 0
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, batch []string) error {
+			snapshotCallCount++
+			require.NotEmpty(t, batch)
+			return nil
+		},
+		activity.RegisterOptions{Name: "SnapshotBillingCycleUsage"},
+	)
+	forwardCallCount := 0
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, batch []string) error {
+			forwardCallCount++
+			require.NotEmpty(t, batch)
+			return nil
+		},
+		activity.RegisterOptions{Name: "ForwardTokenUsageToPostHog"},
+	)
+
 	env.ExecuteWorkflow(RefreshBillingUsageWorkflow, RefreshBillingUsageInput{
 		OrgIDs:           orgIDs,
 		StartIndex:       0,
@@ -111,6 +154,8 @@ func TestRefreshBillingUsageWorkflow_FailingBatchDoesNotAbortRun(t *testing.T) {
 	require.True(t, env.IsWorkflowCompleted())
 	require.NoError(t, env.GetWorkflowError())
 	require.Equal(t, 2, refreshCallCount)
+	require.Equal(t, 2, snapshotCallCount, "snapshots still run when the Polar refresh batch fails")
+	require.Equal(t, 2, forwardCallCount, "posthog forwarding still runs when the Polar refresh batch fails")
 }
 
 func TestRefreshBillingUsageWorkflow_SleepCancellationFailsRun(t *testing.T) {
@@ -142,6 +187,21 @@ func TestRefreshBillingUsageWorkflow_SleepCancellationFailsRun(t *testing.T) {
 		},
 		activity.RegisterOptions{Name: "RefreshBillingUsage"},
 	)
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, batch []string) error {
+			return nil
+		},
+		activity.RegisterOptions{Name: "SnapshotBillingCycleUsage"},
+	)
+	forwardCallCount := 0
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, batch []string) error {
+			forwardCallCount++
+			require.NotEmpty(t, batch)
+			return nil
+		},
+		activity.RegisterOptions{Name: "ForwardTokenUsageToPostHog"},
+	)
 	env.RegisterDelayedCallback(func() {
 		env.CancelWorkflow()
 	}, refreshBillingUsagesWaitInterval/2)
@@ -156,4 +216,5 @@ func TestRefreshBillingUsageWorkflow_SleepCancellationFailsRun(t *testing.T) {
 	require.True(t, env.IsWorkflowCompleted())
 	require.Error(t, env.GetWorkflowError())
 	require.Equal(t, billingUsagePauseEveryBatches, refreshCallCount)
+	require.Equal(t, refreshCallCount, forwardCallCount, "every completed batch forwarded token usage before the cancellation")
 }

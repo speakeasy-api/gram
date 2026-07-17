@@ -23,6 +23,7 @@ import (
 	platformlogs "github.com/speakeasy-api/gram/server/internal/platformtools/logs"
 	platformmemory "github.com/speakeasy-api/gram/server/internal/platformtools/memory"
 	platformrisk "github.com/speakeasy-api/gram/server/internal/platformtools/risk"
+	platformskills "github.com/speakeasy-api/gram/server/internal/platformtools/skills"
 	platformtriggers "github.com/speakeasy-api/gram/server/internal/platformtools/triggers"
 	platformusers "github.com/speakeasy-api/gram/server/internal/platformtools/users"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
@@ -133,6 +134,7 @@ func ManagedAssistantLogsTools(telemetrySvc platformtools.TelemetryService) []pl
 	return []platformtools.ExternalTool{
 		{Executor: platformlogs.NewSearchLogsTool(telemetrySvc), RequiredFeature: ""},
 		{Executor: platformlogs.NewSearchToolCallsTool(telemetrySvc), RequiredFeature: ""},
+		{Executor: platformlogs.NewGetToolUsageSummaryTool(telemetrySvc), RequiredFeature: ""},
 		{Executor: platformlogs.NewSearchChatsTool(telemetrySvc), RequiredFeature: ""},
 		{Executor: platformlogs.NewSearchUsersTool(telemetrySvc), RequiredFeature: ""},
 		{Executor: platformlogs.NewGetProjectMetricsSummaryTool(telemetrySvc), RequiredFeature: ""},
@@ -179,6 +181,17 @@ func ManagedAssistantDeploymentsTools(deploymentsSvc platformdeployments.Deploym
 	}
 }
 
+// ManagedAssistantSkillsTools returns read-only skill management tools for the
+// project's managed assistant.
+func ManagedAssistantSkillsTools(skillsSvc platformskills.SkillsService) []platformtools.ExternalTool {
+	return []platformtools.ExternalTool{
+		{Executor: platformskills.NewListTool(skillsSvc), RequiredFeature: "skills"},
+		{Executor: platformskills.NewGetTool(skillsSvc), RequiredFeature: "skills"},
+		{Executor: platformskills.NewListVersionsTool(skillsSvc), RequiredFeature: "skills"},
+		{Executor: platformskills.NewListDistributionsTool(skillsSvc), RequiredFeature: "skills"},
+	}
+}
+
 func (s *Service) ExecuteTool(ctx context.Context, plan *gateway.ToolCallPlan, env toolconfig.ToolCallEnv, requestBody io.Reader) (*gateway.PlatformResult, error) {
 	if plan == nil || plan.Kind != gateway.ToolKindPlatform || plan.Descriptor == nil || plan.Platform == nil {
 		return nil, fmt.Errorf("invalid platform tool plan")
@@ -195,7 +208,7 @@ func (s *Service) ExecuteTool(ctx context.Context, plan *gateway.ToolCallPlan, e
 
 	if feature, gated := s.featureGates[urnStr]; gated && s.featureChecker != nil {
 		if !s.featureChecker(ctx, authCtx.ActiveOrganizationID, feature) {
-			return nil, oops.E(oops.CodeNotFound, nil, "platform tool not found").LogError(ctx, s.logger)
+			return nil, oops.E(oops.CodeNotFound, nil, "platform tool not found").LogWarn(ctx, s.logger)
 		}
 	}
 
@@ -216,7 +229,7 @@ func (s *Service) ExecuteTool(ctx context.Context, plan *gateway.ToolCallPlan, e
 
 	executor, ok := s.executors[urnStr]
 	if !ok {
-		return nil, oops.E(oops.CodeNotFound, nil, "platform tool not found").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeNotFound, nil, "platform tool not found").LogWarn(ctx, s.logger)
 	}
 
 	var out bytes.Buffer

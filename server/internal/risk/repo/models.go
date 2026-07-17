@@ -64,6 +64,7 @@ type RiskPolicy struct {
 	UserMessage          pgtype.Text
 	Prompt               pgtype.Text
 	ModelConfig          []byte
+	Score                float64
 	Version              int64
 	CreatedAt            pgtype.Timestamptz
 	UpdatedAt            pgtype.Timestamptz
@@ -95,4 +96,41 @@ type RiskPolicyBypassRequest struct {
 	UpdatedAt            pgtype.Timestamptz
 	DeletedAt            pgtype.Timestamptz
 	Deleted              bool
+}
+
+// Interactive warn/challenge lifecycle for warn-action policies: a warn match records a challenged row; the user self-service acknowledges to proceed on retry. Never stores the raw matched value.
+type RiskPolicyChallenge struct {
+	ID              uuid.UUID
+	OrganizationID  string
+	ProjectID       uuid.UUID
+	RiskPolicyID    uuid.UUID
+	UserID          string
+	ToolName        pgtype.Text
+	Status          string
+	PolicyName      pgtype.Text
+	Entity          pgtype.Text
+	RuleID          pgtype.Text
+	CallFingerprint pgtype.Text
+	ChallengedAt    pgtype.Timestamptz
+	AcknowledgedAt  pgtype.Timestamptz
+	ExpiresAt       pgtype.Timestamptz
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
+}
+
+type RiskPolicyEvalReview struct {
+	ID                uuid.UUID
+	ProjectID         uuid.UUID
+	OrganizationID    string
+	RiskPolicyID      uuid.UUID
+	RiskPolicyVersion int64
+	ChatID            uuid.UUID
+	Verdict           string
+	ReviewedBy        string
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	DeletedAt         pgtype.Timestamptz
+	Deleted           bool
 }

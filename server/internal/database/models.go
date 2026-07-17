@@ -122,6 +122,16 @@ type AssistantDashboardMessage struct {
 	CreatedAt pgtype.Timestamptz
 }
 
+type AssistantMcpServer struct {
+	ID            uuid.UUID
+	AssistantID   uuid.UUID
+	McpServerID   uuid.UUID
+	EnvironmentID uuid.NullUUID
+	ProjectID     uuid.UUID
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+}
+
 type AssistantMemory struct {
 	ID             uuid.UUID
 	AssistantID    uuid.NullUUID
@@ -267,6 +277,17 @@ type AwsKmsKey struct {
 	UpdatedAt            pgtype.Timestamptz
 }
 
+type BillingCycleUsage struct {
+	ID             uuid.UUID
+	OrganizationID string
+	CycleStart     pgtype.Timestamptz
+	CycleEnd       pgtype.Timestamptz
+	TumTokens      int64
+	FinalizedAt    pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
 type BillingMetadatum struct {
 	ID                    uuid.UUID
 	OrganizationID        string
@@ -326,6 +347,7 @@ type ChatMessage struct {
 	ToolOutcomeNotes  pgtype.Text
 	ContentHash       []byte
 	Generation        int32
+	Replayed          bool
 	CreatedAt         pgtype.Timestamptz
 	RiskAnalyzedAt    pgtype.Timestamptz
 }
@@ -459,6 +481,16 @@ type DeploymentsPackage struct {
 	VersionID    uuid.UUID
 }
 
+type DeviceAgentSync struct {
+	ID             uuid.UUID
+	OrganizationID string
+	Email          string
+	FirstSeenAt    pgtype.Timestamptz
+	LastSeenAt     pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
 type DeviceOwner struct {
 	ID             uuid.UUID
 	OrganizationID string
@@ -537,6 +569,7 @@ type Environment struct {
 type EnvironmentEntry struct {
 	Name          string
 	Value         string
+	IsSecret      bool
 	EnvironmentID uuid.UUID
 	CreatedAt     pgtype.Timestamptz
 	UpdatedAt     pgtype.Timestamptz
@@ -821,6 +854,37 @@ type HttpToolDefinition struct {
 	Deleted             bool
 }
 
+type JsonWebKey struct {
+	ID                 uuid.UUID
+	OrganizationID     string
+	ProjectID          uuid.NullUUID
+	JsonWebKeySetID    uuid.UUID
+	ExternalKeyID      uuid.UUID
+	ExternalKeyVersion pgtype.Text
+	State              string
+	Kid                string
+	PublicJwk          []byte
+	ActivatedAt        pgtype.Timestamptz
+	RetiredAt          pgtype.Timestamptz
+	RevokedAt          pgtype.Timestamptz
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+	DeletedAt          pgtype.Timestamptz
+	Deleted            bool
+}
+
+type JsonWebKeySet struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+	ExternalKeyID  uuid.UUID
+	Name           string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
 type McpEndpoint struct {
 	ID             uuid.UUID
 	ProjectID      uuid.UUID
@@ -889,6 +953,36 @@ type McpServer struct {
 	Deleted               bool
 }
 
+type McpServerToolMetadatum struct {
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	McpServerID     uuid.UUID
+	ToolName        string
+	Title           pgtype.Text
+	ReadOnlyHint    pgtype.Bool
+	DestructiveHint pgtype.Bool
+	IdempotentHint  pgtype.Bool
+	OpenWorldHint   pgtype.Bool
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
+}
+
+type ModelProviderKey struct {
+	ID              uuid.UUID
+	OrganizationID  string
+	ProjectID       uuid.UUID
+	Slot            string
+	Provider        string
+	ApiKeyEncrypted string
+	Enabled         bool
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
+}
+
 type OauthProxyClientInfo struct {
 	McpSlug                 string
 	ClientID                string
@@ -940,6 +1034,7 @@ type OauthProxyServer struct {
 
 type OpenrouterApiKey struct {
 	OrganizationID string
+	KeyType        string
 	Key            string
 	KeyHash        string
 	MonthlyCredits int64
@@ -1171,15 +1266,18 @@ type PluginAssignment struct {
 }
 
 type PluginGithubConnection struct {
-	ID                   uuid.UUID
-	ProjectID            uuid.UUID
-	InstallationID       int64
-	RepoOwner            string
-	RepoName             string
-	MarketplaceToken     pgtype.Text
-	PublishedFingerprint pgtype.Text
-	CreatedAt            pgtype.Timestamptz
-	UpdatedAt            pgtype.Timestamptz
+	ID                       uuid.UUID
+	ProjectID                uuid.UUID
+	InstallationID           int64
+	RepoOwner                string
+	RepoName                 string
+	MarketplaceToken         pgtype.Text
+	PublishedFingerprint     pgtype.Text
+	PublishedMcpFingerprints []byte
+	PublishedHooksVersion    pgtype.Text
+	PublishedHooksConfig     []byte
+	CreatedAt                pgtype.Timestamptz
+	UpdatedAt                pgtype.Timestamptz
 }
 
 type PluginServer struct {
@@ -1361,6 +1459,9 @@ type RemoteSessionIssuer struct {
 	TokenEndpoint                     pgtype.Text
 	RegistrationEndpoint              pgtype.Text
 	JwksUri                           pgtype.Text
+	ServiceDocumentation              pgtype.Text
+	OpPolicyUri                       pgtype.Text
+	OpTosUri                          pgtype.Text
 	ScopesSupported                   []string
 	GrantTypesSupported               []string
 	ResponseTypesSupported            []string
@@ -1370,6 +1471,7 @@ type RemoteSessionIssuer struct {
 	Passthrough                       bool
 	Name                              pgtype.Text
 	LogoAssetID                       uuid.NullUUID
+	ClientSetupDocumentationUrl       pgtype.Text
 	CreatedAt                         pgtype.Timestamptz
 	UpdatedAt                         pgtype.Timestamptz
 	DeletedAt                         pgtype.Timestamptz
@@ -1431,6 +1533,7 @@ type RiskPolicy struct {
 	UserMessage          pgtype.Text
 	Prompt               pgtype.Text
 	ModelConfig          []byte
+	Score                float64
 	Version              int64
 	CreatedAt            pgtype.Timestamptz
 	UpdatedAt            pgtype.Timestamptz
@@ -1466,23 +1569,39 @@ type RiskPolicyBypassRequest struct {
 
 // Interactive warn/challenge lifecycle for warn-action policies: a warn match records a challenged row; the user self-service acknowledges to proceed on retry. Never stores the raw matched value.
 type RiskPolicyChallenge struct {
-	ID             uuid.UUID
-	OrganizationID string
-	ProjectID      uuid.UUID
-	RiskPolicyID   uuid.UUID
-	UserID         string
-	ToolName       pgtype.Text
-	Status         string
-	PolicyName     pgtype.Text
-	Entity         pgtype.Text
-	RuleID         pgtype.Text
-	ChallengedAt   pgtype.Timestamptz
-	AcknowledgedAt pgtype.Timestamptz
-	ExpiresAt      pgtype.Timestamptz
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	ID              uuid.UUID
+	OrganizationID  string
+	ProjectID       uuid.UUID
+	RiskPolicyID    uuid.UUID
+	UserID          string
+	ToolName        pgtype.Text
+	Status          string
+	PolicyName      pgtype.Text
+	Entity          pgtype.Text
+	RuleID          pgtype.Text
+	CallFingerprint pgtype.Text
+	ChallengedAt    pgtype.Timestamptz
+	AcknowledgedAt  pgtype.Timestamptz
+	ExpiresAt       pgtype.Timestamptz
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
+}
+
+type RiskPolicyEvalReview struct {
+	ID                uuid.UUID
+	ProjectID         uuid.UUID
+	OrganizationID    string
+	RiskPolicyID      uuid.UUID
+	RiskPolicyVersion int64
+	ChatID            uuid.UUID
+	Verdict           string
+	ReviewedBy        string
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	DeletedAt         pgtype.Timestamptz
+	Deleted           bool
 }
 
 type RiskResult struct {
@@ -1510,14 +1629,57 @@ type RiskResult struct {
 	CreatedAt           pgtype.Timestamptz
 }
 
-type SessionCaptureExclusion struct {
-	ID             int64
-	OrganizationID string
-	UserID         string
+type Skill struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	Name           string
+	DisplayName    string
+	Summary        pgtype.Text
+	SourceKind     string
+	Classification string
+	ArchivedAt     pgtype.Timestamptz
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+}
+
+type SkillDistribution struct {
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	SkillID         uuid.UUID
+	PinnedVersionID uuid.NullUUID
+	PluginID        uuid.NullUUID
+	Channel         string
+	CreatedByUserID string
+	RevokedAt       pgtype.Timestamptz
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+}
+
+type SkillSyncReceipt struct {
+	ProjectID      uuid.UUID
+	SkillID        uuid.UUID
+	SkillVersionID uuid.NullUUID
+	UserID         string
+	Hostname       string
+	Provider       string
+	Status         string
+	SyncedAt       pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+type SkillVersion struct {
+	ID               uuid.UUID
+	SkillID          uuid.UUID
+	Content          string
+	CanonicalSha256  string
+	RawSha256        string
+	Description      pgtype.Text
+	Metadata         []byte
+	SpecValid        bool
+	ValidationErrors []byte
+	CreatedAt        pgtype.Timestamptz
+	CreatedByUserID  string
 }
 
 type SlackApp struct {
@@ -1752,11 +1914,27 @@ type TunneledMcpServer struct {
 	Deleted bool
 }
 
+type TunneledMcpServerHeader struct {
+	ID                     uuid.UUID
+	TunneledMcpServerID    uuid.UUID
+	Name                   string
+	Description            pgtype.Text
+	IsRequired             bool
+	IsSecret               bool
+	Value                  pgtype.Text
+	ValueFromRequestHeader pgtype.Text
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	DeletedAt              pgtype.Timestamptz
+	Deleted                bool
+}
+
 type User struct {
-	ID              string
-	Email           string
-	DisplayName     string
-	PhotoUrl        pgtype.Text
+	ID          string
+	Email       string
+	DisplayName string
+	PhotoUrl    pgtype.Text
+	// Maps to the application's platform_admin concept: TRUE marks a Gram/Speakeasy platform admin. Distinct from the org-level admin role.
 	Admin           bool
 	LastLogin       pgtype.Timestamptz
 	WorkosID        pgtype.Text
@@ -1859,6 +2037,7 @@ type UserSessionIssuer struct {
 	Slug               string
 	AuthnChallengeMode string
 	SessionDuration    pgtype.Interval
+	Classification     string
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
 	DeletedAt          pgtype.Timestamptz

@@ -36,6 +36,34 @@ func TestKeysService_CreateKey_AllowsOrgAdminGrant(t *testing.T) {
 	require.Equal(t, "rbac-allow-create", key.Name)
 }
 
+func TestKeysService_CreateKey_AllowsHooksKeyWithoutAnyGrant(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestKeysService(t)
+	// No grants at all — this is a directory-synced (SCIM) member who holds no
+	// role, not even org:read. They must still be able to self-serve a pure
+	// hooks key, since the hook plugins mint one during browser sign-in.
+	ctx = authztest.WithExactGrants(t, ctx)
+
+	key, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{Name: "rbac-hooks-self-serve", Scopes: []string{"hooks"}})
+	require.NoError(t, err)
+	require.Equal(t, []string{"hooks"}, key.Scopes)
+}
+
+func TestKeysService_CreateKey_ForbidsMixedHooksKeyWithoutOrgAdminGrant(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestKeysService(t)
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgRead, Selector: authz.NewSelector(authz.ScopeOrgRead, testAuthContext(t, ctx).ActiveOrganizationID)})
+
+	// The no-grant allowance is only for a pure hooks key; mixing in any other
+	// scope must still require org admin.
+	_, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{Name: "rbac-hooks-mixed", Scopes: []string{"hooks", "consumer"}})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
 func TestKeysService_ListKeys_ForbiddenWithoutOrgAdminGrant(t *testing.T) {
 	t.Parallel()
 

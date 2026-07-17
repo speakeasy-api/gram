@@ -5,7 +5,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"path"
+	"slices"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -35,12 +37,24 @@ type PluginServerInfo struct {
 	EnvConfigs []ServerEnvConfig
 }
 
+// PluginSkillInfo is a skill distributed to a plugin, resolved to the manifest
+// content the plugin package carries (the distribution's pinned version when
+// set, otherwise the skill's latest valid version).
+type PluginSkillInfo struct {
+	// Name is the skill's normalized spec name (lowercase alphanumerics and
+	// single hyphens); it becomes the skill's directory name in the package.
+	Name    string
+	Content string
+}
+
 // PluginInfo contains the data needed to generate packages for a single plugin.
 type PluginInfo struct {
 	Name        string
 	Slug        string
 	Description string
 	Servers     []PluginServerInfo
+	// Skills are emitted into each platform plugin's skills/ directory.
+	Skills []PluginSkillInfo
 }
 
 // GenerateConfig holds org-level configuration for package generation.
@@ -58,7 +72,7 @@ type GenerateConfig struct {
 	APIKey string
 	// HooksAPIKey controls whether the observability plugin is emitted. Runtime
 	// hook senders authenticate with explicit env credentials or a local cached
-	// hooks key; they do not embed this publish-time key.
+	// hooks key, then fall back to this org-wide key embedded in speakeasy.json.
 	HooksAPIKey string
 	// ProjectSlug is the publishing project's slug. The Cursor hooks endpoint
 	// requires it via the Gram-Project header (Claude's does not), and it scopes
@@ -69,21 +83,129 @@ type GenerateConfig struct {
 	// marketplace name; non-default projects get a project-scoped one. Must be
 	// resolved identically to the device-agent endpoint (see naming.MarketplaceName).
 	IsDefaultProject bool
-	// Version is stamped into every plugin.json. Callers should bump this on
-	// every publish so platform marketplaces (Claude Code, Cursor, Codex) treat
-	// the manifest as new and refresh installed copies. Empty falls back to
-	// the static default, preserving test ergonomics.
+	// Version is the per-publish epoch (unix seconds) mixed into generated
+	// plugin.json versions (see pluginManifestVersion and hooksManifestVersion)
+	// so platform marketplaces (Claude Code, Cursor, Codex) treat regenerated
+	// manifests as new and refresh installed copies. Empty pins deterministic
+	// defaults for tests, fingerprints, and the CI render diff.
 	Version string
 	// MarketplaceName is the identifier users type into Claude Code or Codex
 	// (e.g. `<plugin>@<marketplace>`) and the `name` field in the generated
 	// marketplace.json. Empty falls back to DefaultMarketplaceName.
 	MarketplaceName string
-	// ObservabilityMode makes the generated hook plugin fully non-blocking when
-	// set: every Claude hook event is emitted async so the plugin can only
-	// observe and report, never deny or delay a tool call. It is the low-risk
-	// path for POC rollouts in orgs that cannot tolerate hook errors or brief
-	// server unavailability disrupting the user.
-	ObservabilityMode bool
+	// BrowserLogin lets the generated plugin mint per-user hooks keys via the
+	// interactive dashboard browser flow (localhost callback token exchange).
+	// Off by default: the runtime authenticates only through explicit
+	// GRAM_HOOKS_* env credentials, a previously cached key, or the baked
+	// org-wide key instead of opening a browser.
+	BrowserLogin bool
+	// HooksOrgName overrides the org name used to derive the observability
+	// plugin directory slugs (Claude/Cursor/Codex). The publish path sets it to
+	// the published hooks config's org name when it carries the hooks subtree
+	// verbatim, so the always-regenerated shared marketplace manifests and
+	// README keep referencing the carried directories even after an org rename.
+	// Empty falls back to OrgName.
+	HooksOrgName string
+	// InstallFailOpen selects the org's binary install-failure policy. When
+	// set, a bootstrap distribution failure (unreachable download origin,
+	// missing tooling, lock-wait timeout, checksum mismatch) exits 0 so the
+	// provider treats the hook as passed; off keeps the fail-closed default
+	// where decision-capable hooks fail per provider semantics. It only covers
+	// installation — a verified installed binary always runs, and a checksum
+	// mismatch never executes the artifact under either policy.
+	InstallFailOpen bool
+}
+
+// PublishedHooksFiles renders the complete hooks (observability) subtree the
+// publish path rolls out — the Claude, Cursor, and Codex plugins with their
+// manifests — under a pinned configuration, across every
+// browser-login and install-failure-policy combination a publish can emit. CI compares
+// this output between a PR's merge base and head to decide whether a
+// hooksGeneratorVersion bump is required, so it must cover everything a
+// publish emits: a Codex-only or manifest-only generator change has to
+// surface here or it would never roll out to connected repos. Org-derived
+// fields are fixed sentinels so only generator changes register, never data.
+func PublishedHooksFiles() (map[string][]byte, error) {
+	cfg := GenerateConfig{
+		OrgName:          "Hooks Check",
+		OrgEmail:         "hooks-check@example.com",
+		OrgID:            "org-hooks-check",
+		ServerURL:        "https://app.getgram.ai",
+		APIKey:           fingerprintAPIKeySentinel,
+		HooksAPIKey:      fingerprintHooksKeySentinel,
+		ProjectSlug:      "hooks-check",
+		IsDefaultProject: true,
+		Version:          "",
+		MarketplaceName:  "",
+		HooksOrgName:     "",
+		BrowserLogin:     false,
+		InstallFailOpen:  false,
+	}
+	out := make(map[string][]byte)
+	for _, mode := range []struct {
+		prefix          string
+		browserLogin    bool
+		installFailOpen bool
+	}{
+		{"default", false, false},
+		{"browser-login", true, false},
+		{"install-fail-open", false, true},
+	} {
+		cfg.BrowserLogin = mode.browserLogin
+		cfg.InstallFailOpen = mode.installFailOpen
+		files, err := generateHooksFiles(cfg)
+		if err != nil {
+			return nil, fmt.Errorf("generate hooks files (%s): %w", mode.prefix, err)
+		}
+		for p, b := range files {
+			out[path.Join(mode.prefix, p)] = b
+		}
+	}
+	return out, nil
+}
+
+// DogfoodPluginFiles renders the dogfood plugins (plugin-claude,
+// plugin-cursor) from the same generators that publish customer plugins, so
+// dogfood senders exercise the exact scripts -- canonical payloads,
+// /rpc/hooks.ingest, ratchet and org-key recovery -- customers run. The
+// configuration is fully environment-driven: no org, no baked key, no
+// project; every value resolves from GRAM_HOOKS_* variables at run time.
+// The rendered manifests carry org-derived names that make no sense without
+// an org, so manifests are dropped from the returned map; consumers that
+// need one (cmd/export-hook-plugin for `claude --plugin-dir`) supply their
+// own. Nothing is checked in: tests and the local-dev task render into temp
+// directories on demand.
+func DogfoodPluginFiles() (map[string][]byte, error) {
+	cfg := GenerateConfig{
+		OrgName:          "",
+		OrgEmail:         "",
+		OrgID:            "",
+		ServerURL:        "https://app.getgram.ai",
+		APIKey:           "",
+		HooksAPIKey:      "",
+		ProjectSlug:      "",
+		IsDefaultProject: true,
+		Version:          "",
+		MarketplaceName:  "",
+		HooksOrgName:     "",
+		// The dogfood harness is how the browser flow itself gets exercised
+		// locally, so it stays on here regardless of the publish default.
+		BrowserLogin:    true,
+		InstallFailOpen: false,
+	}
+	files := make(map[string][]byte)
+	if err := generateClaudeObservabilityPluginInDir(files, "plugin-claude", cfg); err != nil {
+		return nil, fmt.Errorf("generate dogfood claude plugin: %w", err)
+	}
+	if err := generateCursorObservabilityPluginInDir(files, "plugin-cursor", "plugin-cursor", cfg); err != nil {
+		return nil, fmt.Errorf("generate dogfood cursor plugin: %w", err)
+	}
+	for p := range files {
+		if strings.Contains(p, ".claude-plugin/") || strings.Contains(p, ".cursor-plugin/") {
+			delete(files, p)
+		}
+	}
+	return files, nil
 }
 
 // DefaultMarketplaceName returns the marketplace identifier used when no
@@ -108,21 +230,133 @@ func resolveMarketplaceName(cfg GenerateConfig) string {
 	return conv.Default(cfg.MarketplaceName, DefaultMarketplaceName(cfg.OrgName, cfg.ProjectSlug, cfg.IsDefaultProject))
 }
 
-// pluginManifestVersion returns the version to stamp into generated
-// plugin.json files. Callers set cfg.Version to a per-publish value; the
-// "0.1.0" fallback exists so package tests don't need to construct a version
-// just to exercise unrelated assertions.
+// pluginManifestVersion returns the version to stamp into generated MCP
+// plugin.json files: 0.1.<publish epoch>, which stays strictly above the
+// historical 0.1.0 manifests already in users' caches so a re-publish is
+// always seen as newer and triggers a refresh. The "0.1.0" fallback exists so
+// package tests don't need to construct a version just to exercise unrelated
+// assertions.
 func pluginManifestVersion(cfg GenerateConfig) string {
-	return conv.Default(cfg.Version, "0.1.0")
+	if cfg.Version == "" {
+		return "0.1.0"
+	}
+	return "0.1." + cfg.Version
 }
 
-// pluginGeneratorVersion is mixed into every plugin fingerprint. Bump it to
-// force the automated rollout to republish every connected project on the next
-// run, even when an individual project's generated output is byte-identical —
-// for generator changes that alter behaviour in ways the placeholder
-// fingerprint pass can't observe. The Plugin Generate Check CI workflow
-// requires this to change whenever generate.go does.
-const pluginGeneratorVersion = "8"
+// hooksManifestVersion is the version stamped into the observability
+// plugin.json on all three platforms: 0.<hooksGeneratorVersion>.<publish
+// epoch>. The hooks subtree is only regenerated when its content changes — a
+// hooksGeneratorVersion bump or an org-level hooks settings flip — and carried
+// byte-identical otherwise, so the epoch patch component moves exactly when
+// new hooks content publishes and installed copies refresh on settings-only
+// republishes too. The minor component (9+) sorts strictly above the
+// historical epoch-based 0.1.<epoch> hooks manifests already in users'
+// caches, so any regenerated manifest is always seen as newer. Empty
+// cfg.Version pins the deterministic 0.<hooksGeneratorVersion>.0 for tests
+// and the CI render diff.
+func hooksManifestVersion(cfg GenerateConfig) string {
+	return "0." + hooksGeneratorVersion + "." + conv.Default(cfg.Version, "0")
+}
+
+// HooksConfig is the hook-output-affecting slice of GenerateConfig, captured at
+// publish time (persisted as plugin_github_connections.published_hooks_config)
+// so a later publish can tell whether the observability (hooks) subtree must be
+// regenerated. hooksGeneratorVersion alone can't catch these: a marketplace
+// rename or an observability-mode toggle changes the generated hook commands
+// while leaving the version untouched, so without this snapshot the publish path
+// carries a stale hooks subtree. It deliberately excludes per-publish secrets
+// (HooksAPIKey, APIKey) and the manifest version (tracked separately via
+// published_hooks_version) — only fields that change generated hook *content*
+// belong here. Fields are the resolved/effective values that actually appear in
+// output: the resolved marketplace name folds in the override, org name, project
+// slug, and default-project flag, while OrgName/OrgEmail/ProjectSlug also appear
+// directly in plugin metadata and runtime configuration. ServerURL/OrgID are
+// written to the generated runtime configuration.
+type HooksConfig struct {
+	MarketplaceName string `json:"marketplace_name"`
+	// OrgName's tag is also read by naming.PublishedHooksOrgName, which every
+	// surface uses to name the published observability plugin after a rename.
+	OrgName         string                       `json:"org_name"`
+	OrgEmail        string                       `json:"org_email"`
+	ProjectSlug     string                       `json:"project_slug"`
+	ServerURL       string                       `json:"server_url"`
+	OrgID           string                       `json:"org_id"`
+	BrowserLogin    bool                         `json:"browser_login"`
+	InstallFailOpen bool                         `json:"install_fail_open"`
+	BinaryVersion   string                       `json:"binary_version"`
+	BinaryTargets   map[string]hooksBinaryTarget `json:"binary_targets"`
+}
+
+// hooksConfigSnapshot extracts the hook-output-affecting config from cfg. The
+// marketplace name is resolved (override or org default) so the snapshot records
+// exactly what was baked into the generated hooks.
+func hooksConfigSnapshot(cfg GenerateConfig) HooksConfig {
+	return HooksConfig{
+		MarketplaceName: resolveMarketplaceName(cfg),
+		OrgName:         cfg.OrgName,
+		OrgEmail:        cfg.OrgEmail,
+		ProjectSlug:     cfg.ProjectSlug,
+		ServerURL:       cfg.ServerURL,
+		OrgID:           cfg.OrgID,
+		BrowserLogin:    cfg.BrowserLogin,
+		InstallFailOpen: cfg.InstallFailOpen,
+		BinaryVersion:   hooksBinaryVersion,
+		BinaryTargets:   hooksServedTargets(cfg.ServerURL),
+	}
+}
+
+// marshalHooksConfig serializes a HooksConfig to the JSON stored in
+// published_hooks_config. Go marshals struct fields in declaration order, so the
+// bytes are deterministic for a given value.
+func marshalHooksConfig(c HooksConfig) ([]byte, error) {
+	b, err := json.Marshal(c)
+	if err != nil {
+		return nil, fmt.Errorf("marshal hooks config: %w", err)
+	}
+	return b, nil
+}
+
+// hooksConfigHash returns a stable sha256 over a HooksConfig, used to compare a
+// freshly-computed snapshot against the one last published. Hashing the value
+// (rather than raw stored bytes) normalizes away Postgres JSONB reserialization,
+// which does not preserve key order or whitespace.
+func hooksConfigHash(c HooksConfig) string {
+	b, _ := json.Marshal(c)
+	sum := sha256.Sum256(b)
+	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+// storedHooksConfigHash decodes a published_hooks_config value and hashes it for
+// comparison against a live snapshot. An empty (backfill) or unparseable value
+// hashes to "" so the caller treats it as changed and regenerates once.
+func storedHooksConfigHash(stored []byte) string {
+	if len(stored) == 0 {
+		return ""
+	}
+	var c HooksConfig
+	if err := json.Unmarshal(stored, &c); err != nil {
+		return ""
+	}
+	return hooksConfigHash(c)
+}
+
+// mcpGeneratorVersion is mixed into the MCP fingerprint (see MCPFingerprint).
+// Bump it to force the automated rollout to republish every connected project's
+// MCP plugins on the next run, even when a project's generated MCP output is
+// byte-identical — for generator changes that alter MCP behaviour in ways the
+// placeholder fingerprint pass can't observe.
+const mcpGeneratorVersion = "9"
+
+// hooksGeneratorVersion is the sole rollout signal for the observability (hooks)
+// plugin. It is stamped into the hooks plugin.json version (see
+// hooksManifestVersion) rather than folded into a content hash, so bumping it is
+// the only thing that publishes a new hooks plugin to connected repos — an
+// MCP-only publish leaves the existing hooks subtree untouched. Bump it for ANY
+// change to hooks generation, including behaviour a fingerprint couldn't observe.
+//
+// The Plugin Generate Check CI workflow requires the relevant one of these two
+// constants to change whenever generate.go does.
+const hooksGeneratorVersion = "16"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -134,22 +368,55 @@ const (
 	fingerprintHooksKeySentinel = "gram_fingerprint_hooks_key"
 )
 
-// PluginFingerprint returns a stable content hash of the packages that would be
-// generated for the given plugins. It normalizes the per-publish fields
-// (manifest version and injected API keys) so two publishes with the same
-// plugin configuration and generator version produce the same fingerprint,
-// while any change to the plugin set, project/org config, or generator output
-// changes it. The automated rollout uses this to skip no-op republishes.
-func PluginFingerprint(plugins []PluginInfo, cfg GenerateConfig) (string, error) {
+// mcpSharedFingerprintKey is the reserved key under which MCPFingerprints stores
+// the hash of the shared marketplace/README files. Plugin slugs are kebab-case
+// and never collide with it. When per-plugin publishing lands, shared files will
+// be assembled per plugin and this reserved entry can be reworked away.
+const mcpSharedFingerprintKey = "__shared__"
+
+// MCPFingerprints returns per-plugin content fingerprints of the MCP (feature)
+// plugins that would be generated for the given plugins — a map of plugin slug ->
+// stable hash, plus a reserved mcpSharedFingerprintKey entry covering the shared
+// marketplace/README files. It deliberately excludes the observability (hooks)
+// subtree: that plugin rolls out on its own manual hooksGeneratorVersion signal,
+// so MCP-content and hooks changes move independently.
+//
+// Fingerprints are stored per plugin (rather than as one aggregate) so a future
+// per-plugin publish flow can decide independently which plugins have unpublished
+// changes without a schema migration; today the rollout treats the MCP component
+// as changed when any entry differs. Per-publish fields (manifest version, the
+// injected MCP API key) are normalized out so the same MCP configuration and
+// mcpGeneratorVersion always produce the same fingerprints.
+func MCPFingerprints(plugins []PluginInfo, cfg GenerateConfig) (map[string]string, error) {
 	cfg.Version = ""
 	cfg.APIKey = fingerprintAPIKeySentinel
+	// HooksAPIKey affects only the shared files here (whether the observability
+	// entry is listed in marketplace.json). Published repos always carry a hooks
+	// key, so pin a stable non-empty sentinel to keep that entry in the hash.
 	cfg.HooksAPIKey = fingerprintHooksKeySentinel
 
-	files, err := GeneratePluginPackages(plugins, cfg)
-	if err != nil {
-		return "", fmt.Errorf("generate plugin packages for fingerprint: %w", err)
+	out := make(map[string]string, len(plugins)+1)
+	for _, p := range plugins {
+		files, err := generateMCPFiles([]PluginInfo{p}, cfg)
+		if err != nil {
+			return nil, fmt.Errorf("generate mcp files for plugin %s fingerprint: %w", p.Slug, err)
+		}
+		out[p.Slug] = hashFiles(mcpGeneratorVersion, files)
 	}
 
+	shared, err := generateSharedFiles(plugins, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("generate shared files for fingerprint: %w", err)
+	}
+	out[mcpSharedFingerprintKey] = hashFiles(mcpGeneratorVersion, shared)
+
+	return out, nil
+}
+
+// hashFiles returns a stable sha256 over a salt plus the sorted (path, content)
+// pairs. A NUL after each component disambiguates boundaries so no concatenation
+// of distinct (path, content) sequences can collide.
+func hashFiles(salt string, files map[string][]byte) string {
 	paths := make([]string, 0, len(files))
 	for p := range files {
 		paths = append(paths, p)
@@ -157,9 +424,7 @@ func PluginFingerprint(plugins []PluginInfo, cfg GenerateConfig) (string, error)
 	sort.Strings(paths)
 
 	h := sha256.New()
-	// A NUL after each component disambiguates boundaries so no concatenation
-	// of distinct (path, content) sequences can collide.
-	_, _ = h.Write([]byte(pluginGeneratorVersion))
+	_, _ = h.Write([]byte(salt))
 	_, _ = h.Write([]byte{0})
 	for _, p := range paths {
 		_, _ = h.Write([]byte(p))
@@ -167,8 +432,7 @@ func PluginFingerprint(plugins []PluginInfo, cfg GenerateConfig) (string, error)
 		_, _ = h.Write(files[p])
 		_, _ = h.Write([]byte{0})
 	}
-
-	return "sha256:" + hex.EncodeToString(h.Sum(nil)), nil
+	return "sha256:" + hex.EncodeToString(h.Sum(nil))
 }
 
 // claudeHookAsyncFlag returns the async flag for a Claude hook event.
@@ -181,17 +445,12 @@ func PluginFingerprint(plugins []PluginInfo, cfg GenerateConfig) (string, error)
 // return true for fire-and-forget telemetry so Claude is not held up while
 // the MCP inventory is re-synced mid-session.
 //
-// When observabilityMode is set, every event is forced async so the plugin
-// can only observe and report — no hook can deny or delay a tool call. This
-// is the low-risk path for POC rollouts in orgs that cannot tolerate hook
-// errors or brief server unavailability disrupting the user.
-func claudeHookAsyncFlag(event string, observabilityMode bool) *bool {
-	if observabilityMode {
-		t := true
-		return &t
-	}
+// SessionStart is also blocking so a cold install completes while the
+// session-start payload waits on stdin, and the plugin's first event is
+// never lost.
+func claudeHookAsyncFlag(event string) *bool {
 	switch event {
-	case "UserPromptSubmit", "PreToolUse", "Stop":
+	case "UserPromptSubmit", "PreToolUse", "Stop", "SessionStart":
 		f := false
 		return &f
 	default:
@@ -202,7 +461,7 @@ func claudeHookAsyncFlag(event string, observabilityMode bool) *bool {
 
 // ClaudeObservabilityHookEvents are the Claude Code hook events the
 // observability plugin registers against. Names match Claude's hooks.json
-// schema. Claude only invokes hook.sh for events listed here, so any event
+// schema. Claude only invokes the hooks runtime for events listed here, so any event
 // the Claude() handler in server/internal/hooks/claude_hooks.go expects to
 // record must appear in this list — otherwise it is silently dropped on
 // the client side.
@@ -215,6 +474,7 @@ var ClaudeObservabilityHookEvents = []string{
 	"SessionEnd",
 	"UserPromptSubmit",
 	"Stop",
+	"SubagentStop",
 	"Notification",
 }
 
@@ -239,28 +499,116 @@ var CursorObservabilityHookEvents = []string{
 // so plugin sources can be referenced by bare name relative to this root.
 const cursorPluginRoot = "cursor-plugins"
 
-// GeneratePluginPackages produces the complete file map for a plugin distribution
-// repository containing Claude Code, Cursor, and Codex plugins. Used for GitHub push.
+// GeneratePluginPackages produces the complete file map for a plugin
+// distribution repository containing Claude Code, Cursor, and Codex plugins.
+// Used for GitHub push. It is the union of the three independently-generatable
+// components: the hooks (observability) subtree, the MCP (feature) plugin
+// subtree, and the shared marketplace/README files. The publish path generates
+// and pushes these components separately (see publishProject) so a change to one
+// axis does not churn the other; this helper is the all-at-once composition used
+// for first publishes, fingerprinting, and tests.
 func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[string][]byte, error) {
+	hooks, err := generateHooksFiles(cfg)
+	if err != nil {
+		return nil, err
+	}
+	mcp, err := generateMCPFiles(plugins, cfg)
+	if err != nil {
+		return nil, err
+	}
+	shared, err := generateSharedFiles(plugins, cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	files := make(map[string][]byte, len(hooks)+len(mcp)+len(shared))
+	maps.Copy(files, hooks)
+	maps.Copy(files, mcp)
+	maps.Copy(files, shared)
+	return files, nil
+}
+
+// generateHooksFiles produces the per-org observability (hooks) plugin subtree
+// for Claude, Cursor, and Codex. Returns an empty map when no hooks key is
+// configured (cfg.HooksAPIKey == ""), which omits the observability plugin —
+// typically only in tests that don't exercise the publish flow. This subtree
+// rolls out independently of the MCP subtree on the hooksGeneratorVersion signal.
+func generateHooksFiles(cfg GenerateConfig) (map[string][]byte, error) {
+	files := make(map[string][]byte)
+	if cfg.HooksAPIKey == "" {
+		return files, nil
+	}
+	if err := generateClaudeObservabilityPlugin(files, cfg); err != nil {
+		return nil, fmt.Errorf("generate claude observability plugin: %w", err)
+	}
+	if err := generateCursorObservabilityPlugin(files, cfg); err != nil {
+		return nil, fmt.Errorf("generate cursor observability plugin: %w", err)
+	}
+	if err := generateCodexObservabilityPlugin(files, cfg); err != nil {
+		return nil, fmt.Errorf("generate codex observability plugin: %w", err)
+	}
+	return files, nil
+}
+
+// writeHooksRuntimeFiles emits the files every observability plugin carries:
+// the deployment-identity speakeasy.json and the pinned-binary bootstrap
+// script. Only Codex additionally ships the PowerShell bootstrapper (via
+// commandWindows); Claude and Cursor invoke hooks through bash on every
+// platform.
+func writeHooksRuntimeFiles(files map[string][]byte, subdir string, cfg GenerateConfig) error {
+	configJSON, err := renderHooksConfig(cfg)
+	if err != nil {
+		return err
+	}
+	files[path.Join(subdir, "speakeasy.json")] = configJSON
+	files[path.Join(subdir, "hooks/bootstrap.sh")] = renderHooksBootstrap(cfg)
+	return nil
+}
+
+// mcpFilePaths returns the sorted set of repo paths the MCP (feature) plugin
+// subtree occupies for the given plugins and config, used to carry the MCP files
+// verbatim from the existing repo when only the hooks component changed.
+func mcpFilePaths(plugins []PluginInfo, cfg GenerateConfig) ([]string, error) {
+	cfg.APIKey = fingerprintAPIKeySentinel
+	files, err := generateMCPFiles(plugins, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("enumerate mcp file paths: %w", err)
+	}
+	return slices.Sorted(maps.Keys(files)), nil
+}
+
+// generateMCPFiles produces the feature (MCP) plugin subtree — one plugin per
+// PluginInfo — for Claude, Cursor, and Codex.
+func generateMCPFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][]byte, error) {
+	files := make(map[string][]byte)
+	for _, p := range plugins {
+		if err := generateClaudePlugin(files, p, cfg); err != nil {
+			return nil, fmt.Errorf("generate claude plugin %s: %w", p.Slug, err)
+		}
+		if err := generateCursorPlugin(files, p, cfg); err != nil {
+			return nil, fmt.Errorf("generate cursor plugin %s: %w", p.Slug, err)
+		}
+		if err := generateCodexPlugin(files, p, cfg); err != nil {
+			return nil, fmt.Errorf("generate codex plugin %s: %w", p.Slug, err)
+		}
+	}
+	return files, nil
+}
+
+// generateSharedFiles produces the files that reference both the hooks and MCP
+// plugins: the per-platform marketplace.json manifests and the README. They
+// embed no per-publish secrets or versions, so they are deterministic given the
+// plugin set and org config and are regenerated on every publish. The
+// observability entry is listed first (so it's the first thing team admins see)
+// and only when a hooks key is configured, matching generateHooksFiles.
+func generateSharedFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][]byte, error) {
 	files := make(map[string][]byte)
 
 	claudePlugins := make([]marketplaceEntry, 0)
 	cursorPlugins := make([]marketplaceEntry, 0)
 	codexPlugins := make([]codexMarketplaceEntry, 0)
 
-	// Observability plugin ships first in the marketplace so it's the first
-	// thing team admins see. Skipped when no hooks key is configured —
-	// typically only in tests that don't exercise the publish flow.
 	if cfg.HooksAPIKey != "" {
-		if err := generateClaudeObservabilityPlugin(files, cfg); err != nil {
-			return nil, fmt.Errorf("generate claude observability plugin: %w", err)
-		}
-		if err := generateCursorObservabilityPlugin(files, cfg); err != nil {
-			return nil, fmt.Errorf("generate cursor observability plugin: %w", err)
-		}
-		if err := generateCodexObservabilityPlugin(files, cfg); err != nil {
-			return nil, fmt.Errorf("generate codex observability plugin: %w", err)
-		}
 		claudeObservability := ClaudeObservabilitySlug(cfg)
 		claudePlugins = append(claudePlugins, marketplaceEntry{
 			Name:        claudeObservability,
@@ -290,15 +638,6 @@ func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[strin
 	}
 
 	for _, p := range plugins {
-		if err := generateClaudePlugin(files, p, cfg); err != nil {
-			return nil, fmt.Errorf("generate claude plugin %s: %w", p.Slug, err)
-		}
-		if err := generateCursorPlugin(files, p, cfg); err != nil {
-			return nil, fmt.Errorf("generate cursor plugin %s: %w", p.Slug, err)
-		}
-		if err := generateCodexPlugin(files, p, cfg); err != nil {
-			return nil, fmt.Errorf("generate codex plugin %s: %w", p.Slug, err)
-		}
 		claudePlugins = append(claudePlugins, marketplaceEntry{
 			Name:        p.Slug,
 			DisplayName: p.Name,
@@ -592,6 +931,8 @@ func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p Pl
 	}
 	files[path.Join(subdir, ".mcp.json")] = mcpJSON
 
+	emitPluginSkills(files, subdir, p)
+
 	return nil
 }
 
@@ -629,23 +970,39 @@ func codexMCPServerName(displayName string) string {
 }
 
 // ClaudeObservabilitySlug / CursorObservabilitySlug derive the observability
-// plugin's directory name and marketplace identifier from the org slug.
-// Namespacing per-org avoids collisions with user plugins that legitimately
-// use slug "observability".
+// plugin's directory name and marketplace identifier from the org slug
+// (HooksOrgName when the publish path carried an older subtree, see
+// GenerateConfig). Namespacing per-org avoids collisions with user plugins
+// that legitimately use slug "observability".
 // Exported because tests need to predict the published path.
 func ClaudeObservabilitySlug(cfg GenerateConfig) string {
-	return naming.ObservabilitySlug(cfg.OrgName)
+	return naming.ObservabilitySlug(conv.Default(cfg.HooksOrgName, cfg.OrgName))
 }
 func CursorObservabilitySlug(cfg GenerateConfig) string {
-	return conv.ToSlug(cfg.OrgName) + "-observability-cursor"
+	return conv.ToSlug(conv.Default(cfg.HooksOrgName, cfg.OrgName)) + "-observability-cursor"
 }
 func CodexObservabilitySlug(cfg GenerateConfig) string {
-	return conv.ToSlug(cfg.OrgName) + "-observability-codex"
+	return conv.ToSlug(conv.Default(cfg.HooksOrgName, cfg.OrgName)) + "-observability-codex"
+}
+
+// hooksSubtreePrefixes returns the repo directory prefixes the hooks
+// (observability) subtree occupies for a given org name — every hooks
+// generator version to date has kept each platform's observability plugin
+// under these org-derived directories, so the publish path can carry the
+// subtree verbatim by prefix without knowing which generator version produced
+// it. The rollout gate depends on that layout independence to hold orgs on
+// their published version.
+func hooksSubtreePrefixes(orgName string) []string {
+	return []string{
+		naming.ObservabilitySlug(orgName) + "/",
+		cursorPluginRoot + "/" + conv.ToSlug(orgName) + "-observability-cursor/",
+		conv.ToSlug(orgName) + "-observability-codex/",
+	}
 }
 
 // generateClaudeObservabilityPlugin emits the per-org observability plugin
-// containing Gram hooks for Claude Code. The hook script bakes in the org's
-// hooks-scoped API key so no per-machine credential setup is required.
+// containing Gram hooks for Claude Code. The generated runtime configuration
+// carries the org's hooks-scoped API key so no per-machine setup is required.
 func generateClaudeObservabilityPlugin(files map[string][]byte, cfg GenerateConfig) error {
 	return generateClaudeObservabilityPluginInDir(files, ClaudeObservabilitySlug(cfg), cfg)
 }
@@ -665,7 +1022,7 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 		Name:        name,
 		DisplayName: cfg.OrgName + " Observability",
 		Description: "Speakeasy observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Speakeasy dashboard.",
-		Version:     pluginManifestVersion(cfg),
+		Version:     hooksManifestVersion(cfg),
 		Author:      pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
 		Homepage:    "https://getgram.ai",
 		UserConfig:  nil,
@@ -677,25 +1034,18 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 
 	// Claude Code's plugin reference (https://code.claude.com/docs/en/plugins-reference)
 	// requires hooks at hooks/hooks.json, not at the plugin root. With the
-	// flat layout (hooks.json + hook.sh at root) Claude registers the plugin
-	// silently but never wires the hooks up.
+	// hooks manifest at the plugin root, Claude registers the plugin silently
+	// but never wires the hooks up.
 	//
-	// SessionStart first runs a blocking auth preflight so fresh installs fail
-	// closed until explicit or cached hook credentials exist. The unified hook
-	// path sends all provider events through hook.sh; provider-specific MCP
-	// enrichment stays local to the hook sender and is not persisted as a
-	// server-side inventory cache.
 	hookEvents := make(map[string][]claudeHookMatcher, len(ClaudeObservabilityHookEvents))
 	for _, event := range ClaudeObservabilityHookEvents {
-		hooks := []claudeHookCommand{{Type: "command", Command: `bash "$CLAUDE_PLUGIN_ROOT/hooks/hook.sh"`, Async: claudeHookAsyncFlag(event, cfg.ObservabilityMode), Timeout: nil}}
+		timeoutSeconds := 60
+		var timeout *int
 		if event == "SessionStart" {
-			f := false
-			// Claude's default 60s hook timeout is too short for the
-			// interactive browser login the preflight can run; the login's
-			// 240s inner wait must finish before the hook is killed.
-			preflightTimeout := 300
-			hooks = append([]claudeHookCommand{{Type: "command", Command: `bash "$CLAUDE_PLUGIN_ROOT/hooks/auth_preflight.sh"`, Async: &f, Timeout: &preflightTimeout}}, hooks...)
+			timeoutSeconds = 300
+			timeout = &timeoutSeconds
 		}
+		hooks := []claudeHookCommand{{Type: "command", Command: hooksBootstrapCommand(`$CLAUDE_PLUGIN_ROOT`, "claude-code", timeoutSeconds, false), Async: claudeHookAsyncFlag(event), Timeout: timeout}}
 		hookEvents[event] = []claudeHookMatcher{
 			{Matcher: "", Hooks: hooks},
 		}
@@ -706,13 +1056,9 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 	}
 	files[path.Join(subdir, "hooks/hooks.json")] = hooksJSON
 
-	files[path.Join(subdir, "hooks/identity.sh")] = renderDeviceAgentIdentityScript()
-	files[path.Join(subdir, "hooks/http.sh")] = renderSharedHTTPScript()
-	files[path.Join(subdir, "hooks/auth.sh")] = renderSharedAuthScript()
-	files[path.Join(subdir, "hooks/login.sh")] = renderLoginScript(cfg)
-	files[path.Join(subdir, "hooks/auth_preflight.sh")] = renderAuthPreflightScript(cfg)
-	files[path.Join(subdir, "hooks/hook.sh")] = renderHookScript(cfg, "claude")
-
+	if err := writeHooksRuntimeFiles(files, subdir, cfg); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -735,7 +1081,7 @@ func generateCursorObservabilityPluginInDir(files map[string][]byte, subdir, nam
 		Name:        name,
 		DisplayName: "Observability (Cursor)",
 		Description: "Speakeasy observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Speakeasy dashboard.",
-		Version:     pluginManifestVersion(cfg),
+		Version:     hooksManifestVersion(cfg),
 		Author:      cursorAuthor{Name: cfg.OrgName, Email: cfg.OrgEmail},
 		Homepage:    "https://getgram.ai",
 	})
@@ -747,32 +1093,23 @@ func generateCursorObservabilityPluginInDir(files map[string][]byte, subdir, nam
 	// Same hooks/ subdirectory layout as the Claude side. Cursor follows the
 	// same convention as Claude Code; flat-layout plugins register but their
 	// hooks never fire.
-	authPreflightTimeout := 330
+	sessionStartTimeout := 330
 	// Cursor fails hooks open by default: a crashed or timed-out hook allows
 	// the action unless the entry opts into failClosed. Decision-capable
 	// events must not silently allow when the sender exits 2 (established
 	// machine with broken auth, unreachable server). The never-authenticated
 	// ratchet is unaffected — that path exits 0 with a pass-through body.
-	// ObservabilityMode is documented as fully non-blocking, so no entry
-	// (preflight included) may fail closed there.
-	var hookFailClosed *bool
-	if !cfg.ObservabilityMode {
-		enforced := true
-		hookFailClosed = &enforced
-	}
+	// Outage tolerance is the binary's job (the cached hooks_fail_open
+	// posture), not the hook registration's.
+	enforced := true
+	hookFailClosed := &enforced
 	hookEvents := make(map[string][]cursorHookCommand, len(CursorObservabilityHookEvents)+1)
 	hookEvents["sessionStart"] = []cursorHookCommand{
 		{
-			Command:    `bash "$CURSOR_PLUGIN_ROOT/hooks/auth_preflight.sh"`,
+			Command:    hooksBootstrapCommand(`$CURSOR_PLUGIN_ROOT`, "cursor", sessionStartTimeout, false),
 			Matcher:    "",
-			Timeout:    &authPreflightTimeout,
+			Timeout:    &sessionStartTimeout,
 			FailClosed: hookFailClosed,
-		},
-		{
-			Command:    `bash "$CURSOR_PLUGIN_ROOT/hooks/hook.sh"`,
-			Matcher:    "",
-			Timeout:    nil,
-			FailClosed: nil,
 		},
 	}
 	cursorBlockingEvents := map[string]bool{
@@ -786,7 +1123,7 @@ func generateCursorObservabilityPluginInDir(files map[string][]byte, subdir, nam
 			failClosed = hookFailClosed
 		}
 		hookEvents[event] = []cursorHookCommand{{
-			Command:    `bash "$CURSOR_PLUGIN_ROOT/hooks/hook.sh"`,
+			Command:    hooksBootstrapCommand(`$CURSOR_PLUGIN_ROOT`, "cursor", 60, false),
 			Matcher:    "",
 			Timeout:    nil,
 			FailClosed: failClosed,
@@ -798,13 +1135,9 @@ func generateCursorObservabilityPluginInDir(files map[string][]byte, subdir, nam
 	}
 	files[path.Join(subdir, "hooks/hooks.json")] = hooksJSON
 
-	files[path.Join(subdir, "hooks/identity.sh")] = renderDeviceAgentIdentityScript()
-	files[path.Join(subdir, "hooks/http.sh")] = renderSharedHTTPScript()
-	files[path.Join(subdir, "hooks/auth.sh")] = renderSharedAuthScript()
-	files[path.Join(subdir, "hooks/login.sh")] = renderLoginScript(cfg)
-	files[path.Join(subdir, "hooks/auth_preflight.sh")] = renderAuthPreflightScript(cfg)
-	files[path.Join(subdir, "hooks/hook.sh")] = renderHookScript(cfg, "cursor")
-
+	if err := writeHooksRuntimeFiles(files, subdir, cfg); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -864,7 +1197,7 @@ func generateCodexObservabilityPluginInDir(files map[string][]byte, subdir strin
 	}
 	pluginJSON, err := marshalJSON(codexPluginMeta{
 		Name:        name,
-		Version:     pluginManifestVersion(cfg),
+		Version:     hooksManifestVersion(cfg),
 		Description: "Speakeasy observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Speakeasy dashboard.",
 		MCPServers:  "",
 		Hooks:       "./hooks/hooks.json",
@@ -878,14 +1211,14 @@ func generateCodexObservabilityPluginInDir(files map[string][]byte, subdir strin
 	}
 	files[path.Join(subdir, ".codex-plugin/plugin.json")] = pluginJSON
 
-	marketplace := resolveMarketplaceName(cfg)
-	plugin := CodexObservabilitySlug(cfg)
 	hookEvents := make(map[string][]codexMatcherGroup, len(CodexObservabilityHookEvents))
 	for _, event := range CodexObservabilityHookEvents {
-		hooks := []codexHookCommand{{Type: "command", Command: codexHookCommandString(marketplace, plugin, codexHookScriptName(event))}}
-		if event == "SessionStart" {
-			hooks = append([]codexHookCommand{{Type: "command", Command: codexHookCommandString(marketplace, plugin, "auth_preflight.sh")}}, hooks...)
-		}
+		timeoutSeconds, async := codexHookParams(event)
+		hooks := []codexHookCommand{{
+			Type:           "command",
+			Command:        codexHookCommandString(timeoutSeconds, async),
+			CommandWindows: codexHookCommandStringWindows(timeoutSeconds, async),
+		}}
 		hookEvents[event] = []codexMatcherGroup{{
 			Matcher: "",
 			Hooks:   hooks,
@@ -897,13 +1230,10 @@ func generateCodexObservabilityPluginInDir(files map[string][]byte, subdir strin
 	}
 	files[path.Join(subdir, "hooks/hooks.json")] = hooksJSON
 
-	files[path.Join(subdir, "hooks/identity.sh")] = renderDeviceAgentIdentityScript()
-	files[path.Join(subdir, "hooks/http.sh")] = renderSharedHTTPScript()
-	files[path.Join(subdir, "hooks/auth.sh")] = renderSharedAuthScript()
-	files[path.Join(subdir, "hooks/login.sh")] = renderLoginScript(cfg)
-	files[path.Join(subdir, "hooks/auth_preflight.sh")] = renderAuthPreflightScript(cfg)
-	files[path.Join(subdir, "hooks/hook.sh")] = renderHookScript(cfg, "codex")
-	files[path.Join(subdir, "hooks/hook_async.sh")] = renderCodexAsyncHookScript()
+	if err := writeHooksRuntimeFiles(files, subdir, cfg); err != nil {
+		return err
+	}
+	files[path.Join(subdir, "hooks/bootstrap.ps1")] = renderHooksPowerShellBootstrap(cfg)
 
 	return nil
 }
@@ -933,1495 +1263,15 @@ func GenerateObservabilityPluginPackage(cfg GenerateConfig, platform string) (ma
 	return files, nil
 }
 
-func renderDeviceAgentIdentityScript() []byte {
-	return []byte(`#!/usr/bin/env bash
-# Generated by Speakeasy. Do not edit - overwritten on every publish.
-
-gram_enrich_identity_payload() {
-  local payload="$1"
-  local email=""
-  local commands="${GRAM_DEVICE_AGENT_COMMANDS:-speakeasyd}"
-  local timeout_tenths="${GRAM_DEVICE_AGENT_TIMEOUT_TENTHS:-15}"
-  local old_ifs="$IFS"
-  local command output tmp pid elapsed prefix trimmed
-
-  IFS=,
-  for command in $commands; do
-    IFS="$old_ifs"
-    command="${command#"${command%%[![:space:]]*}"}"
-    command="${command%"${command##*[![:space:]]}"}"
-    if [ -z "$command" ] || ! command -v "$command" >/dev/null 2>&1; then
-      IFS=,
-      continue
-    fi
-
-    tmp="$(mktemp "${TMPDIR:-/tmp}/gram-device-agent-identity.XXXXXX")" || {
-      IFS=,
-      continue
-    }
-    ("$command" identity >"$tmp" 2>/dev/null) &
-    pid=$!
-    elapsed=0
-    while kill -0 "$pid" >/dev/null 2>&1 && [ "$elapsed" -lt "$timeout_tenths" ]; do
-      sleep 0.1
-      elapsed=$((elapsed + 1))
-    done
-    if kill -0 "$pid" >/dev/null 2>&1; then
-      kill "$pid" >/dev/null 2>&1 || true
-      wait "$pid" >/dev/null 2>&1 || true
-      rm -f "$tmp"
-      IFS=,
-      continue
-    fi
-    wait "$pid" >/dev/null 2>&1 || true
-    output=$(cat "$tmp" 2>/dev/null || true)
-    rm -f "$tmp"
-
-    if [[ "$output" =~ ^[[:space:]]*([A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,})[[:space:]]*$ ]]; then
-      email="${BASH_REMATCH[1]}"
-    elif [[ "$output" =~ \"(email|user_email|userEmail|mail|preferred_username)\"[[:space:]]*:[[:space:]]*\"([A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,})\" ]]; then
-      email="${BASH_REMATCH[2]}"
-    fi
-    if [ -n "$email" ]; then
-      break
-    fi
-    IFS=,
-  done
-  IFS="$old_ifs"
-
-  if [ -z "$email" ]; then
-    printf '%s' "$payload"
-    return
-  fi
-
-  trimmed=$(printf '%s' "$payload" | sed 's/[[:space:]]*$//')
-  case "$trimmed" in
-    \{*\})
-      if [[ "$trimmed" =~ \"user_email\"[[:space:]]*: ]]; then
-        printf '%s' "$trimmed" | sed -E 's|"user_email"[[:space:]]*:[[:space:]]*"[^"]*"|"user_email":"'"$email"'"|g'
-        return
-      fi
-      prefix="${trimmed%\}}"
-      if [[ "$prefix" =~ ^\{[[:space:]]*$ ]]; then
-        printf '{"user_email":"%s"}' "$email"
-      else
-        printf '%s,"user_email":"%s"}' "$prefix" "$email"
-      fi
-      ;;
-    *)
-      printf '%s' "$payload"
-      ;;
-  esac
-}
-`)
-}
-
-func renderHookRuntimeSourceSnippet() string {
-	return `script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=/dev/null
-. "$script_dir/http.sh"
-# shellcheck source=/dev/null
-. "$script_dir/auth.sh"
-`
-}
-
-func renderAuthPreflightScript(cfg GenerateConfig) []byte {
-	// In observability mode nothing may block or stall session start: auth
-	// failures exit 0, and the interactive browser login (which can wait
-	// minutes for the redirect) never runs — the in-session nudge and
-	// hooks/login.sh remain the interactive paths.
-	failureExit := "2"
-	interactive := "1"
-	if cfg.ObservabilityMode {
-		failureExit = "0"
-		interactive = "0"
-	}
-	return fmt.Appendf(nil, `#!/usr/bin/env bash
-# Generated by Speakeasy. Do not edit — overwritten on every publish.
-#
-# Blocking auth preflight: fresh installs wait here until explicit or cached
-# hook credentials are available, then later hook senders can reuse them.
-
-set -u
-
-server_url="${GRAM_HOOKS_SERVER_URL:-%s}"
-project_slug="${GRAM_HOOKS_PROJECT_SLUG:-%s}"
-gram_hooks_org_hint="%s"
-
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=/dev/null
-if ! . "$script_dir/auth.sh"; then
-  echo "Speakeasy hooks could not load auth helper." >&2
-  exit %s
-fi
-
-export GRAM_HOOKS_INTERACTIVE=%s
-
-# Never-authenticated machines fail open (prepare_auth returns 3 after
-# warning); once credentials have been established, a broken auth state
-# exits with the configured failure code from inside prepare_auth (2 blocks
-# the session start; observability mode passes 0 so nothing ever blocks).
-gram_hooks_prepare_auth "$server_url" "$project_slug" %s || true
-exit 0
-`, cfg.ServerURL, cfg.ProjectSlug, cfg.OrgID, failureExit, interactive, failureExit)
-}
-
-// renderLoginScript emits hooks/login.sh: the standalone interactive login
-// entry point. Users (or a coding agent acting on the unauthenticated-session
-// nudge) run it directly to open the dashboard browser flow and cache a
-// hooks-scoped API key for this machine.
-func renderLoginScript(cfg GenerateConfig) []byte {
-	return fmt.Appendf(nil, `#!/usr/bin/env bash
-# Generated by Speakeasy. Do not edit — overwritten on every publish.
-#
-# Interactive login for Speakeasy observability hooks. Opens a browser to the
-# Gram dashboard, waits for the localhost callback, and caches the minted
-# hooks API key for this machine. Safe to re-run: exits 0 immediately when
-# already authenticated. Pass --force to discard cached credentials first.
-
-set -u
-
-server_url="${GRAM_HOOKS_SERVER_URL:-%s}"
-project_slug="${GRAM_HOOKS_PROJECT_SLUG:-%s}"
-gram_hooks_org_hint="%s"
-
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=/dev/null
-if ! . "$script_dir/auth.sh"; then
-  echo "Speakeasy hooks could not load auth helper." >&2
-  exit 1
-fi
-
-export GRAM_HOOKS_INTERACTIVE=1
-export GRAM_HOOKS_LOGIN_FORCE=1
-
-if [ "${1:-}" = "--force" ]; then
-  gram_hooks_forget_auth
-elif gram_hooks_read_auth "$server_url" 2>/dev/null; then
-  echo "Speakeasy hooks already authenticated for ${server_url} (project ${GRAM_HOOKS_CACHED_PROJECT:-unset}). Re-run with --force to re-authenticate."
-  exit 0
-fi
-
-if ! gram_hooks_login "$server_url" "$project_slug"; then
-  echo "Speakeasy hooks login failed. Alternatively set GRAM_HOOKS_API_KEY and GRAM_HOOKS_PROJECT_SLUG in your environment." >&2
-  exit 1
-fi
-
-if ! gram_hooks_read_auth "$server_url" 2>/dev/null; then
-  echo "Speakeasy hooks login completed but credentials could not be read back." >&2
-  exit 1
-fi
-
-echo "Speakeasy hooks authenticated (project ${GRAM_HOOKS_CACHED_PROJECT:-unset})."
-exit 0
-`, cfg.ServerURL, cfg.ProjectSlug, cfg.OrgID)
-}
-
-// renderSharedAuthScript emits hooks/auth.sh: local device authentication for
-// hook senders. Hook runtimes cannot assume python/node/jq are installed, so
-// this helper only uses shell, curl's config file support, and POSIX utilities.
-// Keep it in sync with the checked-in hooks/plugin-*/hooks/auth.sh fixtures.
-func renderSharedAuthScript() []byte {
-	return []byte(`#!/usr/bin/env bash
-# Shared local authentication helper for Gram hook senders.
-
-gram_hooks_auth_file() {
-  if [ -n "${GRAM_HOOKS_AUTH_FILE:-}" ]; then
-    printf '%s' "$GRAM_HOOKS_AUTH_FILE"
-    return 0
-  fi
-  local config_home="${XDG_CONFIG_HOME:-$HOME/.config}"
-  printf '%s/gram/hooks-auth.env' "$config_home"
-}
-
-gram_hooks_auth_value() {
-  local path="$1"
-  local key="$2"
-  sed -n "s/^${key}=//p" "$path" 2>/dev/null | sed -n '1p'
-}
-
-gram_hooks_read_auth() {
-  local server_url="$1"
-  local path
-  path="$(gram_hooks_auth_file)"
-  if [ ! -r "$path" ]; then
-    return 1
-  fi
-  GRAM_HOOKS_CACHED_SERVER_URL="$(gram_hooks_auth_value "$path" "server_url")"
-  GRAM_HOOKS_CACHED_API_KEY="$(gram_hooks_auth_value "$path" "api_key")"
-  GRAM_HOOKS_CACHED_PROJECT="$(gram_hooks_auth_value "$path" "project")"
-  GRAM_HOOKS_CACHED_EMAIL="$(gram_hooks_auth_value "$path" "email")"
-  GRAM_HOOKS_CACHED_ORG="$(gram_hooks_auth_value "$path" "org")"
-  [ "$GRAM_HOOKS_CACHED_SERVER_URL" = "$server_url" ] || return 1
-  [ -n "$GRAM_HOOKS_CACHED_API_KEY" ] || return 1
-  # A cache minted for another organization must not authenticate this
-  # plugin: with shared project slugs like "default", its events would land
-  # in — and enforce policies from — the wrong org. Caches from before org
-  # stamping carry no org and stay usable.
-  if [ -n "${gram_hooks_org_hint:-}" ] && [ -n "$GRAM_HOOKS_CACHED_ORG" ] &&
-    [ "$GRAM_HOOKS_CACHED_ORG" != "${gram_hooks_org_hint:-}" ]; then
-    return 1
-  fi
-}
-
-gram_hooks_write_auth() {
-  local server_url="$1"
-  local api_key="$2"
-  local project="$3"
-  local email="${4:-}"
-  local org="${5:-}"
-  local path
-  path="$(gram_hooks_auth_file)"
-  mkdir -p "$(dirname "$path")" || return 1
-  chmod 700 "$(dirname "$path")" 2>/dev/null || true
-  local tmp="${path}.tmp.$$"
-  local old_umask
-  old_umask="$(umask)"
-  umask 077
-  {
-    printf 'server_url=%s\n' "$server_url"
-    printf 'api_key=%s\n' "$api_key"
-    printf 'project=%s\n' "$project"
-    printf 'email=%s\n' "$email"
-    printf 'org=%s\n' "$org"
-  } >"$tmp" || {
-    rm -f "$tmp"
-    umask "$old_umask"
-    return 1
-  }
-  umask "$old_umask"
-  mv "$tmp" "$path" || return 1
-  gram_hooks_mark_auth_established
-}
-
-gram_hooks_forget_auth() {
-  local path
-  path="$(gram_hooks_auth_file)"
-  rm -f "$path"
-}
-
-# gram_hooks_auth_established reports whether this machine has EVER cached
-# hook credentials — the fail-closed ratchet: before the first successful
-# auth, blocking hook paths warn and fail open; afterwards they fail closed.
-# The marker survives gram_hooks_forget_auth so a forgotten or invalidated
-# key cannot silently disable enforcement.
-gram_hooks_auth_established() {
-  [ -e "$(gram_hooks_auth_file).established" ] && return 0
-  [ -r "$(gram_hooks_auth_file)" ]
-}
-
-gram_hooks_mark_auth_established() {
-  : >"$(gram_hooks_auth_file).established" 2>/dev/null || true
-}
-
-gram_hooks_manual_auth_instructions() {
-  local server_url="$1"
-  local project_hint="$2"
-  echo "Speakeasy hooks need a Gram hooks API key before events can be recorded." >&2
-  echo "Set GRAM_HOOKS_API_KEY and GRAM_HOOKS_PROJECT_SLUG, or cache a key by sourcing hooks/auth.sh and running:" >&2
-  echo "  gram_hooks_write_auth '$server_url' '<hooks-api-key>' '${project_hint}' '<email>'" >&2
-}
-
-# gram_hooks_urldecode decodes URL-encoded values (+ as space, %XX escapes).
-# Literal backslashes are routed through %5C so printf %b cannot interpret
-# them as escape sequences.
-gram_hooks_urldecode() {
-  local data="${1//+/ }"
-  data="${data//\\/%5C}"
-  printf '%b' "${data//%/\\x}"
-}
-
-# gram_hooks_nc_listen_styles orders candidate nc invocation styles by a
-# usage-text sniff: host_port = BSD/OpenBSD (nc -l 127.0.0.1 PORT), dash_p_local
-# and dash_p = GNU/busybox (-p PORT, loopback-bound when -s is accepted). The
-# sniff only ranks; each style is verified with a live HTTP self-probe before
-# the browser opens.
-gram_hooks_nc_listen_styles() {
-  local help_text
-  help_text="$(nc -h 2>&1 || true)"
-  case "$help_text" in
-    *--local-port* | *"-p PORT"*) printf 'dash_p_local dash_p host_port' ;;
-    *) printf 'host_port dash_p_local dash_p' ;;
-  esac
-}
-
-gram_hooks_nc_listen() {
-  case "$1" in
-    dash_p_local) nc -l -p "$2" -s 127.0.0.1 2>/dev/null ;;
-    dash_p) nc -l -p "$2" 2>/dev/null ;;
-    *) nc -l 127.0.0.1 "$2" 2>/dev/null ;;
-  esac
-}
-
-gram_hooks_login_http_response() {
-  local status="$1"
-  local body="$2"
-  local reason="OK"
-  if [ "$status" = "204" ]; then
-    reason="No Content"
-  elif [ "$status" = "403" ]; then
-    reason="Forbidden"
-  fi
-  printf 'HTTP/1.1 %s %s\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: %s\r\nConnection: close\r\n\r\n%s' \
-    "$status" "$reason" "${#body}" "$body"
-}
-
-gram_hooks_login_success_html() {
-  printf '<!doctype html><html><head><title>Speakeasy hooks connected</title></head><body style="font-family:sans-serif;text-align:center;padding-top:4rem"><h1>Authentication successful</h1><p>Speakeasy hooks are connected. You can close this tab.</p></body></html>'
-}
-
-# gram_hooks_login_handle_request reads one HTTP request from stdin (the nc
-# pipe), captures the /callback query string into a file, and writes the
-# response to stdout (piped back to the client through the fifo). The probe
-# path echoes a per-attempt marker so the readiness check can tell this
-# listener apart from whatever else answers on the port; other requests
-# without api_key (favicon) get a 204 so the serve loop keeps waiting for the
-# dashboard's real redirect. The callback must echo the unguessable state
-# token minted for this attempt — anyone on this machine can reach the
-# listener, and without the token a racing local process could inject its own
-# key and reroute telemetry to an attacker-controlled project.
-gram_hooks_login_handle_request() {
-  local dir="$1"
-  local state="$2"
-  local probe="$3"
-  local request_line="" line="" path_query=""
-  IFS= read -r -t 10 request_line || request_line=""
-  request_line="${request_line%$'\r'}"
-  if [ -z "$request_line" ]; then
-    return 0
-  fi
-  while IFS= read -r -t 10 line; do
-    line="${line%$'\r'}"
-    if [ -z "$line" ]; then
-      break
-    fi
-  done
-  path_query="${request_line#* }"
-  path_query="${path_query%% *}"
-  case "$path_query" in
-    /callback\?*api_key=*)
-      case "&${path_query#*\?}&" in
-        *"&state=${state}&"*)
-          printf '%s' "${path_query#*\?}" >"$dir/query.tmp"
-          mv "$dir/query.tmp" "$dir/query"
-          gram_hooks_login_http_response 200 "$(gram_hooks_login_success_html)"
-          ;;
-        *)
-          gram_hooks_login_http_response 403 ""
-          ;;
-      esac
-      ;;
-    /gram-probe*)
-      gram_hooks_login_http_response 200 "gram-hooks-probe-ok:${probe}"
-      ;;
-    *)
-      gram_hooks_login_http_response 204 ""
-      ;;
-  esac
-}
-
-# gram_hooks_login_serve accepts connections one at a time until the callback
-# query is captured, a stop file appears, or the request budget runs out. The
-# fifo's read (nc stdin) and write (handler stdout) ends open symmetrically
-# within each pipeline, and the handler exiting closes the write end — that
-# EOF is what makes netcat flavors without socket-close exit (busybox) finish
-# the cycle so the next iteration can listen again. A failed nc bind degrades
-# to a fast, bounded loop that the probe below detects instead of a hung
-# orphan process.
-gram_hooks_login_serve() {
-  local style="$1"
-  local dir="$2"
-  local port="$3"
-  local state="$4"
-  local probe="$5"
-  local requests=0
-  while [ "$requests" -lt 32 ] && [ ! -e "$dir/stop" ] && [ ! -s "$dir/query" ]; do
-    gram_hooks_nc_listen "$style" "$port" <"$dir/fifo" | gram_hooks_login_handle_request "$dir" "$state" "$probe" >"$dir/fifo"
-    requests=$((requests + 1))
-  done
-}
-
-# The probe must see this attempt's marker, not just any HTTP response: if the
-# random port is already bound by another local service, nc's bind fails while
-# a bare connectivity check against that service would still succeed — and the
-# browser would then deliver the freshly minted key to the wrong process.
-gram_hooks_login_probe() {
-  local port="$1"
-  local probe="$2"
-  local i=0 body=""
-  while [ "$i" -lt 3 ]; do
-    i=$((i + 1))
-    body="$(curl -s --max-time 2 "http://127.0.0.1:${port}/gram-probe" 2>/dev/null)" || body=""
-    case "$body" in
-      *"gram-hooks-probe-ok:${probe}"*)
-        return 0
-        ;;
-    esac
-    sleep 1
-  done
-  return 1
-}
-
-# gram_hooks_login_stop_server unblocks a listening nc with a loopback poke so
-# the serve loop can observe the stop file, then reaps the background job.
-gram_hooks_login_stop_server() {
-  local port="$1"
-  local pid="$2"
-  local dir="$3"
-  : >"$dir/stop" 2>/dev/null || true
-  curl -s -o /dev/null --max-time 1 "http://127.0.0.1:${port}/gram-stop" 2>/dev/null || true
-  if [ -n "$pid" ]; then
-    kill "$pid" 2>/dev/null || true
-    wait "$pid" 2>/dev/null || true
-  fi
-}
-
-gram_hooks_open_browser() {
-  local url="$1"
-  case "$(uname -s 2>/dev/null)" in
-    Darwin)
-      if command -v open >/dev/null 2>&1; then
-        open "$url" 2>/dev/null && return 0
-      fi
-      ;;
-    *)
-      if command -v xdg-open >/dev/null 2>&1; then
-        xdg-open "$url" >/dev/null 2>&1 && return 0
-      fi
-      ;;
-  esac
-  return 1
-}
-
-gram_hooks_cleanup_login() {
-  if [ -n "${GRAM_HOOKS_LOGIN_TMPDIR:-}" ]; then
-    : >"$GRAM_HOOKS_LOGIN_TMPDIR/stop" 2>/dev/null || true
-  fi
-  if [ -n "${GRAM_HOOKS_LOGIN_PORT:-}" ]; then
-    curl -s -o /dev/null --max-time 1 "http://127.0.0.1:${GRAM_HOOKS_LOGIN_PORT}/gram-stop" 2>/dev/null || true
-  fi
-  if [ -n "${GRAM_HOOKS_LOGIN_SERVER_PID:-}" ]; then
-    kill "$GRAM_HOOKS_LOGIN_SERVER_PID" 2>/dev/null || true
-  fi
-  if [ -n "${GRAM_HOOKS_LOGIN_TMPDIR:-}" ]; then
-    rm -rf "$GRAM_HOOKS_LOGIN_TMPDIR"
-  fi
-}
-
-# gram_hooks_login mints a hooks-scoped API key via the dashboard browser flow:
-# start a one-shot localhost listener, open the dashboard with cli_callback_url
-# pointing at it, wait for the api_key redirect, and cache the result with
-# gram_hooks_write_auth. Only interactive entry points run this —
-# auth_preflight.sh and login.sh export GRAM_HOOKS_INTERACTIVE=1; per-event
-# hook senders never block on a browser.
-gram_hooks_login() {
-  local server_url="$1"
-  local project_hint="$2"
-
-  if [ "${GRAM_HOOKS_DISABLE_LOCAL_AUTH:-}" = "1" ]; then
-    return 1
-  fi
-  if [ "${GRAM_HOOKS_INTERACTIVE:-}" != "1" ]; then
-    gram_hooks_manual_auth_instructions "$server_url" "$project_hint"
-    return 1
-  fi
-  if [ -n "${CI:-}" ] || [ -n "${SSH_CONNECTION:-}" ] || [ -n "${SSH_TTY:-}" ]; then
-    echo "Speakeasy hooks: no local browser available for login. Set GRAM_HOOKS_API_KEY and GRAM_HOOKS_PROJECT_SLUG instead." >&2
-    return 1
-  fi
-  case "$(uname -s 2>/dev/null)" in
-    Darwin) ;;
-    *)
-      if [ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
-        echo "Speakeasy hooks: no graphical session detected; skipping browser login. Set GRAM_HOOKS_API_KEY and GRAM_HOOKS_PROJECT_SLUG instead." >&2
-        return 1
-      fi
-      ;;
-  esac
-  local dep
-  for dep in nc mkfifo curl date; do
-    if ! command -v "$dep" >/dev/null 2>&1; then
-      echo "Speakeasy hooks: this machine is missing '$dep' for browser login." >&2
-      gram_hooks_manual_auth_instructions "$server_url" "$project_hint"
-      return 1
-    fi
-  done
-
-  # A dismissed or failed browser attempt is not retried for a cooldown period
-  # (login.sh sets GRAM_HOOKS_LOGIN_FORCE=1 to bypass), so an unattended
-  # machine is not spammed with browser tabs on every session start.
-  local now last attempt_marker
-  attempt_marker="$(gram_hooks_auth_file).login-attempt"
-  now="$(date +%s)"
-  if [ "${GRAM_HOOKS_LOGIN_FORCE:-}" != "1" ] && [ -r "$attempt_marker" ]; then
-    last="$(cat "$attempt_marker" 2>/dev/null)"
-    if [ -n "$last" ] && [ "$((now - last))" -lt "${GRAM_HOOKS_LOGIN_COOLDOWN_SECONDS:-21600}" ] 2>/dev/null; then
-      echo "Speakeasy hooks: browser login was attempted recently; run the plugin's hooks/login.sh to retry now." >&2
-      return 1
-    fi
-  fi
-  mkdir -p "$(dirname "$attempt_marker")" 2>/dev/null || true
-  printf '%s' "$now" >"$attempt_marker" 2>/dev/null || true
-
-  # Unguessable per-attempt token: the dashboard echoes it back on the
-  # callback and the listener rejects anything without it, so a local
-  # process racing the redirect cannot inject its own credentials. Without a
-  # cryptographic source the guard would be enumerable, so browser login is
-  # refused entirely rather than run with a guessable token.
-  local state
-  state="$(od -An -N16 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n')"
-  if [ -z "$state" ]; then
-    state="$(openssl rand -hex 16 2>/dev/null)"
-  fi
-  if [ -z "$state" ]; then
-    echo "Speakeasy hooks: no secure random source for browser login on this machine." >&2
-    gram_hooks_manual_auth_instructions "$server_url" "$project_hint"
-    return 1
-  fi
-  # Separate marker for the readiness probe: it is echoed to anyone who asks,
-  # so it must never be the state token.
-  local probe
-  probe="$(od -An -N8 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n')"
-  if [ -z "$probe" ]; then
-    probe="$(openssl rand -hex 8 2>/dev/null)"
-  fi
-
-  GRAM_HOOKS_LOGIN_TMPDIR="$(mktemp -d "${TMPDIR:-/tmp}/gram-hooks-login.XXXXXX")" || return 1
-  local dir="$GRAM_HOOKS_LOGIN_TMPDIR"
-  if ! mkfifo "$dir/fifo"; then
-    rm -rf "$dir"
-    GRAM_HOOKS_LOGIN_TMPDIR=""
-    return 1
-  fi
-
-  local style port tries started=""
-  for style in $(gram_hooks_nc_listen_styles); do
-    tries=0
-    while [ "$tries" -lt 2 ]; do
-      tries=$((tries + 1))
-      port=$(( (${RANDOM:-17} % 45000) + 20000 ))
-      rm -f "$dir/query" "$dir/stop"
-      gram_hooks_login_serve "$style" "$dir" "$port" "$state" "$probe" &
-      GRAM_HOOKS_LOGIN_SERVER_PID=$!
-      GRAM_HOOKS_LOGIN_PORT="$port"
-      if gram_hooks_login_probe "$port" "$probe"; then
-        started=1
-        break 2
-      fi
-      gram_hooks_login_stop_server "$port" "$GRAM_HOOKS_LOGIN_SERVER_PID" "$dir"
-      GRAM_HOOKS_LOGIN_SERVER_PID=""
-      GRAM_HOOKS_LOGIN_PORT=""
-    done
-  done
-  if [ -z "$started" ]; then
-    rm -rf "$dir"
-    GRAM_HOOKS_LOGIN_TMPDIR=""
-    echo "Speakeasy hooks: could not start a localhost login listener." >&2
-    gram_hooks_manual_auth_instructions "$server_url" "$project_hint"
-    return 1
-  fi
-
-  # The callback URL carries the state token as its own query parameter; the
-  # dashboard preserves existing parameters when appending the credentials.
-  local auth_url="${server_url%/}/?from_cli=true&cli_callback_url=http%3A%2F%2F127.0.0.1%3A${port}%2Fcallback%3Fstate%3D${state}&key_scope=hooks"
-  # Project slugs are URL-safe by construction; anything else would need
-  # percent-encoding, so it is dropped rather than corrupt the query string.
-  case "$project_hint" in
-    "" | *[!A-Za-z0-9._-]*) ;;
-    *) auth_url="${auth_url}&project=${project_hint}" ;;
-  esac
-  # Pin the mint to the plugin's organization (callers set gram_hooks_org_hint
-  # from the generated config): in a multi-org browser session the dashboard
-  # refuses to mint a key when the active org differs, instead of silently
-  # binding this machine's telemetry to whichever org happens to be active.
-  case "${gram_hooks_org_hint:-}" in
-    "" | *[!A-Za-z0-9._-]*) ;;
-    *) auth_url="${auth_url}&organization_id=${gram_hooks_org_hint}" ;;
-  esac
-  echo "Speakeasy hooks: opening your browser to connect observability hooks." >&2
-  echo "If nothing opens, visit: $auth_url" >&2
-  # Hand the opener a 0600 file:// redirect instead of the URL itself:
-  # process arguments are world-readable (ps, /proc/<pid>/cmdline), and the
-  # state token must not leak to other local users who can also reach the
-  # loopback listener. The stderr copy above is same-user-only and is the
-  # manual completion path, which needs the token to work.
-  local launch_url="$auth_url"
-  local escaped_url="${auth_url//&/&amp;}"
-  if printf '<!doctype html><meta http-equiv="refresh" content="0;url=%s"><title>Speakeasy sign-in</title><a href="%s">Continue to Speakeasy sign-in</a>\n' "$escaped_url" "$escaped_url" >"$dir/open.html" 2>/dev/null; then
-    chmod 600 "$dir/open.html" 2>/dev/null || true
-    launch_url="$dir/open.html"
-  fi
-  gram_hooks_open_browser "$launch_url" || true
-
-  local waited=0
-  local wait_limit="${GRAM_HOOKS_LOGIN_TIMEOUT_SECONDS:-240}"
-  while [ "$waited" -lt "$wait_limit" ] && [ ! -s "$dir/query" ]; do
-    sleep 1
-    waited=$((waited + 1))
-  done
-
-  gram_hooks_login_stop_server "$port" "$GRAM_HOOKS_LOGIN_SERVER_PID" "$dir"
-  GRAM_HOOKS_LOGIN_SERVER_PID=""
-  GRAM_HOOKS_LOGIN_PORT=""
-
-  local query=""
-  if [ -r "$dir/query" ]; then
-    query="$(cat "$dir/query" 2>/dev/null)"
-  fi
-  rm -rf "$dir"
-  GRAM_HOOKS_LOGIN_TMPDIR=""
-  if [ -z "$query" ]; then
-    echo "Speakeasy hooks: browser login did not complete. Run the plugin's hooks/login.sh to try again." >&2
-    return 1
-  fi
-
-  local api_key="" project="" email="" org="" pair pairs
-  IFS='&' read -r -a pairs <<<"$query"
-  for pair in "${pairs[@]}"; do
-    case "$pair" in
-      api_key=*) api_key="$(gram_hooks_urldecode "${pair#api_key=}")" ;;
-      project=*) project="$(gram_hooks_urldecode "${pair#project=}")" ;;
-      email=*) email="$(gram_hooks_urldecode "${pair#email=}")" ;;
-      organization_id=*) org="$(gram_hooks_urldecode "${pair#organization_id=}")" ;;
-    esac
-  done
-  if [ -z "$api_key" ]; then
-    echo "Speakeasy hooks: login callback did not include an API key." >&2
-    return 1
-  fi
-  if [ -z "$project" ]; then
-    project="$project_hint"
-  fi
-  # Older dashboards omit organization_id on the callback; the login URL
-  # pinned the mint to the plugin's org, so fall back to that hint.
-  if [ -z "$org" ]; then
-    org="${gram_hooks_org_hint:-}"
-  fi
-  if ! gram_hooks_write_auth "$server_url" "$api_key" "$project" "$email" "$org"; then
-    echo "Speakeasy hooks: could not cache the new hooks API key." >&2
-    return 1
-  fi
-  rm -f "$attempt_marker" 2>/dev/null || true
-  echo "Speakeasy hooks: connected${email:+ as $email} (project ${project:-unset})." >&2
-  return 0
-}
-
-gram_hooks_write_curl_config() {
-  local api_key="$1"
-  local project="$2"
-  gram_hooks_cleanup_auth_config
-  auth_config=""
-  auth_config_arg=()
-  auth_config=$(mktemp "${TMPDIR:-/tmp}/gram-hooks-curl.XXXXXX") || return 1
-  chmod 600 "$auth_config" || true
-  # curl config quoted strings treat backslash and double quote specially,
-  # and the config file is line-oriented; escape the metacharacters and strip
-  # CR/LF so a hostile or corrupted cached value cannot break out of the
-  # header directive or inject additional config lines.
-  api_key="${api_key//\\/\\\\}"
-  api_key="${api_key//\"/\\\"}"
-  api_key="${api_key//$'\n'/}"
-  api_key="${api_key//$'\r'/}"
-  project="${project//\\/\\\\}"
-  project="${project//\"/\\\"}"
-  project="${project//$'\n'/}"
-  project="${project//$'\r'/}"
-  printf 'header = "Gram-Key: %s"\n' "$api_key" >"$auth_config"
-  printf 'header = "Gram-Project: %s"\n' "$project" >>"$auth_config"
-  auth_config_arg=(--config "$auth_config")
-}
-
-gram_hooks_cleanup_auth_config() {
-  if [ -n "${auth_config:-}" ]; then
-    rm -f "$auth_config"
-  fi
-}
-# Installed at source time: scripts sourcing this library must not set their
-# own EXIT trap, or it would be overwritten here.
-trap 'gram_hooks_cleanup_auth_config; gram_hooks_cleanup_login' EXIT
-
-gram_hooks_prepare_auth() {
-  local server_url="$1"
-  local project_hint="$2"
-  local failure_exit="$3"
-  local force="${4:-}"
-  local api_key project email
-
-  # Refuse to send credentials over plaintext HTTP; only loopback hosts
-  # (local dev servers) are exempt. Same ratchet as auth failures: machines
-  # that never authenticated fail open (return 3 also skips the network
-  # entirely, so no key can leak), established machines fail closed.
-  case "$server_url" in
-    https://*) ;;
-    http://127.0.0.1 | http://127.0.0.1[:/]* | http://localhost | http://localhost[:/]* | http://\[::1\] | http://\[::1\][:/]*) ;;
-    *)
-      echo "Speakeasy hooks refused insecure Gram server URL '$server_url'; use https:// (or an http://localhost dev server)." >&2
-      if gram_hooks_auth_established; then
-        exit "$failure_exit"
-      fi
-      return 3
-      ;;
-  esac
-
-  api_key=""
-  project=""
-  email=""
-  if [ "$force" != "force" ]; then
-    api_key="${GRAM_HOOKS_API_KEY:-${GRAM_API_KEY:-}}"
-    project="${GRAM_HOOKS_PROJECT_SLUG:-${GRAM_PROJECT_SLUG:-}}"
-  fi
-
-  if [ -z "$api_key" ]; then
-    GRAM_HOOKS_CACHED_API_KEY=""
-    GRAM_HOOKS_CACHED_PROJECT=""
-    GRAM_HOOKS_CACHED_EMAIL=""
-    if [ "$force" != "force" ]; then
-      gram_hooks_read_auth "$server_url" 2>/dev/null || true
-    fi
-    if [ -z "${GRAM_HOOKS_CACHED_API_KEY:-}" ]; then
-      if ! gram_hooks_login "$server_url" "$project_hint"; then
-        if gram_hooks_auth_established; then
-          echo "Speakeasy hooks could not authenticate with Gram. Run the plugin's hooks/login.sh to reconnect, or set GRAM_HOOKS_API_KEY." >&2
-          exit "$failure_exit"
-        fi
-        echo "Speakeasy hooks are not connected on this machine yet; events are not being recorded. Run the plugin's hooks/login.sh to connect." >&2
-        return 3
-      fi
-      if ! gram_hooks_read_auth "$server_url" 2>/dev/null; then
-        echo "Speakeasy hooks could not read Gram authentication after login." >&2
-        exit "$failure_exit"
-      fi
-    fi
-    api_key="${GRAM_HOOKS_CACHED_API_KEY:-}"
-    project="${GRAM_HOOKS_CACHED_PROJECT:-}"
-    email="${GRAM_HOOKS_CACHED_EMAIL:-}"
-  fi
-
-  if [ -z "$project" ]; then
-    project="$project_hint"
-  fi
-  if [ -z "$api_key" ] || [ -z "$project" ]; then
-    echo "Speakeasy hooks are missing Gram authentication or project selection." >&2
-    exit "$failure_exit"
-  fi
-
-  if ! gram_hooks_write_curl_config "$api_key" "$project"; then
-    echo "Speakeasy hooks could not prepare Gram authentication." >&2
-    exit "$failure_exit"
-  fi
-
-  if [ -n "$email" ]; then
-    export GRAM_HOOKS_AUTH_EMAIL="$email"
-  fi
-}
-
-gram_hooks_post_authenticated() {
-  local server_url="$1"
-  local payload="$2"
-  local max_time="$3"
-  local project_hint="$4"
-  local failure_exit="$5"
-  shift 5
-
-  # Return 78 when this machine has never authenticated (ratchet fail-open):
-  # callers emit a pass-through response instead of blocking. Once auth has
-  # been established, prepare_auth fails closed by exiting from within.
-  if ! gram_hooks_prepare_auth "$server_url" "$project_hint" "$failure_exit"; then
-    GRAM_HTTP_CODE=""
-    GRAM_HTTP_BODY=""
-    return 78
-  fi
-  gram_http_post "${server_url}/rpc/hooks.ingest" "$payload" "$max_time" \
-    "$@" \
-    ${auth_config_arg[@]+"${auth_config_arg[@]}"}
-  local first_status="$GRAM_HTTP_CODE"
-  # Retry through the browser-login cache only when the rejected credentials
-  # came from it. Explicit GRAM_HOOKS_API_KEY/GRAM_API_KEY values take
-  # precedence over the cache on every send, so a re-login can never replace
-  # them: a rejected configured key must fall through to the caller's non-2xx
-  # handling (fail closed) rather than wipe the cache and downgrade to the
-  # never-authenticated pass-through.
-  if { [ "$first_status" = "401" ] || [ "$first_status" = "403" ]; } \
-    && [ -z "${GRAM_HOOKS_API_KEY:-${GRAM_API_KEY:-}}" ] \
-    && [ "${GRAM_HOOKS_DISABLE_LOCAL_AUTH:-}" != "1" ]; then
-    gram_hooks_forget_auth
-    if ! gram_hooks_prepare_auth "$server_url" "$project_hint" "$failure_exit" force; then
-      GRAM_HTTP_CODE="$first_status"
-      return 78
-    fi
-    gram_http_post "${server_url}/rpc/hooks.ingest" "$payload" "$max_time" \
-      "$@" \
-      ${auth_config_arg[@]+"${auth_config_arg[@]}"}
-  fi
-}
-`)
-}
-
-// renderSharedHTTPScript emits hooks/http.sh: the retryable transport sourced
-// by every generated hook script. It must stay byte-for-byte identical to the
-// checked-in hooks/plugin-claude/hooks/http.sh so local-dev and generated
-// plugins behave the same. gram_http_post retries transient connection resets
-// and 5xx with backoff while reusing one Idempotency-Key across attempts, so
-// the server (which de-duplicates on that key) stores a redelivery once.
-func renderSharedHTTPScript() []byte {
-	return []byte(`# Shared retryable HTTP helper for Gram hook senders.
-#
-# Sourced (not executed) by every plugin's send/hook scripts so all plugins
-# share one transport with identical retry and idempotency behavior.
-#
-# Why retries are safe: the server de-duplicates on the per-invocation
-# Idempotency-Key header (see gram_http_post), so re-sending the same request
-# after a transient reset stores the event exactly once.
-#
-# Usage:
-#   . "$script_dir/http.sh"
-#   gram_http_post "$url" "$payload" max_time [extra curl args...]
-#   # then read $GRAM_HTTP_CODE (e.g. "200", "000") and $GRAM_HTTP_BODY.
-#
-# gram_http_post returns 0 once curl produced a definitive HTTP status (any
-# code, including 4xx/5xx — the caller decides allow/block from $GRAM_HTTP_CODE)
-# and non-zero only when every attempt failed to reach the server.
-
-GRAM_HTTP_MAX_ATTEMPTS="${GRAM_HTTP_MAX_ATTEMPTS:-4}"
-GRAM_HTTP_BACKOFF_BASE="${GRAM_HTTP_BACKOFF_BASE:-1}"
-
-# gram_new_idempotency_token emits one token per shell invocation, captured
-# once and reused across retries so every attempt of the same logical delivery
-# carries the same token.
-gram_new_idempotency_token() {
-  if [ -n "${GRAM_IDEMPOTENCY_TOKEN:-}" ]; then
-    printf '%s' "$GRAM_IDEMPOTENCY_TOKEN"
-    return 0
-  fi
-  if command -v uuidgen >/dev/null 2>&1; then
-    GRAM_IDEMPOTENCY_TOKEN=$(uuidgen | tr '[:upper:]' '[:lower:]')
-  elif [ -r /proc/sys/kernel/random/uuid ]; then
-    GRAM_IDEMPOTENCY_TOKEN=$(cat /proc/sys/kernel/random/uuid)
-  else
-    GRAM_IDEMPOTENCY_TOKEN="$(date +%s)-$$-${RANDOM:-0}${RANDOM:-0}"
-  fi
-  printf '%s' "$GRAM_IDEMPOTENCY_TOKEN"
-}
-
-# _gram_http_is_transient returns 0 for a transient failure worth retrying: a
-# connection-level error (no response) or a 5xx. A clean 2xx/3xx/4xx is a
-# definitive answer and must NOT be retried.
-_gram_http_is_transient() {
-  local curl_exit="$1"
-  local http_code="$2"
-  case "$curl_exit" in
-    # 6 DNS, 7 connect, 28 timeout, 35 TLS handshake, 52 empty reply,
-    # 55 send error, 56 recv error (the connection-reset class).
-    6 | 7 | 28 | 35 | 52 | 55 | 56) return 0 ;;
-  esac
-  if [ "$curl_exit" -ne 0 ] && { [ -z "$http_code" ] || [ "$http_code" = "000" ]; }; then
-    return 0
-  fi
-  if [ "$http_code" -ge 500 ] 2>/dev/null; then
-    return 0
-  fi
-  return 1
-}
-
-# gram_http_post POSTs $2 to $1 with a per-attempt timeout of $3 seconds,
-# retrying transient failures with backoff. Remaining args pass verbatim to
-# curl. It always adds Content-Type and the reused Idempotency-Key header.
-gram_http_post() {
-  local _url="$1"
-  local _payload="$2"
-  local _max_time="$3"
-  shift 3
-
-  local _token
-  _token=$(gram_new_idempotency_token)
-
-  local attempt=1
-  local response curl_exit
-  GRAM_HTTP_CODE="000"
-  GRAM_HTTP_BODY=""
-  while [ "$attempt" -le "$GRAM_HTTP_MAX_ATTEMPTS" ]; do
-    response=$(printf '%s' "$_payload" | curl -s -w "\n%{http_code}" -X POST \
-      -H "Content-Type: application/json" \
-      -H "Idempotency-Key: ${_token}" \
-      "$@" \
-      --data-binary @- \
-      --max-time "$_max_time" \
-      "$_url")
-    curl_exit=$?
-
-    GRAM_HTTP_CODE=$(printf '%s' "$response" | tail -1)
-    GRAM_HTTP_BODY=$(printf '%s' "$response" | sed '$d')
-
-    if ! _gram_http_is_transient "$curl_exit" "$GRAM_HTTP_CODE"; then
-      # Definitive: a 2xx/3xx/4xx (success) or a non-transient curl error
-      # (bad usage/URL — retrying won't help). Distinguish via the code.
-      if [ "$curl_exit" -eq 0 ]; then
-        return 0
-      fi
-      return 1
-    fi
-
-    if [ "$attempt" -lt "$GRAM_HTTP_MAX_ATTEMPTS" ]; then
-      sleep "$((GRAM_HTTP_BACKOFF_BASE * attempt))"
-    fi
-    attempt=$((attempt + 1))
-  done
-
-  # Exhausted retries. A real HTTP status (e.g. a persistent 5xx) → report
-  # success so the caller can act on the code; otherwise the server was
-  # unreachable.
-  if [ "$GRAM_HTTP_CODE" != "000" ] && [ -n "$GRAM_HTTP_CODE" ]; then
-    return 0
-  fi
-  return 1
-}
-`)
-}
-
-// renderHookScript produces the bash wrapper that forwards hook event JSON
-// from stdin to the unified Gram endpoint. The shared auth helper supplies
-// Gram-Key + Gram-Project from explicit env credentials or a per-device cached
-// hooks key.
-//
-// The script captures the HTTP status code and response body separately so
-// it can forward the body to stdout (for PreToolUse deny decisions) while
-// still exiting with code 2 on 4xx/5xx to signal a block to Claude.
-func renderHookScript(cfg GenerateConfig, platform string) []byte {
-	projectSlug := cfg.ProjectSlug
-	// In observability mode the plugin must never block: server deny decisions
-	// are swallowed and transport failures exit 0 instead of 2.
-	nonblocking := ""
-	if cfg.ObservabilityMode {
-		nonblocking = "1"
-	}
-	cursorMCPEnrichment := ""
-	if platform == "cursor" {
-		cursorMCPEnrichment = renderCursorMCPEnrichmentSnippet()
-	}
-	claudeMCPEnrichment := ""
-	if platform == "claude" {
-		claudeMCPEnrichment = renderClaudeMCPEnrichmentSnippet()
-	}
-
-	// %%{http_code} → %{http_code} in the emitted script (curl write-out format).
-	// %%s           → %s           in the emitted script (printf format).
-	//
-	// Claude reads hookSpecificOutput.permissionDecision from stdout on 2xx,
-	// so the body is echoed unconditionally for the claude platform.
-	// Codex treats any stdout as a structured response and rejects unknown JSON,
-	// so for codex we suppress stdout on 2xx (empty stdout = allow).
-	// Both platforms treat exit 2 as a block; the reason goes to stderr.
-	if platform == "codex" {
-		return fmt.Appendf(nil, `#!/usr/bin/env bash
-# Generated by Speakeasy. Do not edit — overwritten on every publish.
-
-# Send a hook event to Speakeasy. The server is the sole authority on whether to block:
-#   HTTP 2xx -> allow (exit 0, no stdout — Codex allow = empty stdout).
-#   HTTP 4xx/5xx -> block (exit 2). Server message relayed to stderr.
-# The script never makes the allow/deny decision — only the server does.
-
-set -u
-
-server_url="${GRAM_HOOKS_SERVER_URL:-%s}"
-project_slug="${GRAM_HOOKS_PROJECT_SLUG:-%s}"
-gram_hooks_org_hint="${GRAM_HOOKS_ORG_ID:-%s}"
-gram_hooks_nonblocking="%s"
-# In observability mode auth-state failures must not block either: prepare_auth
-# exits with this value on an established machine whose credentials broke.
-gram_hooks_failure_exit=2
-if [ -n "$gram_hooks_nonblocking" ]; then
-  gram_hooks_failure_exit=0
-fi
-provider_payload=$(cat)
-
-%s
-
-%s
-
-hook_hostname=$(hostname 2>/dev/null || true)
-native_event="$(gram_hooks_native_event_name "$provider_payload")"
-payload="$(gram_hooks_build_canonical_payload "$provider_payload" "$hook_hostname")"
-
-# gram_http_post (http.sh) retries transient resets so a single reset no
-# longer blocks the tool call; the server still decides allow/block.
-gram_hooks_post_authenticated "$server_url" "$payload" 10 "$project_slug" "$gram_hooks_failure_exit"
-post_status=$?
-# 78 = never-authenticated ratchet fail-open: allow (empty stdout) instead of
-# blocking a machine that has no way to hold credentials yet.
-if [ "$post_status" -eq 78 ]; then
-  exit 0
-fi
-
-http_code="$GRAM_HTTP_CODE"
-body="$GRAM_HTTP_BODY"
-
-# curl returns 000 on connection failure — treat as block so an unreachable
-# Speakeasy server cannot silently bypass blocking policies.
-if [ "$http_code" -ge 200 ] 2>/dev/null && [ "$http_code" -lt 300 ] 2>/dev/null; then
-  decision="$(gram_hooks_json_string_value "$body" "decision")"
-  reason="$(gram_hooks_decision_message "$body")"
-  if [ "$decision" = "deny" ] && [ -z "$gram_hooks_nonblocking" ]; then
-    echo "${reason:-Speakeasy blocked this Codex hook}" >&2
-    exit 2
-  fi
-  exit 0
-fi
-
-reason="$(gram_hooks_json_string_value "$body" "message")"
-echo "${reason:-Speakeasy hook returned HTTP ${http_code}}" >&2
-if [ -n "$gram_hooks_nonblocking" ]; then
-  exit 0
-fi
-exit 2
-`, cfg.ServerURL, projectSlug, cfg.OrgID, nonblocking, renderHookRuntimeSourceSnippet(), renderHookPayloadNormalizationSnippet("codex"))
-	}
-
-	return fmt.Appendf(nil, `#!/usr/bin/env bash
-# Generated by Speakeasy. Do not edit — overwritten on every publish.
-
-# Send a hook event to Speakeasy. The server is the sole authority on whether to block:
-#   HTTP 2xx -> proceed (exit 0). A deny decision in the body is relayed as an
-#               explicit block; anything else emits an empty response so the
-#               client's own permission flow still runs (never a forced allow).
-#   HTTP 4xx/5xx -> block (exit 2). Server message relayed to stderr.
-# The script never makes the allow/deny decision — only the server does.
-
-set -u
-
-server_url="${GRAM_HOOKS_SERVER_URL:-%s}"
-project_slug="${GRAM_HOOKS_PROJECT_SLUG:-%s}"
-gram_hooks_org_hint="${GRAM_HOOKS_ORG_ID:-%s}"
-gram_hooks_nonblocking="%s"
-# In observability mode auth-state failures must not block either: prepare_auth
-# exits with this value on an established machine whose credentials broke.
-gram_hooks_failure_exit=2
-if [ -n "$gram_hooks_nonblocking" ]; then
-  gram_hooks_failure_exit=0
-fi
-
-%s
-provider_payload=$(cat)
-if type gram_hooks_enrich_cursor_mcp_payload >/dev/null 2>&1; then
-  provider_payload="$(gram_hooks_enrich_cursor_mcp_payload "$provider_payload")"
-fi
-if type gram_hooks_enrich_claude_mcp_payload >/dev/null 2>&1; then
-  provider_payload="$(gram_hooks_enrich_claude_mcp_payload "$provider_payload")"
-fi
-
-%s
-
-# gram_hooks_emit_login_nudge injects a once-per-session UserPromptSubmit
-# additionalContext telling Claude the hooks are unauthenticated and where the
-# login helper lives, so it can offer to run it for the user.
-gram_hooks_emit_login_nudge() {
-  local payload="$1"
-  local plugin_hooks_dir="$2"
-  local session_id marker context escaped
-  session_id="$(gram_hooks_json_string_value "$payload" "session_id")"
-  marker="${TMPDIR:-/tmp}/gram-hooks-login-nudge-${session_id:-$(date +%%Y%%m%%d)}"
-  if [ -e "$marker" ]; then
-    return 0
-  fi
-  : >"$marker" 2>/dev/null || true
-  context="Notice from the Speakeasy observability plugin installed in this workspace: this machine has not completed sign-in, so the telemetry this workspace expects is not being recorded. Handle the user's current request as normal, then you MUST directly ask the user whether to connect Speakeasy hooks now — put it to them as an explicit question (use your ask-user tool if you have one); this is the user's decision, so do not resolve it yourself and do not silently drop this notice. If they agree, run: bash \"${plugin_hooks_dir}/login.sh\" (opens a browser sign-in and waits for it to complete). Never run it without their explicit consent. If they decline, do not raise this again during this session."
-  escaped="$(printf '%%s' "$context" | gram_hooks_json_escape_string)"
-  printf '{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"%%s"}}' "$escaped"
-}
-
-hook_hostname=$(hostname 2>/dev/null || true)
-native_event="$(gram_hooks_native_event_name "$provider_payload")"
-if [ "%s" = "cursor" ] && [ "$native_event" != "beforeSubmitPrompt" ]; then
-  gram_hooks_cursor_backfill_prompt_if_missing "$provider_payload" "$hook_hostname" "$server_url" "$project_slug"
-  # A denied backfilled prompt would have blocked at beforeSubmitPrompt had
-  # that delivery not been missed; relay the deny on this turn's decision
-  # event instead of letting the turn keep executing. A failed backfill also
-  # blocks: it was the turn's only prompt-policy check, so proceeding would
-  # skip prompt blocking exactly on the recovery path.
-  if [ -z "$gram_hooks_nonblocking" ]; then
-    case "$native_event" in
-      preToolUse | beforeMCPExecution)
-        if [ "${GRAM_HOOKS_BACKFILL_DECISION:-}" = "deny" ]; then
-          gram_hooks_provider_response "cursor" "$native_event" "$GRAM_HOOKS_BACKFILL_BODY"
-          exit 0
-        fi
-        if [ "${GRAM_HOOKS_BACKFILL_STATUS:-}" = "failed" ]; then
-          gram_hooks_provider_response "cursor" "$native_event" '{"decision":"deny","message":"Speakeasy could not verify this turn'"'"'s prompt against policy, so the tool call was blocked. Retry in a moment."}'
-          exit 0
-        fi
-        ;;
-    esac
-  fi
-fi
-if [ "%s" = "cursor" ]; then
-  # Cursor also fires the generic pre/post/failure hooks around MCP calls;
-  # the dedicated before/afterMCPExecution events carry the same call, so
-  # the generic echoes are skipped to avoid duplicate telemetry and
-  # duplicate chat tool rows under the same synthetic tool id.
-  case "$native_event" in
-    preToolUse | postToolUse | postToolUseFailure)
-      cursor_tool_name="$(gram_hooks_json_string_value "$provider_payload" "tool_name")"
-      case "$cursor_tool_name" in
-        MCP:*)
-          gram_hooks_provider_response "%s" "$native_event" '{}'
-          exit 0
-          ;;
-      esac
-      ;;
-  esac
-fi
-payload="$(gram_hooks_build_canonical_payload "$provider_payload" "$hook_hostname")"
-
-# gram_http_post (http.sh) retries transient resets so a single reset no
-# longer blocks the tool call; the server still decides allow/block.
-gram_hooks_post_authenticated "$server_url" "$payload" 10 "$project_slug" "$gram_hooks_failure_exit"
-post_status=$?
-# 78 = never-authenticated ratchet fail-open: emit a pass-through response
-# instead of blocking a machine that has no way to hold credentials yet. On
-# Claude prompt submission, additionally nudge the agent to offer login.
-if [ "$post_status" -eq 78 ]; then
-  if [ "%s" = "claude" ] && [ "$native_event" = "UserPromptSubmit" ]; then
-    gram_hooks_emit_login_nudge "$provider_payload" "$script_dir"
-  else
-    gram_hooks_provider_response "%s" "$native_event" '{}'
-  fi
-  exit 0
-fi
-
-http_code="$GRAM_HTTP_CODE"
-body="$GRAM_HTTP_BODY"
-
-# curl returns 000 on connection failure — treat as block so an unreachable
-# Speakeasy server cannot silently bypass blocking policies.
-if [ "$http_code" -ge 200 ] 2>/dev/null && [ "$http_code" -lt 300 ] 2>/dev/null; then
-  if [ "%s" = "cursor" ] && [ "$native_event" = "beforeSubmitPrompt" ]; then
-    gram_hooks_cursor_mark_prompt_submitted "$provider_payload" "$server_url" "$project_slug"
-  fi
-  if [ -n "$gram_hooks_nonblocking" ]; then
-    body='{}'
-  fi
-  gram_hooks_provider_response "%s" "$native_event" "$body"
-  exit 0
-fi
-
-reason="$(gram_hooks_json_string_value "$body" "message")"
-echo "${reason:-Speakeasy hook returned HTTP ${http_code}}" >&2
-if [ -n "$gram_hooks_nonblocking" ]; then
-  gram_hooks_provider_response "%s" "$native_event" '{}'
-  exit 0
-fi
-exit 2
-`, cfg.ServerURL, projectSlug, cfg.OrgID, nonblocking, renderHookRuntimeSourceSnippet()+cursorMCPEnrichment+claudeMCPEnrichment, renderHookPayloadNormalizationSnippet(platform), platform, platform, platform, platform, platform, platform, platform, platform)
-}
-
-func renderClaudeMCPEnrichmentSnippet() string {
-	return `
-
-gram_hooks_sanitize_claude_mcp_name() {
-  local s="$1"
-  s="${s// /_}"
-  s="${s//(/}"
-  s="${s//)/}"
-  while [[ "$s" == *"__"* ]]; do
-    s="${s//__/_}"
-  done
-  while [[ "$s" == _* ]]; do
-    s="${s#_}"
-  done
-  while [[ "$s" == *_ ]]; do
-    s="${s%_}"
-  done
-  printf '%s' "$s"
-}
-
-gram_hooks_enrich_claude_mcp_payload() {
-  local input="$1"
-  if ! command -v jq >/dev/null 2>&1; then
-    printf '%s' "$input"
-    return
-  fi
-
-  local event
-  event=$(printf '%s' "$input" | jq -r '.hook_event_name // .event_name // .event // empty' 2>/dev/null) || {
-    printf '%s' "$input"
-    return
-  }
-  case "$event" in
-    PreToolUse|PostToolUse|PostToolUseFailure) ;;
-    *)
-      printf '%s' "$input"
-      return
-      ;;
-  esac
-
-  local existing_url
-  existing_url=$(printf '%s' "$input" | jq -r '(.url // .mcp_server_url // "") | select(type == "string")' 2>/dev/null) || true
-  if [ -n "$existing_url" ]; then
-    printf '%s' "$input"
-    return
-  fi
-
-  local tool_name server_identity
-  tool_name=$(printf '%s' "$input" | jq -r '.tool_name // empty | select(type == "string")' 2>/dev/null) || true
-  case "$tool_name" in
-    mcp__*__*) ;;
-    *)
-      printf '%s' "$input"
-      return
-      ;;
-  esac
-  server_identity="${tool_name#mcp__}"
-  server_identity="${server_identity%%__*}"
-  if [ -z "$server_identity" ]; then
-    printf '%s' "$input"
-    return
-  fi
-
-  # Marketplace installs put the sanctioned Gram MCP URLs in sibling feature
-  # plugins' .mcp.json, not in the observability plugin running this hook, so
-  # the sibling configs must be scanned too — otherwise plugin-prefixed calls
-  # lose their URL evidence and Shadow MCP treats them as non-Gram-hosted.
-  local plugin_root=""
-  if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ]; then
-    plugin_root="$CLAUDE_PLUGIN_ROOT"
-  else
-    plugin_root="$(cd "$script_dir/.." 2>/dev/null && pwd)"
-  fi
-  local candidates=("${plugin_root}/.mcp.json")
-  local sibling
-  for sibling in "$(dirname "$plugin_root")"/*/.mcp.json; do
-    [ "$sibling" = "${plugin_root}/.mcp.json" ] && continue
-    candidates+=("$sibling")
-  done
-
-  local matched_name=""
-  local matched_url=""
-  local ambiguous=0
-  local mcp_file rows name url prefix file_plugin_prefix
-  for mcp_file in "${candidates[@]}"; do
-    [ -f "$mcp_file" ] || continue
-    file_plugin_prefix="plugin_$(gram_hooks_sanitize_claude_mcp_name "$(basename "$(dirname "$mcp_file")")")_"
-    rows=$(jq -r '.mcpServers // {} | to_entries[] | [.key, (.value.url // "")] | @tsv' "$mcp_file" 2>/dev/null) || continue
-    while IFS=$'\t' read -r name url; do
-      [ -n "$name" ] && [ -n "$url" ] || continue
-      prefix="$(gram_hooks_sanitize_claude_mcp_name "$name")"
-      if [ "$prefix" != "$server_identity" ] && [ "${file_plugin_prefix}${prefix}" != "$server_identity" ]; then
-        continue
-      fi
-      if [ -z "$matched_url" ]; then
-        matched_name="$name"
-        matched_url="$url"
-        continue
-      fi
-      if [ "$matched_url" != "$url" ]; then
-        ambiguous=1
-        break
-      fi
-    done <<< "$rows"
-    [ "$ambiguous" -eq 0 ] || break
-  done
-
-  # Cowork/cmux sessions name MCP tools by connector UUID, which never
-  # matches a .mcp.json display name. The run's connector config maps
-  # UUID -> URL: CLAUDE_PROJECT_DIR is .../local_<rid>/outputs and the config
-  # sits one directory up as .../local_<rid>.json, falling back to the newest
-  # sibling when the per-run file has not been written yet. Without this
-  # lookup, UUID-prefixed Gram-hosted calls arrive with no URL evidence and
-  # Shadow MCP blocks the customer's own tools.
-  if [ -z "$matched_url" ] && [ "$ambiguous" -eq 0 ] && [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
-    local cowork_json="" candidate_local_dir cowork_parent sibling_json connector_uuid
-    candidate_local_dir="$(dirname "$CLAUDE_PROJECT_DIR")"
-    if [ -f "${candidate_local_dir}.json" ]; then
-      cowork_json="${candidate_local_dir}.json"
-    else
-      cowork_parent="$(dirname "$candidate_local_dir")"
-      if [ -d "$cowork_parent" ]; then
-        sibling_json="$(ls -t "$cowork_parent"/local_*.json 2>/dev/null | head -1)"
-        if [ -n "$sibling_json" ] && [ -f "$sibling_json" ]; then
-          cowork_json="$sibling_json"
-        fi
-      fi
-    fi
-    if [ -n "$cowork_json" ]; then
-      rows=$(jq -r '
-        (.remoteMcpServersConfig // [])[]
-        | [
-            (.uuid // .connectorUuid // .connector_uuid // .id // .connectorId // .connector_id // ""),
-            (.name // .displayName // .display_name // ""),
-            (.url // .serverUrl // .server_url // "")
-          ]
-        | @tsv' "$cowork_json" 2>/dev/null) || rows=""
-      while IFS=$'\t' read -r connector_uuid name url; do
-        [ -n "$url" ] || continue
-        if [ "$connector_uuid" != "$server_identity" ] &&
-          [ "$(gram_hooks_sanitize_claude_mcp_name "$name")" != "$server_identity" ]; then
-          continue
-        fi
-        if [ -z "$matched_url" ]; then
-          matched_name="${name:-$connector_uuid}"
-          matched_url="$url"
-          continue
-        fi
-        if [ "$matched_url" != "$url" ]; then
-          ambiguous=1
-          break
-        fi
-      done <<< "$rows"
-    fi
-  fi
-
-  if [ -z "$matched_url" ] || [ "$ambiguous" -ne 0 ]; then
-    printf '%s' "$input"
-    return
-  fi
-
-  printf '%s' "$input" | jq -c --arg name "$matched_name" --arg identity "$server_identity" --arg url "$matched_url" \
-    '. + {mcp_server_name: $name, server_identity: $identity, url: $url, mcp_server_url: $url}' 2>/dev/null || printf '%s' "$input"
-}
-`
-}
-
-func renderCursorMCPEnrichmentSnippet() string {
-	return `
-
-gram_hooks_stat_uid_mode() {
-  local path="$1"
-  if stat -c '%u %a' "$path" >/dev/null 2>&1; then
-    stat -c '%u %a' "$path"
-    return
-  fi
-  stat -f '%u %Lp' "$path" 2>/dev/null
-}
-
-gram_hooks_trusted_cursor_manifest() {
-  local path="$1"
-  [ -n "$path" ] && [ -f "$path" ] || return 1
-  [ ! -L "$path" ] || return 1
-
-  local dir
-  dir=$(dirname "$path")
-  [ -d "$dir" ] && [ ! -L "$dir" ] || return 1
-
-  local uid file_stat dir_stat file_uid file_mode dir_uid dir_mode
-  uid=$(id -u 2>/dev/null) || return 1
-  file_stat=$(gram_hooks_stat_uid_mode "$path") || return 1
-  dir_stat=$(gram_hooks_stat_uid_mode "$dir") || return 1
-
-  file_uid="${file_stat%% *}"
-  file_mode="${file_stat#* }"
-  dir_uid="${dir_stat%% *}"
-  dir_mode="${dir_stat#* }"
-
-  [ "$file_uid" = "$uid" ] && [ "$dir_uid" = "$uid" ] || return 1
-  [ -n "$file_mode" ] && [ -n "$dir_mode" ] || return 1
-  [ $((8#$file_mode & 022)) -eq 0 ] || return 1
-  [ $((8#$dir_mode & 022)) -eq 0 ] || return 1
-}
-
-gram_hooks_enrich_cursor_mcp_payload() {
-  local input="$1"
-  if ! command -v jq >/dev/null 2>&1; then
-    printf '%s' "$input"
-    return
-  fi
-
-  local event
-  event=$(printf '%s' "$input" | jq -r '.hook_event_name // .event_name // .event // empty' 2>/dev/null) || {
-    printf '%s' "$input"
-    return
-  }
-  case "$event" in
-    beforeMCPExecution|afterMCPExecution) ;;
-    *)
-      printf '%s' "$input"
-      return
-      ;;
-  esac
-
-  local existing_url
-  existing_url=$(printf '%s' "$input" | jq -r '(.url // .mcp_server_url // "") | select(type == "string")' 2>/dev/null) || true
-  if [ -n "$existing_url" ]; then
-    printf '%s' "$input"
-    return
-  fi
-
-  local server_name
-  server_name=$(printf '%s' "$input" | jq -r '(.mcp_server_name // .command // "") | select(type == "string")' 2>/dev/null) || true
-  if [ -z "$server_name" ]; then
-    printf '%s' "$input"
-    return
-  fi
-
-  local roots=()
-  if [ -n "${CURSOR_PLUGIN_ROOT:-}" ]; then
-    roots+=("$(dirname "$CURSOR_PLUGIN_ROOT")")
-  fi
-  if [ -n "${script_dir:-}" ]; then
-    roots+=("$(dirname "$(dirname "$script_dir")")")
-  fi
-  roots+=("${HOME}/.cursor/plugins/local")
-
-  local matched_url=""
-  local ambiguous=0
-  local root mcp_file url
-  for root in "${roots[@]}"; do
-    for mcp_file in "$root"/*/mcp.json; do
-      gram_hooks_trusted_cursor_manifest "$mcp_file" || continue
-      url=$(jq -r --arg name "$server_name" '.mcpServers[$name].url // empty | select(type == "string")' "$mcp_file" 2>/dev/null) || continue
-      [ -n "$url" ] || continue
-      if [ -z "$matched_url" ]; then
-        matched_url="$url"
-        continue
-      fi
-      if [ "$matched_url" != "$url" ]; then
-        ambiguous=1
-        break
-      fi
-    done
-    [ "$ambiguous" -eq 0 ] || break
-  done
-
-  if [ -z "$matched_url" ] || [ "$ambiguous" -ne 0 ]; then
-    printf '%s' "$input"
-    return
-  fi
-
-  printf '%s' "$input" | jq -c --arg url "$matched_url" '. + {url: $url, mcp_server_url: $url}' 2>/dev/null || printf '%s' "$input"
-}
-`
-}
-
-func renderCodexAsyncHookScript() []byte {
-	return []byte(`#!/usr/bin/env bash
-# Generated by Gram. Do not edit - overwritten on every publish.
-#
-# Codex does not support hooks.json async=true yet. This wrapper keeps
-# telemetry-only events off the critical path by copying stdin before the
-# parent hook exits, then forwarding the payload in a background process.
-
-set -u
-
-tmp="$(mktemp "${TMPDIR:-/tmp}/gram-codex-hook.XXXXXX")" || exit 0
-if ! cat > "$tmp"; then
-  rm -f "$tmp"
-  exit 0
-fi
-
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-(
-  bash "$script_dir/hook.sh" < "$tmp" >/dev/null 2>&1
-  rm -f "$tmp"
-) >/dev/null 2>&1 &
-
-exit 0
-`)
-}
-
 // codexHookApproval is a single [hooks.state] entry that pre-approves a Codex
 // hook event without requiring the user to click through Settings → Hooks.
+// Codex hashes the platform-effective command — on Windows commandWindows
+// replaces command before hashing (discovery.rs at the pinned commit) — so an
+// approval carries one hash per platform and the install script picks by OS.
 type codexHookApproval struct {
-	StateKey    string
-	TrustedHash string
+	StateKey           string
+	TrustedHash        string
+	TrustedHashWindows string
 }
 
 // codexEventSnakeCase maps PascalCase Codex hook event names to the snake_case
@@ -2454,8 +1304,8 @@ func codexEventSnakeCase(event string) string {
 //     sha256(canonical_json({event_name, hooks:[{async, command, timeout, type}]}))
 //     (no matcher field — these events predate the matcher-group schema in fingerprint.rs)
 //
-// The command uses the literal string "$HOME" (not expanded), so the hash is
-// deterministic for a given marketplace + plugin name pair.
+// The command keeps ${PLUGIN_ROOT} literal while hashing; Codex expands plugin
+// variables only after trust verification.
 func computeCodexHookHash(event, command string) (string, error) {
 	eventSnake := codexEventSnakeCase(event)
 	hook := map[string]any{
@@ -2486,42 +1336,54 @@ func computeCodexHookHash(event, command string) (string, error) {
 	return fmt.Sprintf("sha256:%x", sum), nil
 }
 
+// codexHookParams returns the timeout and relay --async flag for a Codex hook
+// event. The command string embeds both, and Codex trust-hashes the command,
+// so the hooks.json generator and the precomputed approvals must derive them
+// from this single source.
+func codexHookParams(event string) (timeoutSeconds int, async bool) {
+	async = event == "PostToolUse" || event == "Stop"
+	timeoutSeconds = 60
+	if event == "SessionStart" {
+		timeoutSeconds = 330
+	}
+	return timeoutSeconds, async
+}
+
 // computeCodexHookApprovals returns pre-computed [hooks.state] entries for all
 // Codex observability hook events for a given marketplace and plugin name.
 func computeCodexHookApprovals(marketplace, plugin string) ([]codexHookApproval, error) {
-	approvals := make([]codexHookApproval, 0, len(CodexObservabilityHookEvents)+1)
+	approvals := make([]codexHookApproval, 0, len(CodexObservabilityHookEvents))
 	for _, event := range CodexObservabilityHookEvents {
 		snake := codexEventSnakeCase(event)
-		scripts := []string{codexHookScriptName(event)}
-		if event == "SessionStart" {
-			scripts = append([]string{"auth_preflight.sh"}, scripts...)
+		timeoutSeconds, async := codexHookParams(event)
+		hash, err := computeCodexHookHash(event, codexHookCommandString(timeoutSeconds, async))
+		if err != nil {
+			return nil, fmt.Errorf("compute hash for %s hook: %w", event, err)
 		}
-		for hookIndex, script := range scripts {
-			command := codexHookCommandString(marketplace, plugin, script)
-			hash, err := computeCodexHookHash(event, command)
-			if err != nil {
-				return nil, fmt.Errorf("compute hash for %s hook %d: %w", event, hookIndex, err)
-			}
-			approvals = append(approvals, codexHookApproval{
-				StateKey:    fmt.Sprintf(`%s@%s:hooks/hooks.json:%s:0:%d`, plugin, marketplace, snake, hookIndex),
-				TrustedHash: hash,
-			})
+		windowsHash, err := computeCodexHookHash(event, codexHookCommandStringWindows(timeoutSeconds, async))
+		if err != nil {
+			return nil, fmt.Errorf("compute windows hash for %s hook: %w", event, err)
 		}
+		approvals = append(approvals, codexHookApproval{
+			StateKey:           fmt.Sprintf(`%s@%s:hooks/hooks.json:%s:0:0`, plugin, marketplace, snake),
+			TrustedHash:        hash,
+			TrustedHashWindows: windowsHash,
+		})
 	}
 	return approvals, nil
 }
 
-func codexHookScriptName(event string) string {
-	switch event {
-	case "SessionStart", "PostToolUse", "Stop":
-		return "hook_async.sh"
-	default:
-		return "hook.sh"
-	}
+// codexHookCommandString / codexHookCommandStringWindows are the single source
+// for the command strings emitted into the Codex hooks.json (command /
+// commandWindows) AND hashed into the precomputed approvals — Codex hashes the
+// command string verbatim, so any drift between the two call sites silently
+// untrusts every hook.
+func codexHookCommandString(timeoutSeconds int, async bool) string {
+	return hooksBootstrapCommand(`${PLUGIN_ROOT}`, "codex", timeoutSeconds, async)
 }
 
-func codexHookCommandString(marketplace, plugin, script string) string {
-	return fmt.Sprintf(`bash "$HOME/.codex/.tmp/marketplaces/%s/%s/hooks/%s"`, marketplace, plugin, script)
+func codexHookCommandStringWindows(timeoutSeconds int, async bool) string {
+	return hooksPowerShellCommand(`${PLUGIN_ROOT}`, "codex", timeoutSeconds, async)
 }
 
 // GenerateCodexInstallScript produces a bash install script that:
@@ -2555,8 +1417,7 @@ func renderCodexInstallScript(marketplaceURL, marketplace, plugin string, approv
 	fmt.Fprintf(&b, "PLUGIN_KEY=%q\n\n", plugin)
 
 	// Desktop-only and MDM-deployed machines run without codex on PATH; probe
-	// the managed-install and app-bundle locations. Candidate list mirrors
-	// find_codex in the generated hook script.
+	// the managed-install and app-bundle locations.
 	b.WriteString(`find_codex() {
   if command -v codex >/dev/null 2>&1; then
     command -v codex
@@ -2583,27 +1444,35 @@ CODEX_BIN="$(find_codex || true)"
 	// Step 1: marketplace registration differs for remote vs local ZIP installs.
 	if marketplaceURL != "" {
 		fmt.Fprintf(&b, "MARKETPLACE_URL=%q\n\n", marketplaceURL)
-		b.WriteString(`# ── 1. Register & sync marketplace ──────────────────────────────────────────
+		b.WriteString(`# ── 1. Register marketplace & install plugin ────────────────────────────────
 echo "→ Registering Speakeasy marketplace..."
 if [ -n "${CODEX_BIN}" ]; then
   # add is idempotent (no-ops if already registered); upgrade pulls any new commits.
   "${CODEX_BIN}" plugin marketplace add "${MARKETPLACE_URL}" || true
   "${CODEX_BIN}" plugin marketplace upgrade "${MARKETPLACE_KEY}"
+  # Registering the marketplace only makes the plugin available; it must also
+  # be installed. plugin add is idempotent.
+  "${CODEX_BIN}" plugin add "${PLUGIN_KEY}@${MARKETPLACE_KEY}"
 else
   echo "  ⚠  'codex' executable not found."
   echo "     Run manually: codex plugin marketplace add '${MARKETPLACE_URL}'"
+  echo "     Then:         codex plugin add '${PLUGIN_KEY}@${MARKETPLACE_KEY}'"
 fi
 
 `)
 	} else {
-		b.WriteString(`# ── 1. Register marketplace (local ZIP install) ──────────────────────────────
+		b.WriteString(`# ── 1. Register marketplace & install plugin (local ZIP install) ────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 echo "→ Registering Speakeasy marketplace from ${SCRIPT_DIR}..."
 if [ -n "${CODEX_BIN}" ]; then
-  "${CODEX_BIN}" plugin marketplace add "${SCRIPT_DIR}"
+  "${CODEX_BIN}" plugin marketplace add "${SCRIPT_DIR}" || true
+  # Registering the marketplace only makes the plugin available; it must also
+  # be installed. plugin add is idempotent.
+  "${CODEX_BIN}" plugin add "${PLUGIN_KEY}@${MARKETPLACE_KEY}"
 else
   echo "  ⚠  'codex' executable not found."
   echo "     Run manually: codex plugin marketplace add '${SCRIPT_DIR}'"
+  echo "     Then:         codex plugin add '${PLUGIN_KEY}@${MARKETPLACE_KEY}'"
 fi
 
 `)
@@ -2614,28 +1483,44 @@ fi
 	// does not expand $PLUGIN_KEY etc. inside the Python source.
 	b.WriteString(`# ── 2. Patch ~/.codex/config.toml ────────────────────────────────────────────
 echo "→ Configuring ~/.codex/config.toml..."
+# Codex hashes the platform-effective hook command (commandWindows replaces
+# command on Windows before hashing), so the trusted hash to install differs
+# per platform. The quoted heredoc hides bash variables from Python; pass the
+# platform through the environment.
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) SPEAKEASY_HOOKS_OS=windows ;;
+  *) SPEAKEASY_HOOKS_OS=unix ;;
+esac
+export SPEAKEASY_HOOKS_OS
 python3 - <<'PYTHON'
 import os, re
+
+WINDOWS = os.environ.get("SPEAKEASY_HOOKS_OS") == "windows"
 
 config_path = os.path.expanduser("~/.codex/config.toml")
 os.makedirs(os.path.dirname(config_path), exist_ok=True)
 content = open(config_path).read() if os.path.exists(config_path) else ""
 
+# TOML permits leading whitespace before keys and table headers, and Codex's
+# own config writer emits indented entries — every line anchor below must
+# tolerate it or a re-install inserts duplicates into an indented config,
+# which fails to parse and takes Codex down entirely.
+
 # A root-level dotted key implicitly defines its parent table and conflicts
 # with an explicit [table] header elsewhere in the file. Only the region
 # before the first table header is touched.
 def strip_root_dotted_key(text, key):
-    m = re.search(r'(?m)^\[', text)
+    m = re.search(r'(?m)^[ \t]*\[', text)
     root, rest = (text[:m.start()], text[m.start():]) if m else (text, "")
-    root = re.sub(r'(?m)^' + re.escape(key) + r'\s*=.*\n?', '', root)
+    root = re.sub(r'(?m)^[ \t]*' + re.escape(key) + r'\s*=.*\n?', '', root)
     return root + rest
 
 def table_body_bounds(text, table_header):
-    m = re.search(r'(?m)^' + re.escape(table_header) + r'(?:\s*(?:#.*)?)?(?:\n|$)', text)
+    m = re.search(r'(?m)^[ \t]*' + re.escape(table_header) + r'(?:\s*(?:#.*)?)?(?:\n|$)', text)
     if not m:
         return None
     start = m.end()
-    m2 = re.search(r'(?m)^\[', text[start:])
+    m2 = re.search(r'(?m)^[ \t]*\[', text[start:])
     end = start + m2.start() if m2 else len(text)
     return start, end
 
@@ -2643,7 +1528,7 @@ def ensure_table_entry(text, table_header, key, value):
     bounds = table_body_bounds(text, table_header)
     if bounds is None:
         return text.rstrip('\n') + '\n\n' + table_header + '\n' + key + ' = ' + value + '\n'
-    if re.search(r'(?m)^' + re.escape(key) + r'\s*=', text[bounds[0]:bounds[1]]):
+    if re.search(r'(?m)^[ \t]*' + re.escape(key) + r'\s*=', text[bounds[0]:bounds[1]]):
         return text
     prefix = text[:bounds[0]]
     if not prefix.endswith('\n'):
@@ -2665,17 +1550,19 @@ content = ensure_table_entry(content, "[features]", "hooks", "true")
 content = ensure_table_entry(content, "[features]", "plugin_hooks", "true")
 
 # Qualified [hooks.state."…"] sections do not require a bare parent header.
-if not has_table_header(content, "[hooks.state]") and not re.search(r'(?m)^\[hooks\.state\.', content):
+if not has_table_header(content, "[hooks.state]") and not re.search(r'(?m)^[ \t]*\[hooks\.state\.', content):
     content = content.rstrip('\n') + '\n\n[hooks.state]\n'
 
-for state_key, trusted_hash in [
+for state_key, trusted_hash, trusted_hash_windows in [
 `)
 
 	for _, a := range approvals {
-		fmt.Fprintf(&b, "    (%q, %q),\n", a.StateKey, a.TrustedHash)
+		fmt.Fprintf(&b, "    (%q, %q, %q),\n", a.StateKey, a.TrustedHash, a.TrustedHashWindows)
 	}
 
 	b.WriteString(`]:
+    if WINDOWS:
+        trusted_hash = trusted_hash_windows
     section = f'[hooks.state."{state_key}"]'
     if not has_table_header(content, section):
         entry = f'\n{section}\nenabled = true\ntrusted_hash = "{trusted_hash}"\n'
@@ -2779,7 +1666,45 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 	}
 	files[path.Join(subdir, ".mcp.json")] = mcpJSON
 
+	emitPluginSkills(files, subdir, p)
+
 	return nil
+}
+
+// emitPluginSkills writes the plugin's distributed skills as
+// skills/<name>/SKILL.md under the platform plugin directory — the layout
+// Claude Code, Cursor, and Codex all load plugin skills from. Names are
+// normalized at skill creation, but they become filesystem paths in a
+// published repo — refuse anything that isn't a plain lowercase slug rather
+// than trust the invariant across the DB boundary.
+func emitPluginSkills(files map[string][]byte, subdir string, p PluginInfo) {
+	for _, sk := range p.Skills {
+		if !validSkillDirName(sk.Name) {
+			continue
+		}
+		files[path.Join(subdir, "skills", sk.Name, "SKILL.md")] = []byte(sk.Content)
+	}
+}
+
+// validSkillDirName reports whether a skill name is safe to use as a package
+// directory: 1-64 chars of lowercase alphanumerics and single interior
+// hyphens, mirroring the skill spec's name rules.
+func validSkillDirName(name string) bool {
+	if len(name) == 0 || len(name) > 64 || name[0] == '-' || name[len(name)-1] == '-' {
+		return false
+	}
+	previousHyphen := false
+	for _, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z' || r >= '0' && r <= '9':
+			previousHyphen = false
+		case r == '-' && !previousHyphen:
+			previousHyphen = true
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func generateCursorPluginInDir(files map[string][]byte, subdir, name string, p PluginInfo, cfg GenerateConfig) error {
@@ -2828,6 +1753,8 @@ func generateCursorPluginInDir(files map[string][]byte, subdir, name string, p P
 		return fmt.Errorf("marshal mcp.json: %w", err)
 	}
 	files[path.Join(subdir, "mcp.json")] = mcpJSON
+
+	emitPluginSkills(files, subdir, p)
 
 	return nil
 }
@@ -2962,9 +1889,19 @@ type codexMatcherGroup struct {
 	Hooks   []codexHookCommand `json:"hooks"`
 }
 
+// commandWindows is supported by Codex hook_config.rs at
+// 5bed6447998c754d154dbd796517310b8f04d4ce. On Windows it replaces command
+// before execution. Codex substitutes plugin variables only in the ${KEY}
+// textual form (discovery.rs), so commandWindows must use ${PLUGIN_ROOT},
+// never PowerShell-only $env: expansion. Trust hashing happens after that
+// replacement (discovery.rs normalizes command_windows into command before
+// hashing), so Windows machines verify against a hash of the commandWindows
+// string — precomputed approvals carry both hashes and the install script
+// selects by platform.
 type codexHookCommand struct {
-	Type    string `json:"type"`
-	Command string `json:"command"`
+	Type           string `json:"type"`
+	Command        string `json:"command"`
+	CommandWindows string `json:"commandWindows,omitempty"`
 }
 
 // CodexObservabilityHookEvents are Codex's hook event names. Codex uses
@@ -3038,5 +1975,8 @@ func marshalJSON(v any) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("marshal JSON: %w", err)
 	}
-	return b, nil
+	// Newline-terminate: these bytes land on disk as files, and the checked-in
+	// dogfood mirrors are formatted by hk (oxfmt), which enforces a trailing
+	// newline -- the render must match byte-for-byte.
+	return append(b, '\n'), nil
 }

@@ -14,20 +14,28 @@ import (
 
 const addPluginAssignment = `-- name: AddPluginAssignment :one
 INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn)
-VALUES ($1, $2, $3)
+SELECT p.id, $1, $2
+FROM plugins p
+WHERE p.id = $3
+  AND p.organization_id = $1
+  AND p.deleted IS FALSE
 ON CONFLICT (plugin_id, principal_urn) DO UPDATE
   SET principal_urn = EXCLUDED.principal_urn
 RETURNING id, plugin_id, organization_id, principal_urn, created_at, updated_at
 `
 
 type AddPluginAssignmentParams struct {
-	PluginID       uuid.UUID
 	OrganizationID string
 	PrincipalUrn   string
+	PluginID       uuid.UUID
 }
 
+// Scoped to the org: the row is inserted only when @plugin_id resolves to a
+// non-deleted plugin in @organization_id, so a mismatched (plugin, org) pair
+// can never create a cross-tenant assignment. Returns no row (ErrNoRows) when
+// the plugin does not belong to the org.
 func (q *Queries) AddPluginAssignment(ctx context.Context, arg AddPluginAssignmentParams) (PluginAssignment, error) {
-	row := q.db.QueryRow(ctx, addPluginAssignment, arg.PluginID, arg.OrganizationID, arg.PrincipalUrn)
+	row := q.db.QueryRow(ctx, addPluginAssignment, arg.OrganizationID, arg.PrincipalUrn, arg.PluginID)
 	var i PluginAssignment
 	err := row.Scan(
 		&i.ID,
@@ -91,6 +99,39 @@ func (q *Queries) AddPluginServer(ctx context.Context, arg AddPluginServerParams
 	return i, err
 }
 
+const createDefaultPlugin = `-- name: CreateDefaultPlugin :one
+INSERT INTO plugins (organization_id, project_id, name, slug, is_default)
+VALUES ($1, $2, 'Default', 'default', TRUE)
+RETURNING id, organization_id, project_id, name, slug, description, is_default, created_at, updated_at, deleted_at, deleted
+`
+
+type CreateDefaultPluginParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+// Creates the project's fallback plugin (new servers land here absent explicit
+// routing to a named plugin). Called once, in the same transaction as project
+// creation. plugins_project_id_is_default_key enforces at most one per project.
+func (q *Queries) CreateDefaultPlugin(ctx context.Context, arg CreateDefaultPluginParams) (Plugin, error) {
+	row := q.db.QueryRow(ctx, createDefaultPlugin, arg.OrganizationID, arg.ProjectID)
+	var i Plugin
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.IsDefault,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const createPlugin = `-- name: CreatePlugin :one
 
 INSERT INTO plugins (organization_id, project_id, name, slug, description)
@@ -133,6 +174,19 @@ func (q *Queries) CreatePlugin(ctx context.Context, arg CreatePluginParams) (Plu
 	return i, err
 }
 
+const deleteGitHubConnection = `-- name: DeleteGitHubConnection :exec
+DELETE FROM plugin_github_connections WHERE project_id = $1
+`
+
+// Hard-deletes a project's GitHub connection row. plugin_github_connections
+// has no soft-delete column of its own; used only to reclaim a stale row left
+// behind by a soft-deleted project (see GetGitHubConnectionOwner) so its repo
+// slot can be reused by the project that now legitimately claims it.
+func (q *Queries) DeleteGitHubConnection(ctx context.Context, projectID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteGitHubConnection, projectID)
+	return err
+}
+
 const deletePlugin = `-- name: DeletePlugin :exec
 UPDATE plugins
 SET deleted_at = clock_timestamp(),
@@ -154,8 +208,44 @@ func (q *Queries) DeletePlugin(ctx context.Context, arg DeletePluginParams) erro
 	return err
 }
 
+const getDefaultPlugin = `-- name: GetDefaultPlugin :one
+SELECT id, organization_id, project_id, name, slug, description, is_default, created_at, updated_at, deleted_at, deleted
+FROM plugins
+WHERE organization_id = $1
+  AND project_id = $2
+  AND is_default IS TRUE
+  AND deleted IS FALSE
+`
+
+type GetDefaultPluginParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+// Used by AttachToDefaultPlugin to find the fallback plugin new servers get
+// auto-attached to. No rows is expected for projects that predate the
+// Default-plugin feature; callers treat pgx.ErrNoRows as a no-op.
+func (q *Queries) GetDefaultPlugin(ctx context.Context, arg GetDefaultPluginParams) (Plugin, error) {
+	row := q.db.QueryRow(ctx, getDefaultPlugin, arg.OrganizationID, arg.ProjectID)
+	var i Plugin
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.IsDefault,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getGitHubConnection = `-- name: GetGitHubConnection :one
-SELECT id, project_id, installation_id, repo_owner, repo_name, marketplace_token, published_fingerprint, created_at, updated_at
+SELECT id, project_id, installation_id, repo_owner, repo_name, marketplace_token, published_fingerprint, published_mcp_fingerprints, published_hooks_version, published_hooks_config, created_at, updated_at
 FROM plugin_github_connections
 WHERE project_id = $1
 `
@@ -171,6 +261,9 @@ func (q *Queries) GetGitHubConnection(ctx context.Context, projectID uuid.UUID) 
 		&i.RepoName,
 		&i.MarketplaceToken,
 		&i.PublishedFingerprint,
+		&i.PublishedMcpFingerprints,
+		&i.PublishedHooksVersion,
+		&i.PublishedHooksConfig,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -178,7 +271,7 @@ func (q *Queries) GetGitHubConnection(ctx context.Context, projectID uuid.UUID) 
 }
 
 const getGitHubConnectionByMarketplaceToken = `-- name: GetGitHubConnectionByMarketplaceToken :one
-SELECT id, project_id, installation_id, repo_owner, repo_name, marketplace_token, published_fingerprint, created_at, updated_at
+SELECT id, project_id, installation_id, repo_owner, repo_name, marketplace_token, published_fingerprint, published_mcp_fingerprints, published_hooks_version, published_hooks_config, created_at, updated_at
 FROM plugin_github_connections
 WHERE marketplace_token = $1
 `
@@ -196,9 +289,45 @@ func (q *Queries) GetGitHubConnectionByMarketplaceToken(ctx context.Context, mar
 		&i.RepoName,
 		&i.MarketplaceToken,
 		&i.PublishedFingerprint,
+		&i.PublishedMcpFingerprints,
+		&i.PublishedHooksVersion,
+		&i.PublishedHooksConfig,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
+	return i, err
+}
+
+const getGitHubConnectionOwner = `-- name: GetGitHubConnectionOwner :one
+SELECT c.project_id, p.deleted AS project_deleted
+FROM plugin_github_connections c
+JOIN projects p ON p.id = c.project_id
+WHERE c.installation_id = $1
+  AND LOWER(c.repo_owner) = LOWER($2)
+  AND LOWER(c.repo_name) = LOWER($3)
+`
+
+type GetGitHubConnectionOwnerParams struct {
+	InstallationID int64
+	RepoOwner      string
+	RepoName       string
+}
+
+type GetGitHubConnectionOwnerRow struct {
+	ProjectID      uuid.UUID
+	ProjectDeleted bool
+}
+
+// Resolves which project currently owns a given installation/repo pair, and
+// whether that project has since been soft-deleted. Used to self-heal a
+// plugin_github_connections_installation_repo_key conflict on
+// UpsertGitHubConnection: a soft-deleted project's repo claim is stale (soft
+// deletes never clean up this table) and can be reclaimed by whichever
+// active project computes the same repo name next.
+func (q *Queries) GetGitHubConnectionOwner(ctx context.Context, arg GetGitHubConnectionOwnerParams) (GetGitHubConnectionOwnerRow, error) {
+	row := q.db.QueryRow(ctx, getGitHubConnectionOwner, arg.InstallationID, arg.RepoOwner, arg.RepoName)
+	var i GetGitHubConnectionOwnerRow
+	err := row.Scan(&i.ProjectID, &i.ProjectDeleted)
 	return i, err
 }
 
@@ -311,6 +440,44 @@ func (q *Queries) GetPlugin(ctx context.Context, arg GetPluginParams) (Plugin, e
 	return i, err
 }
 
+const getPluginServerByBackend = `-- name: GetPluginServerByBackend :one
+SELECT id, plugin_id, toolset_id, mcp_server_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted FROM plugin_servers
+WHERE plugin_id = $1
+  AND toolset_id IS NOT DISTINCT FROM $2::uuid
+  AND mcp_server_id IS NOT DISTINCT FROM $3::uuid
+  AND deleted IS FALSE
+`
+
+type GetPluginServerByBackendParams struct {
+	PluginID    uuid.UUID
+	ToolsetID   uuid.NullUUID
+	McpServerID uuid.NullUUID
+}
+
+// Look up a live plugin server by its backend (toolset or mcp_server).
+// Used by AttachToDefaultPlugin to no-op on already-attached servers before
+// inserting: a duplicate insert can trip the (plugin_id, display_name)
+// unique index rather than a backend one, and either way the failed
+// statement aborts the caller's surrounding transaction.
+func (q *Queries) GetPluginServerByBackend(ctx context.Context, arg GetPluginServerByBackendParams) (PluginServer, error) {
+	row := q.db.QueryRow(ctx, getPluginServerByBackend, arg.PluginID, arg.ToolsetID, arg.McpServerID)
+	var i PluginServer
+	err := row.Scan(
+		&i.ID,
+		&i.PluginID,
+		&i.ToolsetID,
+		&i.McpServerID,
+		&i.DisplayName,
+		&i.Policy,
+		&i.SortOrder,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getProjectMarketplaceNameContext = `-- name: GetProjectMarketplaceNameContext :one
 SELECT
   pr.slug AS project_slug,
@@ -343,6 +510,35 @@ func (q *Queries) GetProjectMarketplaceNameContext(ctx context.Context, projectI
 	return i, err
 }
 
+const isDefaultProject = `-- name: IsDefaultProject :one
+SELECT (
+  SELECT p.id
+  FROM projects p
+  WHERE p.organization_id = $1
+    AND p.deleted IS FALSE
+  ORDER BY p.id ASC
+  LIMIT 1
+) = $2 AS is_default
+`
+
+type IsDefaultProjectParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+// Whether @project_id is the org's default project — the oldest (first by id
+// ASC) non-deleted project, created at org setup. Mirrors the default-project
+// definition the agent's getPlugins read path uses, so the audience the seeding
+// side grants matches the project the delivery side treats as default. Used to
+// decide whether a new plugin defaults to the org-wide audience: only plugins in
+// the default project do; plugins in other projects default to no assignments.
+func (q *Queries) IsDefaultProject(ctx context.Context, arg IsDefaultProjectParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isDefaultProject, arg.OrganizationID, arg.ProjectID)
+	var is_default bool
+	err := row.Scan(&is_default)
+	return is_default, err
+}
+
 const isOrganizationFeatureEnabled = `-- name: IsOrganizationFeatureEnabled :one
 SELECT EXISTS (
   SELECT 1
@@ -360,12 +556,62 @@ type IsOrganizationFeatureEnabledParams struct {
 
 // Reports whether an organization feature flag is enabled. Mirrors the
 // productfeatures service's read against organization_features so the generator
-// can honour org-level toggles (e.g. observability_mode) at generation time.
+// can honour org-level toggles (e.g. hooks_fail_open) at generation time.
 func (q *Queries) IsOrganizationFeatureEnabled(ctx context.Context, arg IsOrganizationFeatureEnabledParams) (bool, error) {
 	row := q.db.QueryRow(ctx, isOrganizationFeatureEnabled, arg.OrganizationID, arg.FeatureName)
 	var enabled bool
 	err := row.Scan(&enabled)
 	return enabled, err
+}
+
+const listOrgPluginPublishTargets = `-- name: ListOrgPluginPublishTargets :many
+SELECT
+  c.project_id,
+  k.created_by_user_id
+FROM plugin_github_connections c
+JOIN projects p ON p.id = c.project_id AND p.deleted IS FALSE
+JOIN LATERAL (
+  SELECT created_by_user_id
+  FROM api_keys
+  WHERE project_id = c.project_id
+    AND deleted IS FALSE
+    AND name LIKE 'plugins-mcp-%'
+  ORDER BY created_at DESC
+  LIMIT 1
+) k ON TRUE
+WHERE p.organization_id = $1
+ORDER BY c.project_id ASC
+`
+
+type ListOrgPluginPublishTargetsRow struct {
+	ProjectID       uuid.UUID
+	CreatedByUserID string
+}
+
+// Lists every project in one organization that has a GitHub plugin connection,
+// with the actor user for each (the creator of the project's most recent
+// plugins-mcp API key), so an org-level setting change (e.g. browser login)
+// can be republished to all of the org's marketplaces. Like
+// ListPluginPublishCandidates this is a deliberate cross-project sweep, but it is
+// constrained to a single organization rather than scanning globally.
+func (q *Queries) ListOrgPluginPublishTargets(ctx context.Context, organizationID string) ([]ListOrgPluginPublishTargetsRow, error) {
+	rows, err := q.db.Query(ctx, listOrgPluginPublishTargets, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrgPluginPublishTargetsRow
+	for rows.Next() {
+		var i ListOrgPluginPublishTargetsRow
+		if err := rows.Scan(&i.ProjectID, &i.CreatedByUserID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listPluginAssignments = `-- name: ListPluginAssignments :many
@@ -403,21 +649,24 @@ func (q *Queries) ListPluginAssignments(ctx context.Context, pluginID uuid.UUID)
 
 const listPluginPublishCandidates = `-- name: ListPluginPublishCandidates :many
 SELECT
-  c.project_id,
-  k.created_by_user_id
-FROM plugin_github_connections c
-JOIN projects p ON p.id = c.project_id AND p.deleted IS FALSE
-JOIN LATERAL (
+  cp.project_id,
+  COALESCE(k.created_by_user_id, 'system') AS created_by_user_id
+FROM (
+  SELECT c.project_id FROM plugin_github_connections c WHERE c.project_id > $1
+  UNION
+  SELECT dp.project_id FROM plugins dp WHERE dp.is_default IS TRUE AND dp.deleted IS FALSE AND dp.project_id > $1
+) cp
+JOIN projects p ON p.id = cp.project_id AND p.deleted IS FALSE
+LEFT JOIN LATERAL (
   SELECT created_by_user_id
   FROM api_keys
-  WHERE project_id = c.project_id
+  WHERE project_id = cp.project_id
     AND deleted IS FALSE
     AND name LIKE 'plugins-mcp-%'
   ORDER BY created_at DESC
   LIMIT 1
 ) k ON TRUE
-WHERE c.project_id > $1
-ORDER BY c.project_id ASC
+ORDER BY cp.project_id ASC
 LIMIT $2
 `
 
@@ -431,11 +680,27 @@ type ListPluginPublishCandidatesRow struct {
 	CreatedByUserID string
 }
 
-// Lists projects with a GitHub plugin connection for the automated generator
-// rollout, paginated by project_id (pass the zero UUID to start). Each row
-// carries the user that created the project's most recent plugins-mcp API key,
-// used as the publish actor. This is a deliberate cross-project sweep, so unlike
-// the tenant-scoped queries it is not constrained to a single project_id.
+// Lists candidates for the automated generator rollout, paginated by
+// project_id (pass the zero UUID to start): the union of (a) projects that
+// have published before (a plugin_github_connections row exists) -- the
+// original rollout population, kept so an already-connected project isn't
+// silently dropped just because it predates the Default-plugin feature and
+// has had no new attach activity since -- and (b) projects with a Default
+// plugin, published or not. (b) is the periodic safety net for the
+// best-effort initial-publish trigger fired inline by
+// CreateProject/toolsets/mcpendpoints: if that enqueue is ever lost (e.g. a
+// crash between commit and enqueue), this sweep picks it up within one tick
+// instead of leaving it stuck until a human notices. Republishing an
+// unchanged project is cheap -- SkipIfUnchanged short-circuits on the
+// fingerprint check before any GitHub/key work. Each row carries the user
+// that created the project's most recent plugins-mcp API key as the
+// publish actor, falling back to 'system' for a project that has never
+// published (no such key exists yet). This is a deliberate cross-project
+// sweep, so unlike the tenant-scoped queries it is not constrained to a
+// single project_id. The after_project_id filter is applied inside each
+// UNION branch rather than the outer query -- sqlc's analyzer can't resolve
+// an outer WHERE referencing the derived table's alias once a LATERAL join
+// follows it ("table alias does not exist").
 func (q *Queries) ListPluginPublishCandidates(ctx context.Context, arg ListPluginPublishCandidatesParams) ([]ListPluginPublishCandidatesRow, error) {
 	rows, err := q.db.Query(ctx, listPluginPublishCandidates, arg.AfterProjectID, arg.ResultLimit)
 	if err != nil {
@@ -485,6 +750,128 @@ func (q *Queries) ListPluginServers(ctx context.Context, pluginID uuid.UUID) ([]
 			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPluginServersByPluginIDs = `-- name: ListPluginServersByPluginIDs :many
+SELECT plugin_servers.id, plugin_servers.plugin_id, plugin_servers.toolset_id, plugin_servers.mcp_server_id, plugin_servers.display_name, plugin_servers.policy, plugin_servers.sort_order, plugin_servers.created_at, plugin_servers.updated_at, plugin_servers.deleted_at, plugin_servers.deleted
+FROM plugin_servers
+JOIN plugins ON plugins.id = plugin_servers.plugin_id
+WHERE plugin_servers.plugin_id = ANY($1::uuid[])
+  AND plugins.project_id = $2
+  AND plugin_servers.deleted IS FALSE
+ORDER BY plugin_servers.plugin_id, plugin_servers.sort_order ASC, plugin_servers.created_at ASC
+`
+
+type ListPluginServersByPluginIDsParams struct {
+	PluginIds []uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Batch variant of ListPluginServers for callers that need every server for
+// a set of plugins (e.g. ListPlugins) without one round-trip per plugin.
+// Joins plugins and scopes by project_id as defense-in-depth, so this stays
+// safe even if a future caller passes plugin IDs it hasn't already scoped.
+func (q *Queries) ListPluginServersByPluginIDs(ctx context.Context, arg ListPluginServersByPluginIDsParams) ([]PluginServer, error) {
+	rows, err := q.db.Query(ctx, listPluginServersByPluginIDs, arg.PluginIds, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PluginServer
+	for rows.Next() {
+		var i PluginServer
+		if err := rows.Scan(
+			&i.ID,
+			&i.PluginID,
+			&i.ToolsetID,
+			&i.McpServerID,
+			&i.DisplayName,
+			&i.Policy,
+			&i.SortOrder,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPluginSkillsForProject = `-- name: ListPluginSkillsForProject :many
+SELECT
+  p.id AS plugin_id,
+  p.name AS plugin_name,
+  p.slug AS plugin_slug,
+  p.description AS plugin_description,
+  s.name AS skill_name,
+  resolved.content AS skill_content
+FROM skill_distributions sd
+JOIN plugins p ON p.id = sd.plugin_id AND p.deleted IS FALSE
+JOIN skills s
+  ON s.project_id = sd.project_id
+  AND s.id = sd.skill_id
+  AND s.archived_at IS NULL
+JOIN LATERAL (
+  SELECT sv.content
+  FROM skill_versions sv
+  WHERE sv.skill_id = sd.skill_id
+    AND sv.spec_valid IS TRUE
+    AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
+  ORDER BY sv.created_at DESC, sv.id DESC
+  LIMIT 1
+) resolved ON TRUE
+WHERE sd.project_id = $1
+  AND sd.channel = 'plugin'
+  AND sd.revoked_at IS NULL
+ORDER BY p.slug ASC, s.name ASC
+`
+
+type ListPluginSkillsForProjectRow struct {
+	PluginID          uuid.UUID
+	PluginName        string
+	PluginSlug        string
+	PluginDescription pgtype.Text
+	SkillName         string
+	SkillContent      string
+}
+
+// Plugin-generation companion to ListPluginsWithServersForProject covering
+// skill distributions: each active distribution's plugin identity, skill name,
+// and resolved manifest content (the pinned version when set, otherwise the
+// latest valid version). Distributions with no valid resolvable version are
+// dropped — packages only ever carry valid manifests. Plugin identity is
+// selected here so a skills-only plugin (no servers) still generates a package.
+func (q *Queries) ListPluginSkillsForProject(ctx context.Context, projectID uuid.UUID) ([]ListPluginSkillsForProjectRow, error) {
+	rows, err := q.db.Query(ctx, listPluginSkillsForProject, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPluginSkillsForProjectRow
+	for rows.Next() {
+		var i ListPluginSkillsForProjectRow
+		if err := rows.Scan(
+			&i.PluginID,
+			&i.PluginName,
+			&i.PluginSlug,
+			&i.PluginDescription,
+			&i.SkillName,
+			&i.SkillContent,
 		); err != nil {
 			return nil, err
 		}
@@ -731,6 +1118,46 @@ func (q *Queries) ListPluginsWithServersForProject(ctx context.Context, projectI
 	return items, nil
 }
 
+const promoteToDefaultPlugin = `-- name: PromoteToDefaultPlugin :one
+UPDATE plugins
+SET is_default = TRUE,
+    updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND project_id = $2
+  AND slug = 'default'
+  AND deleted IS FALSE
+RETURNING id, organization_id, project_id, name, slug, description, is_default, created_at, updated_at, deleted_at, deleted
+`
+
+type PromoteToDefaultPluginParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+// Self-heals projects that already have a plugin sitting on the reserved
+// "default" slug (e.g. created manually before this feature shipped) by
+// flagging it as the project's is_default plugin. Called by
+// EnsureDefaultPlugin when CreateDefaultPlugin loses to
+// plugins_organization_id_project_id_slug_key instead of the is_default race.
+func (q *Queries) PromoteToDefaultPlugin(ctx context.Context, arg PromoteToDefaultPluginParams) (Plugin, error) {
+	row := q.db.QueryRow(ctx, promoteToDefaultPlugin, arg.OrganizationID, arg.ProjectID)
+	var i Plugin
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.IsDefault,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const removeAllPluginAssignments = `-- name: RemoveAllPluginAssignments :execrows
 DELETE FROM plugin_assignments
 WHERE plugin_id = $1
@@ -778,6 +1205,88 @@ func (q *Queries) RemovePluginServer(ctx context.Context, arg RemovePluginServer
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const revokeSkillDistributionsByPlugin = `-- name: RevokeSkillDistributionsByPlugin :many
+UPDATE skill_distributions sd
+SET revoked_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+FROM skill_distributions prev
+JOIN skills s ON s.id = prev.skill_id
+JOIN LATERAL (
+  SELECT sv.id
+  FROM skill_versions sv
+  WHERE sv.skill_id = prev.skill_id
+    AND sv.spec_valid IS TRUE
+    AND (prev.pinned_version_id IS NULL OR sv.id = prev.pinned_version_id)
+  ORDER BY sv.created_at DESC, sv.id DESC
+  LIMIT 1
+) resolved ON TRUE
+WHERE prev.id = sd.id
+  AND sd.project_id = $1
+  AND sd.plugin_id = $2
+  AND sd.revoked_at IS NULL
+RETURNING sd.id, sd.project_id, sd.skill_id, sd.pinned_version_id, sd.plugin_id, sd.channel, sd.created_by_user_id, sd.revoked_at, sd.created_at, sd.updated_at, prev.updated_at AS previous_updated_at, resolved.id AS resolved_version_id, s.name AS skill_name, s.display_name AS skill_display_name
+`
+
+type RevokeSkillDistributionsByPluginParams struct {
+	ProjectID uuid.UUID
+	PluginID  uuid.NullUUID
+}
+
+type RevokeSkillDistributionsByPluginRow struct {
+	ID                uuid.UUID
+	ProjectID         uuid.UUID
+	SkillID           uuid.UUID
+	PinnedVersionID   uuid.NullUUID
+	PluginID          uuid.NullUUID
+	Channel           string
+	CreatedByUserID   string
+	RevokedAt         pgtype.Timestamptz
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	PreviousUpdatedAt pgtype.Timestamptz
+	ResolvedVersionID uuid.UUID
+	SkillName         string
+	SkillDisplayName  string
+}
+
+// Deleting a plugin revokes the skill distributions it carries so active
+// distributions never reference a tombstoned plugin. The self-join returns
+// the pre-revocation updated_at for audit snapshots.
+func (q *Queries) RevokeSkillDistributionsByPlugin(ctx context.Context, arg RevokeSkillDistributionsByPluginParams) ([]RevokeSkillDistributionsByPluginRow, error) {
+	rows, err := q.db.Query(ctx, revokeSkillDistributionsByPlugin, arg.ProjectID, arg.PluginID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RevokeSkillDistributionsByPluginRow
+	for rows.Next() {
+		var i RevokeSkillDistributionsByPluginRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.SkillID,
+			&i.PinnedVersionID,
+			&i.PluginID,
+			&i.Channel,
+			&i.CreatedByUserID,
+			&i.RevokedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.PreviousUpdatedAt,
+			&i.ResolvedVersionID,
+			&i.SkillName,
+			&i.SkillDisplayName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const softDeletePluginServers = `-- name: SoftDeletePluginServers :exec
@@ -888,34 +1397,42 @@ func (q *Queries) UpdatePluginServer(ctx context.Context, arg UpdatePluginServer
 }
 
 const upsertGitHubConnection = `-- name: UpsertGitHubConnection :one
-INSERT INTO plugin_github_connections (project_id, installation_id, repo_owner, repo_name, marketplace_token, published_fingerprint)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO plugin_github_connections (project_id, installation_id, repo_owner, repo_name, marketplace_token, published_mcp_fingerprints, published_hooks_version, published_hooks_config)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 ON CONFLICT (project_id) DO UPDATE
   SET installation_id = EXCLUDED.installation_id,
       repo_owner = EXCLUDED.repo_owner,
       repo_name = EXCLUDED.repo_name,
       marketplace_token = COALESCE(plugin_github_connections.marketplace_token, EXCLUDED.marketplace_token),
-      published_fingerprint = EXCLUDED.published_fingerprint,
+      published_mcp_fingerprints = EXCLUDED.published_mcp_fingerprints,
+      published_hooks_version = EXCLUDED.published_hooks_version,
+      published_hooks_config = EXCLUDED.published_hooks_config,
       updated_at = clock_timestamp()
-RETURNING id, project_id, installation_id, repo_owner, repo_name, marketplace_token, published_fingerprint, created_at, updated_at
+RETURNING id, project_id, installation_id, repo_owner, repo_name, marketplace_token, published_fingerprint, published_mcp_fingerprints, published_hooks_version, published_hooks_config, created_at, updated_at
 `
 
 type UpsertGitHubConnectionParams struct {
-	ProjectID            uuid.UUID
-	InstallationID       int64
-	RepoOwner            string
-	RepoName             string
-	MarketplaceToken     pgtype.Text
-	PublishedFingerprint pgtype.Text
+	ProjectID                uuid.UUID
+	InstallationID           int64
+	RepoOwner                string
+	RepoName                 string
+	MarketplaceToken         pgtype.Text
+	PublishedMcpFingerprints []byte
+	PublishedHooksVersion    pgtype.Text
+	PublishedHooksConfig     []byte
 }
 
 // Inserts or refreshes a project's GitHub connection. The marketplace_token
 // argument is the candidate token to use if no token is currently set; on
 // conflict the existing token is preserved via COALESCE so callers can pass a
 // freshly-generated token on every publish without overwriting prior state.
-// Token rotation goes through a separate query. published_fingerprint is the
-// content hash of the packages just published and is always overwritten, so
-// subsequent rollout runs can detect when nothing changed.
+// Token rotation goes through a separate query. published_mcp_fingerprints,
+// published_hooks_version, and published_hooks_config record the per-plugin MCP
+// content hashes, the hooks generator version, and the hook-output-affecting
+// config just published; all are always overwritten so subsequent rollout runs
+// can detect independently whether the MCP or hooks component changed (including
+// hooks config drift a version bump can't capture, e.g. a marketplace rename or
+// browser-login toggle).
 func (q *Queries) UpsertGitHubConnection(ctx context.Context, arg UpsertGitHubConnectionParams) (PluginGithubConnection, error) {
 	row := q.db.QueryRow(ctx, upsertGitHubConnection,
 		arg.ProjectID,
@@ -923,7 +1440,9 @@ func (q *Queries) UpsertGitHubConnection(ctx context.Context, arg UpsertGitHubCo
 		arg.RepoOwner,
 		arg.RepoName,
 		arg.MarketplaceToken,
-		arg.PublishedFingerprint,
+		arg.PublishedMcpFingerprints,
+		arg.PublishedHooksVersion,
+		arg.PublishedHooksConfig,
 	)
 	var i PluginGithubConnection
 	err := row.Scan(
@@ -934,6 +1453,9 @@ func (q *Queries) UpsertGitHubConnection(ctx context.Context, arg UpsertGitHubCo
 		&i.RepoName,
 		&i.MarketplaceToken,
 		&i.PublishedFingerprint,
+		&i.PublishedMcpFingerprints,
+		&i.PublishedHooksVersion,
+		&i.PublishedHooksConfig,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

@@ -1,9 +1,12 @@
 import { FullPageError } from "@/components/full-page-error";
 import { GramLogo } from "@/components/gram-logo";
 import { PageHeader } from "@/components/page-header";
+import { SidebarNavSkeleton } from "@/components/sidebar-nav-skeleton";
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
+  SidebarHeader,
   SidebarInset,
   SidebarProvider,
 } from "@/components/ui/sidebar";
@@ -39,7 +42,7 @@ import {
   usePylonInAppChat,
   useFermatPixel,
 } from "./Auth";
-import type { ProjectEntry } from "@gram/client/models/components";
+import type { ProjectEntry } from "@gram/client/models/components/projectentry.js";
 
 const PREFERRED_PROJECT_KEY = "preferredProject";
 
@@ -57,6 +60,7 @@ const SLUG_EXEMPT_PATHS = [
   "/switch-org",
   "/shadow-mcp/request",
   "/risk-policy-bypass/request",
+  "/risk-policy-challenge/acknowledge",
   "/blocks",
 ];
 
@@ -280,69 +284,38 @@ export const ProjectProvider = ({
   );
 };
 
-/** Skeleton nav group matching the new collapsible sidebar style. */
-const SkeletonNavItem = ({ width = "w-20" }: { width?: string }) => (
-  <div className="flex items-center gap-2 px-2 py-2">
-    <Skeleton className="h-4 w-4 shrink-0 rounded" />
-    <Skeleton className={`h-3.5 ${width}`} />
-  </div>
-);
-
-const SkeletonNavGroup = () => (
-  <div className="border-border mt-1 ml-4 border-l pl-2">
-    <div className="flex flex-col gap-0.5 py-0.5">
-      <Skeleton className="mx-2 my-1.5 h-3 w-16" />
-      <Skeleton className="mx-2 my-1.5 h-3 w-20" />
-      <Skeleton className="mx-2 my-1.5 h-3 w-14" />
-    </div>
-  </div>
-);
-
 /**
  * Lightweight shell that mirrors the real AppLayout structure,
  * shown while the auth session is still loading so the user
  * sees the app chrome immediately instead of a blank screen.
+ *
+ * Keep the structure in sync with AppLayout/AppSidebar: the logo belongs
+ * inside SidebarHeader, not a sibling header. The sidebar renders as a
+ * `fixed inset-y-0 z-10` container, so a sibling header would sit under it.
  */
 const AppLoadingShell = () => (
   <SidebarProvider
-    style={{ "--sidebar-width": "14rem" } as React.CSSProperties}
+    style={{ "--sidebar-width": "16rem" } as React.CSSProperties}
   >
     <div className="flex h-screen w-full flex-col">
-      {/* Header */}
-      <header className="dark:bg-background flex h-14 shrink-0 items-center border-b bg-white pr-4 pl-5">
-        <div className="flex items-center gap-3">
-          <GramLogo className="w-28" />
-          <span className="text-muted-foreground/50 text-xl select-none">
-            /
-          </span>
-          <Skeleton className="h-5 w-24" />
-          <span className="text-muted-foreground/50 text-xl select-none">
-            /
-          </span>
-          <Skeleton className="h-5 w-20" />
-        </div>
-        <div className="ml-auto flex items-center gap-4">
-          <Skeleton className="h-8 w-8 rounded-full" />
-        </div>
-      </header>
-      {/* Body */}
-      <div className="flex w-full flex-1 overflow-hidden pt-2">
-        <Sidebar collapsible="offcanvas" variant="inset">
-          <SidebarContent className="pt-5">
-            <div className="flex flex-col gap-1 px-2">
-              {/* Home */}
-              <SkeletonNavItem width="w-16" />
-              {/* Connect group */}
-              <SkeletonNavItem width="w-20" />
-              <SkeletonNavGroup />
-              {/* Build group */}
-              <SkeletonNavItem width="w-14" />
-              {/* Observe group */}
-              <SkeletonNavItem width="w-20" />
-              {/* Security group */}
-              <SkeletonNavItem width="w-18" />
+      <div className="flex w-full flex-1 overflow-hidden">
+        <Sidebar collapsible="icon" variant="inset">
+          <SidebarHeader className="gap-3 pb-3">
+            <div className="flex h-(--header-height) items-center px-1">
+              <GramLogo className="w-28" />
             </div>
+            {/* Workspace switcher */}
+            <Skeleton className="h-8 w-full" />
+          </SidebarHeader>
+          <SidebarContent className="pt-2">
+            <SidebarNavSkeleton />
           </SidebarContent>
+          <SidebarFooter className="border-t">
+            <div className="flex items-center gap-2 py-2">
+              <Skeleton className="size-8 shrink-0 rounded-full" />
+              <Skeleton className="h-3.5 w-24" />
+            </div>
+          </SidebarFooter>
         </Sidebar>
         <SidebarInset>
           <PageHeader>

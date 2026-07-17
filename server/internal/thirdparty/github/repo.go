@@ -3,7 +3,9 @@ package github
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,6 +18,16 @@ import (
 )
 
 const apiBase = "https://api.github.com"
+
+// ErrRepoNotFound is returned by GetRepoFiles when the repository or the
+// requested branch does not exist yet, so callers can treat a never-published
+// project as a first publish rather than an error.
+var ErrRepoNotFound = errors.New("github repo or branch not found")
+
+// ErrFileNotFound is returned by GetFileContent when the repository, branch,
+// or file path does not exist, so callers can treat an absent file as a
+// normal condition rather than an error.
+var ErrFileNotFound = errors.New("github file not found")
 
 // validGitHubUsername matches GitHub's username rules: 1-39 chars, starting
 // with an alphanumeric, alphanumeric or hyphen thereafter. Enforced before
@@ -109,6 +121,75 @@ func (c *Client) AddCollaborator(ctx context.Context, installationID int64, owne
 	return nil
 }
 
+// HasDirectCollaborator reports whether the repo has at least one directly
+// added collaborator — i.e. someone explicitly invited via AddCollaborator,
+// as opposed to access granted implicitly through org membership or team
+// permissions. AddCollaborator's PUT typically creates a *pending*
+// invitation rather than an accepted collaborator (GitHub requires the
+// invitee to accept), and pending invitations don't show up in the
+// collaborators list at all — only in the separate invitations list — so
+// both are checked. per_page=1 on each keeps the requests cheap since only
+// presence/absence is needed.
+func (c *Client) HasDirectCollaborator(ctx context.Context, installationID int64, owner, repo string) (bool, error) {
+	hasInvitation, err := c.hasPendingInvitation(ctx, installationID, owner, repo)
+	if err != nil {
+		return false, err
+	}
+	if hasInvitation {
+		return true, nil
+	}
+
+	return c.hasAcceptedDirectCollaborator(ctx, installationID, owner, repo)
+}
+
+func (c *Client) hasPendingInvitation(ctx context.Context, installationID int64, owner, repo string) (bool, error) {
+	url, _ := url.JoinPath(apiBase, "repos", owner, repo, "invitations")
+	url += "?per_page=1"
+
+	resp, err := c.doAPI(ctx, installationID, http.MethodGet, url, nil)
+	if err != nil {
+		return false, fmt.Errorf("list invitations: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
+
+	if resp.StatusCode != http.StatusOK {
+		return false, fmt.Errorf("list invitations: status %d: %s", resp.StatusCode, truncatedBody(resp))
+	}
+
+	var invitations []struct {
+		ID int64 `json:"id"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&invitations); err != nil {
+		return false, fmt.Errorf("decode invitations: %w", err)
+	}
+
+	return len(invitations) > 0, nil
+}
+
+func (c *Client) hasAcceptedDirectCollaborator(ctx context.Context, installationID int64, owner, repo string) (bool, error) {
+	url, _ := url.JoinPath(apiBase, "repos", owner, repo, "collaborators")
+	url += "?affiliation=direct&per_page=1"
+
+	resp, err := c.doAPI(ctx, installationID, http.MethodGet, url, nil)
+	if err != nil {
+		return false, fmt.Errorf("list collaborators: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
+
+	if resp.StatusCode != http.StatusOK {
+		return false, fmt.Errorf("list collaborators: status %d: %s", resp.StatusCode, truncatedBody(resp))
+	}
+
+	var collaborators []struct {
+		Login string `json:"login"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&collaborators); err != nil {
+		return false, fmt.Errorf("decode collaborators: %w", err)
+	}
+
+	return len(collaborators) > 0, nil
+}
+
 // PushFiles atomically commits a set of files to the given repository branch
 // using the Git Trees API.
 func (c *Client) PushFiles(ctx context.Context, installationID int64, owner, repo, branch, commitMsg string, files map[string][]byte) (string, error) {
@@ -132,6 +213,132 @@ func (c *Client) PushFiles(ctx context.Context, installationID int64, owner, rep
 	}
 
 	return newCommitSHA, nil
+}
+
+// GetRepoFiles returns every file on the given branch as a path->content map,
+// using the Git Trees API (recursive) plus one blob fetch per file. Returns
+// ErrRepoNotFound if the repo or branch does not exist yet. The publish path
+// uses this to carry an unchanged plugin component (hooks or MCP) verbatim from
+// the existing repo into a fresh push, so publishing one component leaves the
+// other's files — including their embedded API keys — untouched.
+func (c *Client) GetRepoFiles(ctx context.Context, installationID int64, owner, repo, branch string) (map[string][]byte, error) {
+	treeURL, _ := url.JoinPath(apiBase, "repos", owner, repo, "git", "trees", branch)
+	treeURL += "?recursive=1"
+	resp, err := c.doAPI(ctx, installationID, http.MethodGet, treeURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("get tree: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
+
+	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusConflict {
+		// 404: repo/branch absent. 409: repo exists but is empty (no commits on
+		// the branch yet). Both mean "nothing published to carry forward".
+		return nil, ErrRepoNotFound
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("get tree: status %d: %s", resp.StatusCode, truncatedBody(resp))
+	}
+
+	var tree struct {
+		Entries []struct {
+			Path string `json:"path"`
+			Type string `json:"type"`
+			SHA  string `json:"sha"`
+		} `json:"tree"`
+		Truncated bool `json:"truncated"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&tree); err != nil {
+		return nil, fmt.Errorf("decode tree: %w", err)
+	}
+	if tree.Truncated {
+		// Our plugin repos are far below GitHub's recursive listing limits;
+		// a truncated response would silently drop files and corrupt a carry.
+		return nil, fmt.Errorf("get tree: response truncated (repo too large)")
+	}
+
+	files := make(map[string][]byte, len(tree.Entries))
+	for _, entry := range tree.Entries {
+		if entry.Type != "blob" {
+			continue
+		}
+		content, err := c.getBlob(ctx, installationID, owner, repo, entry.SHA)
+		if err != nil {
+			return nil, fmt.Errorf("get blob %s: %w", entry.Path, err)
+		}
+		files[entry.Path] = content
+	}
+
+	return files, nil
+}
+
+// GetFileContent returns the raw content of a single file on the given branch
+// via the Contents API — one API call, unlike GetRepoFiles' full-tree walk, so
+// it is cheap enough for read paths that only need one known file. Returns
+// ErrFileNotFound when the repo, branch, or path does not exist.
+func (c *Client) GetFileContent(ctx context.Context, installationID int64, owner, repo, branch, filePath string) ([]byte, error) {
+	fileURL, _ := url.JoinPath(apiBase, "repos", owner, repo, "contents", filePath)
+	fileURL += "?ref=" + url.QueryEscape(branch)
+	resp, err := c.doAPI(ctx, installationID, http.MethodGet, fileURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("get file content: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, ErrFileNotFound
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("get file content: status %d: %s", resp.StatusCode, truncatedBody(resp))
+	}
+
+	var file struct {
+		Content  string `json:"content"`
+		Encoding string `json:"encoding"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&file); err != nil {
+		return nil, fmt.Errorf("decode file content: %w", err)
+	}
+	if file.Encoding != "base64" {
+		return nil, fmt.Errorf("unexpected file content encoding %q", file.Encoding)
+	}
+	// Like the Blobs API, the Contents API wraps base64 content with newlines,
+	// which the standard decoder rejects; strip them before decoding.
+	decoded, err := base64.StdEncoding.DecodeString(strings.ReplaceAll(file.Content, "\n", ""))
+	if err != nil {
+		return nil, fmt.Errorf("decode base64 file content: %w", err)
+	}
+	return decoded, nil
+}
+
+func (c *Client) getBlob(ctx context.Context, installationID int64, owner, repo, sha string) ([]byte, error) {
+	blobURL, _ := url.JoinPath(apiBase, "repos", owner, repo, "git", "blobs", sha)
+	resp, err := c.doAPI(ctx, installationID, http.MethodGet, blobURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("status %d: %s", resp.StatusCode, truncatedBody(resp))
+	}
+
+	var blob struct {
+		Content  string `json:"content"`
+		Encoding string `json:"encoding"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&blob); err != nil {
+		return nil, fmt.Errorf("decode blob: %w", err)
+	}
+	if blob.Encoding != "base64" {
+		return nil, fmt.Errorf("unexpected blob encoding %q", blob.Encoding)
+	}
+	// The Blobs API wraps base64 content at column 76 with newlines, which the
+	// standard decoder rejects; strip them before decoding.
+	decoded, err := base64.StdEncoding.DecodeString(strings.ReplaceAll(blob.Content, "\n", ""))
+	if err != nil {
+		return nil, fmt.Errorf("decode base64 blob: %w", err)
+	}
+	return decoded, nil
 }
 
 func (c *Client) getRef(ctx context.Context, installationID int64, owner, repo, branch string) (string, error) {

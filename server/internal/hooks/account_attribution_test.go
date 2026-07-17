@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 )
 
@@ -452,6 +453,51 @@ func TestClaude_LinksChatToUserAccount(t *testing.T) {
 	require.Equal(t, "bridged-employee", chat.UserID.String)
 }
 
+// TestLogs_BackfillsChatAccountLinkOnExistingChat covers the hook-first
+// ordering: the session's first persisted message creates the chat before OTEL
+// attribution lands, and chat creation happens only once — so attribution must
+// backfill the chat -> user_accounts link or the chat stays unlinked forever
+// (invisible to the account-identity risk rules and the personal/team split).
+func TestLogs_BackfillsChatAccountLinkOnExistingChat(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx := hookAuthContext(t, ctx)
+	queries := repo.New(ti.conn)
+
+	sessionID := "backfill-link-" + uuid.NewString()
+	chatID := sessionIDToUUID(sessionID)
+
+	// The chat already exists, unlinked — as when the first prompt beats the
+	// first OTEL export of the session.
+	_, err := queries.UpsertClaudeCodeSession(ctx, repo.UpsertClaudeCodeSessionParams{
+		ID:             chatID,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         conv.ToPGTextEmpty(""),
+		ExternalUserID: conv.ToPGTextEmpty("employee@example.com"),
+		UserAccountID:  conv.StringToNullUUID(""),
+		Title:          conv.ToPGText("hook-first chat"),
+	})
+	require.NoError(t, err)
+
+	now := time.Now().UTC().Truncate(time.Second)
+	accountUUID := "acct-" + sessionID
+	claudeAccountSession(t, ctx, ti, sessionID, "someone@gmail.com", "org-"+sessionID, accountUUID, "device-"+sessionID, now)
+
+	account, err := queries.GetUserAccount(ctx, repo.GetUserAccountParams{
+		OrganizationID:      authCtx.ActiveOrganizationID,
+		Provider:            providerAnthropic,
+		ExternalAccountUuid: accountUUID,
+	})
+	require.NoError(t, err)
+
+	chat, err := chatRepo.New(ti.conn).GetChat(ctx, chatID)
+	require.NoError(t, err)
+	require.True(t, chat.UserAccountID.Valid)
+	require.Equal(t, account.ID, chat.UserAccountID.UUID)
+}
+
 // TestLogs_NoAccountIdentityDoesNotCreateUserAccount confirms attribution is a
 // no-op for sessions that carry no provider account id (older clients): no
 // user_accounts row is created and ingest still succeeds.
@@ -483,6 +529,111 @@ func TestLogs_NoAccountIdentityDoesNotCreateUserAccount(t *testing.T) {
 		ExternalAccountUuid: "",
 	})
 	require.Error(t, err)
+}
+
+// TestLogs_ClassifiesCompanyCredentialSessionAsTeam covers a Claude session
+// authenticated by company credentials (an API key / gateway / Bedrock / Vertex):
+// it emits user.email and user.id but no user.account_uuid or organization.id, so
+// no personal account is behind it. Attribution must classify it team and stamp
+// account_type onto the telemetry — even though no user_accounts entity can be
+// persisted (that entity keys on the absent UUID) — so the cost breakdown does
+// not park the whole org's spend under "(unset)". The email is deliberately NOT
+// provisioned in Gram: this is the corporate-gateway population that an email- or
+// provider-org-based signal alone would miss.
+func TestLogs_ClassifiesCompanyCredentialSessionAsTeam(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	chClient := enableHookTelemetryLogger(t, ctx, ti)
+	authCtx := hookAuthContext(t, ctx)
+	orgID := authCtx.ActiveOrganizationID
+	now := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
+
+	err := ti.service.Logs(ctx, claudeLogsPayload(
+		[]*gen.OTELResourceAttribute{resourceStrAttr("service.name", "claude-code")},
+		nil,
+		&gen.OTELLogRecord{
+			TimeUnixNano: new(nanoString(now)),
+			Body:         &gen.OTELLogBody{StringValue: new("api request")},
+			Attributes: []*gen.OTELAttribute{
+				strAttr("session.id", "gateway-session"),
+				strAttr("user.email", "gateway-user@example.com"),
+				strAttr("user.id", "gateway-device"),
+			},
+		},
+	))
+	require.NoError(t, err)
+
+	logs := waitForHookLogs(t, ctx, chClient, authCtx.ProjectID.String(), claudeOTELLogsURN, now, 1)
+	require.Contains(t, logs[0].Attributes, accountTypeTeam)
+
+	// No account entity is persisted: the user_accounts key (external_account_uuid)
+	// is absent for a company-credential session.
+	_, err = repo.New(ti.conn).GetUserAccount(ctx, repo.GetUserAccountParams{
+		OrganizationID:      orgID,
+		Provider:            providerAnthropic,
+		ExternalAccountUuid: "",
+	})
+	require.Error(t, err)
+}
+
+// TestLogs_CompanyCredentialSessionTeachesDeviceBridge covers the bridge at a
+// gateway-only org: the device bridge keys on the per-device id, not the account
+// UUID, so a company-credential session whose work email resolves must still
+// teach device -> employee — it is the only session shape such an org ever
+// produces, and without its teaching a personal account later seen on the same
+// device could never be attributed to its employee.
+func TestLogs_CompanyCredentialSessionTeachesDeviceBridge(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx := hookAuthContext(t, ctx)
+	orgID := authCtx.ActiveOrganizationID
+	queries := repo.New(ti.conn)
+	now := time.Now().UTC().Truncate(time.Second)
+
+	userID, workEmail := "gateway-employee", "gateway-employee@example.com"
+	seedHookUser(t, ctx, ti.conn, orgID, userID, workEmail)
+
+	const deviceID = "device-gateway-1"
+
+	// Company-credential session: work email resolves, no account UUID.
+	err := ti.service.Logs(ctx, claudeLogsPayload(
+		[]*gen.OTELResourceAttribute{resourceStrAttr("service.name", "claude-code")},
+		nil,
+		&gen.OTELLogRecord{
+			TimeUnixNano: new(nanoString(now)),
+			Body:         &gen.OTELLogBody{StringValue: new("api request")},
+			Attributes: []*gen.OTELAttribute{
+				strAttr("session.id", "gateway-teach-session"),
+				strAttr("user.email", workEmail),
+				strAttr("user.id", deviceID),
+			},
+		},
+	))
+	require.NoError(t, err)
+
+	// The gateway session taught the bridge despite carrying no account UUID.
+	owner, err := queries.GetDeviceOwner(ctx, repo.GetDeviceOwnerParams{
+		OrganizationID: orgID,
+		Provider:       providerAnthropic,
+		DeviceID:       deviceID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, userID, owner.LinkedUserID.String)
+
+	// A personal session on the same device (UUID present, gmail does not
+	// resolve) adopts the learned employee through the bridge.
+	claudeAccountSession(t, ctx, ti, "gateway-pers-session", "gateway-person@gmail.com", "gateway-max-org", "acct-gateway-personal", deviceID, now.Add(time.Minute))
+
+	personalAccount, err := queries.GetUserAccount(ctx, repo.GetUserAccountParams{
+		OrganizationID:      orgID,
+		Provider:            providerAnthropic,
+		ExternalAccountUuid: "acct-gateway-personal",
+	})
+	require.NoError(t, err)
+	require.Equal(t, accountTypePersonal, personalAccount.AccountType.String)
+	require.Equal(t, userID, personalAccount.UserID.String)
 }
 
 // TestLogs_LateBridgeBackfillsPersonalAccount covers the "late linking" ordering:

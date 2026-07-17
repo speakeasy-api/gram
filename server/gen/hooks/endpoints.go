@@ -32,7 +32,7 @@ func NewEndpoints(s Service) *Endpoints {
 		Claude:  NewClaudeEndpoint(s),
 		Cursor:  NewCursorEndpoint(s, a.APIKeyAuth),
 		Codex:   NewCodexEndpoint(s, a.APIKeyAuth),
-		Ingest:  NewIngestEndpoint(s, a.APIKeyAuth),
+		Ingest:  NewIngestEndpoint(s),
 		Logs:    NewLogsEndpoint(s, a.APIKeyAuth),
 		Metrics: NewMetricsEndpoint(s, a.APIKeyAuth),
 	}
@@ -129,35 +129,9 @@ func NewCodexEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpo
 
 // NewIngestEndpoint returns an endpoint function that calls the method
 // "ingest" of service "hooks".
-func NewIngestEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+func NewIngestEndpoint(s Service) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		p := req.(*IngestPayload)
-		var err error
-		sc := security.APIKeyScheme{
-			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
-			RequiredScopes: []string{"hooks"},
-		}
-		var key string
-		if p.ApikeyToken != nil {
-			key = *p.ApikeyToken
-		}
-		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err == nil {
-			sc := security.APIKeyScheme{
-				Name:           "project_slug",
-				Scopes:         []string{},
-				RequiredScopes: []string{"hooks"},
-			}
-			var key string
-			if p.ProjectSlugInput != nil {
-				key = *p.ProjectSlugInput
-			}
-			ctx, err = authAPIKeyFn(ctx, key, &sc)
-		}
-		if err != nil {
-			return nil, err
-		}
 		return s.Ingest(ctx, p)
 	}
 }

@@ -5,9 +5,9 @@ import {
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { useRoutes } from "@/routes";
-import { type DateRangePreset } from "@gram-ai/elements";
+import { type DateRangePreset } from "@/elements";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
-import { useRiskOverview } from "@gram/client/react-query/index.js";
+import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
 import { Icon } from "@speakeasy-api/moonshine";
 import { useMemo } from "react";
 import { Link, useLocation } from "react-router";

@@ -9,42 +9,66 @@ import (
 )
 
 const (
+	// sessionClaudeOTELRowPredicate anchors Claude provenance on the OTEL log
+	// stream URN stamped at ingest. Claude usage and tool calls are derived
+	// exclusively from these rows; Claude hook rows and claude-code:usage
+	// metric rows are never sources. Mirrors is_claude_otel_row in
+	// attribute_metrics_summaries_mv (server/clickhouse/schema.sql) — keep the
+	// session* predicates in sync with the MV's WITH clause.
+	sessionClaudeOTELRowPredicate = "(gram_urn = 'claude-code:otel:logs')"
 	// sessionClaudeAPIRequestPredicate matches Claude Code api_request rows — the
 	// authoritative source of Claude token/cost and MCP/skill/agent attribution.
-	// Mirrors attribute_metrics_summaries_mv's is_claude_api_request so the
-	// session list reconciles with the aggregate (Claude usage rows are never a
-	// token/cost source; see sessionUsageMeasureFilter below).
 	sessionClaudeAPIRequestPredicate = "(" +
+		sessionClaudeOTELRowPredicate + " AND " +
 		"chat_id != '' AND " +
 		"toString(attributes.prompt.id) != '' AND " +
-		"(toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request') AND " +
-		"(service_name = 'claude-code' OR toString(resource_attributes.service.name) = 'claude-code' OR startsWith(body, 'claude_code.'))" +
+		"(toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')" +
 		")"
-	// sessionGenericUsageRowPredicate matches non-Claude usage rows: codex/cursor
-	// usage plus cost-bearing chat completions. Claude usage rows are excluded so
-	// Claude cost/tokens are not double-counted against the api_request rows.
-	sessionGenericUsageRowPredicate = "(" +
-		"startsWith(gram_urn, 'codex:usage') OR " +
-		"startsWith(gram_urn, 'cursor:usage') OR " +
-		"(toString(attributes.gen_ai.operation.name) = 'chat' AND toString(attributes.gen_ai.usage.cost) != '' AND NOT " +
-		sessionClaudeAPIRequestPredicate + " AND NOT startsWith(gram_urn, 'claude-code:usage'))" +
+	// sessionClaudeToolResultPredicate matches Claude tool_result rows — one per
+	// completed tool call, the sole Claude tool-call source.
+	sessionClaudeToolResultPredicate = "(" +
+		sessionClaudeOTELRowPredicate + " AND " +
+		"(toString(attributes.event.name) = 'tool_result' OR body = 'claude_code.tool_result')" +
 		")"
-	sessionHookToolRowPredicate = "(" +
+	// sessionAgentUsageRowPredicate matches Codex/Cursor usage rows — their only
+	// token/cost source. Gram-hosted chat completions and claude-code:usage rows
+	// are deliberately excluded: the summaries cover agent surfaces only.
+	sessionAgentUsageRowPredicate = "(startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage'))"
+	// sessionAgentToolCallPredicate matches Codex/Cursor completed tool-call hook
+	// rows (they have no OTEL stream). The hook.event guard excludes the
+	// PreToolUse companion row; provider names are not tool calls.
+	sessionAgentToolCallPredicate = "(" +
+		"hook_source IN ('codex', 'cursor') AND " +
 		"toString(attributes.gram.tool.name) != '' AND " +
-		"toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor')" +
-		")"
-	sessionCountedToolCallPredicate = "(" +
-		sessionHookToolRowPredicate + " AND " +
+		"toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor') AND " +
 		"toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')" +
 		")"
+	sessionCountedToolCallPredicate = "(" + sessionClaudeToolResultPredicate + " OR " + sessionAgentToolCallPredicate + ")"
+	// sessionFailedToolCallPredicate marks a counted tool call as failed: Claude
+	// tool_result rows carry success="false", Codex/Cursor hook rows report
+	// PostToolUseFailure or an HTTP error status.
+	sessionFailedToolCallPredicate = "(" +
+		"(" + sessionClaudeToolResultPredicate + " AND toString(attributes.success) = 'false') OR " +
+		"(" + sessionAgentToolCallPredicate + " AND " +
+		"(toString(attributes.gram.hook.event) = 'PostToolUseFailure' OR toInt32OrZero(toString(attributes.http.response.status_code)) >= 400))" +
+		")"
+	// sessionToolCallDedupIDExpr is the call's identity for deduplicated
+	// counting: Claude tool_result rows carry tool_use_id, Cursor/unified-ingest
+	// hook rows carry gen_ai.tool.call.id, and rows with no call id fall back to
+	// the row id (count-per-row). Mirrors tool_call_dedup_id in the MV.
+	sessionToolCallDedupIDExpr = "multiIf(" +
+		"toString(attributes.tool_use_id) != '', toString(attributes.tool_use_id), " +
+		"toString(attributes.gen_ai.tool.call.id) != '', toString(attributes.gen_ai.tool.call.id), " +
+		"toString(id))"
 	// sessionUsageMeasureFilter selects the rows that carry token/cost usage:
-	// Claude api_request rows and generic usage rows. This is the sumIf guard for
-	// every token/cost measure, keeping session totals aligned with the aggregate.
-	sessionUsageMeasureFilter = "(" + sessionClaudeAPIRequestPredicate + " OR " + sessionGenericUsageRowPredicate + ")"
+	// Claude api_request rows and Codex/Cursor usage rows. This is the sumIf
+	// guard for every token/cost measure, keeping session totals aligned with
+	// the aggregate.
+	sessionUsageMeasureFilter = "(" + sessionClaudeAPIRequestPredicate + " OR " + sessionAgentUsageRowPredicate + ")"
 	// sessionSourceRowPredicate admits every row class the session list derives
-	// from — Claude api_request, generic usage, and hook tool rows — matching the
-	// aggregate MV's WHERE clause so the two views cover the same sessions.
-	sessionSourceRowPredicate = "(" + sessionClaudeAPIRequestPredicate + " OR " + sessionGenericUsageRowPredicate + " OR " + sessionHookToolRowPredicate + ")"
+	// from, matching the aggregate MV's WHERE clause so the two views cover the
+	// same sessions.
+	sessionSourceRowPredicate = "(" + sessionClaudeAPIRequestPredicate + " OR " + sessionClaudeToolResultPredicate + " OR " + sessionAgentUsageRowPredicate + " OR " + sessionAgentToolCallPredicate + ")"
 
 	// Token/cost measures are source-aware: Claude api_request rows carry usage on
 	// flat attributes (input_tokens, cost_usd, …), while generic usage rows carry
@@ -55,10 +79,16 @@ const (
 	sessionOutputTokensExpr = "sumIf(if(" + sessionClaudeAPIRequestPredicate + ", " +
 		"toInt64OrZero(toString(attributes.output_tokens)), " +
 		"toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens))), " + sessionUsageMeasureFilter + ")"
+	// total_tokens is input + output + cache WRITES — cache reads are excluded,
+	// matching the aggregate MV and the tokens-under-management measure. Both
+	// branches sum the disjoint components rather than trusting a reported
+	// total (Codex's gen_ai.usage.total_tokens includes cache reads; Cursor
+	// usage rows report no total at all).
 	sessionTotalTokensExpr = "sumIf(if(" + sessionClaudeAPIRequestPredicate + ", " +
 		"toInt64OrZero(toString(attributes.input_tokens)) + toInt64OrZero(toString(attributes.output_tokens)) + " +
-		"toInt64OrZero(toString(attributes.cache_read_tokens)) + toInt64OrZero(toString(attributes.cache_creation_tokens)), " +
-		"toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens))), " + sessionUsageMeasureFilter + ")"
+		"toInt64OrZero(toString(attributes.cache_creation_tokens)), " +
+		"toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)) + " +
+		"toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), " + sessionUsageMeasureFilter + ")"
 	sessionCacheReadTokensExpr = "sumIf(if(" + sessionClaudeAPIRequestPredicate + ", " +
 		"toInt64OrZero(toString(attributes.cache_read_tokens)), " +
 		"toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens))), " + sessionUsageMeasureFilter + ")"
@@ -96,12 +126,12 @@ var sessionMeasureSelects = map[string]string{
 	"total_tokens":                sessionTotalTokensExpr,
 	"cache_read_input_tokens":     sessionCacheReadTokensExpr,
 	"cache_creation_input_tokens": sessionCacheCreationTokensExpr,
-	"tool_call_count":             "countIf(" + sessionCountedToolCallPredicate + ")",
+	"tool_call_count":             "uniqExactIf(" + sessionToolCallDedupIDExpr + ", " + sessionCountedToolCallPredicate + ")",
 	"message_count":               sessionMessageCountExpr,
 	"duration_seconds":            "toFloat64(max(time_unix_nano) - min(time_unix_nano)) / 1000000000.0",
 	// Kept as a service-level compatibility alias; the public listSessions API
 	// uses tool_call_count.
-	"total_tool_calls": "countIf(" + sessionCountedToolCallPredicate + ")",
+	"total_tool_calls": "uniqExactIf(" + sessionToolCallDedupIDExpr + ", " + sessionCountedToolCallPredicate + ")",
 }
 
 type ListSessionsParams struct {
@@ -136,14 +166,18 @@ type SessionSummary struct {
 
 // applySessionFilters restricts the session aggregation to chats matching the
 // requested dimension filters. project_id stays a row-level WHERE because it is
-// present on every row and prunes partitions. Every other dimension is matched
+// present on every row and prunes partitions. Identity dimensions are matched
 // per-chat via HAVING: a chat qualifies when ANY of its rows carries the
-// requested value. This is required because the attributes are stamped on
-// different physical rows within the same chat — user-directory attributes
-// (department_name, email, job_title, …) live on gateway-enriched rows, while
-// cost/hook_source/model live on the usage rows — so a row-level AND of those
-// filters would wrongly return nothing even when each filter matches data.
+// requested value. This is required because those attributes can be stamped on
+// different physical rows within the same chat.
+//
+// Claude attribution dimensions are different: the aggregate summary treats
+// query_source/skill/agent/MCP values as a single api_request-row tuple. Keep
+// those filters co-located inside one countIf so drilling from the aggregate
+// table finds chats that have a row matching the same tuple.
 func applySessionFilters(sb squirrel.SelectBuilder, filters []AttributeMetricsFilter) (squirrel.SelectBuilder, error) {
+	var coLocatedPredicates []squirrel.Sqlizer
+
 	for _, f := range filters {
 		if len(f.Values) == 0 {
 			continue
@@ -156,6 +190,10 @@ func applySessionFilters(sb squirrel.SelectBuilder, filters []AttributeMetricsFi
 		case attributeDimProject:
 			sb = sb.Where(squirrel.Eq{dim.column: f.Values})
 		case attributeDimScalar:
+			if dim.coLocateSessionFilters {
+				coLocatedPredicates = append(coLocatedPredicates, sessionScalarRowPredicate(dim.column, f.Values))
+				continue
+			}
 			sb = sb.Having(sessionScalarHaving(dim.column, f.Values))
 		case attributeDimArray:
 			inner, args, err := arrayDimFilter(dim.column, f.Values).ToSql()
@@ -167,7 +205,45 @@ func applySessionFilters(sb squirrel.SelectBuilder, filters []AttributeMetricsFi
 			return sb, fmt.Errorf("unhandled dimension kind for filter %q", f.Dimension)
 		}
 	}
+	if len(coLocatedPredicates) > 0 {
+		inner, args, err := squirrel.And(coLocatedPredicates).ToSql()
+		if err != nil {
+			return sb, fmt.Errorf("building co-located session filters: %w", err)
+		}
+		sb = sb.Having(squirrel.Expr("countIf("+inner+") > 0", args...))
+	}
 	return sb, nil
+}
+
+// sessionScalarRowPredicate matches a single telemetry row against one scalar
+// dimension filter. Unlike sessionScalarHaving, a requested "" means "this row
+// has an empty value", not "the whole chat has no value anywhere".
+func sessionScalarRowPredicate(expr string, values []string) squirrel.Sqlizer {
+	hasEmpty := false
+	nonEmpty := make([]string, 0, len(values))
+	for _, v := range values {
+		if v == "" {
+			hasEmpty = true
+			continue
+		}
+		nonEmpty = append(nonEmpty, v)
+	}
+
+	emptyPred := squirrel.Expr(expr + " = ''")
+	if len(nonEmpty) == 0 {
+		return emptyPred
+	}
+
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(nonEmpty)), ",")
+	args := make([]any, len(nonEmpty))
+	for i, v := range nonEmpty {
+		args[i] = v
+	}
+	nonEmptyPred := squirrel.Expr(expr+" IN ("+placeholders+")", args...)
+	if !hasEmpty {
+		return nonEmptyPred
+	}
+	return squirrel.Or{nonEmptyPred, emptyPred}
 }
 
 // sessionScalarHaving matches a chat when any of its rows carries one of the
@@ -203,9 +279,10 @@ func sessionScalarHaving(expr string, values []string) squirrel.Sqlizer {
 }
 
 // ListSessions retrieves org-scoped session summaries grouped by chat_id from
-// the same source-event classes as attribute_metrics_summaries: usage rows for
-// tokens/cost and hook tool rows for tool counts. Pagination is based on the
-// selected sort measure plus chat_id so ordering stays stable across pages.
+// the same source-event classes as attribute_metrics_summaries: Claude OTEL
+// api_request/tool_result rows and Codex/Cursor usage plus tool-call hook
+// rows. Pagination is based on the selected sort measure plus chat_id so
+// ordering stays stable across pages.
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) ListSessions(ctx context.Context, arg ListSessionsParams) ([]SessionSummary, error) {
@@ -228,12 +305,12 @@ func (q *Queries) ListSessions(ctx context.Context, arg ListSessionsParams) ([]S
 		"max(time_unix_nano) as end_time_unix_nano",
 		"toFloat64(max(time_unix_nano) - min(time_unix_nano)) / 1000000000.0 as duration_seconds",
 		"toInt64("+sessionMessageCountExpr+") as message_count",
-		"toInt64(countIf("+sessionCountedToolCallPredicate+")) as tool_call_count",
+		"toInt64(uniqExactIf("+sessionToolCallDedupIDExpr+", "+sessionCountedToolCallPredicate+")) as tool_call_count",
 		sessionInputTokensExpr+" as total_input_tokens",
 		sessionOutputTokensExpr+" as total_output_tokens",
 		sessionTotalTokensExpr+" as total_tokens",
 		sessionCostExpr+" as total_cost",
-		"if(countIf("+sessionCountedToolCallPredicate+" AND (toString(attributes.gram.hook.event) = 'PostToolUseFailure' OR toInt32OrZero(toString(attributes.http.response.status_code)) >= 400)) > 0, 'error', 'success') as status",
+		"if(countIf("+sessionFailedToolCallPredicate+") > 0, 'error', 'success') as status",
 		"toFloat64("+sortExpr+") as sort_value",
 	).
 		From("telemetry_logs").

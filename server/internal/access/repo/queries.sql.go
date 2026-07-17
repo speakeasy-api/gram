@@ -701,6 +701,45 @@ func (q *Queries) ListAccessMembers(ctx context.Context, organizationID string) 
 	return items, nil
 }
 
+const listAccessNotificationUsers = `-- name: ListAccessNotificationUsers :many
+SELECT
+  users.id,
+  users.email
+FROM organization_user_relationships AS our
+JOIN users
+  ON users.id = our.user_id
+WHERE our.organization_id = $1
+  AND our.deleted IS FALSE
+  AND users.deleted_at IS NULL
+  AND users.email <> ''
+ORDER BY users.email, users.id
+`
+
+type ListAccessNotificationUsersRow struct {
+	ID    string
+	Email string
+}
+
+func (q *Queries) ListAccessNotificationUsers(ctx context.Context, organizationID string) ([]ListAccessNotificationUsersRow, error) {
+	rows, err := q.db.Query(ctx, listAccessNotificationUsers, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAccessNotificationUsersRow
+	for rows.Next() {
+		var i ListAccessNotificationUsersRow
+		if err := rows.Scan(&i.ID, &i.Email); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listActiveOrganizationRoles = `-- name: ListActiveOrganizationRoles :many
 WITH active_roles AS (
   SELECT id, workos_slug, workos_name, workos_description, workos_created_at, workos_updated_at, 'global'::text AS role_kind

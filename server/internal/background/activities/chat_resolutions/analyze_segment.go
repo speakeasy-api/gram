@@ -325,8 +325,11 @@ If there are no tool calls, return an empty array.`, userPromptText)
 			Temperature:    nil,
 			JSONSchema:     &jsonSchemaConfig,
 			UsageSource:    billing.ModelUsageSourceGram,
+			KeyType:        openrouter.KeyTypeInternal,
+			KeySlot:        "",
 			UserID:         "",
 			ExternalUserID: "",
+			UserEmail:      "",
 			HTTPMetadata:   nil,
 		},
 	)

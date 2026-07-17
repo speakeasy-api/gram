@@ -23,17 +23,16 @@ import { useRoutes } from "@/routes";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
 import { telemetryGetProjectMetricsSummary } from "@gram/client/funcs/telemetryGetProjectMetricsSummary";
 import { telemetrySearchUsers } from "@gram/client/funcs/telemetrySearchUsers";
-import type {
-  GetObservabilityOverviewResult,
-  ModelUsage,
-  ProjectSummary,
-  RoleSummary,
-  TimeSeriesBucket,
-  UserSummary,
-} from "@gram/client/models/components";
-import { useGramContext, useMembers } from "@gram/client/react-query";
+import type { GetObservabilityOverviewResult } from "@gram/client/models/components/getobservabilityoverviewresult.js";
+import type { ModelUsage } from "@gram/client/models/components/modelusage.js";
+import type { ProjectSummary } from "@gram/client/models/components/projectsummary.js";
+import type { RoleSummary } from "@gram/client/models/components/rolesummary.js";
+import type { TimeSeriesBucket } from "@gram/client/models/components/timeseriesbucket.js";
+import type { UserSummary } from "@gram/client/models/components/usersummary.js";
+import { useGramContext } from "@gram/client/react-query/_context.js";
+import { useMembers } from "@gram/client/react-query/members.js";
 import { unwrapAsync } from "@gram/client/types/fp";
-import { type DateRangePreset, getPresetRange } from "@gram-ai/elements";
+import { type DateRangePreset, getPresetRange } from "@/elements";
 import {
   defineFilters,
   useFilterState,
@@ -1295,8 +1294,8 @@ function EmployeeCostTable({
   );
 
   return (
-    <section className="bg-card flex flex-col gap-4">
-      <div className="flex items-center justify-between">
+    <section className="bg-card flex flex-col">
+      <div className="mb-4 flex items-center justify-between">
         <div>
           <h3 className="font-semibold">
             {isCost ? "Cost" : "Usage"} by {isRoleView ? "Role" : "Employee"}

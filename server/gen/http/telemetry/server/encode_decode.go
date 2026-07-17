@@ -2614,6 +2614,219 @@ func EncodeQueryError(encoder func(context.Context, http.ResponseWriter) goahttp
 	}
 }
 
+// EncodeQueryTumDetailsResponse returns an encoder for responses returned by
+// the telemetry queryTumDetails endpoint.
+func EncodeQueryTumDetailsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*telemetry.TumDetailsResult)
+		enc := encoder(ctx, w)
+		body := NewQueryTumDetailsResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeQueryTumDetailsRequest returns a decoder for requests sent to the
+// telemetry queryTumDetails endpoint.
+func DecodeQueryTumDetailsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*telemetry.QueryTumDetailsPayload, error) {
+	return func(r *http.Request) (*telemetry.QueryTumDetailsPayload, error) {
+		var payload *telemetry.QueryTumDetailsPayload
+		var (
+			body QueryTumDetailsRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateQueryTumDetailsRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			sessionToken *string
+		)
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		payload = NewQueryTumDetailsPayload(&body, sessionToken)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeQueryTumDetailsError returns an encoder for errors returned by the
+// queryTumDetails telemetry endpoint.
+func EncodeQueryTumDetailsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewQueryTumDetailsUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewQueryTumDetailsForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewQueryTumDetailsBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewQueryTumDetailsNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewQueryTumDetailsConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewQueryTumDetailsUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewQueryTumDetailsInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewQueryTumDetailsInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewQueryTumDetailsUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewQueryTumDetailsGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeListSessionsResponse returns an encoder for responses returned by the
 // telemetry listSessions endpoint.
 func EncodeListSessionsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -5151,6 +5364,78 @@ func marshalTelemetryQueryPointToQueryPointResponseBody(v *telemetry.QueryPoint)
 	}
 	if v.Measures != nil {
 		res.Measures = marshalTelemetryQueryMeasuresToQueryMeasuresResponseBody(v.Measures)
+	}
+
+	return res
+}
+
+// marshalTelemetryTumDetailsPointToTumDetailsPointResponseBody builds a value
+// of type *TumDetailsPointResponseBody from a value of type
+// *telemetry.TumDetailsPoint.
+func marshalTelemetryTumDetailsPointToTumDetailsPointResponseBody(v *telemetry.TumDetailsPoint) *TumDetailsPointResponseBody {
+	res := &TumDetailsPointResponseBody{
+		BucketTimeUnixNano:  v.BucketTimeUnixNano,
+		InputTokens:         v.InputTokens,
+		OutputTokens:        v.OutputTokens,
+		CacheCreationTokens: v.CacheCreationTokens,
+		TotalTokens:         v.TotalTokens,
+	}
+
+	return res
+}
+
+// marshalTelemetryTumDetailsTotalsToTumDetailsTotalsResponseBody builds a
+// value of type *TumDetailsTotalsResponseBody from a value of type
+// *telemetry.TumDetailsTotals.
+func marshalTelemetryTumDetailsTotalsToTumDetailsTotalsResponseBody(v *telemetry.TumDetailsTotals) *TumDetailsTotalsResponseBody {
+	res := &TumDetailsTotalsResponseBody{
+		InputTokens:         v.InputTokens,
+		OutputTokens:        v.OutputTokens,
+		CacheCreationTokens: v.CacheCreationTokens,
+		TotalTokens:         v.TotalTokens,
+	}
+
+	return res
+}
+
+// marshalTelemetryTumDetailsBreakdownToTumDetailsBreakdownResponseBody builds
+// a value of type *TumDetailsBreakdownResponseBody from a value of type
+// *telemetry.TumDetailsBreakdown.
+func marshalTelemetryTumDetailsBreakdownToTumDetailsBreakdownResponseBody(v *telemetry.TumDetailsBreakdown) *TumDetailsBreakdownResponseBody {
+	res := &TumDetailsBreakdownResponseBody{
+		Key: v.Key,
+	}
+	if v.Rows != nil {
+		res.Rows = make([]*TumDetailsBreakdownRowResponseBody, len(v.Rows))
+		for i, val := range v.Rows {
+			if val == nil {
+				res.Rows[i] = nil
+				continue
+			}
+			res.Rows[i] = marshalTelemetryTumDetailsBreakdownRowToTumDetailsBreakdownRowResponseBody(val)
+		}
+	} else {
+		res.Rows = []*TumDetailsBreakdownRowResponseBody{}
+	}
+
+	return res
+}
+
+// marshalTelemetryTumDetailsBreakdownRowToTumDetailsBreakdownRowResponseBody
+// builds a value of type *TumDetailsBreakdownRowResponseBody from a value of
+// type *telemetry.TumDetailsBreakdownRow.
+func marshalTelemetryTumDetailsBreakdownRowToTumDetailsBreakdownRowResponseBody(v *telemetry.TumDetailsBreakdownRow) *TumDetailsBreakdownRowResponseBody {
+	res := &TumDetailsBreakdownRowResponseBody{
+		Value:       v.Value,
+		TotalTokens: v.TotalTokens,
+	}
+	if v.Series != nil {
+		res.Series = make([]int64, len(v.Series))
+		for i, val := range v.Series {
+			res.Series[i] = val
+		}
+	} else {
+		res.Series = []int64{}
 	}
 
 	return res

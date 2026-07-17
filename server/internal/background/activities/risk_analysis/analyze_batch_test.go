@@ -23,9 +23,12 @@ import (
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	deploymentsrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -34,12 +37,20 @@ import (
 )
 
 type recordingPromptJudge struct {
-	inputs []risk_analysis.JudgeInput
+	inputs []promptpolicy.Input
 }
 
-func (j *recordingPromptJudge) Evaluate(_ context.Context, in risk_analysis.JudgeInput) *risk_analysis.JudgeVerdict {
+func (j *recordingPromptJudge) Evaluate(_ context.Context, in promptpolicy.Input) (*promptpolicy.Verdict, error) {
 	j.inputs = append(j.inputs, in)
-	return &risk_analysis.JudgeVerdict{Confidence: 0.9, Rationale: "matched tool call"}
+	return &promptpolicy.Verdict{
+		Matched:          true,
+		Confidence:       0.9,
+		Rationale:        "matched tool call",
+		CostUSD:          0,
+		PromptTokens:     0,
+		CompletionTokens: 0,
+		TotalTokens:      0,
+	}, nil
 }
 
 // newPresidioPub returns a mock presidio publisher that accepts any publish
@@ -61,6 +72,13 @@ func mustCELEngine(t *testing.T) *celenv.Engine {
 	return eng
 }
 
+func mustCustomRuleScanner(t *testing.T, db riskrepo.DBTX) *customruleanalyzer.Scanner {
+	t.Helper()
+	s, err := customruleanalyzer.NewScanner(db)
+	require.NoError(t, err)
+	return s
+}
+
 func newGitleaksPub() *gcp.MockPublisher[*riskv1.GitleaksAnalysis] {
 	pub := gcp.NewMockPublisher[*riskv1.GitleaksAnalysis]()
 	pub.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult())
@@ -75,7 +93,7 @@ func newCustomRulesPub() *gcp.MockPublisher[*riskv1.CustomRulesAnalysis] {
 
 func TestAnalyzeBatch_EmptyMessageIDs(t *testing.T) {
 	t.Parallel()
-	ab := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil, nil, nil, newPresidioPub(), newGitleaksPub(), newCustomRulesPub(), mustCELEngine(t))
+	ab := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil, nil, nil, newPresidioPub(), newGitleaksPub(), newCustomRulesPub(), mustCustomRuleScanner(t, nil), mustCELEngine(t), nil)
 	require.NotNil(t, ab)
 
 	result, err := ab.Do(t.Context(), risk_analysis.AnalyzeBatchArgs{
@@ -109,7 +127,7 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 
 	// Point the production PresidioClient at a dead URL so the activity
 	// path mirrors what runs in the worker. After exhausting the retry
-	// budget the message dead-letters and the activity proceeds — gitleaks
+	// budget the message dead-letters and the activity proceeds - gitleaks
 	// findings on the same message survive.
 	piiScanner := risk_analysis.NewPresidioClient(
 		"http://127.0.0.1:1",
@@ -132,7 +150,9 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 		newPresidioPub(),
 		newGitleaksPub(),
 		newCustomRulesPub(),
+		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
+		nil,
 	)
 
 	// Execute via Temporal test activity environment to satisfy activity.RecordHeartbeat
@@ -224,7 +244,9 @@ func TestAnalyzeBatch_FilteredMessagesStillClearExistingResults(t *testing.T) {
 		newPresidioPub(),
 		newGitleaksPub(),
 		newCustomRulesPub(),
+		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
+		nil,
 	)
 
 	var ts testsuite.WorkflowTestSuite
@@ -323,12 +345,14 @@ func TestAnalyzeBatch_PromptJudgeUsesToolCallPayload(t *testing.T) {
 		nil,
 		nil,
 		nil,
-		judge,
+		judge.Evaluate,
 		flags,
 		newPresidioPub(),
 		newGitleaksPub(),
 		newCustomRulesPub(),
+		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
+		nil,
 	)
 
 	var ts testsuite.WorkflowTestSuite
@@ -359,6 +383,20 @@ func TestAnalyzeBatch_PromptJudgeUsesToolCallPayload(t *testing.T) {
 	require.Empty(t, msg.MCPServer, "native tool has no MCP server")
 	require.Empty(t, msg.MCPFunction)
 	require.Contains(t, msg.Body, "rm -rf /tmp/data")
+
+	// The stored finding's Match is the full flagged event the judge saw, not the
+	// empty string it used to be — that's what the Risk Events UI reveals.
+	rows, err := riskrepo.New(conn).ListRiskResultsByProjectAndPolicy(t.Context(), riskrepo.ListRiskResultsByProjectAndPolicyParams{
+		ProjectID:    td.projectID,
+		RiskPolicyID: td.policyID,
+		CursorID:     uuid.NullUUID{},
+		PageLimit:    10,
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, promptpolicy.Source, rows[0].Source)
+	require.Equal(t, judgemessage.Render(msg), rows[0].Match.String)
+	require.Contains(t, rows[0].Match.String, "rm -rf /tmp/data")
 }
 
 func TestAnalyzeBatch_PromptJudgeMultiToolCallAttribution(t *testing.T) {
@@ -386,7 +424,7 @@ func TestAnalyzeBatch_PromptJudgeMultiToolCallAttribution(t *testing.T) {
 	td.policyID = policy.ID
 	td.policyVersion = policy.Version
 
-	// An assistant message that issued two tool calls — one MCP, one native.
+	// An assistant message that issued two tool calls, one MCP and one native.
 	msgID := insertAssistantToolCallsWithArgs(t, conn, td, []struct {
 		name string
 		args map[string]any
@@ -407,12 +445,14 @@ func TestAnalyzeBatch_PromptJudgeMultiToolCallAttribution(t *testing.T) {
 		nil,
 		nil,
 		nil,
-		judge,
+		judge.Evaluate,
 		flags,
 		newPresidioPub(),
 		newGitleaksPub(),
 		newCustomRulesPub(),
+		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
+		nil,
 	)
 
 	var ts testsuite.WorkflowTestSuite
@@ -436,7 +476,7 @@ func TestAnalyzeBatch_PromptJudgeMultiToolCallAttribution(t *testing.T) {
 	require.NoError(t, val.Get(&result))
 	require.Len(t, judge.inputs, 1)
 
-	// The judge sees both calls, each with its own attribution — not an opaque blob.
+	// The judge sees both calls, each with its own attribution - not an opaque blob.
 	msg := judge.inputs[0].Message
 	require.Equal(t, message.ToolRequest, msg.Type)
 	require.Empty(t, msg.ToolName, "multi-call message carries no single tool name")
@@ -468,7 +508,7 @@ func TestAnalyzeBatch_DestructiveToolAnnotationSkipsFalseHint(t *testing.T) {
 // TestAnalyzeBatch_CLIDestructive_BashRmRf seeds a native Bash tool call
 // with `rm -rf *` and asserts the cli_destructive scanner emits a finding
 // keyed by the matched pattern. Native tools were previously skipped by the
-// MCP-only filter in scanDestructiveToolAnnotations — proving they are now
+// MCP-only filter in scanDestructiveToolAnnotations - proving they are now
 // in scope is the core of this scenario.
 func TestAnalyzeBatch_CLIDestructive_BashRmRf(t *testing.T) {
 	t.Parallel()
@@ -658,6 +698,54 @@ func TestAnalyzeBatch_CustomDetectionRuleFinding(t *testing.T) {
 	assert.Equal(t, "ACME-ABC12345", rows[0].Match.String)
 }
 
+// A configured exclusion must suppress a message-level content finding through
+// the full Do() path. TestAnalyzeBatch_CustomDetectionRuleFinding is the control
+// (identical setup, no exclusion -> 1 finding). The ExclusionSet predicate is
+// unit-tested in isolation; the wiring the session-level work reshaped -
+// policyExclusionSet's DB fetch and threading into scanStandardPolicy - is only
+// exercised end-to-end here.
+func TestAnalyzeBatch_ExclusionSuppressesMessageFinding(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+	td = seedCustomRulePolicySelection(t, conn, td, "custom.acme_token", `content.matchRegex("ACME-[A-Z0-9]{8}")`)
+
+	msgID, err := testrepo.New(conn).InsertChatMessage(t.Context(), testrepo.InsertChatMessageParams{
+		ChatID:    td.chatID,
+		ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
+		Role:      "user",
+		Content:   "deploy with ACME-ABC12345 today",
+	})
+	require.NoError(t, err)
+
+	_, err = riskrepo.New(conn).CreateRiskExclusion(t.Context(), riskrepo.CreateRiskExclusionParams{
+		ProjectID:      td.projectID,
+		OrganizationID: td.orgID,
+		RiskPolicyID:   uuid.NullUUID{UUID: td.policyID, Valid: true},
+		MatchType:      "exact",
+		MatchValue:     "ACME-ABC12345",
+		Enabled:        true,
+	})
+	require.NoError(t, err)
+
+	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, nil)
+	require.Equal(t, 1, result.Processed)
+	require.Equal(t, 0, result.Findings, "excluded content finding must be suppressed end-to-end through Do()")
+
+	// No active finding remains. The scanned message still records the empty
+	// sentinel row buildRows writes, but that row is found=false, which this
+	// active-findings query filters out - so the list is empty, as in
+	// TestAnalyzeBatch_CustomDetectionRuleSkipsNilRegex.
+	rows, err := riskrepo.New(conn).ListRiskResultsByProjectAndPolicy(t.Context(), riskrepo.ListRiskResultsByProjectAndPolicyParams{
+		ProjectID:    td.projectID,
+		RiskPolicyID: td.policyID,
+		CursorID:     uuid.NullUUID{},
+		PageLimit:    10,
+	})
+	require.NoError(t, err)
+	require.Empty(t, rows, "no active finding should survive the exclusion")
+}
+
 func TestAnalyzeBatch_CustomDetectionRuleSkipsNilRegex(t *testing.T) {
 	t.Parallel()
 	conn := cloneDB(t)
@@ -718,7 +806,7 @@ func TestAnalyzeBatch_CustomDetectionRuleToolServer(t *testing.T) {
 }
 
 // insertAssistantToolCallWithArgs is a sibling of insertAssistantToolCall for
-// CLI scenarios where the recorded arguments don't carry a Gram toolset id —
+// CLI scenarios where the recorded arguments don't carry a Gram toolset id -
 // the cli_destructive scanner is content-driven, so the args field is the
 // thing under test.
 func insertAssistantToolCallWithArgs(t *testing.T, conn *pgxpool.Pool, td testData, callName string, argsMap map[string]any) uuid.UUID {
@@ -743,6 +831,7 @@ func insertAssistantToolCallWithArgs(t *testing.T, conn *pgxpool.Pool, td testDa
 	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
 	t.Cleanup(func() { _ = shutdown(t.Context()) })
 	_, err = writer.Write(t.Context(), td.projectID, []chatrepo.CreateChatMessageParams{{
+		CreatedAt:        pgtype.Timestamptz{},
 		ChatID:           td.chatID,
 		Role:             "assistant",
 		ProjectID:        td.projectID,
@@ -812,6 +901,7 @@ func insertAssistantToolCallsWithArgs(t *testing.T, conn *pgxpool.Pool, td testD
 	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
 	t.Cleanup(func() { _ = shutdown(t.Context()) })
 	_, err = writer.Write(t.Context(), td.projectID, []chatrepo.CreateChatMessageParams{{
+		CreatedAt:        pgtype.Timestamptz{},
 		ChatID:           td.chatID,
 		Role:             "assistant",
 		ProjectID:        td.projectID,
@@ -871,7 +961,9 @@ func executeAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, td testData, messageI
 		newPresidioPub(),
 		newGitleaksPub(),
 		newCustomRulesPub(),
+		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
+		nil,
 	)
 
 	var ts testsuite.WorkflowTestSuite
@@ -1073,6 +1165,7 @@ func insertAssistantToolCall(t *testing.T, conn *pgxpool.Pool, td testData, call
 	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
 	t.Cleanup(func() { _ = shutdown(t.Context()) })
 	_, err = writer.Write(t.Context(), td.projectID, []chatrepo.CreateChatMessageParams{{
+		CreatedAt:        pgtype.Timestamptz{},
 		ChatID:           td.chatID,
 		Role:             "assistant",
 		ProjectID:        td.projectID,

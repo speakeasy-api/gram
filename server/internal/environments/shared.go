@@ -213,20 +213,45 @@ func (e *EnvironmentEntries) ListEnvironmentEntries(ctx context.Context, project
 		return nil, fmt.Errorf("query error: %w", err)
 	}
 
+	return e.decryptEntries(entries, redacted)
+}
+
+// ListEnvironmentEntriesForUpdate is ListEnvironmentEntries with a row lock held
+// on every entry for the rest of the transaction. Callers that derive a write
+// from what they read — such as preserving a stored value the caller omitted —
+// need this so a concurrent write cannot land in between and be reverted.
+func (e *EnvironmentEntries) ListEnvironmentEntriesForUpdate(ctx context.Context, projectID uuid.UUID, environmentID uuid.UUID) ([]repo.EnvironmentEntry, error) {
+	entries, err := e.repo.ListEnvironmentEntriesForUpdate(ctx, repo.ListEnvironmentEntriesForUpdateParams{
+		ProjectID:     projectID,
+		EnvironmentID: environmentID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("query error: %w", err)
+	}
+
+	return e.decryptEntries(entries, false)
+}
+
+func (e *EnvironmentEntries) decryptEntries(entries []repo.EnvironmentEntry, redacted bool) ([]repo.EnvironmentEntry, error) {
 	decryptedEntries := make([]repo.EnvironmentEntry, len(entries))
 	for i, entry := range entries {
-		value, err := e.enc.Decrypt(entry.Value)
-		if err != nil {
-			return nil, fmt.Errorf("decrypt entry %s: %w", entry.Name, err)
-		}
+		value := entry.Value
+		if entry.IsSecret {
+			decrypted, err := e.enc.Decrypt(entry.Value)
+			if err != nil {
+				return nil, fmt.Errorf("decrypt entry %s: %w", entry.Name, err)
+			}
+			value = decrypted
 
-		if redacted {
-			value = redactedEnvironment(value)
+			if redacted {
+				value = redactedEnvironment(value)
+			}
 		}
 
 		decryptedEntries[i] = repo.EnvironmentEntry{
 			Name:          entry.Name,
 			Value:         value,
+			IsSecret:      entry.IsSecret,
 			EnvironmentID: entry.EnvironmentID,
 			CreatedAt:     entry.CreatedAt,
 			UpdatedAt:     entry.UpdatedAt,
@@ -237,19 +262,23 @@ func (e *EnvironmentEntries) ListEnvironmentEntries(ctx context.Context, project
 }
 
 func (e *EnvironmentEntries) CreateEnvironmentEntries(ctx context.Context, params repo.CreateEnvironmentEntriesParams) ([]repo.EnvironmentEntry, error) {
-	encryptedValues := make([]string, len(params.Values))
+	storedValues := make([]string, len(params.Values))
 	originalValues := make(map[string]string, len(params.Values))
 
 	for i, value := range params.Values {
-		encryptedValue, err := e.enc.Encrypt([]byte(value))
-		if err != nil {
-			return nil, fmt.Errorf("failed to encrypt value for entry %s: %w", params.Names[i], err)
+		storedValue := value
+		if params.IsSecrets[i] {
+			encryptedValue, err := e.enc.Encrypt([]byte(value))
+			if err != nil {
+				return nil, fmt.Errorf("failed to encrypt value for entry %s: %w", params.Names[i], err)
+			}
+			storedValue = encryptedValue
 		}
-		encryptedValues[i] = encryptedValue
+		storedValues[i] = storedValue
 		originalValues[params.Names[i]] = value // avoid having to needlessly decrypt the value
 	}
 
-	params.Values = encryptedValues
+	params.Values = storedValues
 	createdEntries, err := e.repo.CreateEnvironmentEntries(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create environment entries: %w", err)
@@ -257,9 +286,15 @@ func (e *EnvironmentEntries) CreateEnvironmentEntries(ctx context.Context, param
 
 	decryptedEntries := make([]repo.EnvironmentEntry, len(createdEntries))
 	for i, entry := range createdEntries {
+		value := originalValues[entry.Name]
+		if entry.IsSecret {
+			value = redactedEnvironment(value)
+		}
+
 		decryptedEntries[i] = repo.EnvironmentEntry{
 			Name:          entry.Name,
-			Value:         redactedEnvironment(originalValues[entry.Name]), // avoid having to needlessly decrypt the value
+			Value:         value,
+			IsSecret:      entry.IsSecret,
 			EnvironmentID: entry.EnvironmentID,
 			CreatedAt:     entry.CreatedAt,
 			UpdatedAt:     entry.UpdatedAt,
@@ -270,13 +305,15 @@ func (e *EnvironmentEntries) CreateEnvironmentEntries(ctx context.Context, param
 }
 
 func (e *EnvironmentEntries) UpdateEnvironmentEntry(ctx context.Context, params repo.UpsertEnvironmentEntryParams) error {
-	encryptedValue, err := e.enc.Encrypt([]byte(params.Value))
-	if err != nil {
-		return fmt.Errorf("failed to encrypt value: %w", err)
+	if params.IsSecret {
+		encryptedValue, err := e.enc.Encrypt([]byte(params.Value))
+		if err != nil {
+			return fmt.Errorf("failed to encrypt value: %w", err)
+		}
+		params.Value = encryptedValue
 	}
 
-	params.Value = encryptedValue
-	_, err = e.repo.UpsertEnvironmentEntry(ctx, params)
+	_, err := e.repo.UpsertEnvironmentEntry(ctx, params)
 	if err != nil {
 		return fmt.Errorf("failed to update environment entry: %w", err)
 	}

@@ -19,6 +19,7 @@ const RISK_CATEGORY_CHART_COLORS = [
   { category: "shadow_mcp", color: "#a3e635" },
   { category: "destructive_tool", color: "#818cf8" },
   { category: "cli_destructive", color: "#fb7185" },
+  { category: "account_identity", color: "#fb923c" },
   { category: "custom", color: "#94a3b8" },
 ] satisfies ReadonlyArray<{ category: RuleCategory; color: string }>;
 

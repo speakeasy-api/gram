@@ -3,11 +3,12 @@ name: Plugin Generate Check
 on:
   pull_request:
     paths:
-      - "hooks/**"
-      - "server/internal/plugins/generate.go"
+      - "server/internal/plugins/**"
+      - "server/cmd/export-hook-plugin/**"
+      - "hooks/relay/config.go"
 
 jobs:
-  check-generate-updated:
+  check-generator-versions:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout PR branch
@@ -15,49 +16,101 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Check that plugins/generate.go was updated
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: "go.mod"
+          # Reference: https://github.com/actions/setup-go/issues/495
+          cache: false
+
+      - name: Require a hooksGeneratorVersion bump when hook plugin output changes
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
+          # The observability (hooks) plugin has no content fingerprint: the
+          # rollout republishes it ONLY when hooksGeneratorVersion is bumped.
+          # Nothing is checked in to diff anymore, so render the published
+          # hooks subtree (Claude, Cursor, Codex, manifests, all mode/login combinations)
+          # from both the merge base and this PR and compare the trees — any
+          # output change MUST come with a bump or it would never roll out to
+          # connected repos. Blocking.
           git fetch origin "$BASE_REF"
-          CHANGED_FILES=$(git diff --name-only "origin/$BASE_REF"...HEAD)
+          BASE=$(git merge-base "origin/$BASE_REF" HEAD)
 
-          HOOKS_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^hooks/' | grep -v -E '^hooks/plugin-claude-test/' || true)
-          GENERATE_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^server/internal/plugins/generate\.go$' || true)
+          HEAD_OUT=$(mktemp -d)
+          (cd server && go run ./cmd/export-hook-plugin -published -out "$HEAD_OUT")
 
-          if [ -n "$HOOKS_CHANGED" ] && [ -z "$GENERATE_CHANGED" ]; then
-            echo "❌ Error: hooks/ was modified but server/internal/plugins/generate.go was not updated"
+          BASE_TREE=$(mktemp -d)
+          git worktree add --detach "$BASE_TREE" "$BASE"
+          BASE_OUT=$(mktemp -d)
+          if [ -d "$BASE_TREE/server/cmd/export-hook-plugin" ]; then
+            (cd "$BASE_TREE/server" && go run ./cmd/export-hook-plugin -published -out "$BASE_OUT")
+          else
+            # The merge base predates the renderer, so there is nothing to
+            # compare against. Leaving BASE_OUT empty makes the diff below
+            # report every rendered file as changed, deliberately: introducing
+            # the renderer changes what publishes, so it must ship with a bump.
+            echo "No exporter at merge base; treating all rendered output as changed."
+          fi
+          git worktree remove --force "$BASE_TREE"
+
+          hooks_version() {
+            git show "${1}:server/internal/plugins/generate.go" 2>/dev/null \
+              | grep -E '^[[:space:]]*const hooksGeneratorVersion' || true
+          }
+
+          if diff -r "$BASE_OUT" "$HEAD_OUT" > /dev/null; then
+            echo "Rendered hook plugins are unchanged; no bump needed."
+            exit 0
+          fi
+
+          if [ "$(hooks_version "$BASE")" = "$(hooks_version HEAD)" ]; then
+            echo "❌ Error: the rendered hook plugins changed but hooksGeneratorVersion was not bumped."
+            echo "The hooks plugin only republishes on a hooksGeneratorVersion bump, so this change would never reach users."
             echo ""
-            echo "Changed production hook files:"
-            echo "$HOOKS_CHANGED"
+            echo "Changed rendered files:"
+            diff -rq "$BASE_OUT" "$HEAD_OUT" || true
             echo ""
-            echo "Please update server/internal/plugins/generate.go to reflect the hook changes."
+            echo "Bump hooksGeneratorVersion in server/internal/plugins/generate.go."
             exit 1
           fi
 
-          echo "✅ server/internal/plugins/generate.go was updated alongside hooks/ changes"
+          echo "✅ Rendered hook plugins changed and hooksGeneratorVersion was bumped."
 
-      - name: Remind to consider a generator version bump
+      - name: Remind to consider an mcpGeneratorVersion bump
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
-          # generate.go drives the plugin fingerprint that the automated rollout
-          # uses to skip unchanged projects. Output-affecting changes are caught
-          # automatically by the content hash, so we do NOT force a bump on every
-          # edit — that would invalidate every project's fingerprint and trigger
-          # a full republish (fresh keys + commits) for no reason. This is a
-          # non-blocking nudge for the rare case where generation BEHAVIOUR
-          # changes in a way the placeholder fingerprint pass can't observe.
-          GENERATE_DIFF=$(git diff "origin/$BASE_REF"...HEAD -- server/internal/plugins/generate.go)
-          if [ -z "$GENERATE_DIFF" ]; then
-            echo "generate.go unchanged; nothing to check."
+          # The MCP fingerprint catches output-visible MCP changes
+          # automatically, so we do NOT force an mcpGeneratorVersion bump on
+          # every edit — that would invalidate every project's fingerprint and
+          # trigger a full MCP republish (fresh keys + commits) for no reason.
+          # Non-blocking nudge, keyed on the git hashes of the generator
+          # sources, for MCP behaviour changes the placeholder fingerprint
+          # pass can't observe.
+          BASE=$(git merge-base "origin/$BASE_REF" HEAD)
+
+          # A vanished path hashes to a distinct sentinel so renames and
+          # deletions register as a change rather than an error.
+          generator_tree_hash() {
+            git rev-parse \
+              "${1}:server/internal/plugins/generate.go" \
+              "${1}:server/internal/plugins/naming" \
+              2>/dev/null || echo "unresolvable:${1}"
+          }
+
+          if [ "$(generator_tree_hash "$BASE")" = "$(generator_tree_hash HEAD)" ]; then
+            echo "Plugin generator sources unchanged; nothing to check."
             exit 0
           fi
 
-          VERSION_BUMPED=$(echo "$GENERATE_DIFF" | grep -E '^\+[[:space:]]*const pluginGeneratorVersion' || true)
-          if [ -n "$VERSION_BUMPED" ]; then
-            echo "✅ pluginGeneratorVersion was bumped."
+          mcp_version() {
+            git show "${1}:server/internal/plugins/generate.go" 2>/dev/null \
+              | grep -E '^[[:space:]]*const mcpGeneratorVersion' || true
+          }
+
+          if [ "$(mcp_version "$BASE")" != "$(mcp_version HEAD)" ]; then
+            echo "✅ mcpGeneratorVersion was bumped."
             exit 0
           fi
 
-          echo "::notice file=server/internal/plugins/generate.go::generate.go changed without bumping pluginGeneratorVersion. If this change alters generation behaviour in a way the fingerprint's placeholder pass can't observe (and you want every project republished on the next rollout), bump the const. Output-visible changes are detected automatically and need no bump."
+          echo "::notice file=server/internal/plugins/generate.go::Plugin generator sources changed without bumping mcpGeneratorVersion. If this alters MCP generation behaviour in a way the fingerprint's placeholder pass can't observe (and you want every project's MCP plugins republished on the next rollout), bump mcpGeneratorVersion. Output-visible MCP changes are detected automatically and need no bump."

@@ -1,24 +1,26 @@
-import type {
-  Deployment,
-  DeploymentLogEvent,
-} from "@gram/client/models/components";
+import type { Deployment } from "@gram/client/models/components/deployment.js";
+import type { DeploymentLogEvent } from "@gram/client/models/components/deploymentlogevent.js";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("@gram/client/react-query/index.js", () => ({
+vi.mock("@gram/client/react-query/deployment.js", () => ({
   useDeployment: vi.fn(() => ({ data: undefined, isLoading: false })),
+}));
+vi.mock("@gram/client/react-query/deploymentLogs.js", () => ({
   useDeploymentLogs: vi.fn(() => ({ data: undefined, isLoading: false })),
+}));
+vi.mock("@gram/client/react-query/latestDeployment.js", () => ({
   useLatestDeployment: vi.fn(() => ({ data: undefined, isLoading: false })),
+}));
+vi.mock("@gram/client/react-query/listToolsets.js", () => ({
   useListToolsets: vi.fn(() => ({ data: undefined })),
 }));
 
-import {
-  useDeployment,
-  useDeploymentLogs,
-  useLatestDeployment,
-  useListToolsets,
-} from "@gram/client/react-query/index.js";
+import { useDeployment } from "@gram/client/react-query/deployment.js";
+import { useDeploymentLogs } from "@gram/client/react-query/deploymentLogs.js";
+import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
+import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import {
   computeFailedSources,
   flattenToolUrns,

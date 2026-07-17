@@ -200,7 +200,8 @@ await pokeHTTPService(
 
 const gramHost = process.env["GRAM_HOST"] ?? "localhost";
 const gramSitePort = process.env["GRAM_SITE_PORT"] ?? "5173";
-const gramDashboardURL = `https://${gramHost}:${gramSitePort}`;
+const gramDashboardURL =
+  process.env["GRAM_SITE_URL"] ?? `https://${gramHost}:${gramSitePort}`;
 await pokeHTTPService("Gram dashboard", gramDashboardURL, gramDashboardURL);
 
 tableRows.sort(([nameA, runningA], [nameB, runningB]) => {
@@ -211,7 +212,9 @@ tableRows.sort(([nameA, runningA], [nameB, runningB]) => {
 const q = (s: string) => `"${s}"`;
 const csv = [
   ["Service", "Status", "Address"].map(q).join(","),
-  ["", "", ""].join(","), // gum has a bug where first row is weirdly styled
+  // gum has a bug where first row is weirdly styled
+  // https://github.com/charmbracelet/gum/pull/1021
+  ["", "", ""].join(","),
   ...tableRows.map(([name, running, detail]) => {
     const status = running
       ? chalk.greenBright("RUNNING")

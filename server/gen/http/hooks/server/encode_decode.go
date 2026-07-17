@@ -12,6 +12,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 
 	hooks "github.com/speakeasy-api/gram/server/gen/hooks"
@@ -751,6 +752,7 @@ func DecodeIngestRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.
 			apikeyToken      *string
 			projectSlugInput *string
 			idempotencyKey   *string
+			replayed         *bool
 		)
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
@@ -764,21 +766,20 @@ func DecodeIngestRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.
 		if idempotencyKeyRaw != "" {
 			idempotencyKey = &idempotencyKeyRaw
 		}
-		payload = NewIngestPayload(&body, apikeyToken, projectSlugInput, idempotencyKey)
-		if payload.ApikeyToken != nil {
-			if strings.Contains(*payload.ApikeyToken, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
-				payload.ApikeyToken = &cred
+		{
+			replayedRaw := r.Header.Get("X-Gram-Replayed")
+			if replayedRaw != "" {
+				v, err2 := strconv.ParseBool(replayedRaw)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("replayed", replayedRaw, "boolean"))
+				}
+				replayed = &v
 			}
 		}
-		if payload.ProjectSlugInput != nil {
-			if strings.Contains(*payload.ProjectSlugInput, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
-				payload.ProjectSlugInput = &cred
-			}
+		if err != nil {
+			return payload, err
 		}
+		payload = NewIngestPayload(&body, apikeyToken, projectSlugInput, idempotencyKey, replayed)
 
 		return payload, nil
 	}
@@ -1393,6 +1394,7 @@ func unmarshalHookIngestSourceRequestBodyToHooksHookIngestSource(v *HookIngestSo
 		AdapterVersion: v.AdapterVersion,
 		RawEventName:   v.RawEventName,
 		Hostname:       v.Hostname,
+		UserEmail:      v.UserEmail,
 	}
 
 	return res
@@ -1442,6 +1444,16 @@ func unmarshalHookIngestDataRequestBodyToHooksHookIngestData(v *HookIngestDataRe
 	if v.Mcp != nil {
 		res.Mcp = unmarshalHookMCPDataRequestBodyToHooksHookMCPData(v.Mcp)
 	}
+	if v.McpInventory != nil {
+		res.McpInventory = make([]*hooks.HookMCPData, len(v.McpInventory))
+		for i, val := range v.McpInventory {
+			if val == nil {
+				res.McpInventory[i] = nil
+				continue
+			}
+			res.McpInventory[i] = unmarshalHookMCPDataRequestBodyToHooksHookMCPData(val)
+		}
+	}
 	if v.Usage != nil {
 		res.Usage = unmarshalHookUsageDataRequestBodyToHooksHookUsageData(v.Usage)
 	}
@@ -1453,6 +1465,16 @@ func unmarshalHookIngestDataRequestBodyToHooksHookIngestData(v *HookIngestDataRe
 	}
 	if v.Notification != nil {
 		res.Notification = unmarshalHookNotificationDataRequestBodyToHooksHookNotificationData(v.Notification)
+	}
+	if v.McpAttribution != nil {
+		res.McpAttribution = make([]*hooks.HookMCPAttributionEntry, len(v.McpAttribution))
+		for i, val := range v.McpAttribution {
+			if val == nil {
+				res.McpAttribution[i] = nil
+				continue
+			}
+			res.McpAttribution[i] = unmarshalHookMCPAttributionEntryRequestBodyToHooksHookMCPAttributionEntry(val)
+		}
 	}
 
 	return res
@@ -1569,6 +1591,22 @@ func unmarshalHookNotificationDataRequestBodyToHooksHookNotificationData(v *Hook
 		Type:    v.Type,
 		Title:   v.Title,
 		Message: v.Message,
+	}
+
+	return res
+}
+
+// unmarshalHookMCPAttributionEntryRequestBodyToHooksHookMCPAttributionEntry
+// builds a value of type *hooks.HookMCPAttributionEntry from a value of type
+// *HookMCPAttributionEntryRequestBody.
+func unmarshalHookMCPAttributionEntryRequestBodyToHooksHookMCPAttributionEntry(v *HookMCPAttributionEntryRequestBody) *hooks.HookMCPAttributionEntry {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.HookMCPAttributionEntry{
+		RequestID: *v.RequestID,
+		McpServer: v.McpServer,
+		McpTool:   v.McpTool,
 	}
 
 	return res

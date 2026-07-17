@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
@@ -80,9 +81,20 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 		// short-circuiting there would freeze a session first seen without an email
 		// as personal and never persist the late-arriving email / external_org_id
 		// or teach the device bridge (DNO-360).
+		//
+		// A company-credential session (no provider account UUID) never gets a
+		// UserAccountID — there is no account entity to persist — so for those
+		// sessions the fast path keys on the resolved AccountType instead, or they
+		// would re-attribute on every batch for their lifetime. A UUID-bearing
+		// session must still present a persisted UserAccountID: attribution stamps
+		// AccountType before the user_accounts upsert, so keying on AccountType
+		// alone would freeze a session whose entity persistence transiently failed
+		// (classified but never persisted, linked, or billing-resolved) instead of
+		// retrying on the next batch.
 		var cached SessionMetadata
 		if err := s.cache.Get(ctx, sessionCacheKey(session.SessionID), &cached); err == nil &&
-			cached.UserAccountID != "" && !sessionEnrichesAttribution(session, cached) {
+			(cached.UserAccountID != "" || (cached.AccountType != "" && cached.ExternalAccountUUID == "")) &&
+			!sessionEnrichesAttribution(session, cached) {
 			attributionBySession[session.SessionID] = cached
 			continue
 		}
@@ -115,8 +127,11 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 			AccountType:         "",
 			BillingMode:         "",
 			UserAccountID:       "",
-			GramOrgID:           orgID,
-			ProjectID:           projectID,
+			// On this path user.email is the account's own report, so it doubles
+			// as the observed email consumers keep separate from actor identity.
+			ObservedUserEmail: userEmail,
+			GramOrgID:         orgID,
+			ProjectID:         projectID,
 		}
 
 		sessionLogger := logger.With(
@@ -124,6 +139,8 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 			attr.SlogGenAIConversationID(session.SessionID),
 			attr.SlogAuthUserEmail(session.UserEmail),
 		)
+
+		_, metadataErr := s.getSessionMetadata(ctx, completeMetadata.SessionID)
 
 		// Attribute the account: classify team vs personal, link it to the
 		// owning employee (directly for team accounts, via the device bridge for
@@ -138,13 +155,54 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 
 		attributionBySession[completeMetadata.SessionID] = completeMetadata
 
-		// Process each session independently so a single cache failure does not
-		// abort flushing the remaining sessions in the batch.
-		if err := s.cache.Set(ctx, sessionCacheKey(completeMetadata.SessionID), completeMetadata, 24*time.Hour); err != nil {
-			sessionLogger.ErrorContext(ctx, "Failed to store session metadata",
-				attr.SlogEvent("claude_logs_cache_set_failed"),
-				attr.SlogError(err),
-			)
+		// A session's chat row is created once, on its first persisted message.
+		// When that message beat this attribution (hooks and OTEL race at session
+		// start), the chat exists without its account link and no later hook
+		// revisits it — so backfill the link here. Fill-once in SQL; a no-op when
+		// the chat does not exist yet or is already linked. At most one write per
+		// attributed session, since only the attribution path runs this.
+		linkFailed := false
+		if completeMetadata.UserAccountID != "" {
+			if _, err := s.repo.LinkChatUserAccount(ctx, repo.LinkChatUserAccountParams{
+				UserAccountID: conv.StringToNullUUID(completeMetadata.UserAccountID),
+				ID:            sessionIDToUUID(completeMetadata.SessionID),
+				ProjectID:     *authCtx.ProjectID,
+			}); err != nil {
+				linkFailed = true
+				sessionLogger.ErrorContext(ctx, "failed to backfill chat account link",
+					attr.SlogEvent("chat_account_link_backfill_failed"),
+					attr.SlogError(err),
+				)
+			}
+		}
+
+		// Cache only after the backfill: the once-per-session fast path above
+		// keys on the cached UserAccountID (or, for a company-credential session
+		// with no account entity, the resolved AccountType), so caching an
+		// attribution whose backfill just failed would freeze the chat unlinked
+		// forever. Skipping
+		// the write keeps this batch's row stamping (attributionBySession) and
+		// lets the next batch re-attribute and retry the link. Process each
+		// session independently so a single cache failure does not abort
+		// flushing the remaining sessions in the batch.
+		if !linkFailed {
+			if err := s.cache.Set(ctx, sessionCacheKey(completeMetadata.SessionID), completeMetadata, 24*time.Hour); err != nil {
+				sessionLogger.ErrorContext(ctx, "Failed to store session metadata",
+					attr.SlogEvent("claude_logs_cache_set_failed"),
+					attr.SlogError(err),
+				)
+			}
+		}
+		if metadataErr != nil {
+			entries, err := s.getCachedMCPList(ctx, completeMetadata.SessionID)
+			if err == nil {
+				s.upsertShadowMCPInventoryURLs(ctx, completeMetadata.GramOrgID, completeMetadata.ProjectID, completeMetadata.SessionID, entries)
+			} else {
+				sessionLogger.WarnContext(ctx, "failed to read cached MCP list for shadow inventory capture",
+					attr.SlogEvent("claude_otel_mcp_list_cache_miss"),
+					attr.SlogError(err),
+				)
+			}
 		}
 
 		s.flushPendingHooks(ctx, completeMetadata.SessionID, &completeMetadata)
@@ -180,6 +238,7 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 func sessionEnrichesAttribution(incoming claudeLogMetadata, cached SessionMetadata) bool {
 	return (incoming.UserEmail != "" && cached.UserEmail == "") ||
 		(incoming.ExternalOrgID != "" && cached.ExternalOrgID == "") ||
+		(incoming.ExternalAccountUUID != "" && cached.ExternalAccountUUID == "") ||
 		(incoming.ExternalAccountID != "" && cached.ExternalAccountID == "") ||
 		(incoming.DeviceID != "" && cached.DeviceID == "")
 }
@@ -291,6 +350,7 @@ func (s *Service) writeClaudeOTELLogsToClickHouse(ctx context.Context, payload *
 	}
 
 	params := make([]telemetry.LogParams, 0)
+	stagedParams := make([]telemetry.LogParams, 0)
 	correlationSessionIDs := make(map[string]struct{})
 	for _, resourceLog := range payload.ResourceLogs {
 		if resourceLog == nil {
@@ -359,12 +419,29 @@ func (s *Service) writeClaudeOTELLogsToClickHouse(ctx context.Context, payload *
 				}
 
 				timestamp, observedTimestamp := otelLogTimestamps(logRecord)
-				params = append(params, telemetry.WithOTELMetadata(telemetry.LogParams{
+				logParams := telemetry.WithOTELMetadata(telemetry.LogParams{
 					Timestamp:  timestamp,
 					ToolInfo:   claudeOTELLogToolInfo(orgID, parsedProjectID.String()),
 					UserInfo:   userInfo,
 					Attributes: logAttrs,
-				}, observedTimestamp, resourceAttrs))
+				}, observedTimestamp, resourceAttrs)
+
+				// Claude redacts user-configured MCP server/tool names to
+				// "custom" on api_request rows. Those rows park in
+				// telemetry_logs_staging until the transcript-derived
+				// attribution for their request_id arrives via the
+				// Stop/SubagentStop hooks (or the promotion timeout passes);
+				// the scheduled sweep then rewrites the names and inserts
+				// into telemetry_logs so attribute_metrics_summaries_mv
+				// aggregates the true attribution. The sweep scans staging
+				// per project and joins tuples per request id, so even
+				// sessionless redacted rows are reachable. Everything else
+				// writes through.
+				if isRedactedClaudeAPIRequest(logAttrs) {
+					stagedParams = append(stagedParams, logParams)
+					continue
+				}
+				params = append(params, logParams)
 			}
 		}
 	}
@@ -373,9 +450,24 @@ func (s *Service) writeClaudeOTELLogsToClickHouse(ctx context.Context, payload *
 		s.logger.ErrorContext(ctx, "failed to write Claude OTEL logs to ClickHouse", attr.SlogError(err))
 		return
 	}
+	if err := s.telemetryLogger.LogBulkStaging(ctx, stagedParams); err != nil {
+		s.logger.ErrorContext(ctx, "failed to write staged Claude OTEL logs to ClickHouse", attr.SlogError(err))
+		return
+	}
 	for sessionID := range correlationSessionIDs {
 		s.scheduleClaudePromptCorrelation(ctx, parsedProjectID, sessionIDToUUID(sessionID), sessionID)
 	}
+}
+
+// isRedactedClaudeAPIRequest reports whether this OTEL log row is a Claude
+// api_request whose inline MCP attribution Claude redacted to "custom" —
+// exactly the rows the staging/promotion path exists for.
+func isRedactedClaudeAPIRequest(logAttrs map[attr.Key]any) bool {
+	if stringAttr(logAttrs, attribute.Key("mcp_server.name")) != "custom" {
+		return false
+	}
+	return stringAttr(logAttrs, attribute.Key("event.name")) == "api_request" ||
+		stringAttr(logAttrs, attr.LogBodyKey) == "claude_code.api_request"
 }
 
 func shouldTriggerClaudePromptCorrelation(logAttrs map[attr.Key]any) bool {

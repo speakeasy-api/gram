@@ -1,23 +1,24 @@
 import { Input } from "@/components/ui/input";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
-import { FeatureName } from "@gram/client/models/components";
-import {
-  useDisableRBACMutation,
-  useEnableRBACMutation,
-  useFeaturesSetMutation,
-  useProductFeatures,
-  useRbacStatus,
-  useSendEnterpriseAdminOnboardingEmailMutation,
-} from "@gram/client/react-query";
+import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
+import { useDisableRBACMutation } from "@gram/client/react-query/disableRBAC.js";
+import { useEnableRBACMutation } from "@gram/client/react-query/enableRBAC.js";
+import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet.js";
+import { invalidateAllGrants } from "@gram/client/react-query/grants.js";
+import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
+import { useRbacStatus } from "@gram/client/react-query/rbacStatus.js";
+import { useSendEnterpriseAdminOnboardingEmailMutation } from "@gram/client/react-query/sendEnterpriseAdminOnboardingEmail.js";
 import { invalidateAllProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { invalidateAllRbacStatus } from "@gram/client/react-query/rbacStatus.js";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowRightLeft,
+  BookOpen,
   Building2,
   FileSearch,
   FolderSync,
+  Key,
   KeyRound,
   Loader2,
   Mail,
@@ -150,6 +151,7 @@ function RBACManagementSection(): ReactElement {
   const enableMutation = useEnableRBACMutation({
     onSuccess: () => {
       void invalidateAllRbacStatus(queryClient);
+      void invalidateAllGrants(queryClient);
       setConfirmAction(null);
     },
   });
@@ -157,6 +159,7 @@ function RBACManagementSection(): ReactElement {
   const disableMutation = useDisableRBACMutation({
     onSuccess: () => {
       void invalidateAllRbacStatus(queryClient);
+      void invalidateAllGrants(queryClient);
       setConfirmAction(null);
     },
   });
@@ -244,8 +247,14 @@ function ProductFeaturesSection(): ReactElement {
     error: mutError,
     variables,
   } = useFeaturesSetMutation({
-    onSuccess: () => {
+    onSuccess: (_data, mutationVariables) => {
       void invalidateAllProductFeatures(queryClient);
+      if (
+        mutationVariables.request?.setProductFeatureRequestBody?.featureName ===
+        FeatureName.Skills
+      ) {
+        void invalidateAllGrants(queryClient);
+      }
     },
   });
 
@@ -286,6 +295,19 @@ function ProductFeaturesSection(): ReactElement {
       </Section>
 
       <FeatureToggle
+        label="Skills"
+        description="Enables the Skills page and provisions default Skills grants when RBAC is active."
+        icon={BookOpen}
+        featureName={FeatureName.Skills}
+        enabled={features.skillsEnabled}
+        isPending={isPending && pendingFeature === FeatureName.Skills}
+        onToggle={handleToggle}
+        error={
+          pendingFeature === FeatureName.Skills ? mutError?.message : undefined
+        }
+      />
+
+      <FeatureToggle
         label="Authz Challenge Logging"
         description='Log every authorization decision (allow/deny) to ClickHouse. Powers auditing of "why did X have access to Y?"'
         icon={FileSearch}
@@ -312,6 +334,21 @@ function ProductFeaturesSection(): ReactElement {
         onToggle={handleToggle}
         error={
           pendingFeature === FeatureName.Webhooks
+            ? mutError?.message
+            : undefined
+        }
+      />
+
+      <FeatureToggle
+        label="Custom Model Provider Keys"
+        description="Allows projects in this organization to store OpenRouter API keys for model completions."
+        icon={Key}
+        featureName={FeatureName.CustomModelKeys}
+        enabled={features.customModelKeysEnabled}
+        isPending={isPending && pendingFeature === FeatureName.CustomModelKeys}
+        onToggle={handleToggle}
+        error={
+          pendingFeature === FeatureName.CustomModelKeys
             ? mutError?.message
             : undefined
         }

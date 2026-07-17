@@ -11,6 +11,7 @@ import { ShieldAlert } from "lucide-react";
 import { Stack } from "@speakeasy-api/moonshine";
 import { SettingsDangerZone } from "./SettingsDangerZone";
 import { RegistryCacheSection } from "./RegistryCacheSection";
+import { ModelProviderKeysSection } from "./ModelProviderKeysSection";
 
 export default function Settings(): JSX.Element {
   const isAdmin = useIsPlatformAdmin();
@@ -31,6 +32,10 @@ export default function Settings(): JSX.Element {
             Manage your project configuration and perform administrative
             actions.
           </Type>
+          <div className="mb-8">
+            <ModelProviderKeysSection />
+          </div>
+
           <div>
             <SettingsDangerZone />
           </div>
