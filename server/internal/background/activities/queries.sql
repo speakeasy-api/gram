@@ -88,6 +88,7 @@ SELECT
 FROM organization_metadata om
 JOIN billing_metadata bm ON bm.organization_id = om.id
 WHERE om.id = ANY(@organization_ids::text[])
+  AND om.disabled_at IS NULL
   AND bm.alert_email IS NOT NULL
   AND NOT EXISTS (
       SELECT 1
