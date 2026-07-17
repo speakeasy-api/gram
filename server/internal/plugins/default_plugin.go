@@ -99,6 +99,31 @@ func EnsureDefaultPlugin(ctx context.Context, tx pgx.Tx, organizationID string, 
 		return nil, fmt.Errorf("release savepoint: %w", err)
 	}
 
+	// Default a freshly-created Default plugin to the org wildcard so it delivers
+	// to every member — but only in the org's default project, the org-wide
+	// baseline. agent.getPlugins scopes delivery by assignment, and the default
+	// project's Default plugin (where enabled servers auto-attach) must reach
+	// everyone unless an admin narrows it. A non-default project's Default plugin
+	// starts with no assignments so enabling a server there doesn't auto-broadcast
+	// org-wide. Only the genuine-creation path seeds this; the race/promote
+	// recoveries above leave any existing assignments untouched.
+	isDefaultProject, err := q.IsDefaultProject(ctx, repo.IsDefaultProjectParams{
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("check default project: %w", err)
+	}
+	if isDefaultProject {
+		if _, err := q.AddPluginAssignment(ctx, repo.AddPluginAssignmentParams{
+			PluginID:       created.ID,
+			OrganizationID: organizationID,
+			PrincipalUrn:   urn.PrincipalWildcard,
+		}); err != nil {
+			return nil, fmt.Errorf("assign default plugin to org: %w", err)
+		}
+	}
+
 	return &EnsureDefaultPluginResult{Plugin: created, Created: true}, nil
 }
 

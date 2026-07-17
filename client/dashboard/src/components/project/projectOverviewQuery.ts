@@ -1,4 +1,4 @@
-import { getPresetRange, type DateRangePreset } from "@gram-ai/elements";
+import { getPresetRange, type DateRangePreset } from "@/elements";
 import { telemetryGetProjectOverview } from "@gram/client/funcs/telemetryGetProjectOverview";
 import type { GetProjectOverviewResult } from "@gram/client/models/components/getprojectoverviewresult.js";
 import { unwrapAsync } from "@gram/client/types/fp";

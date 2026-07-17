@@ -1,4 +1,4 @@
-h1:lPwOJqgmsn9qTHRF28ewOWwqlZTnoDyGkimzw6eGPII=
+h1:sdMrGjv/kj0f+tL71+AhCkq+anIVzkuxQbjiocMEdHU=
 20251127155815_initial_golang_migrate.up.sql h1:fkATa14aucJEoldFi1VgW7TRT8gyC6NGe1Hq/OzXVuI=
 20251208142630_add-tool-logs-table.up.sql h1:cGJCiWBvLPFwOlpx0jYYLgdPZD21+gKSF/x4mVksBcI=
 20251209104438_add-id-col-to-tool-logs-table.up.sql h1:+Ubsl1ZKfeCZL9dBhohUnkBksKZj6nwdZSXm7WwowaE=
@@ -60,7 +60,7 @@ h1:lPwOJqgmsn9qTHRF28ewOWwqlZTnoDyGkimzw6eGPII=
 20260714104107_remove-semicolons-from-comments.up.sql h1:CQMvFncxlzgu0sdoeGZwZ2myd7qathbX0VgfMxopi9U=
 20260714115000_chat-token-summaries-hook-source.up.sql h1:imvQVMa/2Ceuy6tnFmkld537Wr2CwzNsi3qs9DysDA4=
 20260714115010_tum-breakdown-summaries.up.sql h1:TcimH9EEZmoeVZixI3x6kGInFlHcGY4Vl00cgZDKWYM=
-20260714154852_add-risk-findings.up.sql h1:y/IJ76f9XsFM9JD5dIKfmVRAOAvhdNradDR/5+dsbYM=
-20260714173525_drop-tum-breakdown-summaries.up.sql h1:uEIxECzsEQ0FI4IkqPmapSeUb1zSxF7kZ4sP/xdcRhs=
-20260714200951_shadow-mcp-server-name-override.up.sql h1:NKOZGs7YuPaIOtCeQzn67rgdSQtbzLwyxRqVGykd6zk=
-20260717082437_add-risk-findings-exclusion-and-inserted-at.up.sql h1:8lfTfjPp/47IYkB16oni8IQQ746narUqrmdZcQoiQ00=
+20260714173525_drop-tum-breakdown-summaries.up.sql h1:bN2z1+CUm9cttkIMubc0en+gp7viCi4ojcCACI8rhtU=
+20260714200951_shadow-mcp-server-name-override.up.sql h1:O6ZXprNwT+7pVXUmO6pkPoy+SFpCh4+zSH3E61ODGnQ=
+20260714200952_add-risk-findings.up.sql h1:RBBGniqX3KuAlZdyXFC/x/PPrVj8gUWqTBMGWKytQhA=
+20260717082437_add-risk-findings-exclusion-and-inserted-at.up.sql h1:ltZ172wyIsNyIWFTe1RMXEUNlBJARc7p8dsj3NxZXd4=

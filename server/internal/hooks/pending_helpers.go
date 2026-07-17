@@ -46,17 +46,26 @@ func (s *Service) isHookDuplicate(ctx context.Context) bool {
 // is a no-op. An empty token (older plugins, OTEL-only flows) always persists —
 // there is nothing to dedupe on. A cache error fails open: dropping a hook is
 // worse than the rare duplicate a backend blip might cause.
-func (s *Service) claimHookIdempotency(ctx context.Context, token string) bool {
+//
+// replayed marks a redelivery from a device's offline spool (X-Gram-Replayed):
+// the claim then holds for hookReplayIdempotencyTTL instead of the retry-burst
+// window, since competing drain triggers can re-deliver the same entry hours
+// apart.
+func (s *Service) claimHookIdempotency(ctx context.Context, token string, replayed bool) bool {
 	token = strings.TrimSpace(token)
 	if token == "" {
 		return true
+	}
+	ttl := hookIdempotencyTTL
+	if replayed {
+		ttl = hookReplayIdempotencyTTL
 	}
 	// The claim must outlive the request: a transient reset cancels the request
 	// context, and the retry that re-sends the same token would otherwise also
 	// find an unwritten marker (the canceled SETNX returns an error → fail open
 	// → true) and persist a second time. WithoutCancel keeps the marker write
 	// running so the retry actually loses the guard.
-	claimed, err := s.cache.Add(context.WithoutCancel(ctx), hookIdempotencyCacheKey(token), hookIdempotencyTTL)
+	claimed, err := s.cache.Add(context.WithoutCancel(ctx), hookIdempotencyCacheKey(token), ttl)
 	if err != nil {
 		s.logger.WarnContext(ctx, "hook idempotency guard failed; persisting anyway",
 			attr.SlogEvent("hook_idempotency_guard_failed"),

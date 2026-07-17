@@ -26,6 +26,11 @@ const perAttemptTime = 10 * time.Second
 // verdict.
 const sendBudget = 45 * time.Second
 
+// retryMaxElapsedMS caps the SDK's backoff budget for retryable statuses
+// (429/5xx). A var rather than a const so tests that script 5xx responses can
+// shrink it below the wall clock they can afford.
+var retryMaxElapsedMS = 30_000
+
 // decision is the server's verdict for a hook event.
 type decision struct {
 	Decision string `json:"decision"`
@@ -43,6 +48,27 @@ type ingestResult struct {
 	decision   decision
 	// authRejected is true when the server rejected the credential (401/403).
 	authRejected bool
+	// failOpen carries the org's downtime posture from the response's
+	// org_settings effects; nil when the server sent none.
+	failOpen *bool
+}
+
+// accepted reports a definitive 2xx exchange — the server stored (or
+// deduped) the event. The one classification used by the live path, the
+// spool, and the drain; keep them agreeing by never inlining the range.
+func (r ingestResult) accepted() bool {
+	return r.statusCode >= 200 && r.statusCode < 300
+}
+
+// unsent reports whether the control plane failed to store the event: the
+// server was unreachable (statusCode 0), failing (5xx), or shedding load
+// (429/408 — the request wasn't processed, and replaying later is exactly
+// what a rate-limiting server wants). Other 4xx are the server answering —
+// a replay would fail identically. Matches the device agent's downtime
+// classification (its ADR-0010).
+func (r ingestResult) unsent() bool {
+	return r.statusCode == 0 || r.statusCode >= 500 ||
+		r.statusCode == http.StatusTooManyRequests || r.statusCode == http.StatusRequestTimeout
 }
 
 // client posts canonical hook events through the generated ingest SDK with
@@ -52,6 +78,10 @@ type client struct {
 	sdk *sdk.SpeakeasyHooks
 	// budget caps one send end to end; a field so tests can shrink it.
 	budget time.Duration
+	// replayed stamps X-Gram-Replayed on every request via the typed SDK
+	// field, marking a drain redelivery so the server applies the long
+	// idempotency window and tags telemetry. Set by newReplayClient.
+	replayed bool
 }
 
 func newClient(serverURL string) *client {
@@ -70,7 +100,7 @@ func newClient(serverURL string) *client {
 					InitialInterval: 1_000,
 					MaxInterval:     4_000,
 					Exponent:        1.5,
-					MaxElapsedTime:  30_000,
+					MaxElapsedTime:  retryMaxElapsedMS,
 				},
 				RetryConnectionErrors: true,
 			}),
@@ -84,15 +114,24 @@ func newClient(serverURL string) *client {
 // here — safe because the Idempotency-Key is minted once and reused, and
 // necessary because a blocking hook would otherwise deny over one dropped
 // connection.
-func (cl *client) send(ctx context.Context, c creds, body components.IngestRequestBody) ingestResult {
+//
+// The caller mints idemKey (see deliver) so the same key survives beyond
+// this exchange: a payload spooled after a failed send replays under the
+// original key, and the server dedupes it against any partially delivered
+// original.
+func (cl *client) send(ctx context.Context, c creds, body components.IngestRequestBody, idemKey string) ingestResult {
 	ctx, cancel := context.WithTimeout(ctx, cl.budget)
 	defer cancel()
 
 	req := operations.IngestHookEventRequest{
 		GramKey:        new(c.APIKey),
 		GramProject:    nil,
-		IdempotencyKey: new(newIdempotencyToken()),
+		IdempotencyKey: new(idemKey),
+		XGramReplayed:  nil,
 		Body:           body,
+	}
+	if cl.replayed {
+		req.XGramReplayed = new(true)
 	}
 	if c.Project != "" {
 		req.GramProject = new(c.Project)
@@ -116,12 +155,17 @@ func (cl *client) send(ctx context.Context, c creds, body components.IngestReque
 		}
 	}
 
-	out := ingestResult{statusCode: res.StatusCode, decision: decision{Decision: "", Reason: "", Message: ""}, authRejected: false}
+	out := ingestResult{statusCode: res.StatusCode, decision: decision{Decision: "", Reason: "", Message: ""}, authRejected: false, failOpen: nil}
 	if res.IngestHookResult != nil {
 		out.decision = decision{
 			Decision: string(res.IngestHookResult.Decision),
 			Reason:   strDeref(res.IngestHookResult.Reason),
 			Message:  strDeref(res.IngestHookResult.Message),
+		}
+		if settings, ok := res.IngestHookResult.Effects["org_settings"].(map[string]any); ok {
+			if v, ok := settings["fail_open"].(bool); ok {
+				out.failOpen = &v
+			}
 		}
 	}
 	return out
@@ -138,6 +182,7 @@ func interpretError(err error) ingestResult {
 			statusCode:   status,
 			decision:     decision{Decision: "", Reason: svcErr.Name, Message: svcErr.Message},
 			authRejected: status == http.StatusUnauthorized || status == http.StatusForbidden,
+			failOpen:     nil,
 		}
 	}
 	var apiErr *apierrors.APIError
@@ -152,15 +197,17 @@ func interpretError(err error) ingestResult {
 				statusCode:   0,
 				decision:     decision{Decision: "", Reason: "", Message: "Speakeasy hooks could not read the server's verdict."},
 				authRejected: false,
+				failOpen:     nil,
 			}
 		}
 		return ingestResult{
 			statusCode:   apiErr.StatusCode,
 			decision:     decision{Decision: "", Reason: "", Message: ""},
 			authRejected: apiErr.StatusCode == http.StatusUnauthorized || apiErr.StatusCode == http.StatusForbidden,
+			failOpen:     nil,
 		}
 	}
-	return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: ""}, authRejected: false}
+	return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: ""}, authRejected: false, failOpen: nil}
 }
 
 func strDeref(s *string) string {

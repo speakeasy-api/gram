@@ -1,10 +1,9 @@
 ---
 name: frontend
-description: Rules and best practices when working on the dashboard and elements React frontend codebases
+description: Rules and best practices when working on the dashboard React frontend codebase (including the inlined Gram Elements code)
 metadata:
   relevant_files:
     - "client/dashboard/**"
-    - "elements/**"
 ---
 
 ## React & Frontend Coding Guidelines
@@ -13,14 +12,14 @@ metadata:
 
 Use `pnpm` package scripts for frontend checks. From the repo root, prefer `pnpm -F <package> <script>` so commands run against the right frontend package without `cd`. Do not run `npm exec`, `npx`, bare `vitest`, bare `eslint`, bare `oxfmt`, or bare `tsc` unless you are debugging the package script itself.
 
-| Need                | Dashboard                       | Elements                                | Whole workspace                             |
-| ------------------- | ------------------------------- | --------------------------------------- | ------------------------------------------- |
-| Package lint gate   | `pnpm -F dashboard lint`        | `pnpm -F @gram-ai/elements lint`        | `pnpm lint`                                 |
-| Type-check only     | `pnpm -F dashboard type-check`  | `pnpm -F @gram-ai/elements type-check`  | `pnpm type-check`                           |
-| Tests once          | `pnpm -F dashboard test`        | `pnpm -F @gram-ai/elements test`        | Run the touched package's `pnpm test`       |
-| Tests in watch mode | `pnpm -F dashboard test:watch`  | `pnpm -F @gram-ai/elements test:watch`  | Run the touched package's `pnpm test:watch` |
-| ESLint only         | `pnpm -F dashboard lint:eslint` | `pnpm -F @gram-ai/elements lint:eslint` | Run the touched package's script            |
-| Format check only   | `pnpm -F dashboard lint:format` | `pnpm -F @gram-ai/elements lint:format` | Run the touched package's script            |
+| Need                | Dashboard                       | Whole workspace                             |
+| ------------------- | ------------------------------- | ------------------------------------------- |
+| Package lint gate   | `pnpm -F dashboard lint`        | `pnpm lint`                                 |
+| Type-check only     | `pnpm -F dashboard type-check`  | `pnpm type-check`                           |
+| Tests once          | `pnpm -F dashboard test`        | Run the touched package's `pnpm test`       |
+| Tests in watch mode | `pnpm -F dashboard test:watch`  | Run the touched package's `pnpm test:watch` |
+| ESLint only         | `pnpm -F dashboard lint:eslint` | Run the touched package's script            |
+| Format check only   | `pnpm -F dashboard lint:format` | Run the touched package's script            |
 
 For small edits, run the narrowest package script that proves the change. For shared or cross-package frontend changes, run the root `pnpm lint` and `pnpm type-check` scripts.
 

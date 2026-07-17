@@ -5,7 +5,11 @@ import { Type } from "@/components/ui/type";
 import { ManualSetupBadge } from "@/pages/catalog/ManualSetupBadge";
 import { useSdkClient } from "@/contexts/Sdk";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
-import { PulseMCPServer, useListMCPCatalog } from "@/pages/catalog/hooks";
+import {
+  PulseMCPServer,
+  useIsCatalogServerInstalled,
+  useListMCPCatalog,
+} from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
 import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
@@ -136,8 +140,8 @@ export default function CatalogDetail(): JSX.Element {
     );
   }, [deployment?.externalMcps, server]);
 
-  // Also consider origin-backed toolsets as installed, matching the rule
-  // used by useExternalMcpReleaseWorkflow for fork detection.
+  // Also consider origin-backed toolsets as installed — legacy installs
+  // created toolsets stamped with the catalog origin.
   const hasOriginMatch = useMemo(() => {
     if (!server) return false;
     return (toolsetsResult?.toolsets ?? []).some(
@@ -146,7 +150,14 @@ export default function CatalogDetail(): JSX.Element {
     );
   }, [toolsetsResult?.toolsets, server]);
 
-  const isInstalled = !!existingExternalMcp || hasOriginMatch;
+  // New installs are remote MCP servers, matched back to the catalog entry by
+  // endpoint URL.
+  const isInstalledByUrl = useIsCatalogServerInstalled();
+
+  const isInstalled =
+    !!existingExternalMcp ||
+    hasOriginMatch ||
+    (!!server && isInstalledByUrl(server));
 
   if (isLoading) {
     return (
@@ -288,7 +299,7 @@ export default function CatalogDetail(): JSX.Element {
                       )}
                       <Button size="md" onClick={() => setShowAddDialog(true)}>
                         <Plus className="h-4 w-4" />
-                        <Button.Text>Install as fork</Button.Text>
+                        <Button.Text>Add another</Button.Text>
                       </Button>
                     </Stack>
                   ) : (

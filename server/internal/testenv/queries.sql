@@ -141,3 +141,11 @@ VALUES (@organization_id, sqlc.narg('user_id')::text);
 UPDATE user_session_issuers
 SET deleted_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
+
+-- name: InsertPluginAssignmentFixture :exec
+-- Test-only fixture: writes a plugin_assignments row with an EXPLICIT
+-- organization_id so tests can seed a cross-tenant/stale assignment that the
+-- org-scoped AddPluginAssignment (INSERT ... SELECT filtered by org) refuses to
+-- create.
+INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn)
+VALUES (@plugin_id, @organization_id, @principal_urn);

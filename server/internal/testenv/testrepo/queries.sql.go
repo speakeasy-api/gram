@@ -252,6 +252,26 @@ func (q *Queries) InsertChatMessage(ctx context.Context, arg InsertChatMessagePa
 	return id, err
 }
 
+const insertPluginAssignmentFixture = `-- name: InsertPluginAssignmentFixture :exec
+INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn)
+VALUES ($1, $2, $3)
+`
+
+type InsertPluginAssignmentFixtureParams struct {
+	PluginID       uuid.UUID
+	OrganizationID string
+	PrincipalUrn   string
+}
+
+// Test-only fixture: writes a plugin_assignments row with an EXPLICIT
+// organization_id so tests can seed a cross-tenant/stale assignment that the
+// org-scoped AddPluginAssignment (INSERT ... SELECT filtered by org) refuses to
+// create.
+func (q *Queries) InsertPluginAssignmentFixture(ctx context.Context, arg InsertPluginAssignmentFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertPluginAssignmentFixture, arg.PluginID, arg.OrganizationID, arg.PrincipalUrn)
+	return err
+}
+
 const listDeploymentFunctionsResources = `-- name: ListDeploymentFunctionsResources :many
 SELECT id, resource_urn, project_id, deployment_id, function_id, runtime, name, description, uri, title, mime_type, variables, meta, created_at, updated_at, deleted_at, deleted
 FROM function_resource_definitions
