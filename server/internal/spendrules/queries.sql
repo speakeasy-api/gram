@@ -202,7 +202,9 @@ LEFT JOIN LATERAL (
   FROM directory_user_group_memberships m
   INNER JOIN directory_groups dg
     ON dg.id = m.directory_group_id
+    AND dg.organization_id = our.organization_id
     AND dg.deleted IS FALSE
+    AND dg.workos_deleted IS FALSE
     AND dg.workos_deleted IS FALSE
   WHERE m.directory_user_id = du.id
     AND m.deleted IS FALSE
