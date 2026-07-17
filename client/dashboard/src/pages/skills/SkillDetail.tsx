@@ -41,7 +41,7 @@ export const SKILL_MANIFEST_SECTION_ID = "manifest";
 export const SKILL_FRONTMATTER_SECTION_ID = "frontmatter";
 export const SKILL_DISTRIBUTIONS_SECTION_ID = "distributions";
 export const SKILL_VERSIONS_SECTION_ID = "versions";
-export const SKILL_DANGER_SECTION_ID = "danger";
+const SKILL_DANGER_SECTION_ID = "danger";
 
 const SKILL_SECTION_IDS: readonly string[] = [
   SKILL_MANIFEST_SECTION_ID,
