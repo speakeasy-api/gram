@@ -73,6 +73,11 @@ type GitHubPublisher interface {
 	// leaving the other component's files and configuration untouched. Returns
 	// ghclient.ErrRepoNotFound when nothing has been published yet.
 	GetRepoFiles(ctx context.Context, installationID int64, owner, repo, branch string) (map[string][]byte, error)
+	// GetFileContent returns one file's raw content from the given branch.
+	// GetPublishStatus uses it to read the live plugin.json manifest version
+	// without walking the whole repo. Returns ghclient.ErrFileNotFound when
+	// the repo, branch, or path is absent.
+	GetFileContent(ctx context.Context, installationID int64, owner, repo, branch, path string) ([]byte, error)
 }
 
 // GitHubConfig holds the configured GitHub client and the Gram-owned org
@@ -1347,6 +1352,7 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 		HasCollaborators:          nil,
 		UpToDate:                  nil,
 		LastPublishedAt:           nil,
+		LiveVersion:               nil,
 	}
 
 	if s.github != nil {
@@ -1393,6 +1399,7 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 				result.LastPublishedAt = &lastPublishedAt
 			}
 			result.UpToDate = s.publishUpToDate(ctx, ac, conn)
+			result.LiveVersion = s.cachedLiveManifestVersion(ctx, ac, conn)
 
 			hasCollaborators, err := s.cachedHasDirectCollaborator(ctx, conn.RepoOwner, conn.RepoName)
 			if err != nil {
@@ -1455,6 +1462,100 @@ func (s *Service) cachedHasDirectCollaborator(ctx context.Context, owner, repo s
 	}
 
 	return hasCollaborators, nil
+}
+
+// liveVersionCacheTTL bounds how stale the live manifest version can be. Like
+// the collaborator flag, GetPublishStatus is polled by the dashboard, so
+// reading GitHub on every call would burn installation rate limits for a value
+// that only changes on publish. A manual publish busts the cache immediately;
+// background auto-publishes run on the cache-less NewPublisher instance, so
+// their version bump shows up within the TTL instead.
+const liveVersionCacheTTL = 60 * time.Second
+
+func liveVersionCacheKey(owner, repo string) string {
+	return fmt.Sprintf("plugins:live-version:%s/%s", owner, repo)
+}
+
+// cachedLiveManifestVersion returns the manifest version currently live in the
+// published repo — the version generateConfig stamped into the plugin.json
+// files last pushed to GitHub, which is what plugin clients (Claude Code,
+// Cursor, Codex) report for installed plugins. Cached per repo; a cached empty
+// string records a definitive "no live manifest". Returns nil ("unknown") on
+// any failure so a GitHub hiccup degrades the status read rather than failing
+// it.
+func (s *Service) cachedLiveManifestVersion(ctx context.Context, ac *contextvalues.AuthContext, conn repo.PluginGithubConnection) *string {
+	key := liveVersionCacheKey(conn.RepoOwner, conn.RepoName)
+	if s.cache != nil {
+		var cached string
+		switch err := s.cache.Get(ctx, key, &cached); {
+		case err == nil:
+			if cached == "" {
+				return nil
+			}
+			return &cached
+		case errors.Is(err, redisCache.ErrCacheMiss):
+			// Fall through to the live read below.
+		default:
+			s.logger.WarnContext(ctx, "read live version cache", attr.SlogError(err))
+		}
+	}
+
+	version, ok := s.liveManifestVersion(ctx, ac, conn)
+	if !ok {
+		// Transient failure: report unknown without caching so the next
+		// uncached status read retries.
+		return nil
+	}
+
+	if s.cache != nil {
+		if err := s.cache.Set(ctx, key, &version, liveVersionCacheTTL); err != nil {
+			s.logger.WarnContext(ctx, "write live version cache", attr.SlogError(err))
+		}
+	}
+
+	if version == "" {
+		return nil
+	}
+	return &version
+}
+
+// liveManifestVersion reads the version stamped into the live repo's Claude
+// plugin.json, trying each of the project's current plugin slugs until one
+// resolves — a plugin created after the last publish has no file yet, but all
+// manifests in a publish share one version, so any live one answers for the
+// project. ok is false when the read failed transiently (GitHub error,
+// malformed manifest), so the caller skips negative caching; a clean "no live
+// manifest" returns ("", true).
+func (s *Service) liveManifestVersion(ctx context.Context, ac *contextvalues.AuthContext, conn repo.PluginGithubConnection) (version string, ok bool) {
+	pluginInfos, err := s.resolvePluginInfos(ctx, *ac.ProjectID)
+	if err != nil {
+		// resolvePluginInfos already logged the underlying error.
+		return "", false
+	}
+
+	for _, p := range pluginInfos {
+		content, err := s.github.Client.GetFileContent(ctx, s.github.InstallationID, conn.RepoOwner, conn.RepoName, "main", p.Slug+"/.claude-plugin/plugin.json")
+		if errors.Is(err, ghclient.ErrFileNotFound) {
+			continue
+		}
+		if err != nil {
+			s.logger.WarnContext(ctx, "live version: get plugin manifest", attr.SlogError(err))
+			return "", false
+		}
+
+		var manifest struct {
+			Version string `json:"version"`
+		}
+		if err := json.Unmarshal(content, &manifest); err != nil {
+			s.logger.WarnContext(ctx, "live version: parse plugin manifest", attr.SlogError(err))
+			return "", false
+		}
+		return manifest.Version, true
+	}
+
+	// None of the current plugins has a live manifest (e.g. they were all
+	// created after the last publish): definitively absent.
+	return "", true
 }
 
 // publishUpToDate reports whether the project's current plugin state matches
@@ -2005,6 +2106,14 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 			return nil, oops.E(oops.CodeConflict, err, "persist plugin api keys").LogWarn(ctx, s.logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "persist plugin api keys").LogError(ctx, s.logger)
+	}
+
+	// Bust the live-version cache so the dashboard's current-version readout
+	// reflects this publish immediately instead of after the TTL.
+	if s.cache != nil {
+		if err := s.cache.Delete(ctx, liveVersionCacheKey(repoOwner, repoName)); err != nil {
+			s.logger.WarnContext(ctx, "invalidate live version cache", attr.SlogError(err))
+		}
 	}
 
 	return &publishOutcome{RepoURL: repoURL, Skipped: false, HooksConfigDeferred: hooksConfigDeferred}, nil

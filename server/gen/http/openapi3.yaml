@@ -51665,6 +51665,9 @@ components:
                     type: string
                     description: When the project was last published to GitHub. Absent when the project is not connected.
                     format: date-time
+                live_version:
+                    type: string
+                    description: Version stamped into the currently published plugin.json manifests (e.g. 0.1.1783692954) — the version plugin clients such as Claude Code report for installed plugins. Absent when the project is not connected or the live version could not be determined.
                 marketplace_url:
                     type: string
                     description: Git-based Claude Code marketplace URL — the value to pass to `/plugin marketplace add` or set as the source URL in `extraKnownMarketplaces`. Present once a marketplace token has been minted, which happens automatically on the first publish.
