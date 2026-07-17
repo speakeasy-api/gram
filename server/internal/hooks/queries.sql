@@ -51,19 +51,42 @@ UPDATE chats SET updated_at = NOW() WHERE id = @id AND project_id = @project_id;
 -- created before account attribution landed. A chat is created once, on the
 -- session's first persisted message, so a first prompt that beats the first
 -- OTEL export would otherwise leave the chat unlinked forever (and the
--- account-identity risk rules blind to it). Fill-once: never overwrites a
--- link that chat creation or an earlier backfill already set.
+-- account-identity risk rules blind to it). Fill-once, with one exception: a
+-- link to a company-credential account (no provider account UUID) may be
+-- upgraded to a UUID-bearing account. That heals the session whose first OTEL
+-- batch carried the email but not the late-arriving user.account_uuid — the
+-- UUID proves the session was an OAuth account all along, so the UUID-keyed
+-- entity is strictly more precise. Never the reverse: a UUID-bearing link is
+-- final.
 UPDATE chats
 SET user_account_id = @user_account_id
   , updated_at = NOW()
-WHERE id = @id
-  AND project_id = @project_id
-  AND user_account_id IS NULL
-  AND deleted IS FALSE;
+WHERE chats.id = @id
+  AND chats.project_id = @project_id
+  AND chats.deleted IS FALSE
+  AND (
+    chats.user_account_id IS NULL
+    OR (
+      EXISTS (
+        SELECT 1 FROM user_accounts new_ua
+        WHERE new_ua.id = @user_account_id
+          AND new_ua.organization_id = chats.organization_id
+          AND new_ua.external_account_uuid IS NOT NULL
+      )
+      AND EXISTS (
+        SELECT 1 FROM user_accounts cur_ua
+        WHERE cur_ua.id = chats.user_account_id
+          AND cur_ua.organization_id = chats.organization_id
+          AND cur_ua.external_account_uuid IS NULL
+      )
+    )
+  );
 
 -- name: UpsertUserAccount :one
--- Records the external AI provider account observed for a session, keyed by the
--- provider's stable per-account id. COALESCE on conflict keeps a previously
+-- Records the external AI provider account observed for an OAuth-authenticated
+-- session, keyed by the provider's stable per-account id (a company-credential
+-- session has none — see UpsertCompanyCredentialUserAccount). COALESCE on
+-- conflict keeps a previously
 -- learned owner/email/account_id rather than clobbering it with a null from a
 -- later session that lacked that field. The conflict target carries the partial
 -- index predicate so it matches user_accounts_org_provider_external_account_uuid_key.
@@ -98,6 +121,120 @@ DO UPDATE SET
 -- billing_mode is intentionally not written here: it is an admin/out-of-band
 -- override, never set by ingest. Returning it lets attribution resolve the
 -- account-level tier of the billing-mode cascade without a second round trip.
+RETURNING id, billing_mode;
+
+-- Company-credential accounts (an API key, a gateway/proxy, Bedrock, or
+-- Vertex) carry no provider account UUID, so their entity keys on the resolved
+-- employee (user_accounts_org_provider_company_user_key) — one account per
+-- employee per provider, so device-bridge attribution and email aliases
+-- converge on a single account — falling back to the normalized session email
+-- (user_accounts_org_provider_email_key) while no employee has resolved. The
+-- four queries below implement that dual key; external_org_id /
+-- external_account_id are never present on this path, so none of them write
+-- those. As with UpsertUserAccount, billing_mode is admin/out-of-band only —
+-- never written by ingest, returned so attribution can resolve the
+-- account-level tier of the billing-mode cascade without a second round trip.
+
+-- name: ClaimCompanyCredentialUserAccount :one
+-- Promotes an email-keyed row persisted before its employee resolved to the
+-- now-resolved employee, in place — the row id (and any chat links) survive
+-- the transition. Guarded so an employee never gains a second resolved row:
+-- when one already exists this matches nothing (ErrNoRows) and the caller
+-- falls through to the by-user upsert.
+UPDATE user_accounts SET
+    user_id      = @user_id
+  , account_type = @account_type
+  , last_seen_at = clock_timestamp()
+  , updated_at   = clock_timestamp()
+WHERE user_accounts.organization_id = @organization_id
+  AND user_accounts.provider = @provider
+  AND user_accounts.external_account_uuid IS NULL
+  AND user_accounts.deleted_at IS NULL
+  AND user_accounts.user_id IS NULL
+  AND user_accounts.email = @email
+  AND NOT EXISTS (
+    SELECT 1 FROM user_accounts resolved
+    WHERE resolved.organization_id = @organization_id
+      AND resolved.provider = @provider
+      AND resolved.external_account_uuid IS NULL
+      AND resolved.deleted_at IS NULL
+      AND resolved.user_id = @user_id::text
+  )
+RETURNING id, billing_mode;
+
+-- name: UpsertCompanyCredentialUserAccountByUser :one
+-- The resolved-employee entity upsert. email may be NULL: a session with no
+-- email at all still persists here when the device bridge resolved its owner.
+-- COALESCE keeps a previously learned email rather than clobbering it.
+INSERT INTO user_accounts (
+    organization_id
+  , provider
+  , external_account_uuid
+  , user_id
+  , email
+  , account_type
+) VALUES (
+    @organization_id
+  , @provider
+  , NULL
+  , @user_id
+  , sqlc.narg(email)
+  , @account_type
+)
+ON CONFLICT (organization_id, provider, user_id) WHERE external_account_uuid IS NULL AND deleted_at IS NULL
+DO UPDATE SET
+    email        = COALESCE(EXCLUDED.email, user_accounts.email)
+  , account_type = EXCLUDED.account_type
+  , last_seen_at = clock_timestamp()
+  , updated_at   = clock_timestamp()
+RETURNING id, billing_mode;
+
+-- name: AdoptCompanyCredentialUserAccountByEmail :one
+-- For a session whose employee did NOT resolve: joins the company-credential
+-- account already known for this email, preferring an employee-resolved row —
+-- so a session that stops resolving (e.g. the employee was deprovisioned)
+-- rejoins the same account instead of forking a second row. ErrNoRows when
+-- the email has no account yet (caller inserts).
+UPDATE user_accounts SET
+    account_type = @account_type
+  , last_seen_at = clock_timestamp()
+  , updated_at   = clock_timestamp()
+WHERE id = (
+    SELECT candidate.id FROM user_accounts candidate
+    WHERE candidate.organization_id = @organization_id
+      AND candidate.provider = @provider
+      AND candidate.external_account_uuid IS NULL
+      AND candidate.deleted_at IS NULL
+      AND candidate.email = @email
+    ORDER BY (candidate.user_id IS NOT NULL) DESC, candidate.created_at
+    LIMIT 1
+  )
+RETURNING id, billing_mode;
+
+-- name: InsertCompanyCredentialUserAccountByEmail :one
+-- First sight of an unresolved company-credential email: create the
+-- email-keyed row. ON CONFLICT covers the concurrent-first-sight race between
+-- two sessions of the same email.
+INSERT INTO user_accounts (
+    organization_id
+  , provider
+  , external_account_uuid
+  , user_id
+  , email
+  , account_type
+) VALUES (
+    @organization_id
+  , @provider
+  , NULL
+  , NULL
+  , @email
+  , @account_type
+)
+ON CONFLICT (organization_id, provider, email) WHERE external_account_uuid IS NULL AND user_id IS NULL AND deleted_at IS NULL
+DO UPDATE SET
+    account_type = EXCLUDED.account_type
+  , last_seen_at = clock_timestamp()
+  , updated_at   = clock_timestamp()
 RETURNING id, billing_mode;
 
 -- name: CountEmployeesForExternalOrg :one
@@ -144,6 +281,28 @@ SELECT * FROM user_accounts
 WHERE organization_id = @organization_id
   AND provider = @provider
   AND external_account_uuid = @external_account_uuid
+  AND deleted_at IS NULL;
+
+-- name: GetCompanyCredentialUserAccount :one
+-- Looks up a company-credential account by session email, preferring the
+-- employee-resolved row when an orphaned unresolved row with the same email
+-- also exists (see ClaimCompanyCredentialUserAccount's guard).
+SELECT * FROM user_accounts
+WHERE id = (
+    SELECT candidate.id FROM user_accounts candidate
+    WHERE candidate.organization_id = @organization_id
+      AND candidate.provider = @provider
+      AND candidate.email = @email
+      AND candidate.external_account_uuid IS NULL
+      AND candidate.deleted_at IS NULL
+    ORDER BY (candidate.user_id IS NOT NULL) DESC, candidate.created_at
+    LIMIT 1
+  );
+
+-- name: CountUserAccountsByOrg :one
+-- Test fixture: asserts how many live account entities an org has.
+SELECT COUNT(*)::bigint FROM user_accounts
+WHERE organization_id = @organization_id
   AND deleted_at IS NULL;
 
 -- name: ListUserAccountsByUsers :many

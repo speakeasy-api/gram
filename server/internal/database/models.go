@@ -1952,7 +1952,7 @@ type UserAccount struct {
 	UserID              pgtype.Text
 	Provider            string
 	ExternalOrgID       pgtype.Text
-	ExternalAccountUuid string
+	ExternalAccountUuid pgtype.Text
 	ExternalAccountID   pgtype.Text
 	Email               pgtype.Text
 	AccountType         pgtype.Text

@@ -56,9 +56,12 @@ func classifyAccountType(emailResolvedUserID string) string {
 // bridge (keyed on the per-device id) is taught/consulted whenever a DeviceID
 // is present — both including sessions that carry no provider account UUID (a
 // company-credential session — see classifyAccount). The user_accounts entity
-// and billing mode, however, key on that UUID, so they are skipped when it is
-// absent: there is no account entity to persist. All failures are returned to
-// the caller, which logs and continues: account attribution must never block
+// keys on that UUID for OAuth sessions; for company-credential ones it keys on
+// the resolved employee, falling back to the normalized session email until
+// one resolves (see upsertCompanyCredentialAccount). Only a session with no
+// identity at all (no UUID, no resolved employee, no email) has nothing to
+// persist an entity under, and skips it. All failures are returned to the
+// caller, which logs and continues: account attribution must never block
 // session capture or enforcement.
 func (s *Service) attributeSession(ctx context.Context, meta *SessionMetadata) error {
 	// Classify before consulting the device bridge: meta.UserID at this point
@@ -93,38 +96,122 @@ func (s *Service) attributeSession(ctx context.Context, meta *SessionMetadata) e
 		}
 	}
 
-	// The user_accounts entity and its billing mode key on the provider account
-	// UUID (user_accounts.external_account_uuid is NOT NULL and is the entity
-	// key). A session authenticated by company credentials (an API key, a
-	// gateway/proxy, Bedrock, or Vertex) carries no such UUID, so there is no
-	// account entity to persist — the account_type stamped above is the signal
-	// the cost surfaces consume. Stop here for these sessions.
-	if meta.ExternalAccountUUID == "" {
-		return nil
+	// Persist the account entity. An OAuth-authenticated session keys it on the
+	// provider account UUID; a company-credential session (an API key, a
+	// gateway/proxy, Bedrock, or Vertex) carries no UUID and keys on the
+	// resolved employee or, until one resolves, the session email. A session
+	// with no identity on any of those axes persists nothing — the account_type
+	// stamped above is then the only signal the cost surfaces consume.
+	var accountID string
+	var billingOverride string
+	if meta.ExternalAccountUUID != "" {
+		account, err := s.repo.UpsertUserAccount(ctx, repo.UpsertUserAccountParams{
+			OrganizationID:      meta.GramOrgID,
+			Provider:            meta.Provider,
+			ExternalAccountUuid: conv.ToPGText(meta.ExternalAccountUUID),
+			UserID:              conv.ToPGTextEmpty(meta.UserID),
+			ExternalOrgID:       conv.ToPGTextEmpty(meta.ExternalOrgID),
+			ExternalAccountID:   conv.ToPGTextEmpty(meta.ExternalAccountID),
+			Email:               conv.ToPGTextEmpty(meta.UserEmail),
+			AccountType:         conv.ToPGTextEmpty(meta.AccountType),
+		})
+		if err != nil {
+			return fmt.Errorf("upsert user account: %w", err)
+		}
+		accountID = account.ID.String()
+		billingOverride = conv.FromPGTextOrEmpty[string](account.BillingMode)
+	} else {
+		var err error
+		accountID, billingOverride, err = s.upsertCompanyCredentialAccount(ctx, meta)
+		if err != nil {
+			return err
+		}
+		if accountID == "" {
+			return nil
+		}
 	}
+	meta.UserAccountID = accountID
 
-	account, err := s.repo.UpsertUserAccount(ctx, repo.UpsertUserAccountParams{
-		OrganizationID:      meta.GramOrgID,
-		Provider:            meta.Provider,
-		ExternalAccountUuid: meta.ExternalAccountUUID,
-		UserID:              conv.ToPGTextEmpty(meta.UserID),
-		ExternalOrgID:       conv.ToPGTextEmpty(meta.ExternalOrgID),
-		ExternalAccountID:   conv.ToPGTextEmpty(meta.ExternalAccountID),
-		Email:               conv.ToPGTextEmpty(meta.UserEmail),
-		AccountType:         conv.ToPGTextEmpty(meta.AccountType),
-	})
-	if err != nil {
-		return fmt.Errorf("upsert user account: %w", err)
-	}
-	meta.UserAccountID = account.ID.String()
-
-	billingMode, err := s.resolveBillingMode(ctx, meta, conv.FromPGTextOrEmpty[string](account.BillingMode))
+	billingMode, err := s.resolveBillingMode(ctx, meta, billingOverride)
 	if err != nil {
 		return fmt.Errorf("resolve billing mode: %w", err)
 	}
 	meta.BillingMode = billingMode
 
 	return nil
+}
+
+// upsertCompanyCredentialAccount persists the account entity for a
+// company-credential session on its dual key: the resolved employee
+// (user_accounts_org_provider_company_user_key) so every session of an
+// employee — whatever email it reports, or with none at all when the device
+// bridge supplied the owner — lands on ONE account; or the normalized session
+// email (user_accounts_org_provider_email_key) while no employee has
+// resolved. An email-keyed row is promoted to the employee key in place when
+// its employee later resolves, so the row id and any chat links survive.
+// Returns an empty accountID (and no error) when the session has neither a
+// resolved employee nor an email — there is no identity to persist.
+func (s *Service) upsertCompanyCredentialAccount(ctx context.Context, meta *SessionMetadata) (accountID string, billingOverride string, err error) {
+	email := conv.NormalizeEmail(meta.UserEmail)
+
+	if meta.UserID == "" {
+		if email == "" {
+			return "", "", nil
+		}
+		adopted, err := s.repo.AdoptCompanyCredentialUserAccountByEmail(ctx, repo.AdoptCompanyCredentialUserAccountByEmailParams{
+			OrganizationID: meta.GramOrgID,
+			Provider:       meta.Provider,
+			Email:          conv.ToPGText(email),
+			AccountType:    conv.ToPGTextEmpty(meta.AccountType),
+		})
+		if err == nil {
+			return adopted.ID.String(), conv.FromPGTextOrEmpty[string](adopted.BillingMode), nil
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return "", "", fmt.Errorf("adopt company-credential user account: %w", err)
+		}
+		inserted, err := s.repo.InsertCompanyCredentialUserAccountByEmail(ctx, repo.InsertCompanyCredentialUserAccountByEmailParams{
+			OrganizationID: meta.GramOrgID,
+			Provider:       meta.Provider,
+			Email:          conv.ToPGText(email),
+			AccountType:    conv.ToPGTextEmpty(meta.AccountType),
+		})
+		if err != nil {
+			return "", "", fmt.Errorf("insert company-credential user account: %w", err)
+		}
+		return inserted.ID.String(), conv.FromPGTextOrEmpty[string](inserted.BillingMode), nil
+	}
+
+	// Resolved employee: first promote an email-keyed row persisted before the
+	// employee resolved (preserving its id and chat links); when none exists —
+	// or the employee already has their resolved account — upsert on the
+	// employee key.
+	if email != "" {
+		claimed, err := s.repo.ClaimCompanyCredentialUserAccount(ctx, repo.ClaimCompanyCredentialUserAccountParams{
+			OrganizationID: meta.GramOrgID,
+			Provider:       meta.Provider,
+			UserID:         conv.ToPGText(meta.UserID),
+			Email:          conv.ToPGText(email),
+			AccountType:    conv.ToPGTextEmpty(meta.AccountType),
+		})
+		if err == nil {
+			return claimed.ID.String(), conv.FromPGTextOrEmpty[string](claimed.BillingMode), nil
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return "", "", fmt.Errorf("claim company-credential user account: %w", err)
+		}
+	}
+	account, err := s.repo.UpsertCompanyCredentialUserAccountByUser(ctx, repo.UpsertCompanyCredentialUserAccountByUserParams{
+		OrganizationID: meta.GramOrgID,
+		Provider:       meta.Provider,
+		UserID:         conv.ToPGText(meta.UserID),
+		Email:          conv.ToPGTextEmpty(email),
+		AccountType:    conv.ToPGTextEmpty(meta.AccountType),
+	})
+	if err != nil {
+		return "", "", fmt.Errorf("upsert company-credential user account: %w", err)
+	}
+	return account.ID.String(), conv.FromPGTextOrEmpty[string](account.BillingMode), nil
 }
 
 // providerBillingConfigProvider maps a session's provider tag to the provider
@@ -211,7 +298,13 @@ func (s *Service) classifyAccount(ctx context.Context, meta *SessionMetadata) (s
 	// user.account_uuid at all is classified team for personal sessions too.
 	// Accepted: both slices are small and the prior behavior — an entire
 	// company-credential org parked under an unclassified account type — was the
-	// far larger distortion.
+	// far larger distortion. If that UUID-less first batch also carried the
+	// email, it persists an email-keyed company-credential entity
+	// (attributeSession) that the re-attribution does not remove — the chat link
+	// upgrades to the OAuth account (LinkChatUserAccount) but the stale team row
+	// lingers with a frozen last_seen_at. Also accepted: email and UUID ride the
+	// same user.* log attributes, so an email-without-UUID batch for an OAuth
+	// session is the rare sub-slice of an already-small slice.
 	if meta.ExternalAccountUUID == "" {
 		return accountTypeTeam, nil
 	}

@@ -82,18 +82,21 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 		// as personal and never persist the late-arriving email / external_org_id
 		// or teach the device bridge (DNO-360).
 		//
-		// A company-credential session (no provider account UUID) never gets a
-		// UserAccountID — there is no account entity to persist — so for those
-		// sessions the fast path keys on the resolved AccountType instead, or they
-		// would re-attribute on every batch for their lifetime. A UUID-bearing
-		// session must still present a persisted UserAccountID: attribution stamps
-		// AccountType before the user_accounts upsert, so keying on AccountType
-		// alone would freeze a session whose entity persistence transiently failed
-		// (classified but never persisted, linked, or billing-resolved) instead of
-		// retrying on the next batch.
+		// A session with an account entity to persist — a provider account UUID
+		// (OAuth) or a session email (company credentials, entity keyed on the
+		// resolved employee or the email) — must present a persisted
+		// UserAccountID before it may take the
+		// fast path: attribution stamps AccountType before the user_accounts
+		// upsert, so keying on AccountType alone would freeze a session whose
+		// entity persistence transiently failed (classified but never persisted,
+		// linked, or billing-resolved) instead of retrying on the next batch.
+		// Only a session with neither identity (no UUID and no email — nothing to
+		// key an entity on) fast-paths on the resolved AccountType, or it would
+		// re-attribute on every batch for its lifetime.
 		var cached SessionMetadata
 		if err := s.cache.Get(ctx, sessionCacheKey(session.SessionID), &cached); err == nil &&
-			(cached.UserAccountID != "" || (cached.AccountType != "" && cached.ExternalAccountUUID == "")) &&
+			(cached.UserAccountID != "" ||
+				(cached.AccountType != "" && cached.ExternalAccountUUID == "" && cached.UserEmail == "")) &&
 			!sessionEnrichesAttribution(session, cached) {
 			attributionBySession[session.SessionID] = cached
 			continue
@@ -177,8 +180,8 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 		}
 
 		// Cache only after the backfill: the once-per-session fast path above
-		// keys on the cached UserAccountID (or, for a company-credential session
-		// with no account entity, the resolved AccountType), so caching an
+		// keys on the cached UserAccountID (or, for a session with no persistable
+		// account identity, the resolved AccountType), so caching an
 		// attribution whose backfill just failed would freeze the chat unlinked
 		// forever. Skipping
 		// the write keeps this batch's row stamping (attributionBySession) and

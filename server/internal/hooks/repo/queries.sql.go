@@ -12,6 +12,53 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const adoptCompanyCredentialUserAccountByEmail = `-- name: AdoptCompanyCredentialUserAccountByEmail :one
+UPDATE user_accounts SET
+    account_type = $1
+  , last_seen_at = clock_timestamp()
+  , updated_at   = clock_timestamp()
+WHERE id = (
+    SELECT candidate.id FROM user_accounts candidate
+    WHERE candidate.organization_id = $2
+      AND candidate.provider = $3
+      AND candidate.external_account_uuid IS NULL
+      AND candidate.deleted_at IS NULL
+      AND candidate.email = $4
+    ORDER BY (candidate.user_id IS NOT NULL) DESC, candidate.created_at
+    LIMIT 1
+  )
+RETURNING id, billing_mode
+`
+
+type AdoptCompanyCredentialUserAccountByEmailParams struct {
+	AccountType    pgtype.Text
+	OrganizationID string
+	Provider       string
+	Email          pgtype.Text
+}
+
+type AdoptCompanyCredentialUserAccountByEmailRow struct {
+	ID          uuid.UUID
+	BillingMode pgtype.Text
+}
+
+// For a session whose employee did NOT resolve: joins the company-credential
+// account already known for this email, preferring an employee-resolved row —
+// so a session that stops resolving (e.g. the employee was deprovisioned)
+// rejoins the same account instead of forking a second row. ErrNoRows when
+// the email has no account yet (caller inserts).
+func (q *Queries) AdoptCompanyCredentialUserAccountByEmail(ctx context.Context, arg AdoptCompanyCredentialUserAccountByEmailParams) (AdoptCompanyCredentialUserAccountByEmailRow, error) {
+	row := q.db.QueryRow(ctx, adoptCompanyCredentialUserAccountByEmail,
+		arg.AccountType,
+		arg.OrganizationID,
+		arg.Provider,
+		arg.Email,
+	)
+	var i AdoptCompanyCredentialUserAccountByEmailRow
+	err := row.Scan(&i.ID, &i.BillingMode)
+	return i, err
+}
+
 const backfillLatestClaudeUserMessagePromptID = `-- name: BackfillLatestClaudeUserMessagePromptID :execrows
 WITH latest_user_message AS (
   SELECT chat_messages.id
@@ -43,6 +90,72 @@ func (q *Queries) BackfillLatestClaudeUserMessagePromptID(ctx context.Context, a
 	return result.RowsAffected(), nil
 }
 
+const claimCompanyCredentialUserAccount = `-- name: ClaimCompanyCredentialUserAccount :one
+
+UPDATE user_accounts SET
+    user_id      = $1
+  , account_type = $2
+  , last_seen_at = clock_timestamp()
+  , updated_at   = clock_timestamp()
+WHERE user_accounts.organization_id = $3
+  AND user_accounts.provider = $4
+  AND user_accounts.external_account_uuid IS NULL
+  AND user_accounts.deleted_at IS NULL
+  AND user_accounts.user_id IS NULL
+  AND user_accounts.email = $5
+  AND NOT EXISTS (
+    SELECT 1 FROM user_accounts resolved
+    WHERE resolved.organization_id = $3
+      AND resolved.provider = $4
+      AND resolved.external_account_uuid IS NULL
+      AND resolved.deleted_at IS NULL
+      AND resolved.user_id = $1::text
+  )
+RETURNING id, billing_mode
+`
+
+type ClaimCompanyCredentialUserAccountParams struct {
+	UserID         pgtype.Text
+	AccountType    pgtype.Text
+	OrganizationID string
+	Provider       string
+	Email          pgtype.Text
+}
+
+type ClaimCompanyCredentialUserAccountRow struct {
+	ID          uuid.UUID
+	BillingMode pgtype.Text
+}
+
+// Company-credential accounts (an API key, a gateway/proxy, Bedrock, or
+// Vertex) carry no provider account UUID, so their entity keys on the resolved
+// employee (user_accounts_org_provider_company_user_key) — one account per
+// employee per provider, so device-bridge attribution and email aliases
+// converge on a single account — falling back to the normalized session email
+// (user_accounts_org_provider_email_key) while no employee has resolved. The
+// four queries below implement that dual key; external_org_id /
+// external_account_id are never present on this path, so none of them write
+// those. As with UpsertUserAccount, billing_mode is admin/out-of-band only —
+// never written by ingest, returned so attribution can resolve the
+// account-level tier of the billing-mode cascade without a second round trip.
+// Promotes an email-keyed row persisted before its employee resolved to the
+// now-resolved employee, in place — the row id (and any chat links) survive
+// the transition. Guarded so an employee never gains a second resolved row:
+// when one already exists this matches nothing (ErrNoRows) and the caller
+// falls through to the by-user upsert.
+func (q *Queries) ClaimCompanyCredentialUserAccount(ctx context.Context, arg ClaimCompanyCredentialUserAccountParams) (ClaimCompanyCredentialUserAccountRow, error) {
+	row := q.db.QueryRow(ctx, claimCompanyCredentialUserAccount,
+		arg.UserID,
+		arg.AccountType,
+		arg.OrganizationID,
+		arg.Provider,
+		arg.Email,
+	)
+	var i ClaimCompanyCredentialUserAccountRow
+	err := row.Scan(&i.ID, &i.BillingMode)
+	return i, err
+}
+
 const countEmployeesForExternalOrg = `-- name: CountEmployeesForExternalOrg :one
 SELECT COUNT(DISTINCT user_id)::bigint
 FROM user_accounts
@@ -66,6 +179,20 @@ type CountEmployeesForExternalOrgParams struct {
 // email under a solo org is checked against the work-email guard instead.
 func (q *Queries) CountEmployeesForExternalOrg(ctx context.Context, arg CountEmployeesForExternalOrgParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countEmployeesForExternalOrg, arg.OrganizationID, arg.Provider, arg.ExternalOrgID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const countUserAccountsByOrg = `-- name: CountUserAccountsByOrg :one
+SELECT COUNT(*)::bigint FROM user_accounts
+WHERE organization_id = $1
+  AND deleted_at IS NULL
+`
+
+// Test fixture: asserts how many live account entities an org has.
+func (q *Queries) CountUserAccountsByOrg(ctx context.Context, organizationID string) (int64, error) {
+	row := q.db.QueryRow(ctx, countUserAccountsByOrg, organizationID)
 	var column_1 int64
 	err := row.Scan(&column_1)
 	return column_1, err
@@ -160,6 +287,54 @@ func (q *Queries) FindAssistantToolCallMessageID(ctx context.Context, arg FindAs
 	return id, err
 }
 
+const getCompanyCredentialUserAccount = `-- name: GetCompanyCredentialUserAccount :one
+SELECT id, organization_id, user_id, provider, external_org_id, external_account_uuid, external_account_id, email, account_type, billing_mode, plan_type, first_seen_at, last_seen_at, created_at, updated_at, deleted_at, deleted FROM user_accounts
+WHERE id = (
+    SELECT candidate.id FROM user_accounts candidate
+    WHERE candidate.organization_id = $1
+      AND candidate.provider = $2
+      AND candidate.email = $3
+      AND candidate.external_account_uuid IS NULL
+      AND candidate.deleted_at IS NULL
+    ORDER BY (candidate.user_id IS NOT NULL) DESC, candidate.created_at
+    LIMIT 1
+  )
+`
+
+type GetCompanyCredentialUserAccountParams struct {
+	OrganizationID string
+	Provider       string
+	Email          pgtype.Text
+}
+
+// Looks up a company-credential account by session email, preferring the
+// employee-resolved row when an orphaned unresolved row with the same email
+// also exists (see ClaimCompanyCredentialUserAccount's guard).
+func (q *Queries) GetCompanyCredentialUserAccount(ctx context.Context, arg GetCompanyCredentialUserAccountParams) (UserAccount, error) {
+	row := q.db.QueryRow(ctx, getCompanyCredentialUserAccount, arg.OrganizationID, arg.Provider, arg.Email)
+	var i UserAccount
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.UserID,
+		&i.Provider,
+		&i.ExternalOrgID,
+		&i.ExternalAccountUuid,
+		&i.ExternalAccountID,
+		&i.Email,
+		&i.AccountType,
+		&i.BillingMode,
+		&i.PlanType,
+		&i.FirstSeenAt,
+		&i.LastSeenAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getDeviceOwner = `-- name: GetDeviceOwner :one
 SELECT id, organization_id, provider, device_id, linked_user_id, first_seen_at, last_seen_at, created_at, updated_at, deleted_at, deleted FROM device_owners
 WHERE organization_id = $1
@@ -243,7 +418,7 @@ WHERE organization_id = $1
 type GetUserAccountParams struct {
 	OrganizationID      string
 	Provider            string
-	ExternalAccountUuid string
+	ExternalAccountUuid pgtype.Text
 }
 
 func (q *Queries) GetUserAccount(ctx context.Context, arg GetUserAccountParams) (UserAccount, error) {
@@ -268,6 +443,57 @@ func (q *Queries) GetUserAccount(ctx context.Context, arg GetUserAccountParams) 
 		&i.DeletedAt,
 		&i.Deleted,
 	)
+	return i, err
+}
+
+const insertCompanyCredentialUserAccountByEmail = `-- name: InsertCompanyCredentialUserAccountByEmail :one
+INSERT INTO user_accounts (
+    organization_id
+  , provider
+  , external_account_uuid
+  , user_id
+  , email
+  , account_type
+) VALUES (
+    $1
+  , $2
+  , NULL
+  , NULL
+  , $3
+  , $4
+)
+ON CONFLICT (organization_id, provider, email) WHERE external_account_uuid IS NULL AND user_id IS NULL AND deleted_at IS NULL
+DO UPDATE SET
+    account_type = EXCLUDED.account_type
+  , last_seen_at = clock_timestamp()
+  , updated_at   = clock_timestamp()
+RETURNING id, billing_mode
+`
+
+type InsertCompanyCredentialUserAccountByEmailParams struct {
+	OrganizationID string
+	Provider       string
+	Email          pgtype.Text
+	AccountType    pgtype.Text
+}
+
+type InsertCompanyCredentialUserAccountByEmailRow struct {
+	ID          uuid.UUID
+	BillingMode pgtype.Text
+}
+
+// First sight of an unresolved company-credential email: create the
+// email-keyed row. ON CONFLICT covers the concurrent-first-sight race between
+// two sessions of the same email.
+func (q *Queries) InsertCompanyCredentialUserAccountByEmail(ctx context.Context, arg InsertCompanyCredentialUserAccountByEmailParams) (InsertCompanyCredentialUserAccountByEmailRow, error) {
+	row := q.db.QueryRow(ctx, insertCompanyCredentialUserAccountByEmail,
+		arg.OrganizationID,
+		arg.Provider,
+		arg.Email,
+		arg.AccountType,
+	)
+	var i InsertCompanyCredentialUserAccountByEmailRow
+	err := row.Scan(&i.ID, &i.BillingMode)
 	return i, err
 }
 
@@ -397,10 +623,26 @@ const linkChatUserAccount = `-- name: LinkChatUserAccount :execrows
 UPDATE chats
 SET user_account_id = $1
   , updated_at = NOW()
-WHERE id = $2
-  AND project_id = $3
-  AND user_account_id IS NULL
-  AND deleted IS FALSE
+WHERE chats.id = $2
+  AND chats.project_id = $3
+  AND chats.deleted IS FALSE
+  AND (
+    chats.user_account_id IS NULL
+    OR (
+      EXISTS (
+        SELECT 1 FROM user_accounts new_ua
+        WHERE new_ua.id = $1
+          AND new_ua.organization_id = chats.organization_id
+          AND new_ua.external_account_uuid IS NOT NULL
+      )
+      AND EXISTS (
+        SELECT 1 FROM user_accounts cur_ua
+        WHERE cur_ua.id = chats.user_account_id
+          AND cur_ua.organization_id = chats.organization_id
+          AND cur_ua.external_account_uuid IS NULL
+      )
+    )
+  )
 `
 
 type LinkChatUserAccountParams struct {
@@ -413,8 +655,13 @@ type LinkChatUserAccountParams struct {
 // created before account attribution landed. A chat is created once, on the
 // session's first persisted message, so a first prompt that beats the first
 // OTEL export would otherwise leave the chat unlinked forever (and the
-// account-identity risk rules blind to it). Fill-once: never overwrites a
-// link that chat creation or an earlier backfill already set.
+// account-identity risk rules blind to it). Fill-once, with one exception: a
+// link to a company-credential account (no provider account UUID) may be
+// upgraded to a UUID-bearing account. That heals the session whose first OTEL
+// batch carried the email but not the late-arriving user.account_uuid — the
+// UUID proves the session was an OAuth account all along, so the UUID-keyed
+// entity is strictly more precise. Never the reverse: a UUID-bearing link is
+// final.
 func (q *Queries) LinkChatUserAccount(ctx context.Context, arg LinkChatUserAccountParams) (int64, error) {
 	result, err := q.db.Exec(ctx, linkChatUserAccount, arg.UserAccountID, arg.ID, arg.ProjectID)
 	if err != nil {
@@ -588,6 +835,60 @@ func (q *Queries) UpsertClaudeCodeSession(ctx context.Context, arg UpsertClaudeC
 	return id, err
 }
 
+const upsertCompanyCredentialUserAccountByUser = `-- name: UpsertCompanyCredentialUserAccountByUser :one
+INSERT INTO user_accounts (
+    organization_id
+  , provider
+  , external_account_uuid
+  , user_id
+  , email
+  , account_type
+) VALUES (
+    $1
+  , $2
+  , NULL
+  , $3
+  , $4
+  , $5
+)
+ON CONFLICT (organization_id, provider, user_id) WHERE external_account_uuid IS NULL AND deleted_at IS NULL
+DO UPDATE SET
+    email        = COALESCE(EXCLUDED.email, user_accounts.email)
+  , account_type = EXCLUDED.account_type
+  , last_seen_at = clock_timestamp()
+  , updated_at   = clock_timestamp()
+RETURNING id, billing_mode
+`
+
+type UpsertCompanyCredentialUserAccountByUserParams struct {
+	OrganizationID string
+	Provider       string
+	UserID         pgtype.Text
+	Email          pgtype.Text
+	AccountType    pgtype.Text
+}
+
+type UpsertCompanyCredentialUserAccountByUserRow struct {
+	ID          uuid.UUID
+	BillingMode pgtype.Text
+}
+
+// The resolved-employee entity upsert. email may be NULL: a session with no
+// email at all still persists here when the device bridge resolved its owner.
+// COALESCE keeps a previously learned email rather than clobbering it.
+func (q *Queries) UpsertCompanyCredentialUserAccountByUser(ctx context.Context, arg UpsertCompanyCredentialUserAccountByUserParams) (UpsertCompanyCredentialUserAccountByUserRow, error) {
+	row := q.db.QueryRow(ctx, upsertCompanyCredentialUserAccountByUser,
+		arg.OrganizationID,
+		arg.Provider,
+		arg.UserID,
+		arg.Email,
+		arg.AccountType,
+	)
+	var i UpsertCompanyCredentialUserAccountByUserRow
+	err := row.Scan(&i.ID, &i.BillingMode)
+	return i, err
+}
+
 const upsertDeviceOwner = `-- name: UpsertDeviceOwner :one
 INSERT INTO device_owners (
     organization_id
@@ -694,7 +995,7 @@ RETURNING id, billing_mode
 type UpsertUserAccountParams struct {
 	OrganizationID      string
 	Provider            string
-	ExternalAccountUuid string
+	ExternalAccountUuid pgtype.Text
 	UserID              pgtype.Text
 	ExternalOrgID       pgtype.Text
 	ExternalAccountID   pgtype.Text
@@ -707,8 +1008,10 @@ type UpsertUserAccountRow struct {
 	BillingMode pgtype.Text
 }
 
-// Records the external AI provider account observed for a session, keyed by the
-// provider's stable per-account id. COALESCE on conflict keeps a previously
+// Records the external AI provider account observed for an OAuth-authenticated
+// session, keyed by the provider's stable per-account id (a company-credential
+// session has none — see UpsertCompanyCredentialUserAccount). COALESCE on
+// conflict keeps a previously
 // learned owner/email/account_id rather than clobbering it with a null from a
 // later session that lacked that field. The conflict target carries the partial
 // index predicate so it matches user_accounts_org_provider_external_account_uuid_key.

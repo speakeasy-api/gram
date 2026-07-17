@@ -471,7 +471,7 @@ func TestSearchUsers_AttachesAccountsToEmailKeyedSummary(t *testing.T) {
 	_, err := hooksQueries.UpsertUserAccount(ctx, hooksRepo.UpsertUserAccountParams{
 		OrganizationID:      authCtx.ActiveOrganizationID,
 		Provider:            "anthropic",
-		ExternalAccountUuid: uuid.New().String(),
+		ExternalAccountUuid: conv.ToPGText(uuid.New().String()),
 		UserID:              conv.ToPGTextEmpty(userID),
 		ExternalOrgID:       conv.ToPGTextEmpty("ext-org-" + uuid.New().String()),
 		ExternalAccountID:   conv.ToPGTextEmpty(""),
@@ -543,7 +543,7 @@ func TestSearchUsers_ForeignRawUserIDsDoNotStealAccounts(t *testing.T) {
 		_, err := hooksQueries.UpsertUserAccount(ctx, hooksRepo.UpsertUserAccountParams{
 			OrganizationID:      authCtx.ActiveOrganizationID,
 			Provider:            "anthropic",
-			ExternalAccountUuid: uuid.New().String(),
+			ExternalAccountUuid: conv.ToPGText(uuid.New().String()),
 			UserID:              conv.ToPGTextEmpty(owner),
 			ExternalOrgID:       conv.ToPGTextEmpty("ext-org-" + uuid.New().String()),
 			ExternalAccountID:   conv.ToPGTextEmpty(""),
@@ -622,7 +622,7 @@ func TestSearchUsers_PersonalAccountAttachesToOwnerSummary(t *testing.T) {
 		_, err := hooksQueries.UpsertUserAccount(ctx, hooksRepo.UpsertUserAccountParams{
 			OrganizationID:      authCtx.ActiveOrganizationID,
 			Provider:            "anthropic",
-			ExternalAccountUuid: uuid.New().String(),
+			ExternalAccountUuid: conv.ToPGText(uuid.New().String()),
 			UserID:              conv.ToPGTextEmpty(userID),
 			ExternalOrgID:       conv.ToPGTextEmpty("ext-org-" + uuid.New().String()),
 			ExternalAccountID:   conv.ToPGTextEmpty(""),

@@ -75,7 +75,7 @@ func TestLogs_AttributesTeamAndPersonalAccountsViaDeviceBridge(t *testing.T) {
 	teamAccount, err := queries.GetUserAccount(ctx, repo.GetUserAccountParams{
 		OrganizationID:      orgID,
 		Provider:            providerAnthropic,
-		ExternalAccountUuid: teamAccountUUID,
+		ExternalAccountUuid: conv.ToPGText(teamAccountUUID),
 	})
 	require.NoError(t, err)
 	require.Equal(t, accountTypeTeam, teamAccount.AccountType.String)
@@ -114,7 +114,7 @@ func TestLogs_AttributesTeamAndPersonalAccountsViaDeviceBridge(t *testing.T) {
 	personalAccount, err := queries.GetUserAccount(ctx, repo.GetUserAccountParams{
 		OrganizationID:      orgID,
 		Provider:            providerAnthropic,
-		ExternalAccountUuid: persAccountUUID,
+		ExternalAccountUuid: conv.ToPGText(persAccountUUID),
 	})
 	require.NoError(t, err)
 	// Classified personal (email did not resolve) but attributed to the employee
@@ -172,7 +172,7 @@ func TestLogs_DowngradesPersonalAccountOnWorkEmail(t *testing.T) {
 
 	// Employee A's enterprise account is team.
 	entA, err := queries.GetUserAccount(ctx, repo.GetUserAccountParams{
-		OrganizationID: orgID, Provider: providerAnthropic, ExternalAccountUuid: "acct-ent-a",
+		OrganizationID: orgID, Provider: providerAnthropic, ExternalAccountUuid: conv.ToPGText("acct-ent-a"),
 	})
 	require.NoError(t, err)
 	require.Equal(t, accountTypeTeam, entA.AccountType.String)
@@ -183,7 +183,7 @@ func TestLogs_DowngradesPersonalAccountOnWorkEmail(t *testing.T) {
 	claudeAccountSession(t, ctx, ti, "max-a", emailA, "max-org-solo", "acct-max-a", "device-max-a", now.Add(time.Minute))
 
 	maxA, err := queries.GetUserAccount(ctx, repo.GetUserAccountParams{
-		OrganizationID: orgID, Provider: providerAnthropic, ExternalAccountUuid: "acct-max-a",
+		OrganizationID: orgID, Provider: providerAnthropic, ExternalAccountUuid: conv.ToPGText("acct-max-a"),
 	})
 	require.NoError(t, err)
 	require.Equal(t, accountTypePersonal, maxA.AccountType.String)
@@ -208,7 +208,7 @@ func TestLogs_SingleAccountEnterpriseStaysTeam(t *testing.T) {
 	claudeAccountSession(t, ctx, ti, "solo-session", email, "solo-enterprise-org", "acct-solo", "device-solo", now)
 
 	acct, err := queries.GetUserAccount(ctx, repo.GetUserAccountParams{
-		OrganizationID: orgID, Provider: providerAnthropic, ExternalAccountUuid: "acct-solo",
+		OrganizationID: orgID, Provider: providerAnthropic, ExternalAccountUuid: conv.ToPGText("acct-solo"),
 	})
 	require.NoError(t, err)
 	require.Equal(t, accountTypeTeam, acct.AccountType.String)
@@ -248,7 +248,7 @@ func TestLogs_PromotesUnresolvedAccountUnderSharedEnterpriseOrg(t *testing.T) {
 	claudeAccountSession(t, ctx, ti, "promote-ent-c", "unprovisioned@example.com", enterpriseOrg, "acct-promote-c", "device-promote-c", now.Add(2*time.Minute))
 
 	acct, err := queries.GetUserAccount(ctx, repo.GetUserAccountParams{
-		OrganizationID: orgID, Provider: providerAnthropic, ExternalAccountUuid: "acct-promote-c",
+		OrganizationID: orgID, Provider: providerAnthropic, ExternalAccountUuid: conv.ToPGText("acct-promote-c"),
 	})
 	require.NoError(t, err)
 	require.Equal(t, accountTypeTeam, acct.AccountType.String, "unresolved account under a shared enterprise org is team")
@@ -273,7 +273,7 @@ func TestLogs_AttributesOncePerSession(t *testing.T) {
 	claudeAccountSession(t, ctx, ti, "repeat-session", email, "some-org", "acct-repeat", "device-repeat", now)
 
 	first, err := queries.GetUserAccount(ctx, repo.GetUserAccountParams{
-		OrganizationID: orgID, Provider: providerAnthropic, ExternalAccountUuid: "acct-repeat",
+		OrganizationID: orgID, Provider: providerAnthropic, ExternalAccountUuid: conv.ToPGText("acct-repeat"),
 	})
 	require.NoError(t, err)
 	require.Equal(t, accountTypePersonal, first.AccountType.String)
@@ -286,7 +286,7 @@ func TestLogs_AttributesOncePerSession(t *testing.T) {
 	claudeAccountSession(t, ctx, ti, "repeat-session", email, "some-org", "acct-repeat", "device-repeat", now.Add(time.Minute))
 
 	second, err := queries.GetUserAccount(ctx, repo.GetUserAccountParams{
-		OrganizationID: orgID, Provider: providerAnthropic, ExternalAccountUuid: "acct-repeat",
+		OrganizationID: orgID, Provider: providerAnthropic, ExternalAccountUuid: conv.ToPGText("acct-repeat"),
 	})
 	require.NoError(t, err)
 	require.Equal(t, accountTypePersonal, second.AccountType.String)
@@ -334,7 +334,7 @@ func TestLogs_EnrichesAttributionWhenIdentityArrivesAcrossBatches(t *testing.T) 
 	require.NoError(t, err)
 
 	first, err := queries.GetUserAccount(ctx, repo.GetUserAccountParams{
-		OrganizationID: orgID, Provider: providerAnthropic, ExternalAccountUuid: accountUUID,
+		OrganizationID: orgID, Provider: providerAnthropic, ExternalAccountUuid: conv.ToPGText(accountUUID),
 	})
 	require.NoError(t, err)
 	require.Equal(t, accountTypePersonal, first.AccountType.String)
@@ -360,7 +360,7 @@ func TestLogs_EnrichesAttributionWhenIdentityArrivesAcrossBatches(t *testing.T) 
 	require.NoError(t, err)
 
 	enriched, err := queries.GetUserAccount(ctx, repo.GetUserAccountParams{
-		OrganizationID: orgID, Provider: providerAnthropic, ExternalAccountUuid: accountUUID,
+		OrganizationID: orgID, Provider: providerAnthropic, ExternalAccountUuid: conv.ToPGText(accountUUID),
 	})
 	require.NoError(t, err)
 	require.Equal(t, accountTypeTeam, enriched.AccountType.String)
@@ -488,7 +488,7 @@ func TestLogs_BackfillsChatAccountLinkOnExistingChat(t *testing.T) {
 	account, err := queries.GetUserAccount(ctx, repo.GetUserAccountParams{
 		OrganizationID:      authCtx.ActiveOrganizationID,
 		Provider:            providerAnthropic,
-		ExternalAccountUuid: accountUUID,
+		ExternalAccountUuid: conv.ToPGText(accountUUID),
 	})
 	require.NoError(t, err)
 
@@ -499,7 +499,8 @@ func TestLogs_BackfillsChatAccountLinkOnExistingChat(t *testing.T) {
 }
 
 // TestLogs_NoAccountIdentityDoesNotCreateUserAccount confirms attribution is a
-// no-op for sessions that carry no provider account id (older clients): no
+// no-op for a session with no persistable account identity at all — no provider
+// account UUID and no session email. There is nothing to key an entity on, so no
 // user_accounts row is created and ingest still succeeds.
 func TestLogs_NoAccountIdentityDoesNotCreateUserAccount(t *testing.T) {
 	t.Parallel()
@@ -516,30 +517,27 @@ func TestLogs_NoAccountIdentityDoesNotCreateUserAccount(t *testing.T) {
 			TimeUnixNano: new(nanoString(now)),
 			Body:         &gen.OTELLogBody{StringValue: new("api request")},
 			Attributes: []*gen.OTELAttribute{
-				strAttr("session.id", "identityless-session"),
-				strAttr("user.email", "someone@example.com"),
+				strAttr("session.id", "identityless-"+uuid.NewString()),
 			},
 		},
 	))
 	require.NoError(t, err)
 
-	_, err = repo.New(ti.conn).GetUserAccount(ctx, repo.GetUserAccountParams{
-		OrganizationID:      authCtx.ActiveOrganizationID,
-		Provider:            providerAnthropic,
-		ExternalAccountUuid: "",
-	})
-	require.Error(t, err)
+	count, err := repo.New(ti.conn).CountUserAccountsByOrg(ctx, authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
+	require.Zero(t, count)
 }
 
 // TestLogs_ClassifiesCompanyCredentialSessionAsTeam covers a Claude session
 // authenticated by company credentials (an API key / gateway / Bedrock / Vertex):
 // it emits user.email and user.id but no user.account_uuid or organization.id, so
-// no personal account is behind it. Attribution must classify it team and stamp
-// account_type onto the telemetry — even though no user_accounts entity can be
-// persisted (that entity keys on the absent UUID) — so the cost breakdown does
-// not park the whole org's spend under "(unset)". The email is deliberately NOT
+// no personal account is behind it. Attribution must classify it team, stamp
+// account_type onto the telemetry — so the cost breakdown does not park the whole
+// org's spend under "(unset)" — and persist the account entity keyed on the
+// session email (the UUID entity key is absent). The email is deliberately NOT
 // provisioned in Gram: this is the corporate-gateway population that an email- or
-// provider-org-based signal alone would miss.
+// provider-org-based signal alone would miss, so the entity persists with no
+// owning user_id.
 func TestLogs_ClassifiesCompanyCredentialSessionAsTeam(t *testing.T) {
 	t.Parallel()
 
@@ -556,8 +554,8 @@ func TestLogs_ClassifiesCompanyCredentialSessionAsTeam(t *testing.T) {
 			TimeUnixNano: new(nanoString(now)),
 			Body:         &gen.OTELLogBody{StringValue: new("api request")},
 			Attributes: []*gen.OTELAttribute{
-				strAttr("session.id", "gateway-session"),
-				strAttr("user.email", "gateway-user@example.com"),
+				strAttr("session.id", "gateway-"+uuid.NewString()),
+				strAttr("user.email", "Gateway-User@example.com"),
 				strAttr("user.id", "gateway-device"),
 			},
 		},
@@ -567,14 +565,17 @@ func TestLogs_ClassifiesCompanyCredentialSessionAsTeam(t *testing.T) {
 	logs := waitForHookLogs(t, ctx, chClient, authCtx.ProjectID.String(), claudeOTELLogsURN, now, 1)
 	require.Contains(t, logs[0].Attributes, accountTypeTeam)
 
-	// No account entity is persisted: the user_accounts key (external_account_uuid)
-	// is absent for a company-credential session.
-	_, err = repo.New(ti.conn).GetUserAccount(ctx, repo.GetUserAccountParams{
-		OrganizationID:      orgID,
-		Provider:            providerAnthropic,
-		ExternalAccountUuid: "",
+	// The account entity is persisted keyed on the normalized session email,
+	// with no provider account UUID and no resolved owner.
+	account, err := repo.New(ti.conn).GetCompanyCredentialUserAccount(ctx, repo.GetCompanyCredentialUserAccountParams{
+		OrganizationID: orgID,
+		Provider:       providerAnthropic,
+		Email:          conv.ToPGText("gateway-user@example.com"),
 	})
-	require.Error(t, err)
+	require.NoError(t, err)
+	require.Equal(t, accountTypeTeam, account.AccountType.String)
+	require.False(t, account.ExternalAccountUuid.Valid)
+	require.False(t, account.UserID.Valid)
 }
 
 // TestLogs_CompanyCredentialSessionTeachesDeviceBridge covers the bridge at a
@@ -622,6 +623,17 @@ func TestLogs_CompanyCredentialSessionTeachesDeviceBridge(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, userID, owner.LinkedUserID.String)
 
+	// The company-credential account entity persists keyed on the work email,
+	// owned by the resolved employee.
+	companyAccount, err := queries.GetCompanyCredentialUserAccount(ctx, repo.GetCompanyCredentialUserAccountParams{
+		OrganizationID: orgID,
+		Provider:       providerAnthropic,
+		Email:          conv.ToPGText(workEmail),
+	})
+	require.NoError(t, err)
+	require.Equal(t, accountTypeTeam, companyAccount.AccountType.String)
+	require.Equal(t, userID, companyAccount.UserID.String)
+
 	// A personal session on the same device (UUID present, gmail does not
 	// resolve) adopts the learned employee through the bridge.
 	claudeAccountSession(t, ctx, ti, "gateway-pers-session", "gateway-person@gmail.com", "gateway-max-org", "acct-gateway-personal", deviceID, now.Add(time.Minute))
@@ -629,11 +641,224 @@ func TestLogs_CompanyCredentialSessionTeachesDeviceBridge(t *testing.T) {
 	personalAccount, err := queries.GetUserAccount(ctx, repo.GetUserAccountParams{
 		OrganizationID:      orgID,
 		Provider:            providerAnthropic,
-		ExternalAccountUuid: "acct-gateway-personal",
+		ExternalAccountUuid: conv.ToPGText("acct-gateway-personal"),
 	})
 	require.NoError(t, err)
 	require.Equal(t, accountTypePersonal, personalAccount.AccountType.String)
 	require.Equal(t, userID, personalAccount.UserID.String)
+}
+
+// claudeCompanyCredentialSession POSTs a single-record Claude OTEL logs payload
+// with the identity shape a company-credential session emits: a session email
+// and per-device id, but no user.account_uuid or organization.id.
+func claudeCompanyCredentialSession(t *testing.T, ctx context.Context, ti *testInstance, sessionID, email, deviceID string, ts time.Time) {
+	t.Helper()
+	err := ti.service.Logs(ctx, claudeLogsPayload(
+		[]*gen.OTELResourceAttribute{resourceStrAttr("service.name", "claude-code")},
+		nil,
+		&gen.OTELLogRecord{
+			TimeUnixNano: new(nanoString(ts)),
+			Body:         &gen.OTELLogBody{StringValue: new("api request")},
+			Attributes: []*gen.OTELAttribute{
+				strAttr("session.id", sessionID),
+				strAttr("user.email", email),
+				strAttr("user.id", deviceID),
+			},
+		},
+	))
+	require.NoError(t, err)
+}
+
+// TestLogs_CompanyCredentialAccountSharedAcrossSessions covers the entity key:
+// company-credential sessions with the same email share ONE user_accounts row
+// across sessions, and a later session whose email has become resolvable fills
+// in the owning employee (COALESCE keeps learned fields).
+func TestLogs_CompanyCredentialAccountSharedAcrossSessions(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx := hookAuthContext(t, ctx)
+	orgID := authCtx.ActiveOrganizationID
+	queries := repo.New(ti.conn)
+	now := time.Now().UTC().Truncate(time.Second)
+
+	email := "shared-credential@example.com"
+
+	// First session: the email is not provisioned in Gram yet, so the entity
+	// persists unowned.
+	claudeCompanyCredentialSession(t, ctx, ti, "cc-shared-1-"+uuid.NewString(), email, "cc-device-1", now)
+
+	first, err := queries.GetCompanyCredentialUserAccount(ctx, repo.GetCompanyCredentialUserAccountParams{
+		OrganizationID: orgID,
+		Provider:       providerAnthropic,
+		Email:          conv.ToPGText(email),
+	})
+	require.NoError(t, err)
+	require.Equal(t, accountTypeTeam, first.AccountType.String)
+	require.False(t, first.UserID.Valid)
+
+	// The employee is provisioned; a later session resolves and fills the owner
+	// on the SAME entity instead of creating a second row.
+	userID := "cc-shared-employee"
+	seedHookUser(t, ctx, ti.conn, orgID, userID, email)
+	claudeCompanyCredentialSession(t, ctx, ti, "cc-shared-2-"+uuid.NewString(), email, "cc-device-2", now.Add(time.Minute))
+
+	second, err := queries.GetCompanyCredentialUserAccount(ctx, repo.GetCompanyCredentialUserAccountParams{
+		OrganizationID: orgID,
+		Provider:       providerAnthropic,
+		Email:          conv.ToPGText(email),
+	})
+	require.NoError(t, err)
+	require.Equal(t, first.ID, second.ID)
+	require.Equal(t, userID, second.UserID.String)
+
+	count, err := queries.CountUserAccountsByOrg(ctx, orgID)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), count)
+}
+
+// TestLogs_CompanyCredentialSessionsConvergeOnEmployeeAccount covers the
+// resolved entity key: sessions of ONE employee reporting different emails —
+// one that resolves directly, one alias attributed through the device bridge —
+// land on a single employee-keyed account instead of one row per email.
+func TestLogs_CompanyCredentialSessionsConvergeOnEmployeeAccount(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx := hookAuthContext(t, ctx)
+	orgID := authCtx.ActiveOrganizationID
+	queries := repo.New(ti.conn)
+	now := time.Now().UTC().Truncate(time.Second)
+
+	userID, workEmail := "cc-converge-employee", "cc-converge@example.com"
+	seedHookUser(t, ctx, ti.conn, orgID, userID, workEmail)
+	const deviceID = "cc-converge-device"
+
+	// Work email resolves directly; the session also teaches the bridge.
+	claudeCompanyCredentialSession(t, ctx, ti, "cc-converge-1-"+uuid.NewString(), workEmail, deviceID, now)
+
+	// An alias that does NOT resolve, on the same device: the bridge supplies
+	// the employee, so this session must join the SAME account.
+	claudeCompanyCredentialSession(t, ctx, ti, "cc-converge-2-"+uuid.NewString(), "cc-converge-alias@example.com", deviceID, now.Add(time.Minute))
+
+	count, err := queries.CountUserAccountsByOrg(ctx, orgID)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), count)
+}
+
+// TestLogs_PersistsCompanyCredentialAccountForBridgedNoEmailSession covers the
+// no-email residual: a company-credential session reporting no email at all
+// still persists (onto the employee-keyed account) when the device bridge
+// knows the device's owner. Only a session with no identity on any axis — no
+// UUID, no email, no bridged owner — persists nothing.
+func TestLogs_PersistsCompanyCredentialAccountForBridgedNoEmailSession(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx := hookAuthContext(t, ctx)
+	orgID := authCtx.ActiveOrganizationID
+	queries := repo.New(ti.conn)
+	now := time.Now().UTC().Truncate(time.Second)
+
+	userID, workEmail := "cc-noemail-employee", "cc-noemail@example.com"
+	seedHookUser(t, ctx, ti.conn, orgID, userID, workEmail)
+	const deviceID = "cc-noemail-device"
+
+	// Teach the bridge (and create the employee's account).
+	claudeCompanyCredentialSession(t, ctx, ti, "cc-noemail-1-"+uuid.NewString(), workEmail, deviceID, now)
+
+	// A later session on the same device with NO email: the bridge resolves the
+	// owner, and the session joins the same employee-keyed account.
+	err := ti.service.Logs(ctx, claudeLogsPayload(
+		[]*gen.OTELResourceAttribute{resourceStrAttr("service.name", "claude-code")},
+		nil,
+		&gen.OTELLogRecord{
+			TimeUnixNano: new(nanoString(now.Add(time.Minute))),
+			Body:         &gen.OTELLogBody{StringValue: new("api request")},
+			Attributes: []*gen.OTELAttribute{
+				strAttr("session.id", "cc-noemail-2-"+uuid.NewString()),
+				strAttr("user.id", deviceID),
+			},
+		},
+	))
+	require.NoError(t, err)
+
+	count, err := queries.CountUserAccountsByOrg(ctx, orgID)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), count)
+
+	account, err := queries.GetCompanyCredentialUserAccount(ctx, repo.GetCompanyCredentialUserAccountParams{
+		OrganizationID: orgID,
+		Provider:       providerAnthropic,
+		Email:          conv.ToPGText(workEmail),
+	})
+	require.NoError(t, err)
+	require.Equal(t, userID, account.UserID.String)
+}
+
+// TestLogs_UpgradesChatLinkWhenAccountUUIDArrivesLate covers the healing path
+// for a session whose first OTEL batch carried the email but not the (late)
+// user.account_uuid: the batch persists an email-keyed company-credential
+// entity and links the chat to it; when the UUID arrives, re-attribution
+// persists the real OAuth account and the chat link upgrades to it. The stale
+// email-keyed row is a documented leftover (its last_seen_at freezes).
+func TestLogs_UpgradesChatLinkWhenAccountUUIDArrivesLate(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx := hookAuthContext(t, ctx)
+	orgID := authCtx.ActiveOrganizationID
+	queries := repo.New(ti.conn)
+	now := time.Now().UTC().Truncate(time.Second)
+
+	sessionID := "cc-upgrade-" + uuid.NewString()
+	chatID := sessionIDToUUID(sessionID)
+	email := "late-uuid-person@gmail.com"
+
+	// The chat already exists, unlinked — first prompt beat the first OTEL export.
+	_, err := queries.UpsertClaudeCodeSession(ctx, repo.UpsertClaudeCodeSessionParams{
+		ID:             chatID,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: orgID,
+		UserID:         conv.ToPGTextEmpty(""),
+		ExternalUserID: conv.ToPGTextEmpty(email),
+		UserAccountID:  conv.StringToNullUUID(""),
+		Title:          conv.ToPGText("late-uuid chat"),
+	})
+	require.NoError(t, err)
+
+	// First batch: email but no UUID. The chat links to the email-keyed entity.
+	claudeCompanyCredentialSession(t, ctx, ti, sessionID, email, "cc-upgrade-device", now)
+
+	companyAccount, err := queries.GetCompanyCredentialUserAccount(ctx, repo.GetCompanyCredentialUserAccountParams{
+		OrganizationID: orgID,
+		Provider:       providerAnthropic,
+		Email:          conv.ToPGText(email),
+	})
+	require.NoError(t, err)
+
+	chat, err := chatRepo.New(ti.conn).GetChat(ctx, chatID)
+	require.NoError(t, err)
+	require.True(t, chat.UserAccountID.Valid)
+	require.Equal(t, companyAccount.ID, chat.UserAccountID.UUID)
+
+	// Second batch: the UUID arrives. Re-attribution persists the OAuth account
+	// and the chat link upgrades from the email-keyed entity to it.
+	accountUUID := "acct-" + sessionID
+	claudeAccountSession(t, ctx, ti, sessionID, email, "org-"+sessionID, accountUUID, "cc-upgrade-device", now.Add(time.Minute))
+
+	oauthAccount, err := queries.GetUserAccount(ctx, repo.GetUserAccountParams{
+		OrganizationID:      orgID,
+		Provider:            providerAnthropic,
+		ExternalAccountUuid: conv.ToPGText(accountUUID),
+	})
+	require.NoError(t, err)
+	require.Equal(t, accountTypePersonal, oauthAccount.AccountType.String)
+
+	chat, err = chatRepo.New(ti.conn).GetChat(ctx, chatID)
+	require.NoError(t, err)
+	require.True(t, chat.UserAccountID.Valid)
+	require.Equal(t, oauthAccount.ID, chat.UserAccountID.UUID)
 }
 
 // TestLogs_LateBridgeBackfillsPersonalAccount covers the "late linking" ordering:
@@ -667,7 +892,7 @@ func TestLogs_LateBridgeBackfillsPersonalAccount(t *testing.T) {
 	claudeAccountSession(t, ctx, ti, "late-pers-1", "late-person@gmail.com", persOrg, persAcct, deviceID, now)
 
 	pers1, err := queries.GetUserAccount(ctx, repo.GetUserAccountParams{
-		OrganizationID: orgID, Provider: providerAnthropic, ExternalAccountUuid: persAcct,
+		OrganizationID: orgID, Provider: providerAnthropic, ExternalAccountUuid: conv.ToPGText(persAcct),
 	})
 	require.NoError(t, err)
 	require.Equal(t, accountTypePersonal, pers1.AccountType.String)
@@ -688,7 +913,7 @@ func TestLogs_LateBridgeBackfillsPersonalAccount(t *testing.T) {
 	claudeAccountSession(t, ctx, ti, "late-pers-2", "late-person@gmail.com", persOrg, persAcct, deviceID, now.Add(2*time.Minute))
 
 	pers2, err := queries.GetUserAccount(ctx, repo.GetUserAccountParams{
-		OrganizationID: orgID, Provider: providerAnthropic, ExternalAccountUuid: persAcct,
+		OrganizationID: orgID, Provider: providerAnthropic, ExternalAccountUuid: conv.ToPGText(persAcct),
 	})
 	require.NoError(t, err)
 	require.Equal(t, accountTypePersonal, pers2.AccountType.String, "stays personal")

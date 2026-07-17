@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/sdk/testsuite"
 
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	hooksrepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -73,7 +74,7 @@ func seedAccountChatWithAccount(t *testing.T, conn *pgxpool.Pool, td testData, a
 	account, err := hooksrepo.New(conn).UpsertUserAccount(ctx, hooksrepo.UpsertUserAccountParams{
 		OrganizationID:      td.orgID,
 		Provider:            "anthropic",
-		ExternalAccountUuid: externalAccountUUID,
+		ExternalAccountUuid: conv.ToPGText(externalAccountUUID),
 		UserID:              pgtype.Text{},
 		ExternalOrgID:       pgtype.Text{},
 		ExternalAccountID:   pgtype.Text{},
@@ -104,7 +105,7 @@ func setAccountEmail(t *testing.T, conn *pgxpool.Pool, td testData, externalAcco
 	_, err := hooksrepo.New(conn).UpsertUserAccount(t.Context(), hooksrepo.UpsertUserAccountParams{
 		OrganizationID:      td.orgID,
 		Provider:            "anthropic",
-		ExternalAccountUuid: externalAccountUUID,
+		ExternalAccountUuid: conv.ToPGText(externalAccountUUID),
 		UserID:              pgtype.Text{},
 		ExternalOrgID:       pgtype.Text{},
 		ExternalAccountID:   pgtype.Text{},
