@@ -2,13 +2,15 @@ import { Fragment, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 
-// The segment button's own styling, exported so a `trailing` control (e.g. an
-// overflow dropdown trigger) can sit in the track without re-deriving it.
+// The segment button's own styling. Base + inactive are exported so a
+// `trailing` control (e.g. an overflow dropdown trigger) can sit in the track
+// without re-deriving them; the active state stays internal, since only a real
+// segment is ever active.
 export const SEGMENT_BASE =
   "flex h-full items-center rounded-sm border px-3 text-sm font-medium transition-colors";
-export const SEGMENT_ACTIVE = "border-border bg-card text-foreground shadow-sm";
 export const SEGMENT_INACTIVE =
   "text-muted-foreground hover:text-foreground border-transparent";
+const SEGMENT_ACTIVE = "border-border bg-card text-foreground shadow-sm";
 
 /**
  * A two-or-more option segmented toggle (iOS-style): a bordered white track with
