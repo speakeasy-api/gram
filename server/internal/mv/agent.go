@@ -18,11 +18,14 @@ import (
 // agent.GetAgentPluginSet into the tool-agnostic marketplaces + plugins view
 // the agent endpoint returns.
 //
-// For every published marketplace in the org it emits the marketplace and its
+// For every marketplace the query returns it emits the marketplace and its
 // always-required observability plugin, then layers on the user's assigned
-// plugins (the non-null plugin rows). Rows arrive grouped by project
-// (`ORDER BY pr.id, p.slug`), one row per project even when the user has no
-// assignment there (null plugin columns).
+// plugins (the non-null plugin rows). The query already scopes which projects
+// appear — the org's default project always, non-default projects only where the
+// caller has a matching assignment — so this builder emits a marketplace for
+// every row it receives. Rows arrive grouped by project (`ORDER BY pr.id,
+// p.slug`); the default project can still yield one row with null plugin columns
+// when the caller has no assignment there.
 //
 // Each project's marketplace name is resolved the same way the publish path
 // resolves it: the per-project override (project_marketplace_settings) when set,

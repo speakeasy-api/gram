@@ -47,30 +47,49 @@ func isExplicitSkillActivation(payload *gen.IngestPayload) bool {
 // identity is the publishing admin, not the developer at the keyboard —
 // falling back to the token owner for personal keys and senders without a
 // device agent.
-func (s *Service) Ingest(ctx context.Context, payload *gen.IngestPayload) (*gen.IngestHookResult, error) {
+func (s *Service) Ingest(ctx context.Context, payload *gen.IngestPayload) (res *gen.IngestHookResult, err error) {
+	start := time.Now()
+	source := ""
+	eventType := ""
+	orgSlug := ""
+	outcome := hookMetricOutcomeAccepted
+	defer func() {
+		if err != nil && outcome == hookMetricOutcomeAccepted {
+			outcome = hookMetricOutcomeFailure
+		}
+		decision := hookMetricDecisionNone
+		if res != nil {
+			decision = res.Decision
+		}
+		s.metrics.RecordHookEventDuration(ctx, source, eventType, outcome, decision, orgSlug, time.Since(start))
+	}()
+
 	if err := validateCanonicalIngestPayload(payload); err != nil {
 		return nil, err
 	}
+	source = strings.TrimSpace(payload.Source.Adapter)
+	eventType = strings.TrimSpace(payload.Event.Type)
 	if apikey := strings.TrimSpace(conv.PtrValOr(payload.ApikeyToken, "")); apikey != "" {
 		authedCtx, err := s.authorizePluginRequest(ctx, apikey, strings.TrimSpace(conv.PtrValOr(payload.ProjectSlugInput, "")))
 		if err != nil {
+			outcome = hookMetricOutcomeUnauthorized
 			return nil, oops.E(oops.CodeUnauthorized, err, "unauthorized")
 		}
 		ctx = authedCtx
 	}
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		outcome = hookMetricOutcomeUnauthenticated
 		s.logger.InfoContext(ctx, "unauthenticated hook acknowledged without processing",
 			attr.SlogEvent("hooks_ingest_unauthenticated"),
-			attr.SlogHookSource(strings.TrimSpace(payload.Source.Adapter)),
-			attr.SlogHookEvent(strings.TrimSpace(payload.Event.Type)),
+			attr.SlogHookSource(source),
+			attr.SlogHookEvent(eventType),
 		)
 		return canonicalAllowResult(), nil
 	}
+	orgSlug = authCtx.OrganizationSlug
 	actor := s.resolveCanonicalActor(ctx, payload, authCtx)
 
-	eventType := strings.TrimSpace(payload.Event.Type)
-	source := strings.TrimSpace(payload.Source.Adapter)
 	sessionID := canonicalSessionID(payload)
 	timestamp := canonicalEventTime(payload)
 
@@ -486,7 +505,7 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 		}
 	}
 	s.writeCanonicalTelemetry(ctx, payload, authCtx, &metadata, timestamp, blockReason)
-	if err := s.persistCanonicalConversationEvent(ctx, payload, authCtx, &metadata); err != nil {
+	if err := s.persistCanonicalConversationEvent(ctx, payload, authCtx, &metadata, timestamp); err != nil {
 		s.logger.WarnContext(ctx, "failed to persist canonical hook conversation event",
 			attr.SlogEvent("hooks_ingest_chat_persist_failed"),
 			attr.SlogError(err),
@@ -767,7 +786,12 @@ func telemetryHookEventName(payload *gen.IngestPayload) string {
 	}
 }
 
-func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, metadata *SessionMetadata) error {
+// persistCanonicalConversationEvent writes the event's chat row. occurredAt
+// is the ingest-resolved canonicalEventTime, passed in rather than recomputed
+// so the chat row, telemetry, and enforcement carry the exact same
+// server-resolved time for one event — a recomputed fallback or clamp would
+// drift by the handler's processing latency.
+func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, occurredAt time.Time) error {
 	sessionID := canonicalSessionID(payload)
 	if sessionID == "" || authCtx.ProjectID == nil {
 		return nil
@@ -800,7 +824,8 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 			// Downtime backlog redelivered from a device's offline spool:
 			// carried onto the row so the offline risk scanner's findings
 			// (and any session view) can distinguish replayed traffic.
-			Replayed: conv.PtrValOr(payload.Replayed, false),
+			Replayed:  conv.PtrValOr(payload.Replayed, false),
+			CreatedAt: conv.ToPGTimestamptz(occurredAt),
 		}
 	}
 
@@ -915,15 +940,34 @@ func canonicalDenyResult(message string) *gen.IngestHookResult {
 	}
 }
 
+// maxEventBackdate bounds how far into the past a sender-supplied
+// occurred_at may reach. It mirrors the client spool's 14-day expiry: no
+// legitimate replay is older, so anything beyond it is a skewed or hostile
+// clock that would otherwise sort a row ahead of the entire transcript
+// forever (occurred_at is fully client-controlled).
+const maxEventBackdate = 14 * 24 * time.Hour
+
+// canonicalEventTime returns the event's occurred_at clamped to
+// [now-maxEventBackdate, now]. The clamp lives here — not at individual
+// persistence sites — so every consumer (chat rows, ClickHouse telemetry,
+// enforcement evaluation) agrees on one time for one event; a skewed device
+// clock must never make the stores diverge.
 func canonicalEventTime(payload *gen.IngestPayload) time.Time {
+	now := time.Now()
 	if payload != nil && payload.Event != nil {
 		if raw := strings.TrimSpace(conv.PtrValOr(payload.Event.OccurredAt, "")); raw != "" {
 			if t, err := time.Parse(time.RFC3339Nano, raw); err == nil {
+				if t.After(now) {
+					return now
+				}
+				if floor := now.Add(-maxEventBackdate); t.Before(floor) {
+					return floor
+				}
 				return t
 			}
 		}
 	}
-	return time.Now()
+	return now
 }
 
 func canonicalSessionID(payload *gen.IngestPayload) string {

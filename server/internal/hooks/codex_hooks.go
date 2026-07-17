@@ -34,7 +34,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 		if err != nil && outcome == hookMetricOutcomeAccepted {
 			outcome = hookMetricOutcomeFailure
 		}
-		s.metrics.RecordHookEventDuration(ctx, "codex", hookEventName, outcome, orgSlug, time.Since(start))
+		s.metrics.RecordHookEventDuration(ctx, "codex", hookEventName, outcome, codexHookDecision(res), orgSlug, time.Since(start))
 	}()
 
 	logger := s.logger.With(
@@ -526,6 +526,7 @@ func (s *Service) writeCodexToolCallRequestToPG(ctx context.Context, payload *ge
 
 	msgParams := chatRepo.CreateChatMessageParams{
 		Replayed:         false,
+		CreatedAt:        conv.PtrToPGTimestamptz(nil),
 		ChatID:           chatID,
 		ProjectID:        projectID,
 		Role:             "assistant",
@@ -572,6 +573,7 @@ func (s *Service) writeCodexToolCallResultToPG(ctx context.Context, payload *gen
 
 	msgParams := chatRepo.CreateChatMessageParams{
 		Replayed:         false,
+		CreatedAt:        conv.PtrToPGTimestamptz(nil),
 		ChatID:           chatID,
 		ProjectID:        projectID,
 		Role:             "tool",
@@ -619,6 +621,7 @@ func (s *Service) writeCodexUserPromptToPG(ctx context.Context, payload *gen.Cod
 
 	msgParams := chatRepo.CreateChatMessageParams{
 		Replayed:         false,
+		CreatedAt:        conv.PtrToPGTimestamptz(nil),
 		ChatID:           chatID,
 		ProjectID:        projectID,
 		Role:             "user",
@@ -666,6 +669,7 @@ func (s *Service) writeCodexAssistantResponseToPG(ctx context.Context, payload *
 
 	msgParams := chatRepo.CreateChatMessageParams{
 		Replayed:         false,
+		CreatedAt:        conv.PtrToPGTimestamptz(nil),
 		ChatID:           chatID,
 		ProjectID:        projectID,
 		Role:             "assistant",

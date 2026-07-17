@@ -797,6 +797,7 @@ func newTriggersApp(
 	telemetryLogger *telemetry.Logger,
 	auditLogger *audit.Logger,
 	serverURL *url.URL,
+	siteURL *url.URL,
 	slackClient *slack_client.SlackClient,
 ) *bgtriggers.App {
 	envEntries := environments.NewEnvironmentEntries(logger, db, enc, nil)
@@ -828,6 +829,7 @@ func newTriggersApp(
 		}),
 		auditLogger,
 		serverURL,
+		siteURL,
 		slackClient,
 		bgtriggers.NewNoopDispatcher(logger),
 	)

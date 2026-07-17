@@ -53,6 +53,7 @@ func (r iteratorForCreateChatMessage) Values() ([]interface{}, error) {
 		r.rows[0].ContentHash,
 		r.rows[0].Generation,
 		r.rows[0].Replayed,
+		r.rows[0].CreatedAt,
 	}, nil
 }
 
@@ -60,6 +61,10 @@ func (r iteratorForCreateChatMessage) Err() error {
 	return nil
 }
 
+// created_at is caller-supplied so hook-captured messages carry the event's
+// original occurred_at: spool replays arrive after newer live rows, and
+// insert-time stamps would sort them out of conversation order. Transcript
+// readers order by (created_at, seq).
 func (q *Queries) CreateChatMessage(ctx context.Context, arg []CreateChatMessageParams) (int64, error) {
-	return q.db.CopyFrom(ctx, []string{"chat_messages"}, []string{"chat_id", "role", "project_id", "content", "content_raw", "content_asset_url", "storage_error", "model", "message_id", "tool_call_id", "user_id", "external_user_id", "finish_reason", "tool_calls", "prompt_tokens", "completion_tokens", "total_tokens", "origin", "user_agent", "ip_address", "source", "content_hash", "generation", "replayed"}, &iteratorForCreateChatMessage{rows: arg})
+	return q.db.CopyFrom(ctx, []string{"chat_messages"}, []string{"chat_id", "role", "project_id", "content", "content_raw", "content_asset_url", "storage_error", "model", "message_id", "tool_call_id", "user_id", "external_user_id", "finish_reason", "tool_calls", "prompt_tokens", "completion_tokens", "total_tokens", "origin", "user_agent", "ip_address", "source", "content_hash", "generation", "replayed", "created_at"}, &iteratorForCreateChatMessage{rows: arg})
 }

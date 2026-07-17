@@ -2034,6 +2034,7 @@ func storeMessages(ctx context.Context, logger *slog.Logger, tx repo.DBTX, asset
 
 		dbrows[i] = repo.CreateChatMessageParams{
 			Replayed:         false,
+			CreatedAt:        conv.PtrToPGTimestamptz(nil),
 			ChatID:           row.chatID,
 			ProjectID:        row.projectID,
 			Role:             row.role,
@@ -2061,8 +2062,7 @@ func storeMessages(ctx context.Context, logger *slog.Logger, tx repo.DBTX, asset
 	}
 
 	// Batch insert all messages.
-	crepo := repo.New(tx)
-	if _, err := crepo.CreateChatMessage(ctx, dbrows); err != nil {
+	if _, err := insertChatMessages(ctx, tx, dbrows); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to insert chat messages").LogError(ctx, logger)
 	}
 

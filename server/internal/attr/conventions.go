@@ -329,6 +329,10 @@ const (
 	VisibilityKey                     = attribute.Key("gram.visibility")
 
 	// Hooks
+	// HookDecisionKey carries the policy verdict the hook endpoint returned to
+	// the agent (allow/deny) on hook metrics, independent of the processing
+	// outcome (accepted/failure/unauthorized) in OutcomeKey.
+	HookDecisionKey             = attribute.Key("gram.hook.decision")
 	HookEventKey                = attribute.Key("gram.hook.event")
 	HookErrorKey                = attribute.Key("gram.hook.error")
 	HookIsInterruptKey          = attribute.Key("gram.hook.is_interrupt")
@@ -579,6 +583,8 @@ func HookServerNameOverrideID(v string) attribute.KeyValue {
 func SlogHookServerNameOverrideID(v string) slog.Attr {
 	return slog.String(string(HookServerNameOverrideIDKey), v)
 }
+
+func HookDecision(v string) attribute.KeyValue { return HookDecisionKey.String(v) }
 
 func HookEvent(v string) attribute.KeyValue { return HookEventKey.String(v) }
 func SlogHookEvent(v string) slog.Attr      { return slog.String(string(HookEventKey), v) }

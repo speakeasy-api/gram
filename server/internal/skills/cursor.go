@@ -32,31 +32,31 @@ func decodeSkillCursor(cursor string) (string, error) {
 	return name, nil
 }
 
-func encodeSkillVersionCursor(createdAt time.Time, id uuid.UUID) string {
+func encodeCreatedAtIDCursor(createdAt time.Time, id uuid.UUID) string {
 	payload := createdAt.UTC().Format(time.RFC3339Nano) + "|" + id.String()
 	return base64.RawURLEncoding.EncodeToString([]byte(payload))
 }
 
-func decodeSkillVersionCursor(cursor string) (time.Time, uuid.UUID, error) {
+func decodeCreatedAtIDCursor(cursor string) (time.Time, uuid.UUID, error) {
 	decoded, err := base64.RawURLEncoding.DecodeString(cursor)
 	if err != nil {
-		return time.Time{}, uuid.Nil, fmt.Errorf("decode skill version cursor: %w", err)
+		return time.Time{}, uuid.Nil, fmt.Errorf("decode created_at+id cursor: %w", err)
 	}
 
 	payload := string(decoded)
 	if strings.Count(payload, "|") != 1 {
-		return time.Time{}, uuid.Nil, errors.New("decode skill version cursor: invalid format")
+		return time.Time{}, uuid.Nil, errors.New("decode created_at+id cursor: invalid format")
 	}
 	timestampText, idText, _ := strings.Cut(payload, "|")
 
 	createdAt, err := time.Parse(time.RFC3339Nano, timestampText)
 	if err != nil || createdAt.UTC().Format(time.RFC3339Nano) != timestampText {
-		return time.Time{}, uuid.Nil, errors.New("decode skill version cursor: invalid timestamp")
+		return time.Time{}, uuid.Nil, errors.New("decode created_at+id cursor: invalid timestamp")
 	}
 
 	id, err := uuid.Parse(idText)
 	if err != nil || id == uuid.Nil || id.String() != idText {
-		return time.Time{}, uuid.Nil, errors.New("decode skill version cursor: invalid id")
+		return time.Time{}, uuid.Nil, errors.New("decode created_at+id cursor: invalid id")
 	}
 
 	return createdAt, id, nil
