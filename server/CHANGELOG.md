@@ -1,5 +1,12 @@
 # server
 
+## 0.90.1
+
+### Patch Changes
+
+- 9f39b44: Deprovision user access on SCIM deactivation. WorkOS `organization_membership` events with status `inactive` and `dsync.user` events with a non-active state now soft-delete the user's organization relationship and role assignments and invalidate their cached user info. Login-time and backfill membership syncs only import active memberships, directory-user upserts no longer resurrect soft-deleted rows unless the incoming state is explicitly active, and organization rosters exclude deleted users.
+- 50289f1: Show the number of active skills carried by each plugin on the Plugins page.
+
 ## 0.90.0
 
 ### Minor Changes
