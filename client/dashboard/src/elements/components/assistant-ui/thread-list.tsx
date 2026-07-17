@@ -2,7 +2,7 @@ import type { FC } from "react";
 import {
   ThreadListItemPrimitive,
   ThreadListPrimitive,
-  useAssistantState,
+  useAuiState,
 } from "@assistant-ui/react";
 import { MessageSquareTextIcon, PlusIcon } from "lucide-react";
 
@@ -91,7 +91,7 @@ const ThreadListNew: FC = () => {
 };
 
 const ThreadListItems: FC = () => {
-  const isLoading = useAssistantState(({ threads }) => threads.isLoading);
+  const isLoading = useAuiState(({ threads }) => threads.isLoading);
 
   if (isLoading) {
     return <ThreadListSkeleton />;
@@ -155,7 +155,7 @@ const ThreadListItem: FC = () => {
  * one, otherwise the default message icon.
  */
 const ThreadListItemIcon: FC = () => {
-  const id = useAssistantState(
+  const id = useAuiState(
     ({ threadListItem }) =>
       threadListItem.remoteId ?? threadListItem.externalId,
   );
@@ -194,7 +194,7 @@ const ThreadListItemDate: FC = () => {
   // Both remoteId and externalId equal the chat id in the Gram adapter; the
   // side-channel map is keyed by that id. New local threads have neither yet,
   // so they simply render no date.
-  const id = useAssistantState(
+  const id = useAuiState(
     ({ threadListItem }) =>
       threadListItem.remoteId ?? threadListItem.externalId,
   );

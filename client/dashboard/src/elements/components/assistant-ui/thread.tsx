@@ -23,8 +23,8 @@ import {
   ImageMessagePartProps,
   MessagePrimitive,
   ThreadPrimitive,
-  useAssistantApi,
-  useAssistantState,
+  useAui,
+  useAuiState,
 } from "@assistant-ui/react";
 
 import {
@@ -867,11 +867,11 @@ interface ToolCategory {
 // tool mentions are disabled or there are no tools.
 const ComposerToolMentionPicker: FC = () => {
   const { config, mcpTools, mcpToolsLoading } = useElements();
-  const api = useAssistantApi();
+  const aui = useAui();
   // Read the composer text from the same reactive source the tool-mention
   // badges parse, so an inserted mention renders a pill just like the type-`@`
   // autocomplete does.
-  const composerText = useAssistantState(({ composer }) => composer.text);
+  const composerText = useAuiState(({ composer }) => composer.text);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState(
@@ -929,7 +929,7 @@ const ComposerToolMentionPicker: FC = () => {
       composerText && !/\s$/.test(composerText)
         ? `${composerText} `
         : composerText;
-    api.composer().setText(`${base}@${toolName} `);
+    aui.composer().setText(`${base}@${toolName} `);
     setOpen(false);
     setQuery("");
   };
@@ -1163,7 +1163,7 @@ const AssistantActionBar: FC = () => {
   // Only the message text is copyable, so a message made up solely of tool
   // calls (and/or reasoning) has nothing to copy — don't render the bar there.
   // Otherwise a lone Copy button hangs beneath every tool-only turn.
-  const hasCopyableText = useAssistantState(({ message }) =>
+  const hasCopyableText = useAuiState(({ message }) =>
     message.parts.some(
       (part) => part.type === "text" && part.text.trim().length > 0,
     ),
@@ -1238,12 +1238,12 @@ const UserMessage: FC = () => {
  * configured, or it returned nothing for this chat).
  */
 const UserMessageHeader: FC = () => {
-  const id = useAssistantState(
+  const id = useAuiState(
     ({ threadListItem }) =>
       threadListItem.remoteId ?? threadListItem.externalId,
   );
   const owner = useThreadMeta(id ?? undefined)?.owner;
-  const createdAt = useAssistantState(({ message }) => message.createdAt);
+  const createdAt = useAuiState(({ message }) => message.createdAt);
   if (!owner) return null;
 
   const display = owner.name || owner.email;

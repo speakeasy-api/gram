@@ -1,4 +1,4 @@
-import { useAssistantApi, useAssistantState } from "@assistant-ui/react";
+import { useAui, useAuiState } from "@assistant-ui/react";
 import { PencilIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
@@ -34,9 +34,9 @@ export function ActiveChatTitle({
   className,
   size = "sm",
 }: ActiveChatTitleProps): React.JSX.Element {
-  const api = useAssistantApi();
-  const title = useAssistantState((s) => s.threadListItem.title);
-  const remoteId = useAssistantState((s) => s.threadListItem.remoteId);
+  const aui = useAui();
+  const title = useAuiState((s) => s.threadListItem.title);
+  const remoteId = useAuiState((s) => s.threadListItem.remoteId);
 
   const textClass = size === "base" ? "text-base" : "text-sm";
   const persisted = Boolean(remoteId);
@@ -78,7 +78,7 @@ export function ActiveChatTitle({
     if (!save) return;
     const { changed, value } = resolveTitleEdit(draft, currentTitle);
     if (!changed) return;
-    api.threadListItem().rename(value);
+    aui.threadListItem().rename(value);
   };
 
   if (editing) {
