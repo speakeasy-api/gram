@@ -90,11 +90,13 @@ func BuildSkillVersionListView(rows []repo.SkillVersion, frontmatter func(conten
 	return result, nil
 }
 
-func BuildSkillDistributionView(distribution repo.SkillDistribution, pluginName string, resolvedVersionID uuid.UUID) *types.SkillDistribution {
+func BuildSkillDistributionView(distribution repo.SkillDistribution, skillName string, skillDisplayName string, pluginName string, resolvedVersionID uuid.UUID) *types.SkillDistribution {
 	return &types.SkillDistribution{
 		ID:                distribution.ID.String(),
 		ProjectID:         distribution.ProjectID.String(),
 		SkillID:           distribution.SkillID.String(),
+		SkillName:         skillName,
+		SkillDisplayName:  skillDisplayName,
 		PluginID:          distribution.PluginID.UUID.String(),
 		PluginName:        pluginName,
 		PinnedVersionID:   conv.FromNullableUUID(distribution.PinnedVersionID),
@@ -109,7 +111,7 @@ func BuildSkillDistributionView(distribution repo.SkillDistribution, pluginName 
 func BuildSkillDistributionListView(rows []repo.ListActiveSkillDistributionsRow) []*types.SkillDistribution {
 	result := make([]*types.SkillDistribution, len(rows))
 	for i, row := range rows {
-		result[i] = BuildSkillDistributionView(row.SkillDistribution, row.PluginName, row.ResolvedVersionID)
+		result[i] = BuildSkillDistributionView(row.SkillDistribution, row.SkillName, row.SkillDisplayName, row.PluginName, row.ResolvedVersionID)
 	}
 
 	return result

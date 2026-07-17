@@ -139,6 +139,10 @@ type GetSkillResult struct {
 // ListDistributionsPayload is the payload type of the skills service
 // listDistributions method.
 type ListDistributionsPayload struct {
+	// Only return distributions of this skill.
+	SkillID *string
+	// Only return distributions carried by this plugin.
+	PluginID *string
 	// Cursor for the next page of skill distributions.
 	Cursor *string
 	// The number of skill distributions to return per page.

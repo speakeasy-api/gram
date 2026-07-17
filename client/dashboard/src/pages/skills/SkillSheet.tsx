@@ -28,6 +28,7 @@ import {
   ArchiveSkillDialog,
   type ArchiveSkillTarget,
 } from "./ArchiveSkillDialog";
+import { SkillDistributionsSection } from "./SkillDistributionsSection";
 import { stripSkillFrontmatter } from "./skill-manifest";
 import { SkillManifestDialog } from "./SkillManifestDialog";
 import { SkillValidationErrors } from "./SkillValidationErrors";
@@ -197,6 +198,10 @@ function SkillSheetContent({
             </div>
           </SheetSection>
         )}
+
+        <SheetSection label="Plugin distributions">
+          <SkillDistributionsSection skillId={skill.id} />
+        </SheetSection>
 
         <SheetSection label="Version history">
           <div className="space-y-4">

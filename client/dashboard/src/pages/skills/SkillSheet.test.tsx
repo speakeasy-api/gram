@@ -43,6 +43,9 @@ const testState = vi.hoisted(() => ({
 }));
 
 vi.mock("@/contexts/Auth", () => ({ useProject: () => ({ id: "project_a" }) }));
+vi.mock("./SkillDistributionsSection", () => ({
+  SkillDistributionsSection: () => null,
+}));
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => testState.queryClient,
 }));
