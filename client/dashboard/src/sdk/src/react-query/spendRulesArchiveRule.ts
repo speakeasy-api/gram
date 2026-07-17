@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { spendRulesRulesDelete } from "../funcs/spendRulesRulesDelete.js";
+import { spendRulesRulesArchive } from "../funcs/spendRulesRulesArchive.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { GramError } from "../models/errors/gramerror.js";
@@ -23,22 +23,22 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
 import {
-  DeleteSpendRuleRequest,
-  DeleteSpendRuleSecurity,
-} from "../models/operations/deletespendrule.js";
+  ArchiveSpendRuleRequest,
+  ArchiveSpendRuleSecurity,
+} from "../models/operations/archivespendrule.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type SpendRulesDeleteRuleMutationVariables = {
-  request: DeleteSpendRuleRequest;
-  security?: DeleteSpendRuleSecurity | undefined;
+export type SpendRulesArchiveRuleMutationVariables = {
+  request: ArchiveSpendRuleRequest;
+  security?: ArchiveSpendRuleSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type SpendRulesDeleteRuleMutationData = void;
+export type SpendRulesArchiveRuleMutationData = void;
 
-export type SpendRulesDeleteRuleMutationError =
+export type SpendRulesArchiveRuleMutationError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -50,49 +50,49 @@ export type SpendRulesDeleteRuleMutationError =
   | SDKValidationError;
 
 /**
- * deleteSpendRule spendRules
+ * archiveSpendRule spendRules
  *
  * @remarks
- * Archive a budget rule. Any open circuits for the rule close on the next evaluation cycle; the rule's slug, version history, and events are retained.
+ * Archive a budget rule. There is no delete: archiving ends the rule's lineage while retaining its slug, version history, and events. Any open circuits for the rule close on the next evaluation cycle.
  */
-export function useSpendRulesDeleteRuleMutation(
+export function useSpendRulesArchiveRuleMutation(
   options?: MutationHookOptions<
-    SpendRulesDeleteRuleMutationData,
-    SpendRulesDeleteRuleMutationError,
-    SpendRulesDeleteRuleMutationVariables
+    SpendRulesArchiveRuleMutationData,
+    SpendRulesArchiveRuleMutationError,
+    SpendRulesArchiveRuleMutationVariables
   >,
 ): UseMutationResult<
-  SpendRulesDeleteRuleMutationData,
-  SpendRulesDeleteRuleMutationError,
-  SpendRulesDeleteRuleMutationVariables
+  SpendRulesArchiveRuleMutationData,
+  SpendRulesArchiveRuleMutationError,
+  SpendRulesArchiveRuleMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildSpendRulesDeleteRuleMutation(client, options),
+    ...buildSpendRulesArchiveRuleMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeySpendRulesDeleteRule(): MutationKey {
-  return ["@gram/client", "rules", "delete"];
+export function mutationKeySpendRulesArchiveRule(): MutationKey {
+  return ["@gram/client", "rules", "archive"];
 }
 
-export function buildSpendRulesDeleteRuleMutation(
+export function buildSpendRulesArchiveRuleMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: SpendRulesDeleteRuleMutationVariables,
-  ) => Promise<SpendRulesDeleteRuleMutationData>;
+    variables: SpendRulesArchiveRuleMutationVariables,
+  ) => Promise<SpendRulesArchiveRuleMutationData>;
 } {
   return {
-    mutationKey: mutationKeySpendRulesDeleteRule(),
-    mutationFn: function spendRulesDeleteRuleMutationFn({
+    mutationKey: mutationKeySpendRulesArchiveRule(),
+    mutationFn: function spendRulesArchiveRuleMutationFn({
       request,
       security,
       options,
-    }): Promise<SpendRulesDeleteRuleMutationData> {
+    }): Promise<SpendRulesArchiveRuleMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -105,7 +105,7 @@ export function buildSpendRulesDeleteRuleMutation(
           ),
         },
       };
-      return unwrapAsync(spendRulesRulesDelete(
+      return unwrapAsync(spendRulesRulesArchive(
         client$,
         request,
         security,

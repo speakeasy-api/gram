@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
+import { encodeJSON, encodeSimple } from "../lib/encodings.js";
 import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
@@ -27,23 +27,23 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  DeleteSpendRuleRequest,
-  DeleteSpendRuleRequest$outboundSchema,
-  DeleteSpendRuleSecurity,
-} from "../models/operations/deletespendrule.js";
+  ArchiveSpendRuleRequest,
+  ArchiveSpendRuleRequest$outboundSchema,
+  ArchiveSpendRuleSecurity,
+} from "../models/operations/archivespendrule.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * deleteSpendRule spendRules
+ * archiveSpendRule spendRules
  *
  * @remarks
- * Archive a budget rule. Any open circuits for the rule close on the next evaluation cycle; the rule's slug, version history, and events are retained.
+ * Archive a budget rule. There is no delete: archiving ends the rule's lineage while retaining its slug, version history, and events. Any open circuits for the rule close on the next evaluation cycle.
  */
-export function spendRulesRulesDelete(
+export function spendRulesRulesArchive(
   client: GramCore,
-  request: DeleteSpendRuleRequest,
-  security?: DeleteSpendRuleSecurity | undefined,
+  request: ArchiveSpendRuleRequest,
+  security?: ArchiveSpendRuleSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -69,8 +69,8 @@ export function spendRulesRulesDelete(
 
 async function $do(
   client: GramCore,
-  request: DeleteSpendRuleRequest,
-  security?: DeleteSpendRuleSecurity | undefined,
+  request: ArchiveSpendRuleRequest,
+  security?: ArchiveSpendRuleSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
@@ -91,22 +91,19 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(DeleteSpendRuleRequest$outboundSchema, value),
+    (value) => z.parse(ArchiveSpendRuleRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = null;
+  const body = encodeJSON("body", payload.RiskIDRequestBody, { explode: true });
 
-  const path = pathToFunc("/rpc/spendrules.deleteRule")();
-
-  const query = encodeFormQuery({
-    "id": payload.id,
-  });
+  const path = pathToFunc("/rpc/spendrules.archiveRule")();
 
   const headers = new Headers(compactMap({
+    "Content-Type": "application/json",
     Accept: "application/json",
     "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
       explode: false,
@@ -152,7 +149,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "deleteSpendRule",
+    operationID: "archiveSpendRule",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -166,11 +163,10 @@ async function $do(
 
   const requestRes = client._createRequest(context, {
     security: requestSecurity,
-    method: "DELETE",
+    method: "POST",
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
-    query: query,
     body: body,
     userAgent: client._options.userAgent,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,

@@ -11,8 +11,8 @@ import {
   TabsContent,
 } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import { useSpendRulesArchiveRuleMutation } from "@gram/client/react-query/spendRulesArchiveRule.js";
 import { useSpendRulesCreateRuleMutation } from "@gram/client/react-query/spendRulesCreateRule.js";
-import { useSpendRulesDeleteRuleMutation } from "@gram/client/react-query/spendRulesDeleteRule.js";
 import { useSpendRulesListEvents } from "@gram/client/react-query/spendRulesListEvents.js";
 import { useSpendRulesListRules } from "@gram/client/react-query/spendRulesListRules.js";
 import { useSpendRulesOverview } from "@gram/client/react-query/spendRulesOverview.js";
@@ -85,7 +85,7 @@ export function BudgetsContent(): JSX.Element {
     onError: (error) => toast.error(error.message),
   });
 
-  const deleteMutation = useSpendRulesDeleteRuleMutation({
+  const archiveMutation = useSpendRulesArchiveRuleMutation({
     onSuccess: () => {
       invalidate();
       setEditing(null);
@@ -109,9 +109,11 @@ export function BudgetsContent(): JSX.Element {
     });
   };
 
-  const handleDelete = () => {
+  const handleArchive = () => {
     if (!editing) return;
-    deleteMutation.mutate({ request: { id: editing.id } });
+    archiveMutation.mutate({
+      request: { riskIDRequestBody: { id: editing.id } },
+    });
   };
 
   const handleToggle = (rule: SpendRule, on: boolean) => {
@@ -195,8 +197,8 @@ export function BudgetsContent(): JSX.Element {
         }}
         rule={editing ?? undefined}
         onSubmit={handleUpdate}
-        onDelete={handleDelete}
-        submitting={updateMutation.isPending || deleteMutation.isPending}
+        onArchive={handleArchive}
+        submitting={updateMutation.isPending || archiveMutation.isPending}
       />
     </>
   );
@@ -523,9 +525,12 @@ function EventsTab({ rules }: { rules: SpendRule[] }): JSX.Element {
   const events = loaded;
   const nextCursor = data?.nextCursor;
 
-  const versionByRuleId = useMemo(() => {
+  // Live version per slug lineage. Events reference the exact (possibly
+  // superseded) version row that fired them, so the slug — not the row id —
+  // is what connects an event to the rule as it exists today.
+  const liveVersionBySlug = useMemo(() => {
     const map = new Map<string, number>();
-    for (const rule of rules) map.set(rule.id, Number(rule.version));
+    for (const rule of rules) map.set(rule.slug, Number(rule.version));
     return map;
   }, [rules]);
 
@@ -552,7 +557,7 @@ function EventsTab({ rules }: { rules: SpendRule[] }): JSX.Element {
         header: "Rule",
         width: "1fr",
         render: (event) => (
-          <EventRuleCell event={event} versionByRuleId={versionByRuleId} />
+          <EventRuleCell event={event} liveVersionBySlug={liveVersionBySlug} />
         ),
       },
       {
@@ -568,7 +573,7 @@ function EventsTab({ rules }: { rules: SpendRule[] }): JSX.Element {
         render: (event) => <EventSpendCell event={event} />,
       },
     ],
-    [versionByRuleId],
+    [liveVersionBySlug],
   );
 
   if (isLoading) {
@@ -671,16 +676,16 @@ function eventsEmptyCopy(
 
 /** Rule name as recorded on the event, plus a version marker whenever the
  *  event fired under a config that is no longer live — an older version, or a
- *  rule that has since been deleted. The full URN sits in the hover title. */
+ *  rule that has since been archived. The full URN sits in the hover title. */
 function EventRuleCell({
   event,
-  versionByRuleId,
+  liveVersionBySlug,
 }: {
   event: SpendRuleEvent;
-  versionByRuleId: Map<string, number>;
+  liveVersionBySlug: Map<string, number>;
 }): JSX.Element {
   const ref = parseRuleUrn(event.ruleUrn);
-  const currentVersion = versionByRuleId.get(event.ruleId);
+  const currentVersion = ref ? liveVersionBySlug.get(ref.slug) : undefined;
   const marker = versionMarker(ref, currentVersion);
 
   return (

@@ -12,6 +12,49 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const archiveSpendRule = `-- name: ArchiveSpendRule :one
+UPDATE spend_rules
+SET archived_at = clock_timestamp()
+  , updated_at = clock_timestamp()
+WHERE id = $1
+  AND organization_id = $2
+  AND archived IS FALSE
+RETURNING id, organization_id, name, slug, description, target_expr, limit_usd, rule_expr, window_kind, warn_at_pct, action, enabled, version, created_at, updated_at, archived_at, archived, superseded_by
+`
+
+type ArchiveSpendRuleParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// Ends a version row's live tenure. Called on admin archive (no successor)
+// and as the first step of an edit, before the successor row is inserted.
+func (q *Queries) ArchiveSpendRule(ctx context.Context, arg ArchiveSpendRuleParams) (SpendRule, error) {
+	row := q.db.QueryRow(ctx, archiveSpendRule, arg.ID, arg.OrganizationID)
+	var i SpendRule
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.TargetExpr,
+		&i.LimitUsd,
+		&i.RuleExpr,
+		&i.WindowKind,
+		&i.WarnAtPct,
+		&i.Action,
+		&i.Enabled,
+		&i.Version,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ArchivedAt,
+		&i.Archived,
+		&i.SupersededBy,
+	)
+	return i, err
+}
+
 const createSpendRule = `-- name: CreateSpendRule :one
 INSERT INTO spend_rules (
     organization_id
@@ -25,6 +68,7 @@ INSERT INTO spend_rules (
   , warn_at_pct
   , action
   , enabled
+  , version
 )
 VALUES (
     $1
@@ -38,8 +82,9 @@ VALUES (
   , $9
   , $10
   , $11
+  , $12
 )
-RETURNING id, organization_id, name, slug, description, target_expr, limit_usd, rule_expr, window_kind, warn_at_pct, action, enabled, version, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, name, slug, description, target_expr, limit_usd, rule_expr, window_kind, warn_at_pct, action, enabled, version, created_at, updated_at, archived_at, archived, superseded_by
 `
 
 type CreateSpendRuleParams struct {
@@ -54,8 +99,13 @@ type CreateSpendRuleParams struct {
 	WarnAtPct      int32
 	Action         string
 	Enabled        bool
+	Version        int64
 }
 
+// Inserts a rule version row. version = 1 starts a new lineage; an edit
+// inserts the successor row (same slug, version + 1) after archiving the
+// current row — the partial unique index on live (organization_id, slug)
+// enforces that ordering.
 func (q *Queries) CreateSpendRule(ctx context.Context, arg CreateSpendRuleParams) (SpendRule, error) {
 	row := q.db.QueryRow(ctx, createSpendRule,
 		arg.OrganizationID,
@@ -69,6 +119,7 @@ func (q *Queries) CreateSpendRule(ctx context.Context, arg CreateSpendRuleParams
 		arg.WarnAtPct,
 		arg.Action,
 		arg.Enabled,
+		arg.Version,
 	)
 	var i SpendRule
 	err := row.Scan(
@@ -87,29 +138,30 @@ func (q *Queries) CreateSpendRule(ctx context.Context, arg CreateSpendRuleParams
 		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
+		&i.ArchivedAt,
+		&i.Archived,
+		&i.SupersededBy,
 	)
 	return i, err
 }
 
-const deleteSpendRule = `-- name: DeleteSpendRule :one
-UPDATE spend_rules
-SET deleted_at = clock_timestamp()
-  , updated_at = clock_timestamp()
+const getArchivedSpendRule = `-- name: GetArchivedSpendRule :one
+SELECT id, organization_id, name, slug, description, target_expr, limit_usd, rule_expr, window_kind, warn_at_pct, action, enabled, version, created_at, updated_at, archived_at, archived, superseded_by
+FROM spend_rules
 WHERE id = $1
   AND organization_id = $2
-  AND deleted IS FALSE
-RETURNING id, organization_id, name, slug, description, target_expr, limit_usd, rule_expr, window_kind, warn_at_pct, action, enabled, version, created_at, updated_at, deleted_at, deleted
+  AND archived IS TRUE
 `
 
-type DeleteSpendRuleParams struct {
+type GetArchivedSpendRuleParams struct {
 	ID             uuid.UUID
 	OrganizationID string
 }
 
-func (q *Queries) DeleteSpendRule(ctx context.Context, arg DeleteSpendRuleParams) (SpendRule, error) {
-	row := q.db.QueryRow(ctx, deleteSpendRule, arg.ID, arg.OrganizationID)
+// An archived version row by id, used to inspect lineage links (tests and
+// historical lookups). Live rows go through GetSpendRule.
+func (q *Queries) GetArchivedSpendRule(ctx context.Context, arg GetArchivedSpendRuleParams) (SpendRule, error) {
+	row := q.db.QueryRow(ctx, getArchivedSpendRule, arg.ID, arg.OrganizationID)
 	var i SpendRule
 	err := row.Scan(
 		&i.ID,
@@ -127,18 +179,19 @@ func (q *Queries) DeleteSpendRule(ctx context.Context, arg DeleteSpendRuleParams
 		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
+		&i.ArchivedAt,
+		&i.Archived,
+		&i.SupersededBy,
 	)
 	return i, err
 }
 
 const getSpendRule = `-- name: GetSpendRule :one
-SELECT id, organization_id, name, slug, description, target_expr, limit_usd, rule_expr, window_kind, warn_at_pct, action, enabled, version, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, name, slug, description, target_expr, limit_usd, rule_expr, window_kind, warn_at_pct, action, enabled, version, created_at, updated_at, archived_at, archived, superseded_by
 FROM spend_rules
 WHERE id = $1
   AND organization_id = $2
-  AND deleted IS FALSE
+  AND archived IS FALSE
 `
 
 type GetSpendRuleParams struct {
@@ -146,6 +199,7 @@ type GetSpendRuleParams struct {
 	OrganizationID string
 }
 
+// The live (non-archived) version row by id.
 func (q *Queries) GetSpendRule(ctx context.Context, arg GetSpendRuleParams) (SpendRule, error) {
 	row := q.db.QueryRow(ctx, getSpendRule, arg.ID, arg.OrganizationID)
 	var i SpendRule
@@ -165,18 +219,19 @@ func (q *Queries) GetSpendRule(ctx context.Context, arg GetSpendRuleParams) (Spe
 		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
+		&i.ArchivedAt,
+		&i.Archived,
+		&i.SupersededBy,
 	)
 	return i, err
 }
 
 const getSpendRuleForUpdate = `-- name: GetSpendRuleForUpdate :one
-SELECT id, organization_id, name, slug, description, target_expr, limit_usd, rule_expr, window_kind, warn_at_pct, action, enabled, version, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, name, slug, description, target_expr, limit_usd, rule_expr, window_kind, warn_at_pct, action, enabled, version, created_at, updated_at, archived_at, archived, superseded_by
 FROM spend_rules
 WHERE id = $1
   AND organization_id = $2
-  AND deleted IS FALSE
+  AND archived IS FALSE
 FOR UPDATE
 `
 
@@ -204,8 +259,9 @@ func (q *Queries) GetSpendRuleForUpdate(ctx context.Context, arg GetSpendRuleFor
 		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
+		&i.ArchivedAt,
+		&i.Archived,
+		&i.SupersededBy,
 	)
 	return i, err
 }
@@ -214,7 +270,6 @@ const insertSpendRuleEvent = `-- name: InsertSpendRuleEvent :execrows
 INSERT INTO spend_rule_events (
     organization_id
   , spend_rule_id
-  , rule_version
   , rule_urn
   , event_type
   , user_id
@@ -230,22 +285,20 @@ VALUES (
   , $2
   , $3
   , $4
-  , $5
-  , $6::text
-  , $7
-  , $8::text
+  , $5::text
+  , $6
+  , $7::text
+  , $8
   , $9
   , $10
   , $11
-  , $12
 )
-ON CONFLICT (spend_rule_id, rule_urn, event_type, email, window_start) DO NOTHING
+ON CONFLICT (spend_rule_id, event_type, email, window_start) DO NOTHING
 `
 
 type InsertSpendRuleEventParams struct {
 	OrganizationID string
 	SpendRuleID    uuid.UUID
-	RuleVersion    int64
 	RuleUrn        string
 	EventType      string
 	UserID         pgtype.Text
@@ -261,7 +314,6 @@ func (q *Queries) InsertSpendRuleEvent(ctx context.Context, arg InsertSpendRuleE
 	result, err := q.db.Exec(ctx, insertSpendRuleEvent,
 		arg.OrganizationID,
 		arg.SpendRuleID,
-		arg.RuleVersion,
 		arg.RuleUrn,
 		arg.EventType,
 		arg.UserID,
@@ -278,65 +330,12 @@ func (q *Queries) InsertSpendRuleEvent(ctx context.Context, arg InsertSpendRuleE
 	return result.RowsAffected(), nil
 }
 
-const insertSpendRuleVersion = `-- name: InsertSpendRuleVersion :exec
-INSERT INTO spend_rule_versions (
-    organization_id
-  , spend_rule_id
-  , version
-  , target_expr
-  , rule_expr
-  , limit_usd
-  , window_kind
-  , warn_at_pct
-  , action
-)
-VALUES (
-    $1
-  , $2
-  , $3
-  , $4
-  , $5
-  , $6
-  , $7
-  , $8
-  , $9
-)
-ON CONFLICT (spend_rule_id, version) DO NOTHING
-`
-
-type InsertSpendRuleVersionParams struct {
-	OrganizationID string
-	SpendRuleID    uuid.UUID
-	Version        int64
-	TargetExpr     string
-	RuleExpr       string
-	LimitUsd       float64
-	WindowKind     string
-	WarnAtPct      int32
-	Action         string
-}
-
-func (q *Queries) InsertSpendRuleVersion(ctx context.Context, arg InsertSpendRuleVersionParams) error {
-	_, err := q.db.Exec(ctx, insertSpendRuleVersion,
-		arg.OrganizationID,
-		arg.SpendRuleID,
-		arg.Version,
-		arg.TargetExpr,
-		arg.RuleExpr,
-		arg.LimitUsd,
-		arg.WindowKind,
-		arg.WarnAtPct,
-		arg.Action,
-	)
-	return err
-}
-
 const listEnabledSpendRules = `-- name: ListEnabledSpendRules :many
-SELECT id, organization_id, name, slug, description, target_expr, limit_usd, rule_expr, window_kind, warn_at_pct, action, enabled, version, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, name, slug, description, target_expr, limit_usd, rule_expr, window_kind, warn_at_pct, action, enabled, version, created_at, updated_at, archived_at, archived, superseded_by
 FROM spend_rules
 WHERE organization_id = $1
   AND enabled IS TRUE
-  AND deleted IS FALSE
+  AND archived IS FALSE
 ORDER BY created_at DESC
 `
 
@@ -365,8 +364,9 @@ func (q *Queries) ListEnabledSpendRules(ctx context.Context, organizationID stri
 			&i.Version,
 			&i.CreatedAt,
 			&i.UpdatedAt,
-			&i.DeletedAt,
-			&i.Deleted,
+			&i.ArchivedAt,
+			&i.Archived,
+			&i.SupersededBy,
 		); err != nil {
 			return nil, err
 		}
@@ -407,6 +407,7 @@ LEFT JOIN LATERAL (
   FROM directory_user_group_memberships m
   INNER JOIN directory_groups dg
     ON dg.id = m.directory_group_id
+    AND dg.organization_id = our.organization_id
     AND dg.deleted IS FALSE
     AND dg.workos_deleted IS FALSE
   WHERE m.directory_user_id = du.id
@@ -479,7 +480,7 @@ const listOrganizationsWithEnabledSpendRules = `-- name: ListOrganizationsWithEn
 SELECT DISTINCT organization_id
 FROM spend_rules
 WHERE enabled IS TRUE
-  AND deleted IS FALSE
+  AND archived IS FALSE
 `
 
 func (q *Queries) ListOrganizationsWithEnabledSpendRules(ctx context.Context) ([]string, error) {
@@ -503,11 +504,19 @@ func (q *Queries) ListOrganizationsWithEnabledSpendRules(ctx context.Context) ([
 }
 
 const listSpendRuleEvents = `-- name: ListSpendRuleEvents :many
-SELECT ev.id, ev.organization_id, ev.spend_rule_id, ev.rule_version, ev.rule_urn, ev.event_type, ev.user_id, ev.email, ev.display_name, ev.spend_usd, ev.limit_usd, ev.window_start, ev.window_end, ev.created_at, r.name AS rule_name
+SELECT ev.id, ev.organization_id, ev.spend_rule_id, ev.rule_urn, ev.event_type, ev.user_id, ev.email, ev.display_name, ev.spend_usd, ev.limit_usd, ev.window_start, ev.window_end, ev.created_at, r.name AS rule_name
 FROM spend_rule_events ev
 INNER JOIN spend_rules r ON r.id = ev.spend_rule_id
 WHERE ev.organization_id = $1
-  AND ($2::uuid IS NULL OR ev.spend_rule_id = $2::uuid)
+  AND (
+    $2::uuid IS NULL
+    OR r.slug = (
+      SELECT lineage.slug
+      FROM spend_rules lineage
+      WHERE lineage.id = $2::uuid
+        AND lineage.organization_id = $1
+    )
+  )
   AND ($3::text IS NULL OR ev.event_type = $3::text)
   AND ($4::uuid IS NULL OR ev.id < $4::uuid)
 ORDER BY ev.id DESC
@@ -526,7 +535,6 @@ type ListSpendRuleEventsRow struct {
 	ID             uuid.UUID
 	OrganizationID string
 	SpendRuleID    uuid.UUID
-	RuleVersion    int64
 	RuleUrn        string
 	EventType      string
 	UserID         pgtype.Text
@@ -540,6 +548,10 @@ type ListSpendRuleEventsRow struct {
 	RuleName       string
 }
 
+// Events join the exact (immutable) rule version row that fired them, so
+// rule_name and rule config are as of firing time. The optional rule filter
+// expands to the whole slug lineage: pass any version row's id and events
+// from every version of that rule are returned.
 func (q *Queries) ListSpendRuleEvents(ctx context.Context, arg ListSpendRuleEventsParams) ([]ListSpendRuleEventsRow, error) {
 	rows, err := q.db.Query(ctx, listSpendRuleEvents,
 		arg.OrganizationID,
@@ -559,7 +571,6 @@ func (q *Queries) ListSpendRuleEvents(ctx context.Context, arg ListSpendRuleEven
 			&i.ID,
 			&i.OrganizationID,
 			&i.SpendRuleID,
-			&i.RuleVersion,
 			&i.RuleUrn,
 			&i.EventType,
 			&i.UserID,
@@ -583,10 +594,10 @@ func (q *Queries) ListSpendRuleEvents(ctx context.Context, arg ListSpendRuleEven
 }
 
 const listSpendRules = `-- name: ListSpendRules :many
-SELECT id, organization_id, name, slug, description, target_expr, limit_usd, rule_expr, window_kind, warn_at_pct, action, enabled, version, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, name, slug, description, target_expr, limit_usd, rule_expr, window_kind, warn_at_pct, action, enabled, version, created_at, updated_at, archived_at, archived, superseded_by
 FROM spend_rules
 WHERE organization_id = $1
-  AND deleted IS FALSE
+  AND archived IS FALSE
 ORDER BY created_at DESC
 `
 
@@ -615,8 +626,9 @@ func (q *Queries) ListSpendRules(ctx context.Context, organizationID string) ([]
 			&i.Version,
 			&i.CreatedAt,
 			&i.UpdatedAt,
-			&i.DeletedAt,
-			&i.Deleted,
+			&i.ArchivedAt,
+			&i.Archived,
+			&i.SupersededBy,
 		); err != nil {
 			return nil, err
 		}
@@ -626,6 +638,26 @@ func (q *Queries) ListSpendRules(ctx context.Context, organizationID string) ([]
 		return nil, err
 	}
 	return items, nil
+}
+
+const setSpendRuleSupersededBy = `-- name: SetSpendRuleSupersededBy :exec
+UPDATE spend_rules
+SET superseded_by = $1
+WHERE id = $2
+  AND organization_id = $3
+`
+
+type SetSpendRuleSupersededByParams struct {
+	SupersededBy   uuid.NullUUID
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// Links an archived version row to the successor an edit created. Runs after
+// the successor insert because the foreign key requires the target to exist.
+func (q *Queries) SetSpendRuleSupersededBy(ctx context.Context, arg SetSpendRuleSupersededByParams) error {
+	_, err := q.db.Exec(ctx, setSpendRuleSupersededBy, arg.SupersededBy, arg.ID, arg.OrganizationID)
+	return err
 }
 
 const spendRuleSlugExists = `-- name: SpendRuleSlugExists :one
@@ -642,9 +674,9 @@ type SpendRuleSlugExistsParams struct {
 	Slug           string
 }
 
-// Slugs are reserved permanently, even for archived (soft-deleted) rules, so a
-// new rule never reuses a slug and rule URNs stay globally unique. Do NOT scope
-// this to `deleted IS FALSE`.
+// Slugs are reserved permanently, archived lineages included, so a new rule
+// never reuses a slug and rule URNs stay globally unique. Do NOT scope this
+// to `archived IS FALSE`.
 func (q *Queries) SpendRuleSlugExists(ctx context.Context, arg SpendRuleSlugExistsParams) (bool, error) {
 	row := q.db.QueryRow(ctx, spendRuleSlugExists, arg.OrganizationID, arg.Slug)
 	var taken bool
@@ -652,55 +684,27 @@ func (q *Queries) SpendRuleSlugExists(ctx context.Context, arg SpendRuleSlugExis
 	return taken, err
 }
 
-const updateSpendRule = `-- name: UpdateSpendRule :one
+const toggleSpendRuleEnabled = `-- name: ToggleSpendRuleEnabled :one
 UPDATE spend_rules
-SET name = $1
-  , description = $2
-  , target_expr = $3
-  , rule_expr = $4
-  , limit_usd = $5
-  , window_kind = $6
-  , warn_at_pct = $7
-  , action = $8
-  , enabled = $9
-  , version = $10
+SET enabled = $1
   , updated_at = clock_timestamp()
-WHERE id = $11
-  AND organization_id = $12
-  AND deleted IS FALSE
-RETURNING id, organization_id, name, slug, description, target_expr, limit_usd, rule_expr, window_kind, warn_at_pct, action, enabled, version, created_at, updated_at, deleted_at, deleted
+WHERE id = $2
+  AND organization_id = $3
+  AND archived IS FALSE
+RETURNING id, organization_id, name, slug, description, target_expr, limit_usd, rule_expr, window_kind, warn_at_pct, action, enabled, version, created_at, updated_at, archived_at, archived, superseded_by
 `
 
-type UpdateSpendRuleParams struct {
-	Name           string
-	Description    string
-	TargetExpr     string
-	RuleExpr       string
-	LimitUsd       float64
-	WindowKind     string
-	WarnAtPct      int32
-	Action         string
+type ToggleSpendRuleEnabledParams struct {
 	Enabled        bool
-	Version        int64
 	ID             uuid.UUID
 	OrganizationID string
 }
 
-func (q *Queries) UpdateSpendRule(ctx context.Context, arg UpdateSpendRuleParams) (SpendRule, error) {
-	row := q.db.QueryRow(ctx, updateSpendRule,
-		arg.Name,
-		arg.Description,
-		arg.TargetExpr,
-		arg.RuleExpr,
-		arg.LimitUsd,
-		arg.WindowKind,
-		arg.WarnAtPct,
-		arg.Action,
-		arg.Enabled,
-		arg.Version,
-		arg.ID,
-		arg.OrganizationID,
-	)
+// enabled is the one mutable field on a live version row: it is an
+// operational kill switch, not part of the rule's config snapshot, so
+// toggling it does not create a new version.
+func (q *Queries) ToggleSpendRuleEnabled(ctx context.Context, arg ToggleSpendRuleEnabledParams) (SpendRule, error) {
+	row := q.db.QueryRow(ctx, toggleSpendRuleEnabled, arg.Enabled, arg.ID, arg.OrganizationID)
 	var i SpendRule
 	err := row.Scan(
 		&i.ID,
@@ -718,8 +722,9 @@ func (q *Queries) UpdateSpendRule(ctx context.Context, arg UpdateSpendRuleParams
 		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
+		&i.ArchivedAt,
+		&i.Archived,
+		&i.SupersededBy,
 	)
 	return i, err
 }

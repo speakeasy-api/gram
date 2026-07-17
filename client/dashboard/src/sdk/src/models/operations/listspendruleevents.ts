@@ -35,7 +35,7 @@ export type EventType = ClosedEnum<typeof EventType>;
 
 export type ListSpendRuleEventsRequest = {
   /**
-   * Optional rule ID to filter by.
+   * Optional rule ID to filter by. Matches the rule's whole lineage: events from every version of the rule are returned.
    */
   ruleId?: string | undefined;
   /**

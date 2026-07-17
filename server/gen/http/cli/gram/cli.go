@@ -129,7 +129,7 @@ func UsageCommands() []string {
 		"resources list-resources",
 		"risk (create-risk-policy|list-risk-policies|list-builtin-exclusions|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-for-agent|unmask-risk-result|list-risk-results-by-chat|get-risk-overview|list-risk-categories|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-policy-status|create-risk-policy-bypass-request|acknowledge-risk-policy-challenge|get-risk-policy-challenge|decline-risk-policy-challenge|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|suggest-exclusion|test-detection-rule|evaluate-prompt-guardrail|save-risk-eval-review|list-risk-eval-reviews|delete-risk-eval-review)",
 		"skills (create|add-version|list|get|list-versions|archive|distribute|undistribute|list-distributions)",
-		"spend-rules (create-spend-rule|list-spend-rules|get-spend-rule|update-spend-rule|delete-spend-rule|preview-spend-rule|list-spend-rule-events|get-spend-rules-overview)",
+		"spend-rules (create-spend-rule|list-spend-rules|get-spend-rule|update-spend-rule|archive-spend-rule|preview-spend-rule|list-spend-rule-events|get-spend-rules-overview)",
 		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-employee-data-flow-graph|get-observability-overview|get-project-overview|query|query-tum-details|list-sessions|list-filter-options|list-attribute-keys|get-hooks-summary|get-tool-usage-summary|list-tool-usage-traces|get-tool-usage-filter-options|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
 		"tools list-tools",
@@ -2082,11 +2082,11 @@ func ParseEndpoint(
 		spendRulesUpdateSpendRuleSessionTokenFlag     = spendRulesUpdateSpendRuleFlags.String("session-token", "", "")
 		spendRulesUpdateSpendRuleProjectSlugInputFlag = spendRulesUpdateSpendRuleFlags.String("project-slug-input", "", "")
 
-		spendRulesDeleteSpendRuleFlags                = flag.NewFlagSet("delete-spend-rule", flag.ExitOnError)
-		spendRulesDeleteSpendRuleIDFlag               = spendRulesDeleteSpendRuleFlags.String("id", "REQUIRED", "")
-		spendRulesDeleteSpendRuleApikeyTokenFlag      = spendRulesDeleteSpendRuleFlags.String("apikey-token", "", "")
-		spendRulesDeleteSpendRuleSessionTokenFlag     = spendRulesDeleteSpendRuleFlags.String("session-token", "", "")
-		spendRulesDeleteSpendRuleProjectSlugInputFlag = spendRulesDeleteSpendRuleFlags.String("project-slug-input", "", "")
+		spendRulesArchiveSpendRuleFlags                = flag.NewFlagSet("archive-spend-rule", flag.ExitOnError)
+		spendRulesArchiveSpendRuleBodyFlag             = spendRulesArchiveSpendRuleFlags.String("body", "REQUIRED", "")
+		spendRulesArchiveSpendRuleApikeyTokenFlag      = spendRulesArchiveSpendRuleFlags.String("apikey-token", "", "")
+		spendRulesArchiveSpendRuleSessionTokenFlag     = spendRulesArchiveSpendRuleFlags.String("session-token", "", "")
+		spendRulesArchiveSpendRuleProjectSlugInputFlag = spendRulesArchiveSpendRuleFlags.String("project-slug-input", "", "")
 
 		spendRulesPreviewSpendRuleFlags                = flag.NewFlagSet("preview-spend-rule", flag.ExitOnError)
 		spendRulesPreviewSpendRuleBodyFlag             = spendRulesPreviewSpendRuleFlags.String("body", "REQUIRED", "")
@@ -3052,7 +3052,7 @@ func ParseEndpoint(
 	spendRulesListSpendRulesFlags.Usage = spendRulesListSpendRulesUsage
 	spendRulesGetSpendRuleFlags.Usage = spendRulesGetSpendRuleUsage
 	spendRulesUpdateSpendRuleFlags.Usage = spendRulesUpdateSpendRuleUsage
-	spendRulesDeleteSpendRuleFlags.Usage = spendRulesDeleteSpendRuleUsage
+	spendRulesArchiveSpendRuleFlags.Usage = spendRulesArchiveSpendRuleUsage
 	spendRulesPreviewSpendRuleFlags.Usage = spendRulesPreviewSpendRuleUsage
 	spendRulesListSpendRuleEventsFlags.Usage = spendRulesListSpendRuleEventsUsage
 	spendRulesGetSpendRulesOverviewFlags.Usage = spendRulesGetSpendRulesOverviewUsage
@@ -4514,8 +4514,8 @@ func ParseEndpoint(
 			case "update-spend-rule":
 				epf = spendRulesUpdateSpendRuleFlags
 
-			case "delete-spend-rule":
-				epf = spendRulesDeleteSpendRuleFlags
+			case "archive-spend-rule":
+				epf = spendRulesArchiveSpendRuleFlags
 
 			case "preview-spend-rule":
 				epf = spendRulesPreviewSpendRuleFlags
@@ -6064,9 +6064,9 @@ func ParseEndpoint(
 			case "update-spend-rule":
 				endpoint = c.UpdateSpendRule()
 				data, err = spendrulesc.BuildUpdateSpendRulePayload(*spendRulesUpdateSpendRuleBodyFlag, *spendRulesUpdateSpendRuleApikeyTokenFlag, *spendRulesUpdateSpendRuleSessionTokenFlag, *spendRulesUpdateSpendRuleProjectSlugInputFlag)
-			case "delete-spend-rule":
-				endpoint = c.DeleteSpendRule()
-				data, err = spendrulesc.BuildDeleteSpendRulePayload(*spendRulesDeleteSpendRuleIDFlag, *spendRulesDeleteSpendRuleApikeyTokenFlag, *spendRulesDeleteSpendRuleSessionTokenFlag, *spendRulesDeleteSpendRuleProjectSlugInputFlag)
+			case "archive-spend-rule":
+				endpoint = c.ArchiveSpendRule()
+				data, err = spendrulesc.BuildArchiveSpendRulePayload(*spendRulesArchiveSpendRuleBodyFlag, *spendRulesArchiveSpendRuleApikeyTokenFlag, *spendRulesArchiveSpendRuleSessionTokenFlag, *spendRulesArchiveSpendRuleProjectSlugInputFlag)
 			case "preview-spend-rule":
 				endpoint = c.PreviewSpendRule()
 				data, err = spendrulesc.BuildPreviewSpendRulePayload(*spendRulesPreviewSpendRuleBodyFlag, *spendRulesPreviewSpendRuleApikeyTokenFlag, *spendRulesPreviewSpendRuleSessionTokenFlag, *spendRulesPreviewSpendRuleProjectSlugInputFlag)
@@ -14761,8 +14761,8 @@ func spendRulesUsage() {
 	fmt.Fprintln(os.Stderr, `    create-spend-rule: Create a new budget rule for the current organization.`)
 	fmt.Fprintln(os.Stderr, `    list-spend-rules: List all budget rules for the current organization.`)
 	fmt.Fprintln(os.Stderr, `    get-spend-rule: Get a budget rule by ID.`)
-	fmt.Fprintln(os.Stderr, `    update-spend-rule: Update a budget rule. Material changes (target, limit_usd, window_kind, warn_at_pct, action) bump the rule version.`)
-	fmt.Fprintln(os.Stderr, `    delete-spend-rule: Archive a budget rule. Any open circuits for the rule close on the next evaluation cycle; the rule's slug, version history, and events are retained.`)
+	fmt.Fprintln(os.Stderr, `    update-spend-rule: Update a budget rule. Rule rows are immutable version snapshots: any change besides the enabled toggle archives the current version row and creates a successor at version + 1 (returned as the result, under a new ID). Enabled-only changes toggle the live row in place.`)
+	fmt.Fprintln(os.Stderr, `    archive-spend-rule: Archive a budget rule. There is no delete: archiving ends the rule's lineage while retaining its slug, version history, and events. Any open circuits for the rule close on the next evaluation cycle.`)
 	fmt.Fprintln(os.Stderr, `    preview-spend-rule: Preview which actors a target expression matches and their current spend against a proposed budget. Powers the live preview in the rule editor and the per-actor breakdown in the rule detail view.`)
 	fmt.Fprintln(os.Stderr, `    list-spend-rule-events: List warning and breach events emitted by budget rule evaluation, most recent first.`)
 	fmt.Fprintln(os.Stderr, `    get-spend-rules-overview: Get budgets overview metrics: aggregate card numbers plus current-window usage per rule.`)
@@ -14851,7 +14851,7 @@ func spendRulesUpdateSpendRuleUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Update a budget rule. Material changes (target, limit_usd, window_kind, warn_at_pct, action) bump the rule version.`)
+	fmt.Fprintln(os.Stderr, `Update a budget rule. Rule rows are immutable version snapshots: any change besides the enabled toggle archives the current version row and creates a successor at version + 1 (returned as the result, under a new ID). Enabled-only changes toggle the live row in place.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -14864,10 +14864,10 @@ func spendRulesUpdateSpendRuleUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "spend-rules update-spend-rule --body '{\n      \"action\": \"block\",\n      \"description\": \"abc123\",\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"limit_usd\": 1,\n      \"name\": \"abc123\",\n      \"target\": {\n         \"attribute\": \"abc123\",\n         \"operator\": \"abc123\",\n         \"value\": \"abc123\"\n      },\n      \"warn_at_pct\": 2,\n      \"window_kind\": \"weekly\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
-func spendRulesDeleteSpendRuleUsage() {
+func spendRulesArchiveSpendRuleUsage() {
 	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] spend-rules delete-spend-rule", os.Args[0])
-	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprintf(os.Stderr, "%s [flags] spend-rules archive-spend-rule", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
@@ -14875,17 +14875,17 @@ func spendRulesDeleteSpendRuleUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Archive a budget rule. Any open circuits for the rule close on the next evaluation cycle; the rule's slug, version history, and events are retained.`)
+	fmt.Fprintln(os.Stderr, `Archive a budget rule. There is no delete: archiving ends the rule's lineage while retaining its slug, version history, and events. Any open circuits for the rule close on the next evaluation cycle.`)
 
 	// Flags list
-	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "spend-rules delete-spend-rule --id \"550e8400-e29b-41d4-a716-446655440000\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "spend-rules archive-spend-rule --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func spendRulesPreviewSpendRuleUsage() {

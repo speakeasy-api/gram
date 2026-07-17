@@ -99,13 +99,14 @@ function attributeLabel(name: string): string {
     .join(" ");
 }
 
-/** Create or edit a budget rule. */
+/** Create or edit a budget rule. Saving an edit archives the current version
+ *  row server-side and creates a successor; archiving ends the rule outright. */
 export function RuleSheet({
   open,
   onOpenChange,
   rule,
   onSubmit,
-  onDelete,
+  onArchive,
   submitting = false,
 }: {
   open: boolean;
@@ -113,7 +114,7 @@ export function RuleSheet({
   /** Editing an existing rule, or undefined when creating. */
   rule?: SpendRule;
   onSubmit: (draft: RuleDraft) => void;
-  onDelete?: () => void;
+  onArchive?: () => void;
   submitting?: boolean;
 }): JSX.Element {
   return (
@@ -124,7 +125,7 @@ export function RuleSheet({
           key={rule?.id ?? "new"}
           rule={rule}
           onSubmit={onSubmit}
-          onDelete={onDelete}
+          onArchive={onArchive}
           submitting={submitting}
         />
       </SheetContent>
@@ -169,12 +170,12 @@ function useRulePreview(
 function RuleForm({
   rule,
   onSubmit,
-  onDelete,
+  onArchive,
   submitting,
 }: {
   rule?: SpendRule;
   onSubmit: (draft: RuleDraft) => void;
-  onDelete?: () => void;
+  onArchive?: () => void;
   submitting: boolean;
 }): JSX.Element {
   const [draft, setDraft] = useState<RuleDraft>(
@@ -402,11 +403,11 @@ function RuleForm({
       </div>
 
       <SheetFooter className="border-border flex-row items-center justify-between border-t px-6 py-4">
-        {onDelete ? (
+        {onArchive ? (
           <Button
             variant="ghost"
             size="sm"
-            onClick={onDelete}
+            onClick={onArchive}
             disabled={submitting}
             className="text-muted-foreground"
           >

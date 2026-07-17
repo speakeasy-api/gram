@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * updateSpendRule spendRules
  *
  * @remarks
- * Update a budget rule. Material changes (target, limit_usd, window_kind, warn_at_pct, action) bump the rule version.
+ * Update a budget rule. Rule rows are immutable version snapshots: any change besides the enabled toggle archives the current version row and creates a successor at version + 1 (returned as the result, under a new ID). Enabled-only changes toggle the live row in place.
  */
 export function spendRulesRulesUpdate(
   client: GramCore,

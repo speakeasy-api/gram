@@ -59,6 +59,13 @@ type UpdateSpendRuleRequestBody struct {
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 }
 
+// ArchiveSpendRuleRequestBody is the type of the "spendRules" service
+// "archiveSpendRule" endpoint HTTP request body.
+type ArchiveSpendRuleRequestBody struct {
+	// The rule ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+}
+
 // PreviewSpendRuleRequestBody is the type of the "spendRules" service
 // "previewSpendRule" endpoint HTTP request body.
 type PreviewSpendRuleRequestBody struct {
@@ -75,7 +82,8 @@ type PreviewSpendRuleRequestBody struct {
 // CreateSpendRuleResponseBody is the type of the "spendRules" service
 // "createSpendRule" endpoint HTTP response body.
 type CreateSpendRuleResponseBody struct {
-	// The budget rule ID.
+	// The budget rule ID. Identifies one immutable version row: edits produce a
+	// successor row with a fresh ID.
 	ID string `form:"id" json:"id" xml:"id"`
 	// Versioned rule URN, e.g. spend_rule:eng-monthly-cap:v3. Pins the exact rule
 	// configuration that produced an event.
@@ -108,7 +116,8 @@ type CreateSpendRuleResponseBody struct {
 	Action string `form:"action" json:"action" xml:"action"`
 	// Whether the rule is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
-	// Rule version, incremented on material config changes.
+	// Position of this row in its slug lineage; every edit archives the current
+	// row and creates version + 1.
 	Version int64 `form:"version" json:"version" xml:"version"`
 	// When the rule was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
@@ -126,7 +135,8 @@ type ListSpendRulesResponseBody struct {
 // GetSpendRuleResponseBody is the type of the "spendRules" service
 // "getSpendRule" endpoint HTTP response body.
 type GetSpendRuleResponseBody struct {
-	// The budget rule ID.
+	// The budget rule ID. Identifies one immutable version row: edits produce a
+	// successor row with a fresh ID.
 	ID string `form:"id" json:"id" xml:"id"`
 	// Versioned rule URN, e.g. spend_rule:eng-monthly-cap:v3. Pins the exact rule
 	// configuration that produced an event.
@@ -159,7 +169,8 @@ type GetSpendRuleResponseBody struct {
 	Action string `form:"action" json:"action" xml:"action"`
 	// Whether the rule is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
-	// Rule version, incremented on material config changes.
+	// Position of this row in its slug lineage; every edit archives the current
+	// row and creates version + 1.
 	Version int64 `form:"version" json:"version" xml:"version"`
 	// When the rule was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
@@ -170,7 +181,8 @@ type GetSpendRuleResponseBody struct {
 // UpdateSpendRuleResponseBody is the type of the "spendRules" service
 // "updateSpendRule" endpoint HTTP response body.
 type UpdateSpendRuleResponseBody struct {
-	// The budget rule ID.
+	// The budget rule ID. Identifies one immutable version row: edits produce a
+	// successor row with a fresh ID.
 	ID string `form:"id" json:"id" xml:"id"`
 	// Versioned rule URN, e.g. spend_rule:eng-monthly-cap:v3. Pins the exact rule
 	// configuration that produced an event.
@@ -203,7 +215,8 @@ type UpdateSpendRuleResponseBody struct {
 	Action string `form:"action" json:"action" xml:"action"`
 	// Whether the rule is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
-	// Rule version, incremented on material config changes.
+	// Position of this row in its slug lineage; every edit archives the current
+	// row and creates version + 1.
 	Version int64 `form:"version" json:"version" xml:"version"`
 	// When the rule was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
@@ -996,10 +1009,29 @@ type UpdateSpendRuleGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DeleteSpendRuleUnauthorizedResponseBody is the type of the "spendRules"
-// service "deleteSpendRule" endpoint HTTP response body for the "unauthorized"
+// ArchiveSpendRuleUnauthorizedResponseBody is the type of the "spendRules"
+// service "archiveSpendRule" endpoint HTTP response body for the
+// "unauthorized" error.
+type ArchiveSpendRuleUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ArchiveSpendRuleForbiddenResponseBody is the type of the "spendRules"
+// service "archiveSpendRule" endpoint HTTP response body for the "forbidden"
 // error.
-type DeleteSpendRuleUnauthorizedResponseBody struct {
+type ArchiveSpendRuleForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1015,28 +1047,10 @@ type DeleteSpendRuleUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DeleteSpendRuleForbiddenResponseBody is the type of the "spendRules" service
-// "deleteSpendRule" endpoint HTTP response body for the "forbidden" error.
-type DeleteSpendRuleForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// DeleteSpendRuleBadRequestResponseBody is the type of the "spendRules"
-// service "deleteSpendRule" endpoint HTTP response body for the "bad_request"
+// ArchiveSpendRuleBadRequestResponseBody is the type of the "spendRules"
+// service "archiveSpendRule" endpoint HTTP response body for the "bad_request"
 // error.
-type DeleteSpendRuleBadRequestResponseBody struct {
+type ArchiveSpendRuleBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1052,9 +1066,9 @@ type DeleteSpendRuleBadRequestResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DeleteSpendRuleNotFoundResponseBody is the type of the "spendRules" service
-// "deleteSpendRule" endpoint HTTP response body for the "not_found" error.
-type DeleteSpendRuleNotFoundResponseBody struct {
+// ArchiveSpendRuleNotFoundResponseBody is the type of the "spendRules" service
+// "archiveSpendRule" endpoint HTTP response body for the "not_found" error.
+type ArchiveSpendRuleNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1070,9 +1084,9 @@ type DeleteSpendRuleNotFoundResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DeleteSpendRuleConflictResponseBody is the type of the "spendRules" service
-// "deleteSpendRule" endpoint HTTP response body for the "conflict" error.
-type DeleteSpendRuleConflictResponseBody struct {
+// ArchiveSpendRuleConflictResponseBody is the type of the "spendRules" service
+// "archiveSpendRule" endpoint HTTP response body for the "conflict" error.
+type ArchiveSpendRuleConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1088,10 +1102,10 @@ type DeleteSpendRuleConflictResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DeleteSpendRuleUnsupportedMediaResponseBody is the type of the "spendRules"
-// service "deleteSpendRule" endpoint HTTP response body for the
+// ArchiveSpendRuleUnsupportedMediaResponseBody is the type of the "spendRules"
+// service "archiveSpendRule" endpoint HTTP response body for the
 // "unsupported_media" error.
-type DeleteSpendRuleUnsupportedMediaResponseBody struct {
+type ArchiveSpendRuleUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1107,9 +1121,9 @@ type DeleteSpendRuleUnsupportedMediaResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DeleteSpendRuleInvalidResponseBody is the type of the "spendRules" service
-// "deleteSpendRule" endpoint HTTP response body for the "invalid" error.
-type DeleteSpendRuleInvalidResponseBody struct {
+// ArchiveSpendRuleInvalidResponseBody is the type of the "spendRules" service
+// "archiveSpendRule" endpoint HTTP response body for the "invalid" error.
+type ArchiveSpendRuleInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1125,10 +1139,10 @@ type DeleteSpendRuleInvalidResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DeleteSpendRuleInvariantViolationResponseBody is the type of the
-// "spendRules" service "deleteSpendRule" endpoint HTTP response body for the
+// ArchiveSpendRuleInvariantViolationResponseBody is the type of the
+// "spendRules" service "archiveSpendRule" endpoint HTTP response body for the
 // "invariant_violation" error.
-type DeleteSpendRuleInvariantViolationResponseBody struct {
+type ArchiveSpendRuleInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1144,10 +1158,10 @@ type DeleteSpendRuleInvariantViolationResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DeleteSpendRuleUnexpectedResponseBody is the type of the "spendRules"
-// service "deleteSpendRule" endpoint HTTP response body for the "unexpected"
+// ArchiveSpendRuleUnexpectedResponseBody is the type of the "spendRules"
+// service "archiveSpendRule" endpoint HTTP response body for the "unexpected"
 // error.
-type DeleteSpendRuleUnexpectedResponseBody struct {
+type ArchiveSpendRuleUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1163,10 +1177,10 @@ type DeleteSpendRuleUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DeleteSpendRuleGatewayErrorResponseBody is the type of the "spendRules"
-// service "deleteSpendRule" endpoint HTTP response body for the
+// ArchiveSpendRuleGatewayErrorResponseBody is the type of the "spendRules"
+// service "archiveSpendRule" endpoint HTTP response body for the
 // "gateway_error" error.
-type DeleteSpendRuleGatewayErrorResponseBody struct {
+type ArchiveSpendRuleGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1763,7 +1777,8 @@ type SpendRuleTargetConditionResponseBody struct {
 
 // SpendRuleResponseBody is used to define fields on response body types.
 type SpendRuleResponseBody struct {
-	// The budget rule ID.
+	// The budget rule ID. Identifies one immutable version row: edits produce a
+	// successor row with a fresh ID.
 	ID string `form:"id" json:"id" xml:"id"`
 	// Versioned rule URN, e.g. spend_rule:eng-monthly-cap:v3. Pins the exact rule
 	// configuration that produced an event.
@@ -1796,7 +1811,8 @@ type SpendRuleResponseBody struct {
 	Action string `form:"action" json:"action" xml:"action"`
 	// Whether the rule is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
-	// Rule version, incremented on material config changes.
+	// Position of this row in its slug lineage; every edit archives the current
+	// row and creates version + 1.
 	Version int64 `form:"version" json:"version" xml:"version"`
 	// When the rule was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
@@ -1827,11 +1843,11 @@ type SpendRuleActorUsageResponseBody struct {
 type SpendRuleEventResponseBody struct {
 	// The event ID.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The budget rule ID that produced the event.
+	// ID of the exact rule version row that produced the event.
 	RuleID string `form:"rule_id" json:"rule_id" xml:"rule_id"`
 	// Versioned rule URN pinning the config that produced the event.
 	RuleUrn string `form:"rule_urn" json:"rule_urn" xml:"rule_urn"`
-	// Current name of the rule, for display.
+	// Name of the rule as of the version that fired.
 	RuleName string `form:"rule_name" json:"rule_name" xml:"rule_name"`
 	// Event type.
 	EventType string `form:"event_type" json:"event_type" xml:"event_type"`
@@ -2625,11 +2641,11 @@ func NewUpdateSpendRuleGatewayErrorResponseBody(res *goa.ServiceError) *UpdateSp
 	return body
 }
 
-// NewDeleteSpendRuleUnauthorizedResponseBody builds the HTTP response body
-// from the result of the "deleteSpendRule" endpoint of the "spendRules"
+// NewArchiveSpendRuleUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "archiveSpendRule" endpoint of the "spendRules"
 // service.
-func NewDeleteSpendRuleUnauthorizedResponseBody(res *goa.ServiceError) *DeleteSpendRuleUnauthorizedResponseBody {
-	body := &DeleteSpendRuleUnauthorizedResponseBody{
+func NewArchiveSpendRuleUnauthorizedResponseBody(res *goa.ServiceError) *ArchiveSpendRuleUnauthorizedResponseBody {
+	body := &ArchiveSpendRuleUnauthorizedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2640,10 +2656,10 @@ func NewDeleteSpendRuleUnauthorizedResponseBody(res *goa.ServiceError) *DeleteSp
 	return body
 }
 
-// NewDeleteSpendRuleForbiddenResponseBody builds the HTTP response body from
-// the result of the "deleteSpendRule" endpoint of the "spendRules" service.
-func NewDeleteSpendRuleForbiddenResponseBody(res *goa.ServiceError) *DeleteSpendRuleForbiddenResponseBody {
-	body := &DeleteSpendRuleForbiddenResponseBody{
+// NewArchiveSpendRuleForbiddenResponseBody builds the HTTP response body from
+// the result of the "archiveSpendRule" endpoint of the "spendRules" service.
+func NewArchiveSpendRuleForbiddenResponseBody(res *goa.ServiceError) *ArchiveSpendRuleForbiddenResponseBody {
+	body := &ArchiveSpendRuleForbiddenResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2654,10 +2670,10 @@ func NewDeleteSpendRuleForbiddenResponseBody(res *goa.ServiceError) *DeleteSpend
 	return body
 }
 
-// NewDeleteSpendRuleBadRequestResponseBody builds the HTTP response body from
-// the result of the "deleteSpendRule" endpoint of the "spendRules" service.
-func NewDeleteSpendRuleBadRequestResponseBody(res *goa.ServiceError) *DeleteSpendRuleBadRequestResponseBody {
-	body := &DeleteSpendRuleBadRequestResponseBody{
+// NewArchiveSpendRuleBadRequestResponseBody builds the HTTP response body from
+// the result of the "archiveSpendRule" endpoint of the "spendRules" service.
+func NewArchiveSpendRuleBadRequestResponseBody(res *goa.ServiceError) *ArchiveSpendRuleBadRequestResponseBody {
+	body := &ArchiveSpendRuleBadRequestResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2668,10 +2684,10 @@ func NewDeleteSpendRuleBadRequestResponseBody(res *goa.ServiceError) *DeleteSpen
 	return body
 }
 
-// NewDeleteSpendRuleNotFoundResponseBody builds the HTTP response body from
-// the result of the "deleteSpendRule" endpoint of the "spendRules" service.
-func NewDeleteSpendRuleNotFoundResponseBody(res *goa.ServiceError) *DeleteSpendRuleNotFoundResponseBody {
-	body := &DeleteSpendRuleNotFoundResponseBody{
+// NewArchiveSpendRuleNotFoundResponseBody builds the HTTP response body from
+// the result of the "archiveSpendRule" endpoint of the "spendRules" service.
+func NewArchiveSpendRuleNotFoundResponseBody(res *goa.ServiceError) *ArchiveSpendRuleNotFoundResponseBody {
+	body := &ArchiveSpendRuleNotFoundResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2682,10 +2698,10 @@ func NewDeleteSpendRuleNotFoundResponseBody(res *goa.ServiceError) *DeleteSpendR
 	return body
 }
 
-// NewDeleteSpendRuleConflictResponseBody builds the HTTP response body from
-// the result of the "deleteSpendRule" endpoint of the "spendRules" service.
-func NewDeleteSpendRuleConflictResponseBody(res *goa.ServiceError) *DeleteSpendRuleConflictResponseBody {
-	body := &DeleteSpendRuleConflictResponseBody{
+// NewArchiveSpendRuleConflictResponseBody builds the HTTP response body from
+// the result of the "archiveSpendRule" endpoint of the "spendRules" service.
+func NewArchiveSpendRuleConflictResponseBody(res *goa.ServiceError) *ArchiveSpendRuleConflictResponseBody {
+	body := &ArchiveSpendRuleConflictResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2696,11 +2712,11 @@ func NewDeleteSpendRuleConflictResponseBody(res *goa.ServiceError) *DeleteSpendR
 	return body
 }
 
-// NewDeleteSpendRuleUnsupportedMediaResponseBody builds the HTTP response body
-// from the result of the "deleteSpendRule" endpoint of the "spendRules"
+// NewArchiveSpendRuleUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "archiveSpendRule" endpoint of the "spendRules"
 // service.
-func NewDeleteSpendRuleUnsupportedMediaResponseBody(res *goa.ServiceError) *DeleteSpendRuleUnsupportedMediaResponseBody {
-	body := &DeleteSpendRuleUnsupportedMediaResponseBody{
+func NewArchiveSpendRuleUnsupportedMediaResponseBody(res *goa.ServiceError) *ArchiveSpendRuleUnsupportedMediaResponseBody {
+	body := &ArchiveSpendRuleUnsupportedMediaResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2711,10 +2727,10 @@ func NewDeleteSpendRuleUnsupportedMediaResponseBody(res *goa.ServiceError) *Dele
 	return body
 }
 
-// NewDeleteSpendRuleInvalidResponseBody builds the HTTP response body from the
-// result of the "deleteSpendRule" endpoint of the "spendRules" service.
-func NewDeleteSpendRuleInvalidResponseBody(res *goa.ServiceError) *DeleteSpendRuleInvalidResponseBody {
-	body := &DeleteSpendRuleInvalidResponseBody{
+// NewArchiveSpendRuleInvalidResponseBody builds the HTTP response body from
+// the result of the "archiveSpendRule" endpoint of the "spendRules" service.
+func NewArchiveSpendRuleInvalidResponseBody(res *goa.ServiceError) *ArchiveSpendRuleInvalidResponseBody {
+	body := &ArchiveSpendRuleInvalidResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2725,11 +2741,11 @@ func NewDeleteSpendRuleInvalidResponseBody(res *goa.ServiceError) *DeleteSpendRu
 	return body
 }
 
-// NewDeleteSpendRuleInvariantViolationResponseBody builds the HTTP response
-// body from the result of the "deleteSpendRule" endpoint of the "spendRules"
+// NewArchiveSpendRuleInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "archiveSpendRule" endpoint of the "spendRules"
 // service.
-func NewDeleteSpendRuleInvariantViolationResponseBody(res *goa.ServiceError) *DeleteSpendRuleInvariantViolationResponseBody {
-	body := &DeleteSpendRuleInvariantViolationResponseBody{
+func NewArchiveSpendRuleInvariantViolationResponseBody(res *goa.ServiceError) *ArchiveSpendRuleInvariantViolationResponseBody {
+	body := &ArchiveSpendRuleInvariantViolationResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2740,10 +2756,10 @@ func NewDeleteSpendRuleInvariantViolationResponseBody(res *goa.ServiceError) *De
 	return body
 }
 
-// NewDeleteSpendRuleUnexpectedResponseBody builds the HTTP response body from
-// the result of the "deleteSpendRule" endpoint of the "spendRules" service.
-func NewDeleteSpendRuleUnexpectedResponseBody(res *goa.ServiceError) *DeleteSpendRuleUnexpectedResponseBody {
-	body := &DeleteSpendRuleUnexpectedResponseBody{
+// NewArchiveSpendRuleUnexpectedResponseBody builds the HTTP response body from
+// the result of the "archiveSpendRule" endpoint of the "spendRules" service.
+func NewArchiveSpendRuleUnexpectedResponseBody(res *goa.ServiceError) *ArchiveSpendRuleUnexpectedResponseBody {
+	body := &ArchiveSpendRuleUnexpectedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2754,11 +2770,11 @@ func NewDeleteSpendRuleUnexpectedResponseBody(res *goa.ServiceError) *DeleteSpen
 	return body
 }
 
-// NewDeleteSpendRuleGatewayErrorResponseBody builds the HTTP response body
-// from the result of the "deleteSpendRule" endpoint of the "spendRules"
+// NewArchiveSpendRuleGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "archiveSpendRule" endpoint of the "spendRules"
 // service.
-func NewDeleteSpendRuleGatewayErrorResponseBody(res *goa.ServiceError) *DeleteSpendRuleGatewayErrorResponseBody {
-	body := &DeleteSpendRuleGatewayErrorResponseBody{
+func NewArchiveSpendRuleGatewayErrorResponseBody(res *goa.ServiceError) *ArchiveSpendRuleGatewayErrorResponseBody {
+	body := &ArchiveSpendRuleGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -3298,11 +3314,12 @@ func NewUpdateSpendRulePayload(body *UpdateSpendRuleRequestBody, apikeyToken *st
 	return v
 }
 
-// NewDeleteSpendRulePayload builds a spendRules service deleteSpendRule
+// NewArchiveSpendRulePayload builds a spendRules service archiveSpendRule
 // endpoint payload.
-func NewDeleteSpendRulePayload(id string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *spendrules.DeleteSpendRulePayload {
-	v := &spendrules.DeleteSpendRulePayload{}
-	v.ID = id
+func NewArchiveSpendRulePayload(body *ArchiveSpendRuleRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *spendrules.ArchiveSpendRulePayload {
+	v := &spendrules.ArchiveSpendRulePayload{
+		ID: *body.ID,
+	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -3443,6 +3460,18 @@ func ValidateUpdateSpendRuleRequestBody(body *UpdateSpendRuleRequestBody) (err e
 		if !(*body.Action == "flag" || *body.Action == "block") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "block"}))
 		}
+	}
+	return
+}
+
+// ValidateArchiveSpendRuleRequestBody runs the validations defined on
+// ArchiveSpendRuleRequestBody
+func ValidateArchiveSpendRuleRequestBody(body *ArchiveSpendRuleRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
 	return
 }

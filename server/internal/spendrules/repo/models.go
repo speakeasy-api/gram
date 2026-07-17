@@ -25,6 +25,7 @@ type SpendRule struct {
 	Version        int64
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	ArchivedAt     pgtype.Timestamptz
+	Archived       bool
+	SupersededBy   uuid.NullUUID
 }

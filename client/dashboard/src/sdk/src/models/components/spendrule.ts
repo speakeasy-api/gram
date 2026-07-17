@@ -56,7 +56,7 @@ export type SpendRule = {
    */
   enabled: boolean;
   /**
-   * The budget rule ID.
+   * The budget rule ID. Identifies one immutable version row: edits produce a successor row with a fresh ID.
    */
   id: string;
   /**
@@ -93,7 +93,7 @@ export type SpendRule = {
    */
   urn: string;
   /**
-   * Rule version, incremented on material config changes.
+   * Position of this row in its slug lineage; every edit archives the current row and creates version + 1.
    */
   version: number;
   /**

@@ -168,7 +168,7 @@ func TestListAndGetSpendRules(t *testing.T) {
 	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 }
 
-func TestUpdateSpendRule_NonMaterialKeepsVersion(t *testing.T) {
+func TestUpdateSpendRule_EnabledToggleKeepsVersionRow(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestSpendRulesService(t)
 	ctx = withOrgAdmin(t, ctx, ti.conn)
@@ -180,15 +180,13 @@ func TestUpdateSpendRule_NonMaterialKeepsVersion(t *testing.T) {
 	require.NoError(t, err)
 
 	updated, err := ti.service.UpdateSpendRule(ctx, &gen.UpdateSpendRulePayload{
-		ID:          created.ID,
-		Name:        new("Engineering cap (renamed)"),
-		Description: new("Updated description"),
-		Enabled:     new(false),
+		ID:      created.ID,
+		Enabled: new(false),
 	})
 	require.NoError(t, err)
-	require.Equal(t, "Engineering cap (renamed)", updated.Name)
 	require.False(t, updated.Enabled)
-	require.Equal(t, int64(1), updated.Version, "name/description/enabled edits must not bump the version")
+	require.Equal(t, created.ID, updated.ID, "enabled toggles mutate the live row in place")
+	require.Equal(t, int64(1), updated.Version, "enabled toggles must not mint a new version")
 	require.Equal(t, created.Urn, updated.Urn)
 
 	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionSpendRuleUpdate)
@@ -196,7 +194,7 @@ func TestUpdateSpendRule_NonMaterialKeepsVersion(t *testing.T) {
 	require.Equal(t, before+1, after)
 }
 
-func TestUpdateSpendRule_MaterialBumpsVersion(t *testing.T) {
+func TestUpdateSpendRule_EditArchivesAndCreatesSuccessor(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestSpendRulesService(t)
 	ctx = withOrgAdmin(t, ctx, ti.conn)
@@ -214,11 +212,55 @@ func TestUpdateSpendRule_MaterialBumpsVersion(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, `"eng-frontier" in groups`, updated.TargetExpr)
-	require.Equal(t, int64(2), updated.Version, "target changes are material")
+	require.Equal(t, int64(2), updated.Version, "edits mint the successor version")
+	require.NotEqual(t, created.ID, updated.ID, "edits create a new version row")
 	require.NotEqual(t, created.Urn, updated.Urn)
 
-	require.Equal(t, created.Slug, updated.Slug, "material edits keep the slug")
+	require.Equal(t, created.Slug, updated.Slug, "edits keep the slug lineage")
 	require.Equal(t, urn.NewSpendRule(created.Slug, 2).String(), updated.Urn)
+
+	// Only the successor is live; the archived predecessor links to it.
+	list, err := ti.service.ListSpendRules(ctx, &gen.ListSpendRulesPayload{})
+	require.NoError(t, err)
+	require.Len(t, list.Rules, 1)
+	require.Equal(t, updated.ID, list.Rules[0].ID)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	archived, err := spendrepo.New(ti.conn).GetArchivedSpendRule(ctx, spendrepo.GetArchivedSpendRuleParams{
+		ID:             uuid.MustParse(created.ID),
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+	require.True(t, archived.Archived)
+	require.Equal(t, updated.ID, archived.SupersededBy.UUID.String())
+
+	// Editing the archived predecessor is rejected: only live rows update.
+	_, err = ti.service.UpdateSpendRule(ctx, &gen.UpdateSpendRulePayload{
+		ID:   created.ID,
+		Name: new("stale edit"),
+	})
+	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
+}
+
+func TestUpdateSpendRule_NoopReturnsLiveRow(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestSpendRulesService(t)
+	ctx = withOrgAdmin(t, ctx, ti.conn)
+
+	created, err := ti.service.CreateSpendRule(ctx, createTestRulePayload())
+	require.NoError(t, err)
+
+	updated, err := ti.service.UpdateSpendRule(ctx, &gen.UpdateSpendRulePayload{
+		ID:   created.ID,
+		Name: new("Engineering cap"),
+	})
+	require.NoError(t, err)
+	require.Equal(t, created.ID, updated.ID, "no-op updates must not mint a new version")
+	require.Equal(t, int64(1), updated.Version)
 }
 
 func TestUpdateSpendRule_RejectsInvalidExpression(t *testing.T) {
@@ -250,7 +292,7 @@ func TestUpdateSpendRule_RejectsInvalidExpression(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestDeleteSpendRule(t *testing.T) {
+func TestArchiveSpendRule(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestSpendRulesService(t)
 	ctx = withOrgAdmin(t, ctx, ti.conn)
@@ -258,12 +300,12 @@ func TestDeleteSpendRule(t *testing.T) {
 	created, err := ti.service.CreateSpendRule(ctx, createTestRulePayload())
 	require.NoError(t, err)
 
-	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionSpendRuleDelete)
+	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionSpendRuleArchive)
 	require.NoError(t, err)
 
-	require.NoError(t, ti.service.DeleteSpendRule(ctx, &gen.DeleteSpendRulePayload{ID: created.ID}))
+	require.NoError(t, ti.service.ArchiveSpendRule(ctx, &gen.ArchiveSpendRulePayload{ID: created.ID}))
 
-	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionSpendRuleDelete)
+	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionSpendRuleArchive)
 	require.NoError(t, err)
 	require.Equal(t, before+1, after)
 
@@ -271,8 +313,18 @@ func TestDeleteSpendRule(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, list.Rules)
 
-	// Re-deleting a tombstoned rule reports not found.
-	err = ti.service.DeleteSpendRule(ctx, &gen.DeleteSpendRulePayload{ID: created.ID})
+	// An admin archive ends the lineage: no successor row exists.
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	archived, err := spendrepo.New(ti.conn).GetArchivedSpendRule(ctx, spendrepo.GetArchivedSpendRuleParams{
+		ID:             uuid.MustParse(created.ID),
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+	require.False(t, archived.SupersededBy.Valid)
+
+	// Re-archiving reports not found.
+	err = ti.service.ArchiveSpendRule(ctx, &gen.ArchiveSpendRulePayload{ID: created.ID})
 	require.Error(t, err)
 }
 
@@ -295,7 +347,6 @@ func TestSpendRuleEventsListAndDedupe(t *testing.T) {
 	params := spendrepo.InsertSpendRuleEventParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		SpendRuleID:    ruleID,
-		RuleVersion:    1,
 		RuleUrn:        ruleURN,
 		EventType:      spendrules.EventTypeBreach,
 		UserID:         conv.ToPGTextEmpty("user_ada"),
@@ -311,14 +362,20 @@ func TestSpendRuleEventsListAndDedupe(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(1), inserted)
 
-	// Same (rule version, actor, window, type) dedupes to a no-op.
+	// Same (rule version row, actor, window, type) dedupes to a no-op.
 	inserted, err = spendrepo.New(ti.conn).InsertSpendRuleEvent(ctx, params)
 	require.NoError(t, err)
 	require.Equal(t, int64(0), inserted)
 
-	// A new rule version is a fresh evaluation: the same actor/window records
-	// a new event under the bumped URN.
-	params.RuleUrn = urn.NewSpendRule(created.Slug, 2).String()
+	// An edit mints a successor version row, which is a fresh evaluation: the
+	// same actor/window records a new event under the successor's identity.
+	updated, err := ti.service.UpdateSpendRule(ctx, &gen.UpdateSpendRulePayload{
+		ID:       created.ID,
+		LimitUsd: new(400.0),
+	})
+	require.NoError(t, err)
+	params.SpendRuleID = uuid.MustParse(updated.ID)
+	params.RuleUrn = urn.NewSpendRule(created.Slug, updated.Version).String()
 	inserted, err = spendrepo.New(ti.conn).InsertSpendRuleEvent(ctx, params)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), inserted)

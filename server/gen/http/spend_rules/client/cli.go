@@ -255,38 +255,42 @@ func BuildUpdateSpendRulePayload(spendRulesUpdateSpendRuleBody string, spendRule
 	return v, nil
 }
 
-// BuildDeleteSpendRulePayload builds the payload for the spendRules
-// deleteSpendRule endpoint from CLI flags.
-func BuildDeleteSpendRulePayload(spendRulesDeleteSpendRuleID string, spendRulesDeleteSpendRuleApikeyToken string, spendRulesDeleteSpendRuleSessionToken string, spendRulesDeleteSpendRuleProjectSlugInput string) (*spendrules.DeleteSpendRulePayload, error) {
+// BuildArchiveSpendRulePayload builds the payload for the spendRules
+// archiveSpendRule endpoint from CLI flags.
+func BuildArchiveSpendRulePayload(spendRulesArchiveSpendRuleBody string, spendRulesArchiveSpendRuleApikeyToken string, spendRulesArchiveSpendRuleSessionToken string, spendRulesArchiveSpendRuleProjectSlugInput string) (*spendrules.ArchiveSpendRulePayload, error) {
 	var err error
-	var id string
+	var body ArchiveSpendRuleRequestBody
 	{
-		id = spendRulesDeleteSpendRuleID
-		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		err = json.Unmarshal([]byte(spendRulesArchiveSpendRuleBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if err != nil {
 			return nil, err
 		}
 	}
 	var apikeyToken *string
 	{
-		if spendRulesDeleteSpendRuleApikeyToken != "" {
-			apikeyToken = &spendRulesDeleteSpendRuleApikeyToken
+		if spendRulesArchiveSpendRuleApikeyToken != "" {
+			apikeyToken = &spendRulesArchiveSpendRuleApikeyToken
 		}
 	}
 	var sessionToken *string
 	{
-		if spendRulesDeleteSpendRuleSessionToken != "" {
-			sessionToken = &spendRulesDeleteSpendRuleSessionToken
+		if spendRulesArchiveSpendRuleSessionToken != "" {
+			sessionToken = &spendRulesArchiveSpendRuleSessionToken
 		}
 	}
 	var projectSlugInput *string
 	{
-		if spendRulesDeleteSpendRuleProjectSlugInput != "" {
-			projectSlugInput = &spendRulesDeleteSpendRuleProjectSlugInput
+		if spendRulesArchiveSpendRuleProjectSlugInput != "" {
+			projectSlugInput = &spendRulesArchiveSpendRuleProjectSlugInput
 		}
 	}
-	v := &spendrules.DeleteSpendRulePayload{}
-	v.ID = id
+	v := &spendrules.ArchiveSpendRulePayload{
+		ID: body.ID,
+	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

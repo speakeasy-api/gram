@@ -354,8 +354,8 @@ trackedFiles:
   src/funcs/skillsUndistribute.ts: {}
   src/funcs/spendRulesEventsList.ts: {}
   src/funcs/spendRulesOverviewGet.ts: {}
+  src/funcs/spendRulesRulesArchive.ts: {}
   src/funcs/spendRulesRulesCreate.ts: {}
-  src/funcs/spendRulesRulesDelete.ts: {}
   src/funcs/spendRulesRulesGet.ts: {}
   src/funcs/spendRulesRulesList.ts: {}
   src/funcs/spendRulesRulesPreview.ts: {}
@@ -1100,6 +1100,7 @@ trackedFiles:
   src/models/operations/approveriskpolicybypassrequest.ts: {}
   src/models/operations/approveshadowmcpapprovalrequest.ts: {}
   src/models/operations/archiveskill.ts: {}
+  src/models/operations/archivespendrule.ts: {}
   src/models/operations/attachservertocollection.ts: {}
   src/models/operations/attachusersessionissuer.ts: {}
   src/models/operations/authcallback.ts: {}
@@ -1191,7 +1192,6 @@ trackedFiles:
   src/models/operations/deleteshadowmcpaccessrule.ts: {}
   src/models/operations/deleteshadowmcpinventorypolicybypass.ts: {}
   src/models/operations/deletesourceenvironmentlink.ts: {}
-  src/models/operations/deletespendrule.ts: {}
   src/models/operations/deletetemplate.ts: {}
   src/models/operations/deletetoolset.ts: {}
   src/models/operations/deletetoolsetenvironmentlink.ts: {}
@@ -2007,8 +2007,8 @@ trackedFiles:
   src/react-query/skillVersions.ts: {}
   src/react-query/skills.core.ts: {}
   src/react-query/skills.ts: {}
+  src/react-query/spendRulesArchiveRule.ts: {}
   src/react-query/spendRulesCreateRule.ts: {}
-  src/react-query/spendRulesDeleteRule.ts: {}
   src/react-query/spendRulesGetRule.core.ts: {}
   src/react-query/spendRulesGetRule.ts: {}
   src/react-query/spendRulesListEvents.core.ts: {}
@@ -2288,6 +2288,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  archiveSpendRule:
+    speakeasy-default-archive-spend-rule:
+      requestBody:
+        application/json: {"id": "72da89ce-b7d8-4aeb-ba4c-94f20af55de6"}
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   attachServerToCollection:
     speakeasy-default-attach-server-to-collection:
       requestBody:

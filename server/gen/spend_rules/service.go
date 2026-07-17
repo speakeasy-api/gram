@@ -23,12 +23,15 @@ type Service interface {
 	ListSpendRules(context.Context, *ListSpendRulesPayload) (res *ListSpendRulesResult, err error)
 	// Get a budget rule by ID.
 	GetSpendRule(context.Context, *GetSpendRulePayload) (res *types.SpendRule, err error)
-	// Update a budget rule. Material changes (target, limit_usd, window_kind,
-	// warn_at_pct, action) bump the rule version.
+	// Update a budget rule. Rule rows are immutable version snapshots: any change
+	// besides the enabled toggle archives the current version row and creates a
+	// successor at version + 1 (returned as the result, under a new ID).
+	// Enabled-only changes toggle the live row in place.
 	UpdateSpendRule(context.Context, *UpdateSpendRulePayload) (res *types.SpendRule, err error)
-	// Archive a budget rule. Any open circuits for the rule close on the next
-	// evaluation cycle; the rule's slug, version history, and events are retained.
-	DeleteSpendRule(context.Context, *DeleteSpendRulePayload) (err error)
+	// Archive a budget rule. There is no delete: archiving ends the rule's lineage
+	// while retaining its slug, version history, and events. Any open circuits for
+	// the rule close on the next evaluation cycle.
+	ArchiveSpendRule(context.Context, *ArchiveSpendRulePayload) (err error)
 	// Preview which actors a target expression matches and their current spend
 	// against a proposed budget. Powers the live preview in the rule editor and
 	// the per-actor breakdown in the rule detail view.
@@ -61,7 +64,17 @@ const ServiceName = "spendRules"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [8]string{"createSpendRule", "listSpendRules", "getSpendRule", "updateSpendRule", "deleteSpendRule", "previewSpendRule", "listSpendRuleEvents", "getSpendRulesOverview"}
+var MethodNames = [8]string{"createSpendRule", "listSpendRules", "getSpendRule", "updateSpendRule", "archiveSpendRule", "previewSpendRule", "listSpendRuleEvents", "getSpendRulesOverview"}
+
+// ArchiveSpendRulePayload is the payload type of the spendRules service
+// archiveSpendRule method.
+type ArchiveSpendRulePayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The rule ID.
+	ID string
+}
 
 // CreateSpendRulePayload is the payload type of the spendRules service
 // createSpendRule method.
@@ -85,16 +98,6 @@ type CreateSpendRulePayload struct {
 	Action string
 	// Whether the rule is active.
 	Enabled bool
-}
-
-// DeleteSpendRulePayload is the payload type of the spendRules service
-// deleteSpendRule method.
-type DeleteSpendRulePayload struct {
-	ApikeyToken      *string
-	SessionToken     *string
-	ProjectSlugInput *string
-	// The rule ID.
-	ID string
 }
 
 // GetSpendRulePayload is the payload type of the spendRules service
@@ -121,7 +124,8 @@ type ListSpendRuleEventsPayload struct {
 	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
-	// Optional rule ID to filter by.
+	// Optional rule ID to filter by. Matches the rule's whole lineage: events from
+	// every version of the rule are returned.
 	RuleID *string
 	// Optional event type to filter by.
 	EventType *string
@@ -205,11 +209,11 @@ type SpendRuleActorUsage struct {
 type SpendRuleEvent struct {
 	// The event ID.
 	ID string
-	// The budget rule ID that produced the event.
+	// ID of the exact rule version row that produced the event.
 	RuleID string
 	// Versioned rule URN pinning the config that produced the event.
 	RuleUrn string
-	// Current name of the rule, for display.
+	// Name of the rule as of the version that fired.
 	RuleName string
 	// Event type.
 	EventType string

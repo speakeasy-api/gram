@@ -134,7 +134,7 @@ var _ = Service("spendRules", func() {
 	})
 
 	Method("updateSpendRule", func() {
-		Description("Update a budget rule. Material changes (target, limit_usd, window_kind, warn_at_pct, action) bump the rule version.")
+		Description("Update a budget rule. Rule rows are immutable version snapshots: any change besides the enabled toggle archives the current version row and creates a successor at version + 1 (returned as the result, under a new ID). Enabled-only changes toggle the live row in place.")
 
 		Payload(func() {
 			security.ByKeyPayload()
@@ -179,8 +179,8 @@ var _ = Service("spendRules", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SpendRulesUpdateRule", "type": "mutation"}`)
 	})
 
-	Method("deleteSpendRule", func() {
-		Description("Archive a budget rule. Any open circuits for the rule close on the next evaluation cycle; the rule's slug, version history, and events are retained.")
+	Method("archiveSpendRule", func() {
+		Description("Archive a budget rule. There is no delete: archiving ends the rule's lineage while retaining its slug, version history, and events. Any open circuits for the rule close on the next evaluation cycle.")
 
 		Payload(func() {
 			security.ByKeyPayload()
@@ -193,18 +193,17 @@ var _ = Service("spendRules", func() {
 		})
 
 		HTTP(func() {
-			DELETE("/rpc/spendrules.deleteRule")
+			POST("/rpc/spendrules.archiveRule")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
-			Param("id")
 			Response(StatusOK)
 		})
 
-		Meta("openapi:operationId", "deleteSpendRule")
+		Meta("openapi:operationId", "archiveSpendRule")
 		Meta("openapi:extension:x-speakeasy-group", "spendRules.rules")
-		Meta("openapi:extension:x-speakeasy-name-override", "delete")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SpendRulesDeleteRule", "type": "mutation"}`)
+		Meta("openapi:extension:x-speakeasy-name-override", "archive")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SpendRulesArchiveRule", "type": "mutation"}`)
 	})
 
 	Method("previewSpendRule", func() {
@@ -252,7 +251,7 @@ var _ = Service("spendRules", func() {
 			security.ByKeyPayload()
 			security.SessionPayload()
 			security.ProjectPayload()
-			Attribute("rule_id", String, "Optional rule ID to filter by.", func() {
+			Attribute("rule_id", String, "Optional rule ID to filter by. Matches the rule's whole lineage: events from every version of the rule are returned.", func() {
 				Format(FormatUUID)
 			})
 			Attribute("event_type", String, "Optional event type to filter by.", func() {
@@ -324,7 +323,7 @@ var SpendRuleTargetCondition = Type("SpendRuleTargetCondition", func() {
 var SpendRule = Type("SpendRule", func() {
 	Meta("struct:pkg:path", "types")
 
-	Attribute("id", String, "The budget rule ID.", func() {
+	Attribute("id", String, "The budget rule ID. Identifies one immutable version row: edits produce a successor row with a fresh ID.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("urn", String, "Versioned rule URN, e.g. spend_rule:eng-monthly-cap:v3. Pins the exact rule configuration that produced an event.")
@@ -344,7 +343,7 @@ var SpendRule = Type("SpendRule", func() {
 		SpendRuleActionEnum()
 	})
 	Attribute("enabled", Boolean, "Whether the rule is active.")
-	Attribute("version", Int64, "Rule version, incremented on material config changes.")
+	Attribute("version", Int64, "Position of this row in its slug lineage; every edit archives the current row and creates version + 1.")
 	Attribute("created_at", String, "When the rule was created.", func() {
 		Format(FormatDateTime)
 	})
@@ -359,11 +358,11 @@ var SpendRuleEvent = Type("SpendRuleEvent", func() {
 	Attribute("id", String, "The event ID.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("rule_id", String, "The budget rule ID that produced the event.", func() {
+	Attribute("rule_id", String, "ID of the exact rule version row that produced the event.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("rule_urn", String, "Versioned rule URN pinning the config that produced the event.")
-	Attribute("rule_name", String, "Current name of the rule, for display.")
+	Attribute("rule_name", String, "Name of the rule as of the version that fired.")
 	Attribute("event_type", String, "Event type.", func() {
 		Enum("warning", "breach")
 	})

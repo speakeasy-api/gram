@@ -47,11 +47,11 @@ export type SpendRuleEvent = {
    */
   limitUsd: number;
   /**
-   * The budget rule ID that produced the event.
+   * ID of the exact rule version row that produced the event.
    */
   ruleId: string;
   /**
-   * Current name of the rule, for display.
+   * Name of the rule as of the version that fired.
    */
   ruleName: string;
   /**

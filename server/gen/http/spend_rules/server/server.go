@@ -23,7 +23,7 @@ type Server struct {
 	ListSpendRules        http.Handler
 	GetSpendRule          http.Handler
 	UpdateSpendRule       http.Handler
-	DeleteSpendRule       http.Handler
+	ArchiveSpendRule      http.Handler
 	PreviewSpendRule      http.Handler
 	ListSpendRuleEvents   http.Handler
 	GetSpendRulesOverview http.Handler
@@ -60,7 +60,7 @@ func New(
 			{"ListSpendRules", "GET", "/rpc/spendrules.listRules"},
 			{"GetSpendRule", "GET", "/rpc/spendrules.getRule"},
 			{"UpdateSpendRule", "PUT", "/rpc/spendrules.updateRule"},
-			{"DeleteSpendRule", "DELETE", "/rpc/spendrules.deleteRule"},
+			{"ArchiveSpendRule", "POST", "/rpc/spendrules.archiveRule"},
 			{"PreviewSpendRule", "POST", "/rpc/spendrules.previewRule"},
 			{"ListSpendRuleEvents", "GET", "/rpc/spendrules.listEvents"},
 			{"GetSpendRulesOverview", "GET", "/rpc/spendrules.getOverview"},
@@ -69,7 +69,7 @@ func New(
 		ListSpendRules:        NewListSpendRulesHandler(e.ListSpendRules, mux, decoder, encoder, errhandler, formatter),
 		GetSpendRule:          NewGetSpendRuleHandler(e.GetSpendRule, mux, decoder, encoder, errhandler, formatter),
 		UpdateSpendRule:       NewUpdateSpendRuleHandler(e.UpdateSpendRule, mux, decoder, encoder, errhandler, formatter),
-		DeleteSpendRule:       NewDeleteSpendRuleHandler(e.DeleteSpendRule, mux, decoder, encoder, errhandler, formatter),
+		ArchiveSpendRule:      NewArchiveSpendRuleHandler(e.ArchiveSpendRule, mux, decoder, encoder, errhandler, formatter),
 		PreviewSpendRule:      NewPreviewSpendRuleHandler(e.PreviewSpendRule, mux, decoder, encoder, errhandler, formatter),
 		ListSpendRuleEvents:   NewListSpendRuleEventsHandler(e.ListSpendRuleEvents, mux, decoder, encoder, errhandler, formatter),
 		GetSpendRulesOverview: NewGetSpendRulesOverviewHandler(e.GetSpendRulesOverview, mux, decoder, encoder, errhandler, formatter),
@@ -85,7 +85,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListSpendRules = m(s.ListSpendRules)
 	s.GetSpendRule = m(s.GetSpendRule)
 	s.UpdateSpendRule = m(s.UpdateSpendRule)
-	s.DeleteSpendRule = m(s.DeleteSpendRule)
+	s.ArchiveSpendRule = m(s.ArchiveSpendRule)
 	s.PreviewSpendRule = m(s.PreviewSpendRule)
 	s.ListSpendRuleEvents = m(s.ListSpendRuleEvents)
 	s.GetSpendRulesOverview = m(s.GetSpendRulesOverview)
@@ -100,7 +100,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListSpendRulesHandler(mux, h.ListSpendRules)
 	MountGetSpendRuleHandler(mux, h.GetSpendRule)
 	MountUpdateSpendRuleHandler(mux, h.UpdateSpendRule)
-	MountDeleteSpendRuleHandler(mux, h.DeleteSpendRule)
+	MountArchiveSpendRuleHandler(mux, h.ArchiveSpendRule)
 	MountPreviewSpendRuleHandler(mux, h.PreviewSpendRule)
 	MountListSpendRuleEventsHandler(mux, h.ListSpendRuleEvents)
 	MountGetSpendRulesOverviewHandler(mux, h.GetSpendRulesOverview)
@@ -323,21 +323,21 @@ func NewUpdateSpendRuleHandler(
 	})
 }
 
-// MountDeleteSpendRuleHandler configures the mux to serve the "spendRules"
-// service "deleteSpendRule" endpoint.
-func MountDeleteSpendRuleHandler(mux goahttp.Muxer, h http.Handler) {
+// MountArchiveSpendRuleHandler configures the mux to serve the "spendRules"
+// service "archiveSpendRule" endpoint.
+func MountArchiveSpendRuleHandler(mux goahttp.Muxer, h http.Handler) {
 	f, ok := h.(http.HandlerFunc)
 	if !ok {
 		f = func(w http.ResponseWriter, r *http.Request) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("DELETE", "/rpc/spendrules.deleteRule", f)
+	mux.Handle("POST", "/rpc/spendrules.archiveRule", f)
 }
 
-// NewDeleteSpendRuleHandler creates a HTTP handler which loads the HTTP
-// request and calls the "spendRules" service "deleteSpendRule" endpoint.
-func NewDeleteSpendRuleHandler(
+// NewArchiveSpendRuleHandler creates a HTTP handler which loads the HTTP
+// request and calls the "spendRules" service "archiveSpendRule" endpoint.
+func NewArchiveSpendRuleHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
 	decoder func(*http.Request) goahttp.Decoder,
@@ -346,13 +346,13 @@ func NewDeleteSpendRuleHandler(
 	formatter func(ctx context.Context, err error) goahttp.Statuser,
 ) http.Handler {
 	var (
-		decodeRequest  = DecodeDeleteSpendRuleRequest(mux, decoder)
-		encodeResponse = EncodeDeleteSpendRuleResponse(encoder)
-		encodeError    = EncodeDeleteSpendRuleError(encoder, formatter)
+		decodeRequest  = DecodeArchiveSpendRuleRequest(mux, decoder)
+		encodeResponse = EncodeArchiveSpendRuleResponse(encoder)
+		encodeError    = EncodeArchiveSpendRuleError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "deleteSpendRule")
+		ctx = context.WithValue(ctx, goa.MethodKey, "archiveSpendRule")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "spendRules")
 		payload, err := decodeRequest(r)
 		if err != nil {

@@ -27,9 +27,9 @@ func UpdateSpendRuleSpendRulesPath() string {
 	return "/rpc/spendrules.updateRule"
 }
 
-// DeleteSpendRuleSpendRulesPath returns the URL path to the spendRules service deleteSpendRule HTTP endpoint.
-func DeleteSpendRuleSpendRulesPath() string {
-	return "/rpc/spendrules.deleteRule"
+// ArchiveSpendRuleSpendRulesPath returns the URL path to the spendRules service archiveSpendRule HTTP endpoint.
+func ArchiveSpendRuleSpendRulesPath() string {
+	return "/rpc/spendrules.archiveRule"
 }
 
 // PreviewSpendRuleSpendRulesPath returns the URL path to the spendRules service previewSpendRule HTTP endpoint.

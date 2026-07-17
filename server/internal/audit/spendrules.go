@@ -13,9 +13,9 @@ import (
 )
 
 const (
-	ActionSpendRuleCreate Action = "spend_rule:create"
-	ActionSpendRuleUpdate Action = "spend_rule:update"
-	ActionSpendRuleDelete Action = "spend_rule:delete"
+	ActionSpendRuleCreate  Action = "spend_rule:create"
+	ActionSpendRuleUpdate  Action = "spend_rule:update"
+	ActionSpendRuleArchive Action = "spend_rule:archive"
 )
 
 type LogSpendRuleCreateEvent struct {
@@ -106,7 +106,7 @@ func (l *Logger) LogSpendRuleUpdate(ctx context.Context, dbtx repo.DBTX, event L
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.SpendRuleV1})
 }
 
-type LogSpendRuleDeleteEvent struct {
+type LogSpendRuleArchiveEvent struct {
 	OrganizationID string
 
 	Actor            urn.Principal
@@ -117,8 +117,8 @@ type LogSpendRuleDeleteEvent struct {
 	SpendRuleName string
 }
 
-func (l *Logger) LogSpendRuleDelete(ctx context.Context, dbtx repo.DBTX, event LogSpendRuleDeleteEvent) error {
-	action := ActionSpendRuleDelete
+func (l *Logger) LogSpendRuleArchive(ctx context.Context, dbtx repo.DBTX, event LogSpendRuleArchiveEvent) error {
+	action := ActionSpendRuleArchive
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},

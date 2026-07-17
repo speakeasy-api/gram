@@ -20,20 +20,20 @@ type Client struct {
 	ListSpendRulesEndpoint        goa.Endpoint
 	GetSpendRuleEndpoint          goa.Endpoint
 	UpdateSpendRuleEndpoint       goa.Endpoint
-	DeleteSpendRuleEndpoint       goa.Endpoint
+	ArchiveSpendRuleEndpoint      goa.Endpoint
 	PreviewSpendRuleEndpoint      goa.Endpoint
 	ListSpendRuleEventsEndpoint   goa.Endpoint
 	GetSpendRulesOverviewEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "spendRules" service client given the endpoints.
-func NewClient(createSpendRule, listSpendRules, getSpendRule, updateSpendRule, deleteSpendRule, previewSpendRule, listSpendRuleEvents, getSpendRulesOverview goa.Endpoint) *Client {
+func NewClient(createSpendRule, listSpendRules, getSpendRule, updateSpendRule, archiveSpendRule, previewSpendRule, listSpendRuleEvents, getSpendRulesOverview goa.Endpoint) *Client {
 	return &Client{
 		CreateSpendRuleEndpoint:       createSpendRule,
 		ListSpendRulesEndpoint:        listSpendRules,
 		GetSpendRuleEndpoint:          getSpendRule,
 		UpdateSpendRuleEndpoint:       updateSpendRule,
-		DeleteSpendRuleEndpoint:       deleteSpendRule,
+		ArchiveSpendRuleEndpoint:      archiveSpendRule,
 		PreviewSpendRuleEndpoint:      previewSpendRule,
 		ListSpendRuleEventsEndpoint:   listSpendRuleEvents,
 		GetSpendRulesOverviewEndpoint: getSpendRulesOverview,
@@ -131,9 +131,9 @@ func (c *Client) UpdateSpendRule(ctx context.Context, p *UpdateSpendRulePayload)
 	return ires.(*types.SpendRule), nil
 }
 
-// DeleteSpendRule calls the "deleteSpendRule" endpoint of the "spendRules"
+// ArchiveSpendRule calls the "archiveSpendRule" endpoint of the "spendRules"
 // service.
-// DeleteSpendRule may return the following errors:
+// ArchiveSpendRule may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -145,8 +145,8 @@ func (c *Client) UpdateSpendRule(ctx context.Context, p *UpdateSpendRulePayload)
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) DeleteSpendRule(ctx context.Context, p *DeleteSpendRulePayload) (err error) {
-	_, err = c.DeleteSpendRuleEndpoint(ctx, p)
+func (c *Client) ArchiveSpendRule(ctx context.Context, p *ArchiveSpendRulePayload) (err error) {
+	_, err = c.ArchiveSpendRuleEndpoint(ctx, p)
 	return
 }
 

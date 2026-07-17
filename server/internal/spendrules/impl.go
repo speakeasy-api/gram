@@ -167,6 +167,7 @@ func (s *Service) CreateSpendRule(ctx context.Context, payload *gen.CreateSpendR
 		WarnAtPct:      int32(payload.WarnAtPct), //nolint:gosec // design constrains warn_at_pct to 1..100
 		Action:         payload.Action,
 		Enabled:        payload.Enabled,
+		Version:        1,
 	})
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
@@ -175,20 +176,6 @@ func (s *Service) CreateSpendRule(ctx context.Context, payload *gen.CreateSpendR
 	}
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create spend rule").LogError(ctx, s.logger)
-	}
-
-	if err := queries.InsertSpendRuleVersion(ctx, repo.InsertSpendRuleVersionParams{
-		OrganizationID: row.OrganizationID,
-		SpendRuleID:    row.ID,
-		Version:        row.Version,
-		TargetExpr:     row.TargetExpr,
-		RuleExpr:       row.RuleExpr,
-		LimitUsd:       row.LimitUsd,
-		WindowKind:     row.WindowKind,
-		WarnAtPct:      row.WarnAtPct,
-		Action:         row.Action,
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "record spend rule version").LogError(ctx, s.logger)
 	}
 
 	if err := s.audit.LogSpendRuleCreate(ctx, dbtx, audit.LogSpendRuleCreateEvent{
@@ -339,51 +326,69 @@ func (s *Service) UpdateSpendRule(ctx context.Context, payload *gen.UpdateSpendR
 		enabled = *payload.Enabled
 	}
 
-	// Material changes alter what the rule measures or does, so the version
-	// bumps and future events pin the new configuration.
-	material := targetExpr != existing.TargetExpr ||
+	// Rule rows are immutable version snapshots. Any change beyond the enabled
+	// toggle archives the current row and inserts a successor at version + 1,
+	// so events keep resolving to the exact config that fired them.
+	configChanged := name != existing.Name ||
+		description != existing.Description ||
+		targetExpr != existing.TargetExpr ||
 		ruleExpr != existing.RuleExpr ||
 		limitUSD != existing.LimitUsd ||
 		windowKind != existing.WindowKind ||
 		warnAtPct != existing.WarnAtPct ||
 		action != existing.Action
 
-	version := existing.Version
-	if material {
-		version++
-	}
-
-	row, err := queries.UpdateSpendRule(ctx, repo.UpdateSpendRuleParams{
-		ID:             id,
-		OrganizationID: authCtx.ActiveOrganizationID,
-		Name:           name,
-		Description:    description,
-		TargetExpr:     targetExpr,
-		RuleExpr:       ruleExpr,
-		LimitUsd:       limitUSD,
-		WindowKind:     windowKind,
-		WarnAtPct:      warnAtPct,
-		Action:         action,
-		Enabled:        enabled,
-		Version:        version,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "update spend rule").LogError(ctx, s.logger)
-	}
-
-	if material {
-		if err := queries.InsertSpendRuleVersion(ctx, repo.InsertSpendRuleVersionParams{
-			OrganizationID: row.OrganizationID,
-			SpendRuleID:    row.ID,
-			Version:        row.Version,
-			TargetExpr:     row.TargetExpr,
-			RuleExpr:       row.RuleExpr,
-			LimitUsd:       row.LimitUsd,
-			WindowKind:     row.WindowKind,
-			WarnAtPct:      row.WarnAtPct,
-			Action:         row.Action,
+	var row repo.SpendRule
+	switch {
+	case !configChanged && enabled == existing.Enabled:
+		// Nothing to change; return the live row as-is.
+		return buildSpendRuleView(existing), nil
+	case !configChanged:
+		// enabled is an operational kill switch, not config: toggle the live
+		// row in place without minting a new version.
+		row, err = queries.ToggleSpendRuleEnabled(ctx, repo.ToggleSpendRuleEnabledParams{
+			ID:             id,
+			OrganizationID: authCtx.ActiveOrganizationID,
+			Enabled:        enabled,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "toggle spend rule").LogError(ctx, s.logger)
+		}
+	default:
+		// Archive first: the partial unique index on live (organization_id,
+		// slug) rejects the successor while the current row is still live.
+		if _, err := queries.ArchiveSpendRule(ctx, repo.ArchiveSpendRuleParams{
+			ID:             id,
+			OrganizationID: authCtx.ActiveOrganizationID,
 		}); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "record spend rule version").LogError(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "archive superseded spend rule version").LogError(ctx, s.logger)
+		}
+
+		row, err = queries.CreateSpendRule(ctx, repo.CreateSpendRuleParams{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			Name:           name,
+			Slug:           existing.Slug,
+			Description:    description,
+			TargetExpr:     targetExpr,
+			RuleExpr:       ruleExpr,
+			LimitUsd:       limitUSD,
+			WindowKind:     windowKind,
+			WarnAtPct:      warnAtPct,
+			Action:         action,
+			Enabled:        enabled,
+			Version:        existing.Version + 1,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "create spend rule version").LogError(ctx, s.logger)
+		}
+
+		// The successor now exists, so the archived row can point at it.
+		if err := queries.SetSpendRuleSupersededBy(ctx, repo.SetSpendRuleSupersededByParams{
+			ID:             id,
+			OrganizationID: authCtx.ActiveOrganizationID,
+			SupersededBy:   uuid.NullUUID{UUID: row.ID, Valid: true},
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "link superseded spend rule version").LogError(ctx, s.logger)
 		}
 	}
 
@@ -409,7 +414,7 @@ func (s *Service) UpdateSpendRule(ctx context.Context, payload *gen.UpdateSpendR
 	return buildSpendRuleView(row), nil
 }
 
-func (s *Service) DeleteSpendRule(ctx context.Context, payload *gen.DeleteSpendRulePayload) error {
+func (s *Service) ArchiveSpendRule(ctx context.Context, payload *gen.ArchiveSpendRulePayload) error {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return oops.C(oops.CodeUnauthorized)
@@ -430,7 +435,9 @@ func (s *Service) DeleteSpendRule(ctx context.Context, payload *gen.DeleteSpendR
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	row, err := repo.New(dbtx).DeleteSpendRule(ctx, repo.DeleteSpendRuleParams{
+	// superseded_by stays NULL: an admin archive ends the lineage outright,
+	// unlike the archive an edit performs on the way to a successor row.
+	row, err := repo.New(dbtx).ArchiveSpendRule(ctx, repo.ArchiveSpendRuleParams{
 		ID:             id,
 		OrganizationID: authCtx.ActiveOrganizationID,
 	})
@@ -438,10 +445,10 @@ func (s *Service) DeleteSpendRule(ctx context.Context, payload *gen.DeleteSpendR
 		return oops.E(oops.CodeNotFound, err, "spend rule not found")
 	}
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "delete spend rule").LogError(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "archive spend rule").LogError(ctx, s.logger)
 	}
 
-	if err := s.audit.LogSpendRuleDelete(ctx, dbtx, audit.LogSpendRuleDeleteEvent{
+	if err := s.audit.LogSpendRuleArchive(ctx, dbtx, audit.LogSpendRuleArchiveEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
 		ActorDisplayName: authCtx.Email,
@@ -449,11 +456,11 @@ func (s *Service) DeleteSpendRule(ctx context.Context, payload *gen.DeleteSpendR
 		SpendRuleURN:     urn.NewSpendRule(row.Slug, row.Version),
 		SpendRuleName:    row.Name,
 	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "log spend rule delete").LogError(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "log spend rule archive").LogError(ctx, s.logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "commit spend rule delete").LogError(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "commit spend rule archive").LogError(ctx, s.logger)
 	}
 
 	s.signalEvaluation(ctx, authCtx.ActiveOrganizationID)

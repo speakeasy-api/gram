@@ -10,7 +10,8 @@ package types
 // SpendRule is the result type of the spendRules service createSpendRule
 // method.
 type SpendRule struct {
-	// The budget rule ID.
+	// The budget rule ID. Identifies one immutable version row: edits produce a
+	// successor row with a fresh ID.
 	ID string
 	// Versioned rule URN, e.g. spend_rule:eng-monthly-cap:v3. Pins the exact rule
 	// configuration that produced an event.
@@ -43,7 +44,8 @@ type SpendRule struct {
 	Action string
 	// Whether the rule is active.
 	Enabled bool
-	// Rule version, incremented on material config changes.
+	// Position of this row in its slug lineage; every edit archives the current
+	// row and creates version + 1.
 	Version int64
 	// When the rule was created.
 	CreatedAt string

@@ -1,4 +1,8 @@
 -- name: CreateSpendRule :one
+-- Inserts a rule version row. version = 1 starts a new lineage; an edit
+-- inserts the successor row (same slug, version + 1) after archiving the
+-- current row — the partial unique index on live (organization_id, slug)
+-- enforces that ordering.
 INSERT INTO spend_rules (
     organization_id
   , name
@@ -11,6 +15,7 @@ INSERT INTO spend_rules (
   , warn_at_pct
   , action
   , enabled
+  , version
 )
 VALUES (
     @organization_id
@@ -24,13 +29,14 @@ VALUES (
   , @warn_at_pct
   , @action
   , @enabled
+  , @version
 )
 RETURNING *;
 
 -- name: SpendRuleSlugExists :one
--- Slugs are reserved permanently, even for archived (soft-deleted) rules, so a
--- new rule never reuses a slug and rule URNs stay globally unique. Do NOT scope
--- this to `deleted IS FALSE`.
+-- Slugs are reserved permanently, archived lineages included, so a new rule
+-- never reuses a slug and rule URNs stay globally unique. Do NOT scope this
+-- to `archived IS FALSE`.
 SELECT EXISTS (
   SELECT 1
   FROM spend_rules
@@ -39,25 +45,26 @@ SELECT EXISTS (
 ) AS taken;
 
 -- name: GetSpendRule :one
+-- The live (non-archived) version row by id.
 SELECT *
 FROM spend_rules
 WHERE id = @id
   AND organization_id = @organization_id
-  AND deleted IS FALSE;
+  AND archived IS FALSE;
 
 -- name: GetSpendRuleForUpdate :one
 SELECT *
 FROM spend_rules
 WHERE id = @id
   AND organization_id = @organization_id
-  AND deleted IS FALSE
+  AND archived IS FALSE
 FOR UPDATE;
 
 -- name: ListSpendRules :many
 SELECT *
 FROM spend_rules
 WHERE organization_id = @organization_id
-  AND deleted IS FALSE
+  AND archived IS FALSE
 ORDER BY created_at DESC;
 
 -- name: ListEnabledSpendRules :many
@@ -65,72 +72,59 @@ SELECT *
 FROM spend_rules
 WHERE organization_id = @organization_id
   AND enabled IS TRUE
-  AND deleted IS FALSE
+  AND archived IS FALSE
 ORDER BY created_at DESC;
 
 -- name: ListOrganizationsWithEnabledSpendRules :many
 SELECT DISTINCT organization_id
 FROM spend_rules
 WHERE enabled IS TRUE
-  AND deleted IS FALSE;
+  AND archived IS FALSE;
 
--- name: UpdateSpendRule :one
+-- name: ToggleSpendRuleEnabled :one
+-- enabled is the one mutable field on a live version row: it is an
+-- operational kill switch, not part of the rule's config snapshot, so
+-- toggling it does not create a new version.
 UPDATE spend_rules
-SET name = @name
-  , description = @description
-  , target_expr = @target_expr
-  , rule_expr = @rule_expr
-  , limit_usd = @limit_usd
-  , window_kind = @window_kind
-  , warn_at_pct = @warn_at_pct
-  , action = @action
-  , enabled = @enabled
-  , version = @version
+SET enabled = @enabled
   , updated_at = clock_timestamp()
 WHERE id = @id
   AND organization_id = @organization_id
-  AND deleted IS FALSE
+  AND archived IS FALSE
 RETURNING *;
 
--- name: DeleteSpendRule :one
+-- name: ArchiveSpendRule :one
+-- Ends a version row's live tenure. Called on admin archive (no successor)
+-- and as the first step of an edit, before the successor row is inserted.
 UPDATE spend_rules
-SET deleted_at = clock_timestamp()
+SET archived_at = clock_timestamp()
   , updated_at = clock_timestamp()
 WHERE id = @id
   AND organization_id = @organization_id
-  AND deleted IS FALSE
+  AND archived IS FALSE
 RETURNING *;
 
--- name: InsertSpendRuleVersion :exec
-INSERT INTO spend_rule_versions (
-    organization_id
-  , spend_rule_id
-  , version
-  , target_expr
-  , rule_expr
-  , limit_usd
-  , window_kind
-  , warn_at_pct
-  , action
-)
-VALUES (
-    @organization_id
-  , @spend_rule_id
-  , @version
-  , @target_expr
-  , @rule_expr
-  , @limit_usd
-  , @window_kind
-  , @warn_at_pct
-  , @action
-)
-ON CONFLICT (spend_rule_id, version) DO NOTHING;
+-- name: GetArchivedSpendRule :one
+-- An archived version row by id, used to inspect lineage links (tests and
+-- historical lookups). Live rows go through GetSpendRule.
+SELECT *
+FROM spend_rules
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND archived IS TRUE;
+
+-- name: SetSpendRuleSupersededBy :exec
+-- Links an archived version row to the successor an edit created. Runs after
+-- the successor insert because the foreign key requires the target to exist.
+UPDATE spend_rules
+SET superseded_by = @superseded_by
+WHERE id = @id
+  AND organization_id = @organization_id;
 
 -- name: InsertSpendRuleEvent :execrows
 INSERT INTO spend_rule_events (
     organization_id
   , spend_rule_id
-  , rule_version
   , rule_urn
   , event_type
   , user_id
@@ -144,7 +138,6 @@ INSERT INTO spend_rule_events (
 VALUES (
     @organization_id
   , @spend_rule_id
-  , @rule_version
   , @rule_urn
   , @event_type
   , sqlc.narg(user_id)::text
@@ -155,14 +148,26 @@ VALUES (
   , @window_start
   , @window_end
 )
-ON CONFLICT (spend_rule_id, rule_urn, event_type, email, window_start) DO NOTHING;
+ON CONFLICT (spend_rule_id, event_type, email, window_start) DO NOTHING;
 
 -- name: ListSpendRuleEvents :many
+-- Events join the exact (immutable) rule version row that fired them, so
+-- rule_name and rule config are as of firing time. The optional rule filter
+-- expands to the whole slug lineage: pass any version row's id and events
+-- from every version of that rule are returned.
 SELECT ev.*, r.name AS rule_name
 FROM spend_rule_events ev
 INNER JOIN spend_rules r ON r.id = ev.spend_rule_id
 WHERE ev.organization_id = @organization_id
-  AND (sqlc.narg(spend_rule_id)::uuid IS NULL OR ev.spend_rule_id = sqlc.narg(spend_rule_id)::uuid)
+  AND (
+    sqlc.narg(spend_rule_id)::uuid IS NULL
+    OR r.slug = (
+      SELECT lineage.slug
+      FROM spend_rules lineage
+      WHERE lineage.id = sqlc.narg(spend_rule_id)::uuid
+        AND lineage.organization_id = @organization_id
+    )
+  )
   AND (sqlc.narg(event_type)::text IS NULL OR ev.event_type = sqlc.narg(event_type)::text)
   AND (sqlc.narg(cursor_id)::uuid IS NULL OR ev.id < sqlc.narg(cursor_id)::uuid)
 ORDER BY ev.id DESC
@@ -204,7 +209,6 @@ LEFT JOIN LATERAL (
     ON dg.id = m.directory_group_id
     AND dg.organization_id = our.organization_id
     AND dg.deleted IS FALSE
-    AND dg.workos_deleted IS FALSE
     AND dg.workos_deleted IS FALSE
   WHERE m.directory_user_id = du.id
     AND m.deleted IS FALSE

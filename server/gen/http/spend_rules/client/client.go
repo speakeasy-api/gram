@@ -33,9 +33,9 @@ type Client struct {
 	// updateSpendRule endpoint.
 	UpdateSpendRuleDoer goahttp.Doer
 
-	// DeleteSpendRule Doer is the HTTP client used to make requests to the
-	// deleteSpendRule endpoint.
-	DeleteSpendRuleDoer goahttp.Doer
+	// ArchiveSpendRule Doer is the HTTP client used to make requests to the
+	// archiveSpendRule endpoint.
+	ArchiveSpendRuleDoer goahttp.Doer
 
 	// PreviewSpendRule Doer is the HTTP client used to make requests to the
 	// previewSpendRule endpoint.
@@ -73,7 +73,7 @@ func NewClient(
 		ListSpendRulesDoer:        doer,
 		GetSpendRuleDoer:          doer,
 		UpdateSpendRuleDoer:       doer,
-		DeleteSpendRuleDoer:       doer,
+		ArchiveSpendRuleDoer:      doer,
 		PreviewSpendRuleDoer:      doer,
 		ListSpendRuleEventsDoer:   doer,
 		GetSpendRulesOverviewDoer: doer,
@@ -181,15 +181,15 @@ func (c *Client) UpdateSpendRule() goa.Endpoint {
 	}
 }
 
-// DeleteSpendRule returns an endpoint that makes HTTP requests to the
-// spendRules service deleteSpendRule server.
-func (c *Client) DeleteSpendRule() goa.Endpoint {
+// ArchiveSpendRule returns an endpoint that makes HTTP requests to the
+// spendRules service archiveSpendRule server.
+func (c *Client) ArchiveSpendRule() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeDeleteSpendRuleRequest(c.encoder)
-		decodeResponse = DecodeDeleteSpendRuleResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeArchiveSpendRuleRequest(c.encoder)
+		decodeResponse = DecodeArchiveSpendRuleResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildDeleteSpendRuleRequest(ctx, v)
+		req, err := c.BuildArchiveSpendRuleRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -197,9 +197,9 @@ func (c *Client) DeleteSpendRule() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.DeleteSpendRuleDoer.Do(req)
+		resp, err := c.ArchiveSpendRuleDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("spendRules", "deleteSpendRule", err)
+			return nil, goahttp.ErrRequestError("spendRules", "archiveSpendRule", err)
 		}
 		return decodeResponse(resp)
 	}

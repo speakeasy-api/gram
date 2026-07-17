@@ -32447,6 +32447,109 @@ paths:
       x-speakeasy-name-override: undistribute
       x-speakeasy-react-hook:
         name: UndistributeSkill
+  /rpc/spendrules.archiveRule:
+    post:
+      description: 'Archive a budget rule. There is no delete: archiving ends the rule''s lineage while retaining its slug, version history, and events. Any open circuits for the rule close on the next evaluation cycle.'
+      operationId: archiveSpendRule
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RiskIDRequestBody'
+        required: true
+      responses:
+        "200":
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: archiveSpendRule spendRules
+      tags:
+        - spendRules
+      x-speakeasy-group: spendRules.rules
+      x-speakeasy-name-override: archive
+      x-speakeasy-react-hook:
+        name: SpendRulesArchiveRule
+        type: mutation
   /rpc/spendrules.createRule:
     post:
       description: Create a new budget rule for the current organization.
@@ -32553,112 +32656,6 @@ paths:
       x-speakeasy-name-override: create
       x-speakeasy-react-hook:
         name: SpendRulesCreateRule
-        type: mutation
-  /rpc/spendrules.deleteRule:
-    delete:
-      description: Archive a budget rule. Any open circuits for the rule close on the next evaluation cycle; the rule's slug, version history, and events are retained.
-      operationId: deleteSpendRule
-      parameters:
-        - allowEmptyValue: true
-          description: The rule ID.
-          in: query
-          name: id
-          required: true
-          schema:
-            description: The rule ID.
-            format: uuid
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      responses:
-        "200":
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - apikey_header_Gram-Key: []
-          project_slug_header_Gram-Project: []
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - {}
-      summary: deleteSpendRule spendRules
-      tags:
-        - spendRules
-      x-speakeasy-group: spendRules.rules
-      x-speakeasy-name-override: delete
-      x-speakeasy-react-hook:
-        name: SpendRulesDeleteRule
         type: mutation
   /rpc/spendrules.getOverview:
     get:
@@ -32875,11 +32872,11 @@ paths:
       operationId: listSpendRuleEvents
       parameters:
         - allowEmptyValue: true
-          description: Optional rule ID to filter by.
+          description: 'Optional rule ID to filter by. Matches the rule''s whole lineage: events from every version of the rule are returned.'
           in: query
           name: rule_id
           schema:
-            description: Optional rule ID to filter by.
+            description: 'Optional rule ID to filter by. Matches the rule''s whole lineage: events from every version of the rule are returned.'
             format: uuid
             type: string
         - allowEmptyValue: true
@@ -33213,7 +33210,7 @@ paths:
         type: mutation
   /rpc/spendrules.updateRule:
     put:
-      description: Update a budget rule. Material changes (target, limit_usd, window_kind, warn_at_pct, action) bump the rule version.
+      description: 'Update a budget rule. Rule rows are immutable version snapshots: any change besides the enabled toggle archives the current version row and creates a successor at version + 1 (returned as the result, under a new ID). Enabled-only changes toggle the live row in place.'
       operationId: updateSpendRule
       parameters:
         - allowEmptyValue: true
@@ -56386,7 +56383,7 @@ components:
           description: Whether the rule is active.
         id:
           type: string
-          description: The budget rule ID.
+          description: 'The budget rule ID. Identifies one immutable version row: edits produce a successor row with a fresh ID.'
           format: uuid
         limit_usd:
           type: number
@@ -56418,7 +56415,7 @@ components:
           description: Versioned rule URN, e.g. spend_rule:eng-monthly-cap:v3. Pins the exact rule configuration that produced an event.
         version:
           type: integer
-          description: Rule version, incremented on material config changes.
+          description: Position of this row in its slug lineage; every edit archives the current row and creates version + 1.
           format: int64
         warn_at_pct:
           type: integer
@@ -56511,11 +56508,11 @@ components:
           format: double
         rule_id:
           type: string
-          description: The budget rule ID that produced the event.
+          description: ID of the exact rule version row that produced the event.
           format: uuid
         rule_name:
           type: string
-          description: Current name of the rule, for display.
+          description: Name of the rule as of the version that fired.
         rule_urn:
           type: string
           description: Versioned rule URN pinning the config that produced the event.

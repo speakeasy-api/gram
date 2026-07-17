@@ -939,32 +939,45 @@ func EncodeUpdateSpendRuleError(encoder func(context.Context, http.ResponseWrite
 	}
 }
 
-// EncodeDeleteSpendRuleResponse returns an encoder for responses returned by
-// the spendRules deleteSpendRule endpoint.
-func EncodeDeleteSpendRuleResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeArchiveSpendRuleResponse returns an encoder for responses returned by
+// the spendRules archiveSpendRule endpoint.
+func EncodeArchiveSpendRuleResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
 		w.WriteHeader(http.StatusOK)
 		return nil
 	}
 }
 
-// DecodeDeleteSpendRuleRequest returns a decoder for requests sent to the
-// spendRules deleteSpendRule endpoint.
-func DecodeDeleteSpendRuleRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*spendrules.DeleteSpendRulePayload, error) {
-	return func(r *http.Request) (*spendrules.DeleteSpendRulePayload, error) {
-		var payload *spendrules.DeleteSpendRulePayload
+// DecodeArchiveSpendRuleRequest returns a decoder for requests sent to the
+// spendRules archiveSpendRule endpoint.
+func DecodeArchiveSpendRuleRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*spendrules.ArchiveSpendRulePayload, error) {
+	return func(r *http.Request) (*spendrules.ArchiveSpendRulePayload, error) {
+		var payload *spendrules.ArchiveSpendRulePayload
 		var (
-			id               string
+			body ArchiveSpendRuleRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateArchiveSpendRuleRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
 			apikeyToken      *string
 			sessionToken     *string
 			projectSlugInput *string
-			err              error
 		)
-		id = r.URL.Query().Get("id")
-		if id == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("id", "query string"))
-		}
-		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
 			apikeyToken = &apikeyTokenRaw
@@ -977,10 +990,7 @@ func DecodeDeleteSpendRuleRequest(mux goahttp.Muxer, decoder func(*http.Request)
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
 		}
-		if err != nil {
-			return payload, err
-		}
-		payload = NewDeleteSpendRulePayload(id, apikeyToken, sessionToken, projectSlugInput)
+		payload = NewArchiveSpendRulePayload(&body, apikeyToken, sessionToken, projectSlugInput)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -1007,9 +1017,9 @@ func DecodeDeleteSpendRuleRequest(mux goahttp.Muxer, decoder func(*http.Request)
 	}
 }
 
-// EncodeDeleteSpendRuleError returns an encoder for errors returned by the
-// deleteSpendRule spendRules endpoint.
-func EncodeDeleteSpendRuleError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+// EncodeArchiveSpendRuleError returns an encoder for errors returned by the
+// archiveSpendRule spendRules endpoint.
+func EncodeArchiveSpendRuleError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
 	encodeError := goahttp.ErrorEncoder(encoder, formatter)
 	return func(ctx context.Context, w http.ResponseWriter, v error) error {
 		var en goa.GoaErrorNamer
@@ -1026,7 +1036,7 @@ func EncodeDeleteSpendRuleError(encoder func(context.Context, http.ResponseWrite
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteSpendRuleUnauthorizedResponseBody(res)
+				body = NewArchiveSpendRuleUnauthorizedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
@@ -1040,7 +1050,7 @@ func EncodeDeleteSpendRuleError(encoder func(context.Context, http.ResponseWrite
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteSpendRuleForbiddenResponseBody(res)
+				body = NewArchiveSpendRuleForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -1054,7 +1064,7 @@ func EncodeDeleteSpendRuleError(encoder func(context.Context, http.ResponseWrite
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteSpendRuleBadRequestResponseBody(res)
+				body = NewArchiveSpendRuleBadRequestResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadRequest)
@@ -1068,7 +1078,7 @@ func EncodeDeleteSpendRuleError(encoder func(context.Context, http.ResponseWrite
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteSpendRuleNotFoundResponseBody(res)
+				body = NewArchiveSpendRuleNotFoundResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
@@ -1082,7 +1092,7 @@ func EncodeDeleteSpendRuleError(encoder func(context.Context, http.ResponseWrite
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteSpendRuleConflictResponseBody(res)
+				body = NewArchiveSpendRuleConflictResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
@@ -1096,7 +1106,7 @@ func EncodeDeleteSpendRuleError(encoder func(context.Context, http.ResponseWrite
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteSpendRuleUnsupportedMediaResponseBody(res)
+				body = NewArchiveSpendRuleUnsupportedMediaResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnsupportedMediaType)
@@ -1110,7 +1120,7 @@ func EncodeDeleteSpendRuleError(encoder func(context.Context, http.ResponseWrite
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteSpendRuleInvalidResponseBody(res)
+				body = NewArchiveSpendRuleInvalidResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -1124,7 +1134,7 @@ func EncodeDeleteSpendRuleError(encoder func(context.Context, http.ResponseWrite
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteSpendRuleInvariantViolationResponseBody(res)
+				body = NewArchiveSpendRuleInvariantViolationResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -1138,7 +1148,7 @@ func EncodeDeleteSpendRuleError(encoder func(context.Context, http.ResponseWrite
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteSpendRuleUnexpectedResponseBody(res)
+				body = NewArchiveSpendRuleUnexpectedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -1152,7 +1162,7 @@ func EncodeDeleteSpendRuleError(encoder func(context.Context, http.ResponseWrite
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteSpendRuleGatewayErrorResponseBody(res)
+				body = NewArchiveSpendRuleGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)

@@ -983,13 +983,13 @@ func DecodeUpdateSpendRuleResponse(decoder func(*http.Response) goahttp.Decoder,
 	}
 }
 
-// BuildDeleteSpendRuleRequest instantiates a HTTP request object with method
-// and path set to call the "spendRules" service "deleteSpendRule" endpoint
-func (c *Client) BuildDeleteSpendRuleRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DeleteSpendRuleSpendRulesPath()}
-	req, err := http.NewRequest("DELETE", u.String(), nil)
+// BuildArchiveSpendRuleRequest instantiates a HTTP request object with method
+// and path set to call the "spendRules" service "archiveSpendRule" endpoint
+func (c *Client) BuildArchiveSpendRuleRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ArchiveSpendRuleSpendRulesPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
 	if err != nil {
-		return nil, goahttp.ErrInvalidURL("spendRules", "deleteSpendRule", u.String(), err)
+		return nil, goahttp.ErrInvalidURL("spendRules", "archiveSpendRule", u.String(), err)
 	}
 	if ctx != nil {
 		req = req.WithContext(ctx)
@@ -998,13 +998,13 @@ func (c *Client) BuildDeleteSpendRuleRequest(ctx context.Context, v any) (*http.
 	return req, nil
 }
 
-// EncodeDeleteSpendRuleRequest returns an encoder for requests sent to the
-// spendRules deleteSpendRule server.
-func EncodeDeleteSpendRuleRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+// EncodeArchiveSpendRuleRequest returns an encoder for requests sent to the
+// spendRules archiveSpendRule server.
+func EncodeArchiveSpendRuleRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*spendrules.DeleteSpendRulePayload)
+		p, ok := v.(*spendrules.ArchiveSpendRulePayload)
 		if !ok {
-			return goahttp.ErrInvalidType("spendRules", "deleteSpendRule", "*spendrules.DeleteSpendRulePayload", v)
+			return goahttp.ErrInvalidType("spendRules", "archiveSpendRule", "*spendrules.ArchiveSpendRulePayload", v)
 		}
 		if p.ApikeyToken != nil {
 			head := *p.ApikeyToken
@@ -1018,17 +1018,18 @@ func EncodeDeleteSpendRuleRequest(encoder func(*http.Request) goahttp.Encoder) f
 			head := *p.ProjectSlugInput
 			req.Header.Set("Gram-Project", head)
 		}
-		values := req.URL.Query()
-		values.Add("id", p.ID)
-		req.URL.RawQuery = values.Encode()
+		body := NewArchiveSpendRuleRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("spendRules", "archiveSpendRule", err)
+		}
 		return nil
 	}
 }
 
-// DecodeDeleteSpendRuleResponse returns a decoder for responses returned by
-// the spendRules deleteSpendRule endpoint. restoreBody controls whether the
+// DecodeArchiveSpendRuleResponse returns a decoder for responses returned by
+// the spendRules archiveSpendRule endpoint. restoreBody controls whether the
 // response body should be restored after having been read.
-// DecodeDeleteSpendRuleResponse may return the following errors:
+// DecodeArchiveSpendRuleResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -1040,7 +1041,7 @@ func EncodeDeleteSpendRuleRequest(encoder func(*http.Request) goahttp.Encoder) f
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
-func DecodeDeleteSpendRuleResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+func DecodeArchiveSpendRuleResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
 			b, err := io.ReadAll(resp.Body)
@@ -1059,154 +1060,154 @@ func DecodeDeleteSpendRuleResponse(decoder func(*http.Response) goahttp.Decoder,
 			return nil, nil
 		case http.StatusUnauthorized:
 			var (
-				body DeleteSpendRuleUnauthorizedResponseBody
+				body ArchiveSpendRuleUnauthorizedResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("spendRules", "deleteSpendRule", err)
+				return nil, goahttp.ErrDecodingError("spendRules", "archiveSpendRule", err)
 			}
-			err = ValidateDeleteSpendRuleUnauthorizedResponseBody(&body)
+			err = ValidateArchiveSpendRuleUnauthorizedResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("spendRules", "deleteSpendRule", err)
+				return nil, goahttp.ErrValidationError("spendRules", "archiveSpendRule", err)
 			}
-			return nil, NewDeleteSpendRuleUnauthorized(&body)
+			return nil, NewArchiveSpendRuleUnauthorized(&body)
 		case http.StatusForbidden:
 			var (
-				body DeleteSpendRuleForbiddenResponseBody
+				body ArchiveSpendRuleForbiddenResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("spendRules", "deleteSpendRule", err)
+				return nil, goahttp.ErrDecodingError("spendRules", "archiveSpendRule", err)
 			}
-			err = ValidateDeleteSpendRuleForbiddenResponseBody(&body)
+			err = ValidateArchiveSpendRuleForbiddenResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("spendRules", "deleteSpendRule", err)
+				return nil, goahttp.ErrValidationError("spendRules", "archiveSpendRule", err)
 			}
-			return nil, NewDeleteSpendRuleForbidden(&body)
+			return nil, NewArchiveSpendRuleForbidden(&body)
 		case http.StatusBadRequest:
 			var (
-				body DeleteSpendRuleBadRequestResponseBody
+				body ArchiveSpendRuleBadRequestResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("spendRules", "deleteSpendRule", err)
+				return nil, goahttp.ErrDecodingError("spendRules", "archiveSpendRule", err)
 			}
-			err = ValidateDeleteSpendRuleBadRequestResponseBody(&body)
+			err = ValidateArchiveSpendRuleBadRequestResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("spendRules", "deleteSpendRule", err)
+				return nil, goahttp.ErrValidationError("spendRules", "archiveSpendRule", err)
 			}
-			return nil, NewDeleteSpendRuleBadRequest(&body)
+			return nil, NewArchiveSpendRuleBadRequest(&body)
 		case http.StatusNotFound:
 			var (
-				body DeleteSpendRuleNotFoundResponseBody
+				body ArchiveSpendRuleNotFoundResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("spendRules", "deleteSpendRule", err)
+				return nil, goahttp.ErrDecodingError("spendRules", "archiveSpendRule", err)
 			}
-			err = ValidateDeleteSpendRuleNotFoundResponseBody(&body)
+			err = ValidateArchiveSpendRuleNotFoundResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("spendRules", "deleteSpendRule", err)
+				return nil, goahttp.ErrValidationError("spendRules", "archiveSpendRule", err)
 			}
-			return nil, NewDeleteSpendRuleNotFound(&body)
+			return nil, NewArchiveSpendRuleNotFound(&body)
 		case http.StatusConflict:
 			var (
-				body DeleteSpendRuleConflictResponseBody
+				body ArchiveSpendRuleConflictResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("spendRules", "deleteSpendRule", err)
+				return nil, goahttp.ErrDecodingError("spendRules", "archiveSpendRule", err)
 			}
-			err = ValidateDeleteSpendRuleConflictResponseBody(&body)
+			err = ValidateArchiveSpendRuleConflictResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("spendRules", "deleteSpendRule", err)
+				return nil, goahttp.ErrValidationError("spendRules", "archiveSpendRule", err)
 			}
-			return nil, NewDeleteSpendRuleConflict(&body)
+			return nil, NewArchiveSpendRuleConflict(&body)
 		case http.StatusUnsupportedMediaType:
 			var (
-				body DeleteSpendRuleUnsupportedMediaResponseBody
+				body ArchiveSpendRuleUnsupportedMediaResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("spendRules", "deleteSpendRule", err)
+				return nil, goahttp.ErrDecodingError("spendRules", "archiveSpendRule", err)
 			}
-			err = ValidateDeleteSpendRuleUnsupportedMediaResponseBody(&body)
+			err = ValidateArchiveSpendRuleUnsupportedMediaResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("spendRules", "deleteSpendRule", err)
+				return nil, goahttp.ErrValidationError("spendRules", "archiveSpendRule", err)
 			}
-			return nil, NewDeleteSpendRuleUnsupportedMedia(&body)
+			return nil, NewArchiveSpendRuleUnsupportedMedia(&body)
 		case http.StatusUnprocessableEntity:
 			var (
-				body DeleteSpendRuleInvalidResponseBody
+				body ArchiveSpendRuleInvalidResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("spendRules", "deleteSpendRule", err)
+				return nil, goahttp.ErrDecodingError("spendRules", "archiveSpendRule", err)
 			}
-			err = ValidateDeleteSpendRuleInvalidResponseBody(&body)
+			err = ValidateArchiveSpendRuleInvalidResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("spendRules", "deleteSpendRule", err)
+				return nil, goahttp.ErrValidationError("spendRules", "archiveSpendRule", err)
 			}
-			return nil, NewDeleteSpendRuleInvalid(&body)
+			return nil, NewArchiveSpendRuleInvalid(&body)
 		case http.StatusInternalServerError:
 			en := resp.Header.Get("goa-error")
 			switch en {
 			case "invariant_violation":
 				var (
-					body DeleteSpendRuleInvariantViolationResponseBody
+					body ArchiveSpendRuleInvariantViolationResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("spendRules", "deleteSpendRule", err)
+					return nil, goahttp.ErrDecodingError("spendRules", "archiveSpendRule", err)
 				}
-				err = ValidateDeleteSpendRuleInvariantViolationResponseBody(&body)
+				err = ValidateArchiveSpendRuleInvariantViolationResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("spendRules", "deleteSpendRule", err)
+					return nil, goahttp.ErrValidationError("spendRules", "archiveSpendRule", err)
 				}
-				return nil, NewDeleteSpendRuleInvariantViolation(&body)
+				return nil, NewArchiveSpendRuleInvariantViolation(&body)
 			case "unexpected":
 				var (
-					body DeleteSpendRuleUnexpectedResponseBody
+					body ArchiveSpendRuleUnexpectedResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("spendRules", "deleteSpendRule", err)
+					return nil, goahttp.ErrDecodingError("spendRules", "archiveSpendRule", err)
 				}
-				err = ValidateDeleteSpendRuleUnexpectedResponseBody(&body)
+				err = ValidateArchiveSpendRuleUnexpectedResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("spendRules", "deleteSpendRule", err)
+					return nil, goahttp.ErrValidationError("spendRules", "archiveSpendRule", err)
 				}
-				return nil, NewDeleteSpendRuleUnexpected(&body)
+				return nil, NewArchiveSpendRuleUnexpected(&body)
 			default:
 				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("spendRules", "deleteSpendRule", resp.StatusCode, string(body))
+				return nil, goahttp.ErrInvalidResponse("spendRules", "archiveSpendRule", resp.StatusCode, string(body))
 			}
 		case http.StatusBadGateway:
 			var (
-				body DeleteSpendRuleGatewayErrorResponseBody
+				body ArchiveSpendRuleGatewayErrorResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("spendRules", "deleteSpendRule", err)
+				return nil, goahttp.ErrDecodingError("spendRules", "archiveSpendRule", err)
 			}
-			err = ValidateDeleteSpendRuleGatewayErrorResponseBody(&body)
+			err = ValidateArchiveSpendRuleGatewayErrorResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("spendRules", "deleteSpendRule", err)
+				return nil, goahttp.ErrValidationError("spendRules", "archiveSpendRule", err)
 			}
-			return nil, NewDeleteSpendRuleGatewayError(&body)
+			return nil, NewArchiveSpendRuleGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("spendRules", "deleteSpendRule", resp.StatusCode, string(body))
+			return nil, goahttp.ErrInvalidResponse("spendRules", "archiveSpendRule", resp.StatusCode, string(body))
 		}
 	}
 }

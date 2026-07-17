@@ -20,7 +20,7 @@ type Endpoints struct {
 	ListSpendRules        goa.Endpoint
 	GetSpendRule          goa.Endpoint
 	UpdateSpendRule       goa.Endpoint
-	DeleteSpendRule       goa.Endpoint
+	ArchiveSpendRule      goa.Endpoint
 	PreviewSpendRule      goa.Endpoint
 	ListSpendRuleEvents   goa.Endpoint
 	GetSpendRulesOverview goa.Endpoint
@@ -35,7 +35,7 @@ func NewEndpoints(s Service) *Endpoints {
 		ListSpendRules:        NewListSpendRulesEndpoint(s, a.APIKeyAuth),
 		GetSpendRule:          NewGetSpendRuleEndpoint(s, a.APIKeyAuth),
 		UpdateSpendRule:       NewUpdateSpendRuleEndpoint(s, a.APIKeyAuth),
-		DeleteSpendRule:       NewDeleteSpendRuleEndpoint(s, a.APIKeyAuth),
+		ArchiveSpendRule:      NewArchiveSpendRuleEndpoint(s, a.APIKeyAuth),
 		PreviewSpendRule:      NewPreviewSpendRuleEndpoint(s, a.APIKeyAuth),
 		ListSpendRuleEvents:   NewListSpendRuleEventsEndpoint(s, a.APIKeyAuth),
 		GetSpendRulesOverview: NewGetSpendRulesOverviewEndpoint(s, a.APIKeyAuth),
@@ -48,7 +48,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListSpendRules = m(e.ListSpendRules)
 	e.GetSpendRule = m(e.GetSpendRule)
 	e.UpdateSpendRule = m(e.UpdateSpendRule)
-	e.DeleteSpendRule = m(e.DeleteSpendRule)
+	e.ArchiveSpendRule = m(e.ArchiveSpendRule)
 	e.PreviewSpendRule = m(e.PreviewSpendRule)
 	e.ListSpendRuleEvents = m(e.ListSpendRuleEvents)
 	e.GetSpendRulesOverview = m(e.GetSpendRulesOverview)
@@ -290,11 +290,11 @@ func NewUpdateSpendRuleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 	}
 }
 
-// NewDeleteSpendRuleEndpoint returns an endpoint function that calls the
-// method "deleteSpendRule" of service "spendRules".
-func NewDeleteSpendRuleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+// NewArchiveSpendRuleEndpoint returns an endpoint function that calls the
+// method "archiveSpendRule" of service "spendRules".
+func NewArchiveSpendRuleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*DeleteSpendRulePayload)
+		p := req.(*ArchiveSpendRulePayload)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
@@ -345,7 +345,7 @@ func NewDeleteSpendRuleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 		if err != nil {
 			return nil, err
 		}
-		return nil, s.DeleteSpendRule(ctx, p)
+		return nil, s.ArchiveSpendRule(ctx, p)
 	}
 }
 
