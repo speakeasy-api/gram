@@ -27,11 +27,14 @@ export type { MarkdownProps } from "@/elements/components/Markdown";
 // the dashboard's chat detail panel can reuse the elements tool UI directly.
 export {
   ToolUI,
+  ToolUIGroup,
   ToolUISection,
   SyntaxHighlightedCode,
 } from "@/elements/components/ui/tool-ui";
 export type {
   ToolUIProps,
+  ToolUIMetaRow,
+  ToolUIGroupProps,
   ToolUISectionProps,
   ToolStatus,
   ContentItem,

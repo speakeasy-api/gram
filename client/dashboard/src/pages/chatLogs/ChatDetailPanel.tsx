@@ -34,6 +34,7 @@ import {
 } from "@speakeasy-api/moonshine";
 import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
+import { useMembers } from "@gram/client/react-query/members.js";
 import { useSearchLogsMutation } from "@gram/client/react-query/searchLogs.js";
 import { useRiskListResults } from "@gram/client/react-query/riskListResults.js";
 import { QueryErrorResetBoundary, useQueryClient } from "@tanstack/react-query";
@@ -56,8 +57,9 @@ import { AccountTypeBadge } from "@/components/account-type-badge";
 import { personalAccountEmail } from "@/components/observe/account-display-utils";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { useRBAC } from "@/hooks/useRBAC";
-import { useIsPlatformAdmin } from "@/contexts/Auth";
+import { useIsPlatformAdmin, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
+import { chatOwnerLabel } from "@/lib/chat-owner";
 import { handleError, toError } from "@/lib/errors";
 import {
   ExclusionEditor,
@@ -75,6 +77,7 @@ import {
 import {
   buildDisplayItems,
   buildTranscript,
+  displayItemRows,
   type MessageCategory,
   rowCategory,
   rowHasRiskFlag,
@@ -85,6 +88,7 @@ import {
 import { cn } from "@/lib/utils";
 import {
   buildClaudeToolUsageByToolUseId,
+  buildClaudeTurnByPromptId,
   buildClaudeUsageByMessageId,
   formatTokenCount,
   formatUsageCost,
@@ -124,6 +128,9 @@ type ViewMode = "chat" | "tools" | "exclusion";
 interface Occurrence {
   key: string;
   itemIndex: number;
+  /** Row holding the occurrence. A `toolGroup` item covers many rows, so the
+   * item index alone can't say which one to light up. */
+  rowId: string;
   fieldKey: SearchFieldKey;
   indexInField: number;
 }
@@ -235,6 +242,7 @@ function MetaRow({ label, children }: { label: string; children: ReactNode }) {
 
 function SessionSummary({
   chat,
+  userLabel,
   messageCount,
   toolCount,
   compact = false,
@@ -252,6 +260,7 @@ function SessionSummary({
     lastMessageTimestamp?: Date;
     updatedAt: Date;
   };
+  userLabel: string;
   messageCount: number;
   toolCount: number;
   compact?: boolean;
@@ -306,7 +315,7 @@ function SessionSummary({
         <div className="space-y-1">
           <div className="mb-1 text-sm font-semibold">Session details</div>
           <div className="divide-border divide-y">
-            <MetaRow label="User">{chat.externalUserId || "anonymous"}</MetaRow>
+            <MetaRow label="User">{userLabel}</MetaRow>
             {accountEmail && (
               <MetaRow label="Account">
                 <span className="inline-flex flex-wrap items-center justify-end gap-1.5">
@@ -609,6 +618,7 @@ function ThreadSearchBar({
 function ChatDetailHeader({
   chatId,
   chat,
+  userLabel,
   messageCount,
   toolCount,
   canManageChat,
@@ -627,6 +637,7 @@ function ChatDetailHeader({
 }: {
   chatId: string;
   chat: Parameters<typeof SessionSummary>[0]["chat"] & { title?: string };
+  userLabel: string;
   messageCount: number;
   toolCount: number;
   canManageChat: boolean;
@@ -677,6 +688,7 @@ function ChatDetailHeader({
         <div className="flex shrink-0 items-center gap-1">
           <SessionSummary
             chat={chat}
+            userLabel={userLabel}
             messageCount={messageCount}
             toolCount={toolCount}
             compact={compactMetadata}
@@ -769,6 +781,7 @@ function ChatDetailPanel({
   dimNonRisk: dimNonRiskProp = false,
 }: ChatDetailPanelProps) {
   const client = useSdkClient();
+  const { user } = useSession();
   const isPlatformAdmin = useIsPlatformAdmin();
   const { hasScope } = useRBAC();
   const canManageChat = isPlatformAdmin || hasScope("org:admin");
@@ -847,6 +860,15 @@ function ChatDetailPanel({
   // resolved (otherwise the panel would show "Not found" despite having data).
   const chat = transcript.chat ?? active.chat;
   const chatMessages = active.messages;
+  const { data: membersData } = useMembers();
+  const userLabel = chat
+    ? chatOwnerLabel(
+        membersData?.members,
+        chat,
+        user,
+        personalAccountEmail(chat),
+      )
+    : "anonymous";
   // Only the primary (or risk) initial load blanks the whole panel; a search
   // re-fetch updates the transcript in place — its loading shows in the search
   // bar and as a "Searching…" empty state instead.
@@ -925,6 +947,13 @@ function ChatDetailPanel({
         : [];
     return buildClaudeToolUsageByToolUseId(tools);
   }, [chat?.agentUsage]);
+  const claudeTurnByPromptId = useMemo(() => {
+    const turns =
+      chat?.agentUsage?.type === "claude"
+        ? (chat.agentUsage.claude?.turns ?? [])
+        : [];
+    return buildClaudeTurnByPromptId(turns);
+  }, [chat?.agentUsage]);
 
   const transcriptRows = useMemo(
     () => buildTranscript(chatMessages),
@@ -969,8 +998,8 @@ function ChatDetailPanel({
   // the top (first message) — even when the session happens to have findings.
   const initialScrollIndex = useMemo(() => {
     if (!dimNonRisk) return null;
-    const idx = displayItems.findIndex(
-      (it) => it.type === "row" && rowIsFlagged(it.row, riskResultsByMessage),
+    const idx = displayItems.findIndex((it) =>
+      displayItemRows(it).some((r) => rowIsFlagged(r, riskResultsByMessage)),
     );
     return idx >= 0 ? idx : null;
   }, [dimNonRisk, displayItems, riskResultsByMessage]);
@@ -984,19 +1013,24 @@ function ChatDetailPanel({
     if (!searchActive) return EMPTY_OCCURRENCES;
     const out: Occurrence[] = [];
     displayItems.forEach((it, itemIndex) => {
-      if (it.type !== "row") return;
-      for (const f of rowSearchFields(
-        it.row,
-        searchQuery,
-        riskResultsByMessage,
-      )) {
-        for (let k = 0; k < f.count; k++) {
-          out.push({
-            key: `${it.id}:${f.key}:${k}`,
-            itemIndex,
-            fieldKey: f.key,
-            indexInField: k,
-          });
+      // Walk every row the item renders — a `toolGroup` holds a whole run of
+      // them, and its members stay searchable while collapsed (a match inside
+      // pins the group open).
+      for (const row of displayItemRows(it)) {
+        for (const f of rowSearchFields(
+          row,
+          searchQuery,
+          riskResultsByMessage,
+        )) {
+          for (let k = 0; k < f.count; k++) {
+            out.push({
+              key: `${it.id}:${row.id}:${f.key}:${k}`,
+              itemIndex,
+              rowId: row.id,
+              fieldKey: f.key,
+              indexInField: k,
+            });
+          }
         }
       }
     });
@@ -1065,6 +1099,7 @@ function ChatDetailPanel({
       activeOccurrence: activeOccurrence
         ? {
             itemIndex: activeOccurrence.itemIndex,
+            rowId: activeOccurrence.rowId,
             fieldKey: activeOccurrence.fieldKey,
             indexInField: activeOccurrence.indexInField,
           }
@@ -1095,16 +1130,14 @@ function ChatDetailPanel({
     else transcript.loadRest();
   }, [windowed, transcript]);
 
-  // Personal-account sessions label the user's turns with the account's own
-  // email (mirrors the sessions list) instead of the attributed employee's
-  // work email carried on the messages.
-  const userLabelOverride = chat ? personalAccountEmail(chat) : undefined;
+  const userLabelOverride = chat ? userLabel : undefined;
 
   const rowCtx = useMemo<RowContext>(
     () => ({
       riskResultsByMessage,
       claudeUsageByMessage,
       claudeToolUsageByToolUseId,
+      claudeTurnByPromptId,
       dimNonRisk,
       searchQuery: searchActive ? searchQuery : undefined,
       userLabel: chat?.externalUserId,
@@ -1114,6 +1147,7 @@ function ChatDetailPanel({
       riskResultsByMessage,
       claudeUsageByMessage,
       claudeToolUsageByToolUseId,
+      claudeTurnByPromptId,
       dimNonRisk,
       searchActive,
       searchQuery,
@@ -1206,6 +1240,7 @@ function ChatDetailPanel({
       <ChatDetailHeader
         chatId={chatId}
         chat={chat}
+        userLabel={userLabel}
         messageCount={chat.numMessages}
         toolCount={toolLogs.length}
         canManageChat={canManageChat}

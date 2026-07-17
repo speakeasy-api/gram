@@ -225,6 +225,18 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 		return enabled
 	}
 
+	// device_agent is derived from device-agent sync activity, not an
+	// organization_features row, so it bypasses isEnabled. A read failure degrades
+	// to false rather than failing the whole call.
+	deviceAgent, err := s.repo.HasDeviceAgentSync(ctx, orgID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to check device agent syncs",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(orgID),
+		)
+		deviceAgent = false
+	}
+
 	return &gen.GetProductFeaturesResult{
 		LogsEnabled:                  isEnabled(FeatureLogs),
 		ToolIoLogsEnabled:            isEnabled(FeatureToolIOLogs),
@@ -237,6 +249,7 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 		HooksFailOpenEnabled:         isEnabled(FeatureHooksFailOpen),
 		CustomModelKeysEnabled:       isEnabled(FeatureCustomModelKeys),
 		SkillsEnabled:                isEnabled(FeatureSkills),
+		DeviceAgent:                  deviceAgent,
 	}, nil
 }
 

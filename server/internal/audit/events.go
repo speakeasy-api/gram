@@ -31,6 +31,7 @@ const (
 	subjectTypeOrganizationInvite       subjectType = "organization_invitation"
 	subjectTypePlugin                   subjectType = "plugin"
 	subjectTypeProject                  subjectType = "project"
+	subjectTypeSkill                    subjectType = "skill"
 	subjectTypeTemplate                 subjectType = "template"
 	subjectTypeRemoteMcpServer          subjectType = "remote_mcp_server"
 	subjectTypeRemoteMcpServerHeader    subjectType = "remote_mcp_server_header"

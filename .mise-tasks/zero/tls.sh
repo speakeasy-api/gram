@@ -57,6 +57,7 @@ turn_off_tls() {
 
   mise set --file mise.local.toml GRAM_SSL_CERT_FILE=
   mise set --file mise.local.toml GRAM_SSL_KEY_FILE=
+  mise set --file mise.local.toml GRAM_HTTP_SCHEME=http
 }
 
 turn_on_tls() {
@@ -65,7 +66,7 @@ turn_on_tls() {
 
   mise set --file mise.local.toml GRAM_SSL_CERT_FILE="{{config_root}}/local/ssl/certs/local.pem"
   mise set --file mise.local.toml GRAM_SSL_KEY_FILE="{{config_root}}/local/ssl/keys/local-key.pem"
-
+  mise set --file mise.local.toml GRAM_HTTP_SCHEME=https
 }
 
 trust_local_ca() {

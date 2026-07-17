@@ -73,7 +73,7 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
         ? [{ route: routes.assistants, scope: read }]
         : []),
       {
-        route: routes.clis,
+        route: routes.skills,
         scope: isSkillsEnabled ? ["skill:read"] : read,
         ...(isSkillsEnabled ? { resourceId: projectId } : {}),
       },

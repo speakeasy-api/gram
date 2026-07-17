@@ -102,6 +102,12 @@ interface SectionHighlight {
   activeOccurrence?: number | null;
 }
 
+/** One row in the tool's "Meta" section (e.g. payload size, cost). */
+interface ToolUIMetaRow {
+  label: string;
+  value: React.ReactNode;
+}
+
 interface ToolUIProps {
   /** Display name of the tool */
   name: string;
@@ -121,6 +127,9 @@ interface ToolUIProps {
   requestHighlight?: SectionHighlight;
   /** Flag matches inside the output (risk review). */
   resultHighlight?: SectionHighlight;
+  /** Extra facts about the call (payload size, cost) shown in a collapsible
+   * "Meta" section beneath Arguments and Output. */
+  meta?: ToolUIMetaRow[];
   /** When set, highlight occurrences of this query (case-insensitive) in the
    * tool name — e.g. a thread search for "customer" lights up `get_customer`. */
   nameQuery?: string;
@@ -656,6 +665,80 @@ function StructuredResultContent({
  * ToolUISection - Expandable section for Request/Result
  * -------------------------------------------------------------------------- */
 
+function SectionDisclosureHeader({
+  title,
+  indicator,
+  actions,
+  isExpanded,
+  onToggle,
+}: {
+  title: string;
+  indicator?: React.ReactNode;
+  actions?: React.ReactNode;
+  isExpanded: boolean;
+  onToggle: () => void;
+}): React.JSX.Element {
+  return (
+    <button
+      onClick={onToggle}
+      className="flex w-full cursor-pointer items-center justify-between px-5 py-2.5 text-left transition-colors hover:bg-accent/50"
+    >
+      <span className="flex items-center gap-2 text-sm text-muted-foreground">
+        {title}
+        {indicator}
+      </span>
+      <div className="flex items-center gap-1">
+        {actions}
+        <ChevronRightIcon
+          className={cn(
+            "size-4 text-muted-foreground transition-transform duration-200",
+            isExpanded && "rotate-90",
+          )}
+        />
+      </div>
+    </button>
+  );
+}
+
+/* -----------------------------------------------------------------------------
+ * ToolUIMetaSection - Expandable detail list of call facts (size, cost)
+ * -------------------------------------------------------------------------- */
+
+function ToolUIMetaSection({
+  rows,
+  defaultExpanded = false,
+}: {
+  rows: ToolUIMetaRow[];
+  defaultExpanded?: boolean;
+}): React.JSX.Element {
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+
+  return (
+    <div data-slot="tool-ui-meta-section" className="border-t border-border">
+      <SectionDisclosureHeader
+        title="Meta"
+        isExpanded={isExpanded}
+        onToggle={() => setIsExpanded(!isExpanded)}
+      />
+      {isExpanded && (
+        <dl className="divide-y divide-border border-t border-border">
+          {rows.map((row) => (
+            <div
+              key={row.label}
+              className="flex items-start justify-between gap-3 px-5 py-2 text-xs"
+            >
+              <dt className="text-muted-foreground">{row.label}</dt>
+              <dd className="text-right font-medium tabular-nums">
+                {row.value}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      )}
+    </div>
+  );
+}
+
 function ToolUISection({
   title,
   content,
@@ -688,24 +771,13 @@ function ToolUISection({
 
   return (
     <div data-slot="tool-ui-section" className="border-t border-border">
-      <button
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="flex w-full cursor-pointer items-center justify-between px-5 py-2.5 text-left transition-colors hover:bg-accent/50"
-      >
-        <span className="flex items-center gap-2 text-sm text-muted-foreground">
-          {title}
-          {headerIndicator}
-        </span>
-        <div className="flex items-center gap-1">
-          <CopyButton content={contentString} />
-          <ChevronRightIcon
-            className={cn(
-              "size-4 text-muted-foreground transition-transform duration-200",
-              isExpanded && "rotate-90",
-            )}
-          />
-        </div>
-      </button>
+      <SectionDisclosureHeader
+        title={title}
+        indicator={headerIndicator}
+        isExpanded={isExpanded}
+        onToggle={() => setIsExpanded(!isExpanded)}
+        actions={<CopyButton content={contentString} />}
+      />
       {isExpanded && (
         <div className="border-t border-border">
           {matchCount > 0 ? (
@@ -787,6 +859,7 @@ function ToolUI({
   defaultExpanded = false,
   requestHighlight,
   resultHighlight,
+  meta,
   nameQuery,
   nameActiveOccurrence = null,
   className,
@@ -803,7 +876,8 @@ function ToolUI({
     onDeny !== undefined;
   // Auto-expand when approval is pending, collapse when approved
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
-  const hasContent = request !== undefined || result !== undefined;
+  const hasMeta = (meta?.length ?? 0) > 0;
+  const hasContent = request !== undefined || result !== undefined || hasMeta;
 
   // Track approval mode: 'one-time' or 'for-session'
   const [approvalMode, setApprovalMode] = useState<ApprovalMode>("one-time");
@@ -911,6 +985,7 @@ function ToolUI({
               defaultExpanded={(resultHighlight?.matches?.length ?? 0) > 0}
             />
           )}
+          {hasMeta && <ToolUIMetaSection rows={meta!} />}
         </div>
       )}
 
@@ -1169,6 +1244,7 @@ export {
 };
 export type {
   ToolUIProps,
+  ToolUIMetaRow,
   ToolUISectionProps,
   ToolUIGroupProps,
   ToolStatus,

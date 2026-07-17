@@ -1,30 +1,5 @@
 # Welcome to Speakeasy
 
-## How We Use Claude
-
-Based on Adam's usage over the last 30 days:
-
-Work Type Breakdown:
-Build Feature ██████████░░░░░░░░░░ 48%
-Debug Fix █████░░░░░░░░░░░░░░░ 23%
-Improve Quality ███░░░░░░░░░░░░░░░░░ 17%
-Plan Design █░░░░░░░░░░░░░░░░░░░ 7%
-Prototype █░░░░░░░░░░░░░░░░░░░ 5%
-
-Top Skills & Commands:
-/mcp ████████████████████ 28x/month
-/plugin ██████░░░░░░░░░░░░░░ 9x/month
-/reload-plugins ██░░░░░░░░░░░░░░░░░░ 3x/month
-/voice █░░░░░░░░░░░░░░░░░░░ 2x/month
-/model █░░░░░░░░░░░░░░░░░░░ 2x/month
-
-Top MCP Servers:
-datadog-mcp ████████████████████ 95 calls
-chrome-devtools ███████████████████░ 91 calls
-madprocs █████████████░░░░░░░ 63 calls
-linear-server ████████░░░░░░░░░░░░ 39 calls
-eccomerce ██░░░░░░░░░░░░░░░░░░ 9 calls
-
 ## Your Setup Checklist
 
 ### Codebases
@@ -35,7 +10,7 @@ eccomerce ██░░░░░░░░░░░░░░░░░░ 9 calls
 
 - [ ] datadog-mcp — Observability for logs, metrics, traces, and incidents. Ask team lead for Datadog API + app keys.
 - [ ] chrome-devtools — Drives Chrome from Claude for frontend debugging, screenshots, and DOM inspection. Install via `claude mcp add` (no auth).
-- [ ] madprocs — Local dev process manager exposed at `https://localhost:35294`. Auto-runs once you have the local dashboard up (`madprocs` TUI).
+- [ ] pitchfork — Local dev process manager.
 - [ ] linear-server — Linear issue tracker. Run `/login` inside the Linear MCP server to OAuth into the team workspace.
 - [ ] notion — Internal docs and specs. OAuth via Notion MCP server's `authenticate` flow.
 
@@ -43,9 +18,8 @@ eccomerce ██░░░░░░░░░░░░░░░░░░ 9 calls
 
 - `/mcp` — Manage MCP server connections (add, remove, reauth). Most-used command by far.
 - `/plugin` and `/reload-plugins` — Install and refresh Claude Code plugins shared across the team.
-- Project skills are auto-loaded from CLAUDE.md based on task. Worth scanning the `## Skills` table in `/Users/adambull/dev/gram/CLAUDE.md` — covers `golang`, `postgresql`, `clickhouse`, `frontend`, `gram-functions`, `gram-management-api`, `gram-audit-logging`, `gram-rbac`, `glint`, `mise-tasks`, `jaeger`, `datadog`, `madprocs`, `pr`, `spec`.
+- Project skills are auto-loaded from CLAUDE.md based on task. Worth scanning the `## Skills` table in `/Users/adambull/dev/gram/CLAUDE.md` — covers `golang`, `postgresql`, `clickhouse`, `frontend`, `gram-functions`, `gram-management-api`, `gram-audit-logging`, `gram-rbac`, `glint`, `mise-tasks`, `jaeger`, `datadog`, `pitchfork`, `pr`, `spec`.
 - `/pr` — Generates a PR for the current branch.
-- `/madprocs` — Agent-assisted control of local dev processes (start/stop/restart/logs).
 
 ## Team Tips
 

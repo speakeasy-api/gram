@@ -32,7 +32,8 @@ var _ = Service("features", func() {
 			Attribute("hooks_fail_open_enabled", Boolean, "Whether hooks fail open when the Speakeasy control plane is unreachable or erroring — blocking policies are not enforced for the duration of the outage")
 			Attribute("custom_model_keys_enabled", Boolean, "Whether the organization can supply its own model provider API keys (BYOK)")
 			Attribute("skills_enabled", Boolean, "Whether the Skills page is enabled for the organization")
-			Required("logs_enabled", "tool_io_logs_enabled", "session_capture_enabled", "authz_challenge_logging_enabled", "webhooks", "sso_enabled", "scim_enabled", "hooks_browser_login_enabled", "hooks_fail_open_enabled", "custom_model_keys_enabled", "skills_enabled")
+			Attribute("device_agent", Boolean, "Whether the organization uses the device agent (any device has polled agent.getPlugins). Derived from device-agent syncs, not an admin-settable feature.")
+			Required("logs_enabled", "tool_io_logs_enabled", "session_capture_enabled", "authz_challenge_logging_enabled", "webhooks", "sso_enabled", "scim_enabled", "hooks_browser_login_enabled", "hooks_fail_open_enabled", "custom_model_keys_enabled", "skills_enabled", "device_agent")
 		})
 
 		HTTP(func() {

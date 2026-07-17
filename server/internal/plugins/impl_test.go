@@ -84,6 +84,19 @@ func (m *mockGitHubPublisher) GetRepoFiles(_ context.Context, _ int64, _, _, _ s
 	return nil, ghclient.ErrRepoNotFound
 }
 
+// GetFileContent serves single files from the same state GetRepoFiles uses, so
+// the live-version read in GetPublishStatus sees what was last "pushed".
+func (m *mockGitHubPublisher) GetFileContent(_ context.Context, _ int64, _, _, _, path string) ([]byte, error) {
+	files := m.repoFiles
+	if files == nil {
+		files = m.lastPushedFiles
+	}
+	if content, ok := files[path]; ok {
+		return content, nil
+	}
+	return nil, ghclient.ErrFileNotFound
+}
+
 func TestPluginsService_CreatePlugin(t *testing.T) {
 	t.Parallel()
 
@@ -96,6 +109,25 @@ func TestPluginsService_CreatePlugin(t *testing.T) {
 	require.NotNil(t, result)
 	require.Equal(t, "Engineering Tools", result.Name)
 	require.Equal(t, "engineering-tools", result.Slug)
+}
+
+// A new plugin defaults to the org wildcard so it delivers to every member
+// (agent.getPlugins scopes delivery by assignment; without a default an
+// unassigned plugin would reach no one).
+func TestPluginsService_CreatePlugin_DefaultsToWildcardAssignment(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	created, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{
+		Name: "Defaulted Plugin",
+	})
+	require.NoError(t, err)
+
+	fetched, err := ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: created.ID})
+	require.NoError(t, err)
+	require.Len(t, fetched.Assignments, 1)
+	require.Equal(t, "*", fetched.Assignments[0].PrincipalUrn)
 }
 
 func TestPluginsService_CreatePlugin_DuplicateSlugReturnsConflict(t *testing.T) {
@@ -787,6 +819,15 @@ func TestPluginsService_PublishPlugins_HappyPath(t *testing.T) {
 	require.True(t, *status.UpToDate)
 	require.NotNil(t, status.LastPublishedAt)
 
+	// The live manifest version is read back from the published repo and
+	// matches what was stamped into the pushed Claude plugin.json.
+	require.NotNil(t, status.LiveVersion)
+	var manifest struct {
+		Version string `json:"version"`
+	}
+	require.NoError(t, json.Unmarshal(mock.lastPushedFiles[plugin.Slug+"/.claude-plugin/plugin.json"], &manifest))
+	require.Equal(t, manifest.Version, *status.LiveVersion)
+
 	// The observability plugin slugs must name plugins that actually exist in
 	// the published marketplace — install UIs build `<plugin>@<marketplace>`
 	// strings from them.
@@ -872,6 +913,46 @@ func TestPluginsService_PublishPlugins_ReclaimsStaleConnectionFromDeletedProject
 	conn, err := pluginsrepo.New(ti.conn).GetGitHubConnection(ctx, projectB.ID)
 	require.NoError(t, err)
 	require.Equal(t, projectB.ID, conn.ProjectID)
+}
+
+// TestCreatePlugin_DefaultsToOrgWildcardOnlyInDefaultProject pins the audience
+// default: a plugin created in the org's default project is seeded with the org
+// wildcard ("*"), while a plugin created in a non-default project starts with no
+// assignments and reaches no one until an admin assigns an audience.
+func TestCreatePlugin_DefaultsToOrgWildcardOnlyInDefaultProject(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	orgID := authCtx.ActiveOrganizationID
+
+	// The test's original project is the org's only (and thus oldest) project —
+	// the default — so a plugin created here is seeded with the org wildcard.
+	inDefault, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "In Default"})
+	require.NoError(t, err)
+	defaultAssignments, err := pluginsrepo.New(ti.conn).ListPluginAssignments(ctx, uuid.MustParse(inDefault.ID))
+	require.NoError(t, err)
+	require.Len(t, defaultAssignments, 1)
+	require.Equal(t, "*", defaultAssignments[0].PrincipalUrn)
+
+	// A second project, created after the first, is not the default project.
+	other, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           "second-project",
+		Slug:           "second-project",
+		OrganizationID: orgID,
+	})
+	require.NoError(t, err)
+	authCtx.ProjectID = &other.ID
+	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+
+	inOther, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "In Other"})
+	require.NoError(t, err)
+	otherAssignments, err := pluginsrepo.New(ti.conn).ListPluginAssignments(ctx, uuid.MustParse(inOther.ID))
+	require.NoError(t, err)
+	require.Empty(t, otherAssignments,
+		"a plugin in a non-default project starts with no audience")
 }
 
 // After a publish, mutating the plugin set (here: adding another server) must
@@ -1389,8 +1470,7 @@ func TestPluginsService_PublishPlugins_PublicToolsetWithoutMetadata(t *testing.T
 }
 
 // PublishPlugins always emits a per-org observability plugin containing
-// Gram hooks. The hook script bakes in the hooks-scoped API key so team
-// members don't need to configure credentials per-machine.
+// the bootstrapper, relay config, and provider hook manifest.
 func TestPluginsService_PublishPlugins_EmitsObservabilityPlugin(t *testing.T) {
 	t.Parallel()
 
@@ -1420,11 +1500,13 @@ func TestPluginsService_PublishPlugins_EmitsObservabilityPlugin(t *testing.T) {
 	// at the plugin root register the plugin but never wire the hooks up.
 	require.NotNil(t, mock.lastPushedFiles[claudeObservability+"/.claude-plugin/plugin.json"], "claude observability plugin.json missing")
 	require.NotNil(t, mock.lastPushedFiles[claudeObservability+"/hooks/hooks.json"], "claude observability hooks/hooks.json missing")
-	require.NotNil(t, mock.lastPushedFiles[claudeObservability+"/hooks/hook.sh"], "claude observability hooks/hook.sh missing")
+	require.NotNil(t, mock.lastPushedFiles[claudeObservability+"/hooks/bootstrap.sh"], "claude observability bootstrap.sh missing")
+	require.NotNil(t, mock.lastPushedFiles[claudeObservability+"/speakeasy.json"], "claude observability speakeasy.json missing")
 
 	require.NotNil(t, mock.lastPushedFiles["cursor-plugins/"+cursorObservability+"/.cursor-plugin/plugin.json"], "cursor observability plugin.json missing")
 	require.NotNil(t, mock.lastPushedFiles["cursor-plugins/"+cursorObservability+"/hooks/hooks.json"], "cursor observability hooks/hooks.json missing")
-	require.NotNil(t, mock.lastPushedFiles["cursor-plugins/"+cursorObservability+"/hooks/hook.sh"], "cursor observability hooks/hook.sh missing")
+	require.NotNil(t, mock.lastPushedFiles["cursor-plugins/"+cursorObservability+"/hooks/bootstrap.sh"], "cursor observability bootstrap.sh missing")
+	require.NotNil(t, mock.lastPushedFiles["cursor-plugins/"+cursorObservability+"/speakeasy.json"], "cursor observability speakeasy.json missing")
 }
 
 // PublishPlugins must succeed when the org has no custom plugins — the
@@ -1441,8 +1523,8 @@ func TestPluginsService_PublishPlugins_ObservabilityOnly(t *testing.T) {
 
 	claudeObservability, cursorObservability := orgObservabilitySlugs(t, ctx, ti)
 
-	require.NotNil(t, mock.lastPushedFiles[claudeObservability+"/hooks/hook.sh"], "claude observability hooks/hook.sh missing")
-	require.NotNil(t, mock.lastPushedFiles["cursor-plugins/"+cursorObservability+"/hooks/hook.sh"], "cursor observability hooks/hook.sh missing")
+	require.NotNil(t, mock.lastPushedFiles[claudeObservability+"/hooks/bootstrap.sh"], "claude observability bootstrap.sh missing")
+	require.NotNil(t, mock.lastPushedFiles["cursor-plugins/"+cursorObservability+"/hooks/bootstrap.sh"], "cursor observability bootstrap.sh missing")
 
 	for _, p := range []struct {
 		path     string
@@ -1464,10 +1546,9 @@ func TestPluginsService_PublishPlugins_ObservabilityOnly(t *testing.T) {
 	}
 }
 
-// The observability hook script must contain the freshly-minted hooks-scoped
-// API key (Bearer-token form) so team members can install the plugin without
-// any per-machine credential configuration.
-func TestPluginsService_PublishPlugins_ObservabilityHookScriptContainsAPIKey(t *testing.T) {
+// The observability config contains the freshly-minted hooks-scoped API key,
+// while provider commands and bootstrappers remain secret-free.
+func TestPluginsService_PublishPlugins_ObservabilityConfigContainsAPIKey(t *testing.T) {
 	t.Parallel()
 
 	mock := &mockGitHubPublisher{}
@@ -1502,20 +1583,18 @@ func TestPluginsService_PublishPlugins_ObservabilityHookScriptContainsAPIKey(t *
 	require.NotEmpty(t, hooksKeyPrefix, "expected a plugins-hooks-* API key")
 
 	claudeObservability, cursorObservability := orgObservabilitySlugs(t, ctx, ti)
-	// Hook senders embed the publish-time hooks key as the org-wide fallback:
+	// Relay configs embed the publish-time hooks key as the org-wide fallback:
 	// per-user browser login still takes precedence when cached, but a machine
 	// with no personal credentials sends through the baked key instead of
 	// degrading to the unauthenticated pass-through.
-	for _, path := range []string{claudeObservability + "/hooks/hook.sh", "cursor-plugins/" + cursorObservability + "/hooks/hook.sh"} {
-		script := string(mock.lastPushedFiles[path])
-		require.NotEmpty(t, script, path+" missing")
-		require.Contains(t, script, "gram_hooks_post_authenticated", "%s does not use local hook auth", path)
-		require.Contains(t, script, hooksKeyPrefix, "%s must embed the org-wide hooks key fallback", path)
-		// Must NOT contain the MCP key — separate scope, separate concerns.
-		require.NotContains(t, script, "plugins-mcp-", "%s leaked the MCP key", path)
+	for _, root := range []string{claudeObservability, "cursor-plugins/" + cursorObservability} {
+		config := string(mock.lastPushedFiles[root+"/speakeasy.json"])
+		require.NotEmpty(t, config, root+"/speakeasy.json missing")
+		require.Contains(t, config, hooksKeyPrefix)
+		require.NotContains(t, config, "plugins-mcp-", "%s leaked the MCP key", root)
+		require.NotContains(t, string(mock.lastPushedFiles[root+"/hooks/bootstrap.sh"]), hooksKeyPrefix)
+		require.NotContains(t, string(mock.lastPushedFiles[root+"/hooks/hooks.json"]), hooksKeyPrefix)
 	}
-	authScript := string(mock.lastPushedFiles[claudeObservability+"/hooks/auth.sh"])
-	require.Contains(t, authScript, `printf 'header = "Gram-Key: %s"\n'`, "auth.sh must write Gram-Key to curl config")
 }
 
 // The observability plugin must appear FIRST in each platform's marketplace
@@ -1843,13 +1922,12 @@ func TestPluginsService_PublishProject_SkipsWhenUnchanged(t *testing.T) {
 }
 
 // hooksFilesOf returns the observability (hooks) plugin files from a pushed file
-// map, identified by the hooks/ subdirectory that only the observability plugins
-// use. These files embed the hooks API key, so comparing them across publishes
-// detects whether the hooks component was regenerated (fresh key) or carried.
+// map. The root speakeasy.json carries settings and the hooks/ directory carries
+// provider commands and bootstrappers, so both are needed to detect regeneration.
 func hooksFilesOf(files map[string][]byte) map[string]string {
 	out := make(map[string]string)
 	for p, c := range files {
-		if strings.Contains(p, "/hooks/") {
+		if strings.Contains(p, "/hooks/") || (strings.Contains(p, "observability") && strings.HasSuffix(p, "/speakeasy.json")) {
 			out[p] = string(c)
 		}
 	}

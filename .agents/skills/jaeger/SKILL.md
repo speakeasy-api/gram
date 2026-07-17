@@ -83,11 +83,9 @@ Returns all known operation names (HTTP routes, gRPC methods, Temporal activitie
 
 ## Development Workflow
 
-1. **Start infra** — `mise run infra:start` (Jaeger starts automatically)
-2. **Start server** — `mise start:server --dev-single-process`
-3. **Run seed data or hit endpoints** — exercise the code path you're working on
-4. **Query Jaeger** — use the API or UI to inspect the resulting traces
-5. **Look for**: slow spans, error spans (`error=true` tag), missing instrumentation, N+1 query patterns
+1. **Start local dev stack** — `./zero --agent`
+2. **Query Jaeger** — use the API or UI to inspect the resulting traces
+3. **Look for**: slow spans, error spans (`error=true` tag), missing instrumentation, N+1 query patterns
 
 ## Trace Structure
 

@@ -15,7 +15,7 @@ If you've just cloned this repository, then consider running `./zero --agent` to
   - `mise.local.toml`: Local environment variable overrides for development. This file is ignored by git and should not be committed.
   - `.mise-tasks/**/*.{mts,sh}`: Useful tasks for working with the project
   - `go.mod`: Go module definition for the entire project
-  - `mprocs.yaml`: Process manager config for `madprocs` — runs all local services (mock-idp, server, worker, dashboard) in a single terminal with a tabbed UI. Run `madprocs` to start the TUI, or use `madprocs status|logs|start|stop|restart <proc>` from the CLI. Use `/madprocs` slash command for agent-assisted process control.
+  - `pitchfork.toml`: Process manager config for `pitchfork` — runs all local services (mock-idp, server, worker, dashboard) in a single terminal with a tabbed UI. Use `pitchfork list|status|logs|start|stop|restart <daemon>` from the CLI.
   - `server/`: Main backend service codebase
   - `cli/`: Command-line interface for Gram that users use to interact with the Gram service
   - `functions/`: Serverless function runner powering the Gram Functions feature
@@ -55,7 +55,7 @@ Contains the main application code for the Gram server:
 - `mise build:server`: Build the server binary
 - `mise build:tunnel-gateway`: Build the tunnel gateway binary
 - `mise lint:server`: Run linters on the server code
-- `mise start:server --dev-single-process`: Run the server locally
+- `mise run start`: Run the process manager that spins up local servers (server, worker, idp, ...)
 - `hk fix`: Runs formatters across changed files in the current branch.
 
 </commands>
@@ -91,7 +91,7 @@ Migration rules live in the `postgresql` skill (`.agents/skills/postgresql/SKILL
 The `mise` tasks listed in this guide should be used where building, testing or linting is needed. The commands can take arguments directly and don't need a `--` separator. For example, to run the server in development mode, use:
 
 ```
-mise start:server --dev-single-process
+mise run start
 ```
 
 <important>
@@ -129,13 +129,13 @@ Activate a skill when your task falls within its scope.
 | `glint`                           | Authoring or editing analyzers in the `glint/` go/analysis package              |
 | `mise-tasks`                      | Creating or editing mise task scripts in `.mise-tasks/`                         |
 | `jaeger`                          | Testing backend endpoints locally and inspecting traces via Jaeger API          |
+| `pitchfork`                       | Starting/stopping/restarting local dev services or querying their logs          |
 | `datadog`                         | Investigating errors, performance, incidents, or telemetry via Datadog          |
 | `datadog-insights`                | Running the full Gram production health digest and posting it to Slack          |
-| `madprocs`                        | Controlling local dev processes via mprocs (start, stop, restart, logs)         |
-| `pr`                              | Creating a Pull Request for current changes                                     |
 | `spec`                            | Interviewing user in-depth to produce a detailed spec before building           |
 | `page-toolbar`                    | Dashboard list page search, filters, sort, or view controls                     |
 | `gram-playwright-cli`             | Browser automation, dashboard inspection, screenshots, and page interaction     |
+| `pr`                              | Creating a Pull Request for current changes                                     |
 | `pr-demo-gif`                     | Recording a demo GIF of a user-visible frontend change for a PR comment         |
 
 # Plan Mode
@@ -146,11 +146,9 @@ Activate a skill when your task falls within its scope.
 
 ## Cursor Cloud specific instructions
 
-Full environment setup is handled by `./zero --agent` (idempotent — re-run any time to reconcile): it installs tools/deps, generates keys/TLS + the dev-idp RSA key, starts the Docker infra, and runs the Postgres + ClickHouse migrations. Run it per session after starting the Docker daemon. It is deliberately NOT the startup update script — that stays minimal (`mise install` / `mise run install`), because starting infra and running migrations are too heavy and failure-prone for pod boot. Non-obvious caveats:
+Full environment setup is handled by `./zero --agent` (idempotent — re-run any time to reconcile): it installs tools/deps, generates keys/TLS + the dev-idp RSA key, starts the Docker infra, and runs the Postgres + ClickHouse migrations and finally starts all local services. Run it per session after starting the Docker daemon. It is deliberately NOT the startup update script — that stays minimal (`mise install` / `mise run install`), because starting infra and running migrations are too heavy and failure-prone for pod boot. Non-obvious caveats:
 
 - **Docker daemon must be running first.** There is no systemd auto-start, so run `sudo service docker start` before `./zero --agent`. Docker is configured with the `fuse-overlayfs` storage driver and `iptables-legacy`.
 - **`mise` provides all tooling** (`~/.local/bin/mise`). Resolution is automatic inside `mise run` / `mise exec` and mise tasks (including `.mts` Node scripts) — no PATH hacks needed. For bare tool calls, shims are on `PATH` via `mise activate` in `~/.bashrc` (interactive) and via `~/.bash_env` referenced by `BASH_ENV` (non-interactive _script_ shells). Bash does NOT source `BASH_ENV` for `bash -c`, so in that context prefer `mise exec` / `mise run` (or `export PATH="$HOME/.local/bin:$PATH"`).
-- **App services are not started by `./zero --agent`** (agent mode never execs the start task). Start them yourself (each long-running, e.g. in tmux): `mise run start:dev-idp` (auth, :35291), `mise run start:server --dev-single-process` (API :8080 + Temporal worker), `mise run start:dashboard` (Vite https://localhost:5173). `madprocs` runs the full set as a TUI.
 - **Login is credential-less** (`GRAM_IDP_MODE=mock-workos`): click "Login", no username/password.
-- **URLs / health.** Dashboard `https://localhost:5173`; server API `https://localhost:8080` (`/healthz`; control port `8081` has `/healthz` + `/livez`). Local mkcert TLS.
-- **Seed sample data:** `mise seed` (needs the server + dev-idp running).
+- **Pitchfork manages services**: Either use the pitchfork mcp if running or fall back to the `pitchfork` CLI. These both give you access to service health and logs.
