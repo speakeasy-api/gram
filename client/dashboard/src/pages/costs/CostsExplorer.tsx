@@ -1070,6 +1070,7 @@ export function CostsExplorer(): JSX.Element {
       />
       <EntityProfile
         entity={currentEntity}
+        path={path}
         collection={collection}
         cacheMetric={attributionView}
         widgets={widgets}

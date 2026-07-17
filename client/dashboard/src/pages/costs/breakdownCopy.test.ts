@@ -1,12 +1,80 @@
 import { Dimension } from "@gram/client/models/components/queryfilter.js";
 import { describe, expect, it } from "vitest";
-import { breakdownCaption, breakdownTitle } from "./breakdownCopy";
-import { PIVOTS, SESSIONS_AXIS } from "./taxonomy";
+import { breakdownCaption, breakdownTitle, scopePhrase } from "./breakdownCopy";
+import { type Crumb, PIVOTS, SESSIONS_AXIS } from "./taxonomy";
 
-// The copy is assembled from dimension labels, so every label has to read
-// correctly in four sentence frames. Expectations are spelled out in full rather
-// than derived from LABELS — a test that rebuilt the string the same way the
-// code does would pass on any label, including "Cost by Employment Statuss".
+// The copy is assembled from dimension labels and drill-path values, so both
+// have to read correctly in every sentence frame. Expectations are spelled out
+// in full rather than derived from LABELS — a test that rebuilt the string the
+// way the code does would pass on "Cost by Employment Statuss".
+
+const COST = "$4.04";
+
+const at = (dim: Dimension, value: string): Crumb => ({ dim, value });
+const ADAM = at(Dimension.Email, "adam@speakeasy.com");
+const CLAUDE_CODE = at(Dimension.HookSource, "claude-code");
+const RND = at(Dimension.DivisionName, "R&D");
+const ENGINEERING = at(Dimension.DepartmentName, "Engineering");
+
+// ── Scope: the drill path as prose ──────────────────────────────────────────
+
+describe("scopePhrase", () => {
+  type ScopeCase = { name: string; path: Crumb[]; spend: string };
+  const CASES: ScopeCase[] = [
+    { name: "the project root", path: [], spend: "all project spend" },
+    { name: "one division", path: [RND], spend: "R&D's spend" },
+    // A user reads as their name, not the address the breadcrumb uses.
+    { name: "one user", path: [ADAM], spend: "Adam's spend" },
+    {
+      name: "a user's agent",
+      path: [ADAM, CLAUDE_CODE],
+      spend: "Adam's claude-code spend",
+    },
+    {
+      name: "two org levels",
+      path: [RND, ENGINEERING],
+      spend: "R&D's Engineering spend",
+    },
+    {
+      name: "the full chain",
+      path: [RND, ENGINEERING, ADAM, CLAUDE_CODE],
+      spend: "R&D's Engineering's Adam's claude-code spend",
+    },
+  ];
+
+  it.each(CASES)("names $name", ({ path, spend }) => {
+    expect(scopePhrase(path, "spend")).toBe(spend);
+  });
+
+  it("swaps the noun for the session list", () => {
+    expect(scopePhrase([], "sessions")).toBe("all project sessions");
+    expect(scopePhrase([ADAM], "sessions")).toBe("Adam's sessions");
+    expect(scopePhrase([ADAM, CLAUDE_CODE], "sessions")).toBe(
+      "Adam's claude-code sessions",
+    );
+  });
+
+  // "Operations's" is wrong; English drops the second s.
+  it("does not double the s on a name that ends in one", () => {
+    expect(
+      scopePhrase([at(Dimension.DivisionName, "Operations")], "spend"),
+    ).toBe("Operations' spend");
+    expect(
+      scopePhrase(
+        [at(Dimension.DivisionName, "Operations"), ENGINEERING],
+        "spend",
+      ),
+    ).toBe("Operations' Engineering spend");
+  });
+
+  it("keeps an unset value legible", () => {
+    expect(scopePhrase([at(Dimension.DivisionName, "")], "spend")).toBe(
+      "(unset)'s spend",
+    );
+  });
+});
+
+// ── Title + caption, per breakdown axis ─────────────────────────────────────
 
 type Case = {
   dim: Dimension;
@@ -20,113 +88,115 @@ type Case = {
   split: string;
 };
 
-const COST = "$4.04";
-
+// Captions below are asserted at the project root, so each row isolates the
+// dimension's own labels; the drill-path grammar is covered by scopePhrase.
 const CASES: Case[] = [
   {
     dim: Dimension.DivisionName,
     title: "Cost by Division",
-    empty: "Splitting spend by Division.",
-    single: "$4.04 — all from a single Division.",
-    split: "$4.04 split across 3 Divisions.",
+    empty: "Showing all project spend, broken down by Division.",
+    single: "Showing all project spend — $4.04, all from a single Division.",
+    split: "Showing all project spend — $4.04 across 3 Divisions.",
   },
   {
     dim: Dimension.DepartmentName,
     title: "Cost by Department",
-    empty: "Splitting spend by Department.",
-    single: "$4.04 — all from a single Department.",
-    split: "$4.04 split across 3 Departments.",
+    empty: "Showing all project spend, broken down by Department.",
+    single: "Showing all project spend — $4.04, all from a single Department.",
+    split: "Showing all project spend — $4.04 across 3 Departments.",
   },
   {
     dim: Dimension.Email,
     title: "Cost by User",
-    empty: "Splitting spend by User.",
-    single: "$4.04 — all from a single User.",
-    split: "$4.04 split across 3 Users.",
+    empty: "Showing all project spend, broken down by User.",
+    single: "Showing all project spend — $4.04, all from a single User.",
+    split: "Showing all project spend — $4.04 across 3 Users.",
   },
   {
     dim: Dimension.HookSource,
     title: "Cost by Agent",
-    empty: "Splitting spend by Agent.",
-    single: "$4.04 — all from a single Agent.",
-    split: "$4.04 split across 3 Agents.",
+    empty: "Showing all project spend, broken down by Agent.",
+    single: "Showing all project spend — $4.04, all from a single Agent.",
+    split: "Showing all project spend — $4.04 across 3 Agents.",
   },
   {
     dim: Dimension.JobTitle,
     title: "Cost by Job Title",
-    empty: "Splitting spend by Job Title.",
-    single: "$4.04 — all from a single Job Title.",
-    split: "$4.04 split across 3 Job Titles.",
+    empty: "Showing all project spend, broken down by Job Title.",
+    single: "Showing all project spend — $4.04, all from a single Job Title.",
+    split: "Showing all project spend — $4.04 across 3 Job Titles.",
   },
   {
     dim: Dimension.EmployeeType,
     title: "Cost by Employment Type",
-    empty: "Splitting spend by Employment Type.",
-    single: "$4.04 — all from a single Employment Type.",
-    split: "$4.04 split across 3 Employment Types.",
+    empty: "Showing all project spend, broken down by Employment Type.",
+    single:
+      "Showing all project spend — $4.04, all from a single Employment Type.",
+    split: "Showing all project spend — $4.04 across 3 Employment Types.",
   },
   {
     dim: Dimension.CostCenterName,
     title: "Cost by Cost Center",
-    empty: "Splitting spend by Cost Center.",
-    single: "$4.04 — all from a single Cost Center.",
-    split: "$4.04 split across 3 Cost Centers.",
+    empty: "Showing all project spend, broken down by Cost Center.",
+    single: "Showing all project spend — $4.04, all from a single Cost Center.",
+    split: "Showing all project spend — $4.04 across 3 Cost Centers.",
   },
   {
     dim: Dimension.Model,
     title: "Cost by Model",
-    empty: "Splitting spend by Model.",
-    single: "$4.04 — all from a single Model.",
-    split: "$4.04 split across 3 Models.",
+    empty: "Showing all project spend, broken down by Model.",
+    single: "Showing all project spend — $4.04, all from a single Model.",
+    split: "Showing all project spend — $4.04 across 3 Models.",
   },
   {
     dim: Dimension.AccountType,
     title: "Cost by Account Type",
-    empty: "Splitting spend by Account Type.",
-    single: "$4.04 — all from a single Account Type.",
-    split: "$4.04 split across 3 Account Types.",
+    empty: "Showing all project spend, broken down by Account Type.",
+    single:
+      "Showing all project spend — $4.04, all from a single Account Type.",
+    split: "Showing all project spend — $4.04 across 3 Account Types.",
   },
   {
     dim: Dimension.Provider,
     title: "Cost by Provider",
-    empty: "Splitting spend by Provider.",
-    single: "$4.04 — all from a single Provider.",
-    split: "$4.04 split across 3 Providers.",
+    empty: "Showing all project spend, broken down by Provider.",
+    single: "Showing all project spend — $4.04, all from a single Provider.",
+    split: "Showing all project spend — $4.04 across 3 Providers.",
   },
   {
     dim: Dimension.Role,
     title: "Cost by Role",
-    empty: "Splitting spend by Role.",
-    single: "$4.04 — all from a single Role.",
-    split: "$4.04 split across 3 Roles.",
+    empty: "Showing all project spend, broken down by Role.",
+    single: "Showing all project spend — $4.04, all from a single Role.",
+    split: "Showing all project spend — $4.04 across 3 Roles.",
   },
   {
     dim: Dimension.McpServerName,
     title: "Cost by MCP Server",
-    empty: "Splitting spend by MCP Server.",
-    single: "$4.04 — all from a single MCP Server.",
-    split: "$4.04 split across 3 MCP Servers.",
+    empty: "Showing all project spend, broken down by MCP Server.",
+    single: "Showing all project spend — $4.04, all from a single MCP Server.",
+    split: "Showing all project spend — $4.04 across 3 MCP Servers.",
   },
   {
     dim: Dimension.McpToolName,
     title: "Cost by MCP Tool",
-    empty: "Splitting spend by MCP Tool.",
-    single: "$4.04 — all from a single MCP Tool.",
-    split: "$4.04 split across 3 MCP Tools.",
+    empty: "Showing all project spend, broken down by MCP Tool.",
+    single: "Showing all project spend — $4.04, all from a single MCP Tool.",
+    split: "Showing all project spend — $4.04 across 3 MCP Tools.",
   },
   {
     dim: Dimension.SkillName,
     title: "Cost by Skill",
-    empty: "Splitting spend by Skill.",
-    single: "$4.04 — all from a single Skill.",
-    split: "$4.04 split across 3 Skills.",
+    empty: "Showing all project spend, broken down by Skill.",
+    single: "Showing all project spend — $4.04, all from a single Skill.",
+    split: "Showing all project spend — $4.04 across 3 Skills.",
   },
   {
     dim: Dimension.AgentName,
     title: "Cost by Subagent",
-    empty: "Splitting spend by Subagent.",
-    single: "$4.04 — all from a single Subagent.",
-    split: "$4.04 split across 3 Subagents.",
+    empty: "Showing all project spend, broken down by Subagent.",
+    single: "Showing all project spend — $4.04, all from a single Subagent.",
+    split: "Showing all project spend — $4.04 across 3 Subagents.",
   },
 ];
 
@@ -140,6 +210,7 @@ describe("breakdown copy", () => {
       breakdownCaption({
         axisValue: dim,
         groupBy: dim,
+        path: [],
         costLabel: COST,
         groupCount,
       });
@@ -156,44 +227,61 @@ describe("breakdown copy", () => {
     );
   });
 
+  it("reads the drill path into the caption", () => {
+    expect(
+      breakdownCaption({
+        axisValue: Dimension.Model,
+        groupBy: Dimension.Model,
+        path: [ADAM, CLAUDE_CODE],
+        costLabel: COST,
+        groupCount: 2,
+      }),
+    ).toBe("Showing Adam's claude-code spend — $4.04 across 2 Models.");
+  });
+
   describe("the sessions axis", () => {
+    const sessions = (path: Crumb[], groupCount = 42) =>
+      breakdownCaption({
+        axisValue: SESSIONS_AXIS,
+        groupBy: Dimension.Model,
+        path,
+        costLabel: COST,
+        groupCount,
+      });
+
     it("names itself a list, not a breakdown", () => {
       expect(breakdownTitle(SESSIONS_AXIS, Dimension.Model)).toBe(
         "Agent sessions",
       );
-      expect(
-        breakdownCaption({
-          axisValue: SESSIONS_AXIS,
-          groupBy: Dimension.Model,
-          costLabel: COST,
-          groupCount: 42,
-        }),
-      ).toBe("Every agent session, listed individually.");
+      expect(sessions([])).toBe(
+        "Showing all project sessions, listed individually.",
+      );
+      expect(sessions([ADAM, CLAUDE_CODE])).toBe(
+        "Showing Adam's claude-code sessions, listed individually.",
+      );
     });
 
     // Sessions render via a tableOverride, so `rows` is empty and groupCount is
-    // 0 — the caption must not fall through to "Splitting spend by Model."
+    // 0 — the caption must not fall through to "broken down by Model."
     it("ignores the group count the overridden table leaves at zero", () => {
-      expect(
-        breakdownCaption({
-          axisValue: SESSIONS_AXIS,
-          groupBy: Dimension.Model,
-          costLabel: COST,
-          groupCount: 0,
-        }),
-      ).toBe("Every agent session, listed individually.");
+      expect(sessions([ADAM], 0)).toBe(
+        "Showing Adam's sessions, listed individually.",
+      );
     });
   });
 
-  // The scope qualifier this copy deliberately omits: "of R&D" reads fine but
-  // "of Adam" does not, and the hero above already names the entity.
-  it("never qualifies the spend with an entity name", () => {
-    const caption = breakdownCaption({
-      axisValue: Dimension.HookSource,
-      groupBy: Dimension.HookSource,
-      costLabel: COST,
-      groupCount: 1,
-    });
-    expect(caption).not.toMatch(/\bof\b|\bin\b/);
+  // The qualifier that produced "$4.04 of Adam": a user is possessed, never
+  // used as the object of a preposition.
+  it("never says 'of' or 'in' a user", () => {
+    for (const groupCount of [0, 1, 3]) {
+      const caption = breakdownCaption({
+        axisValue: Dimension.HookSource,
+        groupBy: Dimension.HookSource,
+        path: [ADAM],
+        costLabel: COST,
+        groupCount,
+      });
+      expect(caption).not.toMatch(/\b(of|in) Adam\b/);
+    }
   });
 });

@@ -409,3 +409,20 @@ export function displayName(dim: Dimension, value: string): string {
   }
   return value;
 }
+
+// The conversational form of an entity's value, for the hero and for prose that
+// talks about it ("Adam's claude-code spend"). A user becomes the name inside
+// their address; everything else is already conversational. Distinct from
+// displayName, which stays exact because the breadcrumb and the assistant have
+// to identify one person rather than read naturally.
+export function friendlyName(dim: Dimension, value: string): string {
+  if (dim === Dimension.Email && value.includes("@")) {
+    const local = value.split("@")[0] ?? value;
+    return local
+      .split(/[._-]+/)
+      .filter(Boolean)
+      .map((w) => w[0]!.toUpperCase() + w.slice(1))
+      .join(" ");
+  }
+  return displayName(dim, value);
+}

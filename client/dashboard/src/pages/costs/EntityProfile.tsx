@@ -20,6 +20,7 @@ import { downloadCsv, slugify, toCsv } from "./csv";
 import {
   type Crumb,
   entityBadgeVariant,
+  friendlyName,
   isAttributionDim,
   LABELS,
   type Measures,
@@ -75,21 +76,6 @@ function buildCostCsv(
     ];
   });
   return toCsv(header, body);
-}
-
-// Initials for the avatar: email local-part tokens (olivia.novak → ON) or the
-// first letters of the first two words (Engineering → EN, R&D → RD).
-// Title-case an email local part into a name; pass other values through.
-function prettyName(value: string, dim: Dimension): string {
-  if (dim === Dimension.Email && value.includes("@")) {
-    const local = value.split("@")[0] ?? value;
-    return local
-      .split(/[._-]+/)
-      .filter(Boolean)
-      .map((w) => w[0]!.toUpperCase() + w.slice(1))
-      .join(" ");
-  }
-  return displayValue(value);
 }
 
 // A unique, deterministic colour identity for an entity, derived from its name
@@ -177,6 +163,9 @@ export type EntityProfileProps = {
   projectName: string;
   // The immediate parent's value, for the "Back to …" control.
   parentValue: string | null;
+  // The full drill path (root → the entity in view), which the breakdown
+  // caption names so it describes the slice actually on screen.
+  path: Crumb[];
   // Headline measures summed over this entity's children.
   stats: Measures;
   // The dimension the child table is grouped by (drives labels + CostTable).
@@ -239,6 +228,7 @@ export function EntityProfile({
   onHome,
   projectName,
   parentValue,
+  path,
   stats,
   groupBy,
   canDrill,
@@ -265,7 +255,7 @@ export function EntityProfile({
   const groupLabel = LABELS[groupBy] ?? "Group";
 
   const title = entity
-    ? prettyName(entity.value, entity.dim)
+    ? friendlyName(entity.dim, entity.value)
     : (collection?.label ?? projectName ?? "All costs");
   const typeLabel = entity
     ? (LABELS[entity.dim] ?? "Group")
@@ -284,6 +274,7 @@ export function EntityProfile({
   const caption = breakdownCaption({
     axisValue,
     groupBy,
+    path,
     costLabel: formatCost(stats.cost),
     groupCount: isError ? 0 : rows.length,
   });

@@ -35,12 +35,6 @@ export type AxisOption = { value: string; label: string };
 // (Division → Department → User → Agent), which is the common path.
 const SEGMENT_LIMIT = 4;
 
-// Two short sentences, and the second is the one that matters: the total is
-// fixed, only the division moves. That's checkable against the numbers on
-// screen, which a longer definition wasn't.
-const BREAKDOWN_EXPLAINER =
-  "Groups the spend you're looking at. The total stays the same — only how it's divided changes.";
-
 /**
  * Split the options into the segments to render inline and the remainder for the
  * "More" select. The active axis is always segmented, even when it sits past the
@@ -116,18 +110,21 @@ export function BreakdownBar({
       <div className="flex flex-col gap-0.5">
         <h2 className="flex items-center gap-1.5 text-sm font-semibold">
           {title}
-          <Tooltip>
-            <TooltipTrigger
-              aria-label={BREAKDOWN_EXPLAINER}
-              className="text-muted-foreground inline-flex cursor-help"
-            >
-              <Info className="size-3.5" />
-            </TooltipTrigger>
-            <TooltipContent className="flex max-w-64 flex-col gap-2">
-              <span>{BREAKDOWN_EXPLAINER}</span>
-              {axisHint && <span>{axisHint}</span>}
-            </TooltipContent>
-          </Tooltip>
+          {/* No general "what is a breakdown" note — defining it in the abstract
+              read as jargon, and the caption below says it against the slice
+              actually on screen. The icon is left for axes that carry a real
+              caveat, so its presence means something. */}
+          {axisHint && (
+            <Tooltip>
+              <TooltipTrigger
+                aria-label={axisHint}
+                className="text-muted-foreground inline-flex cursor-help"
+              >
+                <Info className="size-3.5" />
+              </TooltipTrigger>
+              <TooltipContent className="max-w-64">{axisHint}</TooltipContent>
+            </Tooltip>
+          )}
         </h2>
         <p className="text-muted-foreground text-xs">{caption}</p>
       </div>
