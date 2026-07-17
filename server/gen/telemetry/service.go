@@ -758,7 +758,7 @@ type LogFilter struct {
 // tunneled/remote servers)
 type McpServerActivity struct {
 	// Specific kind of MCP server target (hosted_mcp_server or tunneled_mcp_server)
-	TargetType ToolUsageTargetType
+	TargetType McpServerActivityTargetType
 	// Stable target identifier: toolset slug for hosted servers, MCP server slug
 	// for tunneled/remote servers
 	TargetID string
@@ -771,6 +771,10 @@ type McpServerActivity struct {
 	// ISO 8601 timestamp of the most recent tool call
 	LastToolCallAt *string
 }
+
+// MCP server activity target type. Only the two server-backed kinds this
+// endpoint reports are valid, unlike the broader tool-usage target types.
+type McpServerActivityTargetType string
 
 // Model usage statistics
 type ModelUsage struct {

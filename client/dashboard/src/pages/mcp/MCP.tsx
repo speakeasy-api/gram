@@ -17,7 +17,9 @@ import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import {
   indexMcpActivity,
+  lookupMcpActivity,
   mcpActivityStatus,
+  type McpActivityTargetType,
 } from "@/components/mcp/mcp-activity";
 import { Badge, Button, Icon } from "@speakeasy-api/moonshine";
 import { Plus } from "lucide-react";
@@ -50,6 +52,18 @@ const BUILT_IN_SERVERS = [
     slug: "logs",
   },
 ];
+
+// A tunnelled mcp_servers row attributes its telemetry as "tunneled_mcp_server";
+// a remote-backed one attributes as "hosted_mcp_server" (same as hosted
+// toolsets). Deriving the type here lets the activity lookup disambiguate a
+// tunnelled server from a hosted toolset that happens to share its slug.
+function mcpServerTargetType(server: {
+  tunneledMcpServerId?: string;
+}): McpActivityTargetType {
+  return server.tunneledMcpServerId
+    ? "tunneled_mcp_server"
+    : "hosted_mcp_server";
+}
 
 export function MCPRoot(): JSX.Element {
   return <Outlet />;
@@ -113,24 +127,34 @@ function MCPOverview() {
   // calls" markers. It's purely decorative: the backend 404s when observability
   // is disabled for the org, so a failed or absent fetch simply hides the
   // markers rather than degrading the listing.
-  const { data: activityResult, refetch: refetchActivity } =
-    useGetMcpServerActivity(
-      { gramProject, getMcpServerActivityPayload: {} },
-      undefined,
-      { throwOnError: false },
-    );
+  const {
+    data: activityResult,
+    isError: isActivityError,
+    isFetching: isFetchingActivity,
+    refetch: refetchActivity,
+  } = useGetMcpServerActivity(
+    { gramProject, getMcpServerActivityPayload: {} },
+    undefined,
+    { throwOnError: false },
+  );
   const activityByTarget = useMemo(
     () => indexMcpActivity(activityResult?.activity),
     [activityResult],
   );
   const recentWindowDays = activityResult?.recentWindowDays ?? 14;
   // Resolve a card's activity marker. Returns undefined (hide the marker) when
-  // the activity fetch hasn't resolved, when observability is disabled, or when
-  // the server has no matchable identifier — we only ever flag a server once we
-  // can confirm it has (or hasn't) received tool calls.
-  const activityStatusFor = (targetId: string | undefined) => {
-    if (!activityResult || !targetId) return undefined;
-    return mcpActivityStatus(activityByTarget.get(targetId));
+  // the activity fetch hasn't resolved or errored (react-query keeps the last
+  // good `data` on error, so we must also gate on isError to avoid showing stale
+  // markers after observability is disabled), or when the server has no
+  // matchable identifier. We only flag a server once we can confirm its state.
+  const activityStatusFor = (
+    targetType: McpActivityTargetType,
+    targetId: string | undefined,
+  ) => {
+    if (isActivityError || !activityResult || !targetId) return undefined;
+    return mcpActivityStatus(
+      lookupMcpActivity(activityByTarget, targetType, targetId),
+    );
   };
   const handleRefresh = () => {
     void toolsets.refetch();
@@ -140,7 +164,10 @@ function MCPOverview() {
     void refetchActivity();
   };
   const isRefreshing =
-    isFetchingMcpServers || isFetchingEndpoints || toolsets.isFetching;
+    isFetchingMcpServers ||
+    isFetchingEndpoints ||
+    isFetchingActivity ||
+    toolsets.isFetching;
   // Until AGE-1902 moves hosted rows here, this grid only renders mcp_servers-backed MCPs.
   const mcpServers = useMemo(
     () =>
@@ -382,7 +409,10 @@ function MCPOverview() {
                     <MCPCard
                       key={toolset.id}
                       toolset={toolset}
-                      activityStatus={activityStatusFor(toolset.slug)}
+                      activityStatus={activityStatusFor(
+                        "hosted_mcp_server",
+                        toolset.slug,
+                      )}
                       recentWindowDays={recentWindowDays}
                     />
                   ))}
@@ -393,7 +423,10 @@ function MCPOverview() {
                       endpointCount={
                         endpointCountByServerId.get(server.id) ?? 0
                       }
-                      activityStatus={activityStatusFor(server.slug)}
+                      activityStatus={activityStatusFor(
+                        mcpServerTargetType(server),
+                        server.slug,
+                      )}
                       recentWindowDays={recentWindowDays}
                     />
                   ))}
@@ -420,7 +453,10 @@ function MCPOverview() {
                     <MCPTableRow
                       key={toolset.id}
                       toolset={toolset}
-                      activityStatus={activityStatusFor(toolset.slug)}
+                      activityStatus={activityStatusFor(
+                        "hosted_mcp_server",
+                        toolset.slug,
+                      )}
                       recentWindowDays={recentWindowDays}
                     />
                   ))}
@@ -431,7 +467,10 @@ function MCPOverview() {
                       endpointCount={
                         endpointCountByServerId.get(server.id) ?? 0
                       }
-                      activityStatus={activityStatusFor(server.slug)}
+                      activityStatus={activityStatusFor(
+                        mcpServerTargetType(server),
+                        server.slug,
+                      )}
                       recentWindowDays={recentWindowDays}
                     />
                   ))}

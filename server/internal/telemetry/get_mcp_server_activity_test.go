@@ -7,7 +7,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/stretchr/testify/assert"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 )
 
@@ -61,37 +61,33 @@ func TestGetMcpServerActivity_FlagsNeverAndStale(t *testing.T) {
 		statusCode:  200,
 	})
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		result, err := ti.service.GetMcpServerActivity(ctx, &gen.GetMcpServerActivityPayload{
-			RecentWindowDays: 14,
-		})
-		if !assert.NoError(c, err, "cause: %v", errors.Unwrap(err)) {
-			return
-		}
-		if !assert.NotNil(c, result) {
-			return
-		}
+	// Flush the server-side async insert queue so the rows (and the
+	// trace_summaries MV rows they trigger) are visible, then assert directly
+	// rather than polling. This is deterministic and matches the telemetry
+	// README guidance for ClickHouse-backed tests.
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
-		byTarget := mcpActivityByTarget(result.Activity)
+	result, err := ti.service.GetMcpServerActivity(ctx, &gen.GetMcpServerActivityPayload{
+		RecentWindowDays: 14,
+	})
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.NotNil(t, result)
 
-		active := byTarget["active-svc"]
-		if !assert.NotNil(c, active) {
-			return
-		}
-		assert.Equal(c, gen.ToolUsageTargetType("hosted_mcp_server"), active.TargetType)
-		assert.Positive(c, active.TotalToolCalls)
-		assert.Positive(c, active.RecentToolCalls)
-		assert.NotNil(c, active.LastToolCallAt)
+	byTarget := mcpActivityByTarget(result.Activity)
 
-		stale := byTarget["stale-svc"]
-		if !assert.NotNil(c, stale) {
-			return
-		}
-		assert.Positive(c, stale.TotalToolCalls)
-		assert.Equal(c, int64(0), stale.RecentToolCalls)
-		assert.NotNil(c, stale.LastToolCallAt)
+	active := byTarget["active-svc"]
+	require.NotNil(t, active)
+	require.Equal(t, gen.McpServerActivityTargetType("hosted_mcp_server"), active.TargetType)
+	require.Positive(t, active.TotalToolCalls)
+	require.Positive(t, active.RecentToolCalls)
+	require.NotNil(t, active.LastToolCallAt)
 
-		// A server that never received a tool call is simply absent from the list.
-		assert.Nil(c, byTarget["never-svc"])
-	}, 10*time.Second, 200*time.Millisecond)
+	stale := byTarget["stale-svc"]
+	require.NotNil(t, stale)
+	require.Positive(t, stale.TotalToolCalls)
+	require.Equal(t, int64(0), stale.RecentToolCalls)
+	require.NotNil(t, stale.LastToolCallAt)
+
+	// A server that never received a tool call is simply absent from the list.
+	require.Nil(t, byTarget["never-svc"])
 }

@@ -46,7 +46,7 @@ export function MCPServerTableRow({
           <Type
             variant="subheading"
             as="div"
-            className="group-hover:text-primary truncate text-sm transition-colors"
+            className="group-hover:text-primary min-w-0 flex-1 truncate text-sm transition-colors"
             title={server.name ?? undefined}
           >
             {server.name || "MCP Server"}
@@ -56,6 +56,7 @@ export function MCPServerTableRow({
               status={activityStatus}
               recentWindowDays={recentWindowDays}
               size="sm"
+              className="shrink-0"
             />
           )}
         </div>

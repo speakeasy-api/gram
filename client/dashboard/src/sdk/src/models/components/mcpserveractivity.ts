@@ -10,17 +10,14 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * Tool usage target type
+ * MCP server activity target type. Only the two server-backed kinds this endpoint reports are valid, unlike the broader tool-usage target types.
  */
 export const TargetType = {
   HostedMcpServer: "hosted_mcp_server",
   TunneledMcpServer: "tunneled_mcp_server",
-  ShadowMcpServer: "shadow_mcp_server",
-  LocalTool: "local_tool",
-  Skill: "skill",
 } as const;
 /**
- * Tool usage target type
+ * MCP server activity target type. Only the two server-backed kinds this endpoint reports are valid, unlike the broader tool-usage target types.
  */
 export type TargetType = ClosedEnum<typeof TargetType>;
 
@@ -45,7 +42,7 @@ export type McpServerActivity = {
    */
   targetLabel: string;
   /**
-   * Tool usage target type
+   * MCP server activity target type. Only the two server-backed kinds this endpoint reports are valid, unlike the broader tool-usage target types.
    */
   targetType: TargetType;
   /**

@@ -92,7 +92,7 @@ export function MCPTableRow({
           <Type
             variant="subheading"
             as="div"
-            className="group-hover:text-primary truncate text-sm transition-colors"
+            className="group-hover:text-primary min-w-0 flex-1 truncate text-sm transition-colors"
             title={toolset.name}
           >
             {toolset.name}
@@ -110,6 +110,7 @@ export function MCPTableRow({
               status={activityStatus}
               recentWindowDays={recentWindowDays}
               size="sm"
+              className="shrink-0"
             />
           )}
         </div>

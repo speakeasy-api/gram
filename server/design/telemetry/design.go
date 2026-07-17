@@ -2270,10 +2270,15 @@ var GetMcpServerActivityResult = Type("GetMcpServerActivityResult", func() {
 	Required("activity", "recent_window_days", "lookback_days")
 })
 
+var McpServerActivityTargetType = Type("McpServerActivityTargetType", String, func() {
+	Description("MCP server activity target type. Only the two server-backed kinds this endpoint reports are valid, unlike the broader tool-usage target types.")
+	Enum("hosted_mcp_server", "tunneled_mcp_server")
+})
+
 var McpServerActivity = Type("McpServerActivity", func() {
 	Description("Tool-call activity for one MCP server, keyed by the same target identifier used elsewhere (toolset slug for hosted servers, MCP server slug for tunneled/remote servers)")
 
-	Attribute("target_type", ToolUsageTargetType, "Specific kind of MCP server target (hosted_mcp_server or tunneled_mcp_server)")
+	Attribute("target_type", McpServerActivityTargetType, "Specific kind of MCP server target (hosted_mcp_server or tunneled_mcp_server)")
 	Attribute("target_id", String, "Stable target identifier: toolset slug for hosted servers, MCP server slug for tunneled/remote servers")
 	Attribute("target_label", String, "User-facing label for the target")
 	Attribute("total_tool_calls", Int64, "Number of tool calls observed across the whole lookback window")

@@ -2703,7 +2703,7 @@ func (s *Service) GetMcpServerActivity(ctx context.Context, payload *telem_gen.G
 	activity := make([]*telem_gen.McpServerActivity, 0, len(rows))
 	for _, row := range rows {
 		entry := &telem_gen.McpServerActivity{
-			TargetType:      telem_gen.ToolUsageTargetType(row.TargetType),
+			TargetType:      telem_gen.McpServerActivityTargetType(row.TargetType),
 			TargetID:        row.TargetID,
 			TargetLabel:     row.TargetLabel,
 			TotalToolCalls:  int64(row.TotalToolCalls),  //nolint:gosec // Bounded count

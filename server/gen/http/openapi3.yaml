@@ -50313,13 +50313,10 @@ components:
                     description: User-facing label for the target
                 target_type:
                     type: string
-                    description: Tool usage target type
+                    description: MCP server activity target type. Only the two server-backed kinds this endpoint reports are valid, unlike the broader tool-usage target types.
                     enum:
                         - hosted_mcp_server
                         - tunneled_mcp_server
-                        - shadow_mcp_server
-                        - local_tool
-                        - skill
                 total_tool_calls:
                     type: integer
                     description: Number of tool calls observed across the whole lookback window

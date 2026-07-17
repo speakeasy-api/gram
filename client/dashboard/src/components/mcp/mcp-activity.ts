@@ -6,6 +6,18 @@ import type { McpServerActivity } from "@gram/client/models/components/mcpserver
 // point but has gone quiet inside the recent window (two weeks by default).
 export type McpActivityStatus = "never" | "stale";
 
+// The MCP server target types the activity endpoint reports. Hosted toolset and
+// remote MCP servers both attribute as "hosted_mcp_server"; tunnelled servers as
+// "tunneled_mcp_server".
+export type McpActivityTargetType = "hosted_mcp_server" | "tunneled_mcp_server";
+
+// A hosted toolset and a tunnelled/remote MCP server can share a slug, so the
+// identifier alone is ambiguous. Compose the target type with the identifier so
+// each server keys uniquely and can't overwrite or shadow the other.
+function activityKey(targetType: string, targetId: string): string {
+  return `${targetType} ${targetId}`;
+}
+
 /**
  * Resolve the activity status for a single listing card/row.
  *
@@ -25,16 +37,29 @@ export function mcpActivityStatus(
 }
 
 /**
- * Index an activity list by its target identifier. Hosted (toolset-backed)
- * servers key by toolset slug; tunneled/remote servers key by MCP server slug,
- * matching how the backend attributes tool calls.
+ * Index an activity list by its (targetType, targetId) pair. Keying on the pair
+ * rather than the identifier alone prevents a hosted toolset and a
+ * tunnelled/remote server that happen to share a slug from overwriting each
+ * other and mis-labelling a card.
  */
 export function indexMcpActivity(
   activity: McpServerActivity[] | undefined,
 ): Map<string, McpServerActivity> {
   const byTarget = new Map<string, McpServerActivity>();
   for (const entry of activity ?? []) {
-    byTarget.set(entry.targetId, entry);
+    byTarget.set(activityKey(entry.targetType, entry.targetId), entry);
   }
   return byTarget;
+}
+
+/**
+ * Look up a listing item's activity by its target type and identifier (toolset
+ * slug for hosted servers, MCP server slug for tunnelled/remote servers).
+ */
+export function lookupMcpActivity(
+  index: Map<string, McpServerActivity>,
+  targetType: McpActivityTargetType,
+  targetId: string,
+): McpServerActivity | undefined {
+  return index.get(activityKey(targetType, targetId));
 }

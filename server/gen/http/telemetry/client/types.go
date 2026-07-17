@@ -16940,8 +16940,8 @@ func ValidateMcpServerActivityResponseBody(body *McpServerActivityResponseBody) 
 		err = goa.MergeErrors(err, goa.MissingFieldError("recent_tool_calls", "body"))
 	}
 	if body.TargetType != nil {
-		if !(*body.TargetType == "hosted_mcp_server" || *body.TargetType == "tunneled_mcp_server" || *body.TargetType == "shadow_mcp_server" || *body.TargetType == "local_tool" || *body.TargetType == "skill") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_type", *body.TargetType, []any{"hosted_mcp_server", "tunneled_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
+		if !(*body.TargetType == "hosted_mcp_server" || *body.TargetType == "tunneled_mcp_server") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_type", *body.TargetType, []any{"hosted_mcp_server", "tunneled_mcp_server"}))
 		}
 	}
 	if body.LastToolCallAt != nil {

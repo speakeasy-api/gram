@@ -3770,7 +3770,7 @@ examples:
         application/json: {"recent_window_days": 14}
       responses:
         "200":
-          application/json: {"activity": [{"recent_tool_calls": 21147, "target_id": "<id>", "target_label": "<value>", "target_type": "skill", "total_tool_calls": 866664}], "lookback_days": 283054, "recent_window_days": 917174}
+          application/json: {"activity": [{"recent_tool_calls": 21147, "target_id": "<id>", "target_label": "<value>", "target_type": "tunneled_mcp_server", "total_tool_calls": 866664}], "lookback_days": 283054, "recent_window_days": 917174}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

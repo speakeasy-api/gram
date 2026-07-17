@@ -6310,7 +6310,7 @@ func unmarshalToolUsageUserFilterOptionResponseBodyToTelemetryToolUsageUserFilte
 // *McpServerActivityResponseBody.
 func unmarshalMcpServerActivityResponseBodyToTelemetryMcpServerActivity(v *McpServerActivityResponseBody) *telemetry.McpServerActivity {
 	res := &telemetry.McpServerActivity{
-		TargetType:      telemetry.ToolUsageTargetType(*v.TargetType),
+		TargetType:      telemetry.McpServerActivityTargetType(*v.TargetType),
 		TargetID:        *v.TargetID,
 		TargetLabel:     *v.TargetLabel,
 		TotalToolCalls:  *v.TotalToolCalls,
