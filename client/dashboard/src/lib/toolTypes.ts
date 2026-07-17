@@ -15,9 +15,6 @@ import { Toolset as GeneratedToolset } from "@gram/client/models/components/tool
 import { useMemo } from "react";
 
 type ToolWithDisplayName = Tool & { displayName: string };
-type HttpToolWithDisplayName = Tool & { type: "http" } & {
-  displayName: string;
-};
 
 export type Toolset = Omit<GeneratedToolset, "tools" | "resources"> & {
   tools: Tool[];
@@ -41,11 +38,6 @@ export type ToolWithAnnotations = Extract<
 export type ToolGroup = {
   key: string;
   tools: ToolWithDisplayName[];
-};
-
-export type HttpToolGroup = {
-  key: string;
-  tools: HttpToolWithDisplayName[];
 };
 
 type ToolDisplayContext = {
@@ -97,18 +89,6 @@ export const asResource = (resource: GeneratedResource): Resource => {
   } else {
     throw new Error("Unexpected resource type");
   }
-};
-
-export const useGroupedHttpTools = (
-  tools: HTTPToolDefinition[],
-): HttpToolGroup[] => {
-  return useGroupedTools(
-    asTools(
-      tools.map((t) => ({
-        httpToolDefinition: t,
-      })),
-    ),
-  ) as HttpToolGroup[];
 };
 
 export const useGroupedTools = (tools: Tool[]): ToolGroup[] => {
