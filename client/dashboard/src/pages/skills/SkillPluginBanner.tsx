@@ -8,6 +8,7 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { Type } from "@/components/ui/type";
 import { useProject } from "@/contexts/Auth";
+import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
 import { ClientIconFan } from "@/pages/mcp/overview/PluginStatusBanner";
 import type { Plugin } from "@gram/client/models/components/plugin.js";
 import { useDistributeSkillMutation } from "@gram/client/react-query/distributeSkill.js";
@@ -69,6 +70,11 @@ export function SkillPluginBanner({
     undefined,
     { throwOnError: false },
   );
+  // The picker seeds and diffs against the complete membership; a partial
+  // page would show later-page memberships as unchecked and no-op re-saves.
+  useDrainInfiniteQuery(distributionsQuery);
+  const isMembershipLoaded =
+    !!distributionsQuery.data && !distributionsQuery.hasNextPage;
   const distributions = useMemo(
     () =>
       distributionsQuery.data?.pages.flatMap(
@@ -97,8 +103,9 @@ export function SkillPluginBanner({
     setSelectedPluginIds(memberKey ? memberKey.split(",") : []);
   }, [memberKey]);
 
-  // Don't flash the "not distributed" warning while either side still loads.
-  if (!pluginsData || (!distributionsQuery.data && !distributionsQuery.error)) {
+  // Don't flash the "not distributed" warning while either side still loads,
+  // and don't derive picker state from a partially drained membership.
+  if (!pluginsData || (!isMembershipLoaded && !distributionsQuery.error)) {
     return null;
   }
 
@@ -129,35 +136,39 @@ export function SkillPluginBanner({
       (distribution) => !selectedIdSet.has(distribution.pluginId),
     );
     if (toAdd.length === 0 && toRemove.length === 0) return;
-    try {
-      await Promise.all([
-        ...toAdd.map((pluginId) =>
-          distribute.mutateAsync({
-            request: {
-              distributeSkillRequestBody: { id: skillId, pluginId },
+    // allSettled + unconditional invalidation: some mutations in the batch
+    // may succeed even when others fail, and the cache must reflect what the
+    // server actually committed.
+    const results = await Promise.allSettled([
+      ...toAdd.map((pluginId) =>
+        distribute.mutateAsync({
+          request: {
+            distributeSkillRequestBody: { id: skillId, pluginId },
+          },
+        }),
+      ),
+      ...toRemove.map((distribution) =>
+        undistribute.mutateAsync({
+          request: {
+            undistributeSkillRequestBody: {
+              id: skillId,
+              pluginId: distribution.pluginId,
             },
-          }),
-        ),
-        ...toRemove.map((distribution) =>
-          undistribute.mutateAsync({
-            request: {
-              undistributeSkillRequestBody: {
-                id: skillId,
-                pluginId: distribution.pluginId,
-              },
-            },
-          }),
-        ),
-      ]);
-      await invalidateAllSkillDistributions(queryClient);
-      toast.success(describeSaveResult(toAdd.length, toRemove.length));
-    } catch (error) {
+          },
+        }),
+      ),
+    ]);
+    await invalidateAllSkillDistributions(queryClient);
+    const firstFailure = results.find((result) => result.status === "rejected");
+    if (firstFailure) {
       toast.error(
-        error instanceof Error
-          ? error.message
+        firstFailure.reason instanceof Error
+          ? firstFailure.reason.message
           : "Failed to update plugin distributions",
       );
+      return;
     }
+    toast.success(describeSaveResult(toAdd.length, toRemove.length));
   };
 
   return (
@@ -234,8 +245,11 @@ export function SkillPluginBanner({
                           key={plugin.id}
                           className="hover:bg-accent flex cursor-pointer items-start gap-2 rounded-sm px-2 py-1.5 text-sm"
                         >
+                          {/* Disabled while saving: the post-save reseed
+                              would silently discard mid-flight toggles. */}
                           <Checkbox
                             checked={selectedPluginIds.includes(plugin.id)}
+                            disabled={isSaving}
                             onCheckedChange={() => togglePlugin(plugin.id)}
                             className="mt-0.5"
                           />

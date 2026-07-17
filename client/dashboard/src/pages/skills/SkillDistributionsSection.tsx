@@ -71,7 +71,10 @@ export function SkillDistributionsSection({
   }
   if (distributionsQuery.error && !distributionsQuery.data) {
     return (
-      <ErrorAlert title="Unable to load distributions" error="Try again." />
+      <ErrorAlert
+        title="Unable to load distributions"
+        error={distributionsQuery.error}
+      />
     );
   }
 

@@ -1,10 +1,12 @@
 import { RequireScope } from "@/components/require-scope";
+import { ErrorAlert } from "@/components/ui/alert";
 import { Button as UiButton } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { DotCard } from "@/components/ui/dot-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { useProject } from "@/contexts/Auth";
+import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
 import { useRoutes } from "@/routes";
 import type { SkillDistribution } from "@gram/client/models/components/skilldistribution.js";
 import { useDistributeSkillMutation } from "@gram/client/react-query/distributeSkill.js";
@@ -18,7 +20,7 @@ import { Badge, Button, Icon, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Sparkles, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { toast } from "sonner";
 
 /**
@@ -43,6 +45,11 @@ export function PluginSkillsSection({
     undefined,
     { throwOnError: false },
   );
+  // The full membership backs both the list and the add-picker's exclusion
+  // set, so partial pages would offer already-distributed skills.
+  useDrainInfiniteQuery(distributionsQuery);
+  const isMembershipLoaded =
+    !!distributionsQuery.data && !distributionsQuery.hasNextPage;
   const distributions = useMemo(
     () =>
       distributionsQuery.data?.pages.flatMap(
@@ -55,6 +62,8 @@ export function PluginSkillsSection({
     throwOnError: false,
     enabled: isAddSkillOpen,
   });
+  useDrainInfiniteQuery(skillsQuery, isAddSkillOpen);
+  const isSkillListLoading = skillsQuery.isPending || skillsQuery.hasNextPage;
   const availableSkills = useMemo(() => {
     const distributedSkillIds = new Set(distributions.map((d) => d.skillId));
     return (
@@ -141,6 +150,7 @@ export function PluginSkillsSection({
           <Button
             variant="secondary"
             size="sm"
+            disabled={!isMembershipLoaded}
             onClick={() => setIsAddSkillOpen(true)}
           >
             <Button.LeftIcon>
@@ -151,7 +161,12 @@ export function PluginSkillsSection({
         </RequireScope>
       </div>
       <div className="mb-8">
-        {distributionsQuery.isPending && !distributionsQuery.data ? (
+        {distributionsQuery.error && !distributionsQuery.data ? (
+          <ErrorAlert
+            title="Unable to load distributed skills"
+            error={distributionsQuery.error}
+          />
+        ) : !isMembershipLoaded ? (
           <Skeleton className="h-24 w-full rounded-xl" />
         ) : distributions.length === 0 ? (
           <Stack
@@ -179,22 +194,6 @@ export function PluginSkillsSection({
             ))}
           </div>
         )}
-        {distributionsQuery.hasNextPage && (
-          <div className="mt-4">
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={distributionsQuery.isFetchingNextPage}
-              onClick={() => void distributionsQuery.fetchNextPage()}
-            >
-              <Button.Text>
-                {distributionsQuery.isFetchingNextPage
-                  ? "Loading..."
-                  : "Load more skills"}
-              </Button.Text>
-            </Button>
-          </div>
-        )}
       </div>
 
       {/* Add Skill Dialog */}
@@ -209,7 +208,7 @@ export function PluginSkillsSection({
           <form onSubmit={handleAddSkill} className="flex flex-col gap-4">
             <div className="flex flex-col gap-2">
               <label className="text-sm font-medium">Skill</label>
-              {skillsQuery.isPending ? (
+              {isSkillListLoading ? (
                 <Skeleton className="h-9 w-full" />
               ) : availableSkills.length > 0 ? (
                 <select
@@ -243,7 +242,7 @@ export function PluginSkillsSection({
                 type="submit"
                 disabled={
                   distribute.isPending ||
-                  skillsQuery.isPending ||
+                  isSkillListLoading ||
                   availableSkills.length === 0
                 }
               >
@@ -285,7 +284,12 @@ function PluginSkillCard({
           className="text-md group-hover:text-primary flex-1 truncate transition-colors"
           title={distribution.skillDisplayName}
         >
-          {distribution.skillDisplayName}
+          <Link
+            to={routes.skills.detail.href(distribution.skillId)}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {distribution.skillDisplayName}
+          </Link>
         </Type>
         {distribution.pinnedVersionId ? (
           <Badge

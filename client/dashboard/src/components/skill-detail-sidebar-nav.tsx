@@ -4,6 +4,7 @@ import {
   type McpSidebarNavItem,
 } from "@/components/mcp-sidebar-nav-shell";
 import { Type } from "@/components/ui/type";
+import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
 import { HumanizeDateTime } from "@/lib/dates";
 import {
   SKILL_DISTRIBUTIONS_SECTION_ID,
@@ -33,6 +34,8 @@ export function SkillDetailSidebarNav(): React.JSX.Element | null {
     undefined,
     { throwOnError: false, enabled: !!skillId },
   );
+  // Drained so the count reflects every distribution, not the first page.
+  useDrainInfiniteQuery(distributionsQuery, !!skillId);
 
   if (!skillId) return null;
 
@@ -99,7 +102,9 @@ export function SkillDetailSidebarNav(): React.JSX.Element | null {
         <Type variant="small" muted className="text-xs">
           {distributionCount === 1
             ? "1 plugin"
-            : `${distributionCount} plugins`}
+            : `${distributionCount}${
+                distributionsQuery.hasNextPage ? "+" : ""
+              } plugins`}
         </Type>
       </div>
 

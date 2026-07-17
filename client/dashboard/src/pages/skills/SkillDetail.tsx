@@ -12,6 +12,7 @@ import { Type } from "@/components/ui/type";
 import { useProject } from "@/contexts/Auth";
 import { Markdown } from "@/elements/components/Markdown";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
+import { isNotFoundError } from "@/lib/route-errors";
 import {
   DangerSettingsSection,
   SettingsSection,
@@ -76,6 +77,16 @@ export default function SkillDetail(): JSX.Element {
     throwOnError: false,
     enabled: !!skillId,
   });
+
+  // Only a 404 means the skill is gone; other failures (transient 5xx, stale
+  // grants) surface through the route error boundary with a retry path.
+  if (
+    skillQuery.error &&
+    !skillQuery.data &&
+    !isNotFoundError(skillQuery.error)
+  ) {
+    throw skillQuery.error;
+  }
 
   if (!skillId || (skillQuery.error && !skillQuery.data)) {
     return (
@@ -343,7 +354,10 @@ function VersionHistory({
         )}
         {versionsQuery.isPending && !versionsQuery.data && <SkeletonTable />}
         {versionsQuery.error && !versionsQuery.data && (
-          <ErrorAlert title="Unable to load versions" error="Try again." />
+          <ErrorAlert
+            title="Unable to load versions"
+            error={versionsQuery.error}
+          />
         )}
         {versionsQuery.data && (
           <div className="overflow-x-auto">

@@ -168,7 +168,7 @@ export function AppSidebar({
   const activeItem =
     state === "collapsed" && activeGroup ? undefined : activeRoute?.title;
 
-  const isMcpDetailRoute =
+  const isWideSidebarDetailRoute =
     routes.mcp.details.active ||
     routes.mcp.x.active ||
     routes.mcp.builtIn.active ||
@@ -336,7 +336,7 @@ export function AppSidebar({
     <Sidebar
       collapsible="icon"
       style={
-        isMcpDetailRoute
+        isWideSidebarDetailRoute
           ? ({ "--sidebar-width": "22rem" } as React.CSSProperties)
           : undefined
       }

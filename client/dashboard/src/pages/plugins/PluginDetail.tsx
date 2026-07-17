@@ -1,6 +1,7 @@
 import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
 import { MCPStatusIndicator } from "@/components/mcp/MCPStatusIndicator";
+import { RequireScope } from "@/components/require-scope";
 import { ToolCollectionBadge } from "@/components/tool-collection-badge";
 import { Button as UiButton } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -50,6 +51,7 @@ import { useNavigate, useParams } from "react-router";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { PluginServer } from "@gram/client/models/components/pluginserver.js";
 import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
+import { useProject } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { toast } from "sonner";
@@ -78,6 +80,7 @@ function serverOptionKey(kind: ServerOptionKind, id: string): string {
 
 export default function PluginDetail(): JSX.Element | null {
   const { pluginId } = useParams<{ pluginId: string }>();
+  const project = useProject();
   const queryClient = useQueryClient();
   const routes = useRoutes();
   const navigate = useNavigate();
@@ -647,10 +650,16 @@ export default function PluginDetail(): JSX.Element | null {
         {/* Skills ride the same publish flow as servers, so changes offer a
             republish. Orgs without the skills feature keep the teaser. */}
         {productFeatures?.skillsEnabled ? (
-          <PluginSkillsSection
-            pluginId={pluginId!}
-            onMutated={(message) => offerPublish(message)}
-          />
+          <RequireScope
+            scope="skill:read"
+            resourceId={project.id}
+            level="section"
+          >
+            <PluginSkillsSection
+              pluginId={pluginId!}
+              onMutated={(message) => offerPublish(message)}
+            />
+          </RequireScope>
         ) : (
           <>
             <div className="mb-3 flex items-center gap-3">
