@@ -51,9 +51,6 @@ sdk-gen:
   - "overlays/**"
   - "server/gen/http/openapi3.yaml"
 
-elements:
-  - "elements/**"
-
 migrations:
   - "go.mod"
   - "go.sum"

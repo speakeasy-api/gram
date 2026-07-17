@@ -30,6 +30,7 @@ import { accessResolveShadowMCPInventoryRequest } from "../funcs/accessResolveSh
 import { accessUpdateMemberRoles } from "../funcs/accessUpdateMemberRoles.js";
 import { accessUpdateRole } from "../funcs/accessUpdateRole.js";
 import { accessUpdateShadowMCPAccessRule } from "../funcs/accessUpdateShadowMCPAccessRule.js";
+import { accessUpdateShadowMCPInventoryServerName } from "../funcs/accessUpdateShadowMCPInventoryServerName.js";
 import { accessUpsertShadowMCPInventoryPolicyBypass } from "../funcs/accessUpsertShadowMCPInventoryPolicyBypass.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { AccessMember } from "../models/components/accessmember.js";
@@ -164,6 +165,10 @@ import {
   UpdateShadowMCPAccessRuleRequest,
   UpdateShadowMCPAccessRuleSecurity,
 } from "../models/operations/updateshadowmcpaccessrule.js";
+import {
+  UpdateShadowMCPInventoryServerNameRequest,
+  UpdateShadowMCPInventoryServerNameSecurity,
+} from "../models/operations/updateshadowmcpinventoryservername.js";
 import {
   UpsertShadowMCPInventoryPolicyBypassRequest,
   UpsertShadowMCPInventoryPolicyBypassSecurity,
@@ -677,6 +682,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<Role> {
     return unwrapAsync(accessUpdateRole(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * updateShadowMCPInventoryServerName access
+   *
+   * @remarks
+   * Update or clear the administrator-defined display name for one project-scoped Shadow MCP inventory server URL.
+   */
+  async updateShadowMCPInventoryServerName(
+    request: UpdateShadowMCPInventoryServerNameRequest,
+    security?: UpdateShadowMCPInventoryServerNameSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(accessUpdateShadowMCPInventoryServerName(
       this,
       request,
       security,

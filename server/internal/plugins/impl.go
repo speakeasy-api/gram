@@ -49,6 +49,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -69,9 +70,14 @@ type GitHubPublisher interface {
 	HasDirectCollaborator(ctx context.Context, installationID int64, owner, repo string) (bool, error)
 	// GetRepoFiles returns the current published files so a publish can carry an
 	// unchanged plugin component (hooks or MCP) verbatim into a fresh push,
-	// leaving the other component's files and embedded key untouched. Returns
+	// leaving the other component's files and configuration untouched. Returns
 	// ghclient.ErrRepoNotFound when nothing has been published yet.
 	GetRepoFiles(ctx context.Context, installationID int64, owner, repo, branch string) (map[string][]byte, error)
+	// GetFileContent returns one file's raw content from the given branch.
+	// GetPublishStatus uses it to read the live plugin.json manifest version
+	// without walking the whole repo. Returns ghclient.ErrFileNotFound when
+	// the repo, branch, or path is absent.
+	GetFileContent(ctx context.Context, installationID int64, owner, repo, branch, path string) ([]byte, error)
 }
 
 // GitHubConfig holds the configured GitHub client and the Gram-owned org
@@ -188,7 +194,7 @@ func NewService(
 		serverURL: serverURL,
 		keyPrefix: auth.APIKeyPrefix(env),
 		// features gates human/dashboard-initiated hook-output changes (marketplace
-		// rename via UpdateMarketplaceSettings, observability-mode toggle via
+		// rename via UpdateMarketplaceSettings, browser-login toggle via
 		// productfeatures) on the phased hooks rollout, mirroring the automated
 		// publisher. Fail-closed when nil: non-canary orgs defer those changes.
 		features: features,
@@ -432,6 +438,30 @@ func (s *Service) CreatePlugin(ctx context.Context, payload *gen.CreatePluginPay
 			return nil, oops.E(oops.CodeConflict, nil, "a plugin with this slug already exists")
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "create plugin").LogError(ctx, s.logger)
+	}
+
+	// Default a new plugin in the org's default project to the org wildcard so it
+	// delivers to every member — that project is the org-wide baseline. Plugins in
+	// other projects default to no assignments (they reach no one until an admin
+	// assigns an audience), so a separate project's servers aren't auto-broadcast
+	// org-wide. agent.getPlugins scopes delivery by assignment; "*" (all org
+	// members) is the closest "everyone" primitive Gram has, since there's no
+	// project-scoped membership.
+	isDefaultProject, err := s.repo.WithTx(tx).IsDefaultProject(ctx, repo.IsDefaultProjectParams{
+		OrganizationID: ac.ActiveOrganizationID,
+		ProjectID:      *ac.ProjectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "check default project").LogError(ctx, s.logger)
+	}
+	if isDefaultProject {
+		if _, err := s.repo.WithTx(tx).AddPluginAssignment(ctx, repo.AddPluginAssignmentParams{
+			PluginID:       plugin.ID,
+			OrganizationID: ac.ActiveOrganizationID,
+			PrincipalUrn:   urn.PrincipalWildcard,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "assign new plugin to org").LogError(ctx, s.logger)
+		}
 	}
 
 	if err := s.audit.LogPluginCreate(ctx, tx, audit.LogPluginCreateEvent{
@@ -1126,7 +1156,7 @@ func (s *Service) DownloadPluginPackage(ctx context.Context, payload *gen.Downlo
 
 // DownloadObservabilityPlugin returns a ZIP of the per-org observability
 // plugin for direct installation. Mints a fresh hooks-scoped API key per
-// download and embeds it in the script — the org's API Keys page will
+// download and embeds it in speakeasy.json — the org's API Keys page will
 // accumulate one row per download, which admins can audit and revoke
 // independently of the publish-bundled key. The plugin contents are
 // otherwise identical to what PublishPlugins ships in the GitHub marketplace.
@@ -1205,6 +1235,10 @@ func (s *Service) DownloadCodexInstallScript(ctx context.Context, payload *gen.D
 	marketplaceURL := fmt.Sprintf("%s%s%s.git", s.serverURL, marketplace.RoutePrefix, conn.MarketplaceToken.String)
 
 	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, conv.PtrValOr(ac.ProjectSlug, ""), *ac.ProjectID)
+	// The script's plugin key and hook approvals must name the codex plugin as
+	// it exists in the published repo, which a rollout-gated carry may have
+	// pinned under a pre-rename org name.
+	cfg.HooksOrgName = naming.PublishedHooksOrgName(conn.PublishedHooksConfig)
 
 	script, err := GenerateCodexInstallScript(marketplaceURL, cfg)
 	if err != nil {
@@ -1217,11 +1251,10 @@ func (s *Service) DownloadCodexInstallScript(ctx context.Context, payload *gen.D
 	}, io.NopCloser(bytes.NewReader(script)), nil
 }
 
-// writePluginZip serializes the file map as a deterministic ZIP, marking
-// shell scripts executable so hook.sh / hook_async.sh run after extraction. The GitHub
+// writePluginZip serializes the file map as a deterministic ZIP, marking shell
+// scripts executable so the bootstrapper runs after extraction. The GitHub
 // publish path applies the same rule via Tree mode 100755 in
-// thirdparty/github/repo.go; keep them in sync — without the execute bit,
-// Claude Code, Cursor, and Codex silently fail on `./hook.sh: permission denied`.
+// thirdparty/github/repo.go; keep them in sync.
 func writePluginZip(w io.Writer, files map[string][]byte) error {
 	zw := zip.NewWriter(w)
 	paths := make([]string, 0, len(files))
@@ -1319,6 +1352,7 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 		HasCollaborators:          nil,
 		UpToDate:                  nil,
 		LastPublishedAt:           nil,
+		LiveVersion:               nil,
 	}
 
 	if s.github != nil {
@@ -1334,19 +1368,23 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 			result.RepoURL = &repoURL
 			// The observability plugin slugs are org-name-derived (see naming
 			// package); surface them so install UIs never re-derive the formula.
+			// HooksOrgName keeps the reported slugs pointing at the published
+			// directories when a rename happened while the rollout gate carried
+			// the hooks subtree.
 			slugCfg := GenerateConfig{
-				OrgName:           s.resolveOrganizationName(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug),
-				OrgEmail:          "",
-				OrgID:             "",
-				ServerURL:         "",
-				APIKey:            "",
-				HooksAPIKey:       "",
-				ProjectSlug:       "",
-				IsDefaultProject:  false,
-				Version:           "",
-				MarketplaceName:   "",
-				ObservabilityMode: false,
-				BrowserLogin:      false,
+				OrgName:          s.resolveOrganizationName(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug),
+				OrgEmail:         "",
+				OrgID:            "",
+				ServerURL:        "",
+				APIKey:           "",
+				HooksAPIKey:      "",
+				ProjectSlug:      "",
+				IsDefaultProject: false,
+				Version:          "",
+				MarketplaceName:  "",
+				HooksOrgName:     naming.PublishedHooksOrgName(conn.PublishedHooksConfig),
+				BrowserLogin:     false,
+				InstallFailOpen:  false,
 			}
 			result.ClaudeObservabilityPlugin = conv.PtrEmpty(ClaudeObservabilitySlug(slugCfg))
 			result.CodexObservabilityPlugin = conv.PtrEmpty(CodexObservabilitySlug(slugCfg))
@@ -1361,6 +1399,7 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 				result.LastPublishedAt = &lastPublishedAt
 			}
 			result.UpToDate = s.publishUpToDate(ctx, ac, conn)
+			result.LiveVersion = s.cachedLiveManifestVersion(ctx, ac, conn)
 
 			hasCollaborators, err := s.cachedHasDirectCollaborator(ctx, conn.RepoOwner, conn.RepoName)
 			if err != nil {
@@ -1425,6 +1464,100 @@ func (s *Service) cachedHasDirectCollaborator(ctx context.Context, owner, repo s
 	return hasCollaborators, nil
 }
 
+// liveVersionCacheTTL bounds how stale the live manifest version can be. Like
+// the collaborator flag, GetPublishStatus is polled by the dashboard, so
+// reading GitHub on every call would burn installation rate limits for a value
+// that only changes on publish. A manual publish busts the cache immediately;
+// background auto-publishes run on the cache-less NewPublisher instance, so
+// their version bump shows up within the TTL instead.
+const liveVersionCacheTTL = 60 * time.Second
+
+func liveVersionCacheKey(owner, repo string) string {
+	return fmt.Sprintf("plugins:live-version:%s/%s", owner, repo)
+}
+
+// cachedLiveManifestVersion returns the manifest version currently live in the
+// published repo — the version generateConfig stamped into the plugin.json
+// files last pushed to GitHub, which is what plugin clients (Claude Code,
+// Cursor, Codex) report for installed plugins. Cached per repo; a cached empty
+// string records a definitive "no live manifest". Returns nil ("unknown") on
+// any failure so a GitHub hiccup degrades the status read rather than failing
+// it.
+func (s *Service) cachedLiveManifestVersion(ctx context.Context, ac *contextvalues.AuthContext, conn repo.PluginGithubConnection) *string {
+	key := liveVersionCacheKey(conn.RepoOwner, conn.RepoName)
+	if s.cache != nil {
+		var cached string
+		switch err := s.cache.Get(ctx, key, &cached); {
+		case err == nil:
+			if cached == "" {
+				return nil
+			}
+			return &cached
+		case errors.Is(err, redisCache.ErrCacheMiss):
+			// Fall through to the live read below.
+		default:
+			s.logger.WarnContext(ctx, "read live version cache", attr.SlogError(err))
+		}
+	}
+
+	version, ok := s.liveManifestVersion(ctx, ac, conn)
+	if !ok {
+		// Transient failure: report unknown without caching so the next
+		// uncached status read retries.
+		return nil
+	}
+
+	if s.cache != nil {
+		if err := s.cache.Set(ctx, key, &version, liveVersionCacheTTL); err != nil {
+			s.logger.WarnContext(ctx, "write live version cache", attr.SlogError(err))
+		}
+	}
+
+	if version == "" {
+		return nil
+	}
+	return &version
+}
+
+// liveManifestVersion reads the version stamped into the live repo's Claude
+// plugin.json, trying each of the project's current plugin slugs until one
+// resolves — a plugin created after the last publish has no file yet, but all
+// manifests in a publish share one version, so any live one answers for the
+// project. ok is false when the read failed transiently (GitHub error,
+// malformed manifest), so the caller skips negative caching; a clean "no live
+// manifest" returns ("", true).
+func (s *Service) liveManifestVersion(ctx context.Context, ac *contextvalues.AuthContext, conn repo.PluginGithubConnection) (version string, ok bool) {
+	pluginInfos, err := s.resolvePluginInfos(ctx, *ac.ProjectID)
+	if err != nil {
+		// resolvePluginInfos already logged the underlying error.
+		return "", false
+	}
+
+	for _, p := range pluginInfos {
+		content, err := s.github.Client.GetFileContent(ctx, s.github.InstallationID, conn.RepoOwner, conn.RepoName, "main", p.Slug+"/.claude-plugin/plugin.json")
+		if errors.Is(err, ghclient.ErrFileNotFound) {
+			continue
+		}
+		if err != nil {
+			s.logger.WarnContext(ctx, "live version: get plugin manifest", attr.SlogError(err))
+			return "", false
+		}
+
+		var manifest struct {
+			Version string `json:"version"`
+		}
+		if err := json.Unmarshal(content, &manifest); err != nil {
+			s.logger.WarnContext(ctx, "live version: parse plugin manifest", attr.SlogError(err))
+			return "", false
+		}
+		return manifest.Version, true
+	}
+
+	// None of the current plugins has a live manifest (e.g. they were all
+	// created after the last publish): definitively absent.
+	return "", true
+}
+
 // publishUpToDate reports whether the project's current plugin state matches
 // what was last published, by recomputing the live MCP fingerprint the same way
 // publishProject does and comparing both it and the current hooks generator
@@ -1466,7 +1599,7 @@ func (s *Service) publishUpToDate(ctx context.Context, ac *contextvalues.AuthCon
 
 	// Up to date only when both components match what was last published: the MCP
 	// per-plugin fingerprints, the hooks generator version, and the hook-affecting
-	// config (so a marketplace rename or observability-mode toggle that hasn't
+	// config (so a marketplace rename or browser-login toggle that hasn't
 	// propagated to the hooks subtree yet reads as stale rather than current).
 	upToDate := maps.Equal(mcpFingerprints, decodeMCPFingerprints(conn.PublishedMcpFingerprints)) &&
 		conv.FromPGTextOrEmpty[string](conn.PublishedHooksVersion) == hooksGeneratorVersion &&
@@ -1603,48 +1736,6 @@ func (s *Service) PublishProject(ctx context.Context, input PublishProjectInput)
 	return &PublishProjectResult{RepoURL: result.RepoURL, Skipped: result.Skipped}, nil
 }
 
-// HooksRolloutEligible reports whether the organization is cleared to receive the
-// current observability (hooks) generator version. Exposed for other services
-// (e.g. productfeatures) that must decide, before persisting an org-level setting
-// that changes generated hook output, whether that change can actually be
-// published to the hooks subtree. Fails closed — see hooksRolloutEligible.
-func (s *Service) HooksRolloutEligible(ctx context.Context, orgID, orgSlug string) bool {
-	return s.hooksRolloutEligible(ctx, orgID, orgSlug)
-}
-
-// RepublishOrganizationProjects republishes every project in the organization
-// that has a plugin GitHub connection. It is used when an org-level setting that
-// affects generated output (e.g. observability mode) changes and must propagate
-// to all of the org's published marketplaces. SkipIfUnchanged is set so only the
-// components that actually changed are regenerated (the config-hash signal picks
-// up the setting change for the hooks component without rotating MCP keys), and
-// the hooks component stays phase-gated. Callers that require the hooks to update
-// synchronously should verify HooksRolloutEligible first; this method never fails
-// the caller for an ineligible org — the change is carried and the automated
-// rollout applies it once the org is eligible. Returns the joined errors of any
-// per-project publishes that failed.
-func (s *Service) RepublishOrganizationProjects(ctx context.Context, orgID string) error {
-	if s.github == nil {
-		return nil
-	}
-	targets, err := s.repo.ListOrgPluginPublishTargets(ctx, orgID)
-	if err != nil {
-		return fmt.Errorf("list org plugin publish targets: %w", err)
-	}
-	var errs []error
-	for _, t := range targets {
-		if _, err := s.PublishProject(ctx, PublishProjectInput{
-			ProjectID:       t.ProjectID,
-			CreatedByUserID: t.CreatedByUserID,
-			CommitMessage:   "Update observability settings",
-			SkipIfUnchanged: true,
-		}); err != nil {
-			errs = append(errs, fmt.Errorf("republish project %s: %w", t.ProjectID, err))
-		}
-	}
-	return errors.Join(errs...)
-}
-
 type publishActor struct {
 	Principal       urn.Principal
 	DisplayName     *string
@@ -1733,7 +1824,7 @@ type publishOutcome struct {
 	RepoURL string
 	Skipped bool
 	// HooksConfigDeferred is true when hook-output-affecting config changed (a
-	// marketplace rename or observability-mode toggle) but the org isn't cleared
+	// marketplace rename or browser-login toggle) but the org isn't cleared
 	// for the current hooks version, so the hooks subtree was carried unchanged
 	// rather than regenerated (which would advance the org past the rollout gate).
 	// The change applies automatically once the org becomes eligible. MCP and the
@@ -1793,7 +1884,7 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		!maps.Equal(mcpFingerprints, decodeMCPFingerprints(existing.PublishedMcpFingerprints))
 
 	// Snapshot the hook-output-affecting config (resolved marketplace name,
-	// observability mode, server URL, etc.). A rename or observability-mode toggle
+	// browser login, server URL, etc.). A rename or browser-login toggle
 	// changes generated hook content while leaving hooksGeneratorVersion untouched,
 	// so this snapshot is the only signal that catches those; without it the hooks
 	// subtree would be carried stale. The version and this config together decide
@@ -1809,7 +1900,7 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	// The hooks version + config this org should converge to. This gate is
 	// UNCONDITIONAL — it is not an opt-in per call site — so no publish path (the
 	// automated rollout, a dashboard publish, a marketplace rename, an
-	// observability-mode toggle) can force a hooks change onto an org that the
+	// browser-login toggle) can force a hooks change onto an org that the
 	// rollout hasn't cleared. The single lever to advance an org is the
 	// FlagHooksRollout payload pin in PostHog (plus the hardcoded canary); see
 	// hooksRolloutEligible. When an org isn't eligible we carry its already-
@@ -1905,15 +1996,16 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		candidates = append(candidates, mcpCandidate)
 	}
 
-	// Hooks component: carry when the generator version is unchanged, otherwise
-	// regenerate with a fresh hooks key.
+	// Hooks component: carry when the target version+config match what's
+	// published (including gated orgs pinned to an older version), otherwise
+	// regenerate with a fresh hooks key. The carry is prefix-based so it works
+	// across generator versions with different file layouts — enumerating the
+	// CURRENT generator's paths would fail against an older published layout
+	// and silently regenerate past the rollout gate.
 	carriedHooks := false
+	carriedHooksOrgName := ""
 	if !hooksChanged {
-		paths, err := hooksFilePaths(cfg)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "enumerate hooks files").LogError(ctx, s.logger)
-		}
-		carriedHooks = carry(files, paths)
+		carriedHooksOrgName, carriedHooks = carryHooksSubtree(files, existingFiles, targetHooksConfigJSON, cfg.OrgName)
 	}
 	if !carriedHooks {
 		hooksCandidate, err := s.buildPluginAPIKeyCandidate(auth.APIKeyScopeHooks, "hooks")
@@ -1927,6 +2019,20 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		}
 		maps.Copy(files, hooksFiles)
 		candidates = append(candidates, hooksCandidate)
+		// What lands in the repo is the CURRENT generator's output; persist that
+		// truthfully even when the rollout gate had pinned an older published
+		// version — recording the stale version would make every subsequent
+		// publish repeat this fallback and mint another hooks key. Reaching here
+		// past the gate is only possible when the published subtree is missing
+		// or unreadable, and regenerating is the one way to keep the repo
+		// installable.
+		if targetHooksVersion != hooksGeneratorVersion {
+			s.logger.WarnContext(ctx, "published hooks subtree not carriable; regenerating at current hooks version despite rollout gate",
+				attr.SlogOrganizationID(input.OrganizationID))
+		}
+		targetHooksVersion = hooksGeneratorVersion
+		targetHooksConfigJSON = currentHooksConfigJSON
+		hooksConfigDeferred = false
 	}
 
 	// Shared files (marketplace manifests + README) reference both components but
@@ -1938,6 +2044,11 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	sharedCfg := cfg
 	sharedCfg.APIKey = fingerprintAPIKeySentinel
 	sharedCfg.HooksAPIKey = fingerprintHooksKeySentinel
+	// A carried subtree keeps the directory names it was published under, which
+	// diverge from cfg.OrgName after an org rename; point the regenerated
+	// manifests' observability entries at the carried directories so they stay
+	// resolvable.
+	sharedCfg.HooksOrgName = carriedHooksOrgName
 	sharedFiles, err := generateSharedFiles(pluginInfos, sharedCfg)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "generate shared files").LogError(ctx, s.logger)
@@ -1997,7 +2108,45 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		return nil, oops.E(oops.CodeUnexpected, err, "persist plugin api keys").LogError(ctx, s.logger)
 	}
 
+	// Bust the live-version cache so the dashboard's current-version readout
+	// reflects this publish immediately instead of after the TTL.
+	if s.cache != nil {
+		if err := s.cache.Delete(ctx, liveVersionCacheKey(repoOwner, repoName)); err != nil {
+			s.logger.WarnContext(ctx, "invalidate live version cache", attr.SlogError(err))
+		}
+	}
+
 	return &publishOutcome{RepoURL: repoURL, Skipped: false, HooksConfigDeferred: hooksConfigDeferred}, nil
+}
+
+// carryHooksSubtree copies the published hooks (observability) subtree
+// verbatim into dst by directory prefix (see hooksSubtreePrefixes). The
+// prefixes derive from the published hooks config's org name — the org may
+// have been renamed since publish — falling back to the current org name when
+// the stored config predates the snapshot. Returns the org name the carried
+// directories derive from (for GenerateConfig.HooksOrgName) and whether the
+// carry succeeded; false means a platform's subtree is missing and the caller
+// must regenerate.
+func carryHooksSubtree(dst, existing map[string][]byte, publishedConfig []byte, currentOrgName string) (string, bool) {
+	if len(existing) == 0 {
+		return "", false
+	}
+	orgName := conv.Default(naming.PublishedHooksOrgName(publishedConfig), currentOrgName)
+	staged := make(map[string][]byte)
+	for _, prefix := range hooksSubtreePrefixes(orgName) {
+		found := false
+		for p, content := range existing {
+			if strings.HasPrefix(p, prefix) {
+				staged[p] = content
+				found = true
+			}
+		}
+		if !found {
+			return "", false
+		}
+	}
+	maps.Copy(dst, staged)
+	return orgName, true
 }
 
 // validMarketplaceName matches identifiers Claude Code, Cursor, and Codex
@@ -2548,11 +2697,12 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlu
 		// settings flip right after a publish) still mint distinct manifest
 		// versions; the 13-digit patch also sorts numerically above the
 		// 10-digit second epochs already in installed caches.
-		Version:           fmt.Sprintf("%d", time.Now().UnixMilli()),
-		MarketplaceName:   "",
-		IsDefaultProject:  s.isDefaultProject(ctx, projectID),
-		ObservabilityMode: false,
-		BrowserLogin:      false,
+		Version:          fmt.Sprintf("%d", time.Now().UnixMilli()),
+		MarketplaceName:  "",
+		HooksOrgName:     "",
+		IsDefaultProject: s.isDefaultProject(ctx, projectID),
+		BrowserLogin:     false,
+		InstallFailOpen:  false,
 	}
 	orgName, err := s.repo.GetOrganizationName(ctx, orgID)
 	switch {
@@ -2574,22 +2724,6 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlu
 			attr.SlogError(err),
 		)
 	}
-	// observability_mode is the org-level non-blocking switch managed by the
-	// productfeatures service against organization_features. When on, the
-	// generated plugin emits async for every hook event. The read is an EXISTS
-	// check so it never returns pgx.ErrNoRows; any error leaves the flag off,
-	// keeping hooks blocking.
-	observabilityMode, err := s.repo.IsOrganizationFeatureEnabled(ctx, repo.IsOrganizationFeatureEnabledParams{
-		OrganizationID: orgID,
-		FeatureName:    string(productfeatures.FeatureObservabilityMode),
-	})
-	if err != nil {
-		s.logger.WarnContext(ctx, "failed to read observability mode flag, defaulting to blocking hooks",
-			attr.SlogOrganizationID(orgID),
-			attr.SlogError(err),
-		)
-	}
-	cfg.ObservabilityMode = observabilityMode
 	// hooks_browser_login is the org-level opt-in for the interactive browser
 	// token exchange. Off (or unreadable), the generated plugin never opens a
 	// browser: senders authenticate through env credentials, a previously
@@ -2605,6 +2739,24 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlu
 		)
 	}
 	cfg.BrowserLogin = browserLogin
+	// The bootstrap install-failure policy is the publish-time snapshot of the
+	// org's hooks_fail_open posture: a cold install has no binary (and no
+	// cached org settings) to consult, so only the baked exit code can honor
+	// the org's outage tolerance. It refreshes on the next publish after a
+	// toggle; the installed binary tracks the live value via ingest effects.
+	// Off (or unreadable), a distribution failure fails closed — the same
+	// posture as every other unobtainable verdict.
+	installFailOpen, err := s.repo.IsOrganizationFeatureEnabled(ctx, repo.IsOrganizationFeatureEnabledParams{
+		OrganizationID: orgID,
+		FeatureName:    string(productfeatures.FeatureHooksFailOpen),
+	})
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to read hooks fail-open flag, defaulting to fail closed",
+			attr.SlogOrganizationID(orgID),
+			attr.SlogError(err),
+		)
+	}
+	cfg.InstallFailOpen = installFailOpen
 	return cfg
 }
 

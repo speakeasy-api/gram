@@ -111,6 +111,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		auditLogger,
 		serverURL,
 		nil,
+		nil,
 	)
 
 	svc := triggers.NewService(

@@ -55,4 +55,8 @@ type RiskResult struct {
 	MatchRedacted *string
 	// When this result was created.
 	CreatedAt string
+	// True when the scanned message arrived as a replay from a device's offline
+	// spool after control-plane downtime — the finding was produced retroactively
+	// rather than from live traffic.
+	Replayed bool
 }

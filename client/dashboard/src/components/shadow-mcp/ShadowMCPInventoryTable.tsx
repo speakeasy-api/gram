@@ -1,5 +1,6 @@
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
+import { Page } from "@/components/page-layout";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { Role } from "@gram/client/models/components/role.js";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
@@ -22,6 +23,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { formatShortDate } from "@/components/access/shadow-mcp-utils";
+import { TableRowContextMenu } from "@/components/table-row-context-menu";
 import { cn } from "@/lib/utils";
 import {
   type ActiveInventoryAction,
@@ -30,6 +32,7 @@ import {
   ShadowMCPInventoryActionSheet,
   type ShadowMCPPolicy,
 } from "./ShadowMCPInventoryActions";
+import { shadowMCPInventoryActions } from "./shadowMCPInventoryActionItems";
 import {
   shadowMCPInventoryStatus,
   shadowMCPInventoryStatusBadgeVariant,
@@ -174,6 +177,7 @@ export function ShadowMCPInventoryTable({
   const upsertPolicyBypass = useUpsertShadowMCPInventoryPolicyBypassMutation();
   const deletePolicyBypass = useDeleteShadowMCPInventoryPolicyBypassMutation();
   const resolveInventoryRequest = useResolveShadowMCPInventoryRequestMutation();
+  const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortDescriptor | null>({
     id: "lastCalled",
     direction: "desc",
@@ -397,17 +401,34 @@ export function ShadowMCPInventoryTable({
     },
   ];
 
-  const servers =
-    loadedServers.length > 0
-      ? loadedServers
-      : canUseInventoryQueryData
-        ? (inventoryQuery.data?.servers ?? [])
-        : [];
+  const servers = useMemo(() => {
+    if (loadedServers.length > 0) {
+      return loadedServers;
+    }
+
+    return canUseInventoryQueryData ? (inventoryQuery.data?.servers ?? []) : [];
+  }, [canUseInventoryQueryData, inventoryQuery.data?.servers, loadedServers]);
+  const normalizedSearch = search.trim().toLowerCase();
+  const filteredServers = useMemo(() => {
+    if (normalizedSearch.length === 0) {
+      return servers;
+    }
+
+    return servers.filter((server) =>
+      [server.serverName, server.urlHost, server.canonicalServerUrl].some(
+        (value) => value?.toLowerCase().includes(normalizedSearch),
+      ),
+    );
+  }, [normalizedSearch, servers]);
   const sortedServers = sortTableData(
-    servers,
+    filteredServers,
     columns,
     sort,
   ) as ShadowMCPInventoryServer[];
+  const noResultsMessage =
+    normalizedSearch.length > 0
+      ? `No servers matching “${search.trim()}”`
+      : undefined;
 
   if (isInitialLoading) {
     return <SkeletonTable />;
@@ -431,7 +452,12 @@ export function ShadowMCPInventoryTable({
   }
 
   return (
-    <div className={cn("min-h-0 shrink overflow-hidden", className)}>
+    <div
+      className={cn(
+        "flex min-h-0 shrink flex-col gap-4 overflow-hidden",
+        className,
+      )}
+    >
       <ShadowMCPInventoryActionSheet
         action={activeAction}
         isSubmitting={isSubmitting}
@@ -446,9 +472,16 @@ export function ShadowMCPInventoryTable({
         roles={roles}
         shadowMCPPolicies={shadowMCPPolicies}
       />
+      <Page.Toolbar className="shrink-0">
+        <Page.Toolbar.Search
+          onChange={setSearch}
+          placeholder="Search servers..."
+          value={search}
+        />
+      </Page.Toolbar>
       <Table
         columns={columns}
-        className="h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-x-auto overflow-y-hidden"
+        className="min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] overflow-x-auto overflow-y-hidden"
       >
         <Table.Header columns={columns} sort={sort} onSortChange={setSort} />
         <Table.Body
@@ -457,9 +490,22 @@ export function ShadowMCPInventoryTable({
           handleLoadMore={loadMoreServers}
           hasMore={Boolean(nextCursor)}
           isLoading={isLoadingMore}
+          noResultsMessage={noResultsMessage}
           onRowClick={onOpenServer}
           rowKey={(row) => row.canonicalServerUrl}
           className="min-h-0 content-start overflow-y-auto"
+          renderRow={(row, rowElement) => (
+            <TableRowContextMenu
+              key={row.canonicalServerUrl}
+              actions={shadowMCPInventoryActions(row, {
+                disabled: isActionPending,
+                onOpenAction: (mode, selectedServer) =>
+                  setActiveAction({ mode, server: selectedServer }),
+              })}
+            >
+              {rowElement}
+            </TableRowContextMenu>
+          )}
         />
       </Table>
     </div>

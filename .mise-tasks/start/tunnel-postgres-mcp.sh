@@ -2,6 +2,7 @@
 
 #MISE description="Start local Postgres MCP behind a tunnel agent"
 #MISE dir="{{ config_root }}"
+#MISE hide=true
 
 set -euo pipefail
 

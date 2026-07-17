@@ -34,7 +34,7 @@ import {
   type OptionsById,
 } from "@/components/filters";
 import { Page } from "@/components/page-layout";
-import { type DateRangePreset, getPresetRange } from "@gram-ai/elements";
+import { type DateRangePreset, getPresetRange } from "@/elements";
 import { isValidPreset } from "@/components/observe/observeFilterUtils";
 
 type SortField = "chronological" | "messageCount";

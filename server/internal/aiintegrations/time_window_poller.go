@@ -111,7 +111,7 @@ func (p *timeWindowPoller) upperBound(ctx context.Context, source timeWindowSour
 
 		retryAfter, retry := source.RetryAfter(err)
 		if !retry {
-			return time.Time{}, err
+			return time.Time{}, fmt.Errorf("get provider upper bound: %w", err)
 		}
 		if err := p.waitForRetry(ctx, retryAfter, 0); err != nil {
 			return time.Time{}, err
@@ -212,7 +212,7 @@ func (p *timeWindowPoller) waitForRetry(ctx context.Context, retryAfter time.Dur
 		select {
 		case <-ctx.Done():
 			timer.Stop()
-			return context.Cause(ctx)
+			return fmt.Errorf("wait for retry: %w", context.Cause(ctx))
 		case <-timer.C:
 		}
 	}

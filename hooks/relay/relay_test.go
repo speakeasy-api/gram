@@ -34,11 +34,14 @@ type fakeServer struct {
 	requests []components.IngestRequestBody
 	headers  []http.Header
 	respond  func(components.IngestRequestBody) (int, decision)
+	// effects, when set, is merged into the response body alongside the
+	// decision, mirroring the server's org_settings side channel.
+	effects func(components.IngestRequestBody) map[string]any
 }
 
 func newFakeServer(t *testing.T, respond func(components.IngestRequestBody) (int, decision)) *fakeServer {
 	t.Helper()
-	fs := &fakeServer{Server: nil, mu: sync.Mutex{}, requests: nil, headers: nil, respond: respond}
+	fs := &fakeServer{Server: nil, mu: sync.Mutex{}, requests: nil, headers: nil, respond: respond, effects: nil}
 	fs.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		var p components.IngestRequestBody
@@ -52,9 +55,16 @@ func newFakeServer(t *testing.T, respond func(components.IngestRequestBody) (int
 		if fs.respond != nil {
 			status, dec = fs.respond(p)
 		}
+		out := struct {
+			decision
+			Effects map[string]any `json:"effects,omitempty"`
+		}{decision: dec, Effects: nil}
+		if fs.effects != nil {
+			out.Effects = fs.effects(p)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
-		_ = json.NewEncoder(w).Encode(dec)
+		_ = json.NewEncoder(w).Encode(out)
 	}))
 	t.Cleanup(fs.Close)
 	return fs
@@ -73,9 +83,31 @@ func (fs *fakeServer) last() components.IngestRequestBody {
 }
 
 // invoke runs the relay runner against a fixture exactly as a provider would.
+// spoolStateHome is the XDG_STATE_HOME a test installed via
+// setSpoolStateHome. invoke preserves exactly that value and overrides
+// anything else: an ambient XDG_STATE_HOME (CI sandboxes commonly export a
+// tmp-located one) would be shared across all tests, and a shared spool plus
+// a successful send would exec the TEST BINARY as a detached drain.
+var spoolStateHome string
+
+// setSpoolStateHome points the spool at a per-test directory and registers
+// it as the one value invoke will preserve. Tests that inspect or seed the
+// spool call this before invoke.
+func setSpoolStateHome(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", dir)
+	spoolStateHome = dir
+	t.Cleanup(func() { spoolStateHome = "" })
+	return dir
+}
+
 func invoke(t *testing.T, cfg Config, provider agenthooks.Provider, fixture string) agenthookstest.Result {
 	t.Helper()
 	t.Setenv("GRAM_DEVICE_AGENT_COMMANDS", "speakeasy-hooks-test-missing-device-agent")
+	if v := os.Getenv("XDG_STATE_HOME"); v == "" || v != spoolStateHome {
+		t.Setenv("XDG_STATE_HOME", t.TempDir())
+	}
 	runner := NewRunner(cfg)
 	payload := agenthookstest.Fixture(t, fixture)
 	return agenthookstest.Invoke(t, runner, provider, payload, "--variant=cli")
@@ -228,7 +260,7 @@ func TestSendRetriesTransientConnectionFailure(t *testing.T) {
 		Event:         components.HookIngestEvent{Type: components.TypeSessionUpdated, OccurredAt: nil},
 		Data:          nil,
 		Raw:           nil,
-	})
+	}, newIdempotencyToken())
 
 	<-killed
 	require.Equal(t, http.StatusOK, res.statusCode, "a transient connection drop must be replayed, not surfaced")
@@ -292,16 +324,19 @@ func TestTelemetryEventIsFireAndForget(t *testing.T) {
 	require.NotEmpty(t, fs.last().Data.ToolCall.Output)
 }
 
-func TestNonBlockingSwallowsDeny(t *testing.T) {
+// TestLegacyNonblockingEnforcesDeny pins the observability-mode removal: a
+// plugin config still carrying the legacy nonblocking flag no longer swallows
+// explicit deny decisions — only the fail-open (outage) posture survives.
+func TestLegacyNonblockingEnforcesDeny(t *testing.T) {
 	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
-		return http.StatusOK, decision{Decision: "deny", Reason: "policy_denied", Message: "would block"}
+		return http.StatusOK, decision{Decision: "deny", Reason: "policy_denied", Message: "blocked by policy"}
 	})
 	cfg := authedConfig(t, fs.URL)
 	cfg.Nonblocking = true
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 
-	require.Equal(t, 0, res.ExitCode)
-	require.Equal(t, "{}", string(bytes.TrimSpace(res.Stdout)))
+	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`, "legacy nonblocking must not swallow explicit denies")
+	require.Contains(t, string(res.Stdout), "blocked by policy")
 }
 
 func TestRatchetNeverAuthedFailsOpen(t *testing.T) {
@@ -411,9 +446,25 @@ func TestServerErrorBlocksToolCall(t *testing.T) {
 	require.Contains(t, string(res.Stdout), "HTTP 400")
 }
 
-// TestServerErrorPassesWhenNonblocking mirrors TestServerErrorBlocksToolCall
-// under observability mode: transport failures must not block the agent.
-func TestServerErrorPassesWhenNonblocking(t *testing.T) {
+// TestLegacyNonblockingFailsOpenOnOutage pins the legacy flag's surviving
+// half: a plugin config still carrying nonblocking behaves as fail-open, so an
+// unreachable server lets the gating event through — while a definitive 4xx
+// (TestLegacyNonblockingKeepsClientErrorsClosed) still blocks.
+func TestLegacyNonblockingFailsOpenOnOutage(t *testing.T) {
+	fs := newFakeServer(t, nil)
+	cfg := authedConfig(t, fs.URL)
+	cfg.Nonblocking = true
+	fs.Close()
+
+	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+
+	require.Equal(t, 0, res.ExitCode)
+	require.Equal(t, "{}", string(bytes.TrimSpace(res.Stdout)))
+}
+
+// TestLegacyNonblockingKeepsClientErrorsClosed: the legacy flag maps to
+// fail-open, not never-block — a definitive 4xx still fails closed.
+func TestLegacyNonblockingKeepsClientErrorsClosed(t *testing.T) {
 	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
 		return http.StatusBadRequest, decision{Decision: "", Reason: "", Message: ""}
 	})
@@ -421,8 +472,8 @@ func TestServerErrorPassesWhenNonblocking(t *testing.T) {
 	cfg.Nonblocking = true
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 
-	require.Equal(t, 0, res.ExitCode)
-	require.Equal(t, "{}", string(bytes.TrimSpace(res.Stdout)))
+	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`)
+	require.Contains(t, string(res.Stdout), "HTTP 400")
 }
 
 // TestCachedAuthUsesConfigProject pins that the plugin's configured project
@@ -519,7 +570,6 @@ func TestWritePluginMatchesPublishedEventSets(t *testing.T) {
 				OrgID:        "org-1",
 				HooksAPIKey:  "shared-key",
 				BrowserLogin: false,
-				Nonblocking:  false,
 				BinaryPath:   "/tmp/speakeasy-hooks",
 			})
 			require.NoError(t, err)
@@ -1288,7 +1338,7 @@ func TestSendBoundsTotalRetryTime(t *testing.T) {
 		Event:         components.HookIngestEvent{Type: components.TypeSessionUpdated, OccurredAt: nil},
 		Data:          nil,
 		Raw:           nil,
-	})
+	}, newIdempotencyToken())
 
 	require.Equal(t, 0, res.statusCode, "a hung endpoint yields a transport failure, not a verdict")
 	require.Less(t, time.Since(start), 10*time.Second, "the send budget must bound retries end to end")

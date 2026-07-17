@@ -39,7 +39,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 		if err != nil && outcome == hookMetricOutcomeAccepted {
 			outcome = hookMetricOutcomeFailure
 		}
-		s.metrics.RecordHookEventDuration(ctx, "cursor", logHookEventName, outcome, orgSlug, time.Since(start))
+		s.metrics.RecordHookEventDuration(ctx, "cursor", logHookEventName, outcome, cursorHookDecision(res), orgSlug, time.Since(start))
 	}()
 
 	logger := s.logger.With(
@@ -85,7 +85,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 	// re-sends the same token: the decision still re-runs so the user stays
 	// blocked, but tagging the context as a duplicate suppresses the duplicate
 	// writes in recordCursorHook.
-	if !s.claimHookIdempotency(ctx, conv.PtrValOr(payload.IdempotencyKey, "")) {
+	if !s.claimHookIdempotency(ctx, conv.PtrValOr(payload.IdempotencyKey, ""), false) {
 		ctx = withHookDuplicate(ctx)
 	}
 
@@ -715,6 +715,8 @@ func (s *Service) writeCursorToolCallRequestToPG(ctx context.Context, payload *g
 	}
 
 	msgParams := chatRepo.CreateChatMessageParams{
+		Replayed:         false,
+		CreatedAt:        conv.PtrToPGTimestamptz(nil),
 		ChatID:           chatID,
 		ProjectID:        projectID,
 		Role:             "assistant",
@@ -783,6 +785,8 @@ func (s *Service) writeCursorToolCallResultToPG(ctx context.Context, payload *ge
 	}
 
 	msgParams := chatRepo.CreateChatMessageParams{
+		Replayed:         false,
+		CreatedAt:        conv.PtrToPGTimestamptz(nil),
 		ChatID:           chatID,
 		ProjectID:        projectID,
 		Role:             "tool",
@@ -830,6 +834,8 @@ func (s *Service) persistCursorAgentResponse(ctx context.Context, payload *gen.C
 	chatID := sessionIDToUUID(*payload.ConversationID)
 
 	msgParams := chatRepo.CreateChatMessageParams{
+		Replayed:         false,
+		CreatedAt:        conv.PtrToPGTimestamptz(nil),
 		ChatID:           chatID,
 		ProjectID:        projectID,
 		Role:             "assistant",
@@ -893,6 +899,8 @@ func (s *Service) persistCursorUserPrompt(ctx context.Context, payload *gen.Curs
 	}
 
 	msgParams := chatRepo.CreateChatMessageParams{
+		Replayed:         false,
+		CreatedAt:        conv.PtrToPGTimestamptz(nil),
 		ChatID:           chatID,
 		ProjectID:        parsedProjectID,
 		Role:             "user",

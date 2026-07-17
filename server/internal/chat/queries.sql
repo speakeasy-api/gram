@@ -151,6 +151,10 @@ SET last_cursor_id = @last_cursor_id
 WHERE chat_id = @chat_id;
 
 -- name: CreateChatMessage :copyfrom
+-- created_at is caller-supplied so hook-captured messages carry the event's
+-- original occurred_at: spool replays arrive after newer live rows, and
+-- insert-time stamps would sort them out of conversation order. Transcript
+-- readers order by (created_at, seq).
 INSERT INTO chat_messages (
     chat_id
   , role
@@ -175,6 +179,8 @@ INSERT INTO chat_messages (
   , source
   , content_hash
   , generation
+  , replayed
+  , created_at
 )
 VALUES (
     @chat_id
@@ -200,6 +206,8 @@ VALUES (
   , @source
   , @content_hash
   , @generation
+  , @replayed
+  , @created_at
 );
 
 -- name: CreateExternalChatMessage :execrows
@@ -261,9 +269,17 @@ ON CONFLICT (chat_id, external_message_id) WHERE external_message_id IS NOT NULL
 DO NOTHING;
 
 -- name: CountChats :one
+-- Fallback for chats.list pagination: ListChats returns the total alongside
+-- each page via a window count, so this only runs when a requested page is
+-- past the end of the result set (no rows to carry the total). The handler
+-- runs it in the same repeatable-read transaction as the ListChats page read,
+-- so the total reflects the same snapshot the empty page came from.
+--
 -- risk_counts pre-aggregates active findings per chat once for the whole
 -- project (one pass over risk_results), so the risk presence + threshold
--- filters become a cheap join instead of a correlated subquery per chat.
+-- filters become a cheap join instead of a correlated subquery per chat. The
+-- parameter-only gate makes it a one-time filter that skips the scan entirely
+-- when neither risk filter is active.
 WITH risk_counts AS (
   SELECT cm.chat_id, COUNT(*)::integer AS cnt
   FROM risk_results rr
@@ -272,7 +288,8 @@ WITH risk_counts AS (
   -- disabling/deleting a policy retires its findings everywhere (keeps this
   -- count in sync with the risk.results.list detail view).
   JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
-  WHERE rr.project_id = @project_id
+  WHERE (@has_risk_filter::text <> '' OR @min_risk_score::int >= 0)
+    AND rr.project_id = @project_id
     AND rr.found IS TRUE
     AND rr.excluded_at IS NULL
     AND rr.false_positive_at IS NULL
@@ -347,12 +364,17 @@ candidate_chats AS (
     )
 ),
 chat_activity AS (
+  -- Per-chat backward probe on chat_messages_chat_id_created_at_idx instead of
+  -- aggregating every candidate chat's full message history.
   SELECT
     cc.id,
-    COALESCE(MAX(cm.created_at), cc.created_at) AS last_message_timestamp
+    COALESCE(last_msg.ts, cc.created_at) AS last_message_timestamp
   FROM candidate_chats cc
-  LEFT JOIN chat_messages cm ON cm.chat_id = cc.id
-  GROUP BY cc.id, cc.created_at
+  CROSS JOIN LATERAL (
+    SELECT MAX(cm.created_at) AS ts
+    FROM chat_messages cm
+    WHERE cm.chat_id = cc.id
+  ) last_msg
 )
 SELECT COUNT(*) AS total
 FROM chat_activity ca
@@ -360,10 +382,15 @@ WHERE (@from_time::timestamptz IS NULL OR ca.last_message_timestamp >= @from_tim
   AND (@to_time::timestamptz IS NULL OR ca.last_message_timestamp <= @to_time);
 
 -- name: ListChats :many
+-- Returns the page plus the pre-LIMIT total (total_count window column), so the
+-- handler only needs a separate CountChats round trip when the requested page
+-- is past the end of the result set.
+--
 -- risk_counts pre-aggregates active findings per chat once for the whole
--- project (one pass over risk_results). It feeds both the risk presence +
--- threshold filters and the risk_findings_count column below, replacing what
--- were two correlated subqueries per candidate chat.
+-- project (one pass over risk_results) to serve the risk presence + threshold
+-- filters. The parameter-only gate makes it a one-time filter that skips the
+-- scan entirely when neither risk filter is active; the displayed
+-- risk_findings_count is computed per returned page row in the final SELECT.
 WITH risk_counts AS (
   SELECT cm.chat_id, COUNT(*)::integer AS cnt
   FROM risk_results rr
@@ -372,7 +399,8 @@ WITH risk_counts AS (
   -- disabling/deleting a policy retires its findings everywhere (keeps this
   -- count in sync with the risk.results.list detail view).
   JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
-  WHERE rr.project_id = @project_id
+  WHERE (@has_risk_filter::text <> '' OR @min_risk_score::int >= 0)
+    AND rr.project_id = @project_id
     AND rr.found IS TRUE
     AND rr.excluded_at IS NULL
     AND rr.false_positive_at IS NULL
@@ -386,7 +414,6 @@ candidate_chats AS (
     c.external_user_id,
     c.created_at,
     c.updated_at,
-    COALESCE(rc.cnt, 0) AS risk_findings_count,
     COALESCE(ua.account_type, '')::text AS account_type,
     COALESCE(ua.email, '')::text AS account_email
   FROM chats c
@@ -458,13 +485,21 @@ candidate_chats AS (
     )
 ),
 chat_stats AS (
+  -- Per-chat probe on chat_messages_chat_id_created_at_idx (index-only count +
+  -- max) instead of aggregating every candidate chat's full message history.
   SELECT
     cc.id,
-    COUNT(cm.id)::integer AS num_messages,
-    COALESCE(MAX(cm.created_at), cc.created_at) AS last_message_timestamp
+    stats.num_messages,
+    COALESCE(stats.max_created_at, cc.created_at)::timestamptz AS last_message_timestamp
   FROM candidate_chats cc
-  LEFT JOIN chat_messages cm ON cm.chat_id = cc.id
-  GROUP BY cc.id, cc.created_at
+  CROSS JOIN LATERAL (
+    -- COUNT(*) rather than COUNT(cm.id) so the probe stays index-only.
+    SELECT
+      COUNT(*)::integer AS num_messages,
+      MAX(cm.created_at) AS max_created_at
+    FROM chat_messages cm
+    WHERE cm.chat_id = cc.id
+  ) stats
 ),
 filtered_chats AS (
   SELECT
@@ -476,7 +511,6 @@ filtered_chats AS (
     cc.updated_at,
     cs.num_messages,
     cs.last_message_timestamp,
-    cc.risk_findings_count,
     cc.account_type,
     cc.account_email
   FROM candidate_chats cc
@@ -495,11 +529,19 @@ limited_chats AS (
     fc.num_messages,
     (SELECT source FROM chat_messages WHERE chat_id = fc.id AND source IS NOT NULL AND source <> '' ORDER BY created_at DESC LIMIT 1) AS source,
     fc.last_message_timestamp,
-    fc.risk_findings_count,
     fc.account_type,
-    fc.account_email
+    fc.account_email,
+    -- Window count runs before LIMIT/OFFSET, so every returned row carries the
+    -- total number of filtered chats.
+    COUNT(*) OVER ()::bigint AS total_count
   FROM filtered_chats fc
   ORDER BY
+    -- Recency is pure message time. Hook rows persist at their occurred_at,
+    -- so a chat whose only new traffic is spool-replayed backlog keeps its
+    -- occurred-time position rather than jumping to the top on arrival —
+    -- deliberate: listings are a timeline of when conversations happened,
+    -- and folding in updated_at would let title renames and pin toggles
+    -- reorder recency.
     CASE WHEN @sort_by = 'last_message_timestamp' AND @sort_order = 'desc' THEN fc.last_message_timestamp END DESC NULLS LAST,
     CASE WHEN @sort_by = 'last_message_timestamp' AND @sort_order = 'asc' THEN fc.last_message_timestamp END ASC NULLS LAST,
     CASE WHEN @sort_by = 'num_messages' AND @sort_order = 'desc' THEN fc.num_messages END DESC NULLS LAST,
@@ -519,9 +561,22 @@ SELECT
   lc.updated_at,
   lc.num_messages,
   lc.last_message_timestamp,
-  lc.risk_findings_count,
+  -- Active findings for the returned page rows only; must stay in sync with
+  -- the risk_counts predicate above (and the risk.results.list detail view).
+  (
+    SELECT COUNT(*)::integer
+    FROM risk_results rr
+    JOIN chat_messages cm ON cm.id = rr.chat_message_id
+    JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+    WHERE rr.project_id = @project_id
+      AND cm.chat_id = lc.id
+      AND rr.found IS TRUE
+      AND rr.excluded_at IS NULL
+      AND rr.false_positive_at IS NULL
+  ) AS risk_findings_count,
   lc.account_type,
-  lc.account_email
+  lc.account_email,
+  lc.total_count
 FROM limited_chats lc;
 
 -- name: ListChatSources :many
@@ -529,22 +584,27 @@ FROM limited_chats lc;
 -- project's chats, honoring the same visibility scoping as ListChats. Feeds the
 -- agent-type filter options on the Agent Sessions page so the list reflects the
 -- sources actually present in the data rather than a hardcoded catalog.
-WITH latest_sources AS (
-  SELECT DISTINCT ON (cm.chat_id) cm.source AS source
-  FROM chats c
-  JOIN chat_messages cm ON cm.chat_id = c.id
-  WHERE c.project_id = @project_id
-    AND c.deleted IS FALSE
-    AND (@external_user_id::text = '' OR c.external_user_id = @external_user_id::text)
-    AND (@user_id::text = '' OR c.user_id = @user_id::text)
+-- Driven from chats with a per-chat probe on
+-- chat_messages_chat_id_created_at_source_idx for the latest non-empty source,
+-- instead of sorting the project's entire message history. The lateral join
+-- drops chats with no sourced messages, matching the previous inner-join
+-- semantics.
+SELECT DISTINCT latest.source
+FROM chats c
+CROSS JOIN LATERAL (
+  SELECT cm.source
+  FROM chat_messages cm
+  WHERE cm.chat_id = c.id
     AND cm.source IS NOT NULL
     AND cm.source <> ''
-  ORDER BY cm.chat_id, cm.created_at DESC
-)
-SELECT DISTINCT source
-FROM latest_sources
-WHERE source IS NOT NULL
-ORDER BY source;
+  ORDER BY cm.created_at DESC
+  LIMIT 1
+) latest
+WHERE c.project_id = @project_id
+  AND c.deleted IS FALSE
+  AND (@external_user_id::text = '' OR c.external_user_id = @external_user_id::text)
+  AND (@user_id::text = '' OR c.user_id = @user_id::text)
+ORDER BY latest.source;
 
 -- name: GetChat :one
 -- Loads a chat plus the team/personal classification of the AI account that
@@ -604,9 +664,12 @@ GROUP BY 1
 ORDER BY 1;
 
 -- name: ListChatMessages :many
-SELECT * FROM chat_messages 
-WHERE chat_id = @chat_id AND (project_id IS NULL OR project_id = @project_id::uuid) 
-ORDER BY seq ASC;
+-- Transcript order is (created_at, seq): created_at carries the event's
+-- original occurred_at for hook-captured messages (spool replays arrive out
+-- of insert order), and seq breaks ties stably for same-timestamp rows.
+SELECT * FROM chat_messages
+WHERE chat_id = @chat_id AND (project_id IS NULL OR project_id = @project_id::uuid)
+ORDER BY created_at ASC, seq ASC;
 
 -- name: CountChatMessages :one
 -- Must match ListChatMessages' project_id filter, otherwise count and the
@@ -682,7 +745,7 @@ SELECT cm.* FROM chat_messages cm
 WHERE cm.chat_id = @chat_id
   AND (cm.project_id IS NULL OR cm.project_id = @project_id::uuid)
   AND cm.generation = (SELECT MAX(generation) FROM chat_messages WHERE chat_id = @chat_id)
-ORDER BY cm.seq ASC;
+ORDER BY cm.created_at ASC, cm.seq ASC;
 
 -- name: ListChatMessagesByGeneration :many
 -- Returns rows for an explicit generation, used to pin a snapshot across
@@ -692,14 +755,17 @@ SELECT cm.* FROM chat_messages cm
 WHERE cm.chat_id = @chat_id
   AND (cm.project_id IS NULL OR cm.project_id = @project_id::uuid)
   AND cm.generation = @generation::integer
-ORDER BY cm.seq ASC;
+ORDER BY cm.created_at ASC, cm.seq ASC;
 
 -- name: GetMaxGenerationForChat :one
 SELECT COALESCE(MAX(generation), 0)::integer AS generation FROM chat_messages WHERE chat_id = @chat_id;
 
 -- name: ListChatMessagesBeforePage :many
--- Keyset page within a generation, newest first. Returns messages with seq
--- strictly less than @before_seq, or the newest page when @before_seq is NULL.
+-- Keyset page within a generation, newest first. The cursor stays the anchor
+-- row's seq (stable, unique, already in the API), but position is compared in
+-- transcript order (created_at, seq) so pages agree with the display order
+-- even when spool-replayed rows carry backdated created_at. Returns rows
+-- strictly before the anchor, or the newest page when @before_seq is NULL.
 -- Order DESC so LIMIT keeps the most recent rows; the caller reverses to
 -- ascending for display. Fetch @lim = pageSize+1 to detect whether more older
 -- rows remain.
@@ -707,21 +773,60 @@ SELECT cm.* FROM chat_messages cm
 WHERE cm.chat_id = @chat_id
   AND (cm.project_id IS NULL OR cm.project_id = @project_id::uuid)
   AND cm.generation = @generation::integer
-  AND (sqlc.narg('before_seq')::bigint IS NULL OR cm.seq < sqlc.narg('before_seq')::bigint)
-ORDER BY cm.seq DESC
+  AND (
+    sqlc.narg('before_seq')::bigint IS NULL
+    OR (cm.created_at, cm.seq) < (
+      SELECT a.created_at, a.seq FROM chat_messages a
+      WHERE a.chat_id = @chat_id
+        AND (a.project_id IS NULL OR a.project_id = @project_id::uuid)
+        AND a.seq = sqlc.narg('before_seq')::bigint
+    )
+    -- A cursor whose anchor row no longer resolves must not dead-end the
+    -- page (a tuple comparison against an empty subquery is NULL): fall
+    -- back to the plain seq comparison the pre-tuple cursor used.
+    OR (
+      NOT EXISTS (
+        SELECT 1 FROM chat_messages a
+        WHERE a.chat_id = @chat_id
+          AND (a.project_id IS NULL OR a.project_id = @project_id::uuid)
+          AND a.seq = sqlc.narg('before_seq')::bigint
+      )
+      AND cm.seq < sqlc.narg('before_seq')::bigint
+    )
+  )
+ORDER BY cm.created_at DESC, cm.seq DESC
 LIMIT @lim::integer;
 
 -- name: ListChatMessagesAfterPage :many
--- Keyset page within a generation, oldest first. Returns messages with seq
--- strictly greater than @after_seq, or the oldest page (start of the thread)
--- when @after_seq is NULL. Fetch @lim = pageSize+1 to detect whether more newer
+-- Keyset page within a generation, oldest first. Same anchor-row cursor
+-- resolution as ListChatMessagesBeforePage. Returns rows strictly after the
+-- anchor in transcript order, or the oldest page (start of the thread) when
+-- @after_seq is NULL. Fetch @lim = pageSize+1 to detect whether more newer
 -- rows remain.
 SELECT cm.* FROM chat_messages cm
 WHERE cm.chat_id = @chat_id
   AND (cm.project_id IS NULL OR cm.project_id = @project_id::uuid)
   AND cm.generation = @generation::integer
-  AND (sqlc.narg('after_seq')::bigint IS NULL OR cm.seq > sqlc.narg('after_seq')::bigint)
-ORDER BY cm.seq ASC
+  AND (
+    sqlc.narg('after_seq')::bigint IS NULL
+    OR (cm.created_at, cm.seq) > (
+      SELECT a.created_at, a.seq FROM chat_messages a
+      WHERE a.chat_id = @chat_id
+        AND (a.project_id IS NULL OR a.project_id = @project_id::uuid)
+        AND a.seq = sqlc.narg('after_seq')::bigint
+    )
+    -- Same missing-anchor fallback as ListChatMessagesBeforePage.
+    OR (
+      NOT EXISTS (
+        SELECT 1 FROM chat_messages a
+        WHERE a.chat_id = @chat_id
+          AND (a.project_id IS NULL OR a.project_id = @project_id::uuid)
+          AND a.seq = sqlc.narg('after_seq')::bigint
+      )
+      AND cm.seq > sqlc.narg('after_seq')::bigint
+    )
+  )
+ORDER BY cm.created_at ASC, cm.seq ASC
 LIMIT @lim::integer;
 
 -- name: ListRiskWindowedMessages :many
@@ -737,7 +842,7 @@ LIMIT @lim::integer;
 WITH ordered AS (
   SELECT
     cm.*,
-    row_number() OVER (ORDER BY cm.seq) AS rn,
+    row_number() OVER (ORDER BY cm.created_at, cm.seq) AS rn,
     count(*) OVER () AS total
   FROM chat_messages cm
   WHERE cm.chat_id = @chat_id
@@ -767,7 +872,7 @@ WHERE EXISTS (
   SELECT 1 FROM risk_rns r
   WHERE o.rn BETWEEN r.rn - @context_size::bigint AND r.rn + @context_size::bigint
 )
-ORDER BY o.seq ASC;
+ORDER BY o.created_at ASC, o.seq ASC;
 
 -- name: ListSearchWindowedMessages :many
 -- Query-search view: same windowing as ListRiskWindowedMessages, but the seed
@@ -783,7 +888,7 @@ ORDER BY o.seq ASC;
 WITH ordered AS (
   SELECT
     cm.*,
-    row_number() OVER (ORDER BY cm.seq) AS rn,
+    row_number() OVER (ORDER BY cm.created_at, cm.seq) AS rn,
     count(*) OVER () AS total
   FROM chat_messages cm
   WHERE cm.chat_id = @chat_id
@@ -806,13 +911,13 @@ WHERE EXISTS (
   SELECT 1 FROM match_rns m
   WHERE o.rn BETWEEN m.rn - @context_size::bigint AND m.rn + @context_size::bigint
 )
-ORDER BY o.seq ASC;
+ORDER BY o.created_at ASC, o.seq ASC;
 
 -- name: ListChatMessagesForMatch :many
 SELECT id, role, content, tool_call_id, tool_calls
 FROM chat_messages
 WHERE chat_id = @chat_id AND generation = @generation
-ORDER BY seq ASC;
+ORDER BY created_at ASC, seq ASC;
 
 -- name: UpdateChatTitle :exec
 -- Auto-generated title write. Guarded on title_manually_set so a manual rename
@@ -977,8 +1082,9 @@ WHERE id IN (
     JOIN chat_resolution_messages crm ON cr.id = crm.chat_resolution_id
     JOIN chat_messages cm ON crm.message_id = cm.id
     WHERE cr.chat_id = @chat_id
-      AND cm.seq > (
-        SELECT seq FROM chat_messages WHERE chat_messages.id = @after_message_id
+      AND (cm.created_at, cm.seq) > (
+        SELECT created_at, seq FROM chat_messages
+        WHERE chat_messages.id = @after_message_id AND chat_messages.chat_id = @chat_id
       )
   );
 

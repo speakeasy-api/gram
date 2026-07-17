@@ -61,10 +61,14 @@ export default function ShadowMCP(): JSX.Element {
               Manage the Shadow MCP server inventory, allow decisions, and
               requests.
             </Page.Section.Description>
+            {policyDataReady ? (
+              <Page.Section.CTA>
+                <ShadowMCPPolicyStatus policyState={policyState} />
+              </Page.Section.CTA>
+            ) : null}
             <Page.Section.Body>
               {policyDataReady ? (
-                <div className="flex flex-col gap-4 pb-8">
-                  <ShadowMCPPolicyStatus policyState={policyState} />
+                <div className="flex flex-col pb-8">
                   <ShadowMCPInventoryTable
                     members={membersQuery.data?.members ?? []}
                     onOpenServer={(server) =>

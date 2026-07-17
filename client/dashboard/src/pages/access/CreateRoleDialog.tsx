@@ -53,6 +53,7 @@ import { GrantRuleDrawerContent } from "./GrantRuleDrawerContent";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import type { Selector } from "@gram/client/models/components/selector.js";
 import type { ActivePanel, RoleGrant, ScopeRule } from "./types";
+import { isProjectSelectableResourceType } from "./types";
 import {
   isSaveDisabled,
   effectiveGrantCount,
@@ -87,7 +88,14 @@ function getAllowLevel(
 }
 
 /** Map an allow level to the panels available for exception rules. */
-function getDenyPanels(allowLevel: string | null): ActivePanel[] {
+function getDenyPanels(
+  allowLevel: string | null,
+  projectSelectable = false,
+): ActivePanel[] {
+  if (projectSelectable) {
+    return allowLevel === "all" ? ["servers"] : [];
+  }
+
   switch (allowLevel) {
     case "all":
       return ["projects", "servers", "tools"];
@@ -185,6 +193,11 @@ export function CreateRoleDialog({
         label: "Environments",
         resourceType: "environment",
         description: "Environments and their entries within projects.",
+      },
+      {
+        label: "Skills",
+        resourceType: "skill",
+        description: "Skills available within projects.",
       },
       {
         label: "MCP Servers",
@@ -543,7 +556,12 @@ export function CreateRoleDialog({
     ? (grants[editingScopeSlug]?.rules ?? [])
     : [];
   const allowLevel = getAllowLevel(editingGrantRules);
-  const denyAllowedPanels = getDenyPanels(allowLevel);
+  const denyAllowedPanels = getDenyPanels(
+    allowLevel,
+    editingScopeDef
+      ? isProjectSelectableResourceType(editingScopeDef.resourceType)
+      : false,
+  );
   const stepOffset =
     dialogStep === "form" ? "translate-x-0" : "-translate-x-full";
 
@@ -817,6 +835,9 @@ export function CreateRoleDialog({
                                         ) &&
                                           getDenyPanels(
                                             getAllowLevel(grant.rules),
+                                            isProjectSelectableResourceType(
+                                              scopeDef.resourceType,
+                                            ),
                                           ).length > 0 && (
                                             <LocalButton
                                               type="button"

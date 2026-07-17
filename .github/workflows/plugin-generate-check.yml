@@ -5,6 +5,7 @@ on:
     paths:
       - "server/internal/plugins/**"
       - "server/cmd/export-hook-plugin/**"
+      - "hooks/relay/config.go"
 
 jobs:
   check-generator-versions:
@@ -28,7 +29,7 @@ jobs:
           # The observability (hooks) plugin has no content fingerprint: the
           # rollout republishes it ONLY when hooksGeneratorVersion is bumped.
           # Nothing is checked in to diff anymore, so render the published
-          # hooks subtree (Claude, Cursor, Codex, manifests, both hook modes)
+          # hooks subtree (Claude, Cursor, Codex, manifests, all mode/login combinations)
           # from both the merge base and this PR and compare the trees — any
           # output change MUST come with a bump or it would never roll out to
           # connected repos. Blocking.
@@ -93,7 +94,6 @@ jobs:
           generator_tree_hash() {
             git rev-parse \
               "${1}:server/internal/plugins/generate.go" \
-              "${1}:server/internal/plugins/hook_adapters.go" \
               "${1}:server/internal/plugins/naming" \
               2>/dev/null || echo "unresolvable:${1}"
           }

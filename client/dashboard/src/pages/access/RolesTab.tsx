@@ -28,9 +28,26 @@ import { DeleteRoleDialog } from "./DeleteRoleDialog";
 import { MemberFacepile } from "@/components/member-facepile";
 import { Ellipsis } from "lucide-react";
 import { RequireScope } from "@/components/require-scope";
+import { TableRowContextMenu } from "@/components/table-row-context-menu";
+import type { Action } from "@/components/ui/more-actions";
 import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
 import { visiblePermissionCount } from "./roleDialogState";
+
+// Single source of truth for the per-role actions: the "⋯" dropdown and the
+// row's right-click context menu both render from this list. Edit always;
+// Delete only for non-system roles.
+function roleActions(
+  role: Role,
+  { onEdit, onDelete }: { onEdit: () => void; onDelete: () => void },
+): Action[] {
+  return [
+    { label: "Edit", onClick: onEdit },
+    ...(!role.isSystem
+      ? [{ label: "Delete", destructive: true, onClick: onDelete }]
+      : []),
+  ];
+}
 
 function RoleActionsMenu({
   role,
@@ -42,6 +59,7 @@ function RoleActionsMenu({
   onDelete: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const actions = roleActions(role, { onEdit, onDelete });
 
   return (
     // Render-prop form: the dropdown content is portaled to <body>, so it
@@ -64,22 +82,16 @@ function RoleActionsMenu({
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem
-              onSelect={() => {
-                void setTimeout(onEdit, 0);
-              }}
-            >
-              Edit
-            </DropdownMenuItem>
-            {!role.isSystem && (
+            {actions.map((action) => (
               <DropdownMenuItem
+                key={action.label}
                 onSelect={() => {
-                  void setTimeout(onDelete, 0);
+                  void setTimeout(action.onClick, 0);
                 }}
               >
-                Delete
+                {action.label}
               </DropdownMenuItem>
-            )}
+            ))}
           </DropdownMenuContent>
         </DropdownMenu>
       )}
@@ -117,46 +129,54 @@ function RoleRow({
       photoUrl: m.photoUrl,
     }));
 
+  // Mirror the row-actions menu via the shared builder. Without org:admin the
+  // menu is empty and the row stays unwrapped.
+  const actions: Action[] = canManageRoles
+    ? roleActions(role, { onEdit, onDelete })
+    : [];
+
   return (
-    <div
-      role={canManageRoles ? "button" : undefined}
-      tabIndex={canManageRoles ? 0 : undefined}
-      onClick={canManageRoles ? onEdit : undefined}
-      onKeyDown={
-        canManageRoles
-          ? (e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                onEdit();
+    <TableRowContextMenu actions={actions}>
+      <div
+        role={canManageRoles ? "button" : undefined}
+        tabIndex={canManageRoles ? 0 : undefined}
+        onClick={canManageRoles ? onEdit : undefined}
+        onKeyDown={
+          canManageRoles
+            ? (e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onEdit();
+                }
               }
-            }
-          : undefined
-      }
-      className={cn(
-        "border-border col-span-full grid grid-cols-subgrid items-center gap-x-6 border-b px-4 py-3 last:border-b-0",
-        canManageRoles && "hover:bg-muted/50 cursor-pointer",
-      )}
-    >
-      <div className="flex items-center gap-2">
-        <Type variant="body" className="font-medium">
-          {role.name}
-        </Type>
-        {role.isSystem && (
-          <Badge variant="outline" size="sm">
-            System
-          </Badge>
+            : undefined
+        }
+        className={cn(
+          "border-border col-span-full grid grid-cols-subgrid items-center gap-x-6 border-b px-4 py-3 last:border-b-0",
+          canManageRoles && "hover:bg-muted/50 cursor-pointer",
         )}
+      >
+        <div className="flex items-center gap-2">
+          <Type variant="body" className="font-medium">
+            {role.name}
+          </Type>
+          {role.isSystem && (
+            <Badge variant="outline" size="sm">
+              System
+            </Badge>
+          )}
+        </div>
+        <Type variant="body" className="text-muted-foreground min-w-0 truncate">
+          {role.description}
+        </Type>
+        <Type variant="body">{visiblePermissionCount(role.grants)}</Type>
+        <MemberFacepile members={roleMembers} />
+        <div aria-hidden />
+        <div onClick={(e) => e.stopPropagation()} className="flex justify-end">
+          <RoleActionsMenu role={role} onEdit={onEdit} onDelete={onDelete} />
+        </div>
       </div>
-      <Type variant="body" className="text-muted-foreground min-w-0 truncate">
-        {role.description}
-      </Type>
-      <Type variant="body">{visiblePermissionCount(role.grants)}</Type>
-      <MemberFacepile members={roleMembers} />
-      <div aria-hidden />
-      <div onClick={(e) => e.stopPropagation()} className="flex justify-end">
-        <RoleActionsMenu role={role} onEdit={onEdit} onDelete={onDelete} />
-      </div>
-    </div>
+    </TableRowContextMenu>
   );
 }
 

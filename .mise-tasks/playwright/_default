@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+
+#MISE description="Run Playwright CLI, installing its browser on first use"
+
+set -e
+
+stderr_file="$(mktemp)"
+trap 'rm -f "$stderr_file"' EXIT
+
+if playwright-cli "$@" 2>"$stderr_file"; then
+  cat "$stderr_file" >&2
+  exit 0
+else
+  status=$?
+fi
+
+cat "$stderr_file" >&2
+
+if ! grep -Eq 'is not installed\. Run `playwright-cli install-browser' "$stderr_file"; then
+  exit "$status"
+fi
+
+echo "Installing Playwright browser and system dependencies..." >&2
+playwright-cli install-browser chromium --with-deps
+
+rm -f "$stderr_file"
+trap - EXIT
+exec playwright-cli "$@"

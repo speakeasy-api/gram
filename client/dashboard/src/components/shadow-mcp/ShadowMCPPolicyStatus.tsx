@@ -48,15 +48,20 @@ export function ShadowMCPPolicyStatus({
   }
 
   const { label, icon, description } = policyStatusText(policyState);
+
   return (
-    <div className="border-border bg-muted/30 flex items-start gap-2 rounded-md border px-4 py-3">
+    <div className="border-border bg-muted/30 flex max-w-2xs items-start gap-2 rounded-md border px-3 py-2">
       <Icon
-        className="text-muted-foreground mt-1 h-4 w-4 shrink-0"
+        className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0"
         name={icon}
       />
       <div className="min-w-0 flex-1">
-        <Type variant="body">{label}</Type>
-        <Type variant="small">{description}</Type>
+        <Type variant="small" className="font-medium">
+          {label}
+        </Type>
+        <Type muted className="text-xs">
+          {description}
+        </Type>
       </div>
     </div>
   );

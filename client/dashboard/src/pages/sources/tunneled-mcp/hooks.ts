@@ -1,6 +1,9 @@
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { formatTunneledMcpDisplay } from "@/lib/sources";
-import { createDefaultMcpEndpoint } from "@/lib/mcpEndpoints";
+import {
+  createDefaultMcpEndpoint,
+  DEFAULT_ENDPOINT_FAILED_MESSAGE,
+} from "@/lib/mcpEndpoints";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { TunneledMcpServer } from "@gram/client/models/components/tunneledmcpserver.js";
 import { invalidateAllGetTunneledMcpServer } from "@gram/client/react-query/getTunneledMcpServer.js";
@@ -14,6 +17,7 @@ import {
   useQueryClient,
   type UseMutationResult,
 } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 export type CreateTunneledMcpSourceVariables = {
   name: string;
@@ -71,7 +75,11 @@ export function useCreateTunneledMcpSource(): UseMutationResult<
           : new Error(String(linkError));
       }
 
-      await createDefaultMcpEndpoint(client, mcpServer, orgSlug);
+      if (orgSlug) {
+        await createDefaultMcpEndpoint(client, mcpServer, orgSlug);
+      } else {
+        toast.warning(DEFAULT_ENDPOINT_FAILED_MESSAGE);
+      }
 
       return {
         tunneledMcpServer,
@@ -113,7 +121,11 @@ export function useLinkMcpServerToTunneled(): UseMutationResult<
         },
       });
 
-      await createDefaultMcpEndpoint(client, mcpServer, orgSlug);
+      if (orgSlug) {
+        await createDefaultMcpEndpoint(client, mcpServer, orgSlug);
+      } else {
+        toast.warning(DEFAULT_ENDPOINT_FAILED_MESSAGE);
+      }
     },
     onSuccess: async () => {
       await Promise.all([

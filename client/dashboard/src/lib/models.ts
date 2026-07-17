@@ -1,4 +1,4 @@
-import type { Model } from "@gram-ai/elements";
+import type { Model } from "@/elements";
 
 export type AvailableModel = {
   value: string;

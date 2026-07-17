@@ -441,6 +441,9 @@ type IngestPayload struct {
 	ApikeyToken *string
 	// Optional project slug for plugin-driven attribution.
 	ProjectSlugInput *string
+	// Set when the event is redelivered from a device's offline spool after
+	// control-plane downtime, under its original Idempotency-Key and occurred_at.
+	Replayed *bool
 	// Contract version. The current version is hook.ingest.v1.
 	SchemaVersion string
 	// Optional per-invocation token reused across retries so the server stores a

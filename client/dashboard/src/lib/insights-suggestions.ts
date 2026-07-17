@@ -515,7 +515,7 @@ export const INSIGHTS_SUGGESTIONS = {
     },
   ],
 
-  clis: [
+  skills: [
     {
       title: "Which skills are used?",
       label: "Most-invoked skills",
