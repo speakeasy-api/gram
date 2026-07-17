@@ -2,12 +2,10 @@ package telemetry
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"maps"
-	"slices"
 	"strings"
 	"time"
 
@@ -152,78 +150,6 @@ func (l *Logger) LogBulk(ctx context.Context, params []LogParams) error {
 		return oops.E(oops.CodeUnexpected, err, "insert telemetry logs")
 	}
 	return nil
-}
-
-// LogBulkDeduplicated writes one AI-integration API page after removing event
-// hashes already committed to telemetry_logs. The synchronous insert makes the
-// existence check visible to a subsequent activity retry before its watermark
-// advances. A deterministic ClickHouse insert token closes the concurrent
-// check/insert race on replicated engines.
-func (l *Logger) LogBulkDeduplicated(ctx context.Context, params []LogParams) error {
-	if len(params) == 0 {
-		return nil
-	}
-
-	paramsByProject := make(map[string][]LogParams)
-	for _, param := range params {
-		hash := aiIntegrationEventHash(param)
-		if hash == "" {
-			return oops.E(oops.CodeUnexpected, nil, "ai integration telemetry row is missing an event hash")
-		}
-		paramsByProject[param.ToolInfo.ProjectID] = append(paramsByProject[param.ToolInfo.ProjectID], param)
-	}
-
-	shutdownCtx := l.shutdownCtx()
-	queries := repo.New(l.chConn)
-	for projectID, projectParams := range paramsByProject {
-		minTimeUnixNano := projectParams[0].Timestamp.UnixNano()
-		maxTimeUnixNano := minTimeUnixNano
-		hashes := make([]string, 0, len(projectParams))
-		for _, param := range projectParams {
-			hashes = append(hashes, aiIntegrationEventHash(param))
-			minTimeUnixNano = min(minTimeUnixNano, param.Timestamp.UnixNano())
-			maxTimeUnixNano = max(maxTimeUnixNano, param.Timestamp.UnixNano())
-		}
-
-		existing, err := queries.ListExistingAIIntegrationEventHashes(shutdownCtx, projectID, minTimeUnixNano, maxTimeUnixNano, hashes)
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "query existing ai integration telemetry events")
-		}
-
-		seen := make(map[string]struct{}, len(projectParams))
-		filtered := make([]LogParams, 0, len(projectParams))
-		for _, param := range projectParams {
-			hash := aiIntegrationEventHash(param)
-			if _, ok := existing[hash]; ok {
-				continue
-			}
-			if _, ok := seen[hash]; ok {
-				continue
-			}
-			seen[hash] = struct{}{}
-			filtered = append(filtered, param)
-		}
-
-		logParams := l.buildBulkParams(ctx, filtered)
-		if len(logParams) == 0 {
-			continue
-		}
-		tokenHashes := slices.Sorted(maps.Keys(seen))
-		tokenPayload := projectID + "\x00" + strings.Join(tokenHashes, "\x00")
-		token := fmt.Sprintf("ai-integration:%x", sha256.Sum256([]byte(tokenPayload)))
-		if err := queries.InsertAIIntegrationTelemetryLogs(shutdownCtx, logParams, token); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "insert deduplicated ai integration telemetry logs")
-		}
-	}
-	return nil
-}
-
-func aiIntegrationEventHash(param LogParams) string {
-	if hash, _ := param.Attributes[attr.CursorUsageEventHashKey].(string); hash != "" {
-		return hash
-	}
-	hash, _ := param.Attributes[attr.ClaudeChatEventHashKey].(string)
-	return hash
 }
 
 // LogBulkStaging writes rows to telemetry_logs_staging instead of

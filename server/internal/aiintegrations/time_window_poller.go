@@ -47,7 +47,7 @@ type timeWindowCheckpointStore interface {
 }
 
 type telemetryBulkLogger interface {
-	LogBulkDeduplicated(ctx context.Context, params []telemetry.LogParams) error
+	LogBulk(ctx context.Context, params []telemetry.LogParams) error
 }
 
 // timeWindowPoller drives a time-kind sync schedule: it walks the range from
@@ -183,7 +183,7 @@ func (p *timeWindowPoller) fetchAndWriteWindow(ctx context.Context, source timeW
 			if len(page.Rows) == 0 {
 				continue
 			}
-			if err := p.telemetryLogger.LogBulkDeduplicated(groupCtx, page.Rows); err != nil {
+			if err := p.telemetryLogger.LogBulk(groupCtx, page.Rows); err != nil {
 				return oops.E(oops.CodeUnexpected, err, "insert ai integration telemetry page")
 			}
 		}
