@@ -6,6 +6,18 @@ This document provides an overview of the key directories in the Gram project to
 If you've just cloned this repository, then consider running `./zero --agent` to get your development environment set up.
 </tip>
 
+## Customer Data Is Confidential
+
+<important>
+
+Never include customer-identifying information in anything that gets committed or pushed: customer names, organization ids, project ids, external account ids, emails, or revenue/spend figures. This applies to EVERY surface that leaves the machine — branch names, commit messages, PR titles and bodies, file contents, file NAMES, changesets, test fixtures, and code comments. This repository is public, and pushed data propagates to surfaces that cannot be scrubbed afterwards: pull request refs outlive branch deletion, CI logs embed PR titles, and review bots ingest full diffs.
+
+- Use placeholders (`<PROJECT_ID>`, `<ORG_ID>`, "the customer") in runbooks, migrations, docs, and tests — even when hardcoding a real value would be more convenient. Keep concrete values in internal systems (e.g. Linear) and fill them in at execution time.
+- Ticket ids (e.g. ABC-123) are fine; ticket URLs whose slugs embed a customer name are not.
+- Before committing or pushing, check every surface: branch name, commit message, changed file contents and names, changeset text, PR title/body.
+
+</important>
+
 ## Key Directories
 
 <structure>
