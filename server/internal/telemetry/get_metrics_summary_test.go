@@ -53,6 +53,43 @@ func TestGetProjectMetricsSummary_Empty(t *testing.T) {
 	require.Equal(t, int64(0), result.Metrics.TotalToolCalls)
 }
 
+func TestGetProjectMetricsSummary_CostAndCacheTokens(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+
+	now := time.Now().UTC()
+	userID := "project-cost-user-" + uuid.New().String()
+
+	insertChatCompletionLogWithCost(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), userID, 100, 50, 1.5, 400, 80)
+	insertChatCompletionLogWithCost(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), userID, 200, 100, 2.25, 600, 120)
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.GetProjectMetricsSummary(ctx, &gen.GetProjectMetricsSummaryPayload{
+			From: from,
+			To:   to,
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) || !assert.NotNil(c, res.Metrics) {
+			return
+		}
+
+		m := res.Metrics
+		assert.InDelta(c, 3.75, m.TotalCost, 1e-9)              // 1.5 + 2.25
+		assert.Equal(c, int64(1000), m.CacheReadInputTokens)    // 400 + 600
+		assert.Equal(c, int64(200), m.CacheCreationInputTokens) // 80 + 120
+	}, 10*time.Second, 200*time.Millisecond)
+}
+
 func TestGetProjectMetricsSummary(t *testing.T) {
 	t.Parallel()
 

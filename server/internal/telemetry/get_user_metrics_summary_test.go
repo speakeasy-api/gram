@@ -395,6 +395,89 @@ func TestGetUserMetricsSummary_OnlyChatCompletions(t *testing.T) {
 	}, 10*time.Second, 200*time.Millisecond)
 }
 
+func TestGetUserMetricsSummary_CostAndCacheTokens(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+
+	now := time.Now().UTC()
+	userID := "cost-user-" + uuid.New().String()
+	otherUserID := "other-cost-user-" + uuid.New().String()
+
+	insertChatCompletionLogWithCost(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), userID, 100, 50, 1.5, 400, 80)
+	insertChatCompletionLogWithCost(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), userID, 200, 100, 2.25, 600, 120)
+
+	// Another user's cost must not leak into the target user's summary
+	insertChatCompletionLogWithCost(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), otherUserID, 500, 250, 9.75, 1000, 200)
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.GetUserMetricsSummary(ctx, &gen.GetUserMetricsSummaryPayload{
+			From:   from,
+			To:     to,
+			UserID: &userID,
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) || !assert.NotNil(c, res.Metrics) {
+			return
+		}
+
+		m := res.Metrics
+		assert.InDelta(c, 3.75, m.TotalCost, 1e-9)              // 1.5 + 2.25
+		assert.Equal(c, int64(1000), m.CacheReadInputTokens)    // 400 + 600
+		assert.Equal(c, int64(200), m.CacheCreationInputTokens) // 80 + 120
+	}, 10*time.Second, 200*time.Millisecond)
+}
+
+// insertChatCompletionLogWithCost inserts a chat completion log carrying cost and
+// cache token usage attributes for a user.
+func insertChatCompletionLogWithCost(t *testing.T, ctx context.Context, projectID, deploymentID string, timestamp time.Time, userID string, inputTokens, outputTokens int, costUSD float64, cacheReadTokens, cacheCreationTokens int) {
+	t.Helper()
+
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	id, err := uuid.NewV7()
+	require.NoError(t, err)
+
+	attributes := map[string]any{
+		"gen_ai.conversation.id":                   uuid.New().String(),
+		"gen_ai.response.id":                       uuid.New().String(),
+		"gen_ai.usage.input_tokens":                inputTokens,
+		"gen_ai.usage.output_tokens":               outputTokens,
+		"gen_ai.usage.total_tokens":                inputTokens + outputTokens,
+		"gen_ai.usage.cost":                        costUSD,
+		"gen_ai.usage.cache_read.input_tokens":     cacheReadTokens,
+		"gen_ai.usage.cache_creation.input_tokens": cacheCreationTokens,
+		"gen_ai.response.model":                    "gpt-4",
+		"gen_ai.provider.name":                     "openai",
+		"gram.resource.urn":                        "chat:completion",
+		"user.id":                                  userID,
+	}
+
+	attrsJSON, err := json.Marshal(attributes)
+	require.NoError(t, err)
+
+	err = conn.Exec(ctx, `
+		INSERT INTO telemetry_logs (
+			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
+			trace_id, span_id, attributes, resource_attributes,
+			gram_project_id, gram_deployment_id, gram_urn, service_name
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), "INFO", "chat completion",
+		nil, nil, string(attrsJSON), "{}",
+		projectID, deploymentID, "chat:completion", "gram-server")
+	require.NoError(t, err)
+}
+
 // insertChatCompletionLogWithUser inserts a chat completion log with user identification attributes.
 func insertChatCompletionLogWithUser(t *testing.T, ctx context.Context, projectID, deploymentID string, timestamp time.Time, chatID string, inputTokens, outputTokens, totalTokens int, durationSec float64, finishReason, model, provider, userID, externalUserID string) {
 	t.Helper()

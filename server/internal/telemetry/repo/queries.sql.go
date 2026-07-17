@@ -1458,7 +1458,12 @@ func (q *Queries) GetMetricsSummary(ctx context.Context, arg GetMetricsSummaryPa
 		"sumIfMerge(total_input_tokens) AS total_input_tokens",
 		"sumIfMerge(total_output_tokens) AS total_output_tokens",
 		"sumIfMerge(total_tokens) AS total_tokens",
+		"sumIfMerge(cache_read_input_tokens) AS cache_read_input_tokens",
+		"sumIfMerge(cache_creation_input_tokens) AS cache_creation_input_tokens",
 		"avgIfMerge(avg_tokens_per_request) AS avg_tokens_per_request",
+
+		// Cost metrics
+		"sumIfMerge(total_cost) AS total_cost",
 
 		// Chat request metrics
 		"countIfMerge(total_chat_requests) AS total_chat_requests",
@@ -1506,6 +1511,13 @@ func (q *Queries) GetMetricsSummary(ctx context.Context, arg GetMetricsSummaryPa
 	defer rows.Close()
 
 	if !rows.Next() {
+		// A summary aggregate with no GROUP BY always yields one row on success,
+		// so a missing row means the query failed mid-stream (e.g. under
+		// ClickHouse concurrency or memory pressure) — surface that instead of
+		// silently reporting an all-zero summary.
+		if err := rows.Err(); err != nil {
+			return nil, fmt.Errorf("reading metrics summary row: %w", err)
+		}
 		// Return empty metrics if no rows
 		return &MetricsSummaryRow{
 			FirstSeenUnixNano:        0,
@@ -1823,6 +1835,11 @@ func (q *Queries) GetOverviewSummary(ctx context.Context, arg GetOverviewSummary
 	defer rows.Close()
 
 	if !rows.Next() {
+		// Distinguish "no data" from a query that failed mid-stream; without
+		// this an execution error is reported as an all-zero overview.
+		if err := rows.Err(); err != nil {
+			return nil, fmt.Errorf("reading overview summary row: %w", err)
+		}
 		return &OverviewSummary{
 			TotalChats:               0,
 			ResolvedChats:            0,
@@ -2523,7 +2540,12 @@ func (q *Queries) GetUserMetricsSummary(ctx context.Context, arg GetUserMetricsS
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gen_ai.usage.input_tokens) != '') AS total_input_tokens",
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gen_ai.usage.output_tokens) != '') AS total_output_tokens",
 		totalTokensExpr+" AS total_tokens",
+		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens)), toString(attributes.gen_ai.usage.cache_read.input_tokens) != '') AS cache_read_input_tokens",
+		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens)), toString(attributes.gen_ai.usage.cache_creation.input_tokens) != '') AS cache_creation_input_tokens",
 		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') AS avg_tokens_per_request",
+
+		// Cost metrics (per-request cost attributed on each usage row)
+		"sumIf(toFloat64OrZero(toString(attributes.gen_ai.usage.cost)), toString(attributes.gen_ai.usage.cost) != '') AS total_cost",
 
 		// Chat request metrics
 		"uniqExactIf(toString(attributes.gen_ai.response.id), toString(attributes.gen_ai.response.id) != '') AS total_chat_requests",
@@ -2588,6 +2610,13 @@ func (q *Queries) GetUserMetricsSummary(ctx context.Context, arg GetUserMetricsS
 	defer rows.Close()
 
 	if !rows.Next() {
+		// A summary aggregate with no GROUP BY always yields one row on success,
+		// so a missing row means the query failed mid-stream (e.g. under
+		// ClickHouse concurrency or memory pressure) — surface that instead of
+		// silently reporting an all-zero summary.
+		if err := rows.Err(); err != nil {
+			return nil, fmt.Errorf("reading metrics summary row: %w", err)
+		}
 		// Return empty metrics if no rows
 		return &MetricsSummaryRow{
 			FirstSeenUnixNano:        0,
@@ -2632,7 +2661,10 @@ func (q *Queries) GetUserMetricsSummary(ctx context.Context, arg GetUserMetricsS
 		&metrics.TotalInputTokens,
 		&metrics.TotalOutputTokens,
 		&metrics.TotalTokens,
+		&metrics.CacheReadInputTokens,
+		&metrics.CacheCreationInputTokens,
 		&metrics.AvgTokensPerReq,
+		&metrics.TotalCost,
 		&metrics.TotalChatRequests,
 		&metrics.AvgChatDurationMs,
 		&metrics.FinishReasonStop,
