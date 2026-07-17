@@ -12,20 +12,104 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const adoptLegacySyncSchedule = `-- name: AdoptLegacySyncSchedule :exec
+UPDATE ai_integration_syncs s
+SET schedule = $1,
+    kind = $2,
+    updated_at = clock_timestamp()
+WHERE s.ai_integration_config_id = $3
+  AND s.schedule IS NULL
+  AND NOT EXISTS (
+    SELECT 1
+    FROM ai_integration_syncs other
+    WHERE other.ai_integration_config_id = s.ai_integration_config_id
+      AND other.schedule = $1
+  )
+`
+
+type AdoptLegacySyncScheduleParams struct {
+	Schedule              pgtype.Text
+	Kind                  pgtype.Text
+	AiIntegrationConfigID uuid.UUID
+}
+
+// AdoptLegacySyncSchedule labels one config's pre-schedule sync row as the
+// provider-named schedule so schedule-keyed reads and upserts see it. The
+// NOT EXISTS guard keeps the update from tripping the unique index if a
+// labeled provider-named row already exists next to an unlabeled legacy row.
+func (q *Queries) AdoptLegacySyncSchedule(ctx context.Context, arg AdoptLegacySyncScheduleParams) error {
+	_, err := q.db.Exec(ctx, adoptLegacySyncSchedule, arg.Schedule, arg.Kind, arg.AiIntegrationConfigID)
+	return err
+}
+
+const adoptLegacySyncSchedulesForProvider = `-- name: AdoptLegacySyncSchedulesForProvider :exec
+UPDATE ai_integration_syncs s
+SET schedule = c.provider,
+    kind = $1,
+    updated_at = clock_timestamp()
+FROM ai_integration_configs c
+WHERE c.id = s.ai_integration_config_id
+  AND c.provider = $2
+  AND c.enabled IS TRUE
+  AND c.deleted IS FALSE
+  AND c.api_key_encrypted IS NOT NULL
+  AND s.schedule IS NULL
+  AND NOT EXISTS (
+    SELECT 1
+    FROM ai_integration_syncs other
+    WHERE other.ai_integration_config_id = s.ai_integration_config_id
+      AND other.schedule = c.provider
+  )
+`
+
+type AdoptLegacySyncSchedulesForProviderParams struct {
+	Kind     pgtype.Text
+	Provider string
+}
+
+// AdoptLegacySyncSchedulesForProvider is the bulk variant run ahead of
+// candidate listing. It only touches active configs: enabled, not deleted,
+// with an API key. Rows of inactive configs are deliberately left alone.
+func (q *Queries) AdoptLegacySyncSchedulesForProvider(ctx context.Context, arg AdoptLegacySyncSchedulesForProviderParams) error {
+	_, err := q.db.Exec(ctx, adoptLegacySyncSchedulesForProvider, arg.Kind, arg.Provider)
+	return err
+}
+
+const advancePollWatermark = `-- name: AdvancePollWatermark :exec
+UPDATE ai_integration_syncs
+SET poll_watermark_at = $1,
+    updated_at = clock_timestamp()
+WHERE ai_integration_config_id = $2
+  AND schedule = $3
+`
+
+type AdvancePollWatermarkParams struct {
+	PollWatermarkAt       pgtype.Timestamptz
+	AiIntegrationConfigID uuid.UUID
+	Schedule              pgtype.Text
+}
+
+func (q *Queries) AdvancePollWatermark(ctx context.Context, arg AdvancePollWatermarkParams) error {
+	_, err := q.db.Exec(ctx, advancePollWatermark, arg.PollWatermarkAt, arg.AiIntegrationConfigID, arg.Schedule)
+	return err
+}
+
 const advanceUsagePollCursor = `-- name: AdvanceUsagePollCursor :exec
 UPDATE ai_integration_syncs
 SET last_cursor_id = $1,
     updated_at = clock_timestamp()
 WHERE ai_integration_config_id = $2
+  AND schedule = $3
 `
 
 type AdvanceUsagePollCursorParams struct {
 	LastCursorID          pgtype.Text
 	AiIntegrationConfigID uuid.UUID
+	Schedule              pgtype.Text
 }
 
 func (q *Queries) AdvanceUsagePollCursor(ctx context.Context, arg AdvanceUsagePollCursorParams) error {
-	_, err := q.db.Exec(ctx, advanceUsagePollCursor, arg.LastCursorID, arg.AiIntegrationConfigID)
+	_, err := q.db.Exec(ctx, advanceUsagePollCursor, arg.LastCursorID, arg.AiIntegrationConfigID, arg.Schedule)
 	return err
 }
 
@@ -48,17 +132,75 @@ func (q *Queries) CountConfigsByOrganization(ctx context.Context, arg CountConfi
 	return count, err
 }
 
+const countSyncRowsForTest = `-- name: CountSyncRowsForTest :one
+SELECT count(*)
+FROM ai_integration_syncs
+WHERE ai_integration_config_id = $1
+`
+
+func (q *Queries) CountSyncRowsForTest(ctx context.Context, aiIntegrationConfigID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countSyncRowsForTest, aiIntegrationConfigID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const ensureProviderSyncSchedules = `-- name: EnsureProviderSyncSchedules :exec
+INSERT INTO ai_integration_syncs (
+    ai_integration_config_id
+  , schedule
+  , kind
+  , poll_watermark_at
+  , next_poll_after
+)
+SELECT c.id, $1, $2, $3, $4
+FROM ai_integration_configs c
+WHERE c.provider = $5
+  AND c.enabled IS TRUE
+  AND c.deleted IS FALSE
+  AND c.api_key_encrypted IS NOT NULL
+ON CONFLICT (ai_integration_config_id, schedule) DO NOTHING
+`
+
+type EnsureProviderSyncSchedulesParams struct {
+	Schedule        pgtype.Text
+	Kind            pgtype.Text
+	PollWatermarkAt pgtype.Timestamptz
+	NextPollAfter   pgtype.Timestamptz
+	Provider        string
+}
+
+// EnsureProviderSyncSchedules inserts one schedule's sync row for every
+// active config of a provider that is missing it, due immediately with the
+// caller's initial watermark (epoch for time-kind schedules, now for
+// cursor-kind ones). Existing rows are untouched.
+func (q *Queries) EnsureProviderSyncSchedules(ctx context.Context, arg EnsureProviderSyncSchedulesParams) error {
+	_, err := q.db.Exec(ctx, ensureProviderSyncSchedules,
+		arg.Schedule,
+		arg.Kind,
+		arg.PollWatermarkAt,
+		arg.NextPollAfter,
+		arg.Provider,
+	)
+	return err
+}
+
 const ensureSync = `-- name: EnsureSync :one
 WITH inserted AS (
   INSERT INTO ai_integration_syncs (
-    ai_integration_config_id
+      ai_integration_config_id
+    , schedule
+    , kind
+    , poll_watermark_at
+    , next_poll_after
+  ) VALUES (
+      $1
+    , $2
+    , $3
+    , $4
+    , $5
   )
-  SELECT $1
-  WHERE NOT EXISTS (
-    SELECT 1
-    FROM ai_integration_syncs
-    WHERE ai_integration_config_id = $1
-  )
+  ON CONFLICT (ai_integration_config_id, schedule) DO NOTHING
   RETURNING created_at, updated_at, ai_integration_config_id, schedule, kind, poll_watermark_at, poll_checkpoint, last_cursor_id, next_poll_after, last_poll_error, last_poll_failed_at, last_poll_success_at, consecutive_failures, id
 )
 SELECT created_at, updated_at, ai_integration_config_id, schedule, kind, poll_watermark_at, poll_checkpoint, last_cursor_id, next_poll_after, last_poll_error, last_poll_failed_at, last_poll_success_at, consecutive_failures, id
@@ -67,8 +209,17 @@ UNION ALL
 SELECT created_at, updated_at, ai_integration_config_id, schedule, kind, poll_watermark_at, poll_checkpoint, last_cursor_id, next_poll_after, last_poll_error, last_poll_failed_at, last_poll_success_at, consecutive_failures, id
 FROM ai_integration_syncs
 WHERE ai_integration_config_id = $1
+  AND schedule = $2
 LIMIT 1
 `
+
+type EnsureSyncParams struct {
+	AiIntegrationConfigID uuid.UUID
+	Schedule              pgtype.Text
+	Kind                  pgtype.Text
+	PollWatermarkAt       pgtype.Timestamptz
+	NextPollAfter         pgtype.Timestamptz
+}
 
 type EnsureSyncRow struct {
 	CreatedAt             pgtype.Timestamptz
@@ -87,12 +238,14 @@ type EnsureSyncRow struct {
 	ID                    uuid.UUID
 }
 
-// The config-only unique index was replaced by (config_id, schedule) in the
-// sync-schedule expand migration, so this insert guards with NOT EXISTS
-// instead of ON CONFLICT on the dropped index. The schedule-aware upsert that
-// follows in the feature change replaces this query entirely.
-func (q *Queries) EnsureSync(ctx context.Context, aiIntegrationConfigID uuid.UUID) (EnsureSyncRow, error) {
-	row := q.db.QueryRow(ctx, ensureSync, aiIntegrationConfigID)
+func (q *Queries) EnsureSync(ctx context.Context, arg EnsureSyncParams) (EnsureSyncRow, error) {
+	row := q.db.QueryRow(ctx, ensureSync,
+		arg.AiIntegrationConfigID,
+		arg.Schedule,
+		arg.Kind,
+		arg.PollWatermarkAt,
+		arg.NextPollAfter,
+	)
 	var i EnsureSyncRow
 	err := row.Scan(
 		&i.CreatedAt,
@@ -114,6 +267,7 @@ func (q *Queries) EnsureSync(ctx context.Context, aiIntegrationConfigID uuid.UUI
 }
 
 const getConfigByOrgAndProvider = `-- name: GetConfigByOrgAndProvider :one
+
 SELECT
     c.created_at, c.deleted_at, c.updated_at, c.organization_id, c.provider, c.project_id, c.external_organization_id, c.api_key_encrypted, c.enabled, c.billing_mode, c.id, c.deleted
   , s.id AS sync_id
@@ -127,7 +281,9 @@ SELECT
   , s.created_at AS sync_created_at
   , s.updated_at AS sync_updated_at
 FROM ai_integration_configs c
-JOIN ai_integration_syncs s ON s.ai_integration_config_id = c.id
+JOIN ai_integration_syncs s
+  ON s.ai_integration_config_id = c.id
+ AND (s.schedule = c.provider OR s.schedule IS NULL)
 WHERE c.organization_id = $1
   AND c.provider = $2
   AND c.deleted IS FALSE
@@ -163,6 +319,15 @@ type GetConfigByOrgAndProviderRow struct {
 	SyncUpdatedAt          pgtype.Timestamptz
 }
 
+// One sync schedule per provider shares its name with the config's provider,
+// so config-level reads join on s.schedule = c.provider. The other schedules
+// (e.g. anthropic_analytics) are read by their own queries.
+//
+// schedule/kind are nullable during the expand-contract transition: rows
+// written before the columns existed carry NULL until a worker adopts them
+// (see AdoptLegacySyncSchedulesForProvider). Config-level reads treat a NULL
+// schedule as the provider-named schedule so those rows stay visible until
+// adoption; the fallbacks go away with the contract migration.
 func (q *Queries) GetConfigByOrgAndProvider(ctx context.Context, arg GetConfigByOrgAndProviderParams) (GetConfigByOrgAndProviderRow, error) {
 	row := q.db.QueryRow(ctx, getConfigByOrgAndProvider, arg.OrganizationID, arg.Provider)
 	var i GetConfigByOrgAndProviderRow
@@ -223,12 +388,19 @@ SELECT
   , s.created_at AS sync_created_at
   , s.updated_at AS sync_updated_at
 FROM ai_integration_configs c
-JOIN ai_integration_syncs s ON s.ai_integration_config_id = c.id
-WHERE c.id = $1
+JOIN ai_integration_syncs s
+  ON s.ai_integration_config_id = c.id
+ AND s.schedule = $1
+WHERE c.id = $2
   AND c.enabled IS TRUE
   AND c.deleted IS FALSE
   AND c.api_key_encrypted IS NOT NULL
 `
+
+type GetUsagePollConfigByIDParams struct {
+	Schedule              pgtype.Text
+	AiIntegrationConfigID uuid.UUID
+}
 
 type GetUsagePollConfigByIDRow struct {
 	CreatedAt              pgtype.Timestamptz
@@ -255,8 +427,8 @@ type GetUsagePollConfigByIDRow struct {
 	SyncUpdatedAt          pgtype.Timestamptz
 }
 
-func (q *Queries) GetUsagePollConfigByID(ctx context.Context, aiIntegrationConfigID uuid.UUID) (GetUsagePollConfigByIDRow, error) {
-	row := q.db.QueryRow(ctx, getUsagePollConfigByID, aiIntegrationConfigID)
+func (q *Queries) GetUsagePollConfigByID(ctx context.Context, arg GetUsagePollConfigByIDParams) (GetUsagePollConfigByIDRow, error) {
+	row := q.db.QueryRow(ctx, getUsagePollConfigByID, arg.Schedule, arg.AiIntegrationConfigID)
 	var i GetUsagePollConfigByIDRow
 	err := row.Scan(
 		&i.CreatedAt,
@@ -344,6 +516,19 @@ func (q *Queries) InsertConfig(ctx context.Context, arg InsertConfigParams) (AiI
 	return i, err
 }
 
+const insertPreScheduleSyncRowForTest = `-- name: InsertPreScheduleSyncRowForTest :exec
+INSERT INTO ai_integration_syncs (ai_integration_config_id, next_poll_after)
+VALUES ($1, clock_timestamp() - interval '1 hour')
+`
+
+// InsertPreScheduleSyncRowForTest simulates a sync row written by code that
+// predates the schedule columns: NULL schedule/kind, already due. Test
+// fixture only.
+func (q *Queries) InsertPreScheduleSyncRowForTest(ctx context.Context, aiIntegrationConfigID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, insertPreScheduleSyncRowForTest, aiIntegrationConfigID)
+	return err
+}
+
 const listEnabledConfigsByProvider = `-- name: ListEnabledConfigsByProvider :many
 SELECT
     c.created_at, c.deleted_at, c.updated_at, c.organization_id, c.provider, c.project_id, c.external_organization_id, c.api_key_encrypted, c.enabled, c.billing_mode, c.id, c.deleted
@@ -358,7 +543,9 @@ SELECT
   , s.created_at AS sync_created_at
   , s.updated_at AS sync_updated_at
 FROM ai_integration_configs c
-JOIN ai_integration_syncs s ON s.ai_integration_config_id = c.id
+JOIN ai_integration_syncs s
+  ON s.ai_integration_config_id = c.id
+ AND (s.schedule = c.provider OR s.schedule IS NULL)
 WHERE c.provider = $1
   AND c.enabled IS TRUE
   AND c.deleted IS FALSE
@@ -434,12 +621,46 @@ func (q *Queries) ListEnabledConfigsByProvider(ctx context.Context, provider str
 	return items, nil
 }
 
+const listSyncSchedules = `-- name: ListSyncSchedules :many
+SELECT schedule, kind
+FROM ai_integration_syncs
+WHERE ai_integration_config_id = $1
+ORDER BY schedule
+`
+
+type ListSyncSchedulesRow struct {
+	Schedule pgtype.Text
+	Kind     pgtype.Text
+}
+
+func (q *Queries) ListSyncSchedules(ctx context.Context, aiIntegrationConfigID uuid.UUID) ([]ListSyncSchedulesRow, error) {
+	rows, err := q.db.Query(ctx, listSyncSchedules, aiIntegrationConfigID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSyncSchedulesRow
+	for rows.Next() {
+		var i ListSyncSchedulesRow
+		if err := rows.Scan(&i.Schedule, &i.Kind); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUsagePollCandidates = `-- name: ListUsagePollCandidates :many
 SELECT
     c.id
   , c.organization_id
   , om.slug AS organization_slug
   , c.provider
+  , s.schedule
+  , s.kind
 FROM ai_integration_syncs s
 JOIN ai_integration_configs c ON c.id = s.ai_integration_config_id
 JOIN organization_metadata om ON om.id = c.organization_id
@@ -447,7 +668,7 @@ WHERE c.enabled IS TRUE
   AND c.deleted IS FALSE
   AND c.api_key_encrypted IS NOT NULL
   AND s.next_poll_after <= $1
-ORDER BY s.next_poll_after ASC, c.organization_id ASC, c.provider ASC
+ORDER BY s.next_poll_after ASC, c.organization_id ASC, s.schedule ASC
 LIMIT $2
 `
 
@@ -461,6 +682,8 @@ type ListUsagePollCandidatesRow struct {
 	OrganizationID   string
 	OrganizationSlug string
 	Provider         string
+	Schedule         pgtype.Text
+	Kind             pgtype.Text
 }
 
 func (q *Queries) ListUsagePollCandidates(ctx context.Context, arg ListUsagePollCandidatesParams) ([]ListUsagePollCandidatesRow, error) {
@@ -477,6 +700,8 @@ func (q *Queries) ListUsagePollCandidates(ctx context.Context, arg ListUsagePoll
 			&i.OrganizationID,
 			&i.OrganizationSlug,
 			&i.Provider,
+			&i.Schedule,
+			&i.Kind,
 		); err != nil {
 			return nil, err
 		}
@@ -488,6 +713,33 @@ func (q *Queries) ListUsagePollCandidates(ctx context.Context, arg ListUsagePoll
 	return items, nil
 }
 
+const recordPollSuccessKeepWatermark = `-- name: RecordPollSuccessKeepWatermark :exec
+UPDATE ai_integration_syncs
+SET next_poll_after = $1,
+    last_poll_error = NULL,
+    last_poll_failed_at = NULL,
+    last_poll_success_at = clock_timestamp(),
+    consecutive_failures = 0,
+    updated_at = clock_timestamp()
+WHERE ai_integration_config_id = $2
+  AND schedule = $3
+`
+
+type RecordPollSuccessKeepWatermarkParams struct {
+	NextPollAfter         pgtype.Timestamptz
+	AiIntegrationConfigID uuid.UUID
+	Schedule              pgtype.Text
+}
+
+// RecordPollSuccessKeepWatermark reschedules a sync and clears failure state
+// without touching the watermark or cursor. Used by schedules that advance
+// poll_watermark_at incrementally mid-sync (e.g. anthropic_analytics) rather
+// than once at the end of a successful poll.
+func (q *Queries) RecordPollSuccessKeepWatermark(ctx context.Context, arg RecordPollSuccessKeepWatermarkParams) error {
+	_, err := q.db.Exec(ctx, recordPollSuccessKeepWatermark, arg.NextPollAfter, arg.AiIntegrationConfigID, arg.Schedule)
+	return err
+}
+
 const recordUsagePollFailure = `-- name: RecordUsagePollFailure :exec
 UPDATE ai_integration_syncs
 SET next_poll_after = $1,
@@ -496,16 +748,23 @@ SET next_poll_after = $1,
     consecutive_failures = consecutive_failures + 1,
     updated_at = clock_timestamp()
 WHERE ai_integration_config_id = $3
+  AND schedule = $4
 `
 
 type RecordUsagePollFailureParams struct {
 	NextPollAfter         pgtype.Timestamptz
 	LastPollError         pgtype.Text
 	AiIntegrationConfigID uuid.UUID
+	Schedule              pgtype.Text
 }
 
 func (q *Queries) RecordUsagePollFailure(ctx context.Context, arg RecordUsagePollFailureParams) error {
-	_, err := q.db.Exec(ctx, recordUsagePollFailure, arg.NextPollAfter, arg.LastPollError, arg.AiIntegrationConfigID)
+	_, err := q.db.Exec(ctx, recordUsagePollFailure,
+		arg.NextPollAfter,
+		arg.LastPollError,
+		arg.AiIntegrationConfigID,
+		arg.Schedule,
+	)
 	return err
 }
 
@@ -520,6 +779,7 @@ SET poll_watermark_at = $1,
     last_cursor_id = $3,
     updated_at = clock_timestamp()
 WHERE ai_integration_config_id = $4
+  AND schedule = $5
 `
 
 type RecordUsagePollSuccessParams struct {
@@ -527,6 +787,7 @@ type RecordUsagePollSuccessParams struct {
 	NextPollAfter         pgtype.Timestamptz
 	LastCursorID          pgtype.Text
 	AiIntegrationConfigID uuid.UUID
+	Schedule              pgtype.Text
 }
 
 func (q *Queries) RecordUsagePollSuccess(ctx context.Context, arg RecordUsagePollSuccessParams) error {
@@ -535,6 +796,7 @@ func (q *Queries) RecordUsagePollSuccess(ctx context.Context, arg RecordUsagePol
 		arg.NextPollAfter,
 		arg.LastCursorID,
 		arg.AiIntegrationConfigID,
+		arg.Schedule,
 	)
 	return err
 }
@@ -550,16 +812,23 @@ SET poll_watermark_at = $1,
     last_cursor_id = NULL,
     updated_at = clock_timestamp()
 WHERE ai_integration_config_id = $3
+  AND schedule = $4
 `
 
 type ResetUsagePollStateParams struct {
 	PollWatermarkAt       pgtype.Timestamptz
 	NextPollAfter         pgtype.Timestamptz
 	AiIntegrationConfigID uuid.UUID
+	Schedule              pgtype.Text
 }
 
 func (q *Queries) ResetUsagePollState(ctx context.Context, arg ResetUsagePollStateParams) error {
-	_, err := q.db.Exec(ctx, resetUsagePollState, arg.PollWatermarkAt, arg.NextPollAfter, arg.AiIntegrationConfigID)
+	_, err := q.db.Exec(ctx, resetUsagePollState,
+		arg.PollWatermarkAt,
+		arg.NextPollAfter,
+		arg.AiIntegrationConfigID,
+		arg.Schedule,
+	)
 	return err
 }
 

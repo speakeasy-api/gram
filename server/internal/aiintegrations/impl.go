@@ -2,6 +2,8 @@ package aiintegrations
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"time"
@@ -282,8 +284,15 @@ func (s *Service) startUsagePoll(ctx context.Context, organizationSlug string, c
 	if s.configPoller == nil {
 		return nil
 	}
-	if err := s.configPoller.Poll(ctx, organizationSlug, configID, provider); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "start ai integration usage poll")
+
+	var startErr error
+	for _, syncSchedule := range syncSchedulesFor(provider) {
+		if err := s.configPoller.Poll(ctx, organizationSlug, configID, syncSchedule.schedule); err != nil {
+			startErr = errors.Join(startErr, fmt.Errorf("start %s schedule: %w", syncSchedule.schedule, err))
+		}
+	}
+	if startErr != nil {
+		return oops.E(oops.CodeUnexpected, startErr, "start ai integration sync schedules")
 	}
 	return nil
 }
