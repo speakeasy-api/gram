@@ -74,27 +74,16 @@ func TestShouldAutoCloseFirstParty(t *testing.T) {
 
 	connected := remoteSessionCard{Connected: true}
 	disconnected := remoteSessionCard{Connected: false}
+	expired := remoteSessionCard{Connected: false, Expired: true}
 
-	tests := []struct {
-		name       string
-		firstParty bool
-		cards      []remoteSessionCard
-		want       bool
-	}{
-		{name: "not first party", firstParty: false, cards: []remoteSessionCard{connected}, want: false},
-		{name: "no cards", firstParty: true, cards: nil, want: false},
-		{name: "single connected", firstParty: true, cards: []remoteSessionCard{connected}, want: true},
-		{name: "single disconnected", firstParty: true, cards: []remoteSessionCard{disconnected}, want: false},
-		{name: "all connected", firstParty: true, cards: []remoteSessionCard{connected, connected}, want: true},
-		{name: "one still disconnected", firstParty: true, cards: []remoteSessionCard{connected, disconnected}, want: false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			require.Equal(t, tt.want, shouldAutoCloseFirstParty(tt.firstParty, tt.cards))
-		})
-	}
+	require.False(t, shouldAutoCloseFirstParty(false, []remoteSessionCard{connected}), "client consent must stay open")
+	require.False(t, shouldAutoCloseFirstParty(true, nil), "a connection with no cards must stay open")
+	require.True(t, shouldAutoCloseFirstParty(true, []remoteSessionCard{connected}))
+	require.False(t, shouldAutoCloseFirstParty(true, []remoteSessionCard{disconnected}))
+	require.False(t, shouldAutoCloseFirstParty(true, []remoteSessionCard{expired}))
+	require.True(t, shouldAutoCloseFirstParty(true, []remoteSessionCard{connected, connected}))
+	require.False(t, shouldAutoCloseFirstParty(true, []remoteSessionCard{connected, disconnected}), "partially connected flows must stay open")
+	require.False(t, shouldAutoCloseFirstParty(true, []remoteSessionCard{connected, expired}), "flows with expired sessions must stay open")
 }
 
 func TestConsentScriptClosesOnlyMarkedPages(t *testing.T) {
