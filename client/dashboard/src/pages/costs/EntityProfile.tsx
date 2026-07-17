@@ -1,4 +1,4 @@
-import { Badge } from "@/components/ui/badge";
+import { Badge } from "@speakeasy-api/moonshine";
 import {
   Select,
   SelectContent,
@@ -6,40 +6,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import { Dimension } from "@gram/client/models/components/queryfilter.js";
 import { type QueryRow } from "@gram/client/models/components/queryrow.js";
 import type { ReactNode } from "react";
-import {
-  BadgeCheck,
-  Bot,
-  Briefcase,
-  Building,
-  Building2,
-  ChevronLeft,
-  Cpu,
-  Download,
-  Home,
-  Info,
-  type LucideIcon,
-  Network,
-  Server,
-  Shield,
-  Sparkles,
-  UserRound,
-  Wallet,
-  Wrench,
-} from "lucide-react";
+import { ChevronLeft, Download, Home } from "lucide-react";
 import { CostMeasureLabel } from "@/components/estimated-cost";
+import { BreakdownBar } from "./BreakdownBar";
+import { breakdownCaption, breakdownTitle } from "./breakdownCopy";
 import { CostTable } from "./CostTable";
+import { downloadCsv, slugify, toCsv } from "./csv";
 import {
   type Crumb,
+  entityBadgeVariant,
+  friendlyName,
   isAttributionDim,
   LABELS,
   type Measures,
@@ -59,19 +40,6 @@ function displayValue(groupValue: string): string {
 }
 
 // ── CSV export ──────────────────────────────────────────────────────────────
-
-// Serialize one CSV field. Two concerns:
-//   1. Formula injection (CWE-1236): a cell starting with = + - @ (or a control
-//      char) is treated as a formula by Excel/Sheets. Directory-sync values
-//      (names, emails) are attacker-influenced, so neutralize with a leading
-//      apostrophe before quoting.
-//   2. RFC 4180 quoting: wrap in quotes (doubling internal quotes) when the
-//      value contains a comma, quote, or newline.
-function csvField(value: string | number): string {
-  let s = String(value);
-  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
 
 // Serialize the current table rows to CSV — same columns the table shows
 // (minus the Trend sparkline), with raw numbers so the file is spreadsheet-ready.
@@ -107,44 +75,7 @@ function buildCostCsv(
       r.measures.totalTokens ?? 0,
     ];
   });
-  return [header, ...body]
-    .map((cols) => cols.map(csvField).join(","))
-    .join("\n");
-}
-
-// Trigger a client-side download of a CSV string.
-function downloadCsv(filename: string, csv: string): void {
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  link.click();
-  URL.revokeObjectURL(url);
-}
-
-function slugify(value: string): string {
-  return (
-    value
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)/g, "") || "all-costs"
-  );
-}
-
-// Initials for the avatar: email local-part tokens (olivia.novak → ON) or the
-// first letters of the first two words (Engineering → EN, R&D → RD).
-// Title-case an email local part into a name; pass other values through.
-function prettyName(value: string, dim: Dimension): string {
-  if (dim === Dimension.Email && value.includes("@")) {
-    const local = value.split("@")[0] ?? value;
-    return local
-      .split(/[._-]+/)
-      .filter(Boolean)
-      .map((w) => w[0]!.toUpperCase() + w.slice(1))
-      .join(" ");
-  }
-  return displayValue(value);
+  return toCsv(header, body);
 }
 
 // A unique, deterministic colour identity for an entity, derived from its name
@@ -174,30 +105,6 @@ function entityPalette(name: string): { mesh: string } {
       `radial-gradient(50% 70% at 100% 24%, hsl(${h1} 68% 82% / 0.30) 0%, transparent 72%)`,
     ].join(", "),
   };
-}
-
-// A Lucide icon representing the entity's type (Division → org chart, User →
-// person, Agent → bot, …). Falls back to the org building at the root.
-const ENTITY_ICONS: Partial<Record<Dimension, LucideIcon>> = {
-  [Dimension.DivisionName]: Network,
-  [Dimension.DepartmentName]: Building,
-  [Dimension.Email]: UserRound,
-  [Dimension.HookSource]: Bot,
-  [Dimension.JobTitle]: Briefcase,
-  [Dimension.EmployeeType]: BadgeCheck,
-  [Dimension.CostCenterName]: Wallet,
-  [Dimension.Model]: Cpu,
-  [Dimension.Role]: Shield,
-  // Claude attribution cuts (also used for the root "collection" hero).
-  [Dimension.McpServerName]: Server,
-  [Dimension.McpToolName]: Wrench,
-  [Dimension.SkillName]: Sparkles,
-  [Dimension.AgentName]: Bot,
-};
-
-function entityIcon(entity: Crumb | null): LucideIcon {
-  if (!entity) return Building2;
-  return ENTITY_ICONS[entity.dim] ?? Building2;
 }
 
 // ── Small presentational pieces ─────────────────────────────────────────────
@@ -256,9 +163,9 @@ export type EntityProfileProps = {
   projectName: string;
   // The immediate parent's value, for the "Back to …" control.
   parentValue: string | null;
-  // The ancestor chain above this entity (root → immediate parent), rendered as
-  // the typed breadcrumb trail under the title so deep nesting stays legible.
-  ancestors: Crumb[];
+  // The full drill path (root → the entity in view), which the breakdown
+  // caption names so it describes the slice actually on screen.
+  path: Crumb[];
   // Headline measures summed over this entity's children.
   stats: Measures;
   // The dimension the child table is grouped by (drives labels + CostTable).
@@ -282,6 +189,10 @@ export type EntityProfileProps = {
   // When set, replaces the dimension CostTable (the per-session list in sessions
   // mode). The override owns its own loading/empty/error states.
   tableOverride?: ReactNode;
+  // CSV export for a `tableOverride`'s rows. Supplied alongside the override so
+  // the export control keeps working — and keeps its place in the header row —
+  // on the sessions breakdown instead of unmounting and reflowing the row.
+  overrideCsv?: { rowCount: number; build: () => string };
   // Switch the breakdown to the per-session list — wired to the clickable
   // "Agent sessions" header stat. Omitted when already in sessions mode.
   onViewSessions?: () => void;
@@ -317,7 +228,7 @@ export function EntityProfile({
   onHome,
   projectName,
   parentValue,
-  ancestors,
+  path,
   stats,
   groupBy,
   canDrill,
@@ -329,6 +240,7 @@ export function EntityProfile({
   billingMode,
   onDrill,
   tableOverride,
+  overrideCsv,
   onViewSessions,
   seriesByGroup,
   datasetValue,
@@ -343,29 +255,51 @@ export function EntityProfile({
   const groupLabel = LABELS[groupBy] ?? "Group";
 
   const title = entity
-    ? prettyName(entity.value, entity.dim)
+    ? friendlyName(entity.dim, entity.value)
     : (collection?.label ?? projectName ?? "All costs");
   const typeLabel = entity
     ? (LABELS[entity.dim] ?? "Group")
     : collection
       ? "Breakdown"
       : "Project";
-  // Raw ancestor values joined by chevrons (e.g. "R&D › Engineering › elena@…").
-  // Values stay raw — the title already shows the entity's pretty name.
-  const ancestryTrail = ancestors
-    .map((c) => displayValue(c.value))
-    .join("  ›  ");
+  // `title` title-cases a user's address into a name ("Olivia Novak"), which is
+  // friendlier but ambiguous between two people — keep the address it came from
+  // alongside it. Only users have one; every other value is already its label.
+  const emailSuffix = entity?.dim === Dimension.Email ? entity.value : null;
+  const badgeVariant = entityBadgeVariant(
+    entity?.dim ?? collection?.dim ?? null,
+  );
   const palette = entityPalette(title);
-  const Icon =
-    !entity && collection
-      ? (ENTITY_ICONS[collection.dim] ?? Building2)
-      : entityIcon(entity);
 
-  const handleExportCsv = () =>
-    downloadCsv(
-      `${slugify(title)}-by-${slugify(groupLabel)}-${slugify(rangeLabel)}.csv`,
-      buildCostCsv(rows, groupLabel, groupBy),
-    );
+  const caption = breakdownCaption({
+    axisValue,
+    groupBy,
+    path,
+    costLabel: formatCost(stats.cost),
+    groupCount: isError ? 0 : rows.length,
+  });
+
+  // Whichever table is on screen owns the export: the dimension rows by default,
+  // the override's rows (sessions) when it has supplied a builder. The control
+  // renders either way and only disables on an empty table, so switching the
+  // breakdown never reflows the header row.
+  const csvExport = overrideCsv
+    ? {
+        rowCount: overrideCsv.rowCount,
+        run: () =>
+          downloadCsv(
+            `${slugify(title)}-sessions-${slugify(rangeLabel)}.csv`,
+            overrideCsv.build(),
+          ),
+      }
+    : {
+        rowCount: rows.length,
+        run: () =>
+          downloadCsv(
+            `${slugify(title)}-by-${slugify(groupLabel)}-${slugify(rangeLabel)}.csv`,
+            buildCostCsv(rows, groupLabel, groupBy),
+          ),
+      };
 
   // The default dimension table; replaced by `tableOverride` (the session list)
   // when one is supplied.
@@ -469,21 +403,27 @@ export function EntityProfile({
           </div>
           <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex min-w-0 items-start gap-4">
-              <div className="border-border bg-background flex size-16 shrink-0 items-center justify-center rounded-2xl border">
-                <Icon className="text-foreground size-7" strokeWidth={1.5} />
-              </div>
               <div className="min-w-0">
-                {ancestryTrail && (
-                  <div className="text-muted-foreground mb-1.5 truncate text-sm">
-                    {ancestryTrail}
-                  </div>
-                )}
-                <div className="flex items-center gap-2">
-                  <h1 className="truncate text-2xl font-semibold tracking-tight">
+                {/* The name leads; the type chip trails it, colour-coded by
+                    entity family (see entityBadgeVariant). `min-w-0` on the
+                    heading keeps the truncation on the name, so the chip stays
+                    legible however long the value is. */}
+                <div className="flex items-center gap-3">
+                  <h1 className="min-w-0 truncate text-2xl font-semibold tracking-tight">
                     {title}
+                    {emailSuffix && (
+                      <span className="text-muted-foreground ml-2 text-xl font-normal">
+                        ({emailSuffix})
+                      </span>
+                    )}
                   </h1>
-                  <Badge variant="secondary" className="shrink-0">
-                    {typeLabel}
+                  <Badge
+                    size="md"
+                    variant={badgeVariant}
+                    background
+                    className="shrink-0"
+                  >
+                    <Badge.Text>{typeLabel}</Badge.Text>
                   </Badge>
                 </div>
               </div>
@@ -520,50 +460,28 @@ export function EntityProfile({
 
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-8 pt-2 pb-24">
         {widgets}
-        <div className="flex flex-col gap-3">
-          <div className="mb-3 flex items-center gap-3">
-            <h2 className="flex items-center gap-2 text-sm font-semibold">
-              Breakdown by
-              <Select value={axisValue} onValueChange={onAxisChange}>
-                <SelectTrigger className="border-border hover:bg-muted data-[state=open]:bg-muted !h-auto w-auto -my-1 cursor-pointer gap-1.5 rounded-md border bg-transparent py-1.5 pr-2.5 pl-3 text-sm font-semibold shadow-none transition-colors focus-visible:ring-0">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {axisOptions.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>
-                      {o.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {axisHint && (
-                <Tooltip>
-                  <TooltipTrigger
-                    aria-label={axisHint}
-                    className="text-muted-foreground inline-flex cursor-help"
-                  >
-                    <Info className="size-3.5" />
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-64">
-                    {axisHint}
-                  </TooltipContent>
-                </Tooltip>
-              )}
-            </h2>
-            {/* CSV export covers the dimension table only; the session list owns
-                its own affordances. */}
-            {!tableOverride && (
+        {/* The breakdown is its own section under the summary widgets, so it
+            opens on a rule rather than floating off the last widget. */}
+        <div className="border-border flex flex-col gap-3 border-t pt-6">
+          <BreakdownBar
+            title={breakdownTitle(axisValue, groupBy)}
+            caption={caption}
+            axisValue={axisValue}
+            axisOptions={axisOptions}
+            axisHint={axisHint}
+            onAxisChange={onAxisChange}
+            actions={
               <button
                 type="button"
-                onClick={handleExportCsv}
-                disabled={rows.length === 0}
-                className="text-muted-foreground hover:text-foreground border-border hover:bg-muted inline-flex items-center gap-1.5 rounded-md border bg-transparent px-2.5 py-1.5 text-sm transition-colors disabled:pointer-events-none disabled:opacity-40"
+                onClick={csvExport.run}
+                disabled={csvExport.rowCount === 0}
+                className="text-muted-foreground hover:text-foreground border-border hover:bg-muted inline-flex h-10 shrink-0 items-center gap-1.5 rounded-md border bg-transparent px-3 text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-40"
               >
                 <Download className="size-3.5 shrink-0" />
                 Export CSV
               </button>
-            )}
-          </div>
+            }
+          />
           {tableOverride ?? dimensionTable}
         </div>
       </div>

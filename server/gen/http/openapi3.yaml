@@ -32199,6 +32199,110 @@ paths:
             x-speakeasy-name-override: create
             x-speakeasy-react-hook:
                 name: CreateSkill
+    /rpc/skills.distribute:
+        post:
+            description: Create or update the active distribution of a skill to a plugin. Repeating the request for the same skill and plugin updates the version pin or is a no-op.
+            operationId: distributeSkill
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DistributeSkillRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SkillDistribution'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: distribute skills
+            tags:
+                - skills
+            x-speakeasy-name-override: distribute
+            x-speakeasy-react-hook:
+                name: DistributeSkill
     /rpc/skills.get:
         get:
             description: Get an active skill and its latest version. The implementation requires the skills product feature and skill read scope.
@@ -32430,6 +32534,130 @@ paths:
                 type: cursor
             x-speakeasy-react-hook:
                 name: Skills
+    /rpc/skills.listDistributions:
+        get:
+            description: List active plugin skill distributions for the current project.
+            operationId: listSkillDistributions
+            parameters:
+                - allowEmptyValue: true
+                  description: Cursor for the next page of skill distributions.
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Cursor for the next page of skill distributions.
+                    type: string
+                - allowEmptyValue: true
+                  description: The number of skill distributions to return per page.
+                  in: query
+                  name: limit
+                  schema:
+                    default: 20
+                    description: The number of skill distributions to return per page.
+                    format: int64
+                    maximum: 50
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListSkillDistributionsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: listDistributions skills
+            tags:
+                - skills
+            x-speakeasy-name-override: listDistributions
+            x-speakeasy-pagination:
+                inputs:
+                    - in: parameters
+                      name: cursor
+                      type: cursor
+                outputs:
+                    nextCursor: $.next_cursor
+                type: cursor
+            x-speakeasy-react-hook:
+                name: SkillDistributions
     /rpc/skills.listVersions:
         get:
             description: List immutable versions of an active skill, newest first. The implementation requires the skills product feature and skill read scope.
@@ -32563,6 +32791,106 @@ paths:
                 type: cursor
             x-speakeasy-react-hook:
                 name: SkillVersions
+    /rpc/skills.undistribute:
+        post:
+            description: Revoke a skill's active distribution to a plugin. Repeated requests are a no-op.
+            operationId: undistributeSkill
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UndistributeSkillRequestBody'
+                required: true
+            responses:
+                "200":
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: undistribute skills
+            tags:
+                - skills
+            x-speakeasy-name-override: undistribute
+            x-speakeasy-react-hook:
+                name: UndistributeSkill
     /rpc/spendrules.createRule:
         post:
             description: Create a new budget rule for the current organization.
@@ -46348,6 +46676,24 @@ components:
                     description: Issuer URL to discover (e.g. https://login.linear.com).
             required:
                 - issuer
+        DistributeSkillRequestBody:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The skill ID.
+                    format: uuid
+                pinned_version_id:
+                    type: string
+                    description: An optional valid version to pin instead of tracking the latest valid version.
+                    format: uuid
+                plugin_id:
+                    type: string
+                    description: The plugin that carries the skill.
+                    format: uuid
+            required:
+                - id
+                - plugin_id
         EmployeeDataFlowEdge:
             type: object
             properties:
@@ -49939,6 +50285,20 @@ components:
                         $ref: '#/components/schemas/ShadowMCPInventoryUser'
             required:
                 - users
+        ListSkillDistributionsResult:
+            type: object
+            properties:
+                distributions:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SkillDistribution'
+                    description: The active skill distributions in this page.
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page; absent when exhausted.
+            description: A page of active plugin skill distributions for the current project.
+            required:
+                - distributions
         ListSkillVersionsResult:
             type: object
             properties:
@@ -52651,6 +53011,9 @@ components:
                     type: string
                     description: When the project was last published to GitHub. Absent when the project is not connected.
                     format: date-time
+                live_version:
+                    type: string
+                    description: Version stamped into the currently published plugin.json manifests (e.g. 0.1.1783692954) — the version plugin clients such as Claude Code report for installed plugins. Absent when the project is not connected or the live version could not be determined.
                 marketplace_url:
                     type: string
                     description: Git-based Claude Code marketplace URL — the value to pass to `/plugin marketplace add` or set as the source URL in `extraKnownMarketplaces`. Present once a marketplace token has been minted, which happens automatically on the first publish.
@@ -56156,6 +56519,64 @@ components:
                 - skill_name
                 - user_email
                 - use_count
+        SkillDistribution:
+            type: object
+            properties:
+                channel:
+                    type: string
+                    description: The distribution channel.
+                    enum:
+                        - plugin
+                created_at:
+                    type: string
+                    description: When the distribution was created.
+                    format: date-time
+                created_by_user_id:
+                    type: string
+                    description: The user that created the distribution.
+                id:
+                    type: string
+                    description: The distribution ID.
+                    format: uuid
+                pinned_version_id:
+                    type: string
+                    description: The pinned version, absent when tracking the latest valid version.
+                    format: uuid
+                plugin_id:
+                    type: string
+                    description: The plugin that carries the skill.
+                    format: uuid
+                plugin_name:
+                    type: string
+                    description: The name of the plugin that carries the skill.
+                project_id:
+                    type: string
+                    description: The project that owns the distribution.
+                    format: uuid
+                resolved_version_id:
+                    type: string
+                    description: The version currently targeted by this distribution.
+                    format: uuid
+                skill_id:
+                    type: string
+                    description: The distributed skill ID.
+                    format: uuid
+                updated_at:
+                    type: string
+                    description: When the distribution configuration last changed.
+                    format: date-time
+            description: An active plugin distribution of a project skill.
+            required:
+                - id
+                - project_id
+                - skill_id
+                - plugin_id
+                - plugin_name
+                - resolved_version_id
+                - channel
+                - created_by_user_id
+                - created_at
+                - updated_at
         SkillSummary:
             type: object
             properties:
@@ -58664,6 +59085,20 @@ components:
                 - connections
                 - active_connection_count
                 - active_consumer_session_count
+        UndistributeSkillRequestBody:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The skill ID.
+                    format: uuid
+                plugin_id:
+                    type: string
+                    description: The plugin the skill was distributed to.
+                    format: uuid
+            required:
+                - id
+                - plugin_id
         UpdateAssistantForm:
             type: object
             properties:

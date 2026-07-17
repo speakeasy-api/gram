@@ -47,7 +47,9 @@ const CHAIN: DimMeta[] = [
 // Every axis the user can pivot to at any level (dynamic taxonomy). The Claude
 // attribution cuts (MCP Server/Tool, Skill, Subagent) are appended last so they
 // never preempt the org-hierarchy default at the root (see defaultGroupBy).
-const PIVOTS: DimMeta[] = [
+// Exported so breakdownCopy's test can assert its grammar table covers every
+// axis — a new pivot with unreviewed copy should fail the suite, not ship.
+export const PIVOTS: DimMeta[] = [
   ...CHAIN,
   { dim: Dimension.JobTitle, label: "Job Title" },
   { dim: Dimension.EmployeeType, label: "Employment Type" },
@@ -80,6 +82,45 @@ const COLLECTION_LABELS: Partial<Record<Dimension, string>> = {
 };
 export function collectionLabel(dim: Dimension): string | null {
   return COLLECTION_LABELS[dim] ?? null;
+}
+
+// Plural label for a breakdown dimension, for prose that counts its groups
+// ("across 8 Job Titles"). Attribution dims already carry a hand-written plural;
+// every other label pluralizes with a bare "s". Not for SESSIONS_AXIS — its
+// label is already plural, and the sessions list isn't a counted breakdown.
+export function pluralLabel(dim: Dimension): string {
+  return COLLECTION_LABELS[dim] ?? `${LABELS[dim] ?? "Group"}s`;
+}
+
+// The Moonshine Badge variant for an entity's type chip. Moonshine ships five
+// variants and two are spoken for — `destructive` reads as an error, `warning`
+// (amber) is the Preview release badge — so the taxonomy's dimensions group into
+// the three that remain, by what kind of thing the entity is:
+//
+//   information (brand blue) — who spent it: the org/people hierarchy
+//   neutral                  — what ran it: the agent/model/account runtime
+//   success (emerald)        — what it used: the Claude attribution cuts
+//
+// The variant names are hooks rather than literal semantics here (the same
+// reasoning as ReleaseStageBadge); grouping beats an arbitrary colour per
+// dimension, since a reader can learn three families but not fifteen.
+const PEOPLE_DIMS = new Set<Dimension>([
+  Dimension.DivisionName,
+  Dimension.DepartmentName,
+  Dimension.Email,
+  Dimension.JobTitle,
+  Dimension.EmployeeType,
+  Dimension.CostCenterName,
+  Dimension.Role,
+]);
+
+export type EntityBadgeVariant = "neutral" | "information" | "success";
+
+export function entityBadgeVariant(dim: Dimension | null): EntityBadgeVariant {
+  if (dim == null) return "neutral"; // the project root
+  if (PEOPLE_DIMS.has(dim)) return "information";
+  if (isAttributionDim(dim)) return "success";
+  return "neutral";
 }
 
 // The most granular grouping axes — an Agent or a Model is an endpoint, not
@@ -354,14 +395,27 @@ export function datasetDefaultGroupBy(
   return DATASET_META[ds].dims[0]!;
 }
 
-// Human label for an entity value: title-cased name for emails, the raw value
-// otherwise. Shared by the profile header and the breadcrumb substitutions.
+// Human label for an entity value, for the breadcrumb trail and the assistant's
+// grounding context. A user stays their address: both callers need to identify
+// one person exactly, and "Adam" doesn't — two people can share a first name,
+// and the assistant can't ground on a name it can't resolve. The friendly
+// title-cased form belongs to the hero, which pairs it with the address anyway
+// (see prettyName in EntityProfile).
 export function displayName(dim: Dimension, value: string): string {
   if (value === "") return "(unset)";
   if (dim === Dimension.Provider) return providerLabel(value);
   if (dim === Dimension.AccountType) {
     return value.charAt(0).toUpperCase() + value.slice(1);
   }
+  return value;
+}
+
+// The conversational form of an entity's value, for the hero and for prose that
+// talks about it ("Adam's claude-code spend"). A user becomes the name inside
+// their address; everything else is already conversational. Distinct from
+// displayName, which stays exact because the breadcrumb and the assistant have
+// to identify one person rather than read naturally.
+export function friendlyName(dim: Dimension, value: string): string {
   if (dim === Dimension.Email && value.includes("@")) {
     const local = value.split("@")[0] ?? value;
     return local
@@ -370,5 +424,5 @@ export function displayName(dim: Dimension, value: string): string {
       .map((w) => w[0]!.toUpperCase() + w.slice(1))
       .join(" ");
   }
-  return value;
+  return displayName(dim, value);
 }

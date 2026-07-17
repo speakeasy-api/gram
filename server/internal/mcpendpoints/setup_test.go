@@ -126,6 +126,10 @@ func (fakeGitHubPublisher) GetRepoFiles(ctx context.Context, installationID int6
 	return nil, ghclient.ErrRepoNotFound
 }
 
+func (fakeGitHubPublisher) GetFileContent(ctx context.Context, installationID int64, owner, repo, branch, path string) ([]byte, error) {
+	return nil, ghclient.ErrFileNotFound
+}
+
 // newTestServiceWithGitHubPublishing is newTestService with GitHub publishing
 // turned on end-to-end: a Temporal worker is started, configured with a
 // plugins.Service backed by a fake (no-op) GitHub client, so an mcp_server's

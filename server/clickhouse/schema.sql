@@ -889,6 +889,7 @@ CREATE TABLE IF NOT EXISTS risk_findings (
     -- Identity
     id UUID COMMENT 'Finding UUIDv7, supplied by the scanner that produced it.',
     created_at DateTime64(9) COMMENT 'Time the finding was produced.' CODEC(DoubleDelta, ZSTD),
+    inserted_at DateTime64(9) DEFAULT now64(9) COMMENT 'Server-side ingestion time, stamped on insert. Used for ingestion-lag diagnostics and to tie-break redelivered rows sharing the same id.' CODEC(DoubleDelta, ZSTD),
 
     -- Tenancy
     organization_id String COMMENT 'Organization the finding belongs to (HKDF salt for the tenant fingerprint).' CODEC(ZSTD),
@@ -921,7 +922,13 @@ CREATE TABLE IF NOT EXISTS risk_findings (
     -- One-way fingerprints (base64url of HMAC-SHA256). See internal/risk/fingerprint.go.
     fingerprint_pepper_version String DEFAULT '' COMMENT 'Pepper keyring version used to compute the fingerprints.',
     fingerprint_global_hs256 String DEFAULT '' COMMENT 'Global fingerprint: base64url HMAC-SHA256 of the match under the current pepper. Stable across tenants.' CODEC(ZSTD),
-    fingerprint_tenant_hs256 String DEFAULT '' COMMENT 'Tenant-qualified fingerprint: base64url HMAC-SHA256 under a per-org HKDF key. Used to dedupe unique matches within an org.' CODEC(ZSTD)
+    fingerprint_tenant_hs256 String DEFAULT '' COMMENT 'Tenant-qualified fingerprint: base64url HMAC-SHA256 under a per-org HKDF key. Used to dedupe unique matches within an org.' CODEC(ZSTD),
+
+    -- Exclusion annotation. When a going-forward exclusion suppresses a finding
+    -- it is recorded here rather than dropped, so excluded findings remain
+    -- auditable and can be filtered in or out at read time.
+    excluded_at Nullable(DateTime64(9)) COMMENT 'Time the finding was suppressed by an exclusion. Null when the finding is not excluded.' CODEC(DoubleDelta, ZSTD),
+    exclusion_id Nullable(UUID) COMMENT 'Id of the risk_exclusions row that suppressed the finding. Null when the finding is not excluded.' CODEC(ZSTD)
 ) ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(created_at)
 ORDER BY (organization_id, project_id, created_at, id)

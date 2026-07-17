@@ -38,6 +38,18 @@ type Client struct {
 	// endpoint.
 	ArchiveDoer goahttp.Doer
 
+	// Distribute Doer is the HTTP client used to make requests to the distribute
+	// endpoint.
+	DistributeDoer goahttp.Doer
+
+	// Undistribute Doer is the HTTP client used to make requests to the
+	// undistribute endpoint.
+	UndistributeDoer goahttp.Doer
+
+	// ListDistributions Doer is the HTTP client used to make requests to the
+	// listDistributions endpoint.
+	ListDistributionsDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -58,17 +70,20 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		CreateDoer:          doer,
-		AddVersionDoer:      doer,
-		ListDoer:            doer,
-		GetDoer:             doer,
-		ListVersionsDoer:    doer,
-		ArchiveDoer:         doer,
-		RestoreResponseBody: restoreBody,
-		scheme:              scheme,
-		host:                host,
-		decoder:             dec,
-		encoder:             enc,
+		CreateDoer:            doer,
+		AddVersionDoer:        doer,
+		ListDoer:              doer,
+		GetDoer:               doer,
+		ListVersionsDoer:      doer,
+		ArchiveDoer:           doer,
+		DistributeDoer:        doer,
+		UndistributeDoer:      doer,
+		ListDistributionsDoer: doer,
+		RestoreResponseBody:   restoreBody,
+		scheme:                scheme,
+		host:                  host,
+		decoder:               dec,
+		encoder:               enc,
 	}
 }
 
@@ -211,6 +226,78 @@ func (c *Client) Archive() goa.Endpoint {
 		resp, err := c.ArchiveDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("skills", "archive", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// Distribute returns an endpoint that makes HTTP requests to the skills
+// service distribute server.
+func (c *Client) Distribute() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDistributeRequest(c.encoder)
+		decodeResponse = DecodeDistributeResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDistributeRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DistributeDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("skills", "distribute", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// Undistribute returns an endpoint that makes HTTP requests to the skills
+// service undistribute server.
+func (c *Client) Undistribute() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUndistributeRequest(c.encoder)
+		decodeResponse = DecodeUndistributeResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUndistributeRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UndistributeDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("skills", "undistribute", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListDistributions returns an endpoint that makes HTTP requests to the skills
+// service listDistributions server.
+func (c *Client) ListDistributions() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListDistributionsRequest(c.encoder)
+		decodeResponse = DecodeListDistributionsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListDistributionsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListDistributionsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("skills", "listDistributions", err)
 		}
 		return decodeResponse(resp)
 	}

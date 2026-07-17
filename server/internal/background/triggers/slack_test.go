@@ -217,6 +217,19 @@ func TestDecodeSlackEventFileShared(t *testing.T) {
 	require.Equal(t, "C0Z7K8SRH", got.Channel)
 }
 
+func TestDecodeSlackEventLinkShared(t *testing.T) {
+	t.Parallel()
+
+	raw := json.RawMessage(`{"type":"link_shared","channel":"C024BE91L","is_bot_user_member":true,"user":"U0Z7K8SRH","message_ts":"1593189506.000200","thread_ts":"1593189505.000100","unfurl_id":"C024BE91L.1593189506.000200.9dcb1","source":"conversations_history","links":[{"domain":"app.getgram.ai","url":"https://app.getgram.ai/acme/projects/default/toolsets/my-tools"}]}`)
+	got, err := decodeSlackEvent(raw)
+	require.NoError(t, err)
+	require.Equal(t, "link_shared", got.Type)
+	require.Equal(t, "U0Z7K8SRH", got.User)
+	require.Equal(t, "C024BE91L", got.Channel)
+	require.Equal(t, "1593189506.000200", got.Ts)
+	require.Equal(t, "1593189505.000100", got.ThreadTs)
+}
+
 func TestDecodeSlackEventMemberJoinedChannel(t *testing.T) {
 	t.Parallel()
 

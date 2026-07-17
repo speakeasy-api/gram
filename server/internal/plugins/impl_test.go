@@ -84,6 +84,19 @@ func (m *mockGitHubPublisher) GetRepoFiles(_ context.Context, _ int64, _, _, _ s
 	return nil, ghclient.ErrRepoNotFound
 }
 
+// GetFileContent serves single files from the same state GetRepoFiles uses, so
+// the live-version read in GetPublishStatus sees what was last "pushed".
+func (m *mockGitHubPublisher) GetFileContent(_ context.Context, _ int64, _, _, _, path string) ([]byte, error) {
+	files := m.repoFiles
+	if files == nil {
+		files = m.lastPushedFiles
+	}
+	if content, ok := files[path]; ok {
+		return content, nil
+	}
+	return nil, ghclient.ErrFileNotFound
+}
+
 func TestPluginsService_CreatePlugin(t *testing.T) {
 	t.Parallel()
 
@@ -805,6 +818,15 @@ func TestPluginsService_PublishPlugins_HappyPath(t *testing.T) {
 	require.NotNil(t, status.UpToDate)
 	require.True(t, *status.UpToDate)
 	require.NotNil(t, status.LastPublishedAt)
+
+	// The live manifest version is read back from the published repo and
+	// matches what was stamped into the pushed Claude plugin.json.
+	require.NotNil(t, status.LiveVersion)
+	var manifest struct {
+		Version string `json:"version"`
+	}
+	require.NoError(t, json.Unmarshal(mock.lastPushedFiles[plugin.Slug+"/.claude-plugin/plugin.json"], &manifest))
+	require.Equal(t, manifest.Version, *status.LiveVersion)
 
 	// The observability plugin slugs must name plugins that actually exist in
 	// the published marketplace — install UIs build `<plugin>@<marketplace>`

@@ -346,9 +346,12 @@ trackedFiles:
   src/funcs/skillsAddVersion.ts: {}
   src/funcs/skillsArchive.ts: {}
   src/funcs/skillsCreate.ts: {}
+  src/funcs/skillsDistribute.ts: {}
   src/funcs/skillsGet.ts: {}
   src/funcs/skillsList.ts: {}
+  src/funcs/skillsListDistributions.ts: {}
   src/funcs/skillsListVersions.ts: {}
+  src/funcs/skillsUndistribute.ts: {}
   src/funcs/spendRulesEventsList.ts: {}
   src/funcs/spendRulesOverviewGet.ts: {}
   src/funcs/spendRulesRulesCreate.ts: {}
@@ -577,6 +580,7 @@ trackedFiles:
     pristine_git_object: 9f408bfae0fc457c23380d8317f36f1be06ead9d
   src/models/components/discoverprotectedresourcemetadatarequestbody.ts: {}
   src/models/components/discoverremotesessionissuerrequestbody.ts: {}
+  src/models/components/distributeskillrequestbody.ts: {}
   src/models/components/employeedataflowedge.ts: {}
   src/models/components/employeedataflownode.ts: {}
   src/models/components/environment.ts: {}
@@ -725,6 +729,7 @@ trackedFiles:
   src/models/components/listshadowmcpapprovalrequestsresult.ts: {}
   src/models/components/listshadowmcpinventoryresult.ts: {}
   src/models/components/listshadowmcpinventoryusersresult.ts: {}
+  src/models/components/listskilldistributionsresult.ts: {}
   src/models/components/listskillsresult.ts: {}
   src/models/components/listskillversionsresult.ts: {}
   src/models/components/listsourcesresult.ts: {}
@@ -945,6 +950,7 @@ trackedFiles:
   src/models/components/shadowmcpinventoryuser.ts: {}
   src/models/components/skill.ts: {}
   src/models/components/skillbreakdownrow.ts: {}
+  src/models/components/skilldistribution.ts: {}
   src/models/components/skillsummary.ts: {}
   src/models/components/skilltimeseriespoint.ts: {}
   src/models/components/skillvalidationerror.ts: {}
@@ -1016,6 +1022,7 @@ trackedFiles:
   src/models/components/tunneledmcpconnection.ts: {}
   src/models/components/tunneledmcpserver.ts: {}
   src/models/components/tunneledmcpserverconnections.ts: {}
+  src/models/components/undistributeskillrequestbody.ts: {}
   src/models/components/updateassistantform.ts: {}
   src/models/components/updateawsiamcredentialrequestbody.ts: {}
   src/models/components/updatecustomdetectionrulerequestbody.ts: {}
@@ -1199,6 +1206,7 @@ trackedFiles:
   src/models/operations/disablewebhooks.ts: {}
   src/models/operations/discoverremotemcpprotectedresourcemetadata.ts: {}
   src/models/operations/discoverremotesessionissuer.ts: {}
+  src/models/operations/distributeskill.ts: {}
   src/models/operations/downloadcodexinstallscript.ts: {}
   src/models/operations/downloadobservabilityplugin.ts: {}
   src/models/operations/downloadpluginpackage.ts: {}
@@ -1353,6 +1361,7 @@ trackedFiles:
   src/models/operations/listshadowmcpapprovalrequests.ts: {}
   src/models/operations/listshadowmcpinventory.ts: {}
   src/models/operations/listshadowmcpinventoryusers.ts: {}
+  src/models/operations/listskilldistributions.ts: {}
   src/models/operations/listskills.ts: {}
   src/models/operations/listskillversions.ts: {}
   src/models/operations/listspendruleevents.ts: {}
@@ -1444,6 +1453,7 @@ trackedFiles:
   src/models/operations/switchauthscopes.ts: {}
   src/models/operations/testdetectionrule.ts: {}
   src/models/operations/triggerriskanalysis.ts: {}
+  src/models/operations/undistributeskill.ts: {}
   src/models/operations/unmaskriskresult.ts: {}
   src/models/operations/updateassistant.ts: {}
   src/models/operations/updateawsiamcredential.ts: {}
@@ -1628,6 +1638,7 @@ trackedFiles:
   src/react-query/disableWebhooks.ts: {}
   src/react-query/discoverRemoteMcpProtectedResourceMetadata.ts: {}
   src/react-query/discoverRemoteSessionIssuer.ts: {}
+  src/react-query/distributeSkill.ts: {}
   src/react-query/enableRBAC.ts: {}
   src/react-query/enableWebhooks.ts: {}
   src/react-query/ensureManagedAssistant.ts: {}
@@ -1990,6 +2001,8 @@ trackedFiles:
   src/react-query/shadowMCPInventoryUsers.ts: {}
   src/react-query/skill.core.ts: {}
   src/react-query/skill.ts: {}
+  src/react-query/skillDistributions.core.ts: {}
+  src/react-query/skillDistributions.ts: {}
   src/react-query/skillVersions.core.ts: {}
   src/react-query/skillVersions.ts: {}
   src/react-query/skills.core.ts: {}
@@ -2030,6 +2043,7 @@ trackedFiles:
   src/react-query/triggers.ts: {}
   src/react-query/tunneledMcpServers.core.ts: {}
   src/react-query/tunneledMcpServers.ts: {}
+  src/react-query/undistributeSkill.ts: {}
   src/react-query/updateAwsIamCredential.ts: {}
   src/react-query/updateDomain.ts: {}
   src/react-query/updateEnvironment.ts: {}
@@ -3420,6 +3434,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  distributeSkill:
+    speakeasy-default-distribute-skill:
+      requestBody:
+        application/json: {"id": "4fc97fb6-f058-4e7e-9e97-5681ce8613a2", "plugin_id": "79683a0f-4e15-4324-add7-aec6f013dfe8"}
+      responses:
+        "200":
+          application/json: {"channel": "plugin", "created_at": "2025-09-14T19:24:28.651Z", "created_by_user_id": "<id>", "id": "4c40713b-faa0-4f6b-916d-c3c15c487cc7", "plugin_id": "e0e2c404-567d-47a4-b279-6623abc68e04", "plugin_name": "<value>", "project_id": "4b9a0b45-eb7c-42eb-bf87-107c2d2a9055", "resolved_version_id": "1802abfd-f6e4-4711-b40e-709fa4913e6c", "skill_id": "98b37be4-63d6-405e-ab2a-96a596db1511", "updated_at": "2026-08-30T16:19:52.579Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   downloadCodexInstallScript:
     speakeasy-default-download-codex-install-script:
       responses:
@@ -5082,6 +5107,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  listSkillDistributions:
+    speakeasy-default-list-skill-distributions:
+      parameters:
+        query:
+          limit: 20
+      responses:
+        "200":
+          application/json: {"distributions": [{"channel": "plugin", "created_at": "2024-05-20T07:11:07.422Z", "created_by_user_id": "<id>", "id": "2d149ea6-56d8-488c-b924-346c2eb5d8e4", "plugin_id": "c13f1c94-153f-4f90-a763-790129595b9b", "plugin_name": "<value>", "project_id": "6ba4dc7a-5f21-4269-9428-0b1d477c0165", "resolved_version_id": "092c4763-1e93-4e9d-b4f1-579c2bdf8b8b", "skill_id": "961a92e6-1f6f-4d63-a667-ce084fdd97ed", "updated_at": "2026-11-01T19:49:21.649Z"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   listSkillVersions:
     speakeasy-default-list-skill-versions:
       parameters:
@@ -6088,6 +6125,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  undistributeSkill:
+    speakeasy-default-undistribute-skill:
+      requestBody:
+        application/json: {"id": "e4deb49b-0782-4e18-b3e0-040fa8435cf5", "plugin_id": "f2364098-2e09-4e6c-9a52-48725ef17ee7"}
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   unmaskRiskResult:
     speakeasy-default-unmask-risk-result:
       parameters:

@@ -32,6 +32,7 @@ import { ChatDetailSheet } from "../chatLogs/ChatDetailPanel";
 import { type CardSpec, CostWidgets } from "./CostWidgets";
 import { EntityProfile } from "./EntityProfile";
 import { SessionTable, type SessionColumnId } from "./SessionTable";
+import { buildSessionCsv } from "./sessionCsv";
 import {
   type Axis,
   availableDimensions,
@@ -997,10 +998,14 @@ export function CostsExplorer(): JSX.Element {
     rows: (topSessionsData?.sessions ?? []).map((s) => ({
       id: s.gramChatId,
       label: s.title?.length ? s.title : s.gramChatId.slice(0, 8),
+      // Whose session it was — dropped only once the drill path pins a user, as
+      // every row then repeats that same address. Deliberately independent of
+      // `groupBy`: these are the slice's top sessions whatever the table below
+      // is grouped by, so keying the sublabel off the breakdown axis both hid a
+      // useful attribution and resized this card (and with it the whole widget
+      // row) on every re-pivot.
       sublabel:
-        groupBy !== Dimension.Email &&
-        currentEntity?.dim !== Dimension.Email &&
-        s.userEmail?.length
+        currentEntity?.dim !== Dimension.Email && s.userEmail?.length
           ? s.userEmail
           : undefined,
       cost: s.totalCost,
@@ -1065,6 +1070,7 @@ export function CostsExplorer(): JSX.Element {
       />
       <EntityProfile
         entity={currentEntity}
+        path={path}
         collection={collection}
         cacheMetric={attributionView}
         widgets={widgets}
@@ -1072,7 +1078,6 @@ export function CostsExplorer(): JSX.Element {
         onHome={goHome}
         projectName={project.name}
         parentValue={parentValue}
-        ancestors={path.slice(0, -1)}
         stats={stats}
         groupBy={groupBy}
         canDrill={canDrill}
@@ -1094,6 +1099,19 @@ export function CostsExplorer(): JSX.Element {
               billingMode={viewBillingMode}
             />
           ) : undefined
+        }
+        overrideCsv={
+          sessionsMode
+            ? {
+                rowCount: sessionsData?.sessions.length ?? 0,
+                build: () =>
+                  buildSessionCsv(
+                    sessionsData?.sessions ?? [],
+                    hiddenSessionColumns,
+                    viewBillingMode,
+                  ),
+              }
+            : undefined
         }
         onViewSessions={onViewSessions}
         seriesByGroup={seriesByGroup}

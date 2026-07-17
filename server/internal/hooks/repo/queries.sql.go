@@ -19,7 +19,7 @@ WITH latest_user_message AS (
   WHERE chat_messages.chat_id = $2
     AND (chat_messages.project_id IS NULL OR chat_messages.project_id = $3::uuid)
     AND chat_messages.role = 'user'
-  ORDER BY chat_messages.seq DESC
+  ORDER BY chat_messages.created_at DESC, chat_messages.seq DESC
   LIMIT 1
 )
 UPDATE chat_messages

@@ -29,28 +29,28 @@ func TestSkillCursorRejectsEmptyAndNonNormalizedNames(t *testing.T) {
 	require.Error(t, normalizedErr)
 }
 
-func TestSkillVersionCursorRoundTrip(t *testing.T) {
+func TestCreatedAtIDCursorRoundTrip(t *testing.T) {
 	t.Parallel()
 
 	createdAt := time.Date(2026, time.July, 15, 12, 34, 56, 789123000, time.UTC)
 	id := uuid.MustParse("4dc20244-52a4-40ce-a09c-6bfa6f3fcf35")
 
-	decodedTime, decodedID, err := decodeSkillVersionCursor(encodeSkillVersionCursor(createdAt, id))
+	decodedTime, decodedID, err := decodeCreatedAtIDCursor(encodeCreatedAtIDCursor(createdAt, id))
 
 	require.NoError(t, err)
 	require.Equal(t, createdAt, decodedTime)
 	require.Equal(t, id, decodedID)
 }
 
-func TestSkillVersionCursorRejectsNonCanonicalValues(t *testing.T) {
+func TestCreatedAtIDCursorRejectsNonCanonicalValues(t *testing.T) {
 	t.Parallel()
 
 	id := "4dc20244-52a4-40ce-a09c-6bfa6f3fcf35"
 	nonUTC := base64.RawURLEncoding.EncodeToString([]byte("2026-07-15T14:34:56+02:00|" + id))
 	nonCanonicalID := base64.RawURLEncoding.EncodeToString([]byte("2026-07-15T12:34:56Z|4DC20244-52A4-40CE-A09C-6BFA6F3FCF35"))
 
-	_, _, timestampErr := decodeSkillVersionCursor(nonUTC)
-	_, _, idErr := decodeSkillVersionCursor(nonCanonicalID)
+	_, _, timestampErr := decodeCreatedAtIDCursor(nonUTC)
+	_, _, idErr := decodeCreatedAtIDCursor(nonCanonicalID)
 
 	require.Error(t, timestampErr)
 	require.Error(t, idErr)
