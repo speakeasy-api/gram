@@ -13,11 +13,11 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import {
-  useRemoteMcpTools,
-  type RemoteMcpTool,
-  type RemoteMcpToolAnnotations,
-} from "@/hooks/useRemoteMcpTools";
-import { useRemoteMcpUserSessionToken } from "@/hooks/useRemoteMcpUserSessionToken";
+  useProxiedMcpTools,
+  type ProxiedMcpTool,
+  type ProxiedMcpToolAnnotations,
+} from "@/hooks/useProxiedMcpTools";
+import { useProxiedMcpUserSessionToken } from "@/hooks/useProxiedMcpUserSessionToken";
 import { handleError, toError } from "@/lib/errors";
 import { cn, firstPartyConnectUrl, mcpConnectionUrl } from "@/lib/utils";
 import { Badge, Button } from "@speakeasy-api/moonshine";
@@ -158,7 +158,7 @@ function RemoteMcpToolsSectionInner({
   isIssuerGated,
 }: RemoteMcpToolsSectionProps): JSX.Element {
   const { accessToken, isLoading: isTokenLoading } =
-    useRemoteMcpUserSessionToken({ mcpServerId, isIssuerGated });
+    useProxiedMcpUserSessionToken({ mcpServerId, isIssuerGated });
 
   // Issuer-gated servers must wait for the JWT before connecting, otherwise the
   // unauthenticated request 401s and caches a spurious `needsAuth`.
@@ -174,7 +174,7 @@ function RemoteMcpToolsSectionInner({
   // isn't dropped on a cross-origin hop. No-op in prod / for custom domains.
   const connectUrl = useMemo(() => mcpConnectionUrl(mcpUrl), [mcpUrl]);
 
-  const { tools, isLoading, needsAuth, isError, refetch } = useRemoteMcpTools(
+  const { tools, isLoading, needsAuth, isError, refetch } = useProxiedMcpTools(
     connectUrl,
     { headers, enabled: connectionEnabled },
   );
@@ -228,7 +228,7 @@ function RemoteMcpToolsBody({
   loading: boolean;
   needsAuth: boolean;
   isError: boolean;
-  toolEntries: Array<[string, RemoteMcpTool]>;
+  toolEntries: Array<[string, ProxiedMcpTool]>;
   onRetry: () => void;
   onConnect?: () => void;
 }): JSX.Element {
@@ -264,7 +264,7 @@ function RemoteMcpToolsBody({
 function RemoteMcpToolsList({
   toolEntries,
 }: {
-  toolEntries: Array<[string, RemoteMcpTool]>;
+  toolEntries: Array<[string, ProxiedMcpTool]>;
 }): JSX.Element {
   const [selectedName, setSelectedName] = useState<string | null>(null);
 
@@ -322,7 +322,7 @@ function RemoteToolRow({
 }: {
   name: string;
   description?: string;
-  annotations?: RemoteMcpToolAnnotations;
+  annotations?: ProxiedMcpToolAnnotations;
   selected: boolean;
   onSelect: () => void;
 }): JSX.Element {
@@ -362,7 +362,7 @@ function RemoteToolDetails({
   tool,
 }: {
   name: string;
-  tool: RemoteMcpTool;
+  tool: ProxiedMcpTool;
 }): JSX.Element {
   const parameters = useMemo(() => extractParameters(tool), [tool]);
 
@@ -508,7 +508,7 @@ function RemoteMcpToolsConnectPrompt({
 
 /** Map raw MCP annotation hints to the booleans AnnotationBadgeIcons renders. */
 function resolveAnnotations(
-  annotations: RemoteMcpToolAnnotations | undefined,
+  annotations: ProxiedMcpToolAnnotations | undefined,
 ): ResolvedToolAnnotations {
   return {
     readOnly: Boolean(annotations?.readOnlyHint),
@@ -526,7 +526,7 @@ type ToolParameter = {
 };
 
 /** Flatten a tool's JSON Schema into a flat list of named parameters. */
-function extractParameters(tool: RemoteMcpTool): ToolParameter[] {
+function extractParameters(tool: ProxiedMcpTool): ToolParameter[] {
   const schema = readJsonSchema(tool.inputSchema);
   if (!schema) return [];
 

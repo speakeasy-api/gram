@@ -43,9 +43,9 @@ import { PlaygroundAuth } from "./PlaygroundAuth";
 import { PlaygroundConfigPanel } from "./PlaygroundConfigPanel";
 import { PlaygroundElements } from "./PlaygroundElements";
 import { PlaygroundLogsPanel } from "./PlaygroundLogsPanel";
-import { PlaygroundRemoteChat } from "./PlaygroundRemoteChat";
+import { PlaygroundProxiedChat } from "./PlaygroundProxiedChat";
 import { ShareChatButton } from "./ShareChatButton";
-import { useRemoteMcpConnection } from "./useRemoteMcpConnection";
+import { useProxiedMcpConnection } from "./useProxiedMcpConnection";
 
 // A single selectable server in the playground. Toolset-backed and
 // remote-MCP-backed servers share one flat picker; the `kind` discriminant only
@@ -61,7 +61,7 @@ type PlaygroundServerRef =
     };
 
 const toolsetServerKey = (slug: string) => `toolset:${slug}`;
-const remoteServerKey = (mcpServerId: string) => `remote:${mcpServerId}`;
+const mcpServerKey = (mcpServerId: string) => `remote:${mcpServerId}`;
 
 // Merges toolset-backed servers (from listToolsets) with remote-MCP-backed
 // servers (the remoteMcpServerId subset of mcpServers) into one sorted list.
@@ -91,7 +91,7 @@ function usePlaygroundServers(): {
       .filter((server) => !!server.remoteMcpServerId)
       .map((server) => ({
         kind: "remote",
-        key: remoteServerKey(server.id),
+        key: mcpServerKey(server.id),
         name: server.name ?? server.slug ?? "Remote MCP server",
         mcpServerId: server.id,
         isIssuerGated: !!server.userSessionIssuerId,
@@ -147,7 +147,7 @@ export default function Playground(): JSX.Element {
 /** Resolve the initially-selected server key from URL params. */
 function initialServerKey(searchParams: URLSearchParams): string | null {
   const mcpServer = searchParams.get("mcpServer");
-  if (mcpServer) return remoteServerKey(mcpServer);
+  if (mcpServer) return mcpServerKey(mcpServer);
   const toolset = searchParams.get("toolset");
   if (toolset) return toolsetServerKey(toolset);
   return null;
@@ -278,7 +278,7 @@ function PlaygroundInner() {
               />
             )}
             {selectedServer?.kind === "remote" && (
-              <RemoteServerPanel
+              <ProxiedServerPanel
                 mcpServerId={selectedServer.mcpServerId}
                 isIssuerGated={selectedServer.isIssuerGated}
                 serverSelector={serverSelector}
@@ -308,7 +308,7 @@ function PlaygroundInner() {
                 />
               )}
               {selectedServer?.kind === "remote" && (
-                <PlaygroundRemoteChat
+                <PlaygroundProxiedChat
                   mcpServerId={selectedServer.mcpServerId}
                   isIssuerGated={selectedServer.isIssuerGated}
                   environmentSlug={selectedEnvironment}
@@ -599,11 +599,11 @@ function ToolsetPanel({
 }
 
 /**
- * Left panel for a remote-MCP-backed server: the shared selector, a read-only
+ * Left panel for a proxied-MCP-backed server: the shared selector, a read-only
  * live tool list, and model settings. Tool curation, auth, and env config are
  * absent — those affordances don't apply to a proxied upstream.
  */
-function RemoteServerPanel({
+function ProxiedServerPanel({
   mcpServerId,
   isIssuerGated,
   serverSelector,
@@ -617,7 +617,7 @@ function RemoteServerPanel({
   mcpServerId: string;
   isIssuerGated: boolean;
 }) {
-  const { tools } = useRemoteMcpConnection(mcpServerId, isIssuerGated);
+  const { tools } = useProxiedMcpConnection(mcpServerId, isIssuerGated);
 
   const remoteTools = useMemo(
     () =>
