@@ -71,9 +71,14 @@
 --                          re-derivable.
 --
 -- Prod state was verified on 2026-07-16 (read replica + ClickHouse read-only;
--- concrete numbers in POC-305). Step 0 re-confirms the two preconditions at
--- run time: #4259 stamping team (0b) and the 20260713 re-derive cutover end
--- state (0c). Anything else: stop.
+-- concrete numbers in POC-305). Step 0 re-confirms the preconditions at run
+-- time: #4259 stamping team (0b), the 20260713 re-derive cutover end state
+-- (0c), and — REQUIRED before staging — the 20260717 gen2-attribute-metrics-mv
+-- migration deployed (ships with this runbook; it recreates the MV stamping
+-- generation 2 instead of 0). With that live, every row ingested after step 1
+-- lands as generation 2 / active and is structurally immune to the cutover's
+-- generation-0/1 hide flip — no late-arriving row can be hidden without a
+-- staged replacement. Anything else: stop.
 
 -- ============================================================================
 -- Step 0a — find the affected org's project id (Postgres, prod read replica;
@@ -113,9 +118,13 @@ WHERE gram_project_id = toUUID('<PROJECT_ID>')
 -- Step 0c — record the before-state. Expected shape for the project:
 --   generation 0, is_active 0 — pre-2026-07-14 rows hidden by the 20260713
 --                               cutover (absent if its final cleanup ran);
---   generation 0, is_active 1 — MV rows from 2026-07-14 on;
+--   generation 0, is_active 1 — MV rows from 2026-07-14 until the
+--                               gen2-attribute-metrics-mv migration deployed;
 --   generation 1, is_active 1 — the 20260713 re-derive;
---   no generation 2 rows yet.
+--   generation 2, is_active 1 — live MV rows since that migration deployed
+--                               (their presence CONFIRMS the migration
+--                               precondition);
+--   no generation 2 HIDDEN rows (a prior staging attempt) yet.
 -- Anything else: stop and reconcile before proceeding.
 -- ============================================================================
 
@@ -152,13 +161,27 @@ FROM (
 -- STAGING IS NOT IDEMPOTENT: a second run of the INSERT merges duplicate
 -- aggregate states into the same generation-2 keys and doubles the staged
 -- spend. Two ENFORCING guards prevent that: the throwIf below errors when
--- generation-2 rows already exist (aborting a piped multi-statement run
--- before the INSERT), and the INSERT's own WHERE repeats the check as a
+-- staged generation-2 rows already exist (aborting a piped multi-statement
+-- run before the INSERT), and the INSERT's own WHERE repeats the check as a
 -- scalar-subquery predicate so a re-run inserts 0 rows even when the INSERT
--- is executed on its own. If a prior staging attempt exists, hard-delete it
--- first (`ALTER TABLE attribute_metrics_summaries DELETE WHERE
--- gram_project_id = toUUID('<PROJECT_ID>') AND generation = 2 SETTINGS
--- mutations_sync = 2`) and only then re-run the INSERT.
+-- is executed on its own. Both check generation = 2 AND is_active = 0: since
+-- the gen2-attribute-metrics-mv migration, live MV rows are ALSO generation 2
+-- but always active, while staged rows are hidden until cutover — is_active
+-- distinguishes them. Consequently the guards only protect BEFORE cutover; do
+-- not re-run step 1 after the flips (to redo a cut-over backfill, roll back
+-- first — the rollback re-hides the staged window, re-arming the guards). If
+-- a prior staging attempt exists, hard-delete it first
+-- (`ALTER TABLE attribute_metrics_summaries DELETE WHERE gram_project_id =
+-- toUUID('<PROJECT_ID>') AND generation = 2 AND is_active = 0 AND time_bucket <
+-- toDateTime('2026-07-16 05:00:00', 'UTC') SETTINGS mutations_sync = 2`) and
+-- only then re-run the INSERT.
+--
+-- Run steps 1 -> 3 in one sitting: until the cutover flips, a staged HIDDEN
+-- generation-2 row can share its full sort key with a late-arriving ACTIVE MV
+-- generation-2 row (same pre-boundary event-time bucket and dimensions), and
+-- a background merge would then pick an arbitrary is_active for the combined
+-- row. The flips resolve any such row; minimizing the staging->cutover window
+-- minimizes the transient.
 -- ============================================================================
 
 SELECT throwIf(
@@ -167,7 +190,8 @@ SELECT throwIf(
 ) AS stage_once_guard
 FROM attribute_metrics_summaries
 WHERE gram_project_id = toUUID('<PROJECT_ID>')
-  AND generation = 2;
+  AND generation = 2
+  AND is_active = 0;
 
 INSERT INTO attribute_metrics_summaries (gram_project_id, time_bucket, department_name, job_title, employee_type, division_name, cost_center_name, user_email, model, hook_source, roles, groups, total_chats, total_input_tokens, total_output_tokens, total_tokens, cache_read_input_tokens, cache_creation_input_tokens, total_cost, total_tool_calls, unique_tool_calls, account_type, provider, billing_mode, query_source, skill_name, agent_name, mcp_server_name, mcp_tool_name, generation, is_active)
 WITH
@@ -264,12 +288,14 @@ WHERE gram_project_id = toUUID('<PROJECT_ID>')
   AND account_type = ''
   AND (is_claude_api_request OR is_claude_tool_result OR is_agent_usage_row OR is_agent_tool_call)
   -- Stage-once guard, enforced in the INSERT itself: inserts 0 rows if a
-  -- prior generation-2 staging already exists (see comment above the throwIf).
+  -- prior generation-2 staging (hidden rows — live MV generation-2 rows are
+  -- always active) already exists. See the comment above the throwIf.
   AND (
       SELECT count()
       FROM attribute_metrics_summaries
       WHERE gram_project_id = toUUID('<PROJECT_ID>')
         AND generation = 2
+        AND is_active = 0
   ) = 0
 GROUP BY
     gram_project_id,
@@ -328,15 +354,15 @@ ORDER BY day DESC;
 -- MV rows and the 20260713 re-derive; re-hiding already-hidden generation-0
 -- pre-cutoff rows is a no-op.
 --
--- LATE-ARRIVAL GUARD: an unset row ingested AFTER step 1 with an event time
--- inside the window (post-#4259 that takes a transient attribution failure on
--- a late-delivered batch — rare) would be hidden here without a staged
--- replacement. Re-run the step-2 conservation query IMMEDIATELY before these
--- flips: if live_unset_cost has grown materially above staged_cost on any
--- day, re-stage (hard-delete generation 2 as described in step 1, re-run the
--- INSERT) and check again. Any sliver that still slips through is a bounded
--- undercount of the residual "(unset)" bucket — the safe failure direction,
--- same trade-off as the parent runbook.
+-- LATE ARRIVALS: structurally closed by the gen2-attribute-metrics-mv
+-- migration (a precondition — step 0c confirms). Every row ingested after
+-- the migration lands as generation 2 / active, and the hide flip below only
+-- targets generations 0/1 — so no row ingested after staging can be hidden
+-- without a staged replacement. Still re-run the step-2 conservation query
+-- immediately before the flips as a sanity gate: live_unset_cost materially
+-- above staged_cost would mean staging ran BEFORE the migration deployed
+-- (precondition violation) — roll back to the guards' comment, hard-delete
+-- the staged rows, and restage.
 -- ============================================================================
 
 ALTER TABLE attribute_metrics_summaries
@@ -348,10 +374,14 @@ ALTER TABLE attribute_metrics_summaries
       AND time_bucket < toDateTime('2026-07-16 05:00:00', 'UTC')
     SETTINGS mutations_sync = 2;
 
+-- Bounded to the staged window: live MV generation-2 rows are already active
+-- (the flip would be a no-op on them), and the bound keeps this the exact
+-- inverse of the rollback's re-hide below.
 ALTER TABLE attribute_metrics_summaries
     UPDATE is_active = 1
     WHERE gram_project_id = toUUID('<PROJECT_ID>')
       AND generation = 2
+      AND time_bucket < toDateTime('2026-07-16 05:00:00', 'UTC')
     SETTINGS mutations_sync = 2;
 
 -- Verify, then spot-check the affected org's Costs page account-type
@@ -379,10 +409,16 @@ GROUP BY account_type;
 -- mutations_sync = 2`) and start over from step 1.
 -- ============================================================================
 
+-- The re-hide is bounded to the staged window so live MV generation-2 rows
+-- (post-boundary buckets) stay visible. The few late-arriving MV generation-2
+-- rows with PRE-boundary event-time buckets get hidden along with the staged
+-- rows — a tiny bounded undercount while rolled back, the safe direction.
+--
 -- ALTER TABLE attribute_metrics_summaries
 --     UPDATE is_active = 0
 --     WHERE gram_project_id = toUUID('<PROJECT_ID>')
 --       AND generation = 2
+--       AND time_bucket < toDateTime('2026-07-16 05:00:00', 'UTC')
 --     SETTINGS mutations_sync = 2;
 --
 -- ALTER TABLE attribute_metrics_summaries
