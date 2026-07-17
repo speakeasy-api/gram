@@ -3382,7 +3382,7 @@ examples:
         application/json: {"id": "4fc97fb6-f058-4e7e-9e97-5681ce8613a2", "plugin_id": "79683a0f-4e15-4324-add7-aec6f013dfe8"}
       responses:
         "200":
-          application/json: {"channel": "plugin", "created_at": "2025-09-14T19:24:28.651Z", "created_by_user_id": "<id>", "id": "4c40713b-faa0-4f6b-916d-c3c15c487cc7", "plugin_id": "e0e2c404-567d-47a4-b279-6623abc68e04", "plugin_name": "<value>", "project_id": "4b9a0b45-eb7c-42eb-bf87-107c2d2a9055", "resolved_version_id": "1802abfd-f6e4-4711-b40e-709fa4913e6c", "skill_id": "98b37be4-63d6-405e-ab2a-96a596db1511", "updated_at": "2026-08-30T16:19:52.579Z"}
+          application/json: {"channel": "plugin", "created_at": "2025-09-14T19:24:28.651Z", "created_by_user_id": "<id>", "id": "4c40713b-faa0-4f6b-916d-c3c15c487cc7", "plugin_id": "e0e2c404-567d-47a4-b279-6623abc68e04", "plugin_name": "<value>", "project_id": "4b9a0b45-eb7c-42eb-bf87-107c2d2a9055", "resolved_version_id": "1802abfd-f6e4-4711-b40e-709fa4913e6c", "skill_display_name": "<value>", "skill_id": "98b37be4-63d6-405e-ab2a-96a596db1511", "skill_name": "<value>", "updated_at": "2026-08-30T16:19:52.579Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -5046,7 +5046,7 @@ examples:
           limit: 20
       responses:
         "200":
-          application/json: {"distributions": [{"channel": "plugin", "created_at": "2024-05-20T07:11:07.422Z", "created_by_user_id": "<id>", "id": "2d149ea6-56d8-488c-b924-346c2eb5d8e4", "plugin_id": "c13f1c94-153f-4f90-a763-790129595b9b", "plugin_name": "<value>", "project_id": "6ba4dc7a-5f21-4269-9428-0b1d477c0165", "resolved_version_id": "092c4763-1e93-4e9d-b4f1-579c2bdf8b8b", "skill_id": "961a92e6-1f6f-4d63-a667-ce084fdd97ed", "updated_at": "2026-11-01T19:49:21.649Z"}]}
+          application/json: {"distributions": [{"channel": "plugin", "created_at": "2024-05-20T07:11:07.422Z", "created_by_user_id": "<id>", "id": "2d149ea6-56d8-488c-b924-346c2eb5d8e4", "plugin_id": "c13f1c94-153f-4f90-a763-790129595b9b", "plugin_name": "<value>", "project_id": "6ba4dc7a-5f21-4269-9428-0b1d477c0165", "resolved_version_id": "092c4763-1e93-4e9d-b4f1-579c2bdf8b8b", "skill_display_name": "<value>", "skill_id": "961a92e6-1f6f-4d63-a667-ce084fdd97ed", "skill_name": "<value>", "updated_at": "2026-11-01T19:49:21.649Z"}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

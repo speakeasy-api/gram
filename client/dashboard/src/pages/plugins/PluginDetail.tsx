@@ -1,6 +1,7 @@
 import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
 import { MCPStatusIndicator } from "@/components/mcp/MCPStatusIndicator";
+import { RequireScope } from "@/components/require-scope";
 import { ToolCollectionBadge } from "@/components/tool-collection-badge";
 import { Button as UiButton } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -50,6 +51,7 @@ import { useNavigate, useParams } from "react-router";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { PluginServer } from "@gram/client/models/components/pluginserver.js";
 import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
+import { useProject } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { toast } from "sonner";
@@ -57,6 +59,7 @@ import { DEFAULT_PLUGIN_DESCRIPTION } from "./default-plugin";
 import { downloadPluginPackage } from "./downloadPluginPackage";
 import { InstallInstructionsDialog } from "./InstallInstructionsDialog";
 import { PluginAssignmentsSheet } from "./PluginAssignmentsSheet";
+import { PluginSkillsSection } from "./PluginSkillsSection";
 import { PluginAssignmentsList } from "./PluginAssignmentsList";
 import { memberMapByUrn, roleMapByUrn } from "./principals";
 import { PublishDialog } from "./PublishDialog";
@@ -77,6 +80,7 @@ function serverOptionKey(kind: ServerOptionKind, id: string): string {
 
 export default function PluginDetail(): JSX.Element | null {
   const { pluginId } = useParams<{ pluginId: string }>();
+  const project = useProject();
   const queryClient = useQueryClient();
   const routes = useRoutes();
   const navigate = useNavigate();
@@ -643,39 +647,55 @@ export default function PluginDetail(): JSX.Element | null {
           </>
         )}
 
-        {/* Skills section — no plugin support yet, coming soon */}
-        <div className="mb-3 flex items-center gap-3">
-          <div className="border-border flex-1 border-t" />
-          <Type
-            small
-            muted
-            className="shrink-0 font-mono text-xs tracking-wide uppercase"
+        {/* Skills ride the same publish flow as servers, so changes offer a
+            republish. Orgs without the skills feature keep the teaser. */}
+        {productFeatures?.skillsEnabled ? (
+          <RequireScope
+            scope="skill:read"
+            resourceId={project.id}
+            level="section"
           >
-            Skills
-          </Type>
-          <div className="border-border flex-1 border-t" />
-        </div>
-        <div className="mb-8">
-          <div className="border-border flex items-center gap-4 rounded-xl border border-dashed p-6 opacity-60">
-            <div className="bg-muted flex h-14 w-14 shrink-0 items-center justify-center rounded-xl">
-              <Sparkles className="text-muted-foreground h-7 w-7" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <Type variant="subheading" as="div">
-                  Skills
-                </Type>
-                <Badge variant="neutral">
-                  <Badge.Text>Coming soon</Badge.Text>
-                </Badge>
-              </div>
-              <Type small muted>
-                Bundle reusable skills alongside your MCP servers in this
-                plugin.
+            <PluginSkillsSection
+              pluginId={pluginId!}
+              onMutated={(message) => offerPublish(message)}
+            />
+          </RequireScope>
+        ) : (
+          <>
+            <div className="mb-3 flex items-center gap-3">
+              <div className="border-border flex-1 border-t" />
+              <Type
+                small
+                muted
+                className="shrink-0 font-mono text-xs tracking-wide uppercase"
+              >
+                Skills
               </Type>
+              <div className="border-border flex-1 border-t" />
             </div>
-          </div>
-        </div>
+            <div className="mb-8">
+              <div className="border-border flex items-center gap-4 rounded-xl border border-dashed p-6 opacity-60">
+                <div className="bg-muted flex h-14 w-14 shrink-0 items-center justify-center rounded-xl">
+                  <Sparkles className="text-muted-foreground h-7 w-7" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Type variant="subheading" as="div">
+                      Skills
+                    </Type>
+                    <Badge variant="neutral">
+                      <Badge.Text>Coming soon</Badge.Text>
+                    </Badge>
+                  </div>
+                  <Type small muted>
+                    Bundle reusable skills alongside your MCP servers in this
+                    plugin.
+                  </Type>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
 
         {/* Edit Dialog */}
         <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>

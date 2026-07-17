@@ -120,6 +120,8 @@ async function $do(
   const query = encodeFormQuery({
     "cursor": payload?.cursor,
     "limit": payload?.limit,
+    "plugin_id": payload?.plugin_id,
+    "skill_id": payload?.skill_id,
   });
 
   const headers = new Headers(compactMap({

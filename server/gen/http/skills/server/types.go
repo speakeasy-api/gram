@@ -123,6 +123,10 @@ type DistributeResponseBody struct {
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 	// The distributed skill ID.
 	SkillID string `form:"skill_id" json:"skill_id" xml:"skill_id"`
+	// The canonical name of the distributed skill.
+	SkillName string `form:"skill_name" json:"skill_name" xml:"skill_name"`
+	// The display name of the distributed skill.
+	SkillDisplayName string `form:"skill_display_name" json:"skill_display_name" xml:"skill_display_name"`
 	// The plugin that carries the skill.
 	PluginID string `form:"plugin_id" json:"plugin_id" xml:"plugin_id"`
 	// The name of the plugin that carries the skill.
@@ -1851,6 +1855,10 @@ type SkillDistributionResponseBody struct {
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 	// The distributed skill ID.
 	SkillID string `form:"skill_id" json:"skill_id" xml:"skill_id"`
+	// The canonical name of the distributed skill.
+	SkillName string `form:"skill_name" json:"skill_name" xml:"skill_name"`
+	// The display name of the distributed skill.
+	SkillDisplayName string `form:"skill_display_name" json:"skill_display_name" xml:"skill_display_name"`
 	// The plugin that carries the skill.
 	PluginID string `form:"plugin_id" json:"plugin_id" xml:"plugin_id"`
 	// The name of the plugin that carries the skill.
@@ -1963,6 +1971,8 @@ func NewDistributeResponseBody(res *types.SkillDistribution) *DistributeResponse
 		ID:                res.ID,
 		ProjectID:         res.ProjectID,
 		SkillID:           res.SkillID,
+		SkillName:         res.SkillName,
+		SkillDisplayName:  res.SkillDisplayName,
 		PluginID:          res.PluginID,
 		PluginName:        res.PluginName,
 		PinnedVersionID:   res.PinnedVersionID,
@@ -3360,8 +3370,10 @@ func NewUndistributePayload(body *UndistributeRequestBody, sessionToken *string,
 
 // NewListDistributionsPayload builds a skills service listDistributions
 // endpoint payload.
-func NewListDistributionsPayload(cursor *string, limit int, sessionToken *string, apikeyToken *string, projectSlugInput *string) *skills.ListDistributionsPayload {
+func NewListDistributionsPayload(skillID *string, pluginID *string, cursor *string, limit int, sessionToken *string, apikeyToken *string, projectSlugInput *string) *skills.ListDistributionsPayload {
 	v := &skills.ListDistributionsPayload{}
+	v.SkillID = skillID
+	v.PluginID = pluginID
 	v.Cursor = cursor
 	v.Limit = limit
 	v.SessionToken = sessionToken
