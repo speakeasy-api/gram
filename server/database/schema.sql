@@ -3113,6 +3113,39 @@ COMMENT ON COLUMN tunneled_mcp_servers.updated_at IS 'Time when the durable tunn
 COMMENT ON COLUMN tunneled_mcp_servers.deleted_at IS 'Soft-delete timestamp for the tunneled MCP source. NULL means the source is active.';
 COMMENT ON COLUMN tunneled_mcp_servers.deleted IS 'Generated soft-delete flag derived from deleted_at and used by partial indexes.';
 
+-- Configurable request headers attached to a tunneled MCP server. Each header
+-- resolves either to a static value (optionally encrypted at rest when secret)
+-- or to a named inbound request header that is passed through. Values are
+-- injected onto the request forwarded through the tunnel gateway to the
+-- customer's upstream MCP server. Mirrors remote_mcp_server_headers.
+CREATE TABLE IF NOT EXISTS tunneled_mcp_server_headers (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  tunneled_mcp_server_id uuid NOT NULL,
+  name TEXT NOT NULL CHECK (name <> ''),
+  description TEXT,
+  is_required BOOLEAN NOT NULL DEFAULT FALSE,
+  is_secret BOOLEAN NOT NULL DEFAULT FALSE,
+  value TEXT,
+  value_from_request_header TEXT CHECK (value_from_request_header IS NULL OR value_from_request_header <> ''),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT tunneled_mcp_server_headers_pkey PRIMARY KEY (id),
+  CONSTRAINT tunneled_mcp_server_headers_tunneled_mcp_server_id_fkey FOREIGN KEY (tunneled_mcp_server_id) REFERENCES tunneled_mcp_servers (id) ON DELETE CASCADE,
+  CONSTRAINT tunneled_mcp_server_headers_value_source_check CHECK ((value IS NULL) != (value_from_request_header IS NULL))
+);
+
+CREATE INDEX IF NOT EXISTS tunneled_mcp_server_headers_tunneled_mcp_server_id_idx
+ON tunneled_mcp_server_headers (tunneled_mcp_server_id)
+WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS tunneled_mcp_server_headers_tunneled_mcp_server_id_name_key
+ON tunneled_mcp_server_headers (tunneled_mcp_server_id, name)
+WHERE deleted IS FALSE;
+
 -- MCP Servers: user-facing MCP server configurations that link an MCP
 -- backend (a toolset, a remote MCP server, or a tunneled MCP server) to
 -- environment and OAuth settings. Each server is addressable via one or more
@@ -3728,6 +3761,13 @@ ON risk_results (project_id, chat_message_id);
 CREATE INDEX IF NOT EXISTS risk_results_project_found_idx
 ON risk_results (project_id, created_at DESC)
 WHERE found IS TRUE AND excluded_at IS NULL AND false_positive_at IS NULL;
+
+-- Serves the risk overview window scan (GetRiskOverviewCounts): counts every
+-- scanned message in a project's created_at window regardless of found state,
+-- so the partial _project_found_idx cannot help. Range-scans just the window;
+-- trailing chat_message_id enables an index-only distinct for messages_scanned.
+CREATE INDEX IF NOT EXISTS risk_results_project_created_msg_idx
+ON risk_results (project_id, created_at, chat_message_id);
 
 -- Narrows the exclusion sweeps (exact/rule_id/source) by project + policy +
 -- rule. The verbatim match column is intentionally NOT indexed: it can exceed

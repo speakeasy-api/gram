@@ -29,8 +29,20 @@ vi.mock("@/contexts/Auth", () => ({ useProject: () => ({ id: "project_a" }) }));
 vi.mock("nuqs", () => ({
   useQueryState: () => [null, vi.fn()],
 }));
-vi.mock("./SkillSheet", () => ({ SkillSheet: () => null }));
 vi.mock("./ArchiveSkillDialog", () => ({ ArchiveSkillDialog: () => null }));
+vi.mock("react-router", () => ({
+  Link: ({ children }: { children: ReactNode }) => <a>{children}</a>,
+  Navigate: () => null,
+  useNavigate: () => vi.fn(),
+}));
+vi.mock("@/routes", () => ({
+  useRoutes: () => ({
+    skills: {
+      href: () => "/skills",
+      detail: { href: (id: string) => `/skills/${id}` },
+    },
+  }),
+}));
 vi.mock("@gram/client/react-query/skills.js", () => ({
   useSkillsInfinite: () => ({
     data: { pages: [{ result: { skills: testState.skills } }] },
@@ -62,7 +74,9 @@ vi.mock("@/components/page-layout", () => {
     Refresh: () => null,
   });
   return {
-    Page: {
+    Page: Object.assign(Wrapper, {
+      Header: Object.assign(Wrapper, { Breadcrumbs: () => null }),
+      Body: Wrapper,
       Section: Object.assign(Wrapper, {
         Title: Wrapper,
         Description: Wrapper,
@@ -70,7 +84,7 @@ vi.mock("@/components/page-layout", () => {
         Body: Wrapper,
       }),
       Toolbar,
-    },
+    }),
   };
 });
 vi.mock("@speakeasy-api/moonshine", () => ({

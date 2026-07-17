@@ -9,6 +9,7 @@ package server
 
 import (
 	skills "github.com/speakeasy-api/gram/server/gen/skills"
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
 )
 
@@ -35,6 +36,27 @@ type AddVersionRequestBody struct {
 type ArchiveRequestBody struct {
 	// The skill ID.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+}
+
+// DistributeRequestBody is the type of the "skills" service "distribute"
+// endpoint HTTP request body.
+type DistributeRequestBody struct {
+	// The skill ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The plugin that carries the skill.
+	PluginID *string `form:"plugin_id,omitempty" json:"plugin_id,omitempty" xml:"plugin_id,omitempty"`
+	// An optional valid version to pin instead of tracking the latest valid
+	// version.
+	PinnedVersionID *string `form:"pinned_version_id,omitempty" json:"pinned_version_id,omitempty" xml:"pinned_version_id,omitempty"`
+}
+
+// UndistributeRequestBody is the type of the "skills" service "undistribute"
+// endpoint HTTP request body.
+type UndistributeRequestBody struct {
+	// The skill ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The plugin the skill was distributed to.
+	PluginID *string `form:"plugin_id,omitempty" json:"plugin_id,omitempty" xml:"plugin_id,omitempty"`
 }
 
 // CreateResponseBody is the type of the "skills" service "create" endpoint
@@ -88,6 +110,46 @@ type GetResponseBody struct {
 type ListVersionsResponseBody struct {
 	// The skill versions in this page.
 	Versions []*SkillVersionResponseBody `form:"versions" json:"versions" xml:"versions"`
+	// Cursor for the next page; absent when exhausted.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
+
+// DistributeResponseBody is the type of the "skills" service "distribute"
+// endpoint HTTP response body.
+type DistributeResponseBody struct {
+	// The distribution ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The project that owns the distribution.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The distributed skill ID.
+	SkillID string `form:"skill_id" json:"skill_id" xml:"skill_id"`
+	// The canonical name of the distributed skill.
+	SkillName string `form:"skill_name" json:"skill_name" xml:"skill_name"`
+	// The display name of the distributed skill.
+	SkillDisplayName string `form:"skill_display_name" json:"skill_display_name" xml:"skill_display_name"`
+	// The plugin that carries the skill.
+	PluginID string `form:"plugin_id" json:"plugin_id" xml:"plugin_id"`
+	// The name of the plugin that carries the skill.
+	PluginName string `form:"plugin_name" json:"plugin_name" xml:"plugin_name"`
+	// The pinned version, absent when tracking the latest valid version.
+	PinnedVersionID *string `form:"pinned_version_id,omitempty" json:"pinned_version_id,omitempty" xml:"pinned_version_id,omitempty"`
+	// The version currently targeted by this distribution.
+	ResolvedVersionID string `form:"resolved_version_id" json:"resolved_version_id" xml:"resolved_version_id"`
+	// The distribution channel.
+	Channel string `form:"channel" json:"channel" xml:"channel"`
+	// The user that created the distribution.
+	CreatedByUserID string `form:"created_by_user_id" json:"created_by_user_id" xml:"created_by_user_id"`
+	// When the distribution was created.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the distribution configuration last changed.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// ListDistributionsResponseBody is the type of the "skills" service
+// "listDistributions" endpoint HTTP response body.
+type ListDistributionsResponseBody struct {
+	// The active skill distributions in this page.
+	Distributions []*SkillDistributionResponseBody `form:"distributions" json:"distributions" xml:"distributions"`
 	// Cursor for the next page; absent when exhausted.
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
@@ -1173,6 +1235,551 @@ type ArchiveGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// DistributeUnauthorizedResponseBody is the type of the "skills" service
+// "distribute" endpoint HTTP response body for the "unauthorized" error.
+type DistributeUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DistributeForbiddenResponseBody is the type of the "skills" service
+// "distribute" endpoint HTTP response body for the "forbidden" error.
+type DistributeForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DistributeBadRequestResponseBody is the type of the "skills" service
+// "distribute" endpoint HTTP response body for the "bad_request" error.
+type DistributeBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DistributeNotFoundResponseBody is the type of the "skills" service
+// "distribute" endpoint HTTP response body for the "not_found" error.
+type DistributeNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DistributeConflictResponseBody is the type of the "skills" service
+// "distribute" endpoint HTTP response body for the "conflict" error.
+type DistributeConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DistributeUnsupportedMediaResponseBody is the type of the "skills" service
+// "distribute" endpoint HTTP response body for the "unsupported_media" error.
+type DistributeUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DistributeInvalidResponseBody is the type of the "skills" service
+// "distribute" endpoint HTTP response body for the "invalid" error.
+type DistributeInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DistributeInvariantViolationResponseBody is the type of the "skills" service
+// "distribute" endpoint HTTP response body for the "invariant_violation" error.
+type DistributeInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DistributeUnexpectedResponseBody is the type of the "skills" service
+// "distribute" endpoint HTTP response body for the "unexpected" error.
+type DistributeUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DistributeGatewayErrorResponseBody is the type of the "skills" service
+// "distribute" endpoint HTTP response body for the "gateway_error" error.
+type DistributeGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UndistributeUnauthorizedResponseBody is the type of the "skills" service
+// "undistribute" endpoint HTTP response body for the "unauthorized" error.
+type UndistributeUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UndistributeForbiddenResponseBody is the type of the "skills" service
+// "undistribute" endpoint HTTP response body for the "forbidden" error.
+type UndistributeForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UndistributeBadRequestResponseBody is the type of the "skills" service
+// "undistribute" endpoint HTTP response body for the "bad_request" error.
+type UndistributeBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UndistributeNotFoundResponseBody is the type of the "skills" service
+// "undistribute" endpoint HTTP response body for the "not_found" error.
+type UndistributeNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UndistributeConflictResponseBody is the type of the "skills" service
+// "undistribute" endpoint HTTP response body for the "conflict" error.
+type UndistributeConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UndistributeUnsupportedMediaResponseBody is the type of the "skills" service
+// "undistribute" endpoint HTTP response body for the "unsupported_media" error.
+type UndistributeUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UndistributeInvalidResponseBody is the type of the "skills" service
+// "undistribute" endpoint HTTP response body for the "invalid" error.
+type UndistributeInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UndistributeInvariantViolationResponseBody is the type of the "skills"
+// service "undistribute" endpoint HTTP response body for the
+// "invariant_violation" error.
+type UndistributeInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UndistributeUnexpectedResponseBody is the type of the "skills" service
+// "undistribute" endpoint HTTP response body for the "unexpected" error.
+type UndistributeUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UndistributeGatewayErrorResponseBody is the type of the "skills" service
+// "undistribute" endpoint HTTP response body for the "gateway_error" error.
+type UndistributeGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDistributionsUnauthorizedResponseBody is the type of the "skills"
+// service "listDistributions" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListDistributionsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDistributionsForbiddenResponseBody is the type of the "skills" service
+// "listDistributions" endpoint HTTP response body for the "forbidden" error.
+type ListDistributionsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDistributionsBadRequestResponseBody is the type of the "skills" service
+// "listDistributions" endpoint HTTP response body for the "bad_request" error.
+type ListDistributionsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDistributionsNotFoundResponseBody is the type of the "skills" service
+// "listDistributions" endpoint HTTP response body for the "not_found" error.
+type ListDistributionsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDistributionsConflictResponseBody is the type of the "skills" service
+// "listDistributions" endpoint HTTP response body for the "conflict" error.
+type ListDistributionsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDistributionsUnsupportedMediaResponseBody is the type of the "skills"
+// service "listDistributions" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListDistributionsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDistributionsInvalidResponseBody is the type of the "skills" service
+// "listDistributions" endpoint HTTP response body for the "invalid" error.
+type ListDistributionsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDistributionsInvariantViolationResponseBody is the type of the "skills"
+// service "listDistributions" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListDistributionsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDistributionsUnexpectedResponseBody is the type of the "skills" service
+// "listDistributions" endpoint HTTP response body for the "unexpected" error.
+type ListDistributionsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDistributionsGatewayErrorResponseBody is the type of the "skills"
+// service "listDistributions" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListDistributionsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // SkillResponseBody is used to define fields on response body types.
 type SkillResponseBody struct {
 	// The skill ID.
@@ -1237,6 +1844,37 @@ type SkillValidationErrorResponseBody struct {
 	Field string `form:"field" json:"field" xml:"field"`
 	// A human-readable explanation of the problem.
 	Message string `form:"message" json:"message" xml:"message"`
+}
+
+// SkillDistributionResponseBody is used to define fields on response body
+// types.
+type SkillDistributionResponseBody struct {
+	// The distribution ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The project that owns the distribution.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The distributed skill ID.
+	SkillID string `form:"skill_id" json:"skill_id" xml:"skill_id"`
+	// The canonical name of the distributed skill.
+	SkillName string `form:"skill_name" json:"skill_name" xml:"skill_name"`
+	// The display name of the distributed skill.
+	SkillDisplayName string `form:"skill_display_name" json:"skill_display_name" xml:"skill_display_name"`
+	// The plugin that carries the skill.
+	PluginID string `form:"plugin_id" json:"plugin_id" xml:"plugin_id"`
+	// The name of the plugin that carries the skill.
+	PluginName string `form:"plugin_name" json:"plugin_name" xml:"plugin_name"`
+	// The pinned version, absent when tracking the latest valid version.
+	PinnedVersionID *string `form:"pinned_version_id,omitempty" json:"pinned_version_id,omitempty" xml:"pinned_version_id,omitempty"`
+	// The version currently targeted by this distribution.
+	ResolvedVersionID string `form:"resolved_version_id" json:"resolved_version_id" xml:"resolved_version_id"`
+	// The distribution channel.
+	Channel string `form:"channel" json:"channel" xml:"channel"`
+	// The user that created the distribution.
+	CreatedByUserID string `form:"created_by_user_id" json:"created_by_user_id" xml:"created_by_user_id"`
+	// When the distribution was created.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the distribution configuration last changed.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // NewCreateResponseBody builds the HTTP response body from the result of the
@@ -1322,6 +1960,48 @@ func NewListVersionsResponseBody(res *skills.ListSkillVersionsResult) *ListVersi
 		}
 	} else {
 		body.Versions = []*SkillVersionResponseBody{}
+	}
+	return body
+}
+
+// NewDistributeResponseBody builds the HTTP response body from the result of
+// the "distribute" endpoint of the "skills" service.
+func NewDistributeResponseBody(res *types.SkillDistribution) *DistributeResponseBody {
+	body := &DistributeResponseBody{
+		ID:                res.ID,
+		ProjectID:         res.ProjectID,
+		SkillID:           res.SkillID,
+		SkillName:         res.SkillName,
+		SkillDisplayName:  res.SkillDisplayName,
+		PluginID:          res.PluginID,
+		PluginName:        res.PluginName,
+		PinnedVersionID:   res.PinnedVersionID,
+		ResolvedVersionID: res.ResolvedVersionID,
+		Channel:           res.Channel,
+		CreatedByUserID:   res.CreatedByUserID,
+		CreatedAt:         res.CreatedAt,
+		UpdatedAt:         res.UpdatedAt,
+	}
+	return body
+}
+
+// NewListDistributionsResponseBody builds the HTTP response body from the
+// result of the "listDistributions" endpoint of the "skills" service.
+func NewListDistributionsResponseBody(res *skills.ListSkillDistributionsResult) *ListDistributionsResponseBody {
+	body := &ListDistributionsResponseBody{
+		NextCursor: res.NextCursor,
+	}
+	if res.Distributions != nil {
+		body.Distributions = make([]*SkillDistributionResponseBody, len(res.Distributions))
+		for i, val := range res.Distributions {
+			if val == nil {
+				body.Distributions[i] = nil
+				continue
+			}
+			body.Distributions[i] = marshalTypesSkillDistributionToSkillDistributionResponseBody(val)
+		}
+	} else {
+		body.Distributions = []*SkillDistributionResponseBody{}
 	}
 	return body
 }
@@ -2166,6 +2846,428 @@ func NewArchiveGatewayErrorResponseBody(res *goa.ServiceError) *ArchiveGatewayEr
 	return body
 }
 
+// NewDistributeUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "distribute" endpoint of the "skills" service.
+func NewDistributeUnauthorizedResponseBody(res *goa.ServiceError) *DistributeUnauthorizedResponseBody {
+	body := &DistributeUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDistributeForbiddenResponseBody builds the HTTP response body from the
+// result of the "distribute" endpoint of the "skills" service.
+func NewDistributeForbiddenResponseBody(res *goa.ServiceError) *DistributeForbiddenResponseBody {
+	body := &DistributeForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDistributeBadRequestResponseBody builds the HTTP response body from the
+// result of the "distribute" endpoint of the "skills" service.
+func NewDistributeBadRequestResponseBody(res *goa.ServiceError) *DistributeBadRequestResponseBody {
+	body := &DistributeBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDistributeNotFoundResponseBody builds the HTTP response body from the
+// result of the "distribute" endpoint of the "skills" service.
+func NewDistributeNotFoundResponseBody(res *goa.ServiceError) *DistributeNotFoundResponseBody {
+	body := &DistributeNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDistributeConflictResponseBody builds the HTTP response body from the
+// result of the "distribute" endpoint of the "skills" service.
+func NewDistributeConflictResponseBody(res *goa.ServiceError) *DistributeConflictResponseBody {
+	body := &DistributeConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDistributeUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "distribute" endpoint of the "skills" service.
+func NewDistributeUnsupportedMediaResponseBody(res *goa.ServiceError) *DistributeUnsupportedMediaResponseBody {
+	body := &DistributeUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDistributeInvalidResponseBody builds the HTTP response body from the
+// result of the "distribute" endpoint of the "skills" service.
+func NewDistributeInvalidResponseBody(res *goa.ServiceError) *DistributeInvalidResponseBody {
+	body := &DistributeInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDistributeInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "distribute" endpoint of the "skills" service.
+func NewDistributeInvariantViolationResponseBody(res *goa.ServiceError) *DistributeInvariantViolationResponseBody {
+	body := &DistributeInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDistributeUnexpectedResponseBody builds the HTTP response body from the
+// result of the "distribute" endpoint of the "skills" service.
+func NewDistributeUnexpectedResponseBody(res *goa.ServiceError) *DistributeUnexpectedResponseBody {
+	body := &DistributeUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDistributeGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "distribute" endpoint of the "skills" service.
+func NewDistributeGatewayErrorResponseBody(res *goa.ServiceError) *DistributeGatewayErrorResponseBody {
+	body := &DistributeGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUndistributeUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "undistribute" endpoint of the "skills" service.
+func NewUndistributeUnauthorizedResponseBody(res *goa.ServiceError) *UndistributeUnauthorizedResponseBody {
+	body := &UndistributeUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUndistributeForbiddenResponseBody builds the HTTP response body from the
+// result of the "undistribute" endpoint of the "skills" service.
+func NewUndistributeForbiddenResponseBody(res *goa.ServiceError) *UndistributeForbiddenResponseBody {
+	body := &UndistributeForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUndistributeBadRequestResponseBody builds the HTTP response body from the
+// result of the "undistribute" endpoint of the "skills" service.
+func NewUndistributeBadRequestResponseBody(res *goa.ServiceError) *UndistributeBadRequestResponseBody {
+	body := &UndistributeBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUndistributeNotFoundResponseBody builds the HTTP response body from the
+// result of the "undistribute" endpoint of the "skills" service.
+func NewUndistributeNotFoundResponseBody(res *goa.ServiceError) *UndistributeNotFoundResponseBody {
+	body := &UndistributeNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUndistributeConflictResponseBody builds the HTTP response body from the
+// result of the "undistribute" endpoint of the "skills" service.
+func NewUndistributeConflictResponseBody(res *goa.ServiceError) *UndistributeConflictResponseBody {
+	body := &UndistributeConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUndistributeUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "undistribute" endpoint of the "skills" service.
+func NewUndistributeUnsupportedMediaResponseBody(res *goa.ServiceError) *UndistributeUnsupportedMediaResponseBody {
+	body := &UndistributeUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUndistributeInvalidResponseBody builds the HTTP response body from the
+// result of the "undistribute" endpoint of the "skills" service.
+func NewUndistributeInvalidResponseBody(res *goa.ServiceError) *UndistributeInvalidResponseBody {
+	body := &UndistributeInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUndistributeInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "undistribute" endpoint of the "skills" service.
+func NewUndistributeInvariantViolationResponseBody(res *goa.ServiceError) *UndistributeInvariantViolationResponseBody {
+	body := &UndistributeInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUndistributeUnexpectedResponseBody builds the HTTP response body from the
+// result of the "undistribute" endpoint of the "skills" service.
+func NewUndistributeUnexpectedResponseBody(res *goa.ServiceError) *UndistributeUnexpectedResponseBody {
+	body := &UndistributeUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUndistributeGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "undistribute" endpoint of the "skills" service.
+func NewUndistributeGatewayErrorResponseBody(res *goa.ServiceError) *UndistributeGatewayErrorResponseBody {
+	body := &UndistributeGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDistributionsUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "listDistributions" endpoint of the "skills" service.
+func NewListDistributionsUnauthorizedResponseBody(res *goa.ServiceError) *ListDistributionsUnauthorizedResponseBody {
+	body := &ListDistributionsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDistributionsForbiddenResponseBody builds the HTTP response body from
+// the result of the "listDistributions" endpoint of the "skills" service.
+func NewListDistributionsForbiddenResponseBody(res *goa.ServiceError) *ListDistributionsForbiddenResponseBody {
+	body := &ListDistributionsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDistributionsBadRequestResponseBody builds the HTTP response body
+// from the result of the "listDistributions" endpoint of the "skills" service.
+func NewListDistributionsBadRequestResponseBody(res *goa.ServiceError) *ListDistributionsBadRequestResponseBody {
+	body := &ListDistributionsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDistributionsNotFoundResponseBody builds the HTTP response body from
+// the result of the "listDistributions" endpoint of the "skills" service.
+func NewListDistributionsNotFoundResponseBody(res *goa.ServiceError) *ListDistributionsNotFoundResponseBody {
+	body := &ListDistributionsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDistributionsConflictResponseBody builds the HTTP response body from
+// the result of the "listDistributions" endpoint of the "skills" service.
+func NewListDistributionsConflictResponseBody(res *goa.ServiceError) *ListDistributionsConflictResponseBody {
+	body := &ListDistributionsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDistributionsUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "listDistributions" endpoint of the "skills"
+// service.
+func NewListDistributionsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListDistributionsUnsupportedMediaResponseBody {
+	body := &ListDistributionsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDistributionsInvalidResponseBody builds the HTTP response body from
+// the result of the "listDistributions" endpoint of the "skills" service.
+func NewListDistributionsInvalidResponseBody(res *goa.ServiceError) *ListDistributionsInvalidResponseBody {
+	body := &ListDistributionsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDistributionsInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "listDistributions" endpoint of the "skills"
+// service.
+func NewListDistributionsInvariantViolationResponseBody(res *goa.ServiceError) *ListDistributionsInvariantViolationResponseBody {
+	body := &ListDistributionsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDistributionsUnexpectedResponseBody builds the HTTP response body
+// from the result of the "listDistributions" endpoint of the "skills" service.
+func NewListDistributionsUnexpectedResponseBody(res *goa.ServiceError) *ListDistributionsUnexpectedResponseBody {
+	body := &ListDistributionsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDistributionsGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "listDistributions" endpoint of the "skills" service.
+func NewListDistributionsGatewayErrorResponseBody(res *goa.ServiceError) *ListDistributionsGatewayErrorResponseBody {
+	body := &ListDistributionsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewCreatePayload builds a skills service create endpoint payload.
 func NewCreatePayload(body *CreateRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *skills.CreatePayload {
 	v := &skills.CreatePayload{
@@ -2239,6 +3341,48 @@ func NewArchivePayload(body *ArchiveRequestBody, sessionToken *string, apikeyTok
 	return v
 }
 
+// NewDistributePayload builds a skills service distribute endpoint payload.
+func NewDistributePayload(body *DistributeRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *skills.DistributePayload {
+	v := &skills.DistributePayload{
+		ID:              *body.ID,
+		PluginID:        *body.PluginID,
+		PinnedVersionID: body.PinnedVersionID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewUndistributePayload builds a skills service undistribute endpoint payload.
+func NewUndistributePayload(body *UndistributeRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *skills.UndistributePayload {
+	v := &skills.UndistributePayload{
+		ID:       *body.ID,
+		PluginID: *body.PluginID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewListDistributionsPayload builds a skills service listDistributions
+// endpoint payload.
+func NewListDistributionsPayload(skillID *string, pluginID *string, cursor *string, limit int, sessionToken *string, apikeyToken *string, projectSlugInput *string) *skills.ListDistributionsPayload {
+	v := &skills.ListDistributionsPayload{}
+	v.SkillID = skillID
+	v.PluginID = pluginID
+	v.Cursor = cursor
+	v.Limit = limit
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // ValidateCreateRequestBody runs the validations defined on CreateRequestBody
 func ValidateCreateRequestBody(body *CreateRequestBody) (err error) {
 	if body.Content == nil {
@@ -2269,6 +3413,45 @@ func ValidateArchiveRequestBody(body *ArchiveRequestBody) (err error) {
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateDistributeRequestBody runs the validations defined on
+// DistributeRequestBody
+func ValidateDistributeRequestBody(body *DistributeRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.PluginID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("plugin_id", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.PluginID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.plugin_id", *body.PluginID, goa.FormatUUID))
+	}
+	if body.PinnedVersionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.pinned_version_id", *body.PinnedVersionID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateUndistributeRequestBody runs the validations defined on
+// UndistributeRequestBody
+func ValidateUndistributeRequestBody(body *UndistributeRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.PluginID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("plugin_id", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.PluginID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.plugin_id", *body.PluginID, goa.FormatUUID))
 	}
 	return
 }

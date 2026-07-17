@@ -123,6 +123,26 @@ type slackEventItemBody struct {
 	Ts      string `json:"ts,omitempty"`
 }
 
+// slackLinkSharedEventBody matches link_shared, where the message timestamp
+// is carried in `event.message_ts` (not `event.ts`) alongside the shared
+// links and the unfurl handle used by chat.unfurl.
+// See https://docs.slack.dev/reference/events/link_shared.
+type slackLinkSharedEventBody struct {
+	Type      string                `json:"type"`
+	User      string                `json:"user,omitempty"`
+	Channel   string                `json:"channel,omitempty"`
+	MessageTs string                `json:"message_ts,omitempty"`
+	ThreadTs  string                `json:"thread_ts,omitempty"`
+	Links     []slackSharedLinkBody `json:"links,omitempty"`
+	UnfurlID  string                `json:"unfurl_id,omitempty"`
+	Source    string                `json:"source,omitempty"`
+}
+
+type slackSharedLinkBody struct {
+	Domain string `json:"domain,omitempty"`
+	URL    string `json:"url,omitempty"`
+}
+
 // decodeSlackEvent decodes the inner `event` payload of an event_callback,
 // dispatching by event type because Slack's `event.user` and `event.channel`
 // are sometimes objects (e.g. team_join, channel_rename) and sometimes string
@@ -214,6 +234,26 @@ func decodeSlackEvent(raw json.RawMessage) (slackEventRequestBody, error) {
 			Channel:  ev.NewChannelID,
 			ThreadTs: "",
 			Ts:       "",
+			Reaction: "",
+			ItemUser: "",
+			Item:     nil,
+		}, nil
+	case "link_shared":
+		var ev slackLinkSharedEventBody
+		if err := json.Unmarshal(raw, &ev); err != nil {
+			return slackEventRequestBody{}, fmt.Errorf("%s event: %w", probe.Type, err)
+		}
+		return slackEventRequestBody{
+			Type:     ev.Type,
+			Subtype:  "",
+			Text:     "",
+			User:     ev.User,
+			Inviter:  "",
+			BotID:    "",
+			AppID:    "",
+			Channel:  ev.Channel,
+			ThreadTs: ev.ThreadTs,
+			Ts:       ev.MessageTs,
 			Reaction: "",
 			ItemUser: "",
 			Item:     nil,

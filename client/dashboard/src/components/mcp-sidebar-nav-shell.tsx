@@ -63,18 +63,23 @@ export type McpSidebarNavItem = {
 
 export function McpSidebarNavShell({
   backHref,
+  backLabel = "Back to all servers",
   topTitle,
   topContent,
   cardContent,
   items,
+  itemsTitle = "Configuration",
 }: {
   backHref: string;
+  backLabel?: string;
   /** Eyebrow label for topContent, styled like "At a glance". */
   topTitle?: string;
   /** Rendered above the "At a glance" card, e.g. a readiness summary. */
   topContent?: React.ReactNode;
   cardContent?: React.ReactNode;
   items: McpSidebarNavItem[];
+  /** Eyebrow label above the nav items. */
+  itemsTitle?: string;
 }): React.JSX.Element {
   const activeItemTitle = items.find((item) => item.active)?.title;
   const { state } = useSidebar();
@@ -87,7 +92,7 @@ export function McpSidebarNavShell({
           <SidebarFooterAction
             to={backHref}
             icon={ArrowLeft}
-            label="Back to all servers"
+            label={backLabel}
           />
         </SidebarMenuItem>
 
@@ -117,7 +122,7 @@ export function McpSidebarNavShell({
 
         <SidebarDivider className="mb-2 group-data-[collapsible=icon]:hidden" />
 
-        <SidebarEyebrow align="items">Configuration</SidebarEyebrow>
+        <SidebarEyebrow align="items">{itemsTitle}</SidebarEyebrow>
 
         {items.map((item) => (
           <SidebarMenuItem
