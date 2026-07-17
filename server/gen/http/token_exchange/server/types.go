@@ -23,9 +23,9 @@ type ExchangeRequestBody struct {
 // ExchangeResponseBody is the type of the "tokenExchange" service "exchange"
 // endpoint HTTP response body.
 type ExchangeResponseBody struct {
-	// The raw per-user API key (carries the `agent` and `hooks` scopes). Returned
-	// exactly once; store it securely. Presented as the Gram-Key on downstream
-	// user-scoped endpoints.
+	// The raw per-user API key (carries the `agent` scope). Returned exactly once;
+	// store it securely. Presented as the Gram-Key on downstream user-scoped
+	// endpoints.
 	AccessToken string `form:"access_token" json:"access_token" xml:"access_token"`
 	// Always empty. The minted key is long-lived and does not refresh; its
 	// lifecycle lever is revocation.

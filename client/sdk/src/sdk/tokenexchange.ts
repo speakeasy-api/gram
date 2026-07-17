@@ -13,7 +13,7 @@ export class TokenExchange extends ClientSDK {
    * exchange tokenExchange
    *
    * @remarks
-   * Exchange the org-scoped device-agent install credential plus a vouched user email for a long-lived, per-user API key carrying the 'agent' and 'hooks' scopes. Authenticated with an org-scoped API key carrying the 'agent_install' scope — deliberately distinct from the 'agent' scope the minted per-user keys carry, so a leaked per-user key cannot mint another user's key. The raw key is returned exactly once.
+   * Exchange the org-scoped device-agent install credential plus a vouched user email for a long-lived, per-user API key carrying the 'agent' scope. Authenticated with an org-scoped API key carrying the 'agent_install' scope — deliberately distinct from the 'agent' scope the minted per-user keys carry, so a leaked per-user key cannot mint another user's key. The raw key is returned exactly once.
    */
   async exchange(
     request: operations.TokenExchangeRequest,

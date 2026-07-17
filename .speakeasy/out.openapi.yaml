@@ -29539,7 +29539,7 @@ paths:
         name: UpdateTemplate
   /rpc/tokenExchange.exchange:
     post:
-      description: Exchange the org-scoped device-agent install credential plus a vouched user email for a long-lived, per-user API key carrying the 'agent' and 'hooks' scopes. Authenticated with an org-scoped API key carrying the 'agent_install' scope — deliberately distinct from the 'agent' scope the minted per-user keys carry, so a leaked per-user key cannot mint another user's key. The raw key is returned exactly once.
+      description: Exchange the org-scoped device-agent install credential plus a vouched user email for a long-lived, per-user API key carrying the 'agent' scope. Authenticated with an org-scoped API key carrying the 'agent_install' scope — deliberately distinct from the 'agent' scope the minted per-user keys carry, so a leaked per-user key cannot mint another user's key. The raw key is returned exactly once.
       operationId: tokenExchange
       parameters:
         - allowEmptyValue: true
@@ -48051,7 +48051,7 @@ components:
       properties:
         access_token:
           type: string
-          description: The raw per-user API key (carries the `agent` and `hooks` scopes). Returned exactly once; store it securely. Presented as the Gram-Key on downstream user-scoped endpoints.
+          description: The raw per-user API key (carries the `agent` scope). Returned exactly once; store it securely. Presented as the Gram-Key on downstream user-scoped endpoints.
         expires_in:
           type: integer
           description: Always zero. The minted key has no expiry (api_keys has no TTL).

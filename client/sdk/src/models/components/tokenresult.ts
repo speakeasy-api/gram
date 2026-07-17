@@ -13,7 +13,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
  */
 export type TokenResult = {
   /**
-   * The raw per-user API key (carries the `agent` and `hooks` scopes). Returned exactly once; store it securely. Presented as the Gram-Key on downstream user-scoped endpoints.
+   * The raw per-user API key (carries the `agent` scope). Returned exactly once; store it securely. Presented as the Gram-Key on downstream user-scoped endpoints.
    */
   accessToken: string;
   /**

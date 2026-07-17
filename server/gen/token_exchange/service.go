@@ -19,11 +19,11 @@ import (
 // long-lived, per-user API key scoped for the device agent.
 type Service interface {
 	// Exchange the org-scoped device-agent install credential plus a vouched user
-	// email for a long-lived, per-user API key carrying the 'agent' and 'hooks'
-	// scopes. Authenticated with an org-scoped API key carrying the
-	// 'agent_install' scope — deliberately distinct from the 'agent' scope the
-	// minted per-user keys carry, so a leaked per-user key cannot mint another
-	// user's key. The raw key is returned exactly once.
+	// email for a long-lived, per-user API key carrying the 'agent' scope.
+	// Authenticated with an org-scoped API key carrying the 'agent_install' scope
+	// — deliberately distinct from the 'agent' scope the minted per-user keys
+	// carry, so a leaked per-user key cannot mint another user's key. The raw key
+	// is returned exactly once.
 	Exchange(context.Context, *ExchangePayload) (res *TokenResult, err error)
 }
 
@@ -60,9 +60,9 @@ type ExchangePayload struct {
 
 // TokenResult is the result type of the tokenExchange service exchange method.
 type TokenResult struct {
-	// The raw per-user API key (carries the `agent` and `hooks` scopes). Returned
-	// exactly once; store it securely. Presented as the Gram-Key on downstream
-	// user-scoped endpoints.
+	// The raw per-user API key (carries the `agent` scope). Returned exactly once;
+	// store it securely. Presented as the Gram-Key on downstream user-scoped
+	// endpoints.
 	AccessToken string
 	// Always empty. The minted key is long-lived and does not refresh; its
 	// lifecycle lever is revocation.
