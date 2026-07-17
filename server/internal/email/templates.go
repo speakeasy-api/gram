@@ -22,20 +22,13 @@ type TransactionalID string
 // Loops transactional template IDs. Keep all IDs declared here so the
 // registry is grep-friendly.
 const (
-	transactionalIDTeamInvite                TransactionalID = "cml3n1h2n27o50i2rakc30bwb"
-	transactionalIDEnterpriseAdminOnboarding TransactionalID = "cmpqyxnzl00hj0jwtkibhyjdz"
-	transactionalIDAccessRequestCreated      TransactionalID = "cmq12wqp901sl0j0ll8cpr0yj"
-	transactionalIDTumUsageThreshold         TransactionalID = "cmrdon75q00390jvq44l87erv"
-	transactionalIDTumUsageOverage           TransactionalID = "cmrdopjpd028m0jx0v8sl25wj"
-	// TODO(DNO-529): replace both with the real Loops transactional IDs once
-	// the "OpenRouter chat credits threshold" and "OpenRouter internal credits
-	// threshold" templates are created in the Loops dashboard — merge
-	// variables for each: organization_name, threshold_percent, exhausted.
-	// Until then each crossed threshold retries its send roughly hourly (the
-	// alert activity's backoff reservation), failing fast at Loops and logging
-	// "failed to send openrouter credits alert".
-	transactionalIDOpenRouterChatCreditsThreshold     TransactionalID = "openrouter_chat_credits_threshold_pending_loops_id"
-	transactionalIDOpenRouterInternalCreditsThreshold TransactionalID = "openrouter_internal_credits_threshold_pending_loops_id"
+	transactionalIDTeamInvite                         TransactionalID = "cml3n1h2n27o50i2rakc30bwb"
+	transactionalIDEnterpriseAdminOnboarding          TransactionalID = "cmpqyxnzl00hj0jwtkibhyjdz"
+	transactionalIDAccessRequestCreated               TransactionalID = "cmq12wqp901sl0j0ll8cpr0yj"
+	transactionalIDTumUsageThreshold                  TransactionalID = "cmrdon75q00390jvq44l87erv"
+	transactionalIDTumUsageOverage                    TransactionalID = "cmrdopjpd028m0jx0v8sl25wj"
+	transactionalIDOpenRouterChatCreditsThreshold     TransactionalID = "cmrpjavhw06x10j1dsxivfted"
+	transactionalIDOpenRouterInternalCreditsThreshold TransactionalID = "cmrpkq1r6014d0jze28webret"
 )
 
 // Template is implemented by every concrete email template. Concrete types
