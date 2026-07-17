@@ -176,7 +176,7 @@ export default defineConfig(({ command }) => {
       renderBuiltUrl(filename, { hostType, type }) {
         const isWorkerAsset = /(^|\/)[^/]*worker[^/]*\.js$/.test(filename);
         if (
-          type === "asset" &&
+          (type === "asset" || type === "public") &&
           !isWorkerAsset &&
           (hostType === "js" || hostType === "css")
         ) {
