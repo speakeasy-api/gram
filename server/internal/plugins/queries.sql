@@ -40,6 +40,22 @@ WHERE organization_id = @organization_id
   AND deleted IS FALSE
 RETURNING *;
 
+-- name: IsDefaultProject :one
+-- Whether @project_id is the org's default project — the oldest (first by id
+-- ASC) non-deleted project, created at org setup. Mirrors the default-project
+-- definition the agent's getPlugins read path uses, so the audience the seeding
+-- side grants matches the project the delivery side treats as default. Used to
+-- decide whether a new plugin defaults to the org-wide audience: only plugins in
+-- the default project do; plugins in other projects default to no assignments.
+SELECT (
+  SELECT p.id
+  FROM projects p
+  WHERE p.organization_id = @organization_id
+    AND p.deleted IS FALSE
+  ORDER BY p.id ASC
+  LIMIT 1
+) = @project_id AS is_default;
+
 -- name: GetPlugin :one
 SELECT *
 FROM plugins
@@ -177,8 +193,16 @@ WHERE id = @id
 RETURNING *;
 
 -- name: AddPluginAssignment :one
+-- Scoped to the org: the row is inserted only when @plugin_id resolves to a
+-- non-deleted plugin in @organization_id, so a mismatched (plugin, org) pair
+-- can never create a cross-tenant assignment. Returns no row (ErrNoRows) when
+-- the plugin does not belong to the org.
 INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn)
-VALUES (@plugin_id, @organization_id, @principal_urn)
+SELECT p.id, @organization_id, @principal_urn
+FROM plugins p
+WHERE p.id = @plugin_id
+  AND p.organization_id = @organization_id
+  AND p.deleted IS FALSE
 ON CONFLICT (plugin_id, principal_urn) DO UPDATE
   SET principal_urn = EXCLUDED.principal_urn
 RETURNING *;
@@ -268,7 +292,7 @@ SELECT name FROM organization_metadata WHERE id = @id;
 -- name: IsOrganizationFeatureEnabled :one
 -- Reports whether an organization feature flag is enabled. Mirrors the
 -- productfeatures service's read against organization_features so the generator
--- can honour org-level toggles (e.g. observability_mode) at generation time.
+-- can honour org-level toggles (e.g. hooks_fail_open) at generation time.
 SELECT EXISTS (
   SELECT 1
   FROM organization_features
@@ -328,7 +352,7 @@ LIMIT @result_limit;
 -- name: ListOrgPluginPublishTargets :many
 -- Lists every project in one organization that has a GitHub plugin connection,
 -- with the actor user for each (the creator of the project's most recent
--- plugins-mcp API key), so an org-level setting change (e.g. observability mode)
+-- plugins-mcp API key), so an org-level setting change (e.g. browser login)
 -- can be republished to all of the org's marketplaces. Like
 -- ListPluginPublishCandidates this is a deliberate cross-project sweep, but it is
 -- constrained to a single organization rather than scanning globally.
@@ -367,7 +391,7 @@ WHERE marketplace_token = @marketplace_token;
 -- config just published; all are always overwritten so subsequent rollout runs
 -- can detect independently whether the MCP or hooks component changed (including
 -- hooks config drift a version bump can't capture, e.g. a marketplace rename or
--- observability-mode toggle).
+-- browser-login toggle).
 INSERT INTO plugin_github_connections (project_id, installation_id, repo_owner, repo_name, marketplace_token, published_mcp_fingerprints, published_hooks_version, published_hooks_config)
 VALUES (@project_id, @installation_id, @repo_owner, @repo_name, @marketplace_token, @published_mcp_fingerprints, @published_hooks_version, @published_hooks_config)
 ON CONFLICT (project_id) DO UPDATE
@@ -435,3 +459,61 @@ ON CONFLICT (project_id) DO UPDATE
   SET marketplace_name = EXCLUDED.marketplace_name,
       updated_at = clock_timestamp()
 RETURNING *;
+
+-- name: RevokeSkillDistributionsByPlugin :many
+-- Deleting a plugin revokes the skill distributions it carries so active
+-- distributions never reference a tombstoned plugin. The self-join returns
+-- the pre-revocation updated_at for audit snapshots.
+UPDATE skill_distributions sd
+SET revoked_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+FROM skill_distributions prev
+JOIN skills s ON s.id = prev.skill_id
+JOIN LATERAL (
+  SELECT sv.id
+  FROM skill_versions sv
+  WHERE sv.skill_id = prev.skill_id
+    AND sv.spec_valid IS TRUE
+    AND (prev.pinned_version_id IS NULL OR sv.id = prev.pinned_version_id)
+  ORDER BY sv.created_at DESC, sv.id DESC
+  LIMIT 1
+) resolved ON TRUE
+WHERE prev.id = sd.id
+  AND sd.project_id = @project_id
+  AND sd.plugin_id = @plugin_id
+  AND sd.revoked_at IS NULL
+RETURNING sd.*, prev.updated_at AS previous_updated_at, resolved.id AS resolved_version_id, s.name AS skill_name, s.display_name AS skill_display_name;
+
+-- name: ListPluginSkillsForProject :many
+-- Plugin-generation companion to ListPluginsWithServersForProject covering
+-- skill distributions: each active distribution's plugin identity, skill name,
+-- and resolved manifest content (the pinned version when set, otherwise the
+-- latest valid version). Distributions with no valid resolvable version are
+-- dropped — packages only ever carry valid manifests. Plugin identity is
+-- selected here so a skills-only plugin (no servers) still generates a package.
+SELECT
+  p.id AS plugin_id,
+  p.name AS plugin_name,
+  p.slug AS plugin_slug,
+  p.description AS plugin_description,
+  s.name AS skill_name,
+  resolved.content AS skill_content
+FROM skill_distributions sd
+JOIN plugins p ON p.id = sd.plugin_id AND p.deleted IS FALSE
+JOIN skills s
+  ON s.project_id = sd.project_id
+  AND s.id = sd.skill_id
+  AND s.archived_at IS NULL
+JOIN LATERAL (
+  SELECT sv.content
+  FROM skill_versions sv
+  WHERE sv.skill_id = sd.skill_id
+    AND sv.spec_valid IS TRUE
+    AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
+  ORDER BY sv.created_at DESC, sv.id DESC
+  LIMIT 1
+) resolved ON TRUE
+WHERE sd.project_id = @project_id
+  AND sd.channel = 'plugin'
+  AND sd.revoked_at IS NULL
+ORDER BY p.slug ASC, s.name ASC;

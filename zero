@@ -147,9 +147,6 @@ interactive_only mise run zero:fly
 mise run zero:encryption
 mise run zero:tls
 
-echo -e "\n⏳ Building elements"
-mise run build:elements
-
 echo -e "\n⏳ Updating VS Code and Cursor editor settings"
 mise run install:vscode
 
@@ -175,8 +172,6 @@ mise clickhouse:migrate
 
 mise run zero:devidp
 
-mise zero:summary
-
 echo -e "\n✅ All set up!"
 
 # Use local:start if it's defined, otherwise fall back to the default start task.
@@ -185,14 +180,23 @@ if mise tasks info local:start &>/dev/null; then
     start_task="local:start"
 fi
 
-if $auto_yes; then
-    exec mise run "$start_task"
-elif ! $agent_mode; then
+started=false
+
+if $auto_yes || $agent_mode; then
+    started=true
+else
     echo "Want me to start the server and dashboard (\`mise run $start_task\`)?"
     echo -n "[y/N] "
     read -r answer
     answer=$(echo "$answer" | tr '[:upper:]' '[:lower:]')
     if [ "$answer" = "y" ]; then
-    exec mise run "$start_task"
+        started=true
     fi
 fi
+
+if $started; then
+    mise run "$start_task"
+    mise run seed
+fi
+
+mise run zero:summary

@@ -23,6 +23,7 @@ import (
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	deploymentsrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
@@ -382,6 +383,20 @@ func TestAnalyzeBatch_PromptJudgeUsesToolCallPayload(t *testing.T) {
 	require.Empty(t, msg.MCPServer, "native tool has no MCP server")
 	require.Empty(t, msg.MCPFunction)
 	require.Contains(t, msg.Body, "rm -rf /tmp/data")
+
+	// The stored finding's Match is the full flagged event the judge saw, not the
+	// empty string it used to be — that's what the Risk Events UI reveals.
+	rows, err := riskrepo.New(conn).ListRiskResultsByProjectAndPolicy(t.Context(), riskrepo.ListRiskResultsByProjectAndPolicyParams{
+		ProjectID:    td.projectID,
+		RiskPolicyID: td.policyID,
+		CursorID:     uuid.NullUUID{},
+		PageLimit:    10,
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, promptpolicy.Source, rows[0].Source)
+	require.Equal(t, judgemessage.Render(msg), rows[0].Match.String)
+	require.Contains(t, rows[0].Match.String, "rm -rf /tmp/data")
 }
 
 func TestAnalyzeBatch_PromptJudgeMultiToolCallAttribution(t *testing.T) {
@@ -816,6 +831,7 @@ func insertAssistantToolCallWithArgs(t *testing.T, conn *pgxpool.Pool, td testDa
 	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
 	t.Cleanup(func() { _ = shutdown(t.Context()) })
 	_, err = writer.Write(t.Context(), td.projectID, []chatrepo.CreateChatMessageParams{{
+		CreatedAt:        pgtype.Timestamptz{},
 		ChatID:           td.chatID,
 		Role:             "assistant",
 		ProjectID:        td.projectID,
@@ -885,6 +901,7 @@ func insertAssistantToolCallsWithArgs(t *testing.T, conn *pgxpool.Pool, td testD
 	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
 	t.Cleanup(func() { _ = shutdown(t.Context()) })
 	_, err = writer.Write(t.Context(), td.projectID, []chatrepo.CreateChatMessageParams{{
+		CreatedAt:        pgtype.Timestamptz{},
 		ChatID:           td.chatID,
 		Role:             "assistant",
 		ProjectID:        td.projectID,
@@ -1148,6 +1165,7 @@ func insertAssistantToolCall(t *testing.T, conn *pgxpool.Pool, td testData, call
 	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
 	t.Cleanup(func() { _ = shutdown(t.Context()) })
 	_, err = writer.Write(t.Context(), td.projectID, []chatrepo.CreateChatMessageParams{{
+		CreatedAt:        pgtype.Timestamptz{},
 		ChatID:           td.chatID,
 		Role:             "assistant",
 		ProjectID:        td.projectID,

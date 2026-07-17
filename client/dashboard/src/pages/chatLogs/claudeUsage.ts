@@ -91,6 +91,12 @@ export function buildClaudeUsageByMessageId({
   return result;
 }
 
+export function buildClaudeTurnByPromptId(
+  turns: ClaudeTurnUsage[],
+): Map<string, ClaudeTurnUsage> {
+  return new Map(turns.map((turn) => [turn.promptId, turn]));
+}
+
 export function buildClaudeToolUsageByToolUseId(
   tools: ClaudeToolUsage[],
 ): Map<string, ClaudeToolUsage> {

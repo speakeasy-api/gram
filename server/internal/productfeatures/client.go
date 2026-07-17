@@ -119,6 +119,69 @@ func (c *Client) UpdateFeatureCache(ctx context.Context, organizationID string, 
 	}
 }
 
+func provisionSkillsSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, organizationID string) error {
+	if _, err := authz.PatchRoleGrantsTx(ctx, dbtx, organizationID, authz.SystemRoleMember, "", []*authz.RoleGrant{
+		{
+			Scope:     string(authz.ScopeSkillRead),
+			Effect:    authz.PolicyEffectAllow,
+			Selectors: nil,
+		},
+	}, nil); err != nil {
+		return fmt.Errorf("provision member Skills grants: %w", err)
+	}
+
+	if _, err := authz.PatchRoleGrantsTx(ctx, dbtx, organizationID, authz.SystemRoleAdmin, "", []*authz.RoleGrant{
+		{
+			Scope:     string(authz.ScopeSkillRead),
+			Effect:    authz.PolicyEffectAllow,
+			Selectors: nil,
+		},
+		{
+			Scope:     string(authz.ScopeSkillWrite),
+			Effect:    authz.PolicyEffectAllow,
+			Selectors: nil,
+		},
+	}, nil); err != nil {
+		return fmt.Errorf("provision admin Skills grants: %w", err)
+	}
+
+	return nil
+}
+
+// EnableSkillsTx provisions the built-in Skills grants when RBAC is already
+// active, then enables the org-level Skills feature in the caller's transaction.
+// When RBAC is off, EnableRBACTx provisions them after seeding system roles.
+// Existing grants and exclusions are preserved.
+func EnableSkillsTx(ctx context.Context, dbtx repo.DBTX, organizationID string) error {
+	q := repo.New(dbtx)
+	if _, err := q.LockOrganizationMetadata(ctx, organizationID); err != nil {
+		return fmt.Errorf("lock organization for Skills enable: %w", err)
+	}
+
+	rbacEnabled, err := q.IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{
+		OrganizationID: organizationID,
+		FeatureName:    string(FeatureRBAC),
+	})
+	if err != nil {
+		return fmt.Errorf("check RBAC feature flag: %w", err)
+	}
+
+	if rbacEnabled {
+		if err := provisionSkillsSystemRoleGrantsTx(ctx, dbtx, organizationID); err != nil {
+			return err
+		}
+	}
+
+	if _, err := q.EnableFeature(ctx, repo.EnableFeatureParams{
+		OrganizationID: organizationID,
+		FeatureName:    string(FeatureSkills),
+	}); err != nil {
+		return fmt.Errorf("enable Skills feature flag: %w", err)
+	}
+
+	return nil
+}
+
 // EnableRBACTx seeds the built-in system-role grants and turns on the org-level
 // RBAC feature flag within the caller's transaction. It is the single source of
 // truth for "enable RBAC for an org" and is idempotent: an already-enabled org
@@ -128,15 +191,45 @@ func (c *Client) UpdateFeatureCache(ctx context.Context, organizationID string, 
 // *Client should prefer Client.EnableRBAC, which wraps this in a transaction and
 // refreshes the cache.
 func EnableRBACTx(ctx context.Context, dbtx repo.DBTX, organizationID string) error {
+	q := repo.New(dbtx)
+	if _, err := q.LockOrganizationMetadata(ctx, organizationID); err != nil {
+		return fmt.Errorf("lock organization for RBAC enable: %w", err)
+	}
+
+	rbacEnabled, err := q.IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{
+		OrganizationID: organizationID,
+		FeatureName:    string(FeatureRBAC),
+	})
+	if err != nil {
+		return fmt.Errorf("check RBAC feature flag: %w", err)
+	}
+
 	if err := authz.SeedSystemRoleGrantsTx(ctx, dbtx, organizationID); err != nil {
 		return fmt.Errorf("seed system role grants: %w", err)
+	}
+
+	skillsEnabled, err := q.IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{
+		OrganizationID: organizationID,
+		FeatureName:    string(FeatureSkills),
+	})
+	if err != nil {
+		return fmt.Errorf("check Skills feature flag: %w", err)
+	}
+	// Repeated calls (including recurring WorkOS events) preserve customized
+	// system-role grants, matching the base seeder's existing-row behavior. Only
+	// a real RBAC off-to-on transition reprovisions the explicit Skills defaults
+	// when Skills is already enabled.
+	if skillsEnabled && !rbacEnabled {
+		if err := provisionSkillsSystemRoleGrantsTx(ctx, dbtx, organizationID); err != nil {
+			return err
+		}
 	}
 
 	// EnableFeature inserts ON CONFLICT DO NOTHING against the partial unique
 	// index (org, feature) WHERE deleted IS FALSE, so re-enabling an already-
 	// enabled org is a true no-op rather than a UniqueViolation that would
 	// poison the transaction.
-	if err := repo.New(dbtx).EnableFeature(ctx, repo.EnableFeatureParams{
+	if _, err := q.EnableFeature(ctx, repo.EnableFeatureParams{
 		OrganizationID: organizationID,
 		FeatureName:    string(FeatureRBAC),
 	}); err != nil {

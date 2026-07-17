@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
+	cache "github.com/speakeasy-api/gram/server/internal/cache"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
@@ -94,12 +95,12 @@ func TestClaimHookIdempotency_Guard(t *testing.T) {
 	ctx, ti := newTestHooksService(t)
 
 	token := uuid.NewString()
-	assert.True(t, ti.service.claimHookIdempotency(ctx, token), "first claim wins")
-	assert.False(t, ti.service.claimHookIdempotency(ctx, token), "repeat claim loses")
-	assert.False(t, ti.service.claimHookIdempotency(ctx, "  "+token+"  "), "whitespace-padded repeat still loses")
+	assert.True(t, ti.service.claimHookIdempotency(ctx, token, false), "first claim wins")
+	assert.False(t, ti.service.claimHookIdempotency(ctx, token, false), "repeat claim loses")
+	assert.False(t, ti.service.claimHookIdempotency(ctx, "  "+token+"  ", false), "whitespace-padded repeat still loses")
 
-	assert.True(t, ti.service.claimHookIdempotency(ctx, ""), "empty token always proceeds")
-	assert.True(t, ti.service.claimHookIdempotency(ctx, "   "), "blank token always proceeds")
+	assert.True(t, ti.service.claimHookIdempotency(ctx, "", false), "empty token always proceeds")
+	assert.True(t, ti.service.claimHookIdempotency(ctx, "   ", false), "blank token always proceeds")
 }
 
 // TestHookDuplicateContextFlag verifies the flag that gates the block-path
@@ -111,4 +112,37 @@ func TestHookDuplicateContextFlag(t *testing.T) {
 
 	assert.False(t, ti.service.isHookDuplicate(context.Background()), "untagged context is a live delivery")
 	assert.True(t, ti.service.isHookDuplicate(withHookDuplicate(context.Background())), "tagged context is a duplicate")
+}
+
+// ttlRecordingCache records the TTL each Add claim was made with, so the
+// replayed-vs-live window selection is pinned without inspecting Redis.
+type ttlRecordingCache struct {
+	cache.Cache
+	ttls []time.Duration
+}
+
+func (c *ttlRecordingCache) Add(_ context.Context, _ string, ttl time.Duration) (bool, error) {
+	c.ttls = append(c.ttls, ttl)
+	return true, nil
+}
+
+// TestClaimHookIdempotency_ReplayedClaimsLongWindow pins the DNO-498 replay
+// contract: a live delivery's claim only needs to outlive a retry burst, but
+// a spool replay (X-Gram-Replayed) can be redelivered hours later by a
+// competing drain trigger — its claim must hold for the long window.
+func TestClaimHookIdempotency_ReplayedClaimsLongWindow(t *testing.T) {
+	t.Parallel()
+	_, ti := newTestHooksService(t)
+
+	rec := &ttlRecordingCache{Cache: ti.service.cache, ttls: nil}
+	svc := *ti.service
+	svc.cache = rec
+
+	require.True(t, svc.claimHookIdempotency(t.Context(), uuid.NewString(), false))
+	require.True(t, svc.claimHookIdempotency(t.Context(), uuid.NewString(), true))
+
+	require.Len(t, rec.ttls, 2)
+	require.Equal(t, hookIdempotencyTTL, rec.ttls[0], "a live delivery claims the retry-burst window")
+	require.Equal(t, hookReplayIdempotencyTTL, rec.ttls[1], "a replayed delivery must claim the drain-cycle window")
+	require.Greater(t, hookReplayIdempotencyTTL, hookIdempotencyTTL)
 }

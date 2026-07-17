@@ -1,6 +1,6 @@
 import { Type } from "@/components/ui/type";
 import { ThreadPrimitive } from "@assistant-ui/react";
-import { useGramElements } from "@gram-ai/elements";
+import { useGramElements } from "@/elements";
 import type { FC } from "react";
 
 /**

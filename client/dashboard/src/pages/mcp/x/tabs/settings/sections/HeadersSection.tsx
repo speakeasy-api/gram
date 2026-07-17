@@ -10,11 +10,15 @@ import {
 } from "@/components/ui/select";
 import { Type } from "@/components/ui/type";
 import { mcpServerRouteParam } from "@/lib/sources";
+import { type PulseMCPServer, useListMCPCatalog } from "@/pages/catalog/hooks";
+import { catalogHeadersForRemoteUrl } from "@/pages/catalog/remotes";
 import { useRoutes } from "@/routes";
+import type { ExternalMCPRemoteHeader } from "@gram/client/models/components/externalmcpremoteheader.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { RemoteMcpServerHeader } from "@gram/client/models/components/remotemcpserverheader.js";
 import { useCreateRemoteMcpServerHeaderMutation } from "@gram/client/react-query/createRemoteMcpServerHeader.js";
 import { useDeleteRemoteMcpServerHeaderMutation } from "@gram/client/react-query/deleteRemoteMcpServerHeader.js";
+import { useGetRemoteMcpServer } from "@gram/client/react-query/getRemoteMcpServer.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import {
   invalidateAllRemoteMcpServerHeaders,
@@ -43,6 +47,8 @@ type HeaderDraft = {
   isRequired: boolean;
   isSecret: boolean;
   hadSecret: boolean;
+  /** Row was seeded from the endpoint's catalog entry (and is unsaved). */
+  fromCatalog?: boolean;
 };
 
 function headerSourceFromServer(header: RemoteMcpServerHeader): HeaderSource {
@@ -143,6 +149,18 @@ function newHeaderDraft(): HeaderDraft {
     isRequired: false,
     isSecret: true,
     hadSecret: false,
+  };
+}
+
+function headerDraftFromCatalog(header: ExternalMCPRemoteHeader): HeaderDraft {
+  return {
+    ...newHeaderDraft(),
+    fromCatalog: true,
+    name: header.name,
+    isRequired: header.isRequired ?? false,
+    // Registries omit is_secret inconsistently; default suggested headers to
+    // secret so an API key never lands in plain text by accident.
+    isSecret: header.isSecret ?? true,
   };
 }
 
@@ -247,6 +265,49 @@ export function HeadersSection({
       draftsEqual(current, previousSynced) ? initialDrafts : current,
     );
   }, [initialDrafts]);
+
+  // Catalog-suggested headers: when the remote's URL matches a catalog entry
+  // that publishes header requirements (e.g. an API key) and no headers are
+  // configured yet, seed the form with those rows so the user only has to fill
+  // in values. Suggestions are unsaved drafts — nothing persists until Save.
+  const headersEmpty = !!headersQuery.data && initialDrafts.length === 0;
+  const suggestionsEnabled = headersEmpty && !readOnly && !siblingsLoading;
+  const { data: remoteMcpServer } = useGetRemoteMcpServer(
+    { id: remoteMcpServerId },
+    undefined,
+    { enabled: suggestionsEnabled && remoteMcpServerId !== "" },
+  );
+  const { data: catalogData } = useListMCPCatalog(
+    undefined,
+    undefined,
+    suggestionsEnabled,
+  );
+  const suggestedHeaders = useMemo(() => {
+    if (!remoteMcpServer?.url || !catalogData?.servers) return [];
+    return catalogHeadersForRemoteUrl(
+      catalogData.servers as PulseMCPServer[],
+      remoteMcpServer.url,
+    );
+  }, [catalogData?.servers, remoteMcpServer?.url]);
+
+  const suggestedDrafts = useMemo(
+    () => suggestedHeaders.map(headerDraftFromCatalog),
+    [suggestedHeaders],
+  );
+
+  const [suggestionsSeeded, setSuggestionsSeeded] = useState(false);
+  useEffect(() => {
+    if (!suggestionsEnabled || suggestionsSeeded) return;
+    if (suggestedDrafts.length === 0) return;
+    setSuggestionsSeeded(true);
+    // Only seed a pristine form — never clobber rows the user already added.
+    setDrafts((current) => (current.length === 0 ? suggestedDrafts : current));
+  }, [suggestionsEnabled, suggestionsSeeded, suggestedDrafts]);
+
+  // Freshly seeded suggestions are intentionally value-less; don't greet the
+  // user with a "needs a static value" error before they've touched anything.
+  const pristineSuggestions =
+    suggestionsSeeded && draftsEqual(drafts, suggestedDrafts);
 
   const queryClient = useQueryClient();
   const createHeader = useCreateRemoteMcpServerHeaderMutation();
@@ -417,6 +478,13 @@ export function HeadersSection({
           </Type>
         ) : (
           <Stack gap={4}>
+            {drafts.some((draft) => draft.fromCatalog) && (
+              <Type muted small>
+                These headers are suggested from this endpoint's MCP catalog
+                entry. Fill in the values and save, or remove the ones you don't
+                need.
+              </Type>
+            )}
             {drafts.map((draft, index) => (
               <HeaderDraftRow
                 key={draft.key}
@@ -441,7 +509,7 @@ export function HeadersSection({
 
         {readOnly || siblingsLoading ? null : (
           <>
-            {validationError && dirty ? (
+            {validationError && dirty && !pristineSuggestions ? (
               <Type small className="text-destructive">
                 {validationError}
               </Type>

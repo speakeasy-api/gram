@@ -98,7 +98,7 @@ func (p *PollAIData) Do(ctx context.Context, configID string) (err error) {
 		}
 
 		attempt := activity.GetInfo(ctx).Attempt
-		nonRetryable := pollAPIKeyRejected(err)
+		nonRetryable := pollRejectedByProvider(err)
 
 		// Temporal records failures, but that's not visible to the user. We
 		// record the failure on the last attempt — or immediately when
@@ -137,8 +137,13 @@ func (p *PollAIData) Do(ctx context.Context, configID string) (err error) {
 		nextCursor, err := p.complianceImporter.SyncAnthropicCompliance(ctx, cfg)
 		if err != nil {
 			var httpErr *anthropicapi.HTTPError
-			if errors.As(err, &httpErr) && (httpErr.StatusCode == 401 || httpErr.StatusCode == 403) {
-				return oops.E(oops.CodeUnauthorized, err, "anthropic compliance rejected the configured api key")
+			if errors.As(err, &httpErr) {
+				switch httpErr.StatusCode {
+				case 401, 403:
+					return oops.E(oops.CodeUnauthorized, err, "anthropic compliance rejected the configured api key")
+				case 404:
+					return oops.E(oops.CodeNotFound, err, "anthropic compliance organization not found or compliance api access not enabled")
+				}
 			}
 			return oops.E(oops.CodeUnexpected, err, "sync anthropic compliance data")
 		}
@@ -153,17 +158,20 @@ func (p *PollAIData) Do(ctx context.Context, configID string) (err error) {
 	return nil
 }
 
-// pollAPIKeyRejected reports whether the poll failed because the provider
-// rejected the configured api key. Those failures are permanent until the
-// user rotates the key, so retrying them is wasted work.
-func pollAPIKeyRejected(err error) bool {
+// pollRejectedByProvider reports whether the poll failed because the provider
+// rejected the request in a way retrying can't fix: a rejected api key
+// (401/403), or — for the anthropic compliance api — a 404, which is how it
+// reports an unknown organization or one without compliance api access. Those
+// failures are permanent until the user fixes the integration configuration,
+// so retrying them is wasted work.
+func pollRejectedByProvider(err error) bool {
 	var cursorErr *cursorapi.HTTPError
 	if errors.As(err, &cursorErr) {
 		return cursorErr.StatusCode == 401
 	}
 	var anthropicErr *anthropicapi.HTTPError
 	if errors.As(err, &anthropicErr) {
-		return anthropicErr.StatusCode == 401 || anthropicErr.StatusCode == 403
+		return anthropicErr.StatusCode == 401 || anthropicErr.StatusCode == 403 || anthropicErr.StatusCode == 404
 	}
 	return false
 }

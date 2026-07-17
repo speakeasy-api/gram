@@ -12,6 +12,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 
 	hooks "github.com/speakeasy-api/gram/server/gen/hooks"
@@ -751,6 +752,7 @@ func DecodeIngestRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.
 			apikeyToken      *string
 			projectSlugInput *string
 			idempotencyKey   *string
+			replayed         *bool
 		)
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
@@ -764,7 +766,20 @@ func DecodeIngestRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.
 		if idempotencyKeyRaw != "" {
 			idempotencyKey = &idempotencyKeyRaw
 		}
-		payload = NewIngestPayload(&body, apikeyToken, projectSlugInput, idempotencyKey)
+		{
+			replayedRaw := r.Header.Get("X-Gram-Replayed")
+			if replayedRaw != "" {
+				v, err2 := strconv.ParseBool(replayedRaw)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("replayed", replayedRaw, "boolean"))
+				}
+				replayed = &v
+			}
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewIngestPayload(&body, apikeyToken, projectSlugInput, idempotencyKey, replayed)
 
 		return payload, nil
 	}

@@ -93,7 +93,10 @@
       }
     },
     {
-      "files": ["src/contexts/**/*.{ts,tsx}"],
+      "files": [
+        "src/contexts/**/*.{ts,tsx}",
+        "src/elements/contexts/**/*.{ts,tsx}"
+      ],
       "rules": {
         "react/only-export-components": "off"
       }

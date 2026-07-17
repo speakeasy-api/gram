@@ -94,16 +94,22 @@ func readCachedAuth(cfg Config) (creds, bool) {
 		Org:       values["org"],
 		Source:    credCache,
 	}
-	if c.ServerURL != cfg.ServerURL || c.APIKey == "" {
-		return creds{}, false
-	}
-	if cfg.OrgID != "" && c.Org != "" && c.Org != cfg.OrgID {
+	if c.APIKey == "" || !sameDeployment(c.ServerURL, c.Org, cfg.ServerURL, cfg.OrgID) {
 		return creds{}, false
 	}
 	if cfg.ProjectSlug != "" {
 		c.Project = cfg.ProjectSlug
 	}
 	return c, true
+}
+
+// sameDeployment reports whether a stored credential or config describing
+// (gotURL, gotOrg) may serve the deployment (wantURL, wantOrg): the server
+// must match exactly, the org only when both sides are known. The one copy
+// of this rule — the auth cache and the spool drain both gate on it, and a
+// tightening must reach both.
+func sameDeployment(gotURL, gotOrg, wantURL, wantOrg string) bool {
+	return gotURL == wantURL && (wantOrg == "" || gotOrg == "" || gotOrg == wantOrg)
 }
 
 // resolveAuth returns the effective credential: an explicit env key wins over
@@ -155,24 +161,32 @@ func writeAuth(c creds) error {
 		}
 	}
 
-	path := authFilePath()
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return fmt.Errorf("create auth dir: %w", err)
-	}
-
-	tmp := fmt.Sprintf("%s.tmp.%d", path, os.Getpid())
 	body := fmt.Sprintf("server_url=%s\napi_key=%s\nproject=%s\nemail=%s\norg=%s\n",
 		c.ServerURL, c.APIKey, c.Project, c.Email, c.Org)
-	if err := os.WriteFile(tmp, []byte(body), 0o600); err != nil {
-		return fmt.Errorf("write auth cache: %w", err)
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		_ = os.Remove(tmp)
-		return fmt.Errorf("commit auth cache: %w", err)
+	if err := atomicWriteCacheFile(authFilePath(), []byte(body)); err != nil {
+		return err
 	}
 	markEstablished()
 	clearReauthNeeded()
+	return nil
+}
+
+// atomicWriteCacheFile commits a credential-adjacent cache file with the
+// tightened permissions (0700 dir, 0600 file) and temp+rename protocol both
+// the auth cache and the org-settings cache rely on, so hardening changes to
+// the commit sequence apply to every cache at once.
+func atomicWriteCacheFile(path string, body []byte) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return fmt.Errorf("create cache dir: %w", err)
+	}
+	tmp := fmt.Sprintf("%s.tmp.%d", path, os.Getpid())
+	if err := os.WriteFile(tmp, body, 0o600); err != nil {
+		return fmt.Errorf("write cache file: %w", err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return fmt.Errorf("commit cache file: %w", err)
+	}
 	return nil
 }
 

@@ -11,8 +11,12 @@ package types
 type EnvironmentEntry struct {
 	// The name of the environment variable
 	Name string
-	// Redacted values of the environment variable
+	// The value of the environment variable. Cleartext when is_secret is false,
+	// redacted otherwise.
 	Value string
+	// Whether the value is a secret. Secret values are redacted in reads;
+	// non-secret values are returned in cleartext.
+	IsSecret bool
 	// The creation date of the environment entry
 	CreatedAt string
 	// When the environment entry was last updated

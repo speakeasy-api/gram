@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
 
-#MISE description="Start all development processes with madprocs"
-#MISE raw=true
-#MISE interactive=true
-
-#USAGE flag "--tls-cert <file>" env="GRAM_SSL_CERT_FILE" help="Path to TLS certificate file for web ui"
-#USAGE flag "--tls-key <file>" env="GRAM_SSL_KEY_FILE" help="Path to TLS key file for web ui"
+#MISE description="Start all development processes with pitchfork"
 
 set -e
 
-args=()
-if [[ -n "$usage_tls_cert" && -n "$usage_tls_key" ]]; then
-  args+=(-tls-cert "$usage_tls_cert" -tls-key "$usage_tls_key")
+if ! supervisor_output="$(pitchfork supervisor start 2>&1)"; then
+  echo "$supervisor_output" >&2
+  exit 1
 fi
 
-exec madprocs "${args[@]}"
+pitchfork clean
+pitchfork start --all-local --force
+
+gum style \
+  --foreground 10 --border-foreground 10 --border rounded \
+  --align center --width 40 --margin "0 0" --padding "0 0" \
+  'Local development stack is running'
