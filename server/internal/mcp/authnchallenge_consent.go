@@ -85,9 +85,10 @@ type consentTemplateData struct {
 	// completion message: a first-party challenge has no MCP client to grant
 	// to, so linking the cards is the whole job.
 	FirstParty bool
-	// AutoClose marks a completed first-party connection. The consent script
-	// closes only this terminal state; incomplete connections and MCP client
-	// consent remain open.
+	// AutoClose marks a fully completed first-party connection: every bound
+	// remote_session_client is connected. The consent script closes only this
+	// terminal state; partially-linked connections (some cards still
+	// disconnected) and MCP client consent remain open.
 	AutoClose bool
 }
 
@@ -239,7 +240,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		RemoteSessionCards: cards,
 		ConsentEnabled:     consentEnabled,
 		FirstParty:         challengeState.FirstParty,
-		AutoClose:          challengeState.FirstParty && hasConnectedCard,
+		AutoClose:          shouldAutoCloseFirstParty(challengeState.FirstParty, cards),
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -440,6 +441,24 @@ func buildClientRedirect(redirectURI, code, originalState, errCode, errDescripti
 func isUniqueViolation(err error) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == "23505"
+}
+
+// shouldAutoCloseFirstParty reports whether a first-party connect tab is fully
+// terminal and safe to auto-close: every bound remote_session_client is
+// connected. The runtime gate (remotesessions.ResolveAccessTokens) fails the
+// request unless all bound clients have a usable token, so closing after only
+// the first of several providers is linked would strand the user mid-flow. A
+// challenge with no cards is never auto-closed — there is nothing to complete.
+func shouldAutoCloseFirstParty(firstParty bool, cards []remoteSessionCard) bool {
+	if !firstParty || len(cards) == 0 {
+		return false
+	}
+	for _, c := range cards {
+		if !c.Connected {
+			return false
+		}
+	}
+	return true
 }
 
 // buildRemoteSessionCards loads every remote_session_client linked to the

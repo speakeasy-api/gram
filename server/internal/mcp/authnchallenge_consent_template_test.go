@@ -69,6 +69,34 @@ func TestConsentTemplateIncompleteFirstPartyConnectionStaysOpen(t *testing.T) {
 	require.NotContains(t, page.String(), "Connection complete")
 }
 
+func TestShouldAutoCloseFirstParty(t *testing.T) {
+	t.Parallel()
+
+	connected := remoteSessionCard{Connected: true}
+	disconnected := remoteSessionCard{Connected: false}
+
+	tests := []struct {
+		name       string
+		firstParty bool
+		cards      []remoteSessionCard
+		want       bool
+	}{
+		{name: "not first party", firstParty: false, cards: []remoteSessionCard{connected}, want: false},
+		{name: "no cards", firstParty: true, cards: nil, want: false},
+		{name: "single connected", firstParty: true, cards: []remoteSessionCard{connected}, want: true},
+		{name: "single disconnected", firstParty: true, cards: []remoteSessionCard{disconnected}, want: false},
+		{name: "all connected", firstParty: true, cards: []remoteSessionCard{connected, connected}, want: true},
+		{name: "one still disconnected", firstParty: true, cards: []remoteSessionCard{connected, disconnected}, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.want, shouldAutoCloseFirstParty(tt.firstParty, tt.cards))
+		})
+	}
+}
+
 func TestConsentScriptClosesOnlyMarkedPages(t *testing.T) {
 	t.Parallel()
 
