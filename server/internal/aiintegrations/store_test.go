@@ -152,7 +152,7 @@ func TestEnsurePrimarySyncHandlesConcurrentFirstWriters(t *testing.T) {
 	require.Equal(t, int64(1), countSyncRows(t, ctx, conn, created.Config))
 }
 
-func TestSyncScheduleBackfillIsResumableAndIdempotent(t *testing.T) {
+func TestBackfillSyncSchedulesIsIdempotent(t *testing.T) {
 	t.Parallel()
 
 	ctx, conn, store, orgID := newStoreTestDB(t)
@@ -167,36 +167,15 @@ func TestSyncScheduleBackfillIsResumableAndIdempotent(t *testing.T) {
 		}))
 	}
 
-	backfiller := NewSyncScheduleBackfiller(conn, cursor.Config.ProjectID)
-	status, err := backfiller.Status(ctx)
+	updated, err := repo.New(conn).BackfillSyncSchedules(ctx)
 	require.NoError(t, err)
-	require.Equal(t, SyncScheduleBackfillStatus{PrimarySyncsPending: 2}, status)
-
-	first, err := backfiller.BackfillBatch(ctx, uuid.Nil, 1)
-	require.NoError(t, err)
-	require.Equal(t, 1, first.ConfigsProcessed)
-	require.Equal(t, 1, first.PrimarySyncsUpdated)
-	require.NotEqual(t, uuid.Nil, first.LastConfigID)
-
-	second, err := backfiller.BackfillBatch(ctx, first.LastConfigID, 1)
-	require.NoError(t, err)
-	require.Equal(t, 1, second.ConfigsProcessed)
-	require.Equal(t, 1, second.PrimarySyncsUpdated)
-	require.NotEqual(t, uuid.Nil, second.LastConfigID)
-
-	status, err = backfiller.Status(ctx)
-	require.NoError(t, err)
-	require.Equal(t, SyncScheduleBackfillStatus{PrimarySyncsPending: 0}, status)
+	require.Equal(t, int64(2), updated)
 	require.Equal(t, int64(1), countSyncRows(t, ctx, conn, cursor.Config))
 	require.Equal(t, int64(1), countSyncRows(t, ctx, conn, anthropic.Config))
 
-	rerun, err := backfiller.BackfillBatch(ctx, uuid.Nil, 10)
+	rerun, err := repo.New(conn).BackfillSyncSchedules(ctx)
 	require.NoError(t, err)
-	require.Equal(t, SyncScheduleBackfillBatch{
-		ConfigsProcessed:    0,
-		PrimarySyncsUpdated: 0,
-		LastConfigID:        uuid.Nil,
-	}, rerun)
+	require.Equal(t, int64(0), rerun)
 }
 
 func TestRecordUsagePollFailureStoresErrorAsData(t *testing.T) {
