@@ -9,7 +9,7 @@
 //     matching the stored challenge IS the credential. The code is single-use,
 //     consumed atomically via GETDEL on lookup, so a replayed/expired/unknown
 //     code or a PKCE mismatch fails closed with 401. On success it mints a
-//     per-user [agent,hooks] API key and returns the raw key exactly once.
+//     per-user `agent_user` API key and returns the raw key exactly once.
 package cliauth
 
 import (
@@ -179,7 +179,7 @@ func (s *Service) Authorize(ctx context.Context, payload *gen.AuthorizePayload) 
 		ProjectID:           project.ID.String(),
 		ProjectSlug:         project.Slug,
 		UserEmail:           *authCtx.Email,
-		Scopes:              []string{auth.APIKeyScopeAgent.String(), auth.APIKeyScopeHooks.String()},
+		Scopes:              []string{auth.APIKeyScopeAgentUser.String()},
 		CodeChallenge:       payload.CodeChallenge,
 		CodeChallengeMethod: pkceMethodS256,
 	}
@@ -211,7 +211,7 @@ func (s *Service) Authorize(ctx context.Context, payload *gen.AuthorizePayload) 
 	}, nil
 }
 
-// Redeem consumes a one-time code and mints the per-user [agent,hooks] API key.
+// Redeem consumes a one-time code and mints the per-user `agent_user` API key.
 // Every failure path returns 401 so a caller learns nothing beyond "no": the
 // code+verifier pair either works or it does not.
 func (s *Service) Redeem(ctx context.Context, payload *gen.RedeemPayload) (*gen.RedeemResult, error) {

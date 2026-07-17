@@ -47,7 +47,7 @@ func NewGetMcpMetadataEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_install"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"consumer"},
 		}
 		var key string
@@ -106,7 +106,7 @@ func NewSetMcpMetadataEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_install"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"consumer"},
 		}
 		var key string
@@ -165,7 +165,7 @@ func NewExportMcpMetadataEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFun
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_install"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"consumer"},
 		}
 		var key string

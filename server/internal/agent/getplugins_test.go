@@ -217,3 +217,31 @@ func TestGetPlugins_VouchedEmailIgnored(t *testing.T) {
 	require.NoError(t, err, "vouched email is ignored when the key resolves an owner email")
 	require.Len(t, res.Marketplaces, 1)
 }
+
+// TestGetPlugins_InstallKeyUsesVouchedEmail covers the MDM zero-touch path: when
+// authenticated with an org install key (`agent` scope), the key owner is an
+// admin, not the enrolled developer, so attribution comes from the vouched
+// `email` param — which is required in this case.
+func TestGetPlugins_InstallKeyUsesVouchedEmail(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	ctx = withInstallKeyAuth(t, ctx)
+
+	publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
+
+	// Vouched developer email present → resolves (the plugin set is org-scoped).
+	dev := "dev@acme.corp"
+	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: &dev})
+	require.NoError(t, err, "org install key + vouched email is the MDM path")
+	require.Len(t, res.Marketplaces, 1)
+
+	// No email on an org install key → error: the key owner is an admin, so the
+	// MDM profile must vouch the developer's email.
+	_, err = ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: nil})
+	require.Error(t, err, "org install key requires a vouched email")
+
+	// Malformed vouched email → rejected.
+	bad := "not-an-email"
+	_, err = ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: &bad})
+	require.Error(t, err, "malformed vouched email is rejected")
+}

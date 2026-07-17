@@ -88,6 +88,24 @@ func newTestAgentService(t *testing.T) (context.Context, *testInstance) {
 	}
 }
 
+// withInstallKeyAuth rewrites the request's auth context to look like an
+// org-scoped device-agent *install* key — the MDM zero-touch path. The key
+// carries the `agent` scope (which implies `agent_user`), and its owner email is
+// an admin, NOT the enrolled developer. getPlugins must therefore attribute to
+// the vouched `email` param rather than the key owner.
+func withInstallKeyAuth(t *testing.T, ctx context.Context) context.Context {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	clone := *authCtx
+	adminEmail := "admin@local-dev-org.example"
+	clone.Email = &adminEmail
+	// Effective scopes as KeyBasedAuth would set them for an `agent` org key.
+	clone.APIKeyScopes = []string{"agent", "agent_user"}
+	clone.SessionID = nil
+	return contextvalues.SetAuthContext(ctx, &clone)
+}
+
 // publishMarketplace gives a project a marketplace_token, which is what makes
 // its marketplace visible to the agent endpoint (the query requires one).
 func publishMarketplace(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, token string) {

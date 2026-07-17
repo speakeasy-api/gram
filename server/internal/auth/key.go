@@ -30,22 +30,25 @@ const (
 	APIKeyScopeChat     APIKeyScope = iota
 	APIKeyScopeHooks    APIKeyScope = iota
 	APIKeyScopeAgent    APIKeyScope = iota
-	// APIKeyScopeAgentInstall is the device-agent *install* credential — the
-	// org-scoped key that may exchange for per-user device-agent keys via
-	// tokenExchange.exchange. It is deliberately distinct from APIKeyScopeAgent:
-	// the per-user keys that mint carries `agent`+`hooks` (data access), NOT
-	// `agent_install`, so a leaked per-user key cannot mint another user's key.
-	APIKeyScopeAgentInstall APIKeyScope = iota
+	// APIKeyScopeAgentUser is the per-user device-agent *data* credential minted
+	// by tokenExchange.exchange, and presented on data endpoints (agent.getPlugins).
+	// It is deliberately narrower than APIKeyScopeAgent: the `agent` scope (the
+	// org install credential) may call exchange to mint per-user keys, but
+	// `agent_user` may not — so a leaked per-user key cannot mint another user's
+	// key. `agent` implies `agent_user` (see Authorize), so an existing org key
+	// still satisfies the data endpoints during the transition, with no
+	// re-provisioning.
+	APIKeyScopeAgentUser APIKeyScope = iota
 )
 
 var APIKeyScopes = map[string]APIKeyScope{
-	"invalid":       APIKeyScopeInvalid,
-	"consumer":      APIKeyScopeConsumer,
-	"producer":      APIKeyScopeProducer,
-	"chat":          APIKeyScopeChat,
-	"hooks":         APIKeyScopeHooks,
-	"agent":         APIKeyScopeAgent,
-	"agent_install": APIKeyScopeAgentInstall,
+	"invalid":    APIKeyScopeInvalid,
+	"consumer":   APIKeyScopeConsumer,
+	"producer":   APIKeyScopeProducer,
+	"chat":       APIKeyScopeChat,
+	"hooks":      APIKeyScopeHooks,
+	"agent":      APIKeyScopeAgent,
+	"agent_user": APIKeyScopeAgentUser,
 }
 
 func (scope APIKeyScope) String() string {
@@ -60,11 +63,34 @@ func (scope APIKeyScope) String() string {
 		return "hooks"
 	case APIKeyScopeAgent:
 		return "agent"
-	case APIKeyScopeAgentInstall:
-		return "agent_install"
+	case APIKeyScopeAgentUser:
+		return "agent_user"
 	default:
 		return "invalid"
 	}
+}
+
+// effectiveScopes expands a key's raw scopes with the product's one-way scope
+// implications: a broader scope grants the narrower scopes it is a superset of.
+//   - producer ⇒ consumer, chat
+//   - agent ⇒ agent_user (the org install credential is a superset of the
+//     per-user data credential, so an existing org key still reads the data
+//     endpoints without re-provisioning)
+//
+// Implications are deliberately one-way: a consumer/chat/agent_user key never
+// gains the broader scope. In particular agent_user does NOT imply agent, so a
+// leaked per-user key cannot reach the mint endpoint (tokenExchange.exchange).
+func effectiveScopes(scopes []string) []string {
+	out := slices.Clone(scopes)
+	grant := func(have, gain APIKeyScope) {
+		if slices.Contains(out, have.String()) && !slices.Contains(out, gain.String()) {
+			out = append(out, gain.String())
+		}
+	}
+	grant(APIKeyScopeProducer, APIKeyScopeConsumer)
+	grant(APIKeyScopeProducer, APIKeyScopeChat)
+	grant(APIKeyScopeAgent, APIKeyScopeAgentUser)
+	return out
 }
 
 func GetAPIKeyHash(key string) (string, error) {
@@ -136,15 +162,7 @@ func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []s
 		)
 	}
 
-	// a bit of a hack right now, the product intends to allow producer keys to act as a superset of consumer and chat keys
-	scopes := slices.Clone(apiKey.Scopes)
-	if slices.Contains(scopes, APIKeyScopeProducer.String()) && !slices.Contains(scopes, APIKeyScopeConsumer.String()) {
-		scopes = append(scopes, APIKeyScopeConsumer.String())
-	}
-	if slices.Contains(scopes, APIKeyScopeProducer.String()) && !slices.Contains(scopes, APIKeyScopeChat.String()) {
-		scopes = append(scopes, APIKeyScopeChat.String())
-	}
-
+	scopes := effectiveScopes(apiKey.Scopes)
 	for _, scope := range requiredScopes {
 		if !slices.Contains(scopes, scope) {
 			return ctx, oops.E(oops.CodeForbidden, nil, "api key insufficient scopes")

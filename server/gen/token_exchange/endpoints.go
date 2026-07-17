@@ -42,8 +42,8 @@ func NewExchangeEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.En
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_install"},
-			RequiredScopes: []string{"agent_install"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"agent"},
 		}
 		var key string
 		if p.ApikeyToken != nil {

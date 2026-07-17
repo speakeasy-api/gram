@@ -13,8 +13,8 @@ var ByKey = APIKeySecurity(constants.KeySecurityScheme, func() {
 	Scope("producer", "producer based tool access")
 	Scope("chat", "chat based model usage access")
 	Scope("hooks", "hooks based access for Claude Code integrations")
-	Scope("agent", "device agent fetching assigned plugins for the enrolled user")
-	Scope("agent_install", "device-agent install credential: exchanges for per-user device-agent keys")
+	Scope("agent", "device-agent org install credential: exchanges for per-user device-agent keys, and (as a superset of agent_user) reads the data endpoints")
+	Scope("agent_user", "per-user device-agent data credential minted via token-exchange; reads the data endpoints but cannot mint")
 })
 
 var ByKeyPayload = func() {

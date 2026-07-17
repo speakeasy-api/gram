@@ -1,8 +1,11 @@
 // Package tokenexchange implements the device-agent token surface (DNO-383).
-// The Speakeasy device agent authenticates with an org-scoped API
-// key carrying the `agent_install` scope and exchanges a vouched user email for
-// a long-lived, per-user API key carrying the `agent` scope. Hooks do not route
-// through the device agent, so the minted key carries no `hooks` scope (DNO-383).
+// The Speakeasy device agent authenticates with an org-scoped API key carrying
+// the `agent` scope and exchanges a vouched user email for a long-lived,
+// per-user API key carrying the narrower `agent_user` scope. `agent` implies
+// `agent_user` (see auth.Authorize), so existing org keys mint without
+// re-provisioning, while a minted `agent_user` key cannot re-enter this
+// endpoint to mint. Hooks do not route through the device agent, so the minted
+// key carries no `hooks` scope (DNO-383).
 //
 // The minted key is a normal Gram API key (see internal/keys): a
 // `gram_<env>_<token>` string whose SHA-256 hash is stored in api_keys with the
@@ -100,15 +103,16 @@ func Attach(mux goahttp.Muxer, service *Service) {
 }
 
 // APIKeyAuth authorizes the org-scoped install credential on the exchange
-// method. Delegates to the shared auth.Authorize path, so the `agent_install`
+// method. Delegates to the shared auth.Authorize path, so the `agent`
 // scope requirement declared in the design is enforced here — a per-user key
-// (which carries `agent`, not `agent_install`) is rejected.
+// (which carries only `agent_user`, and `agent_user` does not imply `agent`) is
+// rejected, so it cannot mint.
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	return s.auth.Authorize(ctx, key, schema)
 }
 
 // Exchange trades the authenticated org-scoped install key + a vouched user
-// email for a long-lived, per-user API key carrying the `agent` scope.
+// email for a long-lived, per-user API key carrying the `agent_user` scope.
 // The raw key is returned exactly once.
 func (s *Service) Exchange(ctx context.Context, payload *gen.ExchangePayload) (*gen.TokenResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -178,7 +182,7 @@ func (s *Service) Exchange(ctx context.Context, payload *gen.ExchangePayload) (*
 		Name:            keyName,
 		KeyPrefix:       s.keyPrefix + token[:5],
 		KeyHash:         keyHash,
-		Scopes:          []string{auth.APIKeyScopeAgent.String()},
+		Scopes:          []string{auth.APIKeyScopeAgentUser.String()},
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create device-agent api key").LogError(ctx, s.logger)
 	}

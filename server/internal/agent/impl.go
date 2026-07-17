@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"log/slog"
+	"slices"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -77,25 +78,39 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 // GetPlugins returns every plugin in the published projects of the caller's
 // org. Per-principal assignment scoping is intentionally disabled for now (see
 // DNO-239): every org member receives every published-project plugin. The
-// enrolled user is the authenticated key owner (authCtx.Email); the optional
-// `email` param is only a backward-compatible fallback for agents that still
-// vouch an email. The resolved email will drive principal resolution again
-// (user:/role: lookups) once RBAC-backed assignment management ships.
+// resolved email will drive principal resolution again (user:/role: lookups)
+// once RBAC-backed assignment management ships.
+//
+// The enrolled user is resolved differently per credential type, because who
+// the key belongs to differs:
+//   - Org install key (`agent` scope): the key owner is whoever minted the org
+//     token in the dashboard (an admin), NOT the enrolled developer. Attribution
+//     comes from the vouched `email` param the MDM profile supplies — required
+//     here. This is the zero-touch MDM path where the developer never signs in.
+//   - Per-user key (`agent_user` only): the key owner IS the enrolled developer
+//     (minted by token-exchange or manual enrollment), so attribution is the key
+//     owner and the vouched param is ignored.
 func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload) (*gen.GetPluginsResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	// Derive the enrolled user from the authenticated key owner. Fall back to
-	// the optional vouched `email` param only when the key does not carry an
-	// email (transition). When present, validate it is well-formed so the
-	// request contract stays stable.
+	// An org install key carries the `agent` scope; a per-user key carries only
+	// `agent_user` (agent implies agent_user, never the reverse — see
+	// auth.effectiveScopes), so the presence of `agent` distinguishes them.
+	isInstallKey := slices.Contains(authCtx.APIKeyScopes, auth.APIKeyScopeAgent.String())
+
 	var enrolledEmail string
-	if authCtx.Email != nil && *authCtx.Email != "" {
-		enrolledEmail = conv.NormalizeEmail(*authCtx.Email)
-	} else if payload.Email != nil {
+	if isInstallKey {
+		// Org key: the owner is not the developer, so we must be vouched an email.
+		if payload.Email == nil || *payload.Email == "" {
+			return nil, oops.E(oops.CodeBadRequest, nil, "email is required when authenticating with an org-scoped agent install key")
+		}
 		enrolledEmail = conv.NormalizeEmail(*payload.Email)
+	} else if authCtx.Email != nil {
+		// Per-user key: the owner is the enrolled developer.
+		enrolledEmail = conv.NormalizeEmail(*authCtx.Email)
 	}
 	if enrolledEmail != "" {
 		if _, err := urn.ParsePrincipal(string(urn.PrincipalTypeEmail) + ":" + enrolledEmail); err != nil {

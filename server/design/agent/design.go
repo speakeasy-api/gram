@@ -10,31 +10,32 @@ import (
 // --- Service ---
 
 var _ = Service("agent", func() {
-	Description("Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an org-scoped API key carrying the 'agent' scope.")
+	Description("Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an API key carrying the 'agent_user' scope — the per-user credential minted by token-exchange. An org key with the broader 'agent' scope also satisfies these endpoints (it implies 'agent_user'), so existing installs keep working during the transition.")
 	Security(security.ByKey, func() {
-		Scope("agent")
+		Scope("agent_user")
 	})
 	shared.DeclareErrorResponses()
 
 	Method("getPlugins", func() {
 		Description("Resolve the marketplaces and plugins assigned to the enrolled user. The device agent reconciles these into whichever AI developer tools it manages (Claude Code today), so each tool's own plugin manager fetches and installs the bundles. The response is tool-agnostic: it names what to install, and each tool's syncer decides how to render it into that tool's native configuration.")
 
-		// Authenticated with an API key carrying the `agent` scope. The
-		// device-agent token exchange mints a per-user key with the `agent`
-		// (and `hooks`) scope, so the enrolled user is the key owner and the
-		// org derives from the key. `email` is retained as an optional param
-		// for backward compatibility with the legacy vouched-email path.
+		// Authenticated with an API key carrying the `agent_user` scope — the
+		// per-user key minted by token-exchange, so the enrolled user is the key
+		// owner and the org derives from the key. An org `agent` install key also
+		// passes (it implies `agent_user`; see auth.Authorize), so agents still
+		// on the shared org key keep working during the transition. `email` is
+		// retained as an optional param for the legacy vouched-email path.
 		Security(security.ByKey, func() {
-			Scope("agent")
+			Scope("agent_user")
 		})
 
 		Payload(func() {
 			security.ByKeyPayload()
-			// Optional: the enrolled user is the authenticated key owner. The
-			// param is kept only for backward compatibility with agents that
-			// still vouch an email, and is used solely as a fallback when the
-			// key does not resolve to a user email.
-			Attribute("email", String, "Email address of the enrolled user. Optional: the enrolled user is normally the authenticated key owner; this is a backward-compatible fallback.", func() {
+			// Required when authenticating with an org install key (`agent`
+			// scope): that key's owner is an admin, not the enrolled developer,
+			// so the MDM profile vouches the developer's email here. Ignored for
+			// a per-user key (`agent_user`), whose owner is the enrolled user.
+			Attribute("email", String, "Email address of the enrolled user. Required when authenticating with an org-scoped agent install key (the MDM zero-touch path); ignored for a per-user key, whose owner is the enrolled user.", func() {
 				Example("dev@acme.corp")
 			})
 		})

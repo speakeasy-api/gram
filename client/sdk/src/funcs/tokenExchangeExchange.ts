@@ -32,7 +32,7 @@ import { Result } from "../types/fp.js";
  * exchange tokenExchange
  *
  * @remarks
- * Exchange the org-scoped device-agent install credential plus a vouched user email for a long-lived, per-user API key carrying the 'agent' scope. Authenticated with an org-scoped API key carrying the 'agent_install' scope — deliberately distinct from the 'agent' scope the minted per-user keys carry, so a leaked per-user key cannot mint another user's key. The raw key is returned exactly once.
+ * Exchange the org-scoped device-agent install credential plus a vouched user email for a long-lived, per-user API key carrying the 'agent_user' scope. Authenticated with an org-scoped API key carrying the 'agent' scope — deliberately broader than the 'agent_user' scope the minted per-user keys carry, so a leaked per-user key cannot re-enter this endpoint to forge another user's key. The raw key is returned exactly once.
  */
 export function tokenExchangeExchange(
   client: GramCore,
