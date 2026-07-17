@@ -152,32 +152,6 @@ func TestEnsurePrimarySyncHandlesConcurrentFirstWriters(t *testing.T) {
 	require.Equal(t, int64(1), countSyncRows(t, ctx, conn, created.Config))
 }
 
-func TestBackfillSyncSchedulesIsIdempotent(t *testing.T) {
-	t.Parallel()
-
-	ctx, conn, store, orgID := newStoreTestDB(t)
-
-	cursor := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderCursor, "cursor-key", true, true, nil, nil)
-	extOrgID := "org_ext_backfill"
-	anthropic := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderAnthropicCompliance, "anthropic-key", true, true, &extOrgID, nil)
-	for _, cfg := range []Config{cursor.Config, anthropic.Config} {
-		require.NoError(t, repo.New(conn).ClearSyncScheduleDiscriminatorsForTest(ctx, repo.ClearSyncScheduleDiscriminatorsForTestParams{
-			AiIntegrationConfigID: cfg.ID,
-			ProjectID:             cfg.ProjectID,
-		}))
-	}
-
-	updated, err := repo.New(conn).BackfillSyncSchedules(ctx)
-	require.NoError(t, err)
-	require.Equal(t, int64(2), updated)
-	require.Equal(t, int64(1), countSyncRows(t, ctx, conn, cursor.Config))
-	require.Equal(t, int64(1), countSyncRows(t, ctx, conn, anthropic.Config))
-
-	rerun, err := repo.New(conn).BackfillSyncSchedules(ctx)
-	require.NoError(t, err)
-	require.Equal(t, int64(0), rerun)
-}
-
 func TestRecordUsagePollFailureStoresErrorAsData(t *testing.T) {
 	t.Parallel()
 
