@@ -16,13 +16,14 @@ Create a Pull Request for the current changes and/or branch:
    - `mig:` - for database migrations and schema changes
    - Ask user to clarify the change type if unclear, and enforce one of these four prefixes
 5. If there are uncommitted changes, create a single line conventional commit summarizing the changes eg. `feat: add new feature`
-6. **Scrub public metadata**: Before pushing, check the branch name, every commit message on the branch, and the PR title/description against the rules in [Public metadata hygiene](#public-metadata-hygiene) below. Fix anything that fails before continuing.
+6. **Scrub the branch**: Before pushing, check the branch name and every commit message on the branch against the rules in [Public metadata hygiene](#public-metadata-hygiene) below. Fix anything that fails before continuing — a push publishes both.
 7. Ensure the branch is up-to-date with remote
 8. Push the branch to the user's fork (origin remote)
 9. Create a short but well-structured PR description in a temporary file (with a unique file name) in the /tmp directory for reviewers
-10. Create PR with the description file using GitHub CLI, ensuring the title starts with `chore:`, `feat:`, `fix:`, or `mig:` and targets the upstream repository
-11. Add appropriate labels based on change type (enhancement, bug, documentation, etc.). Ensure to query for the available labels beforehand.
-12. Provide a clickable link to the PR in the output
+10. **Scrub the PR metadata**: Check the PR title and the drafted description against the same rules. Fix them in place before opening the PR — once created, they are public.
+11. Create PR with the description file using GitHub CLI, ensuring the title starts with `chore:`, `feat:`, `fix:`, or `mig:` and targets the upstream repository
+12. Add appropriate labels based on change type (enhancement, bug, documentation, etc.). Ensure to query for the available labels beforehand.
+13. Provide a clickable link to the PR in the output
 
 Follow conventional commit standards and keep PR descriptions concise but informative. **IMPORTANT**: All PR titles MUST start with one of the four prefixes: `chore:`, `feat:`, `fix:`, or `mig:`.
 
@@ -59,7 +60,7 @@ Redact rather than omit when a real value is needed to explain a bug: `org_01H8X
 
 ### Checking
 
-Run the scan over everything the PR will publish, not just the working tree:
+Run the scan over everything the PR will publish, not just the working tree. At step 6 that is the branch name and the commits; at step 10 it is the title and description you have just drafted, read against the same rules.
 
 ```sh
 # Branch name and every commit message that will land upstream.
@@ -79,7 +80,9 @@ Expect false positives (migration ids, generated fixtures, test constants); use 
 
 ### Fixing a violation
 
-**Nothing pushed yet** — amend or rebase the offending commits (`git commit --amend`, `git rebase -i upstream/main`) before pushing. This is the cheap case, and the reason the scan runs at step 6.
+**Nothing pushed yet** — amend or rebase the offending commits (`git commit --amend`, `git rebase -i upstream/main`) before pushing. This is the cheap case, and the reason the scans run at steps 6 and 10, before anything is published.
+
+**Not opened yet** — edit the title or the description file directly. Also cheap.
 
 **Already disclosed on a PR** — the PR **must not be merged**. Follow the company remediation procedure, in order. Do not improvise around it, and do not attempt to salvage the PR by editing it in place:
 
