@@ -40,6 +40,12 @@ type RiskFindingRow struct {
 	FingerprintPepperVersion string    `ch:"fingerprint_pepper_version"`
 	FingerprintGlobalHS256   string    `ch:"fingerprint_global_hs256"`
 	FingerprintTenantHS256   string    `ch:"fingerprint_tenant_hs256"`
+
+	// Exclusion annotation: set when a going-forward exclusion suppressed the
+	// finding. Both nil when the finding is not excluded (maps to the Nullable
+	// ClickHouse columns).
+	ExcludedAt  *time.Time `ch:"excluded_at"`
+	ExclusionID *uuid.UUID `ch:"exclusion_id"`
 }
 
 // InsertRiskFindings writes findings using a server-side async insert
@@ -82,6 +88,8 @@ func (q *Queries) InsertRiskFindings(ctx context.Context, rows []RiskFindingRow)
 			"fingerprint_pepper_version",
 			"fingerprint_global_hs256",
 			"fingerprint_tenant_hs256",
+			"excluded_at",
+			"exclusion_id",
 		)
 
 	for _, row := range rows {
@@ -107,6 +115,8 @@ func (q *Queries) InsertRiskFindings(ctx context.Context, rows []RiskFindingRow)
 			row.FingerprintPepperVersion,
 			row.FingerprintGlobalHS256,
 			row.FingerprintTenantHS256,
+			row.ExcludedAt,
+			row.ExclusionID,
 		)
 	}
 

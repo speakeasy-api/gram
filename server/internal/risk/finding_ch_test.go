@@ -273,7 +273,7 @@ func TestFindingCHWriter_HandleBatch_RecordsInsertedMetric(t *testing.T) {
 // Integration test against a real Postgres: a going-forward exclusion must drop
 // the matching finding before it reaches ClickHouse, mirroring the Postgres
 // scan path. Findings from the shadow path are otherwise unfiltered.
-func TestFindingCHWriter_HandleBatch_DropsExcludedFindings(t *testing.T) {
+func TestFindingCHWriter_HandleBatch_AnnotatesExcludedFindings(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestRiskService(t)
@@ -282,7 +282,7 @@ func TestFindingCHWriter_HandleBatch_DropsExcludedFindings(t *testing.T) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	// Global exact exclusion suppressing the secret "hunter2" for this project.
-	_, err := riskrepo.New(ti.conn).CreateRiskExclusion(t.Context(), riskrepo.CreateRiskExclusionParams{
+	exclusion, err := riskrepo.New(ti.conn).CreateRiskExclusion(t.Context(), riskrepo.CreateRiskExclusionParams{
 		ProjectID:      *authCtx.ProjectID,
 		OrganizationID: authCtx.ActiveOrganizationID,
 		RiskPolicyID:   uuid.NullUUID{}, // global: applies to every policy
@@ -305,7 +305,7 @@ func TestFindingCHWriter_HandleBatch_DropsExcludedFindings(t *testing.T) {
 	excluded.SetRiskPolicyId(policyID)
 	excluded.SetMatch("hunter2")
 
-	// Kept: a different value the exclusion does not cover.
+	// Not excluded: a different value the exclusion does not cover.
 	kept := chFinding()
 	kept.SetProjectId(authCtx.ProjectID.String())
 	kept.SetRiskPolicyId(policyID)
@@ -313,9 +313,23 @@ func TestFindingCHWriter_HandleBatch_DropsExcludedFindings(t *testing.T) {
 
 	require.NoError(t, w.HandleBatch(ctx, []*riskv1.Finding{excluded, kept}, nil))
 
+	// Both rows are inserted: excluded findings are annotated, not dropped.
 	rows := chRows(t, ins)
-	require.Len(t, rows, 1, "the excluded finding must be dropped, the other kept")
-	require.Equal(t, wantRedacted(t, "org-1", "different-secret"), rows[0].MatchRedacted)
+	require.Len(t, rows, 2, "excluded findings are annotated, not dropped")
+
+	byID := map[uuid.UUID]chrepo.RiskFindingRow{}
+	for _, r := range rows {
+		byID[r.ID] = r
+	}
+
+	excludedRow := byID[uuid.MustParse(excluded.GetId())]
+	require.NotNil(t, excludedRow.ExclusionID, "excluded finding must carry the exclusion id")
+	require.Equal(t, exclusion.ID, *excludedRow.ExclusionID)
+	require.NotNil(t, excludedRow.ExcludedAt, "excluded finding must carry excluded_at")
+
+	keptRow := byID[uuid.MustParse(kept.GetId())]
+	require.Nil(t, keptRow.ExclusionID, "non-excluded finding must not carry an exclusion id")
+	require.Nil(t, keptRow.ExcludedAt, "non-excluded finding must not carry excluded_at")
 }
 
 // chMessagesInsertedPoint returns the single data point for the CH

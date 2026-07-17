@@ -92,13 +92,20 @@ func (w *FindingCHWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 			continue
 		}
 
-		// Drop findings suppressed by a going-forward exclusion. The shadow scan
-		// path that feeds this writer does not apply exclusions, so we mirror the
-		// Postgres path here. Dead-letter sentinels carry no rule/match to match
-		// against, so they bypass the check.
-		if !deadLetter && w.isExcluded(ctx, message) {
-			w.metrics.RecordFindingCHSkipped(ctx, "excluded")
-			continue
+		// Annotate findings suppressed by a going-forward exclusion instead of
+		// dropping them, so excluded findings stay auditable and filterable at
+		// read time. The shadow scan path that feeds this writer does not apply
+		// exclusions, so we mirror the Postgres path here. Dead-letter sentinels
+		// carry no rule/match to match against, so they bypass the check.
+		var excludedAt *time.Time
+		var exclusionID *uuid.UUID
+		if !deadLetter {
+			if exID, ok := w.matchedExclusion(ctx, message); ok {
+				now := time.Now().UTC()
+				excludedAt = &now
+				exclusionID = &exID
+				w.metrics.RecordFindingCHExcluded(ctx)
+			}
 		}
 
 		// Compute the fingerprints. Keep the raw HMAC bytes around so the
@@ -185,6 +192,8 @@ func (w *FindingCHWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 			FingerprintPepperVersion: pepperVersion,
 			FingerprintGlobalHS256:   globalHS256,
 			FingerprintTenantHS256:   tenantHS256,
+			ExcludedAt:               excludedAt,
+			ExclusionID:              exclusionID,
 		})
 	}
 
@@ -205,17 +214,17 @@ func (w *FindingCHWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 	return nil
 }
 
-// isExcluded reports whether a going-forward exclusion for the finding's policy
-// suppresses it, reusing the same matching logic (ExclusionSet) as the Postgres
-// scan path.
-func (w *FindingCHWriter) isExcluded(ctx context.Context, message *riskv1.Finding) bool {
+// matchedExclusion returns the id of the going-forward exclusion that
+// suppresses the finding, and whether one matched, reusing the same matching
+// logic (ExclusionSet) as the Postgres scan path.
+func (w *FindingCHWriter) matchedExclusion(ctx context.Context, message *riskv1.Finding) (uuid.UUID, bool) {
 	set := w.exclusionSetFor(ctx, message.GetProjectId(), message.GetRiskPolicyId())
 	if set.Empty() {
-		return false
+		return uuid.UUID{}, false
 	}
-	// ExclusionSet.Excluded matches on RuleID, Source and Match only; the
+	// ExclusionSet.ExcludedBy matches on RuleID, Source and Match only; the
 	// remaining fields are set for completeness (exhaustruct) but unused.
-	return set.Excluded(scanners.Finding{
+	return set.ExcludedBy(scanners.Finding{
 		RuleID:              message.GetRuleId(),
 		Description:         message.GetDescription(),
 		Match:               message.GetMatch(),
