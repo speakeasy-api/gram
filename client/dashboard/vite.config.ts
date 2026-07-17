@@ -195,6 +195,16 @@ export default defineConfig(({ command }) => {
     },
     build: {
       sourcemap: true,
+      // Fonts must stay as standalone asset files — inlining them as base64
+      // bloats the CSS bundle and defeats CDN caching of the font files.
+      // Returning undefined keeps Vite's default inlining behavior for
+      // everything else.
+      assetsInlineLimit(filePath) {
+        if (/\.(?:woff2?|ttf|otf|eot)$/i.test(filePath)) {
+          return false;
+        }
+        return undefined;
+      },
       rolldownOptions: {
         input: {
           main: path.resolve(__dirname, "index.html"),
