@@ -53,8 +53,8 @@ type AiIntegrationSync struct {
 	CreatedAt             pgtype.Timestamptz
 	UpdatedAt             pgtype.Timestamptz
 	AiIntegrationConfigID uuid.UUID
-	Schedule              pgtype.Text
-	Kind                  pgtype.Text
+	Schedule              string
+	Kind                  string
 	PollWatermarkAt       pgtype.Timestamptz
 	LastCursorID          pgtype.Text
 	NextPollAfter         pgtype.Timestamptz

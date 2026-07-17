@@ -135,16 +135,7 @@ WHERE NOT EXISTS (SELECT 1 FROM updated)
   AND NOT EXISTS (SELECT 1 FROM inserted)
 LIMIT 1;
 
--- Test-only fixtures for transitional sync-row behavior.
--- name: ClearSyncScheduleDiscriminatorsForTest :exec
-UPDATE ai_integration_syncs s
-SET schedule = NULL,
-    kind = NULL
-FROM ai_integration_configs c
-WHERE s.ai_integration_config_id = c.id
-  AND c.id = @ai_integration_config_id
-  AND c.project_id = @project_id;
-
+-- Test-only fixtures for sync-row behavior.
 -- name: DeleteSyncRowsForTest :exec
 DELETE FROM ai_integration_syncs s
 USING ai_integration_configs c

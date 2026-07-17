@@ -1,4 +1,4 @@
-h1:oszNyxiKG13R6qzZdvKH1kYQlC7NqPFU6JjHPJ0kVl4=
+h1:JEs/m7Up3aGdPPyaM/ANz0QjNCqTy6kj+BWwwS2/sxs=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -272,3 +272,4 @@ h1:oszNyxiKG13R6qzZdvKH1kYQlC7NqPFU6JjHPJ0kVl4=
 20260716213928_skill-distributions-sync-receipts.sql h1:iW9LlmEmqcXaWE5ny7fk9ohcbbt1pVS3kFdcvgQvFeY=
 20260717034451_ai-integration-sync-schedule-expand.sql h1:frkSTAfN29DxZoDAyXJOY5dSxMSRFcU1IjIALgyxL4k=
 20260717040040_ai-integration-sync-schedule-index-transition.sql h1:RvsLy6ojHTT+DJLHG+FHqxVvjq9MscEFvU63BBAaCQs=
+20260717050349_ai-integration-sync-schedule-contract.sql h1:G2Ia3f3A327J0SZXK3y0G4//FRAOhQZPRLVzWrIP9B4=

@@ -71,42 +71,16 @@ func TestUpsertWithTxCreatesPrimarySyncDiscriminators(t *testing.T) {
 
 	cursor := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderCursor, "cursor-key", true, true, nil, nil)
 	cursorSync := getPrimarySyncDiscriminators(t, ctx, conn, cursor.Config)
-	require.Equal(t, ProviderCursor, cursorSync.Schedule.String)
-	require.Equal(t, "time", cursorSync.Kind.String)
+	require.Equal(t, ProviderCursor, cursorSync.Schedule)
+	require.Equal(t, "time", cursorSync.Kind)
 	require.Equal(t, int64(1), countSyncRows(t, ctx, conn, cursor.Config))
 
 	extOrgID := "org_ext_primary_sync"
 	anthropic := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderAnthropicCompliance, "anthropic-key", true, true, &extOrgID, nil)
 	anthropicSync := getPrimarySyncDiscriminators(t, ctx, conn, anthropic.Config)
-	require.Equal(t, ProviderAnthropicCompliance, anthropicSync.Schedule.String)
-	require.Equal(t, "cursor", anthropicSync.Kind.String)
+	require.Equal(t, ProviderAnthropicCompliance, anthropicSync.Schedule)
+	require.Equal(t, "cursor", anthropicSync.Kind)
 	require.Equal(t, int64(1), countSyncRows(t, ctx, conn, anthropic.Config))
-}
-
-func TestUpsertWithTxFillsExistingPrimarySyncDiscriminators(t *testing.T) {
-	t.Parallel()
-
-	ctx, conn, store, orgID := newStoreTestDB(t)
-
-	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderCursor, "cursor-key", true, true, nil, nil)
-	original := getPrimarySyncDiscriminators(t, ctx, conn, created.Config)
-	require.NoError(t, repo.New(conn).ClearSyncScheduleDiscriminatorsForTest(ctx, repo.ClearSyncScheduleDiscriminatorsForTestParams{
-		AiIntegrationConfigID: created.Config.ID,
-		ProjectID:             created.Config.ProjectID,
-	}))
-
-	loaded, _, err := store.loadForOrgAndProviderRow(ctx, orgID, ProviderCursor)
-	require.NoError(t, err)
-	require.Equal(t, created.Config.ID, loaded.ID)
-
-	updated := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderCursor, "", false, false, nil, nil)
-	require.Equal(t, created.Config.ID, updated.Config.ID)
-
-	syncRow := getPrimarySyncDiscriminators(t, ctx, conn, updated.Config)
-	require.Equal(t, original.ID, syncRow.ID)
-	require.Equal(t, ProviderCursor, syncRow.Schedule.String)
-	require.Equal(t, "time", syncRow.Kind.String)
-	require.Equal(t, int64(1), countSyncRows(t, ctx, conn, updated.Config))
 }
 
 func TestEnsurePrimarySyncHandlesConcurrentFirstWriters(t *testing.T) {

@@ -31,27 +31,6 @@ func (q *Queries) AdvanceUsagePollCursor(ctx context.Context, arg AdvanceUsagePo
 	return err
 }
 
-const clearSyncScheduleDiscriminatorsForTest = `-- name: ClearSyncScheduleDiscriminatorsForTest :exec
-UPDATE ai_integration_syncs s
-SET schedule = NULL,
-    kind = NULL
-FROM ai_integration_configs c
-WHERE s.ai_integration_config_id = c.id
-  AND c.id = $1
-  AND c.project_id = $2
-`
-
-type ClearSyncScheduleDiscriminatorsForTestParams struct {
-	AiIntegrationConfigID uuid.UUID
-	ProjectID             uuid.UUID
-}
-
-// Test-only fixtures for transitional sync-row behavior.
-func (q *Queries) ClearSyncScheduleDiscriminatorsForTest(ctx context.Context, arg ClearSyncScheduleDiscriminatorsForTestParams) error {
-	_, err := q.db.Exec(ctx, clearSyncScheduleDiscriminatorsForTest, arg.AiIntegrationConfigID, arg.ProjectID)
-	return err
-}
-
 const countConfigsByOrganization = `-- name: CountConfigsByOrganization :one
 SELECT count(*)
 FROM ai_integration_configs
@@ -104,6 +83,7 @@ type DeleteSyncRowsForTestParams struct {
 	ProjectID             uuid.UUID
 }
 
+// Test-only fixtures for sync-row behavior.
 func (q *Queries) DeleteSyncRowsForTest(ctx context.Context, arg DeleteSyncRowsForTestParams) error {
 	_, err := q.db.Exec(ctx, deleteSyncRowsForTest, arg.AiIntegrationConfigID, arg.ProjectID)
 	return err
@@ -182,8 +162,8 @@ type EnsurePrimarySyncRow struct {
 	CreatedAt             pgtype.Timestamptz
 	UpdatedAt             pgtype.Timestamptz
 	AiIntegrationConfigID uuid.UUID
-	Schedule              pgtype.Text
-	Kind                  pgtype.Text
+	Schedule              string
+	Kind                  string
 	PollWatermarkAt       pgtype.Timestamptz
 	LastCursorID          pgtype.Text
 	NextPollAfter         pgtype.Timestamptz
@@ -337,8 +317,8 @@ type GetPrimarySyncDiscriminatorsForTestParams struct {
 
 type GetPrimarySyncDiscriminatorsForTestRow struct {
 	ID       uuid.UUID
-	Schedule pgtype.Text
-	Kind     pgtype.Text
+	Schedule string
+	Kind     string
 }
 
 func (q *Queries) GetPrimarySyncDiscriminatorsForTest(ctx context.Context, arg GetPrimarySyncDiscriminatorsForTestParams) (GetPrimarySyncDiscriminatorsForTestRow, error) {
