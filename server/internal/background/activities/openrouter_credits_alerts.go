@@ -8,19 +8,38 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/metric"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	repo "github.com/speakeasy-api/gram/server/internal/background/activities/repo"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/email"
+	"github.com/speakeasy-api/gram/server/internal/modelkeys"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	"github.com/speakeasy-api/gram/server/internal/usage"
 )
 
-// openRouterCreditsAlertGrace keeps a threshold's dedup reservation alive past
-// the calendar month boundary so a poll firing moments after the month rolls
-// over cannot re-alert for a threshold already sent in the closing month.
-const openRouterCreditsAlertGrace = 48 * time.Hour
+const (
+	meterOpenRouterCreditsAlertsSent   = "gram.openrouter.credits_alerts_sent"
+	meterOpenRouterCreditsAlertsFailed = "gram.openrouter.credits_alerts_failed"
+
+	// openRouterCreditsAlertRetryTTL is the reservation length while a
+	// threshold's email has not been delivered yet. It is taken before any
+	// recipient resolution, so it doubles as a retry backoff (a failed or
+	// skipped send is reattempted only after it expires, not every 5-minute
+	// tick) and as a crash bound (a worker killed between reserving and
+	// sending delays the alert by at most this long instead of suppressing it
+	// for the rest of the month).
+	openRouterCreditsAlertRetryTTL = time.Hour
+
+	// openRouterCreditsAlertGrace extends a delivered threshold's reservation
+	// past the calendar-month boundary. OpenRouter resets monthly usage at
+	// month start but the first post-rollover polls can still report the old
+	// month's usage; without the grace the fresh month would immediately
+	// re-send the same threshold.
+	openRouterCreditsAlertGrace = 48 * time.Hour
+)
 
 // highestCrossedOpenRouterCreditsThreshold returns the highest warning
 // threshold that credit usage has crossed, as a percentage of the monthly cap:
@@ -31,19 +50,8 @@ func highestCrossedOpenRouterCreditsThreshold(used float64, limit int64) int {
 	if limit <= 0 {
 		return 0
 	}
-	pct := used / float64(limit) * 100
-	switch {
-	case pct < 50:
-		return 0
-	case pct < 75:
-		return 50
-	case pct < 90:
-		return 75
-	case pct < 100:
-		return 90
-	default:
-		return 100
-	}
+	pct := int64(used / float64(limit) * 100)
+	return int(highestCrossedAlertThreshold(pct, false))
 }
 
 // MaybeSendOpenRouterCreditsAlerts emails an organization's billing alert
@@ -53,15 +61,17 @@ func highestCrossedOpenRouterCreditsThreshold(used float64, limit int64) int {
 //
 // Only the 'chat' key is alerted on: exhausting it 402s the customer's chat
 // surfaces, which is what the admin can act on, whereas the 'internal' key pays
-// for platform-initiated inference the admin has no control over. BYOK orgs and
-// orgs without a configured billing alert email are filtered out at the SQL
-// layer.
+// for platform-initiated inference the admin has no control over. BYOK orgs
+// (excluding internal-only judge slots) and orgs without a configured billing
+// alert email are filtered out at the SQL layer.
 type MaybeSendOpenRouterCreditsAlerts struct {
-	logger *slog.Logger
-	db     *pgxpool.Pool
-	repo   *repo.Queries
-	cache  cache.Cache
-	emails *email.Service
+	logger       *slog.Logger
+	db           *pgxpool.Pool
+	repo         *repo.Queries
+	cache        cache.Cache
+	emails       *email.Service
+	alertsSent   metric.Int64Counter
+	alertsFailed metric.Int64Counter
 }
 
 func NewMaybeSendOpenRouterCreditsAlerts(
@@ -69,137 +79,180 @@ func NewMaybeSendOpenRouterCreditsAlerts(
 	db *pgxpool.Pool,
 	cacheAdapter cache.Cache,
 	emails *email.Service,
+	meterProvider metric.MeterProvider,
 ) *MaybeSendOpenRouterCreditsAlerts {
+	ctx := context.Background()
+	componentLogger := logger.With(attr.SlogComponent("openrouter_credits_alerts"))
+
+	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/background/activities/openrouter_credits_alerts")
+
+	sent, err := meter.Int64Counter(
+		meterOpenRouterCreditsAlertsSent,
+		metric.WithDescription("OpenRouter credit threshold warning emails delivered."),
+		metric.WithUnit("{email}"),
+	)
+	if err != nil {
+		componentLogger.ErrorContext(ctx, "create metric",
+			attr.SlogMetricName(meterOpenRouterCreditsAlertsSent), attr.SlogError(err))
+	}
+
+	failed, err := meter.Int64Counter(
+		meterOpenRouterCreditsAlertsFailed,
+		metric.WithDescription("OpenRouter credit threshold alert failures (recipient lookup or email send)."),
+		metric.WithUnit("{failure}"),
+	)
+	if err != nil {
+		componentLogger.ErrorContext(ctx, "create metric",
+			attr.SlogMetricName(meterOpenRouterCreditsAlertsFailed), attr.SlogError(err))
+	}
+
 	return &MaybeSendOpenRouterCreditsAlerts{
-		logger: logger.With(attr.SlogComponent("openrouter_credits_alerts")),
-		db:     db,
-		repo:   repo.New(db),
-		cache:  cacheAdapter,
-		emails: emails,
+		logger:       componentLogger,
+		db:           db,
+		repo:         repo.New(db),
+		cache:        cacheAdapter,
+		emails:       emails,
+		alertsSent:   sent,
+		alertsFailed: failed,
 	}
 }
 
-// openRouterCreditsAlertCandidate is an org that has crossed a threshold on its
-// chat key this tick and is a candidate for an email, pending recipient
-// resolution.
-type openRouterCreditsAlertCandidate struct {
-	threshold int
-	limit     int64
+// openRouterCreditsAlertKey is the Redis dedup key for one org's crossed
+// threshold. The calendar month and the credit limit are deliberately NOT part
+// of the key: monthly re-arming comes from the reservation's TTL expiring
+// shortly after the cycle ends (see openRouterCreditsAlertGrace), and keying on
+// the limit would let the limit flapping between the upstream and DB-cached
+// values (when ReconcileMonthlyCredits fails) mint duplicate alerts for one
+// unchanged usage state. The trade-off: raising the cap mid-month does not
+// re-arm already-sent thresholds until the next month.
+func openRouterCreditsAlertKey(orgID string, threshold int) string {
+	return fmt.Sprintf("openrouter-credits-alert:%s:%s:%d", orgID, openrouter.KeyTypeChat, threshold)
 }
 
 func (a *MaybeSendOpenRouterCreditsAlerts) Do(ctx context.Context, metrics []OpenRouterCreditsMetric) error {
 	// Collapse the tick's metrics down to the chat-key orgs that have crossed a
 	// threshold. Everything below the lowest threshold, every non-chat key, and
 	// every unprovisioned (zero-limit) key drops out here.
-	candidates := make(map[string]openRouterCreditsAlertCandidate, len(metrics))
+	candidates := make(map[string]int, len(metrics))
 	for _, m := range metrics {
 		if m.KeyType != string(openrouter.KeyTypeChat) {
 			continue
 		}
-		threshold := highestCrossedOpenRouterCreditsThreshold(m.CreditsUsed, m.CreditLimit)
-		if threshold == 0 {
-			continue
-		}
-		candidates[m.OrganizationID] = openRouterCreditsAlertCandidate{
-			threshold: threshold,
-			limit:     m.CreditLimit,
+		if threshold := highestCrossedOpenRouterCreditsThreshold(m.CreditsUsed, m.CreditLimit); threshold != 0 {
+			candidates[m.OrganizationID] = threshold
 		}
 	}
 	if len(candidates) == 0 {
 		return nil
 	}
 
-	orgIDs := make([]string, 0, len(candidates))
-	for orgID := range candidates {
-		orgIDs = append(orgIDs, orgID)
+	// Reserve before any DB work. At steady state — every crossed threshold
+	// already alerted or backing off — all candidates drop out on this cheap
+	// Redis check and the tick does no recipient lookups at all. The short
+	// reservation is extended to month length only after a successful send.
+	pending := make([]string, 0, len(candidates))
+	for orgID, threshold := range candidates {
+		won, err := a.cache.Add(ctx, openRouterCreditsAlertKey(orgID, threshold), openRouterCreditsAlertRetryTTL)
+		if err != nil {
+			a.logger.ErrorContext(ctx, "failed to reserve openrouter credits alert",
+				attr.SlogOrganizationID(orgID), attr.SlogError(err))
+			continue
+		}
+		if won {
+			pending = append(pending, orgID)
+		}
+	}
+	if len(pending) == 0 {
+		return nil
 	}
 
-	// Resolve recipients in one round-trip. The query already excludes BYOK
-	// orgs and orgs without a billing alert email, so anything it returns is a
-	// send target.
-	recipients, err := a.repo.GetOpenRouterCreditsAlertRecipients(ctx, orgIDs)
+	// Resolve recipients in one round-trip. The query excludes disabled and
+	// BYOK orgs and orgs without a billing alert email; their reservations are
+	// intentionally kept, so an ineligible org is re-checked once per
+	// reservation TTL rather than every tick.
+	recipients, err := a.repo.GetOpenRouterCreditsAlertRecipients(ctx, repo.GetOpenRouterCreditsAlertRecipientsParams{
+		OrganizationIds:   pending,
+		InternalOnlySlots: modelkeys.InternalOnlySlots(),
+	})
 	if err != nil {
+		a.recordFailure(ctx, "")
 		return fmt.Errorf("get openrouter credits alert recipients: %w", err)
 	}
 
 	now := time.Now().UTC()
+	eligible := make(map[string]repo.GetOpenRouterCreditsAlertRecipientsRow, len(recipients))
 	for _, r := range recipients {
-		alertEmail := conv.FromPGText[string](r.AlertEmail)
-		if alertEmail == nil || *alertEmail == "" {
-			continue
-		}
-		candidate, ok := candidates[r.OrganizationID]
+		eligible[r.OrganizationID] = r
+	}
+	for _, orgID := range pending {
+		r, ok := eligible[orgID]
 		if !ok {
+			// Naturally rate-limited to once per reservation TTL.
+			a.logger.InfoContext(ctx, "skipping openrouter credits alert without eligible recipient",
+				attr.SlogOrganizationID(orgID), attr.SlogValueInt(candidates[orgID]))
 			continue
 		}
-		a.sendOne(ctx, r.OrganizationID, r.OrganizationName, *alertEmail, candidate, now)
+		a.sendOne(ctx, orgID, r.OrganizationName, r.AlertEmail.String, candidates[orgID], now)
 	}
 
 	return nil
 }
 
-// sendOne dispatches a single threshold alert, reserving a Redis dedup key so
-// the same threshold is not re-sent every 5 minutes. Sending is best-effort:
-// any failure releases the reservation so the next poll retries, and no failure
-// is propagated to the workflow.
+// sendOne dispatches a single threshold alert whose dedup reservation the
+// caller already holds. On success the reservation is extended to outlive the
+// billing month (plus rollover grace) so the threshold alerts once per month;
+// on failure the short reservation is left in place, deferring the retry to
+// the next tick after it expires instead of hammering the email provider every
+// 5 minutes.
 func (a *MaybeSendOpenRouterCreditsAlerts) sendOne(
 	ctx context.Context,
 	orgID string,
 	orgName string,
 	recipient string,
-	candidate openRouterCreditsAlertCandidate,
+	threshold int,
 	now time.Time,
 ) {
 	logger := a.logger.With(attr.SlogOrganizationID(orgID))
 
-	// The limit is part of the dedup key so raising the cap re-arms every
-	// threshold, and the calendar month re-arms the whole ladder each cycle to
-	// track OpenRouter's monthly credit reset. Only the highest crossed
-	// threshold is alerted, so usage blowing through several thresholds between
-	// runs sends a single email.
-	period := now.Format("200601")
-	key := fmt.Sprintf("openrouter-credits-alert:%s:%s:%s:%d:%d",
-		orgID, openrouter.KeyTypeChat, period, candidate.limit, candidate.threshold)
-	ttl := startOfNextMonthUTC(now).Sub(now) + openRouterCreditsAlertGrace
-
-	won, err := a.cache.Add(ctx, key, ttl)
-	if err != nil {
-		logger.ErrorContext(ctx, "failed to reserve openrouter credits alert", attr.SlogError(err))
-		return
-	}
-	if !won {
-		return
-	}
-
-	// The reservation is held: release it on any failure so the next poll
-	// retries. The release must outlive the failure that triggered it,
-	// including context cancellation, or the stale reservation suppresses the
-	// alert for the rest of the month.
-	release := func(msg string, err error) {
-		logger.ErrorContext(ctx, msg, attr.SlogError(err))
-		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
-		defer cancel()
-		if err := a.cache.Delete(releaseCtx, key); err != nil {
-			logger.ErrorContext(releaseCtx, "failed to release openrouter credits alert reservation", attr.SlogError(err))
-		}
-	}
-
 	tmpl := email.OpenRouterCreditsThreshold{
 		OrganizationName: conv.Default(orgName, "your organization"),
-		ThresholdPercent: strconv.Itoa(candidate.threshold),
-		Exhausted:        candidate.threshold >= 100,
+		ThresholdPercent: strconv.Itoa(threshold),
+		Exhausted:        threshold >= 100,
 	}
 	if err := a.emails.Send(ctx, recipient, tmpl); err != nil {
-		release("failed to send openrouter credits alert", err)
+		logger.ErrorContext(ctx, "failed to send openrouter credits alert", attr.SlogError(err))
+		a.recordFailure(ctx, orgID)
 		return
 	}
 
-	logger.InfoContext(ctx, "sent openrouter credits alert", attr.SlogValueInt(candidate.threshold))
+	// OpenRouter credits reset at calendar-month boundaries, so the delivered
+	// marker must survive until shortly after this month ends and then get out
+	// of the way of next month's ladder.
+	_, cycleEnd := usage.CurrentBillingCycle(now, 1)
+	ttl := cycleEnd.Sub(now) + openRouterCreditsAlertGrace
+	if err := a.cache.Expire(ctx, openRouterCreditsAlertKey(orgID, threshold), ttl); err != nil {
+		// Worst case the short reservation lapses and the same threshold
+		// re-sends within the month — log so repeats are explicable.
+		logger.ErrorContext(ctx, "failed to extend openrouter credits alert reservation", attr.SlogError(err))
+	}
+
+	if a.alertsSent != nil {
+		a.alertsSent.Add(ctx, 1, metric.WithAttributes(attr.OrganizationID(orgID)))
+	}
+	logger.InfoContext(ctx, "sent openrouter credits alert", attr.SlogValueInt(threshold))
 }
 
-// startOfNextMonthUTC returns midnight UTC on the first day of the month after
-// now, used to expire dedup reservations at the credit-reset boundary.
-func startOfNextMonthUTC(now time.Time) time.Time {
-	y, m, _ := now.UTC().Date()
-	return time.Date(y, m, 1, 0, 0, 0, 0, time.UTC).AddDate(0, 1, 0)
+// recordFailure bumps the failure counter that stands in for workflow-level
+// failure signal: the credits workflow deliberately swallows alert errors so
+// metrics collection never fails on account of alerting, which would otherwise
+// leave persistent alert breakage invisible to monitoring.
+func (a *MaybeSendOpenRouterCreditsAlerts) recordFailure(ctx context.Context, orgID string) {
+	if a.alertsFailed == nil {
+		return
+	}
+	opts := []metric.AddOption{}
+	if orgID != "" {
+		opts = append(opts, metric.WithAttributes(attr.OrganizationID(orgID)))
+	}
+	a.alertsFailed.Add(ctx, 1, opts...)
 }

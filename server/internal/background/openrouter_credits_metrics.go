@@ -2,6 +2,7 @@ package background
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -87,21 +88,43 @@ func CollectOpenRouterCreditsMetricsWorkflow(ctx workflow.Context) error {
 }
 
 func AddOpenRouterCreditsMetricsSchedule(ctx context.Context, temporalEnv *tenv.Environment) error {
-	_, err := temporalEnv.Client().ScheduleClient().Create(ctx, client.ScheduleOptions{
-		ID: openRouterCreditsMetricsScheduleID,
-		Spec: client.ScheduleSpec{
-			Intervals: []client.ScheduleIntervalSpec{
-				{Every: openRouterCreditsMetricsScheduleInterval},
-			},
+	sc := temporalEnv.Client().ScheduleClient()
+
+	spec := client.ScheduleSpec{
+		Intervals: []client.ScheduleIntervalSpec{
+			{Every: openRouterCreditsMetricsScheduleInterval},
 		},
-		Action: &client.ScheduleWorkflowAction{
-			ID:                 openRouterCreditsMetricsScheduledWorkflowID,
-			Workflow:           CollectOpenRouterCreditsMetricsWorkflow,
-			TaskQueue:          string(temporalEnv.Queue()),
-			WorkflowRunTimeout: openRouterCreditsMetricsWorkflowRunTimeout,
-		},
+	}
+	action := &client.ScheduleWorkflowAction{
+		ID:                 openRouterCreditsMetricsScheduledWorkflowID,
+		Workflow:           CollectOpenRouterCreditsMetricsWorkflow,
+		TaskQueue:          string(temporalEnv.Queue()),
+		WorkflowRunTimeout: openRouterCreditsMetricsWorkflowRunTimeout,
+	}
+
+	_, err := sc.Create(ctx, client.ScheduleOptions{
+		ID:     openRouterCreditsMetricsScheduleID,
+		Spec:   spec,
+		Action: action,
 	})
-	if err != nil {
+	switch {
+	case errors.Is(err, temporal.ErrScheduleAlreadyRunning):
+		// Push spec/action changes (interval, WorkflowRunTimeout) into the
+		// already-created schedule: Create alone would silently leave deployed
+		// environments running the old values forever.
+		if err := sc.GetHandle(ctx, openRouterCreditsMetricsScheduleID).Update(ctx, client.ScheduleUpdateOptions{
+			DoUpdate: func(input client.ScheduleUpdateInput) (*client.ScheduleUpdate, error) {
+				input.Description.Schedule.Spec = &spec
+				input.Description.Schedule.Action = action
+				return &client.ScheduleUpdate{
+					Schedule:              &input.Description.Schedule,
+					TypedSearchAttributes: nil,
+				}, nil
+			},
+		}); err != nil {
+			return fmt.Errorf("update existing openrouter credits metrics schedule: %w", err)
+		}
+	case err != nil:
 		return fmt.Errorf("create openrouter credits metrics schedule: %w", err)
 	}
 

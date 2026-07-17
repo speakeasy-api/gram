@@ -2,7 +2,6 @@ package activities
 
 import (
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -24,6 +23,7 @@ func TestHighestCrossedOpenRouterCreditsThreshold_Ladder(t *testing.T) {
 		{used: 900, limit: 1000, want: 90},
 		{used: 999.9, limit: 1000, want: 90},
 		{used: 1000, limit: 1000, want: 100},
+		// No beyond-100 escalation for credits: exhausted is exhausted.
 		{used: 1500, limit: 1000, want: 100},
 		// A zero or negative limit yields no signal rather than dividing by zero.
 		{used: 500, limit: 0, want: 0},
@@ -36,18 +36,12 @@ func TestHighestCrossedOpenRouterCreditsThreshold_Ladder(t *testing.T) {
 	}
 }
 
-func TestStartOfNextMonthUTC(t *testing.T) {
+func TestHighestCrossedAlertThreshold_EscalationModes(t *testing.T) {
 	t.Parallel()
 
-	// Mid-month rolls to the first of the next month.
-	require.Equal(t,
-		time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC),
-		startOfNextMonthUTC(time.Date(2026, time.July, 17, 18, 30, 0, 0, time.UTC)),
-	)
-
-	// December rolls into the next year.
-	require.Equal(t,
-		time.Date(2027, time.January, 1, 0, 0, 0, 0, time.UTC),
-		startOfNextMonthUTC(time.Date(2026, time.December, 31, 23, 59, 59, 0, time.UTC)),
-	)
+	// The shared ladder differs between its consumers only past 100%.
+	require.Equal(t, int64(100), highestCrossedAlertThreshold(160, false),
+		"without escalation the ladder tops out at 100")
+	require.Equal(t, int64(150), highestCrossedAlertThreshold(160, true),
+		"with escalation each further 50%% adds a rung")
 }

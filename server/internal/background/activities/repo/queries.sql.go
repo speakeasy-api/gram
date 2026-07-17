@@ -221,6 +221,7 @@ SELECT
 FROM organization_metadata om
 JOIN billing_metadata bm ON bm.organization_id = om.id
 WHERE om.id = ANY($1::text[])
+  AND om.disabled_at IS NULL
   AND bm.alert_email IS NOT NULL
   AND NOT EXISTS (
       SELECT 1
@@ -228,8 +229,14 @@ WHERE om.id = ANY($1::text[])
       WHERE mpk.organization_id = om.id
         AND mpk.enabled = TRUE
         AND mpk.deleted = FALSE
+        AND mpk.slot <> ALL($2::text[])
   )
 `
+
+type GetOpenRouterCreditsAlertRecipientsParams struct {
+	OrganizationIds   []string
+	InternalOnlySlots []string
+}
 
 type GetOpenRouterCreditsAlertRecipientsRow struct {
 	OrganizationID   string
@@ -240,12 +247,17 @@ type GetOpenRouterCreditsAlertRecipientsRow struct {
 // Resolve the billing alert recipient for each supplied organization that
 // should receive an OpenRouter credit threshold warning. An org qualifies only
 // if it has a billing alert email configured (the address set on the billing
-// page) and is not using BYOK — any enabled, non-deleted customer-supplied
-// model provider key means the platform chat key is not what pays for the org's
+// page) and is not using BYOK for chat traffic — an enabled, non-deleted
+// customer-supplied model provider key outside the internal-only slots
+// (@internal_only_slots, the platform-initiated judge slots that never carry
+// chat completions) means the platform chat key is not what pays for the org's
 // completions, so credit exhaustion of that key is not customer-facing and no
-// warning is sent. Orgs without a recipient or with BYOK are simply omitted.
-func (q *Queries) GetOpenRouterCreditsAlertRecipients(ctx context.Context, organizationIds []string) ([]GetOpenRouterCreditsAlertRecipientsRow, error) {
-	rows, err := q.db.Query(ctx, getOpenRouterCreditsAlertRecipients, organizationIds)
+// warning is sent. The exclusion is deliberately org-wide beyond that: a
+// chat-serving customer key on any project marks the whole org as BYOK,
+// matching the ticket-level "no alerts for BYOK orgs" decision. Orgs without a
+// recipient or with BYOK are simply omitted.
+func (q *Queries) GetOpenRouterCreditsAlertRecipients(ctx context.Context, arg GetOpenRouterCreditsAlertRecipientsParams) ([]GetOpenRouterCreditsAlertRecipientsRow, error) {
+	rows, err := q.db.Query(ctx, getOpenRouterCreditsAlertRecipients, arg.OrganizationIds, arg.InternalOnlySlots)
 	if err != nil {
 		return nil, err
 	}

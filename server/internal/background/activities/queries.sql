@@ -77,10 +77,15 @@ ORDER BY om.slug;
 -- Resolve the billing alert recipient for each supplied organization that
 -- should receive an OpenRouter credit threshold warning. An org qualifies only
 -- if it has a billing alert email configured (the address set on the billing
--- page) and is not using BYOK — any enabled, non-deleted customer-supplied
--- model provider key means the platform chat key is not what pays for the org's
+-- page) and is not using BYOK for chat traffic — an enabled, non-deleted
+-- customer-supplied model provider key outside the internal-only slots
+-- (@internal_only_slots, the platform-initiated judge slots that never carry
+-- chat completions) means the platform chat key is not what pays for the org's
 -- completions, so credit exhaustion of that key is not customer-facing and no
--- warning is sent. Orgs without a recipient or with BYOK are simply omitted.
+-- warning is sent. The exclusion is deliberately org-wide beyond that: a
+-- chat-serving customer key on any project marks the whole org as BYOK,
+-- matching the ticket-level "no alerts for BYOK orgs" decision. Orgs without a
+-- recipient or with BYOK are simply omitted.
 SELECT
     om.id AS organization_id,
     om.name AS organization_name,
@@ -96,6 +101,7 @@ WHERE om.id = ANY(@organization_ids::text[])
       WHERE mpk.organization_id = om.id
         AND mpk.enabled = TRUE
         AND mpk.deleted = FALSE
+        AND mpk.slot <> ALL(@internal_only_slots::text[])
   );
 
 -- name: GetUserEmailsByOrgIDs :many

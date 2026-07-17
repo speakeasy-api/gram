@@ -1,5 +1,7 @@
 package email
 
+import "strconv"
+
 // OpenRouterCreditsThreshold is sent to an organization's admins when usage of
 // the platform-managed OpenRouter chat key crosses a warning threshold (50%,
 // 75%, 90%) or exhausts (100%) the monthly credit cap. Exhausting the cap
@@ -24,13 +26,9 @@ func (t OpenRouterCreditsThreshold) TransactionalID() TransactionalID {
 func (t OpenRouterCreditsThreshold) AddToAudience() bool { return false }
 
 func (t OpenRouterCreditsThreshold) Variables() map[string]string {
-	exhausted := "false"
-	if t.Exhausted {
-		exhausted = "true"
-	}
 	return map[string]string{
 		"organization_name": t.OrganizationName,
 		"threshold_percent": t.ThresholdPercent,
-		"exhausted":         exhausted,
+		"exhausted":         strconv.FormatBool(t.Exhausted),
 	}
 }
