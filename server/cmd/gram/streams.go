@@ -202,15 +202,22 @@ func newStreamsCommand() *cli.Command {
 			// ClickHouse risk_findings writer (shadow path). Only connect when
 			// the kill switch is off so a disabled deployment does not require
 			// ClickHouse reachability.
+			//
+			// A ClickHouse connect/ping failure must NOT abort streams: this is a
+			// shadow writer, and taking the process down would also kill the
+			// BigQuery finding path and every other receiver. Degrade instead —
+			// log the failure and disable only the ClickHouse receiver.
 			enableCHRiskWrites := !c.Bool("disable-clickhouse-risk-writes")
 			var chConn clickhouse.Conn
 			if enableCHRiskWrites {
 				conn, shutdown, err := newClickhouseClient(ctx, logger, c)
-				shutdownFuncs = append(shutdownFuncs, shutdown)
 				if err != nil {
-					return fmt.Errorf("failed to create clickhouse client: %w", err)
+					logger.ErrorContext(ctx, "failed to create clickhouse client, disabling clickhouse risk_findings writer", attr.SlogError(err))
+					enableCHRiskWrites = false
+				} else {
+					shutdownFuncs = append(shutdownFuncs, shutdown)
+					chConn = conn
 				}
-				chConn = conn
 			}
 
 			// Gitleaks shadow-mode subscriber: re-runs the in-process gitleaks
