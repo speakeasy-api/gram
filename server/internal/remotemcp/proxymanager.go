@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp/interceptors"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -218,7 +219,9 @@ func (f *ProxyManager) BuildTarget(
 		AuthorizationOverride:   upstreamAuth,
 		UpstreamResponseRetryer: nil,
 		WWWAuthenticate:         wwwAuthenticate,
-		UserRequestInterceptors: nil,
+		UserRequestInterceptors: []proxy.UserRequestInterceptor{
+			interceptors.NewFigma(upstreamURL, logger),
+		},
 		InitializeRequestInterceptors: []proxy.InitializeRequestInterceptor{
 			NewInitializePostHogEventInterceptor(f.posthog, identity, logger),
 		},

@@ -8,7 +8,11 @@ import { useViewMode } from "@/components/ui/use-view-mode";
 import { useProject } from "@/contexts/Auth";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
 import { CommandBar } from "@/pages/catalog/CommandBar";
-import { type PulseMCPServer, useListMCPCatalog } from "@/pages/catalog/hooks";
+import {
+  type PulseMCPServer,
+  useIsCatalogServerInstalled,
+  useListMCPCatalog,
+} from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
 import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import { Button, Stack } from "@speakeasy-api/moonshine";
@@ -87,10 +91,17 @@ function CatalogInner() {
     isFetching,
     refetch: refetchCatalog,
   } = useListMCPCatalog();
-  const { data: deploymentResult, refetch: refetchDeployment } =
-    useLatestDeployment();
+  // Legacy installs live on the deployment's external MCP attachments; new
+  // installs are remote MCP servers matched by endpoint URL. Both mark a
+  // catalog entry as added.
+  const { data: deploymentResult } = useLatestDeployment();
   const deployment = deploymentResult?.deployment;
   const externalMcps = deployment?.externalMcps ?? [];
+  const isInstalledByUrl = useIsCatalogServerInstalled();
+  const isServerAdded = (server: PulseMCPServer) =>
+    externalMcps.some(
+      (mcp) => mcp.registryServerSpecifier === server.registrySpecifier,
+    ) || isInstalledByUrl(server);
 
   // The backend returns the full catalog in one response.
   const allServers = useMemo(
@@ -207,7 +218,7 @@ function CatalogInner() {
                         detailHref={routes.catalog.detail.href(
                           encodeURIComponent(server.registrySpecifier),
                         )}
-                        externalMcps={externalMcps}
+                        isAdded={isServerAdded(server)}
                         isSelected={selectedServers.has(serverKey)}
                         onToggleSelect={() => toggleServerSelection(serverKey)}
                       />
@@ -235,7 +246,7 @@ function CatalogInner() {
                           detailHref={routes.catalog.detail.href(
                             encodeURIComponent(server.registrySpecifier),
                           )}
-                          externalMcps={externalMcps}
+                          isAdded={isServerAdded(server)}
                           isSelected={selectedServers.has(serverKey)}
                           onToggleSelect={() =>
                             toggleServerSelection(serverKey)
@@ -278,9 +289,6 @@ function CatalogInner() {
             setAddingServers([]);
             clearSelection();
           }
-        }}
-        onServersAdded={() => {
-          void refetchDeployment();
         }}
       />
       <CommandBar

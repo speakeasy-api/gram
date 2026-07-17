@@ -8,8 +8,9 @@ import { Page } from "@/components/page-layout";
 import { useSdkClient } from "@/contexts/Sdk";
 import { cn } from "@/lib/utils";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
-import { getPresetRange } from "@gram-ai/elements";
+import { getPresetRange } from "@/elements";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
+import { useAssistantsList } from "@gram/client/react-query/assistantsList.js";
 import { useRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
 import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
 import { Button, Icon } from "@speakeasy-api/moonshine";
@@ -21,6 +22,7 @@ import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import {
   CategoryLabel,
+  EventMatchDialog,
   MaskedMatch,
   RevealAllProvider,
   RevealAllToggle,
@@ -51,7 +53,13 @@ const RISK_FILTERS = defineFilters([
     placeholder: "User contains...",
   },
   { id: "unique", label: "Unique matches only", kind: "boolean" },
+  { id: "assistant", label: "Assistant", kind: "select" },
 ]);
+
+// Sentinel option value for the assistant filter meaning "chats with no
+// assistant link" — maps to the API's non_assistant flag rather than an
+// assistant_id. Assistant ids are UUIDs, so this can't collide.
+const NO_ASSISTANT = "none";
 
 export default function RiskEvents(): JSX.Element {
   const client = useSdkClient();
@@ -65,6 +73,14 @@ export default function RiskEvents(): JSX.Element {
   const ruleFilter = values.rule_id;
   const userFilter = values.user_id;
   const uniqueOnly = values.unique;
+  // "No assistant" pre-selects the non-assistant events (the API's
+  // non_assistant flag); any other value scopes to that assistant's chats.
+  const assistantFilter = values.assistant ?? "";
+  const nonAssistantOnly = assistantFilter === NO_ASSISTANT;
+  const assistantId =
+    assistantFilter && assistantFilter !== NO_ASSISTANT
+      ? assistantFilter
+      : undefined;
 
   // The date range maps to the endpoint's from/to. A null preset with no custom
   // range means "all time" (no from/to sent) — Risk Events' previous behavior.
@@ -141,6 +157,17 @@ export default function RiskEvents(): JSX.Element {
   const viewingInactivePolicy =
     selectedPolicy != null && selectedPolicy.enabled === false;
 
+  // Powers the assistant filter options; "No assistant" is always offered so
+  // findings missing user attribution can be surfaced even before any
+  // assistant exists in the project.
+  const { data: assistantsData } = useAssistantsList(undefined, undefined, {
+    throwOnError: false,
+  });
+  const assistants = useMemo(
+    () => assistantsData?.assistants ?? [],
+    [assistantsData?.assistants],
+  );
+
   // Page-supplied option lists for the schema's select/text dimensions.
   // Disabled policies stay selectable — they hold historical findings — but are
   // labelled "(inactive)" so the distinction is clear in the dropdown.
@@ -151,8 +178,12 @@ export default function RiskEvents(): JSX.Element {
         value: p.id,
       })),
       rule_id: ruleSuggestions.map((r) => ({ label: r, value: r })),
+      assistant: [
+        { label: "No assistant", value: NO_ASSISTANT },
+        ...assistants.map((a) => ({ label: a.name, value: a.id })),
+      ],
     }),
-    [policies, ruleSuggestions],
+    [policies, ruleSuggestions, assistants],
   );
 
   const fromIso = from?.toISOString();
@@ -162,7 +193,15 @@ export default function RiskEvents(): JSX.Element {
   // don't stay at a stale offset and miss the newly filtered results.
   useEffect(() => {
     containerRef.current?.scrollTo({ top: 0 });
-  }, [policyFilter, ruleFilter, userFilter, uniqueOnly, fromIso, toIso]);
+  }, [
+    policyFilter,
+    ruleFilter,
+    userFilter,
+    uniqueOnly,
+    assistantFilter,
+    fromIso,
+    toIso,
+  ]);
 
   const resultsQuery = useInfiniteQuery({
     queryKey: [
@@ -173,6 +212,7 @@ export default function RiskEvents(): JSX.Element {
       ruleFilter,
       userFilter,
       uniqueOnly,
+      assistantFilter,
       fromIso,
       toIso,
     ],
@@ -184,6 +224,8 @@ export default function RiskEvents(): JSX.Element {
         ruleId: ruleFilter || undefined,
         userId: userFilter || undefined,
         uniqueMatch: uniqueOnly || undefined,
+        nonAssistant: nonAssistantOnly || undefined,
+        assistantId,
         from,
         to,
       });
@@ -450,6 +492,15 @@ function RiskEventsRow({
   onSelectChat: (chatId: string | null) => void;
 }) {
   const isShadowMCP = result.source === "shadow_mcp";
+  const isEventSource =
+    result.source === "llm_judge" || result.source === "prompt_injection";
+
+  // A row click opens the chat only when the gesture both starts and ends inside
+  // the row. This rejects the stray click Radix's outside-dismiss sends here:
+  // closing the View-event dialog by clicking its overlay fires pointerdown on
+  // the (portaled) overlay, which unmounts, so the trailing click lands on a row
+  // cell and would otherwise open the chat.
+  const pointerDownInsideRef = useRef(false);
 
   const handleShare = useCallback(
     async (e: React.MouseEvent) => {
@@ -476,12 +527,33 @@ function RiskEventsRow({
         "hover:bg-muted/30 w-full items-center border-b px-5 py-3 text-left text-sm transition-colors",
         !result.chatId && "cursor-default",
       )}
-      onClick={() => {
+      onPointerDown={(e) => {
+        pointerDownInsideRef.current = e.currentTarget.contains(
+          e.target as Node,
+        );
+      }}
+      onClick={(e) => {
+        const startedInside = pointerDownInsideRef.current;
+        pointerDownInsideRef.current = false;
+        // Ignore the trailing click from an outside-dismiss (pointerdown never
+        // landed on the row).
+        if (!startedInside) return;
+        // The row wraps its own interactive controls (match reveal, the
+        // View-event dialog trigger, copy-link); a click on one of those must
+        // not also open the chat. stopPropagation on those children doesn't
+        // reliably stop this handler under React's event delegation, so guard on
+        // the real target too.
+        if ((e.target as HTMLElement).closest("button, a")) return;
         if (result.chatId) {
           onSelectChat(result.chatId);
         }
       }}
       onKeyDown={(e) => {
+        // Only the row itself activates on Enter/Space. Key events bubbling up
+        // from a focused child control (match reveal, the event dialog trigger,
+        // copy-link) must reach that control instead — preventing them here
+        // would swallow the control's own activation and wrongly open the chat.
+        if (e.target !== e.currentTarget) return;
         if (!result.chatId) return;
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
@@ -508,6 +580,11 @@ function RiskEventsRow({
           <span className="font-mono text-xs" title={result.matchRedacted}>
             {result.matchRedacted}
           </span>
+        ) : isEventSource ? (
+          <EventMatchDialog
+            resultId={result.id}
+            matchRedacted={result.matchRedacted}
+          />
         ) : (
           <MaskedMatch
             resultId={result.id}

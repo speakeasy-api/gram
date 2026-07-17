@@ -250,7 +250,7 @@ func TestProductFeaturesClient_IsFeatureEnabled(t *testing.T) {
 
 		// Enable the feature directly in the database
 		queries := repo.New(ti.conn)
-		err = queries.EnableFeature(ctx, repo.EnableFeatureParams{
+		_, err = queries.EnableFeature(ctx, repo.EnableFeatureParams{
 			OrganizationID: authCtx.ActiveOrganizationID,
 			FeatureName:    "logs",
 		})

@@ -4,6 +4,7 @@
 
 import { modelKeysDeleteKey } from "../funcs/modelKeysDeleteKey.js";
 import { modelKeysListKeys } from "../funcs/modelKeysListKeys.js";
+import { modelKeysSetKeyEnabled } from "../funcs/modelKeysSetKeyEnabled.js";
 import { modelKeysUpsertKey } from "../funcs/modelKeysUpsertKey.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { ListKeysResponseBody } from "../models/components/listkeysresponsebody.js";
@@ -16,6 +17,10 @@ import {
   ListModelProviderKeysRequest,
   ListModelProviderKeysSecurity,
 } from "../models/operations/listmodelproviderkeys.js";
+import {
+  SetModelProviderKeyEnabledRequest,
+  SetModelProviderKeyEnabledSecurity,
+} from "../models/operations/setmodelproviderkeyenabled.js";
 import {
   UpsertModelProviderKeyRequest,
   UpsertModelProviderKeySecurity,
@@ -54,6 +59,25 @@ export class ModelKeys extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListKeysResponseBody> {
     return unwrapAsync(modelKeysListKeys(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * setKeyEnabled modelKeys
+   *
+   * @remarks
+   * Enable or disable a model provider key without replacing its key material.
+   */
+  async setKeyEnabled(
+    request: SetModelProviderKeyEnabledRequest,
+    security?: SetModelProviderKeyEnabledSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ModelProviderKey> {
+    return unwrapAsync(modelKeysSetKeyEnabled(
       this,
       request,
       security,

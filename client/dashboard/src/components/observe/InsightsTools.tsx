@@ -31,7 +31,7 @@ import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { useServerNameMappings } from "@/hooks/useServerNameMappings";
 import { cn } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
-import { getPresetRange, type DateRangePreset } from "@gram-ai/elements";
+import { getPresetRange, type DateRangePreset } from "@/elements";
 import { telemetryGetToolUsageFilterOptions } from "@gram/client/funcs/telemetryGetToolUsageFilterOptions";
 import { telemetryGetToolUsageSummary } from "@gram/client/funcs/telemetryGetToolUsageSummary";
 import type { GetToolUsageSummaryResult } from "@gram/client/models/components/gettoolusagesummaryresult.js";

@@ -70,6 +70,8 @@ func TestScopeExclusionsCoversKnownScopes(t *testing.T) {
 		{scope: ScopeMCPConnect, expected: ScopeMCPBlockedConnect},
 		{scope: ScopeEnvironmentRead, expected: ScopeEnvironmentBlockedRead},
 		{scope: ScopeEnvironmentWrite, expected: ScopeEnvironmentBlockedWrite},
+		{scope: ScopeSkillRead, expected: ScopeSkillBlockedRead},
+		{scope: ScopeSkillWrite, expected: ScopeSkillBlockedWrite},
 		{scope: ScopeRiskPolicyEvaluate, expected: ScopeRiskPolicyBypass},
 	}
 
@@ -91,6 +93,7 @@ func TestBlocklistScopeExpansions(t *testing.T) {
 	require.Equal(t, []Scope{ScopeMCPBlockedConnect}, scopeExpansions[ScopeMCPBlockedRead])
 	require.Equal(t, []Scope{ScopeMCPBlockedRead, ScopeMCPBlockedConnect}, scopeExpansions[ScopeMCPBlockedWrite])
 	require.Equal(t, []Scope{ScopeEnvironmentBlockedRead}, scopeExpansions[ScopeEnvironmentBlockedWrite])
+	require.Equal(t, []Scope{ScopeSkillBlockedRead}, scopeExpansions[ScopeSkillBlockedWrite])
 }
 
 func TestCalculateSubScopesExcludesInternalBlocklistScopes(t *testing.T) {
@@ -146,6 +149,24 @@ func TestSystemRoleMemberExcludesEnvironmentRead(t *testing.T) {
 		adminScopes = append(adminScopes, grant.Scope)
 	}
 	require.Contains(t, adminScopes, string(ScopeEnvironmentRead))
+}
+
+func TestSystemRolesIncludeSkillScopes(t *testing.T) {
+	t.Parallel()
+
+	admin := make([]string, 0, len(SystemRoleGrants[SystemRoleAdmin]))
+	for _, grant := range SystemRoleGrants[SystemRoleAdmin] {
+		admin = append(admin, grant.Scope)
+	}
+	require.Contains(t, admin, string(ScopeSkillRead))
+	require.Contains(t, admin, string(ScopeSkillWrite))
+
+	member := make([]string, 0, len(SystemRoleGrants[SystemRoleMember]))
+	for _, grant := range SystemRoleGrants[SystemRoleMember] {
+		member = append(member, grant.Scope)
+	}
+	require.Contains(t, member, string(ScopeSkillRead))
+	require.NotContains(t, member, string(ScopeSkillWrite))
 }
 
 func TestCheckExpand_orgRead(t *testing.T) {
@@ -1253,6 +1274,8 @@ func TestCalculateSubScopes(t *testing.T) {
 		{scope: string(ScopeMCPConnect), want: []string{}},
 		{scope: string(ScopeEnvironmentRead), want: []string{}},
 		{scope: string(ScopeEnvironmentWrite), want: []string{string(ScopeEnvironmentRead)}},
+		{scope: string(ScopeSkillRead), want: []string{}},
+		{scope: string(ScopeSkillWrite), want: []string{string(ScopeSkillRead)}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.scope, func(t *testing.T) {

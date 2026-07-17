@@ -54,6 +54,7 @@ func TestMain(m *testing.M) {
 type stubProvisioner struct {
 	platformKey string
 	usageErr    error
+	usageCalls  int
 }
 
 var _ openrouter.Provisioner = (*stubProvisioner)(nil)
@@ -71,6 +72,7 @@ func (p *stubProvisioner) GetCreditsUsed(ctx context.Context, orgID string, keyT
 }
 
 func (p *stubProvisioner) GetKeyUsage(ctx context.Context, apiKey string) (float64, *int64, error) {
+	p.usageCalls++
 	return 0, nil, p.usageErr
 }
 
@@ -87,6 +89,7 @@ type testInstance struct {
 	conn        *pgxpool.Pool
 	enc         *encryption.Client
 	provisioner *stubProvisioner
+	features    *productfeatures.Client
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -124,7 +127,8 @@ func newTestServiceWithRedisDB(t *testing.T, redisDB int) (context.Context, *tes
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	provisioner := &stubProvisioner{platformKey: "platform-key", usageErr: nil}
+	provisioner := &stubProvisioner{platformKey: "platform-key", usageErr: nil, usageCalls: 0}
+	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
 
 	svc := modelkeys.NewService(
 		logger,
@@ -134,7 +138,7 @@ func newTestServiceWithRedisDB(t *testing.T, redisDB int) (context.Context, *tes
 		authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
 		enc,
 		provisioner,
-		productfeatures.NewClient(logger, tracerProvider, conn, redisClient),
+		features,
 		audit.NewLogger(),
 	)
 
@@ -143,6 +147,7 @@ func newTestServiceWithRedisDB(t *testing.T, redisDB int) (context.Context, *tes
 		conn:        conn,
 		enc:         enc,
 		provisioner: provisioner,
+		features:    features,
 	}
 }
 
@@ -154,10 +159,25 @@ func enableCustomModelKeys(t *testing.T, ctx context.Context, conn *pgxpool.Pool
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	require.NoError(t, pfrepo.New(conn).EnableFeature(ctx, pfrepo.EnableFeatureParams{
+	_, pfErr := pfrepo.New(conn).EnableFeature(ctx, pfrepo.EnableFeatureParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		FeatureName:    string(productfeatures.FeatureCustomModelKeys),
-	}))
+	})
+	require.NoError(t, pfErr)
+}
+
+func disableCustomModelKeys(t *testing.T, ctx context.Context, ti *testInstance) {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	_, err := pfrepo.New(ti.conn).DeleteFeature(ctx, pfrepo.DeleteFeatureParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		FeatureName:    string(productfeatures.FeatureCustomModelKeys),
+	})
+	require.NoError(t, err)
+	ti.features.UpdateFeatureCache(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureCustomModelKeys, false)
 }
 
 func withExactAccessGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, grants ...authz.Grant) context.Context {

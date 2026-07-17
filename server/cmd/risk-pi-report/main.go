@@ -61,7 +61,7 @@ func (c labeledCase) caseType() message.Type {
 	return c.Type
 }
 
-// judgeMessage renders a case as the judgemessage the L1 judge evaluates,
+// judgeMessage renders a case as the judgemessage the judge evaluates,
 // preserving its agent-runtime framing (produced_by/body_kind/tool).
 func (c labeledCase) judgeMessage() judgemessage.Message {
 	if len(c.ToolCalls) > 0 {
@@ -170,14 +170,13 @@ type options struct {
 	corpusDir        string
 	outFile          string
 	checkFloors      bool
-	judge            bool
 	judgeModel       string
 	judgeConcurrency int
 	sources          string
 }
 
 const (
-	// defaultJudgeModel is the report's L1 judge model when none is provided.
+	// defaultJudgeModel is the report's judge model when none is provided.
 	defaultJudgeModel = "anthropic/claude-haiku-4.5"
 	// judgeConcurrency bounds concurrent judge calls. The corpus is a few hundred
 	// rows; 8 keeps it brisk without tripping provider rate limits.
@@ -205,16 +204,14 @@ func parseFlags() options {
 		corpusDir:        "",
 		outFile:          "",
 		checkFloors:      false,
-		judge:            false,
 		judgeModel:       "",
 		judgeConcurrency: 0,
 		sources:          "",
 	}
 	flag.StringVar(&opts.corpusDir, "corpus-dir", defaultCorpusDir, "directory containing prompt-injection JSONL corpus files")
 	flag.StringVar(&opts.outFile, "out", defaultOutFile, "path to write metrics JSON")
-	flag.BoolVar(&opts.checkFloors, "check-floors", true, "fail if L0 metrics violate floors.json")
-	flag.BoolVar(&opts.judge, "judge", false, "also evaluate the L1 LLM judge (needs OPENROUTER_DEV_KEY)")
-	flag.StringVar(&opts.judgeModel, "judge-model", defaultJudgeModel, "OpenRouter model id for the L1 judge (must be allowlisted)")
+	flag.BoolVar(&opts.checkFloors, "check-floors", true, "fail if judge metrics violate floors.json")
+	flag.StringVar(&opts.judgeModel, "judge-model", defaultJudgeModel, "OpenRouter model id for the judge (must be allowlisted)")
 	flag.IntVar(&opts.judgeConcurrency, "judge-concurrency", defaultJudgeConcurrency, "max concurrent judge calls")
 	flag.StringVar(&opts.sources, "sources", "", "comma-separated source substrings to keep (empty = all); use to judge a cheap iteration slice")
 	flag.Parse()
@@ -261,23 +258,11 @@ func run(ctx context.Context, opts options) error {
 		return err
 	}
 
-	l0Findings, err := scanL0(ctx, corpus)
+	judgeMode, judgeFindings, err := scanJudgeMode(ctx, opts, corpus)
 	if err != nil {
 		return err
 	}
-	l0 := summarizeFindings("l0_default", corpus, l0Findings)
-	l0.NewFalsePositives = changedExamples(corpus, make([][]scanners.Finding, len(corpus)), l0Findings, "benign", 500)
-	modes := []modeSummary{l0}
-
-	var l1Findings [][]scanners.Finding
-	if opts.judge {
-		judgeMode, jf, err := scanJudgeMode(ctx, opts, corpus, l0Findings)
-		if err != nil {
-			return err
-		}
-		modes = append(modes, judgeMode)
-		l1Findings = jf
-	}
+	modes := []modeSummary{judgeMode}
 
 	// Scope-aware modes: apply the candidate policy scope (scopes.json) as a
 	// pre-filter, so the report shows the FP reduction from scoping AND flags any
@@ -292,28 +277,25 @@ func run(ctx context.Context, opts options) error {
 			return err
 		}
 		if scope.Active() {
-			modes = append(modes, scopedMode("l0_scoped", corpus, l0Findings, scope))
-			if l1Findings != nil {
-				modes = append(modes, scopedMode("l1_scoped", corpus, l1Findings, scope))
-			}
+			modes = append(modes, scopedMode("judge_scoped", corpus, judgeFindings, scope))
 		}
 	}
 
 	summary := accuracySummary{
-		Total:   l0.Total,
-		Counts:  l0.Counts,
-		Overall: l0.Overall,
-		Sources: l0.Sources,
-		Rules:   l0.Rules,
+		Total:   judgeMode.Total,
+		Counts:  judgeMode.Counts,
+		Overall: judgeMode.Overall,
+		Sources: judgeMode.Sources,
+		Rules:   judgeMode.Rules,
 		Modes:   modes,
 	}
 
 	printSummary(os.Stderr, modes)
 
-	if opts.checkFloors && l0.Overall.FPRate > fl.FPRateMax {
+	if opts.checkFloors && judgeMode.Overall.FPRate > fl.FPRateMax {
 		return fmt.Errorf(
-			"L0 FP-rate %.4f exceeds floor %.4f (floors.json last updated %s by %s)",
-			l0.Overall.FPRate,
+			"judge FP-rate %.4f exceeds floor %.4f (floors.json last updated %s by %s)",
+			judgeMode.Overall.FPRate,
 			fl.FPRateMax,
 			fl.LastUpdated,
 			fl.LastUpdatedBy,
@@ -531,53 +513,40 @@ func loadFloors(dir string) (floors, error) {
 	return fl, nil
 }
 
-func scanL0(ctx context.Context, corpus []labeledCase) ([][]scanners.Finding, error) {
-	out := make([][]scanners.Finding, len(corpus))
-	for i, c := range corpus {
-		findings, err := promptinjection.Detect(ctx, c.Text)
-		if err != nil {
-			return nil, fmt.Errorf("scan L0 %s: %w", c.ID, err)
-		}
-		out[i] = findings
-	}
-	return out, nil
-}
-
-// scanJudgeMode evaluates the L1 LLM judge over the corpus and folds its
-// findings on top of L0 — the "L0 + L1" operational mode an opted-in org runs.
+// scanJudgeMode evaluates the LLM judge over the corpus.
 // It calls GetObjectCompletion directly (the same request piopenrouter builds, minus
 // the engine's per-org rate limiter and fail-open), so the numbers reflect the
-// model's raw accuracy on every case rather than a throttled subset. Returns a
-// skipped mode when no OpenRouter key is configured, so CI and keyless dev runs
-// still produce the L0 report.
-func scanJudgeMode(ctx context.Context, opts options, corpus []labeledCase, l0Findings [][]scanners.Finding) (modeSummary, [][]scanners.Finding, error) {
+// model's raw accuracy on every case rather than a throttled subset.
+func scanJudgeMode(ctx context.Context, opts options, corpus []labeledCase) (modeSummary, [][]scanners.Finding, error) {
 	apiKey := firstEnv("OPENROUTER_DEV_KEY", "OPENROUTER_API_KEY")
 	if apiKey == "" || apiKey == "unset" {
-		return skippedMode("l1_opt_in", "OPENROUTER_DEV_KEY not set"), nil, nil
+		return modeSummary{}, nil, fmt.Errorf("OPENROUTER_DEV_KEY not set")
 	}
 
 	fmt.Fprintf(os.Stderr, "judging %d cases with %s (concurrency=%d)\n", len(corpus), opts.judgeModel, opts.judgeConcurrency)
-	findings := scanJudge(ctx, opts, newOpenRouterClient(apiKey), corpus, l0Findings)
+	findings, err := scanJudge(ctx, opts, newOpenRouterClient(apiKey), corpus)
+	if err != nil {
+		return modeSummary{}, nil, err
+	}
 
-	mode := summarizeFindings("l1_opt_in", corpus, findings)
-	mode.NewFalsePositives = changedExamples(corpus, l0Findings, findings, "benign", 500)
-	mode.RecoveredTruePositive = changedExamples(corpus, l0Findings, findings, "malicious", 500)
+	mode := summarizeFindings("judge", corpus, findings)
+	empty := make([][]scanners.Finding, len(corpus))
+	mode.NewFalsePositives = changedExamples(corpus, empty, findings, "benign", 500)
+	mode.RecoveredTruePositive = changedExamples(corpus, empty, findings, "malicious", 500)
 	mode.MissedAttacks = missedExamples(corpus, findings, 500)
 	return mode, findings, nil
 }
 
-// scanJudge runs the judge for every corpus row (bounded concurrency) and
-// appends an L1 finding wherever it flags an attack, on a clone of the L0
-// findings. A judge failure leaves the row with its L0 verdict — a stuck or
-// erroring model degrades to L0, matching the engine's fail-open posture.
-func scanJudge(ctx context.Context, opts options, client openrouter.CompletionClient, corpus []labeledCase, l0Findings [][]scanners.Finding) [][]scanners.Finding {
-	out := cloneFindings(l0Findings)
+// scanJudge runs the judge for every corpus row and records positive verdicts.
+func scanJudge(ctx context.Context, opts options, client openrouter.CompletionClient, corpus []labeledCase) ([][]scanners.Finding, error) {
+	out := make([][]scanners.Finding, len(corpus))
 	ruleID, description := promptinjection.Describe()
 
 	sem := make(chan struct{}, opts.judgeConcurrency)
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	var done int
+	var errs []error
 
 	for i := range corpus {
 		wg.Add(1)
@@ -596,7 +565,11 @@ func scanJudge(ctx context.Context, opts options, client openrouter.CompletionCl
 			if done%20 == 0 || done == len(corpus) {
 				fmt.Fprintf(os.Stderr, "\r  judge %d/%d", done, len(corpus))
 			}
-			if err != nil || !isAttack {
+			if err != nil {
+				errs = append(errs, fmt.Errorf("%s: %w", corpus[i].ID, err))
+				return
+			}
+			if !isAttack {
 				return
 			}
 			out[i] = append(out[i], scanners.Finding{
@@ -619,7 +592,10 @@ func scanJudge(ctx context.Context, opts options, client openrouter.CompletionCl
 	}
 	wg.Wait()
 	fmt.Fprintln(os.Stderr)
-	return out
+	if len(errs) > 0 {
+		return nil, fmt.Errorf("judge corpus: %w", errors.Join(errs...))
+	}
+	return out, nil
 }
 
 // judgeOne issues one GetObjectCompletion shaped exactly like piopenrouter's call:
@@ -807,9 +783,7 @@ func summarizeFindings(mode string, corpus []labeledCase, findings [][]scanners.
 	}
 }
 
-// changedExamples lists rows of the given label that L0 missed (empty baseline)
-// but the candidate mode now flags — i.e. judge-recovered true positives
-// (label "malicious") or judge-introduced false positives (label "benign").
+// changedExamples lists rows of the given label that the baseline missed.
 // Sorted by confidence desc, capped at limit.
 func changedExamples(corpus []labeledCase, baseline, candidate [][]scanners.Finding, label string, limit int) []exampleCase {
 	examples := []exampleCase{}
@@ -838,8 +812,7 @@ func changedExamples(corpus []labeledCase, baseline, candidate [][]scanners.Find
 	return examples
 }
 
-// missedExamples lists malicious cases the candidate did not flag (FNs) — the
-// recall-loss watchlist for prompt tuning.
+// missedExamples lists malicious cases the candidate did not flag.
 func missedExamples(corpus []labeledCase, candidate [][]scanners.Finding, limit int) []exampleCase {
 	examples := []exampleCase{}
 	for i, c := range corpus {
@@ -863,33 +836,6 @@ func highestConfidenceFinding(findings []scanners.Finding) scanners.Finding {
 		}
 	}
 	return out
-}
-
-func cloneFindings(lhs [][]scanners.Finding) [][]scanners.Finding {
-	out := make([][]scanners.Finding, len(lhs))
-	for i := range lhs {
-		out[i] = append([]scanners.Finding{}, lhs[i]...)
-	}
-	return out
-}
-
-func skippedMode(name, reason string) modeSummary {
-	return modeSummary{
-		Name:                     name,
-		Skipped:                  true,
-		SkipReason:               reason,
-		Total:                    0,
-		Counts:                   counts{TP: 0, FP: 0, TN: 0, FN: 0},
-		Overall:                  metricsBlock{Precision: 0, Recall: 0, F1: 0, Accuracy: 0, FPRate: 0},
-		Sources:                  nil,
-		Rules:                    nil,
-		NewFalsePositives:        nil,
-		RecoveredTruePositive:    nil,
-		MissedAttacks:            nil,
-		InScope:                  0,
-		LostTruePositives:        nil,
-		SuppressedFalsePositives: nil,
-	}
 }
 
 func firstEnv(keys ...string) string {

@@ -5,9 +5,15 @@ import { ShadowMCPPolicyStatus } from "@/components/shadow-mcp/ShadowMCPPolicySt
 import { shadowMCPPolicyState } from "@/components/shadow-mcp/shadowMCPInventoryStatus";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { useProject } from "@/contexts/Auth";
+import { useRoutes } from "@/routes";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
+import { Outlet } from "react-router";
+
+export function ShadowMCPRoot(): JSX.Element {
+  return <Outlet />;
+}
 
 function ShadowMCPLoadingState(): JSX.Element {
   return (
@@ -24,6 +30,7 @@ function ShadowMCPLoadingState(): JSX.Element {
 export default function ShadowMCP(): JSX.Element {
   const pageTitle = "Shadow MCP";
   const project = useProject();
+  const routes = useRoutes();
   const policiesQuery = useRiskListPolicies();
   const membersQuery = useMembers();
   const rolesQuery = useRoles();
@@ -54,12 +61,19 @@ export default function ShadowMCP(): JSX.Element {
               Manage the Shadow MCP server inventory, allow decisions, and
               requests.
             </Page.Section.Description>
+            {policyDataReady ? (
+              <Page.Section.CTA>
+                <ShadowMCPPolicyStatus policyState={policyState} />
+              </Page.Section.CTA>
+            ) : null}
             <Page.Section.Body>
               {policyDataReady ? (
-                <div className="flex flex-col gap-4 pb-8">
-                  <ShadowMCPPolicyStatus policyState={policyState} />
+                <div className="flex flex-col pb-8">
                   <ShadowMCPInventoryTable
                     members={membersQuery.data?.members ?? []}
+                    onOpenServer={(server) =>
+                      routes.shadowMCP.detail.goTo(server.serverSlug)
+                    }
                     policyState={policyState}
                     projectID={project.id}
                     roles={rolesQuery.data?.roles ?? []}

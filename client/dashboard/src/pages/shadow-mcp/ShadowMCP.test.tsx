@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import type { ReactElement, ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ShadowMCP from "./ShadowMCP";
@@ -42,9 +42,9 @@ vi.mock("@/components/page-layout", () => {
 
     return (
       <section>
-        <div>
+        <div data-testid="section-header">
           {title}
-          {cta}
+          <div data-testid="section-cta">{cta}</div>
         </div>
         {description}
         {body}
@@ -83,6 +83,16 @@ vi.mock("@gram/client/react-query/roles.js", () => ({
 
 vi.mock("@/components/ui/skeleton", () => ({
   SkeletonTable: () => <div>Loading table</div>,
+}));
+
+vi.mock("@/routes", () => ({
+  useRoutes: () => ({
+    shadowMCP: {
+      detail: {
+        href: (serverURL: string) => `/shadow-mcp/${serverURL}`,
+      },
+    },
+  }),
 }));
 
 vi.mock("@/components/shadow-mcp/ShadowMCPInventoryTable", () => ({
@@ -200,9 +210,12 @@ describe("ShadowMCP", () => {
     expect(screen.getByText("Loading table")).toBeTruthy();
     expect(screen.queryByText("No Policy")).toBeNull();
     expect(screen.queryByText(/Shadow MCP inventory for/)).toBeNull();
+    expect(
+      within(screen.getByTestId("section-cta")).queryByText(/./),
+    ).toBeNull();
   });
 
-  it("renders blocking policy status above the inventory table", () => {
+  it("renders blocking policy status in the section header", () => {
     mocks.useRiskListPolicies.mockReturnValue({
       data: {
         policies: [
@@ -216,9 +229,10 @@ describe("ShadowMCP", () => {
 
     render(<ShadowMCP />);
 
-    expect(screen.getByText("Blocking")).toBeTruthy();
+    const sectionCTA = within(screen.getByTestId("section-cta"));
+    expect(sectionCTA.getByText("Blocking")).toBeTruthy();
     expect(
-      screen.getByText(
+      sectionCTA.getByText(
         "Block policy is enabled. Servers without allow rules are not allowed.",
       ),
     ).toBeTruthy();

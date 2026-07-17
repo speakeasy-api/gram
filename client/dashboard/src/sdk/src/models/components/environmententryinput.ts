@@ -3,35 +3,49 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 
 /**
  * A single environment entry
  */
 export type EnvironmentEntryInput = {
   /**
+   * Whether the value is a secret. Secret values are encrypted at rest and redacted in reads; non-secret values are readable after save. When omitted, new entries default to secret and existing entries keep their current secrecy.
+   */
+  isSecret?: boolean | undefined;
+  /**
    * The name of the environment variable
    */
   name: string;
   /**
-   * The value of the environment variable
+   * The value of the environment variable. Omit on an existing secret entry to preserve its stored value. Required when creating an entry or when changing is_secret from true to false.
    */
-  value: string;
+  value?: string | undefined;
 };
 
 /** @internal */
 export type EnvironmentEntryInput$Outbound = {
+  is_secret?: boolean | undefined;
   name: string;
-  value: string;
+  value?: string | undefined;
 };
 
 /** @internal */
 export const EnvironmentEntryInput$outboundSchema: z.ZodMiniType<
   EnvironmentEntryInput$Outbound,
   EnvironmentEntryInput
-> = z.object({
-  name: z.string(),
-  value: z.string(),
-});
+> = z.pipe(
+  z.object({
+    isSecret: z.optional(z.boolean()),
+    name: z.string(),
+    value: z.optional(z.string()),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      isSecret: "is_secret",
+    });
+  }),
+);
 
 export function environmentEntryInputToJSON(
   environmentEntryInput: EnvironmentEntryInput,

@@ -24,6 +24,8 @@ type Service interface {
 	// Create or replace the model provider key for a slot. The key is validated
 	// with the provider, then stored encrypted.
 	UpsertKey(context.Context, *UpsertKeyPayload) (res *types.ModelProviderKey, err error)
+	// Enable or disable a model provider key without replacing its key material.
+	SetKeyEnabled(context.Context, *SetKeyEnabledPayload) (res *types.ModelProviderKey, err error)
 	// Delete a model provider key. Completions on the affected slot fall back to
 	// the project default key or the platform key.
 	DeleteKey(context.Context, *DeleteKeyPayload) (err error)
@@ -49,7 +51,7 @@ const ServiceName = "modelKeys"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [3]string{"listKeys", "upsertKey", "deleteKey"}
+var MethodNames = [4]string{"listKeys", "upsertKey", "setKeyEnabled", "deleteKey"}
 
 // DeleteKeyPayload is the payload type of the modelKeys service deleteKey
 // method.
@@ -72,6 +74,18 @@ type ListKeysPayload struct {
 type ListKeysResult struct {
 	// The model provider keys configured for the project.
 	Keys []*types.ModelProviderKey
+}
+
+// SetKeyEnabledPayload is the payload type of the modelKeys service
+// setKeyEnabled method.
+type SetKeyEnabledPayload struct {
+	// The ID of the key to update.
+	ID string
+	// Whether the key participates in key resolution.
+	Enabled          bool
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
 }
 
 // UpsertKeyPayload is the payload type of the modelKeys service upsertKey

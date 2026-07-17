@@ -258,7 +258,7 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (res *
 		if err != nil && outcome == hookMetricOutcomeAccepted {
 			outcome = hookMetricOutcomeFailure
 		}
-		s.metrics.RecordHookEventDuration(ctx, "claude", hookEventName, outcome, orgSlug, time.Since(start))
+		s.metrics.RecordHookEventDuration(ctx, "claude", hookEventName, outcome, claudeHookDecision(res), orgSlug, time.Since(start))
 	}()
 
 	if hasPluginAuth {
@@ -292,7 +292,7 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (res *
 	// token: the decision (scan) still re-runs so the user stays blocked, but
 	// tagging the context as a duplicate suppresses the duplicate writes
 	// (persistence, block-reason telemetry, shadow-MCP findings).
-	if !s.claimHookIdempotency(ctx, conv.PtrValOr(payload.IdempotencyKey, "")) {
+	if !s.claimHookIdempotency(ctx, conv.PtrValOr(payload.IdempotencyKey, ""), false) {
 		ctx = withHookDuplicate(ctx)
 	}
 

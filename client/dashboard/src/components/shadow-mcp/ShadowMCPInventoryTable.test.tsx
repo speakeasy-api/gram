@@ -11,6 +11,7 @@ import {
   cloneElement,
   isValidElement,
   type ReactElement,
+  type MouseEvent,
   type ReactNode,
 } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -54,6 +55,33 @@ vi.mock("@gram/client/react-query/resolveShadowMCPInventoryRequest.js", () => ({
     mocks.resolveInventoryRequestMutation,
 }));
 
+vi.mock("@/components/page-layout", () => {
+  const Toolbar = Object.assign(
+    ({ children }: { children: ReactNode }) => (
+      <div role="toolbar">{children}</div>
+    ),
+    {
+      Search: ({
+        onChange,
+        placeholder,
+        value,
+      }: {
+        onChange: (value: string) => void;
+        placeholder?: string;
+        value: string;
+      }) => (
+        <input
+          onChange={(event) => onChange(event.currentTarget.value)}
+          placeholder={placeholder}
+          value={value}
+        />
+      ),
+    },
+  );
+
+  return { Page: { Toolbar } };
+});
+
 vi.mock("@speakeasy-api/moonshine", () => ({
   Badge: Object.assign(
     ({ children }: { children: ReactNode }) => <span>{children}</span>,
@@ -73,12 +101,12 @@ vi.mock("@speakeasy-api/moonshine", () => ({
     }: {
       children: ReactNode;
       disabled?: boolean;
-      onClick?: () => void;
+      onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
       [key: string]: unknown;
     }) => (
       <button
         disabled={disabled}
-        onClick={() => onClick?.()}
+        onClick={(event) => onClick?.(event)}
         type="button"
         {...props}
       >
@@ -99,9 +127,13 @@ vi.mock("@speakeasy-api/moonshine", () => ({
     children: ReactNode;
     modal?: boolean;
   }) => <div data-dropdown-modal={String(modal)}>{children}</div>,
-  DropdownMenuContent: ({ children }: { children: ReactNode }) => (
-    <div>{children}</div>
-  ),
+  DropdownMenuContent: ({
+    children,
+    onClick,
+  }: {
+    children: ReactNode;
+    onClick?: (event: { stopPropagation: () => void }) => void;
+  }) => <div onClick={(event) => onClick?.(event)}>{children}</div>,
   DropdownMenuItem: ({
     children,
     disabled,
@@ -111,12 +143,12 @@ vi.mock("@speakeasy-api/moonshine", () => ({
     children: ReactNode;
     disabled?: boolean;
     onClick?: () => void;
-    onSelect?: () => void;
+    onSelect?: (event: { stopPropagation: () => void }) => void;
   }) => (
     <button
       disabled={disabled}
-      onClick={() => {
-        onSelect?.();
+      onClick={(event) => {
+        onSelect?.(event);
         onClick?.();
       }}
     >
@@ -199,6 +231,8 @@ vi.mock("@speakeasy-api/moonshine", () => ({
         handleLoadMore,
         hasMore,
         isLoading,
+        noResultsMessage,
+        onRowClick,
         rowKey,
       }: {
         columns: Array<{
@@ -209,16 +243,23 @@ vi.mock("@speakeasy-api/moonshine", () => ({
         handleLoadMore?: () => void;
         hasMore?: boolean;
         isLoading?: boolean;
+        noResultsMessage?: ReactNode;
+        onRowClick?: (row: ShadowMCPInventoryServer) => void;
         rowKey: (row: ShadowMCPInventoryServer) => string;
       }) => (
         <tbody>
           {data.map((row) => (
-            <tr key={rowKey(row)}>
+            <tr key={rowKey(row)} onClick={() => onRowClick?.(row)}>
               {columns.map((column) => (
                 <td key={column.key}>{column.render?.(row)}</td>
               ))}
             </tr>
           ))}
+          {data.length === 0 && noResultsMessage ? (
+            <tr>
+              <td colSpan={columns.length}>{noResultsMessage}</td>
+            </tr>
+          ) : null}
           {hasMore && handleLoadMore ? (
             <tr>
               <td colSpan={columns.length}>
@@ -364,6 +405,7 @@ function inventoryServer(
     observedUseCount: 0,
     requestCount: 0,
     serverName: undefined,
+    serverSlug: "github-example-com-mcp-d8860eea",
     topUsers: [],
     urlHost: new URL(canonicalServerUrl).host,
     userCount: 0,
@@ -546,6 +588,78 @@ describe("ShadowMCPInventoryTable", () => {
     );
   });
 
+  it("filters loaded inventory rows by name, hostname, and canonical URL", async () => {
+    mockShadowMCPInventory({
+      servers: [
+        inventoryServer({
+          canonicalServerUrl: "https://github.example.com/mcp",
+          serverName: "GitHub MCP",
+        }),
+        inventoryServer({
+          canonicalServerUrl: "https://teams.slack.local/mcp",
+        }),
+        inventoryServer({
+          canonicalServerUrl: "https://gateway.example.dev/linear/mcp",
+          serverName: "Gateway",
+        }),
+      ],
+    });
+
+    renderInventoryTable();
+
+    const search = screen.getByPlaceholderText("Search servers...");
+
+    fireEvent.change(search, { target: { value: "  gItHuB  " } });
+    expect(screen.getByText("GitHub MCP")).toBeTruthy();
+    expect(screen.queryByText("https://teams.slack.local/mcp")).toBeNull();
+
+    fireEvent.change(search, { target: { value: "teams.slack.local" } });
+    expect(screen.getByText("https://teams.slack.local/mcp")).toBeTruthy();
+    expect(screen.queryByText("GitHub MCP")).toBeNull();
+
+    fireEvent.change(search, { target: { value: "/linear/mcp" } });
+    expect(screen.getByText("Gateway")).toBeTruthy();
+    expect(screen.queryByText("https://teams.slack.local/mcp")).toBeNull();
+
+    fireEvent.change(search, { target: { value: "missing" } });
+    expect(screen.getByText("No servers matching “missing”")).toBeTruthy();
+
+    fireEvent.change(search, { target: { value: "" } });
+    expect(screen.getByText("GitHub MCP")).toBeTruthy();
+    expect(screen.getByText("https://teams.slack.local/mcp")).toBeTruthy();
+    expect(screen.getByText("Gateway")).toBeTruthy();
+  });
+
+  it("sorts the filtered inventory rows", () => {
+    mockShadowMCPInventory({
+      servers: [
+        inventoryServer({
+          canonicalServerUrl: "https://zulu.example.com/mcp",
+          serverName: "Zulu Team",
+        }),
+        inventoryServer({
+          canonicalServerUrl: "https://other.example.com/mcp",
+          serverName: "Other",
+        }),
+        inventoryServer({
+          canonicalServerUrl: "https://alpha.example.com/mcp",
+          serverName: "Alpha Team",
+        }),
+      ],
+    });
+
+    renderInventoryTable();
+    fireEvent.change(screen.getByPlaceholderText("Search servers..."), {
+      target: { value: "team" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Server" }));
+
+    const rows = screen.getAllByRole("row").slice(1);
+    expect(within(rows[0]!).getByText("Alpha Team")).toBeTruthy();
+    expect(within(rows[1]!).getByText("Zulu Team")).toBeTruthy();
+    expect(screen.queryByText("Other")).toBeNull();
+  });
+
   it("shows request counts for each Shadow MCP server URL", async () => {
     mockShadowMCPInventory({
       servers: [
@@ -570,6 +684,87 @@ describe("ShadowMCPInventoryTable", () => {
 
     expect(screen.getByText("2 Access Requests")).toBeTruthy();
     expect(screen.queryByText("0 Access Requests")).toBeFalsy();
+  });
+
+  it("opens the server detail page when an inventory row is clicked", async () => {
+    mockShadowMCPInventory({
+      servers: [
+        inventoryServer({
+          canonicalServerUrl: "https://github.example.com/mcp",
+          serverName: "GitHub MCP",
+        }),
+      ],
+    });
+    const queryClient = new QueryClient();
+    const onOpenServer = vi.fn();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ShadowMCPInventoryTable
+          members={[]}
+          onOpenServer={(server) => {
+            onOpenServer(server);
+          }}
+          policyState="blocking"
+          projectID="project-id-1"
+          roles={[]}
+          shadowMCPPolicies={[blockingPolicy()]}
+        />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("GitHub MCP")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByText("GitHub MCP").closest("tr")!);
+
+    expect(onOpenServer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        canonicalServerUrl: "https://github.example.com/mcp",
+        serverSlug: "github-example-com-mcp-d8860eea",
+      }),
+    );
+  });
+
+  it("opens row actions without navigating to the server detail page", async () => {
+    mockShadowMCPInventory({
+      servers: [
+        inventoryServer({
+          access: "allowed",
+          canonicalServerUrl: "https://github.example.com/mcp",
+          serverName: "GitHub MCP",
+        }),
+      ],
+    });
+    const queryClient = new QueryClient();
+    const onOpenServer = vi.fn();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ShadowMCPInventoryTable
+          members={[]}
+          onOpenServer={(server) => {
+            onOpenServer(server);
+          }}
+          policyState="blocking"
+          projectID="project-id-1"
+          roles={[]}
+          shadowMCPPolicies={[blockingPolicy()]}
+        />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("GitHub MCP")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit Rule" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Edit Rule" })).toBeTruthy();
+    });
+    expect(onOpenServer).not.toHaveBeenCalled();
   });
 
   it("sorts inventory columns and uses call count for Usage", async () => {
@@ -674,6 +869,57 @@ describe("ShadowMCPInventoryTable", () => {
       undefined,
       expect.objectContaining({ enabled: true }),
     );
+  });
+
+  it("applies an active search to newly loaded inventory pages", async () => {
+    const firstPageResponse = {
+      data: {
+        servers: [
+          inventoryServer({
+            canonicalServerUrl: "https://first.example.com/mcp",
+            serverName: "First MCP",
+          }),
+        ],
+        nextCursor: "next-page",
+      },
+      error: null,
+      isFetching: false,
+      isLoading: false,
+      refetch: vi.fn(),
+    };
+    const secondPageResponse = {
+      data: {
+        servers: [
+          inventoryServer({
+            canonicalServerUrl: "https://matching.example.com/mcp",
+            serverName: "Matching MCP",
+          }),
+        ],
+        nextCursor: undefined,
+      },
+      error: null,
+      isFetching: false,
+      isLoading: false,
+      refetch: vi.fn(),
+    };
+    mocks.useShadowMCPInventory.mockImplementation(
+      (request: { cursor?: string }) =>
+        request.cursor === "next-page" ? secondPageResponse : firstPageResponse,
+    );
+
+    renderInventoryTable();
+    fireEvent.change(screen.getByPlaceholderText("Search servers..."), {
+      target: { value: "matching" },
+    });
+
+    expect(screen.getByText("No servers matching “matching”")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Matching MCP")).toBeTruthy();
+    });
+    expect(screen.queryByText("First MCP")).toBeNull();
+    expect(screen.queryByText("No servers matching “matching”")).toBeNull();
   });
 
   it("keeps loaded inventory rows visible while loading the next page", async () => {

@@ -241,6 +241,7 @@ var HookIngestData = Type("HookIngestData", func() {
 	Attribute("prompt", HookPromptData)
 	Attribute("tool_call", HookToolCallData)
 	Attribute("mcp", HookMCPData)
+	Attribute("mcp_inventory", ArrayOf(HookMCPData), "Configured MCP server snapshot captured at session start or configuration change. Transport credentials must be redacted by the sender.")
 	Attribute("usage", HookUsageData)
 	Attribute("message", HookMessageData)
 	Attribute("skill", HookSkillData)
@@ -377,6 +378,7 @@ var _ = Service("hooks", func() {
 			Extend(IngestHookPayload)
 			Attribute("apikey_token", String, "Optional API key for plugin-driven attribution.")
 			Attribute("project_slug_input", String, "Optional project slug for plugin-driven attribution.")
+			Attribute("replayed", Boolean, "Set when the event is redelivered from a device's offline spool after control-plane downtime, under its original Idempotency-Key and occurred_at.")
 		})
 
 		Result(IngestHookResult)
@@ -386,6 +388,7 @@ var _ = Service("hooks", func() {
 			Header("apikey_token:Gram-Key")
 			Header("project_slug_input:Gram-Project")
 			Header("idempotency_key:Idempotency-Key")
+			Header("replayed:X-Gram-Replayed")
 		})
 
 		Meta("openapi:operationId", "ingestHookEvent")

@@ -20,10 +20,12 @@ import (
 
 const codexToolQueueCap = 32
 
-// codexToolStatePath returns the id queue file for one install+session+tool,
-// or "" when state cannot be kept — correlation then degrades to the
-// input-less fallback id.
-func codexToolStatePath(cfg Config, session agenthooks.SessionInfo, toolName string) string {
+// hooksStateDir resolves the root of the hooks' per-user state
+// ($XDG_STATE_HOME/gram/hooks, defaulting to ~/.local/state), or "" when no
+// state home exists. The codex id queue and the offline payload spool both
+// key off it — one resolution, so their state can never end up under
+// different roots.
+func hooksStateDir() string {
 	stateHome := strings.TrimSpace(os.Getenv("XDG_STATE_HOME"))
 	if stateHome == "" {
 		home, err := os.UserHomeDir()
@@ -32,7 +34,18 @@ func codexToolStatePath(cfg Config, session agenthooks.SessionInfo, toolName str
 		}
 		stateHome = filepath.Join(home, ".local", "state")
 	}
-	dir := filepath.Join(stateHome, "gram", "hooks", "codex-tools")
+	return filepath.Join(stateHome, "gram", "hooks")
+}
+
+// codexToolStatePath returns the id queue file for one install+session+tool,
+// or "" when state cannot be kept — correlation then degrades to the
+// input-less fallback id.
+func codexToolStatePath(cfg Config, session agenthooks.SessionInfo, toolName string) string {
+	root := hooksStateDir()
+	if root == "" {
+		return ""
+	}
+	dir := filepath.Join(root, "codex-tools")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return ""
 	}
@@ -47,7 +60,7 @@ func pushCodexToolID(path, id string) {
 	if path == "" || id == "" {
 		return
 	}
-	withCodexQueueLock(path, func() {
+	withFileLock(path, func() {
 		lines := readCodexToolQueue(path)
 		lines = append(lines, id)
 		if len(lines) > codexToolQueueCap {
@@ -63,7 +76,7 @@ func popCodexToolID(path string) string {
 		return ""
 	}
 	var first string
-	withCodexQueueLock(path, func() {
+	withFileLock(path, func() {
 		lines := readCodexToolQueue(path)
 		if len(lines) == 0 {
 			return
@@ -78,13 +91,12 @@ func popCodexToolID(path string) string {
 	return first
 }
 
-// withCodexQueueLock serializes the queue's read-modify-write across
-// concurrent hook processes: the async completion sender can run alongside
-// the next same-tool request's hook. The lock rides a dedicated sibling file
-// that is never removed — locking the queue file itself would race its own
-// unlink. When locking is unavailable the operation degrades to unlocked,
-// the bash sender's posture.
-func withCodexQueueLock(path string, fn func()) {
+// withFileLock serializes a read-modify-write across concurrent hook
+// processes (the codex id queue, the spool drain). The lock rides a
+// dedicated sibling file that is never removed — locking the guarded file
+// itself would race its own unlink. When locking is unavailable the
+// operation degrades to unlocked, the bash sender's posture.
+func withFileLock(path string, fn func()) {
 	f, err := os.OpenFile(path+".lock", os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
 		fn()

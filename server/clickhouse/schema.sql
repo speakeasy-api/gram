@@ -57,10 +57,10 @@ CREATE TABLE IF NOT EXISTS telemetry_logs (
     remote_mcp_server_id String MATERIALIZED toString(attributes.gram.remote_mcp_server.id) COMMENT 'Remote MCP server ID (materialized from attributes.gram.remote_mcp_server.id).',
     mcp_server_id String MATERIALIZED toString(attributes.gram.mcp_server.id) COMMENT 'MCP server ID (materialized from attributes.gram.mcp_server.id).',
     skill_name String MATERIALIZED if(toString(attributes.gram.tool.name) = 'Skill', JSONExtractString(toString(attributes.gen_ai.tool.call.arguments), 'skill'), '') COMMENT 'Skill name extracted from tool arguments when tool_name is Skill (materialized).',
-    provider String MATERIALIZED toString(attributes.gram.provider) COMMENT 'AI provider for the session account (e.g. anthropic, openai); set by ingest (materialized from attributes.gram.provider).',
-    external_org_id String MATERIALIZED toString(attributes.gram.external_org_id) COMMENT 'Provider organization id for the account the user was logged into on-device (e.g. Claude organization.id). Distinct from the Gram org. Personal-account tracking discriminator; normalized by ingest (materialized from attributes.gram.external_org_id).',
-    account_type String MATERIALIZED toString(attributes.gram.account_type) COMMENT 'team (company/enterprise account) or personal (individual account); set by ingest. Empty until classified (materialized from attributes.gram.account_type).',
-    billing_mode String MATERIALIZED toString(attributes.gram.billing_mode) COMMENT 'How the account is billed: metered (pay-per-token; cost is real spend) | flat_rate (subscription seat; cost is an estimate) | unknown | empty. Resolved by ingest from admin-declared config (materialized from attributes.gram.billing_mode).'
+    provider String MATERIALIZED toString(attributes.gram.provider) COMMENT 'AI provider for the session account (e.g. anthropic, openai). Set by ingest (materialized from attributes.gram.provider).',
+    external_org_id String MATERIALIZED toString(attributes.gram.external_org_id) COMMENT 'Provider organization id for the account the user was logged into on-device (e.g. Claude organization.id). Distinct from the Gram org. Personal-account tracking discriminator. Normalized by ingest (materialized from attributes.gram.external_org_id).',
+    account_type String MATERIALIZED toString(attributes.gram.account_type) COMMENT 'team (company/enterprise account) or personal (individual account). Set by ingest. Empty until classified (materialized from attributes.gram.account_type).',
+    billing_mode String MATERIALIZED toString(attributes.gram.billing_mode) COMMENT 'How the account is billed: metered (pay-per-token, cost is real spend) | flat_rate (subscription seat, cost is an estimate) | unknown | empty. Resolved by ingest from admin-declared config (materialized from attributes.gram.billing_mode).'
 ) ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(fromUnixTimestamp64Nano(time_unix_nano))
 ORDER BY (gram_project_id, time_unix_nano, id)
@@ -268,6 +268,7 @@ CREATE TABLE IF NOT EXISTS shadow_mcp_inventory_urls (
     canonical_server_url String,
     url_host String,
     server_name String,
+    server_name_override String DEFAULT '',
     first_seen DateTime64(9, 'UTC'),
     last_seen DateTime64(9, 'UTC'),
     updated_at DateTime64(9, 'UTC')
@@ -275,6 +276,10 @@ CREATE TABLE IF NOT EXISTS shadow_mcp_inventory_urls (
 ORDER BY (gram_project_id, canonical_server_url)
 SETTINGS index_granularity = 8192
 COMMENT 'Project-scoped Shadow MCP inventory URLs and display metadata';
+
+CREATE INDEX IF NOT EXISTS idx_shadow_mcp_inventory_urls_slug_hash
+ON shadow_mcp_inventory_urls (substring(lower(hex(SHA256(canonical_server_url))), 1, 8))
+TYPE bloom_filter(0.01) GRANULARITY 1;
 
 CREATE TABLE IF NOT EXISTS metrics_summaries (
     -- Key columns
@@ -738,57 +743,6 @@ FROM telemetry_logs
 WHERE chat_id != ''
 GROUP BY gram_project_id, chat_id, time_bucket, hook_source;
 
--- tum_breakdown_summaries is the DIMENSIONED billing aggregate: the same
--- gen_ai completion rows chat_token_summaries (the billing record) sums,
--- broken down by consuming surface and user identity so the billing page's
--- breakdowns can report the billed population exactly. Reads apply the same
--- read-time stored-session qualification (via chat_token_summaries) and
--- registry-driven source scoping (billing.ModelUsageSources). Identity
--- dimensions are stamped on completion rows at emit time by the telemetry
--- logger's directory snapshot. attribute_metrics_summaries is provenance-
--- first (agent-fleet surfaces only) and no longer carries these rows.
-CREATE TABLE IF NOT EXISTS tum_breakdown_summaries (
-    -- Key columns
-    gram_project_id UUID,
-    chat_id String,
-    time_bucket DateTime('UTC'),
-    hook_source String,
-    model String,
-    user_email String,
-    division_name String,
-    roles Array(String),
-
-    -- Billed token split for the slice (input + output = total for
-    -- completion rows; they carry no cache attributes).
-    input_tokens SimpleAggregateFunction(sum, Int64),
-    output_tokens SimpleAggregateFunction(sum, Int64),
-    total_tokens SimpleAggregateFunction(sum, Int64)
-) ENGINE = AggregatingMergeTree
-ORDER BY (gram_project_id, time_bucket, chat_id, hook_source, model, user_email, division_name, roles)
-TTL time_bucket + INTERVAL 730 DAY
-SETTINGS index_granularity = 8192
-COMMENT 'Per-chat daily billed token usage broken down by consuming surface and user identity, retained beyond the raw telemetry TTL to power the billing page breakdowns across historical billing cycles';
-
-CREATE MATERIALIZED VIEW IF NOT EXISTS tum_breakdown_summaries_mv TO tum_breakdown_summaries AS
-SELECT
-    gram_project_id,
-    chat_id,
-    -- Force UTC so the daily billing bucket boundary never shifts with the
-    -- server timezone (fromUnixTimestamp64Nano defaults to the server tz).
-    toStartOfDay(fromUnixTimestamp64Nano(time_unix_nano, 'UTC')) AS time_bucket,
-    hook_source,
-    toString(attributes.gen_ai.response.model) AS model,
-    user_email,
-    toString(attributes.user.attributes.division_name) AS division_name,
-    arraySort(JSONExtract(ifNull(toJSONString(attributes.user.roles), '[]'), 'Array(String)')) AS roles,
-    sum(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens))) AS input_tokens,
-    sum(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens))) AS output_tokens,
-    sum(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens))) AS total_tokens
-FROM telemetry_logs
-WHERE chat_id != ''
-  AND toString(attributes.gen_ai.usage.total_tokens) != ''
-GROUP BY gram_project_id, chat_id, time_bucket, hook_source, model, user_email, division_name, roles;
-
 CREATE TABLE IF NOT EXISTS attribute_keys (
     gram_project_id UUID,
     attribute_key String,
@@ -882,3 +836,53 @@ CREATE INDEX IF NOT EXISTS idx_authz_challenges_session_id ON authz_challenges (
 CREATE INDEX IF NOT EXISTS idx_authz_challenges_api_key_id ON authz_challenges (api_key_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_authz_challenges_scope ON authz_challenges (scope) TYPE set(0) GRANULARITY 4;
 CREATE INDEX IF NOT EXISTS idx_authz_challenges_reason ON authz_challenges (reason) TYPE set(0) GRANULARITY 4;
+
+CREATE TABLE IF NOT EXISTS risk_findings (
+    -- Identity
+    id UUID COMMENT 'Finding UUIDv7, supplied by the scanner that produced it.',
+    created_at DateTime64(9) COMMENT 'Time the finding was produced.' CODEC(DoubleDelta, ZSTD),
+
+    -- Tenancy
+    organization_id String COMMENT 'Organization the finding belongs to (HKDF salt for the tenant fingerprint).' CODEC(ZSTD),
+    project_id String DEFAULT '' COMMENT 'Project the finding was scoped to. Empty string when unknown, kept non-nullable so it can sit in the primary key.' CODEC(ZSTD),
+
+    -- Correlation
+    request_id String DEFAULT '' COMMENT 'Internal request ID that produced the finding, when set.' CODEC(ZSTD),
+    chat_message_id String DEFAULT '' COMMENT 'Chat message the finding was detected in.' CODEC(ZSTD),
+
+    -- Owning policy
+    risk_policy_id String DEFAULT '' COMMENT 'Risk policy the message was scanned against.' CODEC(ZSTD),
+    risk_policy_version Int64 DEFAULT 0 COMMENT 'Version of the risk policy at scan time.',
+
+    -- Finding detail
+    rule_id LowCardinality(String) COMMENT 'Rule that fired, e.g. pii.email_address.',
+    description String DEFAULT '' COMMENT 'Human-readable description of the rule that fired.' CODEC(ZSTD),
+    source LowCardinality(String) COMMENT 'Detection source: gitleaks | presidio | shadow_mcp | prompt_injection | llm_judge | account_identity.',
+    confidence Float64 DEFAULT 0 COMMENT 'Detection confidence in the range 0.0 to 1.0.',
+    tags Array(LowCardinality(String)) COMMENT 'Category tags for the finding, e.g. [pii].',
+    start_pos Int32 DEFAULT 0 COMMENT 'Byte offset of the match start within the scanned field.',
+    end_pos Int32 DEFAULT 0 COMMENT 'Byte offset of the match end within the scanned field.',
+    dead_letter_reason String DEFAULT '' COMMENT 'Non-empty marks a synthetic could-not-analyze sentinel rather than a real finding.' CODEC(ZSTD),
+
+    -- Masked match. The raw matched value is never stored in ClickHouse: only
+    -- its length, a redacted display string, and one-way fingerprints. Plaintext
+    -- stays in Postgres for the audited unmask path.
+    match_len UInt32 DEFAULT 0 COMMENT 'Byte length of the raw match, used to render the redacted display.',
+    match_redacted String DEFAULT '' COMMENT 'Precomputed display string in the form redacted len=N sha=XXXXXXXX. Every source is redacted here including shadow_mcp and account_identity so no plaintext or PII is ever stored in ClickHouse. The verbatim value stays in Postgres for the audited unmask path.' CODEC(ZSTD),
+
+    -- One-way fingerprints (base64url of HMAC-SHA256). See internal/risk/fingerprint.go.
+    fingerprint_pepper_version String DEFAULT '' COMMENT 'Pepper keyring version used to compute the fingerprints.',
+    fingerprint_global_hs256 String DEFAULT '' COMMENT 'Global fingerprint: base64url HMAC-SHA256 of the match under the current pepper. Stable across tenants.' CODEC(ZSTD),
+    fingerprint_tenant_hs256 String DEFAULT '' COMMENT 'Tenant-qualified fingerprint: base64url HMAC-SHA256 under a per-org HKDF key. Used to dedupe unique matches within an org.' CODEC(ZSTD)
+) ENGINE = MergeTree
+PARTITION BY toYYYYMMDD(created_at)
+ORDER BY (organization_id, project_id, created_at, id)
+TTL toDateTime(created_at) + INTERVAL 90 DAY
+SETTINGS index_granularity = 8192
+COMMENT 'Risk findings event log: one row per detected secret or sensitive-data match, hashed not plaintext, powering the Risk Events page and analytics.';
+
+-- Bloom filter indices for point lookups (organization_id and project_id are
+-- already in the ORDER BY so no bloom filters needed for them).
+CREATE INDEX IF NOT EXISTS idx_risk_findings_chat_message_id ON risk_findings (chat_message_id) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_risk_findings_risk_policy_id ON risk_findings (risk_policy_id) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_risk_findings_rule_id ON risk_findings (rule_id) TYPE set(0) GRANULARITY 4;

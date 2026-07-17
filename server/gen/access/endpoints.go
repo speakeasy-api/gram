@@ -31,6 +31,8 @@ type Endpoints struct {
 	DenyShadowMCPApprovalRequest         goa.Endpoint
 	ListShadowMCPAccessRules             goa.Endpoint
 	ListShadowMCPInventory               goa.Endpoint
+	GetShadowMCPInventoryServer          goa.Endpoint
+	UpdateShadowMCPInventoryServerName   goa.Endpoint
 	ListShadowMCPInventoryUsers          goa.Endpoint
 	UpsertShadowMCPInventoryPolicyBypass goa.Endpoint
 	DeleteShadowMCPInventoryPolicyBypass goa.Endpoint
@@ -66,6 +68,8 @@ func NewEndpoints(s Service) *Endpoints {
 		DenyShadowMCPApprovalRequest:         NewDenyShadowMCPApprovalRequestEndpoint(s, a.APIKeyAuth),
 		ListShadowMCPAccessRules:             NewListShadowMCPAccessRulesEndpoint(s, a.APIKeyAuth),
 		ListShadowMCPInventory:               NewListShadowMCPInventoryEndpoint(s, a.APIKeyAuth),
+		GetShadowMCPInventoryServer:          NewGetShadowMCPInventoryServerEndpoint(s, a.APIKeyAuth),
+		UpdateShadowMCPInventoryServerName:   NewUpdateShadowMCPInventoryServerNameEndpoint(s, a.APIKeyAuth),
 		ListShadowMCPInventoryUsers:          NewListShadowMCPInventoryUsersEndpoint(s, a.APIKeyAuth),
 		UpsertShadowMCPInventoryPolicyBypass: NewUpsertShadowMCPInventoryPolicyBypassEndpoint(s, a.APIKeyAuth),
 		DeleteShadowMCPInventoryPolicyBypass: NewDeleteShadowMCPInventoryPolicyBypassEndpoint(s, a.APIKeyAuth),
@@ -99,6 +103,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.DenyShadowMCPApprovalRequest = m(e.DenyShadowMCPApprovalRequest)
 	e.ListShadowMCPAccessRules = m(e.ListShadowMCPAccessRules)
 	e.ListShadowMCPInventory = m(e.ListShadowMCPInventory)
+	e.GetShadowMCPInventoryServer = m(e.GetShadowMCPInventoryServer)
+	e.UpdateShadowMCPInventoryServerName = m(e.UpdateShadowMCPInventoryServerName)
 	e.ListShadowMCPInventoryUsers = m(e.ListShadowMCPInventoryUsers)
 	e.UpsertShadowMCPInventoryPolicyBypass = m(e.UpsertShadowMCPInventoryPolicyBypass)
 	e.DeleteShadowMCPInventoryPolicyBypass = m(e.DeleteShadowMCPInventoryPolicyBypass)
@@ -564,6 +570,53 @@ func NewListShadowMCPInventoryEndpoint(s Service, authAPIKeyFn security.AuthAPIK
 			return nil, err
 		}
 		return s.ListShadowMCPInventory(ctx, p)
+	}
+}
+
+// NewGetShadowMCPInventoryServerEndpoint returns an endpoint function that
+// calls the method "getShadowMCPInventoryServer" of service "access".
+func NewGetShadowMCPInventoryServerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetShadowMCPInventoryServerPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetShadowMCPInventoryServer(ctx, p)
+	}
+}
+
+// NewUpdateShadowMCPInventoryServerNameEndpoint returns an endpoint function
+// that calls the method "updateShadowMCPInventoryServerName" of service
+// "access".
+func NewUpdateShadowMCPInventoryServerNameEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*UpdateShadowMCPInventoryServerNamePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.UpdateShadowMCPInventoryServerName(ctx, p)
 	}
 }
 

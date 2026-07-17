@@ -57,7 +57,7 @@ import {
   TimeRangePicker,
   type DateRangePreset,
   getPresetRange,
-} from "@gram-ai/elements";
+} from "@/elements";
 import { useSlugs } from "@/contexts/Sdk";
 import { formatDateRangeLabel } from "@/components/observe/useDateRangeFilter";
 import {
@@ -1078,7 +1078,7 @@ const SERVER_CLASS_BADGE_META: Record<
   gram: {
     variant: "information",
     icon: Boxes,
-    tooltip: "Gram-hosted MCP server",
+    tooltip: "Speakeasy-hosted MCP server",
   },
   external: {
     variant: "warning",
@@ -1977,7 +1977,7 @@ function formatServerLabel(node: DataFlowSourceNode) {
     const shortId = node.label.slice(0, 8);
     const prefix =
       serverClass === "gram"
-        ? "Gram server"
+        ? "Speakeasy server"
         : serverClass === "local"
           ? "Local server"
           : "MCP server";

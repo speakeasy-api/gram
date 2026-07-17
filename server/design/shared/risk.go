@@ -256,8 +256,9 @@ var RiskResult = Type("RiskResult", func() {
 	Attribute("created_at", String, "When this result was created.", func() {
 		Format(FormatDateTime)
 	})
+	Attribute("replayed", Boolean, "True when the scanned message arrived as a replay from a device's offline spool after control-plane downtime — the finding was produced retroactively rather than from live traffic.")
 
-	Required("id", "policy_id", "policy_version", "chat_message_id", "source", "created_at")
+	Required("id", "policy_id", "policy_version", "chat_message_id", "source", "created_at", "replayed")
 })
 
 // RiskSpan is one matched span attributed to a finding.

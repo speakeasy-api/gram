@@ -93,3 +93,4 @@ __pycache__/
 .uv-cache
 
 .playwright-mcp
+.playwright-cli

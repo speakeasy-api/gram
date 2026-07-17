@@ -25,6 +25,10 @@ type Client struct {
 	// endpoint.
 	UpsertKeyDoer goahttp.Doer
 
+	// SetKeyEnabled Doer is the HTTP client used to make requests to the
+	// setKeyEnabled endpoint.
+	SetKeyEnabledDoer goahttp.Doer
+
 	// DeleteKey Doer is the HTTP client used to make requests to the deleteKey
 	// endpoint.
 	DeleteKeyDoer goahttp.Doer
@@ -51,6 +55,7 @@ func NewClient(
 	return &Client{
 		ListKeysDoer:        doer,
 		UpsertKeyDoer:       doer,
+		SetKeyEnabledDoer:   doer,
 		DeleteKeyDoer:       doer,
 		RestoreResponseBody: restoreBody,
 		scheme:              scheme,
@@ -103,6 +108,30 @@ func (c *Client) UpsertKey() goa.Endpoint {
 		resp, err := c.UpsertKeyDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("modelKeys", "upsertKey", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetKeyEnabled returns an endpoint that makes HTTP requests to the modelKeys
+// service setKeyEnabled server.
+func (c *Client) SetKeyEnabled() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetKeyEnabledRequest(c.encoder)
+		decodeResponse = DecodeSetKeyEnabledResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetKeyEnabledRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetKeyEnabledDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("modelKeys", "setKeyEnabled", err)
 		}
 		return decodeResponse(resp)
 	}

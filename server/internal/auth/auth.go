@@ -77,6 +77,7 @@ func (s *Auth) checkProjectAccess(ctx context.Context, logger *slog.Logger, proj
 	if !ok {
 		return ctx, oops.E(oops.CodeUnauthorized, nil, "no session found")
 	}
+	boundProjectID := authCtx.ProjectID
 
 	projects, err := s.repo.ListProjectsByOrganization(ctx, authCtx.ActiveOrganizationID)
 	switch {
@@ -97,6 +98,9 @@ func (s *Auth) checkProjectAccess(ctx context.Context, logger *slog.Logger, proj
 	hasProjectAccess := false
 	for _, project := range projects {
 		if project.Slug == projectSlug {
+			if boundProjectID != nil && project.ID != *boundProjectID {
+				return ctx, oops.C(oops.CodeForbidden)
+			}
 			authCtx.ProjectID = &project.ID // This is important
 			authCtx.ProjectSlug = &projectSlug
 			hasProjectAccess = true

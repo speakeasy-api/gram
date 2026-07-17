@@ -8,11 +8,16 @@ export function ResourceLink({
   orgSlug,
   projectMap,
   toolsetMap,
+  mcpServerMap,
 }: {
   challenge: ChallengeBucket;
   orgSlug: string;
   projectMap: Map<string, { slug: string; name: string }>;
   toolsetMap: Map<string, { slug: string; name: string; projectId: string }>;
+  mcpServerMap: Map<
+    string,
+    { slug?: string; name?: string; projectId: string }
+  >;
 }): JSX.Element {
   const { resourceKind, resourceId } = challenge;
 
@@ -39,13 +44,23 @@ export function ResourceLink({
     to = proj ? `/${orgSlug}/projects/${proj.slug}` : null;
   } else if (resourceKind === "mcp") {
     IconEl = Plug;
+    // Grants store the toolset id for toolset-backed servers and the
+    // mcp_servers row id for remote/tunneled ones, so try both maps.
     const toolset = toolsetMap.get(resourceId);
+    const mcpServer = toolset ? undefined : mcpServerMap.get(resourceId);
     if (toolset) {
       label = toolset.name;
       const proj = projectMap.get(toolset.projectId);
       to = proj
         ? `/${orgSlug}/projects/${proj.slug}/mcp/${toolset.slug}`
         : null;
+    } else if (mcpServer) {
+      label = mcpServer.name ?? mcpServer.slug ?? resourceId;
+      const proj = projectMap.get(mcpServer.projectId);
+      to =
+        proj && mcpServer.slug
+          ? `/${orgSlug}/projects/${proj.slug}/mcp/x/${mcpServer.slug}`
+          : null;
     } else {
       label = resourceId;
     }

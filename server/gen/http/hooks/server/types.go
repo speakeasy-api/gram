@@ -1362,9 +1362,12 @@ type HookIngestEventRequestBody struct {
 
 // HookIngestDataRequestBody is used to define fields on request body types.
 type HookIngestDataRequestBody struct {
-	Prompt       *HookPromptDataRequestBody       `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
-	ToolCall     *HookToolCallDataRequestBody     `form:"tool_call,omitempty" json:"tool_call,omitempty" xml:"tool_call,omitempty"`
-	Mcp          *HookMCPDataRequestBody          `form:"mcp,omitempty" json:"mcp,omitempty" xml:"mcp,omitempty"`
+	Prompt   *HookPromptDataRequestBody   `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
+	ToolCall *HookToolCallDataRequestBody `form:"tool_call,omitempty" json:"tool_call,omitempty" xml:"tool_call,omitempty"`
+	Mcp      *HookMCPDataRequestBody      `form:"mcp,omitempty" json:"mcp,omitempty" xml:"mcp,omitempty"`
+	// Configured MCP server snapshot captured at session start or configuration
+	// change. Transport credentials must be redacted by the sender.
+	McpInventory []*HookMCPDataRequestBody        `form:"mcp_inventory,omitempty" json:"mcp_inventory,omitempty" xml:"mcp_inventory,omitempty"`
 	Usage        *HookUsageDataRequestBody        `form:"usage,omitempty" json:"usage,omitempty" xml:"usage,omitempty"`
 	Message      *HookMessageDataRequestBody      `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
 	Skill        *HookSkillDataRequestBody        `form:"skill,omitempty" json:"skill,omitempty" xml:"skill,omitempty"`
@@ -2644,7 +2647,7 @@ func NewCodexPayload(body *CodexRequestBody, apikeyToken *string, projectSlugInp
 }
 
 // NewIngestPayload builds a hooks service ingest endpoint payload.
-func NewIngestPayload(body *IngestRequestBody, apikeyToken *string, projectSlugInput *string, idempotencyKey *string) *hooks.IngestPayload {
+func NewIngestPayload(body *IngestRequestBody, apikeyToken *string, projectSlugInput *string, idempotencyKey *string, replayed *bool) *hooks.IngestPayload {
 	v := &hooks.IngestPayload{
 		SchemaVersion: *body.SchemaVersion,
 		Raw:           body.Raw,
@@ -2660,6 +2663,7 @@ func NewIngestPayload(body *IngestRequestBody, apikeyToken *string, projectSlugI
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 	v.IdempotencyKey = idempotencyKey
+	v.Replayed = replayed
 
 	return v
 }

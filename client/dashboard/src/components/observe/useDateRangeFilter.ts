@@ -1,4 +1,4 @@
-import { getPresetRange, type DateRangePreset } from "@gram-ai/elements";
+import { getPresetRange, type DateRangePreset } from "@/elements";
 import { useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router";
 import {

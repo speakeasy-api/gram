@@ -316,10 +316,28 @@ type ListShadowMCPInventoryURLsParams struct {
 	Cursor        string
 }
 
+type GetShadowMCPInventoryURLParams struct {
+	GramProjectID      string
+	CanonicalServerURL string
+}
+
+type UpdateShadowMCPInventoryURLNameOverrideParams struct {
+	GramProjectID      string
+	CanonicalServerURL string
+	ServerNameOverride string
+	UpdatedAt          time.Time
+}
+
+type ListShadowMCPInventoryURLsBySlugHashParams struct {
+	GramProjectID string
+	SlugHash      string
+}
+
 type ShadowMCPInventoryURLRow struct {
 	CanonicalServerURL string    `ch:"canonical_server_url"`
 	URLHost            string    `ch:"url_host"`
 	ServerName         string    `ch:"server_name"`
+	ServerNameOverride string    `ch:"server_name_override"`
 	FirstSeen          time.Time `ch:"first_seen"`
 	LastSeen           time.Time `ch:"last_seen"`
 	LastCalledUnixNano int64     `ch:"last_called_unix_nano"`
@@ -369,6 +387,7 @@ type shadowMCPInventoryURLUpsert struct {
 	CanonicalServerURL string
 	URLHost            string
 	ServerName         string
+	ServerNameOverride string
 	FirstSeen          time.Time
 	LastSeen           time.Time
 	UpdatedAt          time.Time
@@ -514,6 +533,7 @@ func (q *Queries) UpsertShadowMCPInventoryURLs(ctx context.Context, args []Upser
 				CanonicalServerURL: arg.CanonicalServerURL,
 				URLHost:            arg.URLHost,
 				ServerName:         arg.ServerName,
+				ServerNameOverride: "",
 				FirstSeen:          firstSeen.UTC(),
 				LastSeen:           lastSeen.UTC(),
 				UpdatedAt:          updatedAt.UTC(),
@@ -550,6 +570,7 @@ func (q *Queries) UpsertShadowMCPInventoryURLs(ctx context.Context, args []Upser
 		if existing == nil {
 			continue
 		}
+		upsert.ServerNameOverride = existing.ServerNameOverride
 		if upsert.URLHost == "" {
 			upsert.URLHost = existing.URLHost
 		}
@@ -564,40 +585,133 @@ func (q *Queries) UpsertShadowMCPInventoryURLs(ctx context.Context, args []Upser
 		}
 	}
 
+	rows := make([]*shadowMCPInventoryURLUpsert, 0, len(upserts))
+	for _, upsert := range upserts {
+		rows = append(rows, upsert)
+	}
 	ctx = clickhouse.Context(ctx, clickhouse.WithAsync(false))
+	if err := q.insertShadowMCPInventoryURLRows(ctx, rows); err != nil {
+		return fmt.Errorf("upserting shadow mcp inventory urls: %w", err)
+	}
+
+	return nil
+}
+
+func (q *Queries) insertShadowMCPInventoryURLRows(ctx context.Context, rows []*shadowMCPInventoryURLUpsert) error {
 	builder := sq.Insert("shadow_mcp_inventory_urls").
 		Columns(
 			"gram_project_id",
 			"canonical_server_url",
 			"url_host",
 			"server_name",
+			"server_name_override",
 			"first_seen",
 			"last_seen",
 			"updated_at",
 		)
 
-	for _, upsert := range upserts {
+	for _, row := range rows {
 		builder = builder.Values(
-			upsert.GramProjectID,
-			upsert.CanonicalServerURL,
-			upsert.URLHost,
-			upsert.ServerName,
-			upsert.FirstSeen.UTC(),
-			upsert.LastSeen.UTC(),
-			upsert.UpdatedAt.UTC(),
+			row.GramProjectID,
+			row.CanonicalServerURL,
+			row.URLHost,
+			row.ServerName,
+			row.ServerNameOverride,
+			row.FirstSeen.UTC(),
+			row.LastSeen.UTC(),
+			row.UpdatedAt.UTC(),
 		)
 	}
 
 	query, queryArgs, err := builder.ToSql()
 	if err != nil {
-		return fmt.Errorf("building shadow mcp inventory url upsert query: %w", err)
+		return fmt.Errorf("building shadow mcp inventory url insert query: %w", err)
 	}
 
 	if err := q.conn.Exec(ctx, query, queryArgs...); err != nil {
-		return fmt.Errorf("upserting shadow mcp inventory urls: %w", err)
+		return fmt.Errorf("inserting shadow mcp inventory url rows: %w", err)
 	}
 
 	return nil
+}
+
+func (q *Queries) GetShadowMCPInventoryURL(ctx context.Context, arg GetShadowMCPInventoryURLParams) (*ShadowMCPInventoryURLRow, error) {
+	return q.getShadowMCPInventoryURL(ctx, arg.GramProjectID, arg.CanonicalServerURL)
+}
+
+func (q *Queries) UpdateShadowMCPInventoryURLNameOverride(
+	ctx context.Context,
+	arg UpdateShadowMCPInventoryURLNameOverrideParams,
+) (bool, error) {
+	existing, err := q.getShadowMCPInventoryURL(ctx, arg.GramProjectID, arg.CanonicalServerURL)
+	if err != nil {
+		return false, err
+	}
+	if existing == nil {
+		return false, nil
+	}
+
+	updatedAt := arg.UpdatedAt
+	if updatedAt.IsZero() {
+		updatedAt = time.Now()
+	}
+
+	err = q.insertShadowMCPInventoryURLRows(ctx, []*shadowMCPInventoryURLUpsert{{
+		GramProjectID:      arg.GramProjectID,
+		CanonicalServerURL: arg.CanonicalServerURL,
+		URLHost:            existing.URLHost,
+		ServerName:         existing.ServerName,
+		ServerNameOverride: arg.ServerNameOverride,
+		FirstSeen:          existing.FirstSeen,
+		LastSeen:           existing.LastSeen,
+		UpdatedAt:          updatedAt.UTC(),
+	}})
+	if err != nil {
+		return false, fmt.Errorf("updating shadow mcp inventory url name override: %w", err)
+	}
+	return true, nil
+}
+
+func (q *Queries) ListShadowMCPInventoryURLsBySlugHash(ctx context.Context, arg ListShadowMCPInventoryURLsBySlugHashParams) ([]ShadowMCPInventoryURLRow, error) {
+	const slugHashExpression = "substring(lower(hex(SHA256(canonical_server_url))), 1, 8)"
+
+	sb := sq.Select(
+		"canonical_server_url",
+		"max(url_host) AS url_host",
+		"argMaxIf(server_name, updated_at, server_name != '') AS server_name",
+		"argMax(server_name_override, updated_at) AS server_name_override",
+		"min(first_seen) AS first_seen",
+		"max(last_seen) AS last_seen",
+	).
+		From("shadow_mcp_inventory_urls").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		Where(slugHashExpression+" = ?", arg.SlugHash).
+		GroupBy("gram_project_id", "canonical_server_url")
+
+	query, queryArgs, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building shadow mcp inventory slug hash lookup query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, queryArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("querying shadow mcp inventory slug hash lookup: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	result := make([]ShadowMCPInventoryURLRow, 0)
+	for rows.Next() {
+		var row ShadowMCPInventoryURLRow
+		if err := rows.ScanStruct(&row); err != nil {
+			return nil, fmt.Errorf("scanning shadow mcp inventory slug hash lookup row: %w", err)
+		}
+		result = append(result, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating shadow mcp inventory slug hash lookup rows: %w", err)
+	}
+
+	return result, nil
 }
 
 func (q *Queries) getShadowMCPInventoryURL(ctx context.Context, projectID string, canonicalURL string) (*ShadowMCPInventoryURLRow, error) {
@@ -605,6 +719,7 @@ func (q *Queries) getShadowMCPInventoryURL(ctx context.Context, projectID string
 		"canonical_server_url",
 		"max(url_host) AS url_host",
 		"argMaxIf(server_name, updated_at, server_name != '') AS server_name",
+		"argMax(server_name_override, updated_at) AS server_name_override",
 		"min(first_seen) AS first_seen",
 		"max(last_seen) AS last_seen",
 	).
@@ -658,6 +773,7 @@ func (q *Queries) ListShadowMCPInventoryURLs(ctx context.Context, arg ListShadow
 		"canonical_server_url",
 		"max(url_host) AS url_host",
 		"argMaxIf(server_name, updated_at, server_name != '') AS server_name",
+		"argMax(server_name_override, updated_at) AS server_name_override",
 		"min(first_seen) AS first_seen",
 		"max(last_seen) AS last_seen",
 	).
@@ -682,6 +798,7 @@ func (q *Queries) ListShadowMCPInventoryURLs(ctx context.Context, arg ListShadow
 		"inventory_urls.canonical_server_url",
 		"inventory_urls.url_host",
 		"inventory_urls.server_name",
+		"inventory_urls.server_name_override",
 		"inventory_urls.first_seen",
 		"inventory_urls.last_seen",
 		"maxIf(ifNull(trace_usage.called_at_unix_nano, 0), ifNull(trace_usage.canonical_server_url, '') != '') AS last_called_unix_nano",
@@ -695,6 +812,7 @@ func (q *Queries) ListShadowMCPInventoryURLs(ctx context.Context, arg ListShadow
 			"inventory_urls.canonical_server_url",
 			"inventory_urls.url_host",
 			"inventory_urls.server_name",
+			"inventory_urls.server_name_override",
 			"inventory_urls.first_seen",
 			"inventory_urls.last_seen",
 		)
@@ -703,6 +821,7 @@ func (q *Queries) ListShadowMCPInventoryURLs(ctx context.Context, arg ListShadow
 		"canonical_server_url",
 		"url_host",
 		"server_name",
+		"server_name_override",
 		"first_seen",
 		"last_seen",
 		"last_called_unix_nano",
@@ -5864,6 +5983,9 @@ const tumMeasureExpr = "toInt64(sumIfMerge(total_input_tokens) + sumIfMerge(tota
 func tumObservedBase(sb squirrel.SelectBuilder, arg GetTokensUnderManagementParams) squirrel.SelectBuilder {
 	sb = sb.
 		From("attribute_metrics_summaries").
+		// Exclude tombstoned rows (soft-deleted backfill data; see the
+		// is_active column comment in server/clickhouse/schema.sql).
+		Where("is_active = 1").
 		Where(squirrel.Eq{"gram_project_id": arg.ProjectIDs}).
 		Where("time_bucket >= toStartOfDay(fromUnixTimestamp64Nano(?))", arg.StartUnixNano).
 		Where("time_bucket < fromUnixTimestamp64Nano(?)", arg.EndUnixNano)

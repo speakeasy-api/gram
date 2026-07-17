@@ -356,18 +356,35 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
     const prevIsOpen = React.useRef(isPopoverOpen);
     const prevSearchValue = React.useRef(searchValue);
 
+    const politeTimerRef =
+      React.useRef<ReturnType<typeof setTimeout>>(undefined);
+    const assertiveTimerRef =
+      React.useRef<ReturnType<typeof setTimeout>>(undefined);
+
     const announce = React.useCallback(
       (message: string, priority: "polite" | "assertive" = "polite") => {
         if (priority === "assertive") {
           setAssertiveMessage(message);
-          setTimeout(() => setAssertiveMessage(""), 100);
+          clearTimeout(assertiveTimerRef.current);
+          assertiveTimerRef.current = setTimeout(
+            () => setAssertiveMessage(""),
+            100,
+          );
         } else {
           setPoliteMessage(message);
-          setTimeout(() => setPoliteMessage(""), 100);
+          clearTimeout(politeTimerRef.current);
+          politeTimerRef.current = setTimeout(() => setPoliteMessage(""), 100);
         }
       },
       [],
     );
+
+    React.useEffect(() => {
+      return () => {
+        clearTimeout(politeTimerRef.current);
+        clearTimeout(assertiveTimerRef.current);
+      };
+    }, []);
 
     const multiSelectId = React.useId();
     const listboxId = `${multiSelectId}-listbox`;

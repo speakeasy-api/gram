@@ -62,7 +62,7 @@ const CATEGORY_RULE_DESCRIPTION: Record<RuleCategory, string> = {
   shadow_mcp:
     "Detects MCP tool calls in Cursor, Claude Code, and Codex that didn't originate from a Speakeasy-issued MCP server. Requires Speakeasy hooks on the agent.",
   destructive_tool:
-    "Flags tool calls whose Gram tool definition is annotated as destructive. Requires Speakeasy hooks and Gram-issued tool metadata.",
+    "Flags tool calls whose Speakeasy tool definition is annotated as destructive. Requires Speakeasy hooks and Speakeasy-issued tool metadata.",
   cli_destructive:
     "Pattern detector for destructive shell, git, database, and cloud CLI invocations passed through tool arguments.",
   account_identity:

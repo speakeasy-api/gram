@@ -22,6 +22,11 @@ func ListMcpServersMcpServersPath() string {
 	return "/rpc/mcpServers.list"
 }
 
+// ListMcpServersForOrgMcpServersPath returns the URL path to the mcpServers service listMcpServersForOrg HTTP endpoint.
+func ListMcpServersForOrgMcpServersPath() string {
+	return "/rpc/mcpServers.listForOrg"
+}
+
 // UpdateMcpServerMcpServersPath returns the URL path to the mcpServers service updateMcpServer HTTP endpoint.
 func UpdateMcpServerMcpServersPath() string {
 	return "/rpc/mcpServers.update"

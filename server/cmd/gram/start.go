@@ -103,6 +103,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	ppopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/skills"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/templates"
@@ -761,7 +762,7 @@ func newStartCommand() *cli.Command {
 			accessStore := accesscontrol.NewRedisStore(cache.NewRedisCacheAdapter(redisClient), accesscontrol.AlphaTTL)
 			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env, sessionManager, identityResolver, guardianPolicy)
 			shadowMCPClient := shadowmcp.NewClient(logger, db, cache.NewRedisCacheAdapter(redisClient), accessStore)
-			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemLogger, auditLogger, serverURL, slackClient)
+			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemLogger, auditLogger, serverURL, siteURL, slackClient)
 
 			platformFeatureChecker := productFeatures.PlatformFeatureCheck
 
@@ -957,6 +958,15 @@ func newStartCommand() *cli.Command {
 				logger.InfoContext(ctx, "marketplace proxy: disabled (no github app configured)")
 			}
 
+			// Hooks binary artifacts (checksum-verifying proxy in front of the
+			// pinned GitHub release). Served from this domain so bootstrap
+			// scripts never need GitHub egress; mounted like the marketplace
+			// proxy — dispatched ahead of the Goa mux with its own recovery
+			// wrap — but not gated on the GitHub App, since release assets are
+			// public.
+			hooksArtifactServer := plugins.NewHooksArtifactServer(logger, guardianPolicy.Client())
+			hooksArtifactRoutes := middleware.NewRecovery(logger)(hooksArtifactServer.Routes())
+
 			mux := goahttp.NewMuxer()
 			mux.Use(func(h http.Handler) http.Handler {
 				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -966,6 +976,10 @@ func newStartCommand() *cli.Command {
 					}
 					if marketplaceServer != nil && marketplaceServer.IsMarketplaceRoute(r) {
 						marketplaceRoutes.ServeHTTP(w, r)
+						return
+					}
+					if hooksArtifactServer.IsHooksReleaseRoute(r) {
+						hooksArtifactRoutes.ServeHTTP(w, r)
 						return
 					}
 
@@ -1110,7 +1124,8 @@ func newStartCommand() *cli.Command {
 			}
 			pluginsSvc := plugins.NewService(logger, tracerProvider, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags)
 			plugins.Attach(mux, pluginsSvc)
-			productfeatures.Attach(mux, productfeatures.NewService(logger, tracerProvider, db, sessionManager, redisClient, authzEngine, pluginsSvc))
+			productfeatures.Attach(mux, productfeatures.NewService(logger, tracerProvider, db, sessionManager, redisClient, authzEngine, auditLogger))
+			skills.Attach(mux, skills.NewService(logger, tracerProvider, db, sessionManager, authzEngine, productFeatures, auditLogger))
 			toolsetsSvc := toolsets.NewService(logger, tracerProvider, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, temporalEnv, pluginsGitHub != nil)
 			toolsets.Attach(mux, toolsetsSvc)
 			integrations.Attach(mux, integrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine))

@@ -1,5 +1,75 @@
 # server
 
+## 0.89.0
+
+### Minor Changes
+
+- 82869db: Distribute observability hooks through a pinned, checksum-verified Go binary bootstrapper. The one-time binary install is capped at 45 seconds and runs in the background wherever the agent supports asynchronous hooks. When the binary can't be installed on a developer machine, the outcome follows the org's "Fail Open During Outages" setting: fail open lets hook events pass, the fail-closed default blocks per provider semantics. The binary downloads from your Speakeasy server domain — the same domain hooks already send telemetry to — so restricted or sandboxed developer environments only ever need that one domain allowed.
+- 999c323: Environment entries can now be marked non-secret so their values stay readable after save. Secret entries keep today's encrypt-and-redact behavior; flipping a secret entry to non-secret requires supplying a new value, while flipping a non-secret entry to secret encrypts the stored value in place. Callers that never send the new is_secret flag behave exactly as before (entries default to secret).
+- 52aaf58: Add the org-level `hooks_fail_open` product feature and remove `observability_mode` (DNO-497): org admins choose whether agent hooks fail open or fail closed (the default) when the Speakeasy control plane is unreachable or erroring and no policy verdict can be obtained. The setting is delivered to hook senders as an `org_settings` entry in every authenticated `hooks.ingest` response's effects map, and toggling it records an `organization:hooks_fail_open_enabled|disabled` audit event. The speakeasy-hooks binary caches the last server-confirmed value next to its credential cache and consults it only on the unreachable/5xx branch of verdict resolution — explicit denies, 4xx responses, and the 401/403 credential ratchet keep failing closed regardless. The cached posture expires after 14 days without server confirmation (reverting to fail closed), and successful exchanges re-stamp an unchanged value daily so actively syncing machines never age out.
+
+  Observability mode is removed outright — fail-open supersedes it (observability mode was equivalent to fail-open plus not creating blocking policies, while also swallowing explicit denies). Generated hook plugins no longer carry a nonblocking variant (`hooksGeneratorVersion` bumped, so connected repos republish), and the binary treats a legacy baked `nonblocking` flag as the fail-open posture so stale plugins keep outage tolerance without bypassing deny decisions.
+
+- 1275b21: Add a project-scoped API for manually managing the Skills registry with immutable canonical versions. Project-bound API keys can no longer select a different project through the project header.
+- 3edf806: Plugin assignments: organizations using the Speakeasy device agent can now choose which principals receive each plugin. From a plugin's detail page, admins assign an org-wide default (everyone), specific roles, individual members, or email addresses, and the device agent (`agent.getPlugins`) delivers each plugin only to its resolved recipients (email, user, and RBAC role membership). New plugins — including the auto-provisioned Default plugin — default to everyone, so nothing stops being delivered; admins can narrow the audience afterward. The assignments section is shown only for device-agent organizations; marketplace installs (Claude, Cursor, Codex) continue to receive every published plugin regardless of assignment.
+- f4786b5: Show the currently live (published) plugin version on the plugin detail page.
+  `getPublishStatus` now reports `live_version` — the version stamped into the
+  published plugin.json manifests, read back from the marketplace repo via a
+  single Contents API call and cached briefly — and the dashboard displays it
+  next to the publish freshness indicator, so it can be compared directly
+  against the version plugin clients like Claude Code report for installed
+  plugins when debugging sync lag.
+
+### Patch Changes
+
+- b6f3467: Classify Claude sessions authenticated by company credentials (an API key, gateway/proxy, Bedrock, or Vertex) as `team` for the account-type cost breakdown. These sessions emit no `user.account_uuid` (only a personal Claude subscription, which signs in via OAuth, does), so account attribution previously no-op'd and their entire spend fell into the `(unset)` bucket. Attribution now always classifies and stamps `account_type`, and these sessions also teach the device-owner bridge (keyed on the per-device id, not the account UUID) so a personal account later seen on the same device can be attributed to its employee; only the `user_accounts` entity and billing mode, which key on the absent UUID, are skipped.
+- dae476c: Persist hook-captured chat messages at their original occurred_at and order transcripts by (created_at, seq) (DNO-536). Previously chat_messages rows were stamped at insert time and read back in insertion order, so downtime backlog replayed from a device's offline spool sorted AFTER the newer live event that triggered the drain — the latest message appeared before older ones. The ingest handler now writes the event's occurred_at (clamped to arrival time so a skewed device clock cannot sort a row into the future) as created_at, and every transcript reader — full lists, keyset pages, risk/search windows — orders by (created_at, seq) with seq as the stable tiebreak. Keyset cursors keep their public seq shape; the anchor row's position is resolved server-side. Non-hook writers (playground, assistants, imports) leave created_at unset and the message store stamps each batch with one shared write-time value, so their ordering semantics are unchanged.
+- 2fef155: Add a (chat_id, generation, created_at, seq) index on chat_messages so the DNO-536 transcript ordering — (created_at, seq) within a generation — is served by an ordered index scan and keyset pagination keeps its LIMIT early-stop instead of sorting the generation's full row set per page.
+- cb75e1c: Scope the device agent's managed marketplaces to the org's default project plus any project the caller has an assignment in. `agent.getPlugins` previously returned every published marketplace in the org — each synthesizing its always-on observability plugin independent of assignments — so an org with many published projects flooded the device agent with one `speakeasy-observability` per project. The default project still always surfaces as the org-wide baseline; a non-default project now appears only when the caller has a matching plugin assignment there.
+- cc8791e: Add project-selectable read and write permissions for skills to RBAC role management.
+- a98cbcd: Gate the Skills page by organization entitlement and provision default Skills grants for RBAC-enabled organizations.
+- 6429a07: Expand the `hooks.event.duration` metric for DNO-539 dashboard coverage: the unified `/rpc/hooks.ingest` endpoint now records it (it previously emitted no duration/throughput metric at all, leaving the plugin ingest path invisible to the hooks monitors), and every hooks endpoint now tags the metric with a `gram.hook.decision` attribute (allow/deny/ask, or none when the endpoint errored before producing a verdict) so allow/deny rates can be charted independently of the processing outcome. Ingest also distinguishes a new `unauthenticated` outcome (keyless requests acknowledged without processing) from the hard-401 `unauthorized` one.
+- 49a4aac: Data migration translating organizations still on the removed `observability_mode` product feature to `hooks_fail_open` (DNO-497): the new fail-open row preserves the outage tolerance those orgs opted into, and the retired observability_mode rows are soft-deleted.
+- cbf965c: Accept replayed hook events on hooks.ingest: an optional X-Gram-Replayed header marks deliveries redelivered from a device's offline spool after control-plane downtime. Replayed deliveries claim the idempotency guard for 15 days (covering the devices' 14-day spool retention) (instead of the 10-minute retry-burst window) so competing drain triggers dedupe, and their telemetry rows carry gram.hook.replayed so dashboards can separate backdated backlog from live traffic.
+- 7ff9141: Persist the replayed flag on captured chat messages and surface it on risk results: messages redelivered from a device's offline spool after control-plane downtime (X-Gram-Replayed) now carry chat_messages.replayed, and findings produced by scanning them return replayed on the RiskResult type so retroactive findings are distinguishable from live ones.
+- 1275b21: Skill version responses now include a `frontmatter` field with every top-level field parsed from the SKILL.md manifest, so spec fields like `license` and tool-specific extensions like `argument-hint` are visible without re-parsing the raw content.
+- f96b6fb: Unfurl Gram dashboard links shared in Slack with the Speakeasy logo (the dashboard favicon) and a humanized page title. The generated Slack app manifest now registers the dashboard as an unfurl domain and grants links:write, and the trigger webhook answers link_shared events with chat.unfurl.
+
+## 0.88.0
+
+### Minor Changes
+
+- e50ecd5: Add org-scoped `mcpServers.listForOrg` endpoint that lists MCP servers across all projects in the caller's organization, for organization-administrator flows like the RBAC connection-policy picker.
+- 24f54bb: Allow organization admins to rename Shadow MCP inventory servers without changing their canonical URL identity.
+- 8e3b7f2: Add a project-scoped API and dashboard detail page for individual Shadow MCP servers.
+- a1def6a: Allow projects to disable and re-enable custom model provider keys without deleting or re-entering them.
+
+### Patch Changes
+
+- 4dde5e0: Billing tokens-under-management reads over attribute_metrics_summaries now filter tombstoned rows (is_active = 1), matching the costs page reads, so generations soft-deleted by the backfill runbook are excluded from billed totals and breakdowns.
+- 5ac5f91: Employees list linked accounts now attach by directory ownership (summary email resolved to the org user, or the account's own email) instead of by the raw telemetry user_ids folded into a summary. Stray telemetry rows that pair one person's email with another person's user id could previously hand an account — and the role bucket in the by-role view — to the wrong employee (DNO-509).
+- 703a22b: feat(risk): add an assistant filter to risk events. The Risk Events page gains an "Assistant" select listing the project's assistants plus a "No assistant" option, so findings from chats not linked to an assistant (the ones most likely missing user attribution) can be surfaced on their own — or scoped to a single assistant. API: `assistant_id` and `non_assistant` params on `listRiskResults`/`listRiskResultsForAgent`.
+- efe608b: PI detection now uses the LLM judge for all orgs. The L0 heuristics layer and its feature flag are removed.
+- 6e7a771: Stop forwarding browser-only headers (`Origin`, `Referer`, `Cookie`) from the inbound request to remote MCP upstreams. When the dashboard drove a remote MCP server, its `Origin` was relayed verbatim and upstreams enforcing the MCP spec's DNS-rebinding protection (e.g. Langfuse) rejected the request with 403 "Access forbidden", surfacing as "Something went wrong loading tools" in the Tools tab. Dropping these headers makes dashboard-proxied requests match those from a headless MCP client and prevents the dashboard session cookie from leaking upstream.
+- 63008ae: Restore Claude MCP inventory capture in the Go hooks relay. Session start and configuration-change hooks now send a locally redacted inventory snapshot through canonical ingest so external MCP URLs appear in Shadow MCP inventory before a tool is called.
+
+## 0.87.0
+
+### Minor Changes
+
+- 4da1ceb: Assistant completions now route through a project's own model provider key when one covers the assistants slot. Projects without a key keep the current platform-covered behavior. The key slot a completion uses is derived from the authenticated caller rather than request headers.
+- 0d36d3c: Projects can now bring their own model provider key for the risk-policy judge and the prompt-injection classifier, each as an independent key slot. Unset slots fall back to the project default key, then the platform key.
+- 15b6f77: Projects can now store their own model provider API keys (BYOK), scoped per responsibility slot with a fallback chain: a slot-specific key wins over the project default key, which wins over the platform key. Keys are validated with the provider on save, stored encrypted, and never returned by the API. Configuration is gated behind the custom model keys product feature; with no keys configured, behavior is unchanged.
+- 50097b0: Implement remote MCP server header management API
+- 15618be: Add the project-scoped API for listing users and usage for a Shadow MCP server, with generated dashboard SDK support.
+- 7cef3fe: Redefine tokens under management as observed agent traffic: the billing page now counts the tokens the platform observes coming from users' agent sessions (input, output, and cache writes — cache reads excluded), never inference the platform spends itself (risk-policy analysis, hosted chat). Breakdowns now offer model, agent, provider, account type, project, user, division, department, and role; the project filter dropdown is replaced by the Project breakdown section.
+
+### Patch Changes
+
+- db26157: Label cowork tool calls as `cowork` in tool logs so filtering by Cowork source works
+- b8a6e78: Fix MCP attribution never promoting when the Claude plugin authenticates with an org-wide hooks key. The transcript-attribution tuple was keyed in Redis by the project resolved from the plugin's `GRAM_HOOKS_PROJECT_SLUG` (default `"default"`), while the promotion worker looked it up by the staged OTEL row's project — set by the OTEL exporter's own credential. With an org-wide key the two disagree, so the join always missed and staged rows promoted verbatim as `custom` after the timeout. The tuple is now keyed by org id — both ingest paths always agree on the org, and cross-org isolation is preserved — with the row's org materialized onto `telemetry_logs_staging` as the lookup scope.
+- b270dc9: Remove the dormant telemetry.queryRiskTokens endpoint (no consumers; it computed the pre-DNO-491 billed population and no longer matched any billing surface)
+
 ## 0.86.0
 
 ### Minor Changes

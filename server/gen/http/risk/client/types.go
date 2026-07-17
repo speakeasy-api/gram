@@ -9409,6 +9409,10 @@ type RiskResultResponseBody struct {
 	MatchRedacted *string `form:"match_redacted,omitempty" json:"match_redacted,omitempty" xml:"match_redacted,omitempty"`
 	// When this result was created.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// True when the scanned message arrived as a replay from a device's offline
+	// spool after control-plane downtime — the finding was produced retroactively
+	// rather than from live traffic.
+	Replayed *bool `form:"replayed,omitempty" json:"replayed,omitempty" xml:"replayed,omitempty"`
 }
 
 // RiskSpanResponseBody is used to define fields on response body types.
@@ -29438,6 +29442,9 @@ func ValidateRiskResultResponseBody(body *RiskResultResponseBody) (err error) {
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.Replayed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("replayed", "body"))
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))

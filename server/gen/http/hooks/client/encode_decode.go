@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 
 	hooks "github.com/speakeasy-api/gram/server/gen/hooks"
 	goahttp "goa.design/goa/v3/http"
@@ -779,6 +780,11 @@ func EncodeIngestRequest(encoder func(*http.Request) goahttp.Encoder) func(*http
 			head := *p.IdempotencyKey
 			req.Header.Set("Idempotency-Key", head)
 		}
+		if p.Replayed != nil {
+			head := *p.Replayed
+			headStr := strconv.FormatBool(head)
+			req.Header.Set("X-Gram-Replayed", headStr)
+		}
 		body := NewIngestRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
 			return goahttp.ErrEncodingError("hooks", "ingest", err)
@@ -1495,6 +1501,16 @@ func marshalHooksHookIngestDataToHookIngestDataRequestBody(v *hooks.HookIngestDa
 	if v.Mcp != nil {
 		res.Mcp = marshalHooksHookMCPDataToHookMCPDataRequestBody(v.Mcp)
 	}
+	if v.McpInventory != nil {
+		res.McpInventory = make([]*HookMCPDataRequestBody, len(v.McpInventory))
+		for i, val := range v.McpInventory {
+			if val == nil {
+				res.McpInventory[i] = nil
+				continue
+			}
+			res.McpInventory[i] = marshalHooksHookMCPDataToHookMCPDataRequestBody(val)
+		}
+	}
 	if v.Usage != nil {
 		res.Usage = marshalHooksHookUsageDataToHookUsageDataRequestBody(v.Usage)
 	}
@@ -1711,6 +1727,16 @@ func marshalHookIngestDataRequestBodyToHooksHookIngestData(v *HookIngestDataRequ
 	}
 	if v.Mcp != nil {
 		res.Mcp = marshalHookMCPDataRequestBodyToHooksHookMCPData(v.Mcp)
+	}
+	if v.McpInventory != nil {
+		res.McpInventory = make([]*hooks.HookMCPData, len(v.McpInventory))
+		for i, val := range v.McpInventory {
+			if val == nil {
+				res.McpInventory[i] = nil
+				continue
+			}
+			res.McpInventory[i] = marshalHookMCPDataRequestBodyToHooksHookMCPData(val)
+		}
 	}
 	if v.Usage != nil {
 		res.Usage = marshalHookUsageDataRequestBodyToHooksHookUsageData(v.Usage)
