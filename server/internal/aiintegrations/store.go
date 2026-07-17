@@ -3,6 +3,7 @@ package aiintegrations
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"time"
@@ -29,6 +30,7 @@ const (
 	cursorUsagePollInterval              = time.Hour
 	anthropicComplianceUsagePollInterval = 5 * time.Minute
 	maxUsagePollErrorMessage             = 4000
+	ensurePrimarySyncMaxAttempts         = 2
 )
 
 // usagePollIntervalFor returns the delay between polls for a provider.
@@ -184,7 +186,7 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 		}
 	}
 
-	syncRow, err := q.EnsureSync(ctx, row.ID)
+	syncRow, err := s.ensurePrimarySync(ctx, dbtx, row.ID, row.ProjectID)
 	if err != nil {
 		return UpsertResult{}, oops.E(oops.CodeUnexpected, err, "failed to save ai integration sync")
 	}
@@ -198,6 +200,7 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 		syncRow.LastCursorID = pgtype.Text{String: "", Valid: false}
 		if err := q.ResetUsagePollState(ctx, repo.ResetUsagePollStateParams{
 			AiIntegrationConfigID: row.ID,
+			Schedule:              provider,
 			PollWatermarkAt:       syncRow.PollWatermarkAt,
 			NextPollAfter:         syncRow.NextPollAfter,
 		}); err != nil {
@@ -214,6 +217,25 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 		Row:                  &row,
 		CreatedNewGeneration: createdNewGeneration,
 	}, nil
+}
+
+func (s *Store) ensurePrimarySync(ctx context.Context, dbtx repo.DBTX, configID uuid.UUID, projectID uuid.UUID) (repo.EnsurePrimarySyncRow, error) {
+	params := repo.EnsurePrimarySyncParams{
+		AiIntegrationConfigID: configID,
+		ProjectID:             projectID,
+	}
+	var err error
+	for range ensurePrimarySyncMaxAttempts {
+		var row repo.EnsurePrimarySyncRow
+		row, err = repo.New(dbtx).EnsurePrimarySync(ctx, params)
+		if err == nil {
+			return row, nil
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return repo.EnsurePrimarySyncRow{}, fmt.Errorf("ensure primary sync: %w", err)
+		}
+	}
+	return repo.EnsurePrimarySyncRow{}, fmt.Errorf("ensure primary sync after conflict retry: %w", err)
 }
 
 func (s *Store) softDeleteWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, provider string) error {
@@ -302,6 +324,7 @@ func (s *Store) GetUsagePollConfig(ctx context.Context, configID uuid.UUID) (Con
 func (s *Store) RecordUsagePollSuccess(ctx context.Context, configID uuid.UUID, provider string, t time.Time, lastCursor string) error {
 	if err := s.repo.RecordUsagePollSuccess(ctx, repo.RecordUsagePollSuccessParams{
 		AiIntegrationConfigID: configID,
+		Schedule:              provider,
 		PollWatermarkAt:       conv.ToPGTimestamptz(t),
 		NextPollAfter:         conv.ToPGTimestamptz(t.UTC().Add(usagePollIntervalFor(provider))),
 		LastCursorID:          conv.ToPGTextEmpty(lastCursor),
@@ -319,6 +342,7 @@ func (s *Store) RecordUsagePollFailure(ctx context.Context, configID uuid.UUID, 
 
 	if err := s.repo.RecordUsagePollFailure(ctx, repo.RecordUsagePollFailureParams{
 		AiIntegrationConfigID: configID,
+		Schedule:              provider,
 		NextPollAfter:         conv.ToPGTimestamptz(t.UTC().Add(usagePollIntervalFor(provider))),
 		LastPollError:         conv.ToPGTextEmpty(conv.TruncateString(errStr, maxUsagePollErrorMessage)),
 	}); err != nil {
@@ -405,7 +429,7 @@ func (s *Store) configFromUsagePollConfigRow(row repo.GetUsagePollConfigByIDRow)
 	}, nil
 }
 
-func (s *Store) configFromRows(row repo.AiIntegrationConfig, syncRow repo.EnsureSyncRow) (Config, error) {
+func (s *Store) configFromRows(row repo.AiIntegrationConfig, syncRow repo.EnsurePrimarySyncRow) (Config, error) {
 	apiKey, err := s.decryptAPIKey(row.ApiKeyEncrypted)
 	if err != nil {
 		return emptyConfig(row.OrganizationID, row.Provider), err

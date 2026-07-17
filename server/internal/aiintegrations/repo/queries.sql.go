@@ -17,15 +17,116 @@ UPDATE ai_integration_syncs
 SET last_cursor_id = $1,
     updated_at = clock_timestamp()
 WHERE ai_integration_config_id = $2
+  AND (schedule = $3::text OR schedule IS NULL)
 `
 
 type AdvanceUsagePollCursorParams struct {
 	LastCursorID          pgtype.Text
 	AiIntegrationConfigID uuid.UUID
+	Schedule              string
 }
 
 func (q *Queries) AdvanceUsagePollCursor(ctx context.Context, arg AdvanceUsagePollCursorParams) error {
-	_, err := q.db.Exec(ctx, advanceUsagePollCursor, arg.LastCursorID, arg.AiIntegrationConfigID)
+	_, err := q.db.Exec(ctx, advanceUsagePollCursor, arg.LastCursorID, arg.AiIntegrationConfigID, arg.Schedule)
+	return err
+}
+
+const backfillSyncSchedulesBatch = `-- name: BackfillSyncSchedulesBatch :many
+WITH candidate_configs AS MATERIALIZED (
+  SELECT c.id, c.provider
+  FROM ai_integration_configs c
+  WHERE c.project_id = $1
+    AND c.id > $2
+    AND EXISTS (
+      SELECT 1
+      FROM ai_integration_syncs s
+      WHERE s.ai_integration_config_id = c.id
+        AND (s.schedule = c.provider OR s.schedule IS NULL)
+        AND (s.schedule IS NULL OR s.kind IS NULL)
+    )
+  ORDER BY c.id
+  LIMIT $3
+),
+updated AS (
+  UPDATE ai_integration_syncs s
+  SET schedule = COALESCE(s.schedule, c.provider),
+      kind = COALESCE(
+        s.kind,
+        CASE c.provider
+          WHEN 'anthropic_compliance' THEN 'cursor'
+          ELSE 'time'
+        END
+      ),
+      updated_at = clock_timestamp()
+  FROM candidate_configs c
+  WHERE s.ai_integration_config_id = c.id
+    AND (s.schedule = c.provider OR s.schedule IS NULL)
+    AND (s.schedule IS NULL OR s.kind IS NULL)
+  RETURNING s.ai_integration_config_id
+)
+SELECT
+    c.id AS ai_integration_config_id
+  , EXISTS (
+      SELECT 1
+      FROM updated
+      WHERE updated.ai_integration_config_id = c.id
+    ) AS updated_primary
+FROM candidate_configs c
+ORDER BY c.id
+`
+
+type BackfillSyncSchedulesBatchParams struct {
+	ProjectID     uuid.UUID
+	AfterConfigID uuid.UUID
+	LimitCount    int32
+}
+
+type BackfillSyncSchedulesBatchRow struct {
+	AiIntegrationConfigID uuid.UUID
+	UpdatedPrimary        bool
+}
+
+// BackfillSyncSchedulesBatch fills only existing primary rows. Phase 2 keeps
+// the config-only unique index, so secondary schedules are deliberately
+// deferred until the later index transition.
+func (q *Queries) BackfillSyncSchedulesBatch(ctx context.Context, arg BackfillSyncSchedulesBatchParams) ([]BackfillSyncSchedulesBatchRow, error) {
+	rows, err := q.db.Query(ctx, backfillSyncSchedulesBatch, arg.ProjectID, arg.AfterConfigID, arg.LimitCount)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []BackfillSyncSchedulesBatchRow
+	for rows.Next() {
+		var i BackfillSyncSchedulesBatchRow
+		if err := rows.Scan(&i.AiIntegrationConfigID, &i.UpdatedPrimary); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const clearSyncScheduleDiscriminatorsForTest = `-- name: ClearSyncScheduleDiscriminatorsForTest :exec
+UPDATE ai_integration_syncs s
+SET schedule = NULL,
+    kind = NULL
+FROM ai_integration_configs c
+WHERE s.ai_integration_config_id = c.id
+  AND c.id = $1
+  AND c.project_id = $2
+`
+
+type ClearSyncScheduleDiscriminatorsForTestParams struct {
+	AiIntegrationConfigID uuid.UUID
+	ProjectID             uuid.UUID
+}
+
+// Test-only fixtures for transitional sync-row behavior.
+func (q *Queries) ClearSyncScheduleDiscriminatorsForTest(ctx context.Context, arg ClearSyncScheduleDiscriminatorsForTestParams) error {
+	_, err := q.db.Exec(ctx, clearSyncScheduleDiscriminatorsForTest, arg.AiIntegrationConfigID, arg.ProjectID)
 	return err
 }
 
@@ -48,26 +149,114 @@ func (q *Queries) CountConfigsByOrganization(ctx context.Context, arg CountConfi
 	return count, err
 }
 
-const ensureSync = `-- name: EnsureSync :one
-WITH inserted AS (
+const countSyncRowsForTest = `-- name: CountSyncRowsForTest :one
+SELECT count(*)::bigint
+FROM ai_integration_syncs s
+JOIN ai_integration_configs c ON c.id = s.ai_integration_config_id
+WHERE c.id = $1
+  AND c.project_id = $2
+`
+
+type CountSyncRowsForTestParams struct {
+	AiIntegrationConfigID uuid.UUID
+	ProjectID             uuid.UUID
+}
+
+func (q *Queries) CountSyncRowsForTest(ctx context.Context, arg CountSyncRowsForTestParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countSyncRowsForTest, arg.AiIntegrationConfigID, arg.ProjectID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const deleteSyncRowsForTest = `-- name: DeleteSyncRowsForTest :exec
+DELETE FROM ai_integration_syncs s
+USING ai_integration_configs c
+WHERE s.ai_integration_config_id = c.id
+  AND c.id = $1
+  AND c.project_id = $2
+`
+
+type DeleteSyncRowsForTestParams struct {
+	AiIntegrationConfigID uuid.UUID
+	ProjectID             uuid.UUID
+}
+
+func (q *Queries) DeleteSyncRowsForTest(ctx context.Context, arg DeleteSyncRowsForTestParams) error {
+	_, err := q.db.Exec(ctx, deleteSyncRowsForTest, arg.AiIntegrationConfigID, arg.ProjectID)
+	return err
+}
+
+const ensurePrimarySync = `-- name: EnsurePrimarySync :one
+WITH config AS MATERIALIZED (
+  SELECT id, provider
+  FROM ai_integration_configs
+  WHERE ai_integration_configs.id = $1
+    AND ai_integration_configs.project_id = $2
+),
+updated AS (
+  UPDATE ai_integration_syncs s
+  SET schedule = COALESCE(s.schedule, c.provider),
+      kind = COALESCE(
+        s.kind,
+        CASE c.provider
+          WHEN 'anthropic_compliance' THEN 'cursor'
+          ELSE 'time'
+        END
+      ),
+      updated_at = clock_timestamp()
+  FROM config c
+  WHERE s.ai_integration_config_id = c.id
+    AND (s.schedule = c.provider OR s.schedule IS NULL)
+    AND (s.schedule IS NULL OR s.kind IS NULL)
+  RETURNING s.created_at, s.updated_at, s.ai_integration_config_id, s.schedule, s.kind, s.poll_watermark_at, s.last_cursor_id, s.next_poll_after, s.last_poll_error, s.last_poll_failed_at, s.last_poll_success_at, s.consecutive_failures, s.id
+),
+inserted AS (
   INSERT INTO ai_integration_syncs (
     ai_integration_config_id
-  ) VALUES (
-    $1
+  , schedule
+  , kind
   )
-  ON CONFLICT (ai_integration_config_id) DO NOTHING
+  SELECT
+    c.id
+  , c.provider
+  , CASE c.provider
+      WHEN 'anthropic_compliance' THEN 'cursor'
+      ELSE 'time'
+    END
+  FROM config c
+  WHERE NOT EXISTS (SELECT 1 FROM updated)
+    AND NOT EXISTS (
+      SELECT 1
+      FROM ai_integration_syncs s
+      WHERE s.ai_integration_config_id = c.id
+        AND (s.schedule = c.provider OR s.schedule IS NULL)
+    )
+  ON CONFLICT DO NOTHING
   RETURNING created_at, updated_at, ai_integration_config_id, schedule, kind, poll_watermark_at, last_cursor_id, next_poll_after, last_poll_error, last_poll_failed_at, last_poll_success_at, consecutive_failures, id
 )
 SELECT created_at, updated_at, ai_integration_config_id, schedule, kind, poll_watermark_at, last_cursor_id, next_poll_after, last_poll_error, last_poll_failed_at, last_poll_success_at, consecutive_failures, id
-FROM inserted
+FROM updated
 UNION ALL
 SELECT created_at, updated_at, ai_integration_config_id, schedule, kind, poll_watermark_at, last_cursor_id, next_poll_after, last_poll_error, last_poll_failed_at, last_poll_success_at, consecutive_failures, id
-FROM ai_integration_syncs
-WHERE ai_integration_config_id = $1
+FROM inserted
+UNION ALL
+SELECT s.created_at, s.updated_at, s.ai_integration_config_id, s.schedule, s.kind, s.poll_watermark_at, s.last_cursor_id, s.next_poll_after, s.last_poll_error, s.last_poll_failed_at, s.last_poll_success_at, s.consecutive_failures, s.id
+FROM ai_integration_syncs s
+JOIN config c
+  ON s.ai_integration_config_id = c.id
+ AND (s.schedule = c.provider OR s.schedule IS NULL)
+WHERE NOT EXISTS (SELECT 1 FROM updated)
+  AND NOT EXISTS (SELECT 1 FROM inserted)
 LIMIT 1
 `
 
-type EnsureSyncRow struct {
+type EnsurePrimarySyncParams struct {
+	AiIntegrationConfigID uuid.UUID
+	ProjectID             uuid.UUID
+}
+
+type EnsurePrimarySyncRow struct {
 	CreatedAt             pgtype.Timestamptz
 	UpdatedAt             pgtype.Timestamptz
 	AiIntegrationConfigID uuid.UUID
@@ -83,9 +272,16 @@ type EnsureSyncRow struct {
 	ID                    uuid.UUID
 }
 
-func (q *Queries) EnsureSync(ctx context.Context, aiIntegrationConfigID uuid.UUID) (EnsureSyncRow, error) {
-	row := q.db.QueryRow(ctx, ensureSync, aiIntegrationConfigID)
-	var i EnsureSyncRow
+// EnsurePrimarySync works while either the legacy config-only unique index or
+// the schedule-aware composite index exists. A targetless conflict clause
+// avoids coupling this writer to the index that Phase 3 will remove.
+//
+// PostgreSQL statement snapshots do not see a row inserted by a concurrent
+// transaction after this statement starts. The caller retries pgx.ErrNoRows
+// in a fresh statement so a conflict loser can read the committed row.
+func (q *Queries) EnsurePrimarySync(ctx context.Context, arg EnsurePrimarySyncParams) (EnsurePrimarySyncRow, error) {
+	row := q.db.QueryRow(ctx, ensurePrimarySync, arg.AiIntegrationConfigID, arg.ProjectID)
+	var i EnsurePrimarySyncRow
 	err := row.Scan(
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -118,7 +314,9 @@ SELECT
   , s.created_at AS sync_created_at
   , s.updated_at AS sync_updated_at
 FROM ai_integration_configs c
-JOIN ai_integration_syncs s ON s.ai_integration_config_id = c.id
+JOIN ai_integration_syncs s
+  ON s.ai_integration_config_id = c.id
+ AND (s.schedule = c.provider OR s.schedule IS NULL)
 WHERE c.organization_id = $1
   AND c.provider = $2
   AND c.deleted IS FALSE
@@ -200,6 +398,49 @@ func (q *Queries) GetFirstProjectByOrganization(ctx context.Context, organizatio
 	return id, err
 }
 
+const getPrimarySyncDiscriminatorsForTest = `-- name: GetPrimarySyncDiscriminatorsForTest :one
+SELECT s.id, s.schedule, s.kind
+FROM ai_integration_syncs s
+JOIN ai_integration_configs c ON c.id = s.ai_integration_config_id
+WHERE c.id = $1
+  AND c.project_id = $2
+  AND (s.schedule = c.provider OR s.schedule IS NULL)
+LIMIT 1
+`
+
+type GetPrimarySyncDiscriminatorsForTestParams struct {
+	AiIntegrationConfigID uuid.UUID
+	ProjectID             uuid.UUID
+}
+
+type GetPrimarySyncDiscriminatorsForTestRow struct {
+	ID       uuid.UUID
+	Schedule pgtype.Text
+	Kind     pgtype.Text
+}
+
+func (q *Queries) GetPrimarySyncDiscriminatorsForTest(ctx context.Context, arg GetPrimarySyncDiscriminatorsForTestParams) (GetPrimarySyncDiscriminatorsForTestRow, error) {
+	row := q.db.QueryRow(ctx, getPrimarySyncDiscriminatorsForTest, arg.AiIntegrationConfigID, arg.ProjectID)
+	var i GetPrimarySyncDiscriminatorsForTestRow
+	err := row.Scan(&i.ID, &i.Schedule, &i.Kind)
+	return i, err
+}
+
+const getSyncScheduleBackfillStatus = `-- name: GetSyncScheduleBackfillStatus :one
+SELECT count(*)::bigint AS primary_syncs_pending
+FROM ai_integration_syncs s
+JOIN ai_integration_configs c ON c.id = s.ai_integration_config_id
+WHERE c.project_id = $1
+  AND (s.schedule IS NULL OR s.kind IS NULL)
+`
+
+func (q *Queries) GetSyncScheduleBackfillStatus(ctx context.Context, projectID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, getSyncScheduleBackfillStatus, projectID)
+	var primary_syncs_pending int64
+	err := row.Scan(&primary_syncs_pending)
+	return primary_syncs_pending, err
+}
+
 const getUsagePollConfigByID = `-- name: GetUsagePollConfigByID :one
 SELECT
     c.created_at, c.deleted_at, c.updated_at, c.organization_id, c.provider, c.project_id, c.external_organization_id, c.api_key_encrypted, c.enabled, c.billing_mode, c.id, c.deleted
@@ -214,7 +455,9 @@ SELECT
   , s.created_at AS sync_created_at
   , s.updated_at AS sync_updated_at
 FROM ai_integration_configs c
-JOIN ai_integration_syncs s ON s.ai_integration_config_id = c.id
+JOIN ai_integration_syncs s
+  ON s.ai_integration_config_id = c.id
+ AND (s.schedule = c.provider OR s.schedule IS NULL)
 WHERE c.id = $1
   AND c.enabled IS TRUE
   AND c.deleted IS FALSE
@@ -349,7 +592,9 @@ SELECT
   , s.created_at AS sync_created_at
   , s.updated_at AS sync_updated_at
 FROM ai_integration_configs c
-JOIN ai_integration_syncs s ON s.ai_integration_config_id = c.id
+JOIN ai_integration_syncs s
+  ON s.ai_integration_config_id = c.id
+ AND (s.schedule = c.provider OR s.schedule IS NULL)
 WHERE c.provider = $1
   AND c.enabled IS TRUE
   AND c.deleted IS FALSE
@@ -437,6 +682,7 @@ JOIN organization_metadata om ON om.id = c.organization_id
 WHERE c.enabled IS TRUE
   AND c.deleted IS FALSE
   AND c.api_key_encrypted IS NOT NULL
+  AND (s.schedule = c.provider OR s.schedule IS NULL)
   AND s.next_poll_after <= $1
 ORDER BY s.next_poll_after ASC, c.organization_id ASC, c.provider ASC
 LIMIT $2
@@ -487,16 +733,23 @@ SET next_poll_after = $1,
     consecutive_failures = consecutive_failures + 1,
     updated_at = clock_timestamp()
 WHERE ai_integration_config_id = $3
+  AND (schedule = $4::text OR schedule IS NULL)
 `
 
 type RecordUsagePollFailureParams struct {
 	NextPollAfter         pgtype.Timestamptz
 	LastPollError         pgtype.Text
 	AiIntegrationConfigID uuid.UUID
+	Schedule              string
 }
 
 func (q *Queries) RecordUsagePollFailure(ctx context.Context, arg RecordUsagePollFailureParams) error {
-	_, err := q.db.Exec(ctx, recordUsagePollFailure, arg.NextPollAfter, arg.LastPollError, arg.AiIntegrationConfigID)
+	_, err := q.db.Exec(ctx, recordUsagePollFailure,
+		arg.NextPollAfter,
+		arg.LastPollError,
+		arg.AiIntegrationConfigID,
+		arg.Schedule,
+	)
 	return err
 }
 
@@ -511,6 +764,7 @@ SET poll_watermark_at = $1,
     last_cursor_id = $3,
     updated_at = clock_timestamp()
 WHERE ai_integration_config_id = $4
+  AND (schedule = $5::text OR schedule IS NULL)
 `
 
 type RecordUsagePollSuccessParams struct {
@@ -518,6 +772,7 @@ type RecordUsagePollSuccessParams struct {
 	NextPollAfter         pgtype.Timestamptz
 	LastCursorID          pgtype.Text
 	AiIntegrationConfigID uuid.UUID
+	Schedule              string
 }
 
 func (q *Queries) RecordUsagePollSuccess(ctx context.Context, arg RecordUsagePollSuccessParams) error {
@@ -526,6 +781,7 @@ func (q *Queries) RecordUsagePollSuccess(ctx context.Context, arg RecordUsagePol
 		arg.NextPollAfter,
 		arg.LastCursorID,
 		arg.AiIntegrationConfigID,
+		arg.Schedule,
 	)
 	return err
 }
@@ -541,16 +797,23 @@ SET poll_watermark_at = $1,
     last_cursor_id = NULL,
     updated_at = clock_timestamp()
 WHERE ai_integration_config_id = $3
+  AND (schedule = $4::text OR schedule IS NULL)
 `
 
 type ResetUsagePollStateParams struct {
 	PollWatermarkAt       pgtype.Timestamptz
 	NextPollAfter         pgtype.Timestamptz
 	AiIntegrationConfigID uuid.UUID
+	Schedule              string
 }
 
 func (q *Queries) ResetUsagePollState(ctx context.Context, arg ResetUsagePollStateParams) error {
-	_, err := q.db.Exec(ctx, resetUsagePollState, arg.PollWatermarkAt, arg.NextPollAfter, arg.AiIntegrationConfigID)
+	_, err := q.db.Exec(ctx, resetUsagePollState,
+		arg.PollWatermarkAt,
+		arg.NextPollAfter,
+		arg.AiIntegrationConfigID,
+		arg.Schedule,
+	)
 	return err
 }
 
