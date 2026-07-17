@@ -50,21 +50,22 @@ func (s *UsagePollService) SyncCursorUsage(ctx context.Context, cfg Config, endT
 		return oops.E(oops.CodeInvalid, nil, "unsupported ai integration provider for usage polling: %s", cfg.Provider)
 	}
 
-	poller := &timeWindowPoller{
-		store:           s.store,
-		telemetryLogger: s.telemetryLogger,
-		schedule:        ScheduleCursor,
-		heartbeat:       s.heartbeat,
+	runner := &poller[[]telemetry.LogParams]{
+		store:       s.store,
+		schedule:    ScheduleCursor,
+		heartbeat:   s.heartbeat,
+		processPage: s.telemetryLogger.LogBulk,
+		// Cursor usage is immediately final and has no provider window limit.
 		initialLookback: initialUsagePollLookback,
 		maxWindow:       0,
 		granularity:     0,
 	}
-	source := &cursorUsageSource{
+	src := &cursorUsageSource{
 		client: cursorapi.New(s.guardianPolicy, cursorapi.WithAPIKey(cfg.APIKey)),
 		svc:    s,
 		cfg:    cfg,
 	}
-	return poller.sync(ctx, cfg, cfg.PollWatermarkAt, source, endTime)
+	return runner.sync(ctx, cfg, cfg.PollWatermarkAt, src, endTime)
 }
 
 // cursorUsageSource adapts one Cursor usage-events response page to the
@@ -80,38 +81,38 @@ func (src *cursorUsageSource) UpperBound(_ context.Context, endTime time.Time) (
 	return endTime, nil
 }
 
-func (src *cursorUsageSource) FetchPage(ctx context.Context, start, end time.Time, pageToken string) (timeWindowPage, error) {
+func (src *cursorUsageSource) FetchPage(ctx context.Context, start, end time.Time, pageToken string) (page[[]telemetry.LogParams], error) {
 	pageNum := 1
 	if pageToken != "" {
 		parsed, err := strconv.Atoi(pageToken)
 		if err != nil {
-			return timeWindowPage{}, fmt.Errorf("parse cursor usage page %q: %w", pageToken, err)
+			return page[[]telemetry.LogParams]{}, fmt.Errorf("parse cursor usage page %q: %w", pageToken, err)
 		}
 		pageNum = parsed
 	}
 
-	page, err := src.client.FetchUsageEventsPage(ctx, cursorapi.FetchUsageEventsPageParams{
+	res, err := src.client.FetchUsageEventsPage(ctx, cursorapi.FetchUsageEventsPageParams{
 		Start: start.Add(time.Millisecond),
 		End:   end,
 		Page:  pageNum,
 	})
 	if err != nil {
-		return timeWindowPage{}, fmt.Errorf("fetch cursor usage events page: %w", err)
+		return page[[]telemetry.LogParams]{}, fmt.Errorf("fetch cursor usage events page: %w", err)
 	}
 
-	rows := make([]telemetry.LogParams, 0, len(page.Events))
-	for _, event := range page.Events {
+	rows := make([]telemetry.LogParams, 0, len(res.Events))
+	for _, event := range res.Events {
 		rows = append(rows, src.svc.buildCursorUsageEvent(src.cfg, event))
 	}
 
 	nextPage := ""
-	if page.HasNextPage {
+	if res.HasNextPage {
 		nextPage = strconv.Itoa(pageNum + 1)
 	}
-	return timeWindowPage{
-		Rows:     rows,
+	return page[[]telemetry.LogParams]{
+		Payload:  rows,
 		NextPage: nextPage,
-		HasMore:  page.HasNextPage,
+		HasMore:  res.HasNextPage,
 	}, nil
 }
 

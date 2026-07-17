@@ -55,7 +55,7 @@ const (
 
 // anthropicAnalyticsSourceFactory builds the report-specific source for one
 // sync, bound to that sync's API client and config.
-type anthropicAnalyticsSourceFactory func(client *anthropicapi.Client, cfg Config) timeWindowSource
+type anthropicAnalyticsSourceFactory func(client *anthropicapi.Client, cfg Config) source[[]telemetry.LogParams]
 
 // AnthropicAnalyticsPoller ingests one Admin Analytics report — usage or
 // cost — from the Anthropic API into telemetry_logs, where the
@@ -86,7 +86,7 @@ func NewAnthropicUsageAnalyticsPoller(
 	heartbeat func(ctx context.Context, scope string, page int),
 ) *AnthropicAnalyticsPoller {
 	return newAnthropicAnalyticsPoller(store, guardianPolicy, telemetryLogger, heartbeat, ScheduleAnthropicAnalyticsUsage,
-		func(client *anthropicapi.Client, cfg Config) timeWindowSource {
+		func(client *anthropicapi.Client, cfg Config) source[[]telemetry.LogParams] {
 			return &anthropicUsageReportSource{client: client, cfg: cfg}
 		})
 }
@@ -100,7 +100,7 @@ func NewAnthropicCostAnalyticsPoller(
 	heartbeat func(ctx context.Context, scope string, page int),
 ) *AnthropicAnalyticsPoller {
 	return newAnthropicAnalyticsPoller(store, guardianPolicy, telemetryLogger, heartbeat, ScheduleAnthropicAnalyticsCost,
-		func(client *anthropicapi.Client, cfg Config) timeWindowSource {
+		func(client *anthropicapi.Client, cfg Config) source[[]telemetry.LogParams] {
 			return &anthropicCostReportSource{client: client, cfg: cfg}
 		})
 }
@@ -138,13 +138,13 @@ func (p *AnthropicAnalyticsPoller) Sync(ctx context.Context, cfg Config, endTime
 
 	client := anthropicapi.New(p.guardianPolicy, anthropicapi.WithAPIKey(cfg.APIKey), anthropicapi.WithBaseURL(p.baseURL))
 
-	runner := &timeWindowPoller{
-		store:           p.store,
-		telemetryLogger: p.telemetryLogger,
-		schedule:        p.schedule,
+	runner := &poller[[]telemetry.LogParams]{
+		store:    p.store,
+		schedule: p.schedule,
 		heartbeat: func(ctx context.Context, page int) {
 			p.heartbeat(ctx, p.schedule, page)
 		},
+		processPage:     p.telemetryLogger.LogBulk,
 		initialLookback: anthropicAnalyticsInitialLookback,
 		maxWindow:       anthropicAnalyticsMaxWindow,
 		granularity:     time.Minute,
@@ -215,17 +215,17 @@ func (src *anthropicUsageReportSource) UpperBound(ctx context.Context, endTime t
 	return refreshedAt.UTC(), nil
 }
 
-func (src *anthropicUsageReportSource) FetchPage(ctx context.Context, start, end time.Time, pageToken string) (timeWindowPage, error) {
+func (src *anthropicUsageReportSource) FetchPage(ctx context.Context, start, end time.Time, pageToken string) (page[[]telemetry.LogParams], error) {
 	res, err := src.client.GetUserUsageReport(ctx, analyticsWindowParams(start, end, pageToken))
 	if err != nil {
-		return timeWindowPage{}, err //nolint:wrapcheck // Preserve HTTPError for access-denied and rate-limit handling upstream.
+		return page[[]telemetry.LogParams]{}, err //nolint:wrapcheck // Preserve HTTPError for access-denied and rate-limit handling upstream.
 	}
 	rows, err := buildClaudeChatUsageRows(src.cfg, res.Data)
 	if err != nil {
-		return timeWindowPage{}, err
+		return page[[]telemetry.LogParams]{}, err
 	}
-	return timeWindowPage{
-		Rows:     rows,
+	return page[[]telemetry.LogParams]{
+		Payload:  rows,
 		NextPage: res.NextPage,
 		HasMore:  res.HasMore,
 	}, nil
@@ -258,17 +258,17 @@ func (src *anthropicCostReportSource) UpperBound(ctx context.Context, endTime ti
 	return refreshedAt.UTC(), nil
 }
 
-func (src *anthropicCostReportSource) FetchPage(ctx context.Context, start, end time.Time, pageToken string) (timeWindowPage, error) {
+func (src *anthropicCostReportSource) FetchPage(ctx context.Context, start, end time.Time, pageToken string) (page[[]telemetry.LogParams], error) {
 	res, err := src.client.GetUserCostReport(ctx, analyticsWindowParams(start, end, pageToken))
 	if err != nil {
-		return timeWindowPage{}, err //nolint:wrapcheck // Preserve HTTPError for access-denied and rate-limit handling upstream.
+		return page[[]telemetry.LogParams]{}, err //nolint:wrapcheck // Preserve HTTPError for access-denied and rate-limit handling upstream.
 	}
 	rows, err := buildClaudeChatCostRows(src.cfg, res.Data)
 	if err != nil {
-		return timeWindowPage{}, err
+		return page[[]telemetry.LogParams]{}, err
 	}
-	return timeWindowPage{
-		Rows:     rows,
+	return page[[]telemetry.LogParams]{
+		Payload:  rows,
 		NextPage: res.NextPage,
 		HasMore:  res.HasMore,
 	}, nil

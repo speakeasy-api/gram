@@ -7,58 +7,51 @@ import (
 
 	"github.com/google/uuid"
 	"golang.org/x/sync/errgroup"
-
-	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
 const (
-	timeWindowPageBufferSize  = 1
-	timeWindowHeartbeatPeriod = 10 * time.Second
+	pageBufferSize  = 1
+	heartbeatPeriod = 10 * time.Second
 )
 
-type timeWindowPage struct {
-	Rows     []telemetry.LogParams
+type page[T any] struct {
+	Payload  T
 	NextPage string
 	HasMore  bool
 }
 
-// timeWindowSource adapts one provider report to the shared time-window
+// source adapts one provider report to the shared time-window
 // poller. Implementations make one API call and map one response page. The
-// poller owns pagination, rate-limit waits, heartbeats, writes, and durable
+// poller owns pagination, rate-limit waits, heartbeats, processing, and durable
 // watermark advancement.
-type timeWindowSource interface {
+type source[T any] interface {
 	// UpperBound returns the exclusive upper bound for pulls ending at
 	// endTime, e.g. a provider finalization watermark like Anthropic's
 	// data_refreshed_at. Sources whose data is immediately final return
 	// endTime.
 	UpperBound(ctx context.Context, endTime time.Time) (time.Time, error)
-	// FetchPage fetches one response page for the fixed window. page is empty
-	// for the first request and otherwise the opaque value returned by the
-	// preceding response.
-	FetchPage(ctx context.Context, start, end time.Time, page string) (timeWindowPage, error)
+	// FetchPage fetches one response page for the fixed window. pageToken is
+	// empty for the first request and otherwise the opaque value returned by
+	// the preceding response.
+	FetchPage(ctx context.Context, start, end time.Time, pageToken string) (page[T], error)
 	// RetryAfter translates a provider rate-limit error into a requested wait.
 	// A zero duration asks the poller to apply its default delay.
 	RetryAfter(err error) (time.Duration, bool)
 }
 
-type timeWindowCheckpointStore interface {
+type checkpointStore interface {
 	AdvanceSchedulePollWatermark(ctx context.Context, configID uuid.UUID, schedule string, watermark time.Time) error
 }
 
-type telemetryBulkLogger interface {
-	LogBulk(ctx context.Context, params []telemetry.LogParams) error
-}
-
-// timeWindowPoller drives a time-kind sync schedule: it walks the range from
+// poller drives a time-kind sync schedule: it walks the range from
 // the schedule's watermark to the source's upper bound one window at a time,
-// pipelines page fetches with page-sized bulk writes, and advances the
+// pipelines page fetches with page processing, and advances the
 // watermark only after every page in a window is durable.
-type timeWindowPoller struct {
-	store           timeWindowCheckpointStore
-	telemetryLogger telemetryBulkLogger
-	schedule        string
-	heartbeat       func(ctx context.Context, page int)
+type poller[T any] struct {
+	store       checkpointStore
+	schedule    string
+	heartbeat   func(ctx context.Context, page int)
+	processPage func(ctx context.Context, payload T) error
 	// initialLookback bounds the first window for a schedule that has never
 	// synced (zero watermark).
 	initialLookback time.Duration
@@ -70,9 +63,9 @@ type timeWindowPoller struct {
 	granularity time.Duration
 }
 
-func (p *timeWindowPoller) sync(ctx context.Context, cfg Config, watermarkAt time.Time, source timeWindowSource, endTime time.Time) error {
+func (p *poller[T]) sync(ctx context.Context, cfg Config, watermarkAt time.Time, src source[T], endTime time.Time) error {
 	p.heartbeat(ctx, 0)
-	upperBound, err := p.upperBound(ctx, source, endTime)
+	upperBound, err := p.upperBound(ctx, src, endTime)
 	if err != nil {
 		return fmt.Errorf("fetch %s upper bound: %w", p.schedule, err)
 	}
@@ -90,7 +83,7 @@ func (p *timeWindowPoller) sync(ctx context.Context, cfg Config, watermarkAt tim
 			windowEnd = windowStart.Add(p.maxWindow)
 		}
 
-		if err := p.fetchAndWriteWindow(ctx, source, windowStart, windowEnd); err != nil {
+		if err := p.fetchAndProcessWindow(ctx, src, windowStart, windowEnd); err != nil {
 			return err
 		}
 
@@ -102,14 +95,14 @@ func (p *timeWindowPoller) sync(ctx context.Context, cfg Config, watermarkAt tim
 	return nil
 }
 
-func (p *timeWindowPoller) upperBound(ctx context.Context, source timeWindowSource, endTime time.Time) (time.Time, error) {
+func (p *poller[T]) upperBound(ctx context.Context, src source[T], endTime time.Time) (time.Time, error) {
 	for {
-		upperBound, err := source.UpperBound(ctx, endTime)
+		upperBound, err := src.UpperBound(ctx, endTime)
 		if err == nil {
 			return upperBound, nil
 		}
 
-		retryAfter, retry := source.RetryAfter(err)
+		retryAfter, retry := src.RetryAfter(err)
 		if !retry {
 			return time.Time{}, fmt.Errorf("get provider upper bound: %w", err)
 		}
@@ -120,13 +113,13 @@ func (p *timeWindowPoller) upperBound(ctx context.Context, source timeWindowSour
 	}
 }
 
-// fetchAndWriteWindow overlaps fetching page N+1 with writing page N. A
+// fetchAndProcessWindow overlaps fetching page N+1 with processing page N. A
 // provider fetch failure is delivered through fetchDone instead of being
-// returned directly from the producer goroutine so the writer can finish any
+// returned directly from the producer goroutine so the consumer can finish any
 // already-fetched pages before the error cancels the errgroup context.
-func (p *timeWindowPoller) fetchAndWriteWindow(ctx context.Context, source timeWindowSource, start, end time.Time) error {
+func (p *poller[T]) fetchAndProcessWindow(ctx context.Context, src source[T], start, end time.Time) error {
 	group, groupCtx := errgroup.WithContext(ctx)
-	pages := make(chan timeWindowPage, timeWindowPageBufferSize)
+	pages := make(chan page[T], pageBufferSize)
 	fetchDone := make(chan error, 1)
 
 	group.Go(func() error {
@@ -141,14 +134,14 @@ func (p *timeWindowPoller) fetchAndWriteWindow(ctx context.Context, source timeW
 		for pageNum := 1; ; pageNum++ {
 			p.heartbeat(groupCtx, pageNum)
 
-			var page timeWindowPage
+			var current page[T]
 			for {
-				page, fetchErr = source.FetchPage(groupCtx, start, end, pageToken)
+				current, fetchErr = src.FetchPage(groupCtx, start, end, pageToken)
 				if fetchErr == nil {
 					break
 				}
 
-				retryAfter, retry := source.RetryAfter(fetchErr)
+				retryAfter, retry := src.RetryAfter(fetchErr)
 				if !retry {
 					fetchErr = fmt.Errorf("fetch %s page %d: %w", p.schedule, pageNum, fetchErr)
 					return nil
@@ -164,27 +157,24 @@ func (p *timeWindowPoller) fetchAndWriteWindow(ctx context.Context, source timeW
 			case <-groupCtx.Done():
 				fetchErr = groupCtx.Err()
 				return nil
-			case pages <- page:
+			case pages <- current:
 			}
 
-			if !page.HasMore {
+			if !current.HasMore {
 				return nil
 			}
-			if page.NextPage == "" {
+			if current.NextPage == "" {
 				fetchErr = fmt.Errorf("fetch %s page %d: provider returned has_more without a next page", p.schedule, pageNum)
 				return nil
 			}
-			pageToken = page.NextPage
+			pageToken = current.NextPage
 		}
 	})
 
 	group.Go(func() error {
-		for page := range pages {
-			if len(page.Rows) == 0 {
-				continue
-			}
-			if err := p.telemetryLogger.LogBulk(groupCtx, page.Rows); err != nil {
-				return oops.E(oops.CodeUnexpected, err, "insert ai integration telemetry page")
+		for current := range pages {
+			if err := p.processPage(groupCtx, current.Payload); err != nil {
+				return fmt.Errorf("process %s page: %w", p.schedule, err)
 			}
 		}
 		if err := <-fetchDone; err != nil {
@@ -199,7 +189,7 @@ func (p *timeWindowPoller) fetchAndWriteWindow(ctx context.Context, source timeW
 	return nil
 }
 
-func (p *timeWindowPoller) waitForRetry(ctx context.Context, retryAfter time.Duration, page int) error {
+func (p *poller[T]) waitForRetry(ctx context.Context, retryAfter time.Duration, page int) error {
 	if retryAfter <= 0 {
 		retryAfter = time.Minute
 	}
@@ -208,7 +198,7 @@ func (p *timeWindowPoller) waitForRetry(ctx context.Context, retryAfter time.Dur
 	deadline := time.Now().Add(retryAfter)
 	for remaining := time.Until(deadline); remaining > 0; remaining = time.Until(deadline) {
 		p.heartbeat(ctx, page)
-		timer := time.NewTimer(min(remaining, timeWindowHeartbeatPeriod))
+		timer := time.NewTimer(min(remaining, heartbeatPeriod))
 		select {
 		case <-ctx.Done():
 			timer.Stop()
