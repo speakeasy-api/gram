@@ -1,8 +1,11 @@
 package auth
 
 import (
+	"encoding/hex"
 	"slices"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -80,6 +83,35 @@ func TestEffectiveScopes_NoMutation(t *testing.T) {
 	if len(in) != 1 || in[0] != APIKeyScopeAgent.String() {
 		t.Fatalf("input mutated: %v", in)
 	}
+}
+
+// TestDeviceAgentKeyName pins the DNO-383 device-agent key-name shape:
+// device-agent:<userID>:<YYYYMMDD-HHMMSS>:<8 hex chars>. The suffix is fresh
+// crypto/rand entropy (the function takes no token, so it cannot embed
+// secret-derived bytes), and each call is unique.
+func TestDeviceAgentKeyName(t *testing.T) {
+	t.Parallel()
+
+	const userID = "user-123"
+	name, err := DeviceAgentKeyName(userID)
+	require.NoError(t, err)
+
+	parts := strings.Split(name, ":")
+	require.Len(t, parts, 4, "name is device-agent:userID:timestamp:entropy")
+	require.Equal(t, "device-agent", parts[0])
+	require.Equal(t, userID, parts[1])
+
+	_, err = time.Parse("20060102-150405", parts[2])
+	require.NoError(t, err, "third segment is a parseable timestamp")
+
+	require.Len(t, parts[3], 8, "entropy suffix is 4 bytes = 8 hex chars")
+	_, err = hex.DecodeString(parts[3])
+	require.NoError(t, err, "entropy suffix is hex")
+
+	// Two mints for the same user do not collide (fresh entropy each time).
+	other, err := DeviceAgentKeyName(userID)
+	require.NoError(t, err)
+	require.NotEqual(t, name, other)
 }
 
 func TestIsOrgWidePluginHooksAPIKey(t *testing.T) {

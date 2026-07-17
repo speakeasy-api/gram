@@ -2,9 +2,11 @@ package auth
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"log/slog"
 	"slices"
 	"strings"
@@ -83,6 +85,26 @@ func IsOrgWidePluginHooksAPIKey(name, key, keyPrefix string) bool {
 		strings.HasPrefix(key, keyPrefix) &&
 		strings.HasSuffix(keyPrefix, tokenMarker[:5]) &&
 		key[len(keyPrefix)] == tokenMarker[5]
+}
+
+// DeviceAgentKeyName builds a unique, human-readable name for a minted
+// device-agent API key: "device-agent:<userID>:<YYYYMMDD-HHMMSS>:<random>".
+//
+// The timestamp records issuance — device-agent keys are minted in
+// low-frequency per-org bursts, so it is useful metadata. The random suffix is
+// drawn independently of the key's secret token (via crypto/rand), so it
+// guarantees uniqueness for the (organization_id, name) index without embedding
+// any secret-derived bytes in a metadata field that surfaces in dashboards and
+// admin tooling. Unlike the org-wide plugin/hooks keys (IsOrgWidePluginHooksAPIKey),
+// device-agent keys are authorized by scope, not name, so there is no minting
+// provenance to encode here.
+func DeviceAgentKeyName(userID string) (string, error) {
+	var suffix [4]byte
+	if _, err := rand.Read(suffix[:]); err != nil {
+		return "", fmt.Errorf("generate device-agent key name suffix: %w", err)
+	}
+	ts := time.Now().UTC().Format("20060102-150405")
+	return fmt.Sprintf("device-agent:%s:%s:%s", userID, ts, hex.EncodeToString(suffix[:])), nil
 }
 
 var APIKeyScopes = map[string]APIKeyScope{

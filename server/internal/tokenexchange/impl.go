@@ -46,11 +46,6 @@ import (
 	users_repo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
-// deviceAgentKeyName is the fixed name stamped on every minted device-agent
-// key. It is the rotation key: exchange revokes prior keys with this name owned
-// by the same user in the org before minting a fresh one.
-const deviceAgentKeyName = "device-agent"
-
 type Service struct {
 	tracer       trace.Tracer
 	logger       *slog.Logger
@@ -167,13 +162,16 @@ func (s *Service) Exchange(ctx context.Context, payload *gen.ExchangePayload) (*
 		return nil, oops.E(oops.CodeUnexpected, err, "hash api key").LogError(ctx, s.logger)
 	}
 
-	// Unique per-enrollment key name. API keys are not treated as singletons:
-	// each enrollment mints its own key (made unique by the random token suffix),
-	// so a user's other enrolled devices keep working — there is no
-	// revoke-then-mint gap, and no collision with the (organization_id, name)
-	// unique index. Stale keys are reclaimed out of band via revocation, not by
-	// deleting a prior key here.
-	keyName := deviceAgentKeyName + ":" + user.ID + ":" + token[:8]
+	// Unique per-enrollment key name (timestamp + fresh entropy, never
+	// secret-derived — see auth.DeviceAgentKeyName). API keys are not treated as
+	// singletons: each enrollment mints its own uniquely-named key, so a user's
+	// other enrolled devices keep working — there is no revoke-then-mint gap, and
+	// no collision with the (organization_id, name) unique index. Stale keys are
+	// reclaimed out of band via revocation, not by deleting a prior key here.
+	keyName, err := auth.DeviceAgentKeyName(user.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "generate device-agent key name").LogError(ctx, s.logger)
+	}
 
 	if _, err := s.keysRepo.CreateAPIKey(ctx, keys_repo.CreateAPIKeyParams{
 		OrganizationID:  orgID,

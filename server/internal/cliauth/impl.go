@@ -54,10 +54,6 @@ const (
 	// so they never collide with the other Redis consumers sharing the client.
 	codeKeyNamespace = "cliauth:code:"
 
-	// deviceAgentKeyName is the name stamped on the API key minted by redeem, so
-	// it is identifiable in the org's key list.
-	deviceAgentKeyName = "device-agent"
-
 	// pkceMethodS256 is the only PKCE challenge method this flow accepts.
 	pkceMethodS256 = "S256"
 )
@@ -316,12 +312,16 @@ func (s *Service) mintKey(ctx context.Context, record codeRecord, projectID uuid
 		return "", fmt.Errorf("hash api key: %w", err)
 	}
 
-	// Unique per-enrollment key name. API keys are not treated as singletons:
-	// each enrollment mints its own key (made unique by the random token suffix),
-	// so a user's other enrolled devices keep working — no revoke-then-mint gap,
-	// and no collision with the (organization_id, name) unique index. Stale keys
-	// are reclaimed out of band via revocation, not by deleting a prior key here.
-	keyName := deviceAgentKeyName + ":" + record.UserID + ":" + token[:8]
+	// Unique per-enrollment key name (timestamp + fresh entropy, never
+	// secret-derived — see auth.DeviceAgentKeyName). API keys are not treated as
+	// singletons: each enrollment mints its own uniquely-named key, so a user's
+	// other enrolled devices keep working — no revoke-then-mint gap, and no
+	// collision with the (organization_id, name) unique index. Stale keys are
+	// reclaimed out of band via revocation, not by deleting a prior key here.
+	keyName, err := auth.DeviceAgentKeyName(record.UserID)
+	if err != nil {
+		return "", fmt.Errorf("generate device-agent key name: %w", err)
+	}
 
 	// record.Scopes is set by Authorize and validated non-empty in Redeem, so it
 	// is used directly here — no default, so an unexpectedly empty scope set
