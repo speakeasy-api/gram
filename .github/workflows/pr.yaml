@@ -1960,6 +1960,7 @@ jobs:
       - atlas-push
       - webhooks-catalog-breaking-changes
       - tunnel-agent
+      - svix-sync-webhooks
     steps:
       - name: Check results
         env:
@@ -2006,11 +2007,7 @@ jobs:
 
   dispatch-release:
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    needs:
-      - ci-gate
-      - docker-build-server
-      - assistant-runtime-image
-      - svix-sync-webhooks
+    needs: [ci-gate]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - name: Generate GitHub App Token
