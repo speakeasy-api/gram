@@ -1,12 +1,6 @@
 -- One sync schedule per provider shares its name with the config's provider,
 -- so config-level reads join on s.schedule = c.provider. The other schedules
 -- (e.g. anthropic_analytics) are read by their own queries.
---
--- schedule/kind are nullable during the expand-contract transition: rows
--- written before the columns existed carry NULL until a worker adopts them
--- (see AdoptLegacySyncSchedulesForProvider). Config-level reads treat a NULL
--- schedule as the provider-named schedule so those rows stay visible until
--- adoption; the fallbacks go away with the contract migration.
 
 -- name: GetConfigByOrgAndProvider :one
 SELECT
@@ -25,7 +19,7 @@ SELECT
 FROM ai_integration_configs c
 JOIN ai_integration_syncs s
   ON s.ai_integration_config_id = c.id
- AND (s.schedule = c.provider OR s.schedule IS NULL)
+ AND s.schedule = c.provider
 WHERE c.organization_id = @organization_id
   AND c.provider = @provider
   AND c.deleted IS FALSE;
@@ -103,46 +97,6 @@ WHERE ai_integration_config_id = @ai_integration_config_id
   AND schedule = @schedule
 LIMIT 1;
 
--- AdoptLegacySyncSchedule labels one config's pre-schedule sync row as the
--- provider-named schedule so schedule-keyed reads and upserts see it. The
--- NOT EXISTS guard keeps the update from tripping the unique index if a
--- labeled provider-named row already exists next to an unlabeled legacy row.
--- name: AdoptLegacySyncSchedule :exec
-UPDATE ai_integration_syncs s
-SET schedule = @schedule,
-    kind = @kind,
-    updated_at = clock_timestamp()
-WHERE s.ai_integration_config_id = @ai_integration_config_id
-  AND s.schedule IS NULL
-  AND NOT EXISTS (
-    SELECT 1
-    FROM ai_integration_syncs other
-    WHERE other.ai_integration_config_id = s.ai_integration_config_id
-      AND other.schedule = @schedule
-  );
-
--- AdoptLegacySyncSchedulesForProvider is the bulk variant run ahead of
--- candidate listing. It only touches active configs: enabled, not deleted,
--- with an API key. Rows of inactive configs are deliberately left alone.
--- name: AdoptLegacySyncSchedulesForProvider :exec
-UPDATE ai_integration_syncs s
-SET schedule = c.provider,
-    kind = @kind,
-    updated_at = clock_timestamp()
-FROM ai_integration_configs c
-WHERE c.id = s.ai_integration_config_id
-  AND c.provider = @provider
-  AND c.enabled IS TRUE
-  AND c.deleted IS FALSE
-  AND c.api_key_encrypted IS NOT NULL
-  AND s.schedule IS NULL
-  AND NOT EXISTS (
-    SELECT 1
-    FROM ai_integration_syncs other
-    WHERE other.ai_integration_config_id = s.ai_integration_config_id
-      AND other.schedule = c.provider
-  );
-
 -- EnsureProviderSyncSchedules inserts one schedule's sync row for every
 -- active config of a provider that is missing it, due immediately with the
 -- caller's initial watermark (epoch for time-kind schedules, now for
@@ -187,7 +141,7 @@ SELECT
 FROM ai_integration_configs c
 JOIN ai_integration_syncs s
   ON s.ai_integration_config_id = c.id
- AND (s.schedule = c.provider OR s.schedule IS NULL)
+ AND s.schedule = c.provider
 WHERE c.provider = @provider
   AND c.enabled IS TRUE
   AND c.deleted IS FALSE
@@ -268,12 +222,11 @@ SELECT
 FROM ai_integration_configs c
 JOIN ai_integration_syncs s
   ON s.ai_integration_config_id = c.id
- AND (s.schedule = c.provider OR s.schedule IS NULL)
+ AND s.schedule = c.provider
 WHERE c.id = @ai_integration_config_id
   AND c.enabled IS TRUE
   AND c.deleted IS FALSE
   AND c.api_key_encrypted IS NOT NULL
-ORDER BY s.schedule ASC NULLS LAST
 LIMIT 1;
 
 -- name: GetUsagePollConfigByID :one
@@ -356,13 +309,6 @@ SELECT id, schedule, kind
 FROM ai_integration_syncs
 WHERE ai_integration_config_id = @ai_integration_config_id
 ORDER BY schedule;
-
--- InsertPreScheduleSyncRowForTest simulates a sync row written by code that
--- predates the schedule columns: NULL schedule/kind, already due. Test
--- fixture only.
--- name: InsertPreScheduleSyncRowForTest :exec
-INSERT INTO ai_integration_syncs (ai_integration_config_id, next_poll_after)
-VALUES (@ai_integration_config_id, clock_timestamp() - interval '1 hour');
 
 -- name: CountSyncRowsForTest :one
 SELECT count(*)

@@ -2999,13 +2999,10 @@ CREATE TABLE IF NOT EXISTS ai_integration_syncs (
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   ai_integration_config_id uuid NOT NULL,
   -- Discriminator for the sync pipeline (e.g. 'cursor', 'anthropic_compliance',
-  -- 'anthropic_analytics_usage'). Nullable during the expand-contract
-  -- transition; workers label active configs' rows lazily and a later contract
-  -- migration enforces NOT NULL.
-  schedule TEXT NULL,
-  -- How the schedule checkpoints progress: 'cursor' or 'time'. Nullable during
-  -- the expand-contract transition, same as schedule.
-  kind TEXT NULL,
+  -- 'anthropic_analytics_usage').
+  schedule TEXT NOT NULL,
+  -- How the schedule checkpoints progress: 'cursor' or 'time'.
+  kind TEXT NOT NULL,
   poll_watermark_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   poll_checkpoint TEXT,
   last_cursor_id TEXT,
