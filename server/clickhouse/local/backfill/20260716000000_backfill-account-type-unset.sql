@@ -151,14 +151,20 @@ FROM (
 --
 -- STAGING IS NOT IDEMPOTENT: a second run of the INSERT merges duplicate
 -- aggregate states into the same generation-2 keys and doubles the staged
--- spend. The guard below must return 0 rows staged; if it does not, a prior
--- staging attempt exists — hard-delete it first
--- (`ALTER TABLE attribute_metrics_summaries DELETE WHERE gram_project_id =
--- toUUID('<PROJECT_ID>') AND generation = 2 SETTINGS mutations_sync = 2`)
--- and only then re-run the INSERT.
+-- spend. Two ENFORCING guards prevent that: the throwIf below errors when
+-- generation-2 rows already exist (aborting a piped multi-statement run
+-- before the INSERT), and the INSERT's own WHERE repeats the check as a
+-- scalar-subquery predicate so a re-run inserts 0 rows even when the INSERT
+-- is executed on its own. If a prior staging attempt exists, hard-delete it
+-- first (`ALTER TABLE attribute_metrics_summaries DELETE WHERE
+-- gram_project_id = toUUID('<PROJECT_ID>') AND generation = 2 SETTINGS
+-- mutations_sync = 2`) and only then re-run the INSERT.
 -- ============================================================================
 
-SELECT count() AS existing_generation_2_rows -- MUST be 0 before staging
+SELECT throwIf(
+    count() > 0,
+    'generation 2 already staged for this project - hard-delete it before re-staging (see comment above)'
+) AS stage_once_guard
 FROM attribute_metrics_summaries
 WHERE gram_project_id = toUUID('<PROJECT_ID>')
   AND generation = 2;
@@ -257,6 +263,14 @@ WHERE gram_project_id = toUUID('<PROJECT_ID>')
   -- Only source rows that fed the "(unset)" bucket (indexed materialized column).
   AND account_type = ''
   AND (is_claude_api_request OR is_claude_tool_result OR is_agent_usage_row OR is_agent_tool_call)
+  -- Stage-once guard, enforced in the INSERT itself: inserts 0 rows if a
+  -- prior generation-2 staging already exists (see comment above the throwIf).
+  AND (
+      SELECT count()
+      FROM attribute_metrics_summaries
+      WHERE gram_project_id = toUUID('<PROJECT_ID>')
+        AND generation = 2
+  ) = 0
 GROUP BY
     gram_project_id,
     time_bucket,
