@@ -80,47 +80,6 @@ func insertAttributeUsageLog(t *testing.T, ctx context.Context, projectID string
 	require.NoError(t, err)
 }
 
-// insertAttributeClaudeChatMetricLog inserts one sessionless Admin Analytics
-// usage or cost row. eventHash is the durable read-time deduplication key.
-func insertAttributeClaudeChatMetricLog(t *testing.T, ctx context.Context, projectID string, timestamp time.Time, urn, eventHash string, cost float64, inputTokens, outputTokens, cacheReadTokens, cacheCreationTokens int) {
-	t.Helper()
-
-	conn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
-	id, err := uuid.NewV7()
-	require.NoError(t, err)
-
-	attributes := map[string]any{
-		"claude_chat.event_hash":                   eventHash,
-		"gen_ai.usage.input_tokens":                inputTokens,
-		"gen_ai.usage.output_tokens":               outputTokens,
-		"gen_ai.usage.cache_read.input_tokens":     cacheReadTokens,
-		"gen_ai.usage.cache_creation.input_tokens": cacheCreationTokens,
-		"gen_ai.usage.cost":                        cost,
-		"gen_ai.response.model":                    "claude-opus-4-8",
-		"gram.hook.source":                         "claude-chat",
-		"gram.provider":                            "anthropic",
-		"gram.account_type":                        "team",
-		"user.email":                               "claude-chat@example.com",
-		"user.attributes.department_name":          "Engineering",
-	}
-
-	attrsJSON, err := json.Marshal(attributes)
-	require.NoError(t, err)
-
-	err = conn.Exec(ctx, `
-		INSERT INTO telemetry_logs (
-			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
-			trace_id, span_id, attributes, resource_attributes,
-			gram_project_id, gram_urn, service_name
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, id.String(), timestamp.UnixNano(), time.Now().UnixNano(), "INFO", "Claude Chat analytics",
-		nil, nil, string(attrsJSON), "{}",
-		projectID, urn, "gram-server")
-	require.NoError(t, err)
-}
-
 // insertAttributeClaudeAPIRequestLog inserts the Claude Code api_request row that
 // now carries Claude token/cost attribution for attribute_metrics_summaries.
 func insertAttributeClaudeAPIRequestLog(t *testing.T, ctx context.Context, projectID string, timestamp time.Time, chatID string, cost float64, inputTokens, outputTokens, cacheReadTokens, cacheCreationTokens int, model, email, department string, roles []string, querySource, skillName, agentName, mcpServerName, mcpToolName string) {
@@ -483,64 +442,6 @@ func TestQuery_GroupByDimensionsAndDrilldown(t *testing.T) {
 	require.Empty(t, totalResult.Table[0].GroupValue)
 	require.InDelta(t, 0.85, totalResult.Table[0].Measures.TotalCost, 1e-9)
 	require.Len(t, totalResult.Timeseries, 1)
-}
-
-func TestQuery_DeduplicatesClaudeChatMetricsByEventHash(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestLogsService(t)
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	projectID := authCtx.ProjectID.String()
-
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
-
-	now := time.Date(2026, time.July, 20, 1, 0, 0, 0, time.UTC)
-	ts := now.Add(-10 * time.Minute)
-
-	// A retry physically writes each page row again. Matching
-	// (project, event_hash) pairs count once.
-	for range 2 {
-		insertAttributeClaudeChatMetricLog(t, ctx, projectID, ts, "claude_chat:usage:metrics", "usage-retried", 0, 100, 50, 1000, 25)
-		insertAttributeClaudeChatMetricLog(t, ctx, projectID, ts, "claude_chat:cost:metrics", "cost-retried", 1.5, 0, 0, 0, 0)
-	}
-
-	// Distinct report hashes remain distinct contributions.
-	insertAttributeClaudeChatMetricLog(t, ctx, projectID, ts, "claude_chat:usage:metrics", "usage-distinct", 0, 20, 5, 3, 2)
-	insertAttributeClaudeChatMetricLog(t, ctx, projectID, ts, "claude_chat:cost:metrics", "cost-distinct", 0.25, 0, 0, 0, 0)
-
-	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
-	to := now.Add(1 * time.Hour).Format(time.RFC3339)
-
-	var result *gen.QueryResult
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.Query(ctx, &gen.QueryPayload{
-			From:    from,
-			To:      to,
-			GroupBy: conv.PtrEmpty("hook_source"),
-			TopN:    10,
-			SortBy:  "total_cost",
-		})
-		if !assert.NoError(c, err) || !assert.NotNil(c, res) || !assert.Len(c, res.Table, 1) {
-			return
-		}
-		result = res
-		assert.Equal(c, int64(120), res.Table[0].Measures.TotalInputTokens)
-		assert.InDelta(c, 1.75, res.Table[0].Measures.TotalCost, 1e-9)
-	}, 10*time.Second, 200*time.Millisecond)
-
-	row := result.Table[0]
-	require.Equal(t, "claude-chat", row.GroupValue)
-	require.Equal(t, int64(120), row.Measures.TotalInputTokens)
-	require.Equal(t, int64(55), row.Measures.TotalOutputTokens)
-	require.Equal(t, int64(202), row.Measures.TotalTokens)
-	require.Equal(t, int64(1003), row.Measures.CacheReadInputTokens)
-	require.Equal(t, int64(27), row.Measures.CacheCreationInputTokens)
-	require.InDelta(t, 1.75, row.Measures.TotalCost, 1e-9)
 }
 
 func TestQuery_DefaultSortByAndTopN(t *testing.T) {

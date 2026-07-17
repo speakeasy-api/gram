@@ -22,8 +22,8 @@ import (
 const (
 	// claudeChatUsageMetricsURN tags Admin Analytics user_usage_report rows
 	// (token counts) in telemetry_logs and claudeChatCostMetricsURN the
-	// user_cost_report rows (spend). A dedicated ClickHouse MV retains both
-	// prefixes for event-hash-deduplicated analytics and TUM billing.
+	// user_cost_report rows (spend). The shared attribute metrics summary
+	// retains both prefixes for analytics and TUM billing.
 	// Deliberately distinct from "claude-code:usage", which is excluded from
 	// observed-traffic billing as a duplicate of OTEL data.
 	claudeChatUsageMetricsURN = "claude_chat:usage:metrics"
@@ -58,8 +58,7 @@ const (
 type anthropicAnalyticsSourceFactory func(client *anthropicapi.Client, cfg Config) source[[]telemetry.LogParams]
 
 // AnthropicAnalyticsPoller ingests one Admin Analytics report — usage or
-// cost — from the Anthropic API into telemetry_logs, where the
-// claude_chat_metrics MV retains it for read-time-deduplicated analytics and
+// cost — from the Anthropic API into telemetry_logs for analytics and
 // tokens-under-management billing. Each report is its own service instance
 // driving its own sync schedule: construct one with
 // NewAnthropicUsageAnalyticsPoller and one with
@@ -286,8 +285,7 @@ func (src *anthropicCostReportSource) RetryAfter(err error) (time.Duration, bool
 // buildClaudeChatUsageRows converts usage-report rows into
 // claude_chat:usage:metrics telemetry rows. Usage and cost are ingested
 // independently — no join — so spend in a bucket without token usage (e.g.
-// web-search charges) is never dropped, and the deduplicated read model sums
-// tokens and cost across both row kinds.
+// web-search charges) is never dropped, and summaries include both row kinds.
 func buildClaudeChatUsageRows(cfg Config, rows []anthropicapi.UserUsageRow) ([]telemetry.LogParams, error) {
 	logParams := make([]telemetry.LogParams, 0, len(rows))
 	for _, row := range rows {

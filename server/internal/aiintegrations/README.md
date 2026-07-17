@@ -100,7 +100,7 @@ Cursor windows are non-overlapping on success. Cursor includes both request boun
 
 Child workflow failures are isolated. The coordinator waits for the current child batch to finish and continues fetching later candidates instead of failing the whole coordinator run.
 
-ClickHouse and Postgres are not updated atomically. If ClickHouse insert succeeds but the success sync-state update fails before a retry advances `poll_watermark_at`, the same window can be re-inserted. Ingestion does not enforce uniqueness. Cursor rows include `cursor.event_hash` for consumers that need exact-once sums. Claude Chat rows include `claude_chat.event_hash`; ClickHouse retains them for 730 days and the TUM/attribute-metrics read view deduplicates by `(gram_project_id, claude_chat.event_hash)`. If the final activity attempt fails before inserting, the failure is recorded and only `next_poll_after` advances so that provider/org does not block later work.
+ClickHouse and Postgres are not updated atomically. If ClickHouse insert succeeds but the success sync-state update fails before a retry advances `poll_watermark_at`, the same window can be re-inserted. Ingestion does not enforce uniqueness; each row includes `cursor.event_hash` so consumers that need exact-once sums can dedupe by `(gram_project_id, cursor.event_hash)`. If the final activity attempt fails before inserting, the failure is recorded and only `next_poll_after` advances so that provider/org does not block later work.
 
 Cost fields are intentionally separate. `gen_ai.usage.cost` currently uses `tokenUsage.totalCents / 100`. Cursor's charged amount is also stored as `cursor.charged_cents` so billing semantics can be adjusted later without losing data.
 
