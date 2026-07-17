@@ -1,4 +1,4 @@
-h1:8Xb2+zzpfdEI9R48YhZc6CprI0Y6Dx60e8ztAXHBz3c=
+h1:zrFzrdDXLUTetam6kapo1aJSYoV/dlGG6t2jzYtyR2c=
 20251013090028_initial.sql h1:I90GAjfJN/3i4nLe4AThT5OW/Qgc0+5LOI2jZ6WQZME=
 20251028141444_add_indexes.sql h1:CDwn2EdBZ7Nrn9hx5vYguR1ljlP5hTxiOI6n/I25Cpk=
 20251029120230_add_other_indexes.sql h1:3EtD+3hW8+s5me23va+BdfiIKmfQKOdv4glrQ34fle4=
@@ -68,3 +68,4 @@ h1:8Xb2+zzpfdEI9R48YhZc6CprI0Y6Dx60e8ztAXHBz3c=
 20260714173521_drop-tum-breakdown-summaries.sql h1:La2w4JzKmjNoWbI1cZXtZKwXYCbFSkNUHwgVACpS0IY=
 20260714200946_shadow-mcp-server-name-override.sql h1:FjftHYJ4Mqv4G1R1n0LoyA4M5pVgXcRwhz6ZUiebLd8=
 20260714200947_add-risk-findings.sql h1:b+Neqb/8G5TEVbAaoxOke+CNZq5sYm2UYjFUIJ+Id3I=
+20260717083841_add-risk-findings-exclusion-fields.sql h1:MNvPLJC/fEexs/4te14GQCp2u6VWsEvZPQZUWnSf1bM=
