@@ -144,8 +144,10 @@ type DistributeResponseBody struct {
 // ListDistributionsResponseBody is the type of the "skills" service
 // "listDistributions" endpoint HTTP response body.
 type ListDistributionsResponseBody struct {
-	// The active skill distributions.
+	// The active skill distributions in this page.
 	Distributions []*SkillDistributionResponseBody `form:"distributions" json:"distributions" xml:"distributions"`
+	// Cursor for the next page; absent when exhausted.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
 // CreateUnauthorizedResponseBody is the type of the "skills" service "create"
@@ -1976,7 +1978,9 @@ func NewDistributeResponseBody(res *types.SkillDistribution) *DistributeResponse
 // NewListDistributionsResponseBody builds the HTTP response body from the
 // result of the "listDistributions" endpoint of the "skills" service.
 func NewListDistributionsResponseBody(res *skills.ListSkillDistributionsResult) *ListDistributionsResponseBody {
-	body := &ListDistributionsResponseBody{}
+	body := &ListDistributionsResponseBody{
+		NextCursor: res.NextCursor,
+	}
 	if res.Distributions != nil {
 		body.Distributions = make([]*SkillDistributionResponseBody, len(res.Distributions))
 		for i, val := range res.Distributions {
@@ -3356,8 +3360,10 @@ func NewUndistributePayload(body *UndistributeRequestBody, sessionToken *string,
 
 // NewListDistributionsPayload builds a skills service listDistributions
 // endpoint payload.
-func NewListDistributionsPayload(sessionToken *string, apikeyToken *string, projectSlugInput *string) *skills.ListDistributionsPayload {
+func NewListDistributionsPayload(cursor *string, limit int, sessionToken *string, apikeyToken *string, projectSlugInput *string) *skills.ListDistributionsPayload {
 	v := &skills.ListDistributionsPayload{}
+	v.Cursor = cursor
+	v.Limit = limit
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

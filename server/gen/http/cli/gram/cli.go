@@ -2049,6 +2049,8 @@ func ParseEndpoint(
 		skillsUndistributeProjectSlugInputFlag = skillsUndistributeFlags.String("project-slug-input", "", "")
 
 		skillsListDistributionsFlags                = flag.NewFlagSet("list-distributions", flag.ExitOnError)
+		skillsListDistributionsCursorFlag           = skillsListDistributionsFlags.String("cursor", "", "")
+		skillsListDistributionsLimitFlag            = skillsListDistributionsFlags.String("limit", "20", "")
 		skillsListDistributionsSessionTokenFlag     = skillsListDistributionsFlags.String("session-token", "", "")
 		skillsListDistributionsApikeyTokenFlag      = skillsListDistributionsFlags.String("apikey-token", "", "")
 		skillsListDistributionsProjectSlugInputFlag = skillsListDistributionsFlags.String("project-slug-input", "", "")
@@ -5952,7 +5954,7 @@ func ParseEndpoint(
 				data, err = skillsc.BuildUndistributePayload(*skillsUndistributeBodyFlag, *skillsUndistributeSessionTokenFlag, *skillsUndistributeApikeyTokenFlag, *skillsUndistributeProjectSlugInputFlag)
 			case "list-distributions":
 				endpoint = c.ListDistributions()
-				data, err = skillsc.BuildListDistributionsPayload(*skillsListDistributionsSessionTokenFlag, *skillsListDistributionsApikeyTokenFlag, *skillsListDistributionsProjectSlugInputFlag)
+				data, err = skillsc.BuildListDistributionsPayload(*skillsListDistributionsCursorFlag, *skillsListDistributionsLimitFlag, *skillsListDistributionsSessionTokenFlag, *skillsListDistributionsApikeyTokenFlag, *skillsListDistributionsProjectSlugInputFlag)
 			}
 		case "telemetry":
 			c := telemetryc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -14606,6 +14608,8 @@ func skillsUndistributeUsage() {
 func skillsListDistributionsUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] skills list-distributions", os.Args[0])
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
@@ -14616,13 +14620,15 @@ func skillsListDistributionsUsage() {
 	fmt.Fprintln(os.Stderr, `List active plugin skill distributions for the current project.`)
 
 	// Flags list
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills list-distributions --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills list-distributions --cursor \"abc123\" --limit 2 --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // telemetryUsage displays the usage of the telemetry command and its

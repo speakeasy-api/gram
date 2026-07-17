@@ -39,16 +39,17 @@ type SkillSnapshot struct {
 
 // SkillDistributionSnapshot excludes all manifest-derived skill content.
 type SkillDistributionSnapshot struct {
-	ID              string
-	ProjectID       string
-	SkillID         string
-	PluginID        *string
-	PinnedVersionID *string
-	Channel         string
-	CreatedByUserID string
-	RevokedAt       *string
-	CreatedAt       string
-	UpdatedAt       string
+	ID                string
+	ProjectID         string
+	SkillID           string
+	PluginID          *string
+	PinnedVersionID   *string
+	ResolvedVersionID string
+	Channel           string
+	CreatedByUserID   string
+	RevokedAt         *string
+	CreatedAt         string
+	UpdatedAt         string
 }
 
 type LogSkillCreateEvent struct {

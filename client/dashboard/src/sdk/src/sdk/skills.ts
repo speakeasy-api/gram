@@ -13,7 +13,6 @@ import { skillsListVersions } from "../funcs/skillsListVersions.js";
 import { skillsUndistribute } from "../funcs/skillsUndistribute.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { GetSkillResult } from "../models/components/getskillresult.js";
-import { ListSkillDistributionsResult } from "../models/components/listskilldistributionsresult.js";
 import { RecordSkillResult } from "../models/components/recordskillresult.js";
 import { SkillDistribution } from "../models/components/skilldistribution.js";
 import {
@@ -38,6 +37,7 @@ import {
 } from "../models/operations/getskill.js";
 import {
   ListSkillDistributionsRequest,
+  ListSkillDistributionsResponse,
   ListSkillDistributionsSecurity,
 } from "../models/operations/listskilldistributions.js";
 import {
@@ -182,8 +182,8 @@ export class Skills extends ClientSDK {
     request?: ListSkillDistributionsRequest | undefined,
     security?: ListSkillDistributionsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<ListSkillDistributionsResult> {
-    return unwrapAsync(skillsListDistributions(
+  ): Promise<PageIterator<ListSkillDistributionsResponse, { cursor: string }>> {
+    return unwrapResultIterator(skillsListDistributions(
       this,
       request,
       security,

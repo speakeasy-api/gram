@@ -610,6 +610,18 @@ func (s *Service) DeletePlugin(ctx context.Context, payload *gen.DeletePluginPay
 
 	txRepo := s.repo.WithTx(tx)
 
+	// Soft-delete the plugin first: its row lock serializes this transaction
+	// against skills.Distribute, which share-locks the plugin row before
+	// inserting a distribution. Revoking distributions after taking the lock
+	// guarantees no active distribution survives on a tombstoned plugin.
+	if err := txRepo.DeletePlugin(ctx, repo.DeletePluginParams{
+		ID:             pluginID,
+		OrganizationID: ac.ActiveOrganizationID,
+		ProjectID:      *ac.ProjectID,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "delete plugin").LogError(ctx, s.logger)
+	}
+
 	if err := txRepo.SoftDeletePluginServers(ctx, pluginID); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "soft-delete plugin servers").LogError(ctx, s.logger)
 	}
@@ -627,19 +639,21 @@ func (s *Service) DeletePlugin(ctx context.Context, payload *gen.DeletePluginPay
 	}
 	for _, revoked := range revokedDistributions {
 		afterSnapshot := &audit.SkillDistributionSnapshot{
-			ID:              revoked.ID.String(),
-			ProjectID:       revoked.ProjectID.String(),
-			SkillID:         revoked.SkillID.String(),
-			PluginID:        conv.FromNullableUUID(revoked.PluginID),
-			PinnedVersionID: conv.FromNullableUUID(revoked.PinnedVersionID),
-			Channel:         revoked.Channel,
-			CreatedByUserID: revoked.CreatedByUserID,
-			RevokedAt:       conv.PtrEmpty(conv.FromPGTimestamptz(revoked.RevokedAt)),
-			CreatedAt:       conv.FromPGTimestamptz(revoked.CreatedAt),
-			UpdatedAt:       conv.FromPGTimestamptz(revoked.UpdatedAt),
+			ID:                revoked.ID.String(),
+			ProjectID:         revoked.ProjectID.String(),
+			SkillID:           revoked.SkillID.String(),
+			PluginID:          conv.FromNullableUUID(revoked.PluginID),
+			PinnedVersionID:   conv.FromNullableUUID(revoked.PinnedVersionID),
+			ResolvedVersionID: revoked.ResolvedVersionID.String(),
+			Channel:           revoked.Channel,
+			CreatedByUserID:   revoked.CreatedByUserID,
+			RevokedAt:         conv.PtrEmpty(conv.FromPGTimestamptz(revoked.RevokedAt)),
+			CreatedAt:         conv.FromPGTimestamptz(revoked.CreatedAt),
+			UpdatedAt:         conv.FromPGTimestamptz(revoked.UpdatedAt),
 		}
 		beforeSnapshot := *afterSnapshot
 		beforeSnapshot.RevokedAt = nil
+		beforeSnapshot.UpdatedAt = conv.FromPGTimestamptz(revoked.PreviousUpdatedAt)
 		if auditErr := s.audit.LogSkillUndistribute(ctx, tx, audit.LogSkillUndistributeEvent{
 			OrganizationID:             ac.ActiveOrganizationID,
 			ProjectID:                  *ac.ProjectID,
@@ -654,14 +668,6 @@ func (s *Service) DeletePlugin(ctx context.Context, payload *gen.DeletePluginPay
 		}); auditErr != nil {
 			return oops.E(oops.CodeUnexpected, auditErr, "audit log skill undistribution for deleted plugin").LogError(ctx, s.logger)
 		}
-	}
-
-	if err := txRepo.DeletePlugin(ctx, repo.DeletePluginParams{
-		ID:             pluginID,
-		OrganizationID: ac.ActiveOrganizationID,
-		ProjectID:      *ac.ProjectID,
-	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "delete plugin").LogError(ctx, s.logger)
 	}
 
 	if err := s.audit.LogPluginDelete(ctx, tx, audit.LogPluginDeleteEvent{

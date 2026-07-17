@@ -258,6 +258,12 @@ var _ = Service("skills", func() {
 		Description("List active plugin skill distributions for the current project.")
 
 		Payload(func() {
+			Attribute("cursor", String, "Cursor for the next page of skill distributions.")
+			Attribute("limit", Int, "The number of skill distributions to return per page.", func() {
+				Default(20)
+				Minimum(1)
+				Maximum(50)
+			})
 			security.SessionPayload()
 			security.ByKeyPayload()
 			security.ProjectPayload()
@@ -267,12 +273,15 @@ var _ = Service("skills", func() {
 
 		HTTP(func() {
 			GET("/rpc/skills.listDistributions")
+			Param("cursor")
+			Param("limit")
 			security.SessionHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()
 			Response(StatusOK)
 		})
 
+		shared.CursorPagination()
 		Meta("openapi:operationId", "listSkillDistributions")
 		Meta("openapi:extension:x-speakeasy-name-override", "listDistributions")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SkillDistributions"}`)
@@ -398,7 +407,7 @@ var SkillDistribution = Type("SkillDistribution", func() {
 	Attribute("plugin_name", String, "The name of the plugin that carries the skill.")
 	Attribute("pinned_version_id", String, "The pinned version, absent when tracking the latest valid version.", func() { Format(FormatUUID) })
 	Attribute("resolved_version_id", String, "The version currently targeted by this distribution.", func() { Format(FormatUUID) })
-	Attribute("channel", String, "The distribution channel.")
+	Attribute("channel", String, "The distribution channel.", func() { Enum("plugin") })
 	Attribute("created_by_user_id", String, "The user that created the distribution.")
 	Attribute("created_at", String, "When the distribution was created.", func() { Format(FormatDateTime) })
 	Attribute("updated_at", String, "When the distribution configuration last changed.", func() { Format(FormatDateTime) })
@@ -407,9 +416,10 @@ var SkillDistribution = Type("SkillDistribution", func() {
 })
 
 var ListSkillDistributionsResult = Type("ListSkillDistributionsResult", func() {
-	Description("Active plugin skill distributions for the current project.")
+	Description("A page of active plugin skill distributions for the current project.")
 
-	Attribute("distributions", ArrayOf(SkillDistribution), "The active skill distributions.")
+	Attribute("distributions", ArrayOf(SkillDistribution), "The active skill distributions in this page.")
+	Attribute("next_cursor", String, "Cursor for the next page; absent when exhausted.")
 	Required("distributions")
 })
 

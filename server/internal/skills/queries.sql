@@ -212,20 +212,35 @@ ORDER BY sv.created_at DESC, sv.id DESC
 LIMIT 1;
 
 -- name: GetPluginForDistribution :one
+-- The share lock makes distribution creation serialize against plugin
+-- deletion, which soft-deletes the plugin row before revoking distributions.
 SELECT id, name
 FROM plugins
 WHERE id = @plugin_id
   AND project_id = @project_id
-  AND deleted IS FALSE;
+  AND deleted IS FALSE
+FOR SHARE;
 
 -- name: GetActiveSkillDistributionRecord :one
-SELECT sd.*
+SELECT
+  sqlc.embed(sd),
+  resolved.id AS resolved_version_id
 FROM skill_distributions sd
+JOIN LATERAL (
+  SELECT sv.id
+  FROM skill_versions sv
+  WHERE sv.skill_id = sd.skill_id
+    AND sv.spec_valid IS TRUE
+    AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
+  ORDER BY sv.created_at DESC, sv.id DESC
+  LIMIT 1
+) resolved ON TRUE
 WHERE sd.project_id = @project_id
   AND sd.skill_id = @skill_id
   AND sd.plugin_id = @plugin_id
   AND sd.channel = 'plugin'
-  AND sd.revoked_at IS NULL;
+  AND sd.revoked_at IS NULL
+FOR UPDATE OF sd;
 
 -- name: ListActiveSkillDistributions :many
 SELECT
@@ -250,7 +265,15 @@ JOIN LATERAL (
 WHERE sd.project_id = @project_id
   AND sd.channel = 'plugin'
   AND sd.revoked_at IS NULL
-ORDER BY sd.created_at ASC, sd.id ASC;
+  AND (
+    sqlc.narg(cursor_created_at)::timestamptz IS NULL
+    OR (sd.created_at, sd.id) > (
+      sqlc.narg(cursor_created_at)::timestamptz,
+      sqlc.narg(cursor_id)::uuid
+    )
+  )
+ORDER BY sd.created_at ASC, sd.id ASC
+LIMIT @page_limit;
 
 -- name: CreateSkillDistribution :one
 INSERT INTO skill_distributions (
@@ -297,10 +320,22 @@ WHERE project_id = @project_id
 RETURNING *;
 
 -- name: RevokeAllSkillDistributionsBySkill :many
-UPDATE skill_distributions
+-- The self-join returns the pre-revocation updated_at for audit snapshots.
+UPDATE skill_distributions sd
 SET revoked_at = clock_timestamp(),
     updated_at = clock_timestamp()
-WHERE project_id = @project_id
-  AND skill_id = @skill_id
-  AND revoked_at IS NULL
-RETURNING *;
+FROM skill_distributions prev
+JOIN LATERAL (
+  SELECT sv.id
+  FROM skill_versions sv
+  WHERE sv.skill_id = prev.skill_id
+    AND sv.spec_valid IS TRUE
+    AND (prev.pinned_version_id IS NULL OR sv.id = prev.pinned_version_id)
+  ORDER BY sv.created_at DESC, sv.id DESC
+  LIMIT 1
+) resolved ON TRUE
+WHERE prev.id = sd.id
+  AND sd.project_id = @project_id
+  AND sd.skill_id = @skill_id
+  AND sd.revoked_at IS NULL
+RETURNING sqlc.embed(sd), prev.updated_at AS previous_updated_at, resolved.id AS resolved_version_id;

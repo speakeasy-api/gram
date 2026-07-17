@@ -94,16 +94,17 @@ func TestSkillDistributionSnapshotIsContentFree(t *testing.T) {
 	pluginID := "plugin-id"
 	revokedAt := "2026-07-16T12:00:00Z"
 	snapshot := &SkillDistributionSnapshot{
-		ID:              "distribution-id",
-		ProjectID:       "project-id",
-		SkillID:         "skill-id",
-		PluginID:        &pluginID,
-		PinnedVersionID: &pin,
-		Channel:         "plugin",
-		CreatedByUserID: "user-id",
-		RevokedAt:       &revokedAt,
-		CreatedAt:       "2026-07-16T10:00:00Z",
-		UpdatedAt:       "2026-07-16T12:00:00Z",
+		ID:                "distribution-id",
+		ProjectID:         "project-id",
+		SkillID:           "skill-id",
+		PluginID:          &pluginID,
+		PinnedVersionID:   &pin,
+		ResolvedVersionID: "resolved-version-id",
+		Channel:           "plugin",
+		CreatedByUserID:   "user-id",
+		RevokedAt:         &revokedAt,
+		CreatedAt:         "2026-07-16T10:00:00Z",
+		UpdatedAt:         "2026-07-16T12:00:00Z",
 	}
 	original := *snapshot
 
@@ -118,6 +119,7 @@ func TestSkillDistributionSnapshotIsContentFree(t *testing.T) {
 		"SkillID":"skill-id",
 		"PluginID":"plugin-id",
 		"PinnedVersionID":"version-id",
+		"ResolvedVersionID":"resolved-version-id",
 		"Channel":"plugin",
 		"CreatedByUserID":"user-id",
 		"RevokedAt":"2026-07-16T12:00:00Z",

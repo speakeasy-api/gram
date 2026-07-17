@@ -58,7 +58,7 @@ func TestSkillsConcurrentDistributionCreatesOneActiveRow(t *testing.T) {
 		}
 		require.Equal(t, distributionID, result.id)
 	}
-	listed, err := ti.service.ListDistributions(ctx, &gen.ListDistributionsPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	listed, err := ti.service.ListDistributions(ctx, &gen.ListDistributionsPayload{Cursor: nil, Limit: 50, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
 	require.Len(t, listed.Distributions, 1)
 	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionSkillDistribute)

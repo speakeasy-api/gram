@@ -1969,6 +1969,12 @@ func EncodeListDistributionsRequest(encoder func(*http.Request) goahttp.Encoder)
 			head := *p.ProjectSlugInput
 			req.Header.Set("Gram-Project", head)
 		}
+		values := req.URL.Query()
+		if p.Cursor != nil {
+			values.Add("cursor", *p.Cursor)
+		}
+		values.Add("limit", fmt.Sprintf("%v", p.Limit))
+		req.URL.RawQuery = values.Encode()
 		return nil
 	}
 }

@@ -11,13 +11,25 @@ import { GramCore } from "../core.js";
 import { skillsListDistributions } from "../funcs/skillsListDistributions.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { ListSkillDistributionsResult } from "../models/components/listskilldistributionsresult.js";
 import {
   ListSkillDistributionsRequest,
+  ListSkillDistributionsResponse,
   ListSkillDistributionsSecurity,
 } from "../models/operations/listskilldistributions.js";
 import { unwrapAsync } from "../types/fp.js";
-export type SkillDistributionsQueryData = ListSkillDistributionsResult;
+import { PageIterator, unwrapResultIterator } from "../types/operations.js";
+import { pageIteratorToJSON } from "./_types.js";
+export type SkillDistributionsQueryData = ListSkillDistributionsResponse;
+
+export type SkillDistributionsInfiniteQueryData = PageIterator<
+  ListSkillDistributionsResponse,
+  { cursor: string }
+>;
+
+export type SkillDistributionsPageParams = PageIterator<
+  ListSkillDistributionsResponse,
+  { cursor: string }
+>["~next"];
 
 export function prefetchSkillDistributions(
   queryClient: QueryClient,
@@ -36,6 +48,26 @@ export function prefetchSkillDistributions(
   });
 }
 
+export function prefetchSkillDistributionsInfinite(
+  queryClient: QueryClient,
+  client$: GramCore,
+  request?: ListSkillDistributionsRequest | undefined,
+  security?: ListSkillDistributionsSecurity | undefined,
+  options?: RequestOptions,
+): Promise<void> {
+  return queryClient.prefetchInfiniteQuery({
+    ...buildSkillDistributionsInfiniteQuery(
+      client$,
+      request,
+      security,
+      options,
+    ),
+    initialPageParam: undefined as SkillDistributionsPageParams,
+    getNextPageParam: (previousPage: SkillDistributionsInfiniteQueryData) =>
+      previousPage["~next"],
+  });
+}
+
 export function buildSkillDistributionsQuery(
   client$: GramCore,
   request?: ListSkillDistributionsRequest | undefined,
@@ -49,6 +81,8 @@ export function buildSkillDistributionsQuery(
 } {
   return {
     queryKey: queryKeySkillDistributions({
+      cursor: request?.cursor,
+      limit: request?.limit,
       gramSession: request?.gramSession,
       gramKey: request?.gramKey,
       gramProject: request?.gramProject,
@@ -77,12 +111,83 @@ export function buildSkillDistributionsQuery(
   };
 }
 
+export function buildSkillDistributionsInfiniteQuery(
+  client$: GramCore,
+  request?: ListSkillDistributionsRequest | undefined,
+  security?: ListSkillDistributionsSecurity | undefined,
+  options?: RequestOptions,
+): {
+  queryKey: QueryKey;
+  queryFn: (
+    context: QueryFunctionContext<QueryKey, SkillDistributionsPageParams>,
+  ) => Promise<SkillDistributionsInfiniteQueryData>;
+} {
+  return {
+    queryKey: queryKeySkillDistributionsInfinite({
+      cursor: request?.cursor,
+      limit: request?.limit,
+      gramSession: request?.gramSession,
+      gramKey: request?.gramKey,
+      gramProject: request?.gramProject,
+    }),
+    queryFn: async function skillDistributionsQuery(
+      ctx,
+    ): Promise<SkillDistributionsInfiniteQueryData> {
+      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
+      const mergedOptions = {
+        ...options,
+        fetchOptions: { ...options?.fetchOptions, signal: sig },
+      };
+
+      if (!ctx.pageParam) {
+        const pageResult = await unwrapResultIterator(skillsListDistributions(
+          client$,
+          request,
+          security,
+          mergedOptions,
+        ));
+        return pageIteratorToJSON(pageResult);
+      }
+      const pageResult = await unwrapResultIterator(skillsListDistributions(
+        client$,
+        {
+          ...request!,
+          cursor: ctx.pageParam.cursor,
+        },
+        security,
+        mergedOptions,
+      ));
+      return pageIteratorToJSON(pageResult);
+    },
+  };
+}
+
 export function queryKeySkillDistributions(
   parameters: {
+    cursor?: string | undefined;
+    limit?: number | undefined;
     gramSession?: string | undefined;
     gramKey?: string | undefined;
     gramProject?: string | undefined;
   },
 ): QueryKey {
   return ["@gram/client", "skills", "listDistributions", parameters];
+}
+
+export function queryKeySkillDistributionsInfinite(
+  parameters: {
+    cursor?: string | undefined;
+    limit?: number | undefined;
+    gramSession?: string | undefined;
+    gramKey?: string | undefined;
+    gramProject?: string | undefined;
+  },
+): QueryKey {
+  return [
+    "@gram/client",
+    "skills",
+    "listDistributions",
+    "infinite",
+    parameters,
+  ];
 }

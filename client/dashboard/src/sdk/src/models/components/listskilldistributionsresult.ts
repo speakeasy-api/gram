@@ -3,6 +3,7 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
@@ -12,22 +13,34 @@ import {
 } from "./skilldistribution.js";
 
 /**
- * Active plugin skill distributions for the current project.
+ * A page of active plugin skill distributions for the current project.
  */
 export type ListSkillDistributionsResult = {
   /**
-   * The active skill distributions.
+   * The active skill distributions in this page.
    */
   distributions: Array<SkillDistribution>;
+  /**
+   * Cursor for the next page; absent when exhausted.
+   */
+  nextCursor?: string | undefined;
 };
 
 /** @internal */
 export const ListSkillDistributionsResult$inboundSchema: z.ZodMiniType<
   ListSkillDistributionsResult,
   unknown
-> = z.object({
-  distributions: z.array(SkillDistribution$inboundSchema),
-});
+> = z.pipe(
+  z.object({
+    distributions: z.array(SkillDistribution$inboundSchema),
+    next_cursor: z.optional(z.string()),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      "next_cursor": "nextCursor",
+    });
+  }),
+);
 
 export function listSkillDistributionsResultFromJSON(
   jsonString: string,

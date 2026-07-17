@@ -226,13 +226,25 @@ func (q *Queries) CreateSkillVersion(ctx context.Context, arg CreateSkillVersion
 }
 
 const getActiveSkillDistributionRecord = `-- name: GetActiveSkillDistributionRecord :one
-SELECT sd.id, sd.project_id, sd.skill_id, sd.pinned_version_id, sd.plugin_id, sd.channel, sd.created_by_user_id, sd.revoked_at, sd.created_at, sd.updated_at
+SELECT
+  sd.id, sd.project_id, sd.skill_id, sd.pinned_version_id, sd.plugin_id, sd.channel, sd.created_by_user_id, sd.revoked_at, sd.created_at, sd.updated_at,
+  resolved.id AS resolved_version_id
 FROM skill_distributions sd
+JOIN LATERAL (
+  SELECT sv.id
+  FROM skill_versions sv
+  WHERE sv.skill_id = sd.skill_id
+    AND sv.spec_valid IS TRUE
+    AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
+  ORDER BY sv.created_at DESC, sv.id DESC
+  LIMIT 1
+) resolved ON TRUE
 WHERE sd.project_id = $1
   AND sd.skill_id = $2
   AND sd.plugin_id = $3
   AND sd.channel = 'plugin'
   AND sd.revoked_at IS NULL
+FOR UPDATE OF sd
 `
 
 type GetActiveSkillDistributionRecordParams struct {
@@ -241,20 +253,26 @@ type GetActiveSkillDistributionRecordParams struct {
 	PluginID  uuid.NullUUID
 }
 
-func (q *Queries) GetActiveSkillDistributionRecord(ctx context.Context, arg GetActiveSkillDistributionRecordParams) (SkillDistribution, error) {
+type GetActiveSkillDistributionRecordRow struct {
+	SkillDistribution SkillDistribution
+	ResolvedVersionID uuid.UUID
+}
+
+func (q *Queries) GetActiveSkillDistributionRecord(ctx context.Context, arg GetActiveSkillDistributionRecordParams) (GetActiveSkillDistributionRecordRow, error) {
 	row := q.db.QueryRow(ctx, getActiveSkillDistributionRecord, arg.ProjectID, arg.SkillID, arg.PluginID)
-	var i SkillDistribution
+	var i GetActiveSkillDistributionRecordRow
 	err := row.Scan(
-		&i.ID,
-		&i.ProjectID,
-		&i.SkillID,
-		&i.PinnedVersionID,
-		&i.PluginID,
-		&i.Channel,
-		&i.CreatedByUserID,
-		&i.RevokedAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
+		&i.SkillDistribution.ID,
+		&i.SkillDistribution.ProjectID,
+		&i.SkillDistribution.SkillID,
+		&i.SkillDistribution.PinnedVersionID,
+		&i.SkillDistribution.PluginID,
+		&i.SkillDistribution.Channel,
+		&i.SkillDistribution.CreatedByUserID,
+		&i.SkillDistribution.RevokedAt,
+		&i.SkillDistribution.CreatedAt,
+		&i.SkillDistribution.UpdatedAt,
+		&i.ResolvedVersionID,
 	)
 	return i, err
 }
@@ -289,6 +307,7 @@ FROM plugins
 WHERE id = $1
   AND project_id = $2
   AND deleted IS FALSE
+FOR SHARE
 `
 
 type GetPluginForDistributionParams struct {
@@ -301,6 +320,8 @@ type GetPluginForDistributionRow struct {
 	Name string
 }
 
+// The share lock makes distribution creation serialize against plugin
+// deletion, which soft-deletes the plugin row before revoking distributions.
 func (q *Queries) GetPluginForDistribution(ctx context.Context, arg GetPluginForDistributionParams) (GetPluginForDistributionRow, error) {
 	row := q.db.QueryRow(ctx, getPluginForDistribution, arg.PluginID, arg.ProjectID)
 	var i GetPluginForDistributionRow
@@ -605,8 +626,23 @@ JOIN LATERAL (
 WHERE sd.project_id = $1
   AND sd.channel = 'plugin'
   AND sd.revoked_at IS NULL
+  AND (
+    $2::timestamptz IS NULL
+    OR (sd.created_at, sd.id) > (
+      $2::timestamptz,
+      $3::uuid
+    )
+  )
 ORDER BY sd.created_at ASC, sd.id ASC
+LIMIT $4
 `
+
+type ListActiveSkillDistributionsParams struct {
+	ProjectID       uuid.UUID
+	CursorCreatedAt pgtype.Timestamptz
+	CursorID        uuid.NullUUID
+	PageLimit       int32
+}
 
 type ListActiveSkillDistributionsRow struct {
 	SkillDistribution SkillDistribution
@@ -614,8 +650,13 @@ type ListActiveSkillDistributionsRow struct {
 	ResolvedVersionID uuid.UUID
 }
 
-func (q *Queries) ListActiveSkillDistributions(ctx context.Context, projectID uuid.UUID) ([]ListActiveSkillDistributionsRow, error) {
-	rows, err := q.db.Query(ctx, listActiveSkillDistributions, projectID)
+func (q *Queries) ListActiveSkillDistributions(ctx context.Context, arg ListActiveSkillDistributionsParams) ([]ListActiveSkillDistributionsRow, error) {
+	rows, err := q.db.Query(ctx, listActiveSkillDistributions,
+		arg.ProjectID,
+		arg.CursorCreatedAt,
+		arg.CursorID,
+		arg.PageLimit,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -832,13 +873,24 @@ func (q *Queries) RevokeActiveSkillDistribution(ctx context.Context, arg RevokeA
 }
 
 const revokeAllSkillDistributionsBySkill = `-- name: RevokeAllSkillDistributionsBySkill :many
-UPDATE skill_distributions
+UPDATE skill_distributions sd
 SET revoked_at = clock_timestamp(),
     updated_at = clock_timestamp()
-WHERE project_id = $1
-  AND skill_id = $2
-  AND revoked_at IS NULL
-RETURNING id, project_id, skill_id, pinned_version_id, plugin_id, channel, created_by_user_id, revoked_at, created_at, updated_at
+FROM skill_distributions prev
+JOIN LATERAL (
+  SELECT sv.id
+  FROM skill_versions sv
+  WHERE sv.skill_id = prev.skill_id
+    AND sv.spec_valid IS TRUE
+    AND (prev.pinned_version_id IS NULL OR sv.id = prev.pinned_version_id)
+  ORDER BY sv.created_at DESC, sv.id DESC
+  LIMIT 1
+) resolved ON TRUE
+WHERE prev.id = sd.id
+  AND sd.project_id = $1
+  AND sd.skill_id = $2
+  AND sd.revoked_at IS NULL
+RETURNING sd.id, sd.project_id, sd.skill_id, sd.pinned_version_id, sd.plugin_id, sd.channel, sd.created_by_user_id, sd.revoked_at, sd.created_at, sd.updated_at, prev.updated_at AS previous_updated_at, resolved.id AS resolved_version_id
 `
 
 type RevokeAllSkillDistributionsBySkillParams struct {
@@ -846,26 +898,35 @@ type RevokeAllSkillDistributionsBySkillParams struct {
 	SkillID   uuid.UUID
 }
 
-func (q *Queries) RevokeAllSkillDistributionsBySkill(ctx context.Context, arg RevokeAllSkillDistributionsBySkillParams) ([]SkillDistribution, error) {
+type RevokeAllSkillDistributionsBySkillRow struct {
+	SkillDistribution SkillDistribution
+	PreviousUpdatedAt pgtype.Timestamptz
+	ResolvedVersionID uuid.UUID
+}
+
+// The self-join returns the pre-revocation updated_at for audit snapshots.
+func (q *Queries) RevokeAllSkillDistributionsBySkill(ctx context.Context, arg RevokeAllSkillDistributionsBySkillParams) ([]RevokeAllSkillDistributionsBySkillRow, error) {
 	rows, err := q.db.Query(ctx, revokeAllSkillDistributionsBySkill, arg.ProjectID, arg.SkillID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []SkillDistribution
+	var items []RevokeAllSkillDistributionsBySkillRow
 	for rows.Next() {
-		var i SkillDistribution
+		var i RevokeAllSkillDistributionsBySkillRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.ProjectID,
-			&i.SkillID,
-			&i.PinnedVersionID,
-			&i.PluginID,
-			&i.Channel,
-			&i.CreatedByUserID,
-			&i.RevokedAt,
-			&i.CreatedAt,
-			&i.UpdatedAt,
+			&i.SkillDistribution.ID,
+			&i.SkillDistribution.ProjectID,
+			&i.SkillDistribution.SkillID,
+			&i.SkillDistribution.PinnedVersionID,
+			&i.SkillDistribution.PluginID,
+			&i.SkillDistribution.Channel,
+			&i.SkillDistribution.CreatedByUserID,
+			&i.SkillDistribution.RevokedAt,
+			&i.SkillDistribution.CreatedAt,
+			&i.SkillDistribution.UpdatedAt,
+			&i.PreviousUpdatedAt,
+			&i.ResolvedVersionID,
 		); err != nil {
 			return nil, err
 		}

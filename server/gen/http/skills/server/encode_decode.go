@@ -1943,10 +1943,36 @@ func DecodeListDistributionsRequest(mux goahttp.Muxer, decoder func(*http.Reques
 	return func(r *http.Request) (*skills.ListDistributionsPayload, error) {
 		var payload *skills.ListDistributionsPayload
 		var (
+			cursor           *string
+			limit            int
 			sessionToken     *string
 			apikeyToken      *string
 			projectSlugInput *string
+			err              error
 		)
+		qp := r.URL.Query()
+		cursorRaw := qp.Get("cursor")
+		if cursorRaw != "" {
+			cursor = &cursorRaw
+		}
+		{
+			limitRaw := qp.Get("limit")
+			if limitRaw == "" {
+				limit = 20
+			} else {
+				v, err2 := strconv.ParseInt(limitRaw, 10, strconv.IntSize)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("limit", limitRaw, "integer"))
+				}
+				limit = int(v)
+			}
+		}
+		if limit < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+		}
+		if limit > 50 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 50, false))
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -1959,7 +1985,10 @@ func DecodeListDistributionsRequest(mux goahttp.Muxer, decoder func(*http.Reques
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
 		}
-		payload = NewListDistributionsPayload(sessionToken, apikeyToken, projectSlugInput)
+		if err != nil {
+			return payload, err
+		}
+		payload = NewListDistributionsPayload(cursor, limit, sessionToken, apikeyToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

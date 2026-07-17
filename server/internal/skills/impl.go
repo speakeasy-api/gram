@@ -185,18 +185,19 @@ func buildSkillAuditSnapshot(skill repo.Skill, latestVersionID uuid.UUID, versio
 	}
 }
 
-func buildSkillDistributionAuditSnapshot(distribution repo.SkillDistribution) *audit.SkillDistributionSnapshot {
+func buildSkillDistributionAuditSnapshot(distribution repo.SkillDistribution, resolvedVersionID uuid.UUID) *audit.SkillDistributionSnapshot {
 	return &audit.SkillDistributionSnapshot{
-		ID:              distribution.ID.String(),
-		ProjectID:       distribution.ProjectID.String(),
-		SkillID:         distribution.SkillID.String(),
-		PluginID:        conv.FromNullableUUID(distribution.PluginID),
-		PinnedVersionID: conv.FromNullableUUID(distribution.PinnedVersionID),
-		Channel:         distribution.Channel,
-		CreatedByUserID: distribution.CreatedByUserID,
-		RevokedAt:       conv.PtrEmpty(conv.FromPGTimestamptz(distribution.RevokedAt)),
-		CreatedAt:       conv.FromPGTimestamptz(distribution.CreatedAt),
-		UpdatedAt:       conv.FromPGTimestamptz(distribution.UpdatedAt),
+		ID:                distribution.ID.String(),
+		ProjectID:         distribution.ProjectID.String(),
+		SkillID:           distribution.SkillID.String(),
+		PluginID:          conv.FromNullableUUID(distribution.PluginID),
+		PinnedVersionID:   conv.FromNullableUUID(distribution.PinnedVersionID),
+		ResolvedVersionID: resolvedVersionID.String(),
+		Channel:           distribution.Channel,
+		CreatedByUserID:   distribution.CreatedByUserID,
+		RevokedAt:         conv.PtrEmpty(conv.FromPGTimestamptz(distribution.RevokedAt)),
+		CreatedAt:         conv.FromPGTimestamptz(distribution.CreatedAt),
+		UpdatedAt:         conv.FromPGTimestamptz(distribution.UpdatedAt),
 	}
 }
 
@@ -529,7 +530,7 @@ func (s *Service) ListVersions(ctx context.Context, payload *gen.ListVersionsPay
 	cursorCreatedAt := conv.PtrToPGTimestamptz(nil)
 	cursorID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	if payload.Cursor != nil {
-		createdAt, id, decodeErr := decodeSkillVersionCursor(*payload.Cursor)
+		createdAt, id, decodeErr := decodeCreatedAtIDCursor(*payload.Cursor)
 		if decodeErr != nil {
 			return nil, oops.E(oops.CodeBadRequest, nil, "invalid skill version cursor")
 		}
@@ -571,7 +572,7 @@ func (s *Service) ListVersions(ctx context.Context, payload *gen.ListVersionsPay
 	var nextCursor *string
 	if hasMore {
 		last := rows[len(rows)-1]
-		encoded := encodeSkillVersionCursor(last.CreatedAt.Time, last.ID)
+		encoded := encodeCreatedAtIDCursor(last.CreatedAt.Time, last.ID)
 		nextCursor = &encoded
 	}
 
@@ -660,7 +661,7 @@ func (s *Service) Distribute(ctx context.Context, payload *gen.DistributePayload
 		PluginID:  uuid.NullUUID{UUID: pluginID, Valid: true},
 	})
 	if err == nil {
-		distribution := existing
+		distribution := existing.SkillDistribution
 		if distribution.PinnedVersionID == pinnedVersionID {
 			if err := dbtx.Commit(ctx); err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "commit unchanged skill distribution transaction").LogError(ctx, logger)
@@ -668,7 +669,7 @@ func (s *Service) Distribute(ctx context.Context, payload *gen.DistributePayload
 			return mv.BuildSkillDistributionView(distribution, plugin.Name, resolvedVersionID), nil
 		}
 
-		beforeSnapshot := buildSkillDistributionAuditSnapshot(distribution)
+		beforeSnapshot := buildSkillDistributionAuditSnapshot(distribution, existing.ResolvedVersionID)
 		distribution, err = queries.UpdateSkillDistribution(ctx, repo.UpdateSkillDistributionParams{
 			PinnedVersionID: pinnedVersionID,
 			ProjectID:       *authCtx.ProjectID,
@@ -688,7 +689,7 @@ func (s *Service) Distribute(ctx context.Context, payload *gen.DistributePayload
 			SkillName:                  skill.Name,
 			SkillDisplayName:           skill.DisplayName,
 			DistributionSnapshotBefore: beforeSnapshot,
-			DistributionSnapshotAfter:  buildSkillDistributionAuditSnapshot(distribution),
+			DistributionSnapshotAfter:  buildSkillDistributionAuditSnapshot(distribution, resolvedVersionID),
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "log skill distribution update").LogError(ctx, logger)
 		}
@@ -720,7 +721,7 @@ func (s *Service) Distribute(ctx context.Context, payload *gen.DistributePayload
 		SkillURN:                  urn.NewSkill(skill.ID),
 		SkillName:                 skill.Name,
 		SkillDisplayName:          skill.DisplayName,
-		DistributionSnapshotAfter: buildSkillDistributionAuditSnapshot(distribution),
+		DistributionSnapshotAfter: buildSkillDistributionAuditSnapshot(distribution, resolvedVersionID),
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log skill distribution create").LogError(ctx, logger)
 	}
@@ -759,7 +760,7 @@ func (s *Service) Undistribute(ctx context.Context, payload *gen.UndistributePay
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "lock skill for undistribution").LogError(ctx, logger)
 	}
-	distribution, err := queries.GetActiveSkillDistributionRecord(ctx, repo.GetActiveSkillDistributionRecordParams{
+	existing, err := queries.GetActiveSkillDistributionRecord(ctx, repo.GetActiveSkillDistributionRecordParams{
 		ProjectID: *authCtx.ProjectID,
 		SkillID:   skill.ID,
 		PluginID:  uuid.NullUUID{UUID: pluginID, Valid: true},
@@ -774,7 +775,8 @@ func (s *Service) Undistribute(ctx context.Context, payload *gen.UndistributePay
 		return oops.E(oops.CodeUnexpected, err, "get skill distribution for revocation").LogError(ctx, logger)
 	}
 
-	beforeSnapshot := buildSkillDistributionAuditSnapshot(distribution)
+	distribution := existing.SkillDistribution
+	beforeSnapshot := buildSkillDistributionAuditSnapshot(distribution, existing.ResolvedVersionID)
 	revoked, err := queries.RevokeActiveSkillDistribution(ctx, repo.RevokeActiveSkillDistributionParams{
 		ProjectID: *authCtx.ProjectID,
 		SkillID:   skill.ID,
@@ -793,7 +795,7 @@ func (s *Service) Undistribute(ctx context.Context, payload *gen.UndistributePay
 		SkillName:                  skill.Name,
 		SkillDisplayName:           skill.DisplayName,
 		DistributionSnapshotBefore: beforeSnapshot,
-		DistributionSnapshotAfter:  buildSkillDistributionAuditSnapshot(revoked),
+		DistributionSnapshotAfter:  buildSkillDistributionAuditSnapshot(revoked, existing.ResolvedVersionID),
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "log skill undistribution").LogError(ctx, logger)
 	}
@@ -804,17 +806,48 @@ func (s *Service) Undistribute(ctx context.Context, payload *gen.UndistributePay
 	return nil
 }
 
-func (s *Service) ListDistributions(ctx context.Context, _ *gen.ListDistributionsPayload) (*gen.ListSkillDistributionsResult, error) {
+func (s *Service) ListDistributions(ctx context.Context, payload *gen.ListDistributionsPayload) (*gen.ListSkillDistributionsResult, error) {
 	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillRead)
 	if err != nil {
 		return nil, err
 	}
-	rows, err := repo.New(s.db).ListActiveSkillDistributions(ctx, *authCtx.ProjectID)
+
+	cursorCreatedAt := conv.PtrToPGTimestamptz(nil)
+	cursorID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	if payload.Cursor != nil {
+		createdAt, id, decodeErr := decodeCreatedAtIDCursor(*payload.Cursor)
+		if decodeErr != nil {
+			return nil, oops.E(oops.CodeBadRequest, nil, "invalid skill distribution cursor")
+		}
+		cursorCreatedAt = conv.ToPGTimestamptz(createdAt)
+		cursorID = uuid.NullUUID{UUID: id, Valid: true}
+	}
+
+	rows, err := repo.New(s.db).ListActiveSkillDistributions(ctx, repo.ListActiveSkillDistributionsParams{
+		ProjectID:       *authCtx.ProjectID,
+		CursorCreatedAt: cursorCreatedAt,
+		CursorID:        cursorID,
+		PageLimit:       conv.SafeInt32(payload.Limit + 1),
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list skill distributions").LogError(ctx, logger)
 	}
 
-	return &gen.ListSkillDistributionsResult{Distributions: mv.BuildSkillDistributionListView(rows)}, nil
+	hasMore := len(rows) > payload.Limit
+	if hasMore {
+		rows = rows[:payload.Limit]
+	}
+	var nextCursor *string
+	if hasMore {
+		last := rows[len(rows)-1]
+		encoded := encodeCreatedAtIDCursor(last.SkillDistribution.CreatedAt.Time, last.SkillDistribution.ID)
+		nextCursor = &encoded
+	}
+
+	return &gen.ListSkillDistributionsResult{
+		Distributions: mv.BuildSkillDistributionListView(rows),
+		NextCursor:    nextCursor,
+	}, nil
 }
 
 func (s *Service) Archive(ctx context.Context, payload *gen.ArchivePayload) error {
@@ -882,8 +915,9 @@ func (s *Service) Archive(ctx context.Context, payload *gen.ArchivePayload) erro
 		return oops.E(oops.CodeUnexpected, err, "revoke skill distributions during archive").LogError(ctx, logger)
 	}
 	for _, revoked := range revokedDistributions {
-		beforeDistribution := buildSkillDistributionAuditSnapshot(revoked)
+		beforeDistribution := buildSkillDistributionAuditSnapshot(revoked.SkillDistribution, revoked.ResolvedVersionID)
 		beforeDistribution.RevokedAt = nil
+		beforeDistribution.UpdatedAt = conv.FromPGTimestamptz(revoked.PreviousUpdatedAt)
 		if auditErr := s.audit.LogSkillUndistribute(ctx, dbtx, audit.LogSkillUndistributeEvent{
 			OrganizationID:             authCtx.ActiveOrganizationID,
 			ProjectID:                  *authCtx.ProjectID,
@@ -894,7 +928,7 @@ func (s *Service) Archive(ctx context.Context, payload *gen.ArchivePayload) erro
 			SkillName:                  skill.Name,
 			SkillDisplayName:           skill.DisplayName,
 			DistributionSnapshotBefore: beforeDistribution,
-			DistributionSnapshotAfter:  buildSkillDistributionAuditSnapshot(revoked),
+			DistributionSnapshotAfter:  buildSkillDistributionAuditSnapshot(revoked.SkillDistribution, revoked.ResolvedVersionID),
 		}); auditErr != nil {
 			return oops.E(oops.CodeUnexpected, auditErr, "log archived skill undistribution").LogError(ctx, logger)
 		}

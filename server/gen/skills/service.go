@@ -139,6 +139,10 @@ type GetSkillResult struct {
 // ListDistributionsPayload is the payload type of the skills service
 // listDistributions method.
 type ListDistributionsPayload struct {
+	// Cursor for the next page of skill distributions.
+	Cursor *string
+	// The number of skill distributions to return per page.
+	Limit            int
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
@@ -158,8 +162,10 @@ type ListPayload struct {
 // ListSkillDistributionsResult is the result type of the skills service
 // listDistributions method.
 type ListSkillDistributionsResult struct {
-	// The active skill distributions.
+	// The active skill distributions in this page.
 	Distributions []*types.SkillDistribution
+	// Cursor for the next page; absent when exhausted.
+	NextCursor *string
 }
 
 // ListSkillVersionsResult is the result type of the skills service

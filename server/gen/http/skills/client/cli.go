@@ -402,7 +402,34 @@ func BuildUndistributePayload(skillsUndistributeBody string, skillsUndistributeS
 
 // BuildListDistributionsPayload builds the payload for the skills
 // listDistributions endpoint from CLI flags.
-func BuildListDistributionsPayload(skillsListDistributionsSessionToken string, skillsListDistributionsApikeyToken string, skillsListDistributionsProjectSlugInput string) (*skills.ListDistributionsPayload, error) {
+func BuildListDistributionsPayload(skillsListDistributionsCursor string, skillsListDistributionsLimit string, skillsListDistributionsSessionToken string, skillsListDistributionsApikeyToken string, skillsListDistributionsProjectSlugInput string) (*skills.ListDistributionsPayload, error) {
+	var err error
+	var cursor *string
+	{
+		if skillsListDistributionsCursor != "" {
+			cursor = &skillsListDistributionsCursor
+		}
+	}
+	var limit int
+	{
+		if skillsListDistributionsLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(skillsListDistributionsLimit, 10, strconv.IntSize)
+			limit = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+			}
+			if limit > 50 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 50, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
 	var sessionToken *string
 	{
 		if skillsListDistributionsSessionToken != "" {
@@ -422,6 +449,8 @@ func BuildListDistributionsPayload(skillsListDistributionsSessionToken string, s
 		}
 	}
 	v := &skills.ListDistributionsPayload{}
+	v.Cursor = cursor
+	v.Limit = limit
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

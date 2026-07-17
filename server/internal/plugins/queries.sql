@@ -462,13 +462,24 @@ RETURNING *;
 
 -- name: RevokeSkillDistributionsByPlugin :many
 -- Deleting a plugin revokes the skill distributions it carries so active
--- distributions never reference a tombstoned plugin.
+-- distributions never reference a tombstoned plugin. The self-join returns
+-- the pre-revocation updated_at for audit snapshots.
 UPDATE skill_distributions sd
 SET revoked_at = clock_timestamp(),
     updated_at = clock_timestamp()
-FROM skills s
-WHERE sd.project_id = @project_id
+FROM skill_distributions prev
+JOIN skills s ON s.id = prev.skill_id
+JOIN LATERAL (
+  SELECT sv.id
+  FROM skill_versions sv
+  WHERE sv.skill_id = prev.skill_id
+    AND sv.spec_valid IS TRUE
+    AND (prev.pinned_version_id IS NULL OR sv.id = prev.pinned_version_id)
+  ORDER BY sv.created_at DESC, sv.id DESC
+  LIMIT 1
+) resolved ON TRUE
+WHERE prev.id = sd.id
+  AND sd.project_id = @project_id
   AND sd.plugin_id = @plugin_id
   AND sd.revoked_at IS NULL
-  AND s.id = sd.skill_id
-RETURNING sd.*, s.name AS skill_name, s.display_name AS skill_display_name;
+RETURNING sd.*, prev.updated_at AS previous_updated_at, resolved.id AS resolved_version_id, s.name AS skill_name, s.display_name AS skill_display_name;

@@ -4,6 +4,13 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { safeParse } from "../../lib/schemas.js";
+import { Result as SafeParseResult } from "../../types/fp.js";
+import {
+  ListSkillDistributionsResult,
+  ListSkillDistributionsResult$inboundSchema,
+} from "../components/listskilldistributionsresult.js";
+import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type ListSkillDistributionsSecurityOption1 = {
   projectSlugHeaderGramProject: string;
@@ -22,6 +29,14 @@ export type ListSkillDistributionsSecurity = {
 
 export type ListSkillDistributionsRequest = {
   /**
+   * Cursor for the next page of skill distributions.
+   */
+  cursor?: string | undefined;
+  /**
+   * The number of skill distributions to return per page.
+   */
+  limit?: number | undefined;
+  /**
    * Session header
    */
   gramSession?: string | undefined;
@@ -33,6 +48,10 @@ export type ListSkillDistributionsRequest = {
    * project header
    */
   gramProject?: string | undefined;
+};
+
+export type ListSkillDistributionsResponse = {
+  result: ListSkillDistributionsResult;
 };
 
 /** @internal */
@@ -142,6 +161,8 @@ export function listSkillDistributionsSecurityToJSON(
 
 /** @internal */
 export type ListSkillDistributionsRequest$Outbound = {
+  cursor?: string | undefined;
+  limit: number;
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
@@ -153,6 +174,8 @@ export const ListSkillDistributionsRequest$outboundSchema: z.ZodMiniType<
   ListSkillDistributionsRequest
 > = z.pipe(
   z.object({
+    cursor: z.optional(z.string()),
+    limit: z._default(z.int(), 20),
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
@@ -173,5 +196,30 @@ export function listSkillDistributionsRequestToJSON(
     ListSkillDistributionsRequest$outboundSchema.parse(
       listSkillDistributionsRequest,
     ),
+  );
+}
+
+/** @internal */
+export const ListSkillDistributionsResponse$inboundSchema: z.ZodMiniType<
+  ListSkillDistributionsResponse,
+  unknown
+> = z.pipe(
+  z.object({
+    Result: ListSkillDistributionsResult$inboundSchema,
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      "Result": "result",
+    });
+  }),
+);
+
+export function listSkillDistributionsResponseFromJSON(
+  jsonString: string,
+): SafeParseResult<ListSkillDistributionsResponse, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => ListSkillDistributionsResponse$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListSkillDistributionsResponse' from JSON`,
   );
 }

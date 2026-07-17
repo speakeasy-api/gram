@@ -3,10 +3,16 @@
  */
 
 import {
+  InfiniteData,
   InvalidateQueryFilters,
   QueryClient,
+  QueryKey,
+  useInfiniteQuery,
+  UseInfiniteQueryResult,
   useQuery,
   UseQueryResult,
+  useSuspenseInfiniteQuery,
+  UseSuspenseInfiniteQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
@@ -27,20 +33,32 @@ import {
 } from "../models/operations/listskilldistributions.js";
 import { useGramContext } from "./_context.js";
 import {
+  InfiniteQueryHookOptions,
   QueryHookOptions,
+  SuspenseInfiniteQueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
 import {
+  buildSkillDistributionsInfiniteQuery,
   buildSkillDistributionsQuery,
   prefetchSkillDistributions,
+  prefetchSkillDistributionsInfinite,
   queryKeySkillDistributions,
+  queryKeySkillDistributionsInfinite,
+  SkillDistributionsInfiniteQueryData,
+  SkillDistributionsPageParams,
   SkillDistributionsQueryData,
 } from "./skillDistributions.core.js";
 export {
+  buildSkillDistributionsInfiniteQuery,
   buildSkillDistributionsQuery,
   prefetchSkillDistributions,
+  prefetchSkillDistributionsInfinite,
   queryKeySkillDistributions,
+  queryKeySkillDistributionsInfinite,
+  type SkillDistributionsInfiniteQueryData,
+  type SkillDistributionsPageParams,
   type SkillDistributionsQueryData,
 };
 
@@ -110,10 +128,98 @@ export function useSkillDistributionsSuspense(
   });
 }
 
+/**
+ * listDistributions skills
+ *
+ * @remarks
+ * List active plugin skill distributions for the current project.
+ */
+export function useSkillDistributionsInfinite(
+  request?: ListSkillDistributionsRequest | undefined,
+  security?: ListSkillDistributionsSecurity | undefined,
+  options?: InfiniteQueryHookOptions<
+    SkillDistributionsInfiniteQueryData,
+    SkillDistributionsQueryError
+  >,
+): UseInfiniteQueryResult<
+  InfiniteData<
+    SkillDistributionsInfiniteQueryData,
+    SkillDistributionsPageParams
+  >,
+  SkillDistributionsQueryError
+> {
+  const client = useGramContext();
+  return useInfiniteQuery<
+    SkillDistributionsInfiniteQueryData,
+    SkillDistributionsQueryError,
+    InfiniteData<
+      SkillDistributionsInfiniteQueryData,
+      SkillDistributionsPageParams
+    >,
+    QueryKey,
+    SkillDistributionsPageParams
+  >({
+    ...buildSkillDistributionsInfiniteQuery(
+      client,
+      request,
+      security,
+      options,
+    ),
+    initialPageParam: options?.initialPageParam,
+    getNextPageParam: (previousPage) => previousPage["~next"],
+    ...options,
+  });
+}
+
+/**
+ * listDistributions skills
+ *
+ * @remarks
+ * List active plugin skill distributions for the current project.
+ */
+export function useSkillDistributionsInfiniteSuspense(
+  request?: ListSkillDistributionsRequest | undefined,
+  security?: ListSkillDistributionsSecurity | undefined,
+  options?: SuspenseInfiniteQueryHookOptions<
+    SkillDistributionsInfiniteQueryData,
+    SkillDistributionsQueryError
+  >,
+): UseSuspenseInfiniteQueryResult<
+  InfiniteData<
+    SkillDistributionsInfiniteQueryData,
+    SkillDistributionsPageParams
+  >,
+  SkillDistributionsQueryError
+> {
+  const client = useGramContext();
+  return useSuspenseInfiniteQuery<
+    SkillDistributionsInfiniteQueryData,
+    SkillDistributionsQueryError,
+    InfiniteData<
+      SkillDistributionsInfiniteQueryData,
+      SkillDistributionsPageParams
+    >,
+    QueryKey,
+    SkillDistributionsPageParams
+  >({
+    ...buildSkillDistributionsInfiniteQuery(
+      client,
+      request,
+      security,
+      options,
+    ),
+    initialPageParam: options?.initialPageParam,
+    getNextPageParam: (previousPage) => previousPage["~next"],
+    ...options,
+  });
+}
+
 export function setSkillDistributionsData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
+      cursor?: string | undefined;
+      limit?: number | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
       gramProject?: string | undefined;
@@ -130,6 +236,8 @@ export function invalidateSkillDistributions(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
+      cursor?: string | undefined;
+      limit?: number | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
       gramProject?: string | undefined;

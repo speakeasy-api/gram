@@ -144,8 +144,10 @@ type DistributeResponseBody struct {
 // ListDistributionsResponseBody is the type of the "skills" service
 // "listDistributions" endpoint HTTP response body.
 type ListDistributionsResponseBody struct {
-	// The active skill distributions.
+	// The active skill distributions in this page.
 	Distributions []*SkillDistributionResponseBody `form:"distributions,omitempty" json:"distributions,omitempty" xml:"distributions,omitempty"`
+	// Cursor for the next page; absent when exhausted.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
 // CreateUnauthorizedResponseBody is the type of the "skills" service "create"
@@ -3187,7 +3189,9 @@ func NewUndistributeGatewayError(body *UndistributeGatewayErrorResponseBody) *go
 // NewListDistributionsListSkillDistributionsResultOK builds a "skills" service
 // "listDistributions" endpoint result from a HTTP "OK" response.
 func NewListDistributionsListSkillDistributionsResultOK(body *ListDistributionsResponseBody) *skills.ListSkillDistributionsResult {
-	v := &skills.ListSkillDistributionsResult{}
+	v := &skills.ListSkillDistributionsResult{
+		NextCursor: body.NextCursor,
+	}
 	v.Distributions = make([]*types.SkillDistribution, len(body.Distributions))
 	for i, val := range body.Distributions {
 		if val == nil {
@@ -3507,6 +3511,11 @@ func ValidateDistributeResponseBody(body *DistributeResponseBody) (err error) {
 	}
 	if body.ResolvedVersionID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.resolved_version_id", *body.ResolvedVersionID, goa.FormatUUID))
+	}
+	if body.Channel != nil {
+		if !(*body.Channel == "plugin") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.channel", *body.Channel, []any{"plugin"}))
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -5863,6 +5872,11 @@ func ValidateSkillDistributionResponseBody(body *SkillDistributionResponseBody) 
 	}
 	if body.ResolvedVersionID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.resolved_version_id", *body.ResolvedVersionID, goa.FormatUUID))
+	}
+	if body.Channel != nil {
+		if !(*body.Channel == "plugin") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.channel", *body.Channel, []any{"plugin"}))
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))

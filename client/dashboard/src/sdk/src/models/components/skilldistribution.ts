@@ -5,8 +5,20 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+
+/**
+ * The distribution channel.
+ */
+export const Channel = {
+  Plugin: "plugin",
+} as const;
+/**
+ * The distribution channel.
+ */
+export type Channel = ClosedEnum<typeof Channel>;
 
 /**
  * An active plugin distribution of a project skill.
@@ -15,7 +27,7 @@ export type SkillDistribution = {
   /**
    * The distribution channel.
    */
-  channel: string;
+  channel: Channel;
   /**
    * When the distribution was created.
    */
@@ -59,12 +71,17 @@ export type SkillDistribution = {
 };
 
 /** @internal */
+export const Channel$inboundSchema: z.ZodMiniEnum<typeof Channel> = z.enum(
+  Channel,
+);
+
+/** @internal */
 export const SkillDistribution$inboundSchema: z.ZodMiniType<
   SkillDistribution,
   unknown
 > = z.pipe(
   z.object({
-    channel: z.string(),
+    channel: Channel$inboundSchema,
     created_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
