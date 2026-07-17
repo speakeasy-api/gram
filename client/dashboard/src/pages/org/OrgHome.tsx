@@ -6,6 +6,7 @@ import { DEFAULT_DATE_RANGE_PRESET } from "@/components/observe/useDateRangeFilt
 import { buildProjectOverviewQuery } from "@/components/project/projectOverviewQuery";
 import { RequireScope } from "@/components/require-scope";
 import { CardContextMenu } from "@/components/card-context-menu";
+import { TableRowContextMenu } from "@/components/table-row-context-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Heading } from "@/components/ui/heading";
@@ -547,9 +548,7 @@ function ProjectRow({
   const actions = useProjectActions(project, { isFavorite, onToggleFavorite });
 
   return (
-    <CardContextMenu actions={actions}>
-      {/* The row div keeps `relative`, so the Link overlay below still fills
-          the row rather than the context-menu wrapper. */}
+    <TableRowContextMenu actions={actions}>
       <div className="group hover:bg-muted/40 relative flex items-center gap-4 px-4 py-3 transition-colors">
         {/* Decorative content: pointer-events-none routes clicks through to the
             Link overlay below, while the actions region opts back in. */}
@@ -603,7 +602,7 @@ function ProjectRow({
           className="absolute inset-0"
         />
       </div>
-    </CardContextMenu>
+    </TableRowContextMenu>
   );
 }
 
