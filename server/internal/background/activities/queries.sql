@@ -73,6 +73,30 @@ WHERE om.disabled_at IS NULL
   AND om.gram_account_type = ANY(@account_types::text[])
 ORDER BY om.slug;
 
+-- name: GetOpenRouterCreditsAlertRecipients :many
+-- Resolve the billing alert recipient for each supplied organization that
+-- should receive an OpenRouter credit threshold warning. An org qualifies only
+-- if it has a billing alert email configured (the address set on the billing
+-- page) and is not using BYOK — any enabled, non-deleted customer-supplied
+-- model provider key means the platform chat key is not what pays for the org's
+-- completions, so credit exhaustion of that key is not customer-facing and no
+-- warning is sent. Orgs without a recipient or with BYOK are simply omitted.
+SELECT
+    om.id AS organization_id,
+    om.name AS organization_name,
+    bm.alert_email
+FROM organization_metadata om
+JOIN billing_metadata bm ON bm.organization_id = om.id
+WHERE om.id = ANY(@organization_ids::text[])
+  AND bm.alert_email IS NOT NULL
+  AND NOT EXISTS (
+      SELECT 1
+      FROM model_provider_keys mpk
+      WHERE mpk.organization_id = om.id
+        AND mpk.enabled = TRUE
+        AND mpk.deleted = FALSE
+  );
+
 -- name: GetUserEmailsByOrgIDs :many
 -- Get user emails for organization IDs by looking up the latest deployment for each org
 SELECT DISTINCT

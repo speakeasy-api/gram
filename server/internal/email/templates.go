@@ -27,6 +27,11 @@ const (
 	transactionalIDAccessRequestCreated      TransactionalID = "cmq12wqp901sl0j0ll8cpr0yj"
 	transactionalIDTumUsageThreshold         TransactionalID = "cmrdon75q00390jvq44l87erv"
 	transactionalIDTumUsageOverage           TransactionalID = "cmrdopjpd028m0jx0v8sl25wj"
+	// TODO(DNO-529): replace with the real Loops transactional ID once the
+	// "OpenRouter credits threshold" template is created in the Loops
+	// dashboard. Until then sends fail best-effort (logged, never fatal) — the
+	// merge variables are organization_name, threshold_percent, exhausted.
+	transactionalIDOpenRouterCreditsThreshold TransactionalID = "openrouter_credits_threshold_pending_loops_id"
 )
 
 // Template is implemented by every concrete email template. Concrete types
@@ -82,5 +87,10 @@ var RegisteredTemplates = []Template{
 		OverageTokens:    "",
 		CycleStart:       "",
 		CycleEnd:         "",
+	},
+	OpenRouterCreditsThreshold{
+		OrganizationName: "",
+		ThresholdPercent: "",
+		Exhausted:        false,
 	},
 }

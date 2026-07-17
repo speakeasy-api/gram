@@ -213,6 +213,57 @@ func (q *Queries) GetAllOrganizationsWithToolsets(ctx context.Context) ([]GetAll
 	return items, nil
 }
 
+const getOpenRouterCreditsAlertRecipients = `-- name: GetOpenRouterCreditsAlertRecipients :many
+SELECT
+    om.id AS organization_id,
+    om.name AS organization_name,
+    bm.alert_email
+FROM organization_metadata om
+JOIN billing_metadata bm ON bm.organization_id = om.id
+WHERE om.id = ANY($1::text[])
+  AND bm.alert_email IS NOT NULL
+  AND NOT EXISTS (
+      SELECT 1
+      FROM model_provider_keys mpk
+      WHERE mpk.organization_id = om.id
+        AND mpk.enabled = TRUE
+        AND mpk.deleted = FALSE
+  )
+`
+
+type GetOpenRouterCreditsAlertRecipientsRow struct {
+	OrganizationID   string
+	OrganizationName string
+	AlertEmail       pgtype.Text
+}
+
+// Resolve the billing alert recipient for each supplied organization that
+// should receive an OpenRouter credit threshold warning. An org qualifies only
+// if it has a billing alert email configured (the address set on the billing
+// page) and is not using BYOK — any enabled, non-deleted customer-supplied
+// model provider key means the platform chat key is not what pays for the org's
+// completions, so credit exhaustion of that key is not customer-facing and no
+// warning is sent. Orgs without a recipient or with BYOK are simply omitted.
+func (q *Queries) GetOpenRouterCreditsAlertRecipients(ctx context.Context, organizationIds []string) ([]GetOpenRouterCreditsAlertRecipientsRow, error) {
+	rows, err := q.db.Query(ctx, getOpenRouterCreditsAlertRecipients, organizationIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetOpenRouterCreditsAlertRecipientsRow
+	for rows.Next() {
+		var i GetOpenRouterCreditsAlertRecipientsRow
+		if err := rows.Scan(&i.OrganizationID, &i.OrganizationName, &i.AlertEmail); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getOpenRouterCreditsMonitoringTargets = `-- name: GetOpenRouterCreditsMonitoringTargets :many
 SELECT
     om.id AS organization_id,
