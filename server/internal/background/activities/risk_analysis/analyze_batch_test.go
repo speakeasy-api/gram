@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"maps"
-	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -52,55 +50,6 @@ func (j *recordingPromptJudge) Evaluate(_ context.Context, in promptpolicy.Input
 		CompletionTokens: 0,
 		TotalTokens:      0,
 	}, nil
-}
-
-type localFlagCall struct {
-	flag             feature.Flag
-	distinctID       string
-	groups           map[string]string
-	personProperties map[string]string
-}
-
-type recordingLocalFlags struct {
-	feature.InMemory
-	mu    sync.Mutex
-	calls []localFlagCall
-}
-
-func (f *recordingLocalFlags) IsFlagEnabledLocal(ctx context.Context, flag feature.Flag, distinctID string, groups, personProperties map[string]string) (bool, error) {
-	f.mu.Lock()
-	f.calls = append(f.calls, localFlagCall{
-		flag:             flag,
-		distinctID:       distinctID,
-		groups:           copyStringMap(groups),
-		personProperties: copyStringMap(personProperties),
-	})
-	f.mu.Unlock()
-
-	on, err := f.IsFlagEnabled(ctx, flag, distinctID, groups)
-	if err != nil {
-		return false, fmt.Errorf("check in-memory flag: %w", err)
-	}
-	return on, nil
-}
-
-func (f *recordingLocalFlags) Calls() []localFlagCall {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	out := make([]localFlagCall, len(f.calls))
-	copy(out, f.calls)
-	return out
-}
-
-func copyStringMap(in map[string]string) map[string]string {
-	if in == nil {
-		return nil
-	}
-
-	out := make(map[string]string, len(in))
-	maps.Copy(out, in)
-	return out
 }
 
 // newPresidioPub returns a mock presidio publisher that accepts any publish
@@ -289,191 +238,120 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 	assert.True(t, sawDeadLetter, "expected a presidio dead-letter row with dead_letter_reason set")
 }
 
-func TestAnalyzeBatch_PromptInjectionShadowSamplingGate(t *testing.T) {
+func TestAnalyzeBatch_PromptInjectionPublishesAsyncRequestsForEveryMessage(t *testing.T) {
 	t.Parallel()
 
-	for _, tc := range []struct {
-		name          string
-		enabled       []int
-		wantPublished int
-	}{
-		{name: "flag off", enabled: nil, wantPublished: 0},
-		{name: "all enabled", enabled: []int{0, 1, 2}, wantPublished: 3},
-		{name: "subset enabled", enabled: []int{0, 2}, wantPublished: 2},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			conn := cloneDB(t)
-			td := seedTestData(t, conn, true)
-			msgIDs := seedMessages(t, conn, td, 3)
-			flagGroups, err := riskrepo.New(conn).GetProjectFlagGroups(t.Context(), td.projectID)
-			require.NoError(t, err)
-			flags := &recordingLocalFlags{}
-			for _, idx := range tc.enabled {
-				flags.SetFlag(feature.FlagRiskAsyncScanShadow, msgIDs[idx].String(), true)
-			}
-			promptInjectionPub, published := capturingPromptInjectionPub(t)
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+	msgIDs := seedMessages(t, conn, td, 3)
+	promptInjectionPub, published := capturingPromptInjectionPub(t)
 
-			ab := risk_analysis.NewAnalyzeBatch(
-				testenv.NewLogger(t),
-				testenv.NewTracerProvider(t),
-				testenv.NewMeterProvider(t),
-				conn,
-				&risk_analysis.StubPIIScanner{},
-				nil,
-				nil,
-				nil,
-				nil,
-				flags,
-				newPresidioPub(),
-				newGitleaksPub(),
-				promptInjectionPub,
-				newPromptPolicyPub(),
-				newCustomRulesPub(),
-				mustCustomRuleScanner(t, conn),
-				mustCELEngine(t),
-				nil,
-			)
+	ab := risk_analysis.NewAnalyzeBatch(
+		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
+		conn,
+		&risk_analysis.StubPIIScanner{},
+		nil,
+		nil,
+		nil,
+		nil,
+		&feature.InMemory{},
+		newPresidioPub(),
+		newGitleaksPub(),
+		promptInjectionPub,
+		newPromptPolicyPub(),
+		newCustomRulesPub(),
+		mustCustomRuleScanner(t, conn),
+		mustCELEngine(t),
+		nil,
+	)
 
-			var ts testsuite.WorkflowTestSuite
-			env := ts.NewTestActivityEnvironment()
-			env.RegisterActivity(ab.Do)
+	var ts testsuite.WorkflowTestSuite
+	env := ts.NewTestActivityEnvironment()
+	env.RegisterActivity(ab.Do)
 
-			val, err := env.ExecuteActivity(ab.Do, risk_analysis.AnalyzeBatchArgs{
-				ProjectID:        td.projectID,
-				OrganizationID:   td.orgID,
-				RiskPolicyID:     td.policyID,
-				PolicyVersion:    td.policyVersion,
-				MessageIDs:       msgIDs,
-				Sources:          []string{risk_analysis.SourcePromptInjection},
-				PresidioEntities: nil,
-				CustomRuleIds:    nil,
-			})
-			require.NoError(t, err)
-			var result risk_analysis.AnalyzeBatchResult
-			require.NoError(t, val.Get(&result))
-			require.Len(t, *published, tc.wantPublished)
-			calls := flags.Calls()
-			require.Len(t, calls, len(msgIDs))
-			gotDistinctIDs := make([]string, 0, len(calls))
-			wantDistinctIDs := make([]string, 0, len(msgIDs))
-			for _, msgID := range msgIDs {
-				wantDistinctIDs = append(wantDistinctIDs, msgID.String())
-			}
-			for _, call := range calls {
-				gotDistinctIDs = append(gotDistinctIDs, call.distinctID)
-				assert.Equal(t, feature.FlagRiskAsyncScanShadow, call.flag)
-				assert.Nil(t, call.groups)
-				assert.Equal(t, map[string]string{
-					"organization_slug": flagGroups.OrganizationSlug,
-					"project_slug":      flagGroups.ProjectSlug,
-				}, call.personProperties)
-			}
-			assert.ElementsMatch(t, wantDistinctIDs, gotDistinctIDs)
-		})
-	}
+	val, err := env.ExecuteActivity(ab.Do, risk_analysis.AnalyzeBatchArgs{
+		ProjectID:        td.projectID,
+		OrganizationID:   td.orgID,
+		RiskPolicyID:     td.policyID,
+		PolicyVersion:    td.policyVersion,
+		MessageIDs:       msgIDs,
+		Sources:          []string{risk_analysis.SourcePromptInjection},
+		PresidioEntities: nil,
+		CustomRuleIds:    nil,
+	})
+	require.NoError(t, err)
+	var result risk_analysis.AnalyzeBatchResult
+	require.NoError(t, val.Get(&result))
+	require.Len(t, *published, len(msgIDs))
 }
 
-func TestAnalyzeBatch_PromptPolicyShadowSamplingGate(t *testing.T) {
+func TestAnalyzeBatch_PromptPolicyPublishesAsyncRequestsForEveryEligibleMessage(t *testing.T) {
 	t.Parallel()
 
-	for _, tc := range []struct {
-		name          string
-		enabled       []int
-		wantPublished int
-	}{
-		{name: "flag off", enabled: nil, wantPublished: 0},
-		{name: "all enabled", enabled: []int{0, 1}, wantPublished: 2},
-		{name: "subset enabled", enabled: []int{1}, wantPublished: 1},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			conn := cloneDB(t)
-			td := seedTestData(t, conn, true)
-			policyID, err := uuid.NewV7()
-			require.NoError(t, err)
-			policy, err := riskrepo.New(conn).CreateRiskPolicy(t.Context(), riskrepo.CreateRiskPolicyParams{
-				ID:             policyID,
-				ProjectID:      td.projectID,
-				OrganizationID: td.orgID,
-				Name:           "prompt policy",
-				PolicyType:     "prompt_based",
-				Sources:        []string{},
-				Enabled:        true,
-				Action:         "flag",
-				AudienceType:   "everyone",
-				AutoName:       false,
-				Prompt:         pgtype.Text{String: "Block unsafe requests", Valid: true},
-			})
-			require.NoError(t, err)
-			msgIDs := seedMessages(t, conn, td, 2)
-			flagGroups, err := riskrepo.New(conn).GetProjectFlagGroups(t.Context(), td.projectID)
-			require.NoError(t, err)
-			flags := &recordingLocalFlags{}
-			flags.SetFlag(feature.FlagPromptPolicies, td.orgID, true)
-			for _, idx := range tc.enabled {
-				flags.SetFlag(feature.FlagRiskAsyncScanShadow, msgIDs[idx].String(), true)
-			}
-			promptPolicyPub, published := capturingPromptPolicyPub(t)
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+	policyID, err := uuid.NewV7()
+	require.NoError(t, err)
+	policy, err := riskrepo.New(conn).CreateRiskPolicy(t.Context(), riskrepo.CreateRiskPolicyParams{
+		ID:             policyID,
+		ProjectID:      td.projectID,
+		OrganizationID: td.orgID,
+		Name:           "prompt policy",
+		PolicyType:     "prompt_based",
+		Sources:        []string{},
+		Enabled:        true,
+		Action:         "flag",
+		AudienceType:   "everyone",
+		AutoName:       false,
+		Prompt:         pgtype.Text{String: "Block unsafe requests", Valid: true},
+	})
+	require.NoError(t, err)
+	msgIDs := seedMessages(t, conn, td, 2)
+	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagPromptPolicies, td.orgID, true)
+	promptPolicyPub, published := capturingPromptPolicyPub(t)
 
-			ab := risk_analysis.NewAnalyzeBatch(
-				testenv.NewLogger(t),
-				testenv.NewTracerProvider(t),
-				testenv.NewMeterProvider(t),
-				conn,
-				&risk_analysis.StubPIIScanner{},
-				nil,
-				nil,
-				nil,
-				(&recordingPromptJudge{}).Evaluate,
-				flags,
-				newPresidioPub(),
-				newGitleaksPub(),
-				newPromptInjectionPub(),
-				promptPolicyPub,
-				newCustomRulesPub(),
-				mustCustomRuleScanner(t, conn),
-				mustCELEngine(t),
-				nil,
-			)
+	ab := risk_analysis.NewAnalyzeBatch(
+		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
+		conn,
+		&risk_analysis.StubPIIScanner{},
+		nil,
+		nil,
+		nil,
+		(&recordingPromptJudge{}).Evaluate,
+		flags,
+		newPresidioPub(),
+		newGitleaksPub(),
+		newPromptInjectionPub(),
+		promptPolicyPub,
+		newCustomRulesPub(),
+		mustCustomRuleScanner(t, conn),
+		mustCELEngine(t),
+		nil,
+	)
 
-			var ts testsuite.WorkflowTestSuite
-			env := ts.NewTestActivityEnvironment()
-			env.RegisterActivity(ab.Do)
+	var ts testsuite.WorkflowTestSuite
+	env := ts.NewTestActivityEnvironment()
+	env.RegisterActivity(ab.Do)
 
-			val, err := env.ExecuteActivity(ab.Do, risk_analysis.AnalyzeBatchArgs{
-				ProjectID:        td.projectID,
-				OrganizationID:   td.orgID,
-				RiskPolicyID:     policy.ID,
-				PolicyVersion:    policy.Version,
-				MessageIDs:       msgIDs,
-				Sources:          nil,
-				PresidioEntities: nil,
-				CustomRuleIds:    nil,
-			})
-			require.NoError(t, err)
-			var result risk_analysis.AnalyzeBatchResult
-			require.NoError(t, val.Get(&result))
-			require.Len(t, *published, tc.wantPublished)
-			calls := flags.Calls()
-			require.Len(t, calls, len(msgIDs))
-			gotDistinctIDs := make([]string, 0, len(calls))
-			wantDistinctIDs := make([]string, 0, len(msgIDs))
-			for _, msgID := range msgIDs {
-				wantDistinctIDs = append(wantDistinctIDs, msgID.String())
-			}
-			for _, call := range calls {
-				gotDistinctIDs = append(gotDistinctIDs, call.distinctID)
-				assert.Equal(t, feature.FlagRiskAsyncScanShadow, call.flag)
-				assert.Nil(t, call.groups)
-				assert.Equal(t, map[string]string{
-					"organization_slug": flagGroups.OrganizationSlug,
-					"project_slug":      flagGroups.ProjectSlug,
-				}, call.personProperties)
-			}
-			assert.ElementsMatch(t, wantDistinctIDs, gotDistinctIDs)
-		})
-	}
+	val, err := env.ExecuteActivity(ab.Do, risk_analysis.AnalyzeBatchArgs{
+		ProjectID:        td.projectID,
+		OrganizationID:   td.orgID,
+		RiskPolicyID:     policy.ID,
+		PolicyVersion:    policy.Version,
+		MessageIDs:       msgIDs,
+		Sources:          nil,
+		PresidioEntities: nil,
+		CustomRuleIds:    nil,
+	})
+	require.NoError(t, err)
+	var result risk_analysis.AnalyzeBatchResult
+	require.NoError(t, val.Get(&result))
+	require.Len(t, *published, len(msgIDs))
 }
 
 func TestAnalyzeBatch_FilteredMessagesStillClearExistingResults(t *testing.T) {

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 
+	"go.opentelemetry.io/otel/metric"
+
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -15,20 +17,41 @@ import (
 type Handler struct {
 	logger      *slog.Logger
 	findingsPub gcp.Publisher[*riskv1.Finding]
-	scanner     *Scanner
+	metrics     *scanners.AsyncScanHandlerMetrics
+	realScanner *Scanner
+	stubScanner *Scanner
+	gate        *scanners.AsyncShadowGate
 }
 
-func NewHandler(logger *slog.Logger, scanner *Scanner, findingsPub gcp.Publisher[*riskv1.Finding]) *Handler {
+func NewHandler(logger *slog.Logger, meterProvider metric.MeterProvider, realScanner, stubScanner *Scanner, findingsPub gcp.Publisher[*riskv1.Finding], gate *scanners.AsyncShadowGate) *Handler {
+	if stubScanner == nil {
+		stubScanner = NewScanner(logger, NoopClassifier)
+	}
+	if realScanner == nil {
+		realScanner = stubScanner
+	}
 	return &Handler{
 		logger:      logger.With(attr.SlogComponent("prompt-injection-analyzer")),
 		findingsPub: findingsPub,
-		scanner:     scanner,
+		metrics:     scanners.NewAsyncScanHandlerMetrics(meterProvider, logger),
+		realScanner: realScanner,
+		stubScanner: stubScanner,
+		gate:        gate,
 	}
 }
 
 func (h *Handler) Handle(ctx context.Context, m *riskv1.PromptInjectionAnalysis, _ gcp.MessageMetadata) error {
-	findings, err := h.scanner.Scan(ctx, m.GetContent(), m.GetOrganizationId(), m.GetProjectId(), m.GetUserId(), promptInjectionJudgeMessage(m))
+	gateReason := h.gate.Decide(ctx, m.GetProjectId(), m.GetChatMessageId())
+	engine := gateReason.Engine()
+
+	scanner := h.stubScanner
+	if engine == scanners.AsyncScanEngineReal {
+		scanner = h.realScanner
+	}
+
+	findings, err := scanner.Scan(ctx, m.GetContent(), m.GetOrganizationId(), m.GetProjectId(), m.GetUserId(), promptInjectionJudgeMessage(m))
 	if err != nil {
+		h.metrics.RecordHandled(ctx, m.GetOrganizationId(), Source, engine, scanners.AsyncScanOutcomeScanError, gateReason)
 		return fmt.Errorf("scan prompt injection: %w", err)
 	}
 
@@ -41,12 +64,17 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.PromptInjectionAnalysis,
 		RiskPolicyVersion: m.GetRiskPolicyVersion(),
 	}, findings, "prompt injection")
 	if err != nil {
+		h.metrics.RecordHandled(ctx, m.GetOrganizationId(), Source, engine, scanners.AsyncScanOutcomePublishError, gateReason)
 		return fmt.Errorf("publish prompt injection findings: %w", err)
 	}
 
+	h.metrics.RecordHandled(ctx, m.GetOrganizationId(), Source, engine, scanners.AsyncScanOutcomeOK, gateReason)
 	h.logger.InfoContext(ctx, "prompt injection scan complete", attr.SlogValueAny(map[string]any{
 		"request_id":      m.GetRequestId(),
 		"chat_message_id": m.GetChatMessageId(),
+		"org_id":          m.GetOrganizationId(),
+		"engine":          engine,
+		"gate_reason":     string(gateReason),
 		"detections":      len(findings),
 		"published":       published,
 		"rule_ids":        ruleIDs,

@@ -37,18 +37,9 @@ func (a *AnalyzeBatch) scanPromptInjection(ctx context.Context, args AnalyzeBatc
 }
 
 func (a *AnalyzeBatch) publishPromptInjectionScanRequests(ctx context.Context, args AnalyzeBatchArgs, requestID uuid.UUID, messages []batchMessage) {
-	personProperties, ok := a.asyncShadowPersonProperties(ctx, args.OrganizationID, args.ProjectID)
-	if !ok {
-		return
-	}
-
 	createdAt := time.Now().UTC().Format(time.RFC3339)
 	publishResults := make([]gcp.PublishResult, 0, len(messages))
 	for _, msg := range messages {
-		if !a.asyncShadowEnabled(ctx, args.OrganizationID, args.ProjectID, msg.ID.String(), personProperties) {
-			continue
-		}
-
 		jm := batchJudgeMessage(msg)
 		toolCalls := make([]*riskv1.PromptInjectionAnalysis_ToolCall, 0, len(jm.ToolCalls))
 		for _, call := range jm.ToolCalls {
