@@ -2025,8 +2025,11 @@ CREATE TABLE IF NOT EXISTS user_accounts (
   external_org_id TEXT,
   -- The provider's stable per-account identity (Claude `user.account_uuid`). The
   -- account entity key — unique per account even when external_org_id is shared
-  -- across employees (as it is for a Claude enterprise org).
-  external_account_uuid TEXT NOT NULL,
+  -- across employees (as it is for a Claude enterprise org). Only OAuth-
+  -- authenticated accounts carry one; NULL for a company-credential account (an
+  -- API key, gateway/proxy, Bedrock, or Vertex), whose entity key is the
+  -- session email instead (see user_accounts_org_provider_email_key).
+  external_account_uuid TEXT,
   -- The provider's tagged account id (Claude `user.account_id`, e.g. user_01…).
   external_account_id TEXT,
   -- Email associated with the account; may differ from the employee's work email
@@ -2071,6 +2074,14 @@ CREATE TABLE IF NOT EXISTS user_accounts (
 CREATE UNIQUE INDEX IF NOT EXISTS user_accounts_org_provider_external_account_uuid_key
 ON user_accounts (organization_id, provider, external_account_uuid)
 WHERE deleted_at IS NULL;
+
+-- Entity key for company-credential accounts (no provider account UUID): one
+-- account per normalized session email per provider. Rows on this key are only
+-- written by ingest, which normalizes the email before upserting, so a plain
+-- column index suffices (no lower() expression needed).
+CREATE UNIQUE INDEX IF NOT EXISTS user_accounts_org_provider_email_key
+ON user_accounts (organization_id, provider, email)
+WHERE external_account_uuid IS NULL AND deleted_at IS NULL;
 
 -- The dashboard lists an employee's accounts by (organization_id, user_id).
 CREATE INDEX IF NOT EXISTS user_accounts_organization_id_user_id_idx

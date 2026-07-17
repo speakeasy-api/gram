@@ -15,6 +15,12 @@ overrides:
           import: "github.com/google/uuid"
           type: "NullUUID"
         nullable: true
+      # Temporary pin while user_accounts.external_account_uuid transitions to
+      # nullable (DNO-555): keeps the generated type `string` so the migration
+      # ships without Go changes. The follow-up feature PR removes this pin and
+      # adapts call sites to pgtype.Text. No NULLs exist until that PR writes them.
+      - column: user_accounts.external_account_uuid
+        go_type: string
       - column: http_tool_definitions.response_filter
         go_type:
           import: github.com/speakeasy-api/gram/server/internal/tools/repo/models
