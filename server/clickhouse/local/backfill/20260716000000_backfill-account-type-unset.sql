@@ -399,14 +399,20 @@ WHERE gram_project_id = toUUID('<PROJECT_ID>')
 GROUP BY account_type;
 
 -- ============================================================================
--- ROLLBACK — exact reverse flips, lossless and repeatable. This restores the
--- step-0c end state: generation 1 visible before 2026-07-14 (the 20260713
--- runbook's cutoff), generation 0 visible from it (generation-0 rows before it
--- were already hidden by that runbook's cutover and must stay hidden). To
--- retry a corrected backfill afterwards, hard-delete generation 2 for the
--- project (`ALTER TABLE attribute_metrics_summaries DELETE WHERE
--- gram_project_id = toUUID('<PROJECT_ID>') AND generation = 2 SETTINGS
--- mutations_sync = 2`) and start over from step 1.
+-- ROLLBACK — reverse flips, repeatable (near-lossless: see the note below on
+-- the small in-window MV undercount). This restores the step-0c end state:
+-- generation 1 visible before 2026-07-14 (the 20260713 runbook's cutoff),
+-- generation 0 visible from it (generation-0 rows before it were already
+-- hidden by that runbook's cutover and must stay hidden). To retry a
+-- corrected backfill afterwards: FIRST run the rollback flips below (never
+-- delete while generations 0/1 are hidden and the staged rows are the live
+-- copy — an interrupted restage would leave the project's history missing),
+-- THEN hard-delete the now-hidden staged rows — bounded exactly like the
+-- stage-once guard's delete, so live MV generation-2 rows are never touched
+-- (`ALTER TABLE attribute_metrics_summaries DELETE WHERE gram_project_id =
+-- toUUID('<PROJECT_ID>') AND generation = 2 AND is_active = 0 AND time_bucket <
+-- toDateTime('2026-07-16 05:00:00', 'UTC') SETTINGS mutations_sync = 2`) —
+-- and start over from step 1.
 -- ============================================================================
 
 -- The re-hide is bounded to the staged window so live MV generation-2 rows
