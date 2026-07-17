@@ -30,9 +30,11 @@ const (
 		sessionClaudeOTELRowPredicate + " AND " +
 		"(toString(attributes.event.name) = 'tool_result' OR body = 'claude_code.tool_result')" +
 		")"
-	// sessionAgentUsageRowPredicate matches Codex/Cursor usage rows — their only
-	// token/cost source. Gram-hosted chat completions and claude-code:usage rows
-	// are deliberately excluded: the summaries cover agent surfaces only.
+	// sessionAgentUsageRowPredicate matches Codex/Cursor usage rows — their
+	// only token/cost source. Gram-hosted chat completions, claude-code:usage
+	// rows, and sessionless Claude Chat Admin Analytics rows are deliberately
+	// excluded. Claude Chat usage is read through the event-hash-deduplicated
+	// attribute metrics path instead.
 	sessionAgentUsageRowPredicate = "(startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage'))"
 	// sessionAgentToolCallPredicate matches Codex/Cursor completed tool-call hook
 	// rows (they have no OTEL stream). The hook.event guard excludes the

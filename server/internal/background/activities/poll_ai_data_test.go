@@ -1,6 +1,7 @@
 package activities
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,13 +10,80 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/testsuite"
 
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	anthropicapi "github.com/speakeasy-api/gram/server/internal/thirdparty/anthropic"
 	cursorapi "github.com/speakeasy-api/gram/server/internal/thirdparty/cursor"
 )
+
+func TestPollAIDataInputAcceptsLegacyStringThroughTemporal(t *testing.T) {
+	t.Parallel()
+
+	configID := "11111111-1111-1111-1111-111111111111"
+	payloads, err := converter.GetDefaultDataConverter().ToPayloads(configID)
+	require.NoError(t, err)
+	require.Len(t, payloads.Payloads, 1)
+	require.Equal(t, "json/plain", string(payloads.Payloads[0].Metadata["encoding"]))
+	require.Equal(t, `"`+configID+`"`, string(payloads.Payloads[0].Data))
+
+	endTime := time.Date(2026, 7, 16, 20, 0, 0, 0, time.FixedZone("test", -5*60*60))
+	decodeAndNormalize := func(_ context.Context, input PollAIDataInput) (PollAIDataInput, error) {
+		return normalizePollAIDataInput(
+			input,
+			"v1:ai-usage-poller:acme:"+configID+":"+aiintegrations.ProviderAnthropicCompliance,
+			endTime,
+		), nil
+	}
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestActivityEnvironment()
+	env.RegisterActivityWithOptions(decodeAndNormalize, activity.RegisterOptions{Name: "DecodePollAIDataInput"})
+
+	// Passing a string here reproduces the old PollAIData activity command.
+	value, err := env.ExecuteActivity("DecodePollAIDataInput", configID)
+	require.NoError(t, err)
+
+	var actual PollAIDataInput
+	require.NoError(t, value.Get(&actual))
+	require.Equal(t, PollAIDataInput{
+		ConfigID: configID,
+		Schedule: aiintegrations.ScheduleAnthropicCompliance,
+		EndTime:  endTime.UTC(),
+	}, actual)
+}
+
+func TestPollAIDataInputAcceptsObjectThroughTemporal(t *testing.T) {
+	t.Parallel()
+
+	input := PollAIDataInput{
+		ConfigID: "22222222-2222-2222-2222-222222222222",
+		Schedule: aiintegrations.ScheduleAnthropicAnalyticsCost,
+		EndTime:  time.Date(2026, 7, 16, 20, 0, 0, 0, time.UTC),
+	}
+	decodeAndNormalize := func(_ context.Context, decoded PollAIDataInput) (PollAIDataInput, error) {
+		return normalizePollAIDataInput(
+			decoded,
+			"v1:ai-usage-poller:acme:"+input.ConfigID+":"+aiintegrations.ProviderAnthropicCompliance,
+			time.Date(2030, 1, 1, 0, 0, 0, 0, time.UTC),
+		), nil
+	}
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestActivityEnvironment()
+	env.RegisterActivityWithOptions(decodeAndNormalize, activity.RegisterOptions{Name: "DecodePollAIDataInput"})
+
+	value, err := env.ExecuteActivity("DecodePollAIDataInput", input)
+	require.NoError(t, err)
+
+	var actual PollAIDataInput
+	require.NoError(t, value.Get(&actual))
+	require.Equal(t, input, actual)
+}
 
 func TestPollRejectedByProviderMatchesPermanentProviderFailures(t *testing.T) {
 	t.Parallel()

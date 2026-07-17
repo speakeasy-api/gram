@@ -317,10 +317,7 @@ func (q *Queries) QueryAttributeMetricsTable(ctx context.Context, arg AttributeM
 	sb := sq.Select(groupExpr+" AS group_value").
 		Columns(attributeMeasureSelects...).
 		Column(squirrel.Expr(attributeDimensionValuesExpr(arg.GroupBy))).
-		From("attribute_metrics_summaries").
-		// Exclude tombstoned rows (soft-deleted backfill data; see the
-		// is_active column comment in server/clickhouse/schema.sql).
-		Where("is_active = 1").
+		From("deduplicated_attribute_metrics_summaries").
 		Where(squirrel.Eq{"gram_project_id": arg.ProjectIDs}).
 		Where("time_bucket >= toStartOfHour(fromUnixTimestamp64Nano(?))", arg.TimeStart).
 		Where("time_bucket <= toStartOfHour(fromUnixTimestamp64Nano(?))", arg.TimeEnd)
@@ -384,10 +381,7 @@ func (q *Queries) QueryAttributeMetricsTimeseries(ctx context.Context, arg Attri
 		)).
 		Column(groupExpr+" AS group_value").
 		Columns(attributeMeasureSelects...).
-		From("attribute_metrics_summaries").
-		// Exclude tombstoned rows (soft-deleted backfill data; see the
-		// is_active column comment in server/clickhouse/schema.sql).
-		Where("is_active = 1").
+		From("deduplicated_attribute_metrics_summaries").
 		Where(squirrel.Eq{"gram_project_id": arg.ProjectIDs}).
 		Where("time_bucket >= toStartOfHour(fromUnixTimestamp64Nano(?))", arg.TimeStart).
 		Where("time_bucket <= toStartOfHour(fromUnixTimestamp64Nano(?))", arg.TimeEnd)

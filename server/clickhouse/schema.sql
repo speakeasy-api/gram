@@ -414,6 +414,10 @@ SELECT
     sumMapIfState(map(gram_urn, toUInt64(1)), startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 200 AND toInt32OrZero(toString(attributes.http.response.status_code)) < 300) AS tool_success_counts,
     sumMapIfState(map(gram_urn, toUInt64(1)), startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) AS tool_failure_counts
 FROM telemetry_logs
+-- Claude Chat analytics rows use claude_chat.event_hash as a read-time
+-- deduplication key. They are retained in the dedicated table below and must
+-- not enter this legacy row-summing aggregate.
+WHERE NOT startsWith(gram_urn, 'claude_chat:')
 GROUP BY gram_project_id, time_bucket;
 
 -- attribute_metrics_summaries pre-aggregates cost/token/usage metrics broken
@@ -542,7 +546,9 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS attribute_metrics_summaries_mv TO attribu
 -- Cursor come from their usage-metrics rows plus completed tool-call hook
 -- rows. Everything else — Gram-hosted chat completions, claude-code:usage
 -- metric rows (which duplicate api_request usage), Claude hook rows, MCP hook
--- rows — is excluded so cost attribution never mixes sources.
+-- rows — is excluded so cost attribution never mixes sources. Claude Chat
+-- Admin Analytics rows are retained separately below so event_hash can remain
+-- a read-time deduplication key.
 -- Keep the predicates in sync with the session* constants in
 -- server/internal/telemetry/repo/sessions.go, which apply the same
 -- classification to raw telemetry_logs.
@@ -673,6 +679,182 @@ WHERE time_unix_nano >= attribute_metrics_cutoff_unix_nano
   AND (is_claude_api_request OR is_claude_tool_result OR is_agent_usage_row OR is_agent_tool_call)
 GROUP BY
     gram_project_id,
+    time_bucket,
+    department_name,
+    job_title,
+    employee_type,
+    division_name,
+    cost_center_name,
+    user_email,
+    model,
+    hook_source,
+    roles,
+    groups,
+    account_type,
+    provider,
+    billing_mode,
+    query_source,
+    skill_name,
+    agent_name,
+    mcp_server_name,
+    mcp_tool_name;
+
+-- Claude Chat Admin Analytics rows need exact retry protection without
+-- suppressing writes. Keep every physical insert in a long-lived table and
+-- expose only the latest row for each (project, event_hash) through FINAL in
+-- deduplicated_attribute_metrics_summaries. The hash includes starting_at, so
+-- retries for one event always share a monthly partition. The 730-day TTL
+-- matches attribute_metrics_summaries and preserves billing history after raw
+-- telemetry_logs expires.
+CREATE TABLE IF NOT EXISTS claude_chat_metrics (
+    gram_project_id UUID,
+    event_hash String,
+    time_bucket DateTime('UTC'),
+    observed_time_unix_nano Int64,
+
+    department_name String,
+    job_title String,
+    employee_type String,
+    division_name String,
+    cost_center_name String,
+    user_email String,
+    model String,
+    hook_source String,
+    roles Array(String),
+    groups Array(String),
+
+    total_input_tokens Int64,
+    total_output_tokens Int64,
+    total_tokens Int64,
+    cache_read_input_tokens Int64,
+    cache_creation_input_tokens Int64,
+    total_cost Float64,
+
+    account_type String,
+    provider String,
+    billing_mode String,
+    query_source String,
+    skill_name String,
+    agent_name String,
+    mcp_server_name String,
+    mcp_tool_name String
+) ENGINE = ReplacingMergeTree(observed_time_unix_nano)
+PARTITION BY toYYYYMM(time_bucket)
+ORDER BY (gram_project_id, event_hash)
+TTL time_bucket + INTERVAL 730 DAY
+SETTINGS index_granularity = 8192
+COMMENT 'Long-lived Claude Chat usage and cost events keyed for read-time retry deduplication.';
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS claude_chat_metrics_mv TO claude_chat_metrics AS
+SELECT
+    gram_project_id,
+    toString(attributes.claude_chat.event_hash) AS event_hash,
+    toStartOfHour(fromUnixTimestamp64Nano(time_unix_nano)) AS time_bucket,
+    observed_time_unix_nano,
+
+    toString(attributes.user.attributes.department_name) AS department_name,
+    toString(attributes.user.attributes.job_title) AS job_title,
+    toString(attributes.user.attributes.employee_type) AS employee_type,
+    toString(attributes.user.attributes.division_name) AS division_name,
+    toString(attributes.user.attributes.cost_center_name) AS cost_center_name,
+    user_email,
+    toString(attributes.gen_ai.response.model) AS model,
+    hook_source,
+    arraySort(JSONExtract(ifNull(toJSONString(attributes.user.roles), '[]'), 'Array(String)')) AS roles,
+    arraySort(JSONExtract(ifNull(toJSONString(attributes.user.groups), '[]'), 'Array(String)')) AS groups,
+
+    toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)) AS total_input_tokens,
+    toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)) AS total_output_tokens,
+    toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens))
+        + toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens))
+        + toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens)) AS total_tokens,
+    toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens)) AS cache_read_input_tokens,
+    toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens)) AS cache_creation_input_tokens,
+    toFloat64OrZero(toString(attributes.gen_ai.usage.cost)) AS total_cost,
+
+    account_type,
+    provider,
+    billing_mode,
+    '' AS query_source,
+    '' AS skill_name,
+    '' AS agent_name,
+    '' AS mcp_server_name,
+    '' AS mcp_tool_name
+FROM telemetry_logs
+WHERE gram_urn IN ('claude_chat:usage:metrics', 'claude_chat:cost:metrics')
+  AND toString(attributes.claude_chat.event_hash) != '';
+
+-- Present the existing aggregate and the deduplicated Claude Chat events with
+-- one AggregateFunction-compatible shape. All TUM and telemetry.query readers
+-- consume this view, so retry duplicates cannot inflate token or cost sums.
+CREATE VIEW IF NOT EXISTS deduplicated_attribute_metrics_summaries AS
+SELECT
+    gram_project_id,
+    time_bucket,
+    department_name,
+    job_title,
+    employee_type,
+    division_name,
+    cost_center_name,
+    user_email,
+    model,
+    hook_source,
+    roles,
+    groups,
+    total_chats,
+    total_input_tokens,
+    total_output_tokens,
+    total_tokens,
+    cache_read_input_tokens,
+    cache_creation_input_tokens,
+    total_cost,
+    total_tool_calls,
+    unique_tool_calls,
+    account_type,
+    provider,
+    billing_mode,
+    query_source,
+    skill_name,
+    agent_name,
+    mcp_server_name,
+    mcp_tool_name
+FROM attribute_metrics_summaries
+WHERE is_active = 1
+UNION ALL
+SELECT
+    gram_project_id,
+    time_bucket,
+    department_name,
+    job_title,
+    employee_type,
+    division_name,
+    cost_center_name,
+    user_email,
+    model,
+    hook_source,
+    roles,
+    groups,
+    uniqExactIfState(toString(''), toUInt8(0)) AS total_chats,
+    sumIfState(total_input_tokens, toUInt8(1)) AS total_input_tokens,
+    sumIfState(total_output_tokens, toUInt8(1)) AS total_output_tokens,
+    sumIfState(total_tokens, toUInt8(1)) AS total_tokens,
+    sumIfState(cache_read_input_tokens, toUInt8(1)) AS cache_read_input_tokens,
+    sumIfState(cache_creation_input_tokens, toUInt8(1)) AS cache_creation_input_tokens,
+    sumIfState(total_cost, toUInt8(1)) AS total_cost,
+    countIfState(toUInt8(0)) AS total_tool_calls,
+    uniqExactIfState(toString(''), toUInt8(0)) AS unique_tool_calls,
+    account_type,
+    provider,
+    billing_mode,
+    query_source,
+    skill_name,
+    agent_name,
+    mcp_server_name,
+    mcp_tool_name
+FROM claude_chat_metrics FINAL
+GROUP BY
+    gram_project_id,
+    event_hash,
     time_bucket,
     department_name,
     job_title,

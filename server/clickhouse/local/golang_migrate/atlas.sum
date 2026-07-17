@@ -1,4 +1,4 @@
-h1:hC+lQ42fJHlAyTseEkH1UjTtHOJYW4yiT0XQ15BTwHE=
+h1:IVpzVoBBOkYunlF0ydi3O8So1SPSWO9/dLaeSxff8yI=
 20251127155815_initial_golang_migrate.up.sql h1:fkATa14aucJEoldFi1VgW7TRT8gyC6NGe1Hq/OzXVuI=
 20251208142630_add-tool-logs-table.up.sql h1:cGJCiWBvLPFwOlpx0jYYLgdPZD21+gKSF/x4mVksBcI=
 20251209104438_add-id-col-to-tool-logs-table.up.sql h1:+Ubsl1ZKfeCZL9dBhohUnkBksKZj6nwdZSXm7WwowaE=
@@ -63,3 +63,5 @@ h1:hC+lQ42fJHlAyTseEkH1UjTtHOJYW4yiT0XQ15BTwHE=
 20260714173525_drop-tum-breakdown-summaries.up.sql h1:bN2z1+CUm9cttkIMubc0en+gp7viCi4ojcCACI8rhtU=
 20260714200951_shadow-mcp-server-name-override.up.sql h1:O6ZXprNwT+7pVXUmO6pkPoy+SFpCh4+zSH3E61ODGnQ=
 20260714200952_add-risk-findings.up.sql h1:RBBGniqX3KuAlZdyXFC/x/PPrVj8gUWqTBMGWKytQhA=
+20260716210412_claude-chat-usage-cost-metrics.up.sql h1:SlHU5dg0kiW94LmKoXjc12q/23B4+tuE48VgfQg5dlY=
+20260717043657_claude-chat-read-dedup.up.sql h1:UY45YGDQvxL5eCYuYkXweJOH+qS0uW9eWUFyFjBB440=

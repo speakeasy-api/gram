@@ -279,6 +279,73 @@ func sumTumBuckets(buckets []telemetryrepo.TumDayBucket) int64 {
 	return total
 }
 
+func TestGetTokensUnderManagementQuery_CountsClaudeChatAnalyticsUsage(t *testing.T) {
+	t.Parallel()
+
+	_, _, chConn, projectID := newTUMTestService(t, "org-tum-claude-chat-analytics")
+
+	now := attributeMetricsPostCutoff
+	dayStart := now.Truncate(24 * time.Hour)
+	windowStart := dayStart.Add(-2 * 24 * time.Hour)
+	windowEnd := dayStart.Add(24 * time.Hour)
+
+	// A Claude Chat (web/desktop) usage row polled from the Anthropic Admin
+	// Analytics API — sessionless usage (no conversation id) carrying
+	// gen_ai.usage.* token fields, the shape emitted by
+	// aiintegrations.AnthropicAnalyticsPoller. The same report row is inserted
+	// twice to model a retry after ClickHouse accepted a page but before the
+	// poll watermark advanced. TUM must count the shared event hash once.
+	usageAttrs := map[string]any{
+		"gen_ai.usage.input_tokens":                100,
+		"gen_ai.usage.output_tokens":               50,
+		"gen_ai.usage.cache_read.input_tokens":     100000,
+		"gen_ai.usage.cache_creation.input_tokens": 25,
+		"gen_ai.response.model":                    "claude-opus-4-8",
+		"gram.hook.source":                         "claude-chat",
+		"claude_chat.event_hash":                   "usage-retried",
+	}
+	insertTelemetryRow(t, chConn, projectID.String(), now, "claude_chat:usage:metrics", usageAttrs)
+	insertTelemetryRow(t, chConn, projectID.String(), now, "claude_chat:usage:metrics", usageAttrs)
+
+	// A different report row has a different hash and must count separately.
+	insertTelemetryRow(t, chConn, projectID.String(), now, "claude_chat:usage:metrics", map[string]any{
+		"gen_ai.usage.input_tokens": 20,
+		"gen_ai.response.model":     "claude-opus-4-8",
+		"gram.hook.source":          "claude-chat",
+		"claude_chat.event_hash":    "usage-distinct",
+	})
+
+	// The matching spend arrives as a separate cost row: admitted by the MV
+	// (its cost sums into total_cost) but contributing zero tokens to TUM.
+	insertTelemetryRow(t, chConn, projectID.String(), now, "claude_chat:cost:metrics", map[string]any{
+		"gen_ai.usage.cost":      1.5,
+		"gen_ai.response.model":  "claude-opus-4-8",
+		"gram.hook.source":       "claude-chat",
+		"claude_chat.event_hash": "cost-event",
+	})
+
+	// claude-code:usage metric rows stay excluded from the MV — they
+	// duplicate the OTEL api_request stream.
+	insertTelemetryRow(t, chConn, projectID.String(), now, "claude-code:usage:metrics", map[string]any{
+		"gen_ai.usage.input_tokens": 9000,
+		"gen_ai.usage.total_tokens": 9000,
+		"gram.hook.source":          "claude-code",
+	})
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := telemetryrepo.New(chConn).GetTokensUnderManagementByDay(t.Context(), telemetryrepo.GetTokensUnderManagementParams{
+			ProjectIDs:          []string{projectID.String()},
+			StartUnixNano:       windowStart.UnixNano(),
+			EndUnixNano:         windowEnd.UnixNano(),
+			ExcludedHookSources: nil,
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		assert.Equal(c, int64(195), sumTumBuckets(res), "the retried event hash counts once, the distinct hash counts separately, cost adds no tokens, and claude-code:usage stays excluded")
+	}, 10*time.Second, 200*time.Millisecond)
+}
+
 func TestGetTokensUnderManagementQuery_DailyBreakdown(t *testing.T) {
 	t.Parallel()
 

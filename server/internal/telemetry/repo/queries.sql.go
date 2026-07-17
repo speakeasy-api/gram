@@ -99,6 +99,12 @@ const searchUsersKnownEmailsJoin = "(SELECT user_id, any(user_email) AS known_em
 const totalTokensExpr = "sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') + " +
 	"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gen_ai.usage.total_tokens) = '')"
 
+// Claude Chat Admin Analytics rows are intentionally excluded from legacy
+// telemetry_logs/metrics_summaries token and cost readers. Their retry-safe
+// analytics path is deduplicated_attribute_metrics_summaries, where
+// claude_chat.event_hash is applied at read time.
+const nonClaudeChatAnalyticsPredicate = "NOT startsWith(gram_urn, 'claude_chat:')"
+
 // AttributeFilter represents a filter on an arbitrary JSON attribute path.
 // Paths prefixed with @ target user-defined attributes (translated to app.<path> in ClickHouse).
 // Bare paths target system/OTel attributes directly.
@@ -1609,6 +1615,7 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 		Where("gram_project_id = ?", arg.GramProjectID).
 		Where("time_unix_nano >= ?", arg.TimeStart).
 		Where("time_unix_nano <= ?", arg.TimeEnd).
+		Where(nonClaudeChatAnalyticsPredicate).
 		GroupBy("bucket_time_unix_nano")
 
 	if arg.ExternalUserID != "" {
@@ -1898,7 +1905,8 @@ func (q *Queries) getOverviewSummaryRaw(arg GetOverviewSummaryParams) squirrel.S
 		From("telemetry_logs").
 		Where("gram_project_id = ?", arg.GramProjectID).
 		Where("time_unix_nano >= ?", arg.TimeStart).
-		Where("time_unix_nano <= ?", arg.TimeEnd)
+		Where("time_unix_nano <= ?", arg.TimeEnd).
+		Where(nonClaudeChatAnalyticsPredicate)
 
 	if arg.ExternalUserID != "" {
 		sb = sb.Where(squirrel.Eq{userIdentifierExpr("external_user_id"): arg.ExternalUserID})
@@ -2413,6 +2421,7 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 		Where("gram_project_id = ?", arg.GramProjectID).
 		Where("time_unix_nano >= ?", arg.TimeStart).
 		Where("time_unix_nano <= ?", arg.TimeEnd).
+		Where(nonClaudeChatAnalyticsPredicate).
 		Where(groupExpr + " != ''")
 
 	// Internal grouping keys on email, so rows missing user_email look up the
@@ -2557,7 +2566,8 @@ func (q *Queries) GetUserMetricsSummary(ctx context.Context, arg GetUserMetricsS
 		From("telemetry_logs").
 		Where("gram_project_id = ?", arg.GramProjectID).
 		Where("time_unix_nano >= ?", arg.TimeStart).
-		Where("time_unix_nano <= ?", arg.TimeEnd)
+		Where("time_unix_nano <= ?", arg.TimeEnd).
+		Where(nonClaudeChatAnalyticsPredicate)
 
 	// Filter by user ID (one of these must be set)
 	if arg.UserID != "" {
@@ -5969,23 +5979,20 @@ type GetTokensUnderManagementParams struct {
 }
 
 // tumMeasureExpr is the tokens-under-management measure over
-// attribute_metrics_summaries: input + output + cache WRITES. Cache reads
-// are deliberately excluded — a cache read re-observes prompt content that
-// was already counted when it entered the cache (and dwarfs everything else:
-// agent sessions re-read their whole cached prefix on every turn) — while a
-// cache write is new prompt content being observed for the first time, so it
-// counts.
+// deduplicated_attribute_metrics_summaries: input + output + cache WRITES.
+// Cache reads are deliberately excluded — a cache read re-observes prompt
+// content that was already counted when it entered the cache (and dwarfs
+// everything else: agent sessions re-read their whole cached prefix on every
+// turn) — while a cache write is new prompt content being observed for the
+// first time, so it counts.
 const tumMeasureExpr = "toInt64(sumIfMerge(total_input_tokens) + sumIfMerge(total_output_tokens) + sumIfMerge(cache_creation_input_tokens))"
 
 // tumObservedBase applies the shared window and observed-population scoping
-// for tokens-under-management reads over attribute_metrics_summaries. The
-// aggregate is bucketed hourly; callers group to UTC days.
+// for tokens-under-management reads over the combined retry-deduplicated
+// aggregate. The source is bucketed hourly; callers group to UTC days.
 func tumObservedBase(sb squirrel.SelectBuilder, arg GetTokensUnderManagementParams) squirrel.SelectBuilder {
 	sb = sb.
-		From("attribute_metrics_summaries").
-		// Exclude tombstoned rows (soft-deleted backfill data; see the
-		// is_active column comment in server/clickhouse/schema.sql).
-		Where("is_active = 1").
+		From("deduplicated_attribute_metrics_summaries").
 		Where(squirrel.Eq{"gram_project_id": arg.ProjectIDs}).
 		Where("time_bucket >= toStartOfDay(fromUnixTimestamp64Nano(?))", arg.StartUnixNano).
 		Where("time_bucket < fromUnixTimestamp64Nano(?)", arg.EndUnixNano)
@@ -6007,14 +6014,12 @@ type TumDayBucket struct {
 // tumMeasureExpr), scoped to the observed population (see
 // ExcludedHookSources).
 //
-// Reads the attribute_metrics_summaries aggregate — the provenance-first
-// fleet aggregate whose rows are, by construction, sessions the platform
-// observed (Claude api_request rows require a session and prompt id;
-// Codex/Cursor usage rows are session usage) — retained well beyond the raw
-// telemetry TTL, so historical billing cycles stay computable. Window
-// boundaries are day-granular: the start rounds down to its UTC day and the
-// end is expected to be a UTC day boundary, which billing cycle boundaries
-// always are. Days without usage are omitted.
+// Reads the retry-deduplicated aggregate view over the provenance-first fleet
+// aggregate and long-lived Claude Chat events. Both sources outlive raw
+// telemetry, so historical billing cycles stay computable. Window boundaries
+// are day-granular: the start rounds down to its UTC day and the end is
+// expected to be a UTC day boundary, which billing cycle boundaries always
+// are. Days without usage are omitted.
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetTokensUnderManagementByDay(ctx context.Context, arg GetTokensUnderManagementParams) ([]TumDayBucket, error) {
@@ -6117,11 +6122,11 @@ func (q *Queries) GetTumBreakdownTotalsByDay(ctx context.Context, arg GetTokensU
 }
 
 // tumBreakdownDimExprs maps the billing page's breakdown dimensions to their
-// attribute_metrics_summaries grouping expressions. The keys are the public
+// deduplicated attribute metrics grouping expressions. The keys are the public
 // telemetry dimension identifiers (see telemetryDimensionRegistry) so the
-// frontend picker and telemetry.query filters speak the same names. Roles
-// are multi-valued: a session's tokens count once under each held role, so
-// role rows overlap and can sum past the total.
+// frontend picker and telemetry.query filters speak the same names. Roles are
+// multi-valued: a session's tokens count once under each held role, so role
+// rows overlap and can sum past the total.
 var tumBreakdownDimExprs = map[string]string{
 	"model":           "model",
 	"hook_source":     "hook_source",

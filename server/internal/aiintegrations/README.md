@@ -7,7 +7,11 @@ This package owns organization-level AI provider configuration and usage sync st
 AI integrations are split across two Postgres tables:
 
 - `ai_integration_configs` stores provider configuration: organization, provider, encrypted API key, enabled flag, soft-delete metadata, and the telemetry project used for usage rows.
-- `ai_integration_syncs` stores usage polling state: the completed inclusive query cursor (`poll_watermark_at`), scheduler cursor (`next_poll_after`), and final failure metadata.
+- `ai_integration_syncs` stores sync scheduling state: the completed inclusive query cursor (`poll_watermark_at`), scheduler cursor (`next_poll_after`), and final failure metadata.
+
+A config can run several independent sync pipelines, so `ai_integration_syncs` rows are unique per `(ai_integration_config_id, schedule)`. The `schedule` column names the pipeline with provider-style values: each provider's primary sync shares the provider's name (`cursor`, `anthropic_compliance`), and secondary pipelines get their own names (`anthropic_analytics_usage` and `anthropic_analytics_cost` for the Admin Analytics reports, each tracking its own endpoint's finalization watermark and failure state). The `kind` column records how the schedule checkpoints progress: `cursor` rows resume from `last_cursor_id`, `time` rows resume from `poll_watermark_at`. Upserting a config eagerly creates every schedule its provider runs.
+
+Time-kind schedules share one runner: `timeWindowPoller` (`time_window_poller.go`) walks the range from the schedule's watermark to the source's upper bound in windows, bulk-writes each window's telemetry rows, and advances the watermark after each durable write. Providers implement the small `timeWindowSource` interface (an upper-bound probe plus a window fetch); the Cursor usage poller and both Anthropic Admin Analytics reports run on it.
 
 Configuration and sync state are separate because provider credentials are user-managed settings, while polling metadata is operational state owned by background workers.
 
@@ -96,7 +100,7 @@ Cursor windows are non-overlapping on success. Cursor includes both request boun
 
 Child workflow failures are isolated. The coordinator waits for the current child batch to finish and continues fetching later candidates instead of failing the whole coordinator run.
 
-ClickHouse and Postgres are not updated atomically. If ClickHouse insert succeeds but the success sync-state update fails before a retry advances `poll_watermark_at`, the same window can be re-inserted. Ingestion does not enforce uniqueness; each row includes `cursor.event_hash` so consumers that need exact-once sums can dedupe by `(gram_project_id, cursor.event_hash)`. If the final activity attempt fails before inserting, the failure is recorded and only `next_poll_after` advances so that provider/org does not block later work.
+ClickHouse and Postgres are not updated atomically. If ClickHouse insert succeeds but the success sync-state update fails before a retry advances `poll_watermark_at`, the same window can be re-inserted. Ingestion does not enforce uniqueness. Cursor rows include `cursor.event_hash` for consumers that need exact-once sums. Claude Chat rows include `claude_chat.event_hash`; ClickHouse retains them for 730 days and the TUM/attribute-metrics read view deduplicates by `(gram_project_id, claude_chat.event_hash)`. If the final activity attempt fails before inserting, the failure is recorded and only `next_poll_after` advances so that provider/org does not block later work.
 
 Cost fields are intentionally separate. `gen_ai.usage.cost` currently uses `tokenUsage.totalCents / 100`. Cursor's charged amount is also stored as `cursor.charged_cents` so billing semantics can be adjusted later without losing data.
 
@@ -110,7 +114,7 @@ When adding a provider:
 
 1. Add the provider constant and validation.
 2. Reuse `ai_integration_configs` for credentials and enablement.
-3. Reuse `ai_integration_syncs` for query cursors, scheduler state, and failure metadata.
+3. Reuse `ai_integration_syncs` for query cursors, scheduler state, and failure metadata. Declare the provider's schedules in `syncSchedulesFor` so upserts start every pipeline the provider runs.
 4. Add provider-specific polling inside the activity layer.
 5. Emit telemetry with the shared `gen_ai.usage.*` attributes where possible.
 6. Store provider-specific fields under a provider namespace, such as `cursor.*`.

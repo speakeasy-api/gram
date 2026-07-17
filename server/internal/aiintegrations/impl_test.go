@@ -18,14 +18,14 @@ type fakeConfigPoller struct {
 type fakeConfigPollerCall struct {
 	organizationSlug string
 	configID         uuid.UUID
-	provider         string
+	schedule         string
 }
 
-func (f *fakeConfigPoller) Poll(_ context.Context, organizationSlug string, configID uuid.UUID, provider string) error {
+func (f *fakeConfigPoller) Poll(_ context.Context, organizationSlug string, configID uuid.UUID, schedule string) error {
 	f.calls = append(f.calls, fakeConfigPollerCall{
 		organizationSlug: organizationSlug,
 		configID:         configID,
-		provider:         provider,
+		schedule:         schedule,
 	})
 	return f.returnErr
 }
@@ -41,8 +41,23 @@ func TestStartUsagePollDelegatesToStarter(t *testing.T) {
 	require.Equal(t, []fakeConfigPollerCall{{
 		organizationSlug: "acme",
 		configID:         configID,
-		provider:         ProviderCursor,
+		schedule:         ScheduleCursor,
 	}}, poller.calls)
+}
+
+func TestStartUsagePollStartsEveryAnthropicSchedule(t *testing.T) {
+	t.Parallel()
+
+	configID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	poller := &fakeConfigPoller{}
+	svc := &Service{configPoller: poller}
+
+	require.NoError(t, svc.startUsagePoll(t.Context(), "acme", configID, ProviderAnthropicCompliance))
+	require.Equal(t, []fakeConfigPollerCall{
+		{organizationSlug: "acme", configID: configID, schedule: ScheduleAnthropicCompliance},
+		{organizationSlug: "acme", configID: configID, schedule: ScheduleAnthropicAnalyticsUsage},
+		{organizationSlug: "acme", configID: configID, schedule: ScheduleAnthropicAnalyticsCost},
+	}, poller.calls)
 }
 
 func TestStartUsagePollAllowsMissingStarter(t *testing.T) {

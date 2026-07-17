@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations/repo"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 func TestUpsertWithTxCreatesConfigGeneration(t *testing.T) {
@@ -25,7 +26,7 @@ func TestUpsertWithTxCreatesConfigGeneration(t *testing.T) {
 	require.True(t, result.CreatedNewGeneration)
 	require.NotNil(t, result.Row)
 	require.Equal(t, result.Row.ID, result.Config.ID)
-	require.Equal(t, watermark.UTC().Add(usagePollIntervalFor(ProviderCursor)), result.Config.NextPollAfter)
+	require.Equal(t, watermark.UTC().Add(pollIntervalForSchedule(ScheduleCursor)), result.Config.NextPollAfter)
 	require.Equal(t, watermark, result.Config.PollWatermarkAt)
 
 	require.Equal(t, int64(1), countAIIntegrationConfigs(t, ctx, conn, orgID, false))
@@ -64,23 +65,31 @@ func TestUpsertWithTxKeyReplacementCreatesNewConfigGeneration(t *testing.T) {
 	require.Equal(t, int64(2), countAIIntegrationConfigs(t, ctx, conn, orgID, true))
 }
 
-func TestUpsertWithTxCreatesPrimarySyncDiscriminators(t *testing.T) {
+func TestUpsertWithTxStartsAllProviderSchedules(t *testing.T) {
 	t.Parallel()
 
 	ctx, conn, store, orgID := newStoreTestDB(t)
 
-	cursor := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderCursor, "cursor-key", true, true, nil, nil)
-	cursorSync := getPrimarySyncDiscriminators(t, ctx, conn, cursor.Config)
-	require.Equal(t, ProviderCursor, cursorSync.Schedule.String)
-	require.Equal(t, "time", cursorSync.Kind.String)
-	require.Equal(t, int64(1), countSyncRows(t, ctx, conn, cursor.Config))
+	extOrgID := "org_ext_1"
+	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderAnthropicCompliance, "anthropic-key", true, true, &extOrgID, nil)
 
-	extOrgID := "org_ext_primary_sync"
-	anthropic := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderAnthropicCompliance, "anthropic-key", true, true, &extOrgID, nil)
-	anthropicSync := getPrimarySyncDiscriminators(t, ctx, conn, anthropic.Config)
-	require.Equal(t, ProviderAnthropicCompliance, anthropicSync.Schedule.String)
-	require.Equal(t, "cursor", anthropicSync.Kind.String)
-	require.Equal(t, int64(1), countSyncRows(t, ctx, conn, anthropic.Config))
+	require.Equal(t, map[string]string{
+		ScheduleAnthropicCompliance:     SyncKindCursor,
+		ScheduleAnthropicAnalyticsUsage: SyncKindTime,
+		ScheduleAnthropicAnalyticsCost:  SyncKindTime,
+	}, listSyncSchedules(t, ctx, conn, created.Config.ID))
+}
+
+func TestUpsertWithTxStartsSingleCursorSchedule(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+
+	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderCursor, "cursor-key", true, true, nil, nil)
+
+	require.Equal(t, map[string]string{
+		ScheduleCursor: SyncKindTime,
+	}, listSyncSchedules(t, ctx, conn, created.Config.ID))
 }
 
 func TestUpsertWithTxFillsExistingPrimarySyncDiscriminators(t *testing.T) {
@@ -105,7 +114,7 @@ func TestUpsertWithTxFillsExistingPrimarySyncDiscriminators(t *testing.T) {
 	syncRow := getPrimarySyncDiscriminators(t, ctx, conn, updated.Config)
 	require.Equal(t, original.ID, syncRow.ID)
 	require.Equal(t, ProviderCursor, syncRow.Schedule.String)
-	require.Equal(t, "time", syncRow.Kind.String)
+	require.Equal(t, SyncKindTime, syncRow.Kind.String)
 	require.Equal(t, int64(1), countSyncRows(t, ctx, conn, updated.Config))
 }
 
@@ -152,50 +161,85 @@ func TestEnsurePrimarySyncHandlesConcurrentFirstWriters(t *testing.T) {
 	require.Equal(t, int64(1), countSyncRows(t, ctx, conn, created.Config))
 }
 
-func TestSyncScheduleBackfillIsResumableAndIdempotent(t *testing.T) {
+func TestListUsagePollCandidatesReturnsEveryDueSchedule(t *testing.T) {
 	t.Parallel()
 
 	ctx, conn, store, orgID := newStoreTestDB(t)
 
-	cursor := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderCursor, "cursor-key", true, true, nil, nil)
-	extOrgID := "org_ext_backfill"
-	anthropic := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderAnthropicCompliance, "anthropic-key", true, true, &extOrgID, nil)
-	for _, cfg := range []Config{cursor.Config, anthropic.Config} {
-		require.NoError(t, repo.New(conn).ClearSyncScheduleDiscriminatorsForTest(ctx, repo.ClearSyncScheduleDiscriminatorsForTestParams{
-			AiIntegrationConfigID: cfg.ID,
-			ProjectID:             cfg.ProjectID,
-		}))
+	extOrgID := "org_ext_1"
+	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderAnthropicCompliance, "anthropic-key", true, true, &extOrgID, nil)
+
+	candidates, err := store.ListUsagePollCandidates(ctx, time.Now().Add(time.Minute), 10)
+	require.NoError(t, err)
+	require.Len(t, candidates, 3)
+
+	schedules := make(map[string]string, len(candidates))
+	for _, candidate := range candidates {
+		require.Equal(t, created.Config.ID, candidate.ID)
+		require.Equal(t, ProviderAnthropicCompliance, candidate.Provider)
+		schedules[candidate.Schedule] = candidate.Kind
 	}
+	require.Equal(t, map[string]string{
+		ScheduleAnthropicCompliance:     SyncKindCursor,
+		ScheduleAnthropicAnalyticsUsage: SyncKindTime,
+		ScheduleAnthropicAnalyticsCost:  SyncKindTime,
+	}, schedules)
+}
 
-	backfiller := NewSyncScheduleBackfiller(conn, cursor.Config.ProjectID)
-	status, err := backfiller.Status(ctx)
-	require.NoError(t, err)
-	require.Equal(t, SyncScheduleBackfillStatus{PrimarySyncsPending: 2}, status)
+func TestSyncScheduleBackfillPopulatesPrimaryAndAnthropicAnalyticsSchedules(t *testing.T) {
+	t.Parallel()
 
-	first, err := backfiller.BackfillBatch(ctx, uuid.Nil, 1)
-	require.NoError(t, err)
-	require.Equal(t, 1, first.ConfigsProcessed)
-	require.Equal(t, 1, first.PrimarySyncsUpdated)
-	require.NotEqual(t, uuid.Nil, first.LastConfigID)
+	ctx, conn, store, orgID := newStoreTestDB(t)
 
-	second, err := backfiller.BackfillBatch(ctx, first.LastConfigID, 1)
-	require.NoError(t, err)
-	require.Equal(t, 1, second.ConfigsProcessed)
-	require.Equal(t, 1, second.PrimarySyncsUpdated)
-	require.NotEqual(t, uuid.Nil, second.LastConfigID)
+	extOrgID := "org_ext_backfill"
+	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderAnthropicCompliance, "anthropic-key", true, true, &extOrgID, nil)
+	queries := repo.New(conn)
+	require.NoError(t, queries.DeleteSecondarySyncSchedulesForTest(ctx, repo.DeleteSecondarySyncSchedulesForTestParams{
+		AiIntegrationConfigID: created.Config.ID,
+		ProjectID:             created.Config.ProjectID,
+		PrimarySchedule:       conv.ToPGText(ScheduleAnthropicCompliance),
+	}))
+	require.NoError(t, queries.ClearSyncScheduleDiscriminatorsForTest(ctx, repo.ClearSyncScheduleDiscriminatorsForTestParams{
+		AiIntegrationConfigID: created.Config.ID,
+		ProjectID:             created.Config.ProjectID,
+	}))
 
-	status, err = backfiller.Status(ctx)
+	backfiller := NewSyncScheduleBackfiller(conn, created.Config.ProjectID)
+	before, err := backfiller.Status(ctx)
 	require.NoError(t, err)
-	require.Equal(t, SyncScheduleBackfillStatus{PrimarySyncsPending: 0}, status)
-	require.Equal(t, int64(1), countSyncRows(t, ctx, conn, cursor.Config))
-	require.Equal(t, int64(1), countSyncRows(t, ctx, conn, anthropic.Config))
+	require.Equal(t, SyncScheduleBackfillStatus{
+		PrimarySyncsPending:   1,
+		AnalyticsSyncsPending: 2,
+	}, before)
+
+	batch, err := backfiller.BackfillBatch(ctx, uuid.Nil, 10)
+	require.NoError(t, err)
+	require.Equal(t, SyncScheduleBackfillBatch{
+		ConfigsProcessed:          1,
+		PrimarySyncsUpdated:       1,
+		AnalyticsSchedulesCreated: 2,
+		LastConfigID:              created.Config.ID,
+	}, batch)
+
+	after, err := backfiller.Status(ctx)
+	require.NoError(t, err)
+	require.Equal(t, SyncScheduleBackfillStatus{
+		PrimarySyncsPending:   0,
+		AnalyticsSyncsPending: 0,
+	}, after)
+	require.Equal(t, map[string]string{
+		ScheduleAnthropicCompliance:     SyncKindCursor,
+		ScheduleAnthropicAnalyticsUsage: SyncKindTime,
+		ScheduleAnthropicAnalyticsCost:  SyncKindTime,
+	}, listSyncSchedules(t, ctx, conn, created.Config.ID))
 
 	rerun, err := backfiller.BackfillBatch(ctx, uuid.Nil, 10)
 	require.NoError(t, err)
 	require.Equal(t, SyncScheduleBackfillBatch{
-		ConfigsProcessed:    0,
-		PrimarySyncsUpdated: 0,
-		LastConfigID:        uuid.Nil,
+		ConfigsProcessed:          0,
+		PrimarySyncsUpdated:       0,
+		AnalyticsSchedulesCreated: 0,
+		LastConfigID:              uuid.Nil,
 	}, rerun)
 }
 
@@ -238,6 +282,19 @@ func upsertConfigWithTx(
 		return err
 	}))
 	return result
+}
+
+func listSyncSchedules(t *testing.T, ctx context.Context, conn *pgxpool.Pool, configID uuid.UUID) map[string]string {
+	t.Helper()
+
+	rows, err := repo.New(conn).ListSyncSchedules(ctx, configID)
+	require.NoError(t, err)
+
+	schedules := map[string]string{}
+	for _, row := range rows {
+		schedules[row.Schedule.String] = row.Kind.String
+	}
+	return schedules
 }
 
 func countAIIntegrationConfigs(t *testing.T, ctx context.Context, conn *pgxpool.Pool, orgID string, includeDeleted bool) int64 {

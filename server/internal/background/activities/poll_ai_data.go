@@ -1,10 +1,13 @@
 package activities
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -46,9 +49,11 @@ type stageFailureDetail struct {
 }
 
 type PollAIData struct {
-	integrations       *aiintegrations.Store
-	cursorUsagePoller  *aiintegrations.UsagePollService
-	complianceImporter *aiintegrations.ComplianceImportService
+	integrations         *aiintegrations.Store
+	cursorUsagePoller    *aiintegrations.UsagePollService
+	complianceImporter   *aiintegrations.ComplianceImportService
+	analyticsUsagePoller *aiintegrations.AnthropicAnalyticsPoller
+	analyticsCostPoller  *aiintegrations.AnthropicAnalyticsPoller
 }
 
 func NewPollAIData(
@@ -59,38 +64,84 @@ func NewPollAIData(
 	guardianPolicy *guardian.Policy,
 	chatWriter *chat.ChatMessageWriter,
 ) *PollAIData {
+	store := aiintegrations.NewStore(logger, db, encryptionClient)
+	complianceHeartbeat := func(ctx context.Context, scope string, page int) {
+		activity.RecordHeartbeat(ctx, map[string]any{
+			"schedule": aiintegrations.ScheduleAnthropicCompliance,
+			"scope":    scope,
+			"page":     page,
+		})
+	}
+	analyticsHeartbeat := func(ctx context.Context, schedule string, page int) {
+		activity.RecordHeartbeat(ctx, map[string]any{
+			"schedule": schedule,
+			"page":     page,
+		})
+	}
 	return &PollAIData{
-		integrations: aiintegrations.NewStore(logger, db, encryptionClient),
-		cursorUsagePoller: aiintegrations.NewUsagePollService(telemetryLogger, guardianPolicy, func(ctx context.Context, page int) {
+		integrations: store,
+		cursorUsagePoller: aiintegrations.NewUsagePollService(store, telemetryLogger, guardianPolicy, func(ctx context.Context, page int) {
 			activity.RecordHeartbeat(ctx, map[string]any{
-				"provider": aiintegrations.ProviderCursor,
+				"schedule": aiintegrations.ScheduleCursor,
 				"page":     page,
 			})
 		}),
-		complianceImporter: aiintegrations.NewComplianceImportService(logger, db, guardianPolicy, chatWriter, func(ctx context.Context, scope string, page int) {
-			activity.RecordHeartbeat(ctx, map[string]any{
-				"provider": aiintegrations.ProviderAnthropicCompliance,
-				"scope":    scope,
-				"page":     page,
-			})
-		}),
+		complianceImporter:   aiintegrations.NewComplianceImportService(logger, db, guardianPolicy, chatWriter, complianceHeartbeat),
+		analyticsUsagePoller: aiintegrations.NewAnthropicUsageAnalyticsPoller(store, guardianPolicy, telemetryLogger, analyticsHeartbeat),
+		analyticsCostPoller:  aiintegrations.NewAnthropicCostAnalyticsPoller(store, guardianPolicy, telemetryLogger, analyticsHeartbeat),
 	}
 }
 
-// Do polls an AI integration provider and persists the provider-specific data.
-// It records provider-visible failure state on the final Temporal retry or as
-// soon as the failure is known to be non-retryable, and wraps every failure
-// in a typed Temporal application error carrying structured details.
-func (p *PollAIData) Do(ctx context.Context, configID string) (err error) {
-	id, err := uuid.Parse(configID)
+type PollAIDataInput struct {
+	ConfigID string    `json:"config_id"`
+	Schedule string    `json:"schedule"`
+	EndTime  time.Time `json:"end_time"`
+}
+
+// UnmarshalJSON keeps activity tasks scheduled with the legacy scalar config
+// ID readable after the activity input changed to this object.
+func (i *PollAIDataInput) UnmarshalJSON(data []byte) error {
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) > 0 && trimmed[0] == '"' {
+		var configID string
+		if err := json.Unmarshal(trimmed, &configID); err != nil {
+			return fmt.Errorf("decode legacy poll ai data input: %w", err)
+		}
+		*i = PollAIDataInput{
+			ConfigID: configID,
+			Schedule: "",
+			EndTime:  time.Time{},
+		}
+		return nil
+	}
+
+	type input PollAIDataInput
+	var decoded input
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return fmt.Errorf("decode poll ai data input: %w", err)
+	}
+	*i = PollAIDataInput(decoded)
+	return nil
+}
+
+// Do runs exactly one sync schedule. Temporal gives every schedule its own
+// workflow and retry budget, so a slow or failing schedule cannot block the
+// other schedules attached to the same integration config.
+func (p *PollAIData) Do(ctx context.Context, input PollAIDataInput) (err error) {
+	input = normalizePollAIDataInput(input, activity.GetInfo(ctx).WorkflowExecution.ID, time.Now())
+
+	id, err := uuid.Parse(input.ConfigID)
 	if err != nil {
 		return oops.E(oops.CodeInvalid, err, "invalid ai integration config id")
 	}
+	if input.Schedule == "" {
+		return oops.E(oops.CodeInvalid, nil, "ai integration sync schedule is required")
+	}
+	if input.EndTime.IsZero() {
+		return oops.E(oops.CodeInvalid, nil, "ai integration sync end time is required")
+	}
 
-	endTime := time.Now().UTC()
-	// cfg is declared before the defer so the failure path can resolve the
-	// provider-specific poll interval; if loading failed the provider is empty
-	// and the default interval applies.
+	endTime := input.EndTime.UTC()
 	var cfg aiintegrations.Config
 	defer func() {
 		if err == nil {
@@ -108,24 +159,24 @@ func (p *PollAIData) Do(ctx context.Context, configID string) (err error) {
 			recordCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 			defer cancel()
 
-			if recordErr := p.integrations.RecordUsagePollFailure(recordCtx, id, cfg.Provider, endTime, err); recordErr != nil {
-				err = errors.Join(err, fmt.Errorf("record usage poll failure: %w", recordErr))
+			if recordErr := p.integrations.RecordSchedulePollFailure(recordCtx, id, input.Schedule, endTime, err); recordErr != nil {
+				err = errors.Join(err, fmt.Errorf("record ai integration schedule failure: %w", recordErr))
 			}
 		}
 
 		err = newPollFailureError(id, cfg.Provider, attempt, nonRetryable, err)
 	}()
 
-	cfg, err = p.integrations.GetUsagePollConfig(ctx, id)
+	cfg, err = p.integrations.GetUsagePollConfig(ctx, id, input.Schedule)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to load ai integration configuration")
 	}
 
-	// Providers with cursor-based pagination advance lastCursor; time-window
-	// providers leave the stored value untouched.
-	lastCursor := cfg.LastCursor
-	switch cfg.Provider {
-	case aiintegrations.ProviderCursor:
+	switch input.Schedule {
+	case aiintegrations.ScheduleCursor:
+		if cfg.Provider != aiintegrations.ProviderCursor {
+			return oops.E(oops.CodeInvalid, nil, "cursor schedule cannot run for provider %s", cfg.Provider)
+		}
 		if err := p.cursorUsagePoller.SyncCursorUsage(ctx, cfg, endTime); err != nil {
 			var httpErr *cursorapi.HTTPError
 			if errors.As(err, &httpErr) && httpErr.StatusCode == 401 {
@@ -133,7 +184,13 @@ func (p *PollAIData) Do(ctx context.Context, configID string) (err error) {
 			}
 			return oops.E(oops.CodeUnexpected, err, "fetch cursor usage window")
 		}
-	case aiintegrations.ProviderAnthropicCompliance:
+		if err := p.integrations.RecordSchedulePollSuccess(ctx, id, input.Schedule, endTime); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "record cursor schedule success")
+		}
+	case aiintegrations.ScheduleAnthropicCompliance:
+		if cfg.Provider != aiintegrations.ProviderAnthropicCompliance {
+			return oops.E(oops.CodeInvalid, nil, "anthropic compliance schedule cannot run for provider %s", cfg.Provider)
+		}
 		nextCursor, err := p.complianceImporter.SyncAnthropicCompliance(ctx, cfg)
 		if err != nil {
 			var httpErr *anthropicapi.HTTPError
@@ -147,15 +204,45 @@ func (p *PollAIData) Do(ctx context.Context, configID string) (err error) {
 			}
 			return oops.E(oops.CodeUnexpected, err, "sync anthropic compliance data")
 		}
-		lastCursor = nextCursor
+		if err := p.integrations.RecordUsagePollSuccess(ctx, id, input.Schedule, endTime, nextCursor); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "record anthropic compliance schedule success")
+		}
+	case aiintegrations.ScheduleAnthropicAnalyticsUsage:
+		if err := p.analyticsUsagePoller.Sync(ctx, cfg, endTime); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "sync anthropic analytics usage")
+		}
+		if err := p.integrations.RecordSchedulePollSuccess(ctx, id, input.Schedule, endTime); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "record anthropic analytics usage success")
+		}
+	case aiintegrations.ScheduleAnthropicAnalyticsCost:
+		if err := p.analyticsCostPoller.Sync(ctx, cfg, endTime); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "sync anthropic analytics cost")
+		}
+		if err := p.integrations.RecordSchedulePollSuccess(ctx, id, input.Schedule, endTime); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "record anthropic analytics cost success")
+		}
 	default:
-		return oops.E(oops.CodeInvalid, nil, "unsupported ai integration provider for usage polling: %s", cfg.Provider)
-	}
-
-	if err := p.integrations.RecordUsagePollSuccess(ctx, id, cfg.Provider, endTime, lastCursor); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "record usage poll success")
+		return oops.E(oops.CodeInvalid, nil, "unsupported ai integration sync schedule: %s", input.Schedule)
 	}
 	return nil
+}
+
+func normalizePollAIDataInput(input PollAIDataInput, workflowID string, now time.Time) PollAIDataInput {
+	// Legacy workflow IDs ended in the provider, which equals the only
+	// schedules that existed when PollAIData accepted a scalar input.
+	if input.Schedule == "" {
+		separator := strings.LastIndexByte(workflowID, ':')
+		if separator >= 0 {
+			switch schedule := workflowID[separator+1:]; schedule {
+			case aiintegrations.ScheduleCursor, aiintegrations.ScheduleAnthropicCompliance:
+				input.Schedule = schedule
+			}
+		}
+	}
+	if input.EndTime.IsZero() {
+		input.EndTime = now.UTC()
+	}
+	return input
 }
 
 // pollRejectedByProvider reports whether the poll failed because the provider

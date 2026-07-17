@@ -36,7 +36,8 @@ func TestExecuteDryRunOnlyReports(t *testing.T) {
 
 	worker := &fakeBackfiller{
 		statuses: []aiintegrations.SyncScheduleBackfillStatus{{
-			PrimarySyncsPending: 3,
+			PrimarySyncsPending:   3,
+			AnalyticsSyncsPending: 2,
 		}},
 		batches: nil,
 	}
@@ -51,7 +52,7 @@ func TestExecuteDryRunOnlyReports(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Zero(t, worker.batchCalls)
-	require.Contains(t, out.String(), "before: primary_pending=3")
+	require.Contains(t, out.String(), "before: primary_pending=3 analytics_pending=2")
 	require.Contains(t, out.String(), "DRY RUN")
 }
 
@@ -62,24 +63,27 @@ func TestExecuteAppliesResumableBatches(t *testing.T) {
 	lastCursor := uuid.MustParse("019b1000-0000-7000-8000-000000000002")
 	worker := &fakeBackfiller{
 		statuses: []aiintegrations.SyncScheduleBackfillStatus{
-			{PrimarySyncsPending: 2},
-			{PrimarySyncsPending: 0},
+			{PrimarySyncsPending: 2, AnalyticsSyncsPending: 2},
+			{PrimarySyncsPending: 0, AnalyticsSyncsPending: 0},
 		},
 		batches: []aiintegrations.SyncScheduleBackfillBatch{
 			{
-				ConfigsProcessed:    1,
-				PrimarySyncsUpdated: 1,
-				LastConfigID:        firstCursor,
+				ConfigsProcessed:          1,
+				PrimarySyncsUpdated:       1,
+				AnalyticsSchedulesCreated: 2,
+				LastConfigID:              firstCursor,
 			},
 			{
-				ConfigsProcessed:    1,
-				PrimarySyncsUpdated: 1,
-				LastConfigID:        lastCursor,
+				ConfigsProcessed:          1,
+				PrimarySyncsUpdated:       1,
+				AnalyticsSchedulesCreated: 0,
+				LastConfigID:              lastCursor,
 			},
 			{
-				ConfigsProcessed:    0,
-				PrimarySyncsUpdated: 0,
-				LastConfigID:        uuid.Nil,
+				ConfigsProcessed:          0,
+				PrimarySyncsUpdated:       0,
+				AnalyticsSchedulesCreated: 0,
+				LastConfigID:              uuid.Nil,
 			},
 		},
 	}
@@ -94,8 +98,8 @@ func TestExecuteAppliesResumableBatches(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, []uuid.UUID{uuid.Nil, firstCursor, lastCursor}, worker.after)
-	require.Contains(t, out.String(), "applied: configs=2 primary_updated=2")
-	require.Contains(t, out.String(), "after: primary_pending=0")
+	require.Contains(t, out.String(), "applied: configs=2 primary_updated=2 analytics_created=2")
+	require.Contains(t, out.String(), "after: primary_pending=0 analytics_pending=0")
 }
 
 func TestExecuteRejectsIncompleteBackfill(t *testing.T) {
@@ -103,13 +107,14 @@ func TestExecuteRejectsIncompleteBackfill(t *testing.T) {
 
 	worker := &fakeBackfiller{
 		statuses: []aiintegrations.SyncScheduleBackfillStatus{
-			{PrimarySyncsPending: 1},
-			{PrimarySyncsPending: 1},
+			{PrimarySyncsPending: 1, AnalyticsSyncsPending: 1},
+			{PrimarySyncsPending: 1, AnalyticsSyncsPending: 1},
 		},
 		batches: []aiintegrations.SyncScheduleBackfillBatch{{
-			ConfigsProcessed:    0,
-			PrimarySyncsUpdated: 0,
-			LastConfigID:        uuid.Nil,
+			ConfigsProcessed:          0,
+			PrimarySyncsUpdated:       0,
+			AnalyticsSchedulesCreated: 0,
+			LastConfigID:              uuid.Nil,
 		}},
 	}
 

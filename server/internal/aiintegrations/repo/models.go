@@ -23,3 +23,19 @@ type AiIntegrationConfig struct {
 	ID                     uuid.UUID
 	Deleted                bool
 }
+
+type AiIntegrationSync struct {
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+	AiIntegrationConfigID uuid.UUID
+	Schedule              pgtype.Text
+	Kind                  pgtype.Text
+	PollWatermarkAt       pgtype.Timestamptz
+	LastCursorID          pgtype.Text
+	NextPollAfter         pgtype.Timestamptz
+	LastPollError         pgtype.Text
+	LastPollFailedAt      pgtype.Timestamptz
+	LastPollSuccessAt     pgtype.Timestamptz
+	ConsecutiveFailures   int32
+	ID                    uuid.UUID
+}

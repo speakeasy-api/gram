@@ -1,8 +1,7 @@
-// Command backfill_ai_integration_sync_schedules fills the nullable schedule
-// and kind columns on existing primary ai_integration_syncs rows.
+// Command backfill_ai_integration_sync_schedules fills nullable primary
+// schedule discriminators and creates missing Anthropic analytics schedules.
 //
-// Run it once per project after the expand migration and Phase 2 application
-// have deployed:
+// Run it once per project after the Phase 3 index transition has deployed:
 //
 //	GRAM_DATABASE_URL=postgres://USER:PASS@127.0.0.1:5432/gram \
 //	  go run ./server/cmd/tools/backfill_ai_integration_sync_schedules \
@@ -148,7 +147,7 @@ func execute(ctx context.Context, out io.Writer, worker backfiller, cfg config) 
 	}
 
 	cursor := cfg.cursor
-	var configs, primaries int
+	var configs, primaries, analytics int
 	for {
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf("backfill interrupted; resume with -cursor=%s: %w", cursor, err)
@@ -165,11 +164,13 @@ func execute(ctx context.Context, out io.Writer, worker backfiller, cfg config) 
 		cursor = batch.LastConfigID
 		configs += batch.ConfigsProcessed
 		primaries += batch.PrimarySyncsUpdated
+		analytics += batch.AnalyticsSchedulesCreated
 		if _, err := fmt.Fprintf(
 			out,
-			"batch: configs=%d primary_updated=%d cursor=%s\n",
+			"batch: configs=%d primary_updated=%d analytics_created=%d cursor=%s\n",
 			batch.ConfigsProcessed,
 			batch.PrimarySyncsUpdated,
+			batch.AnalyticsSchedulesCreated,
 			cursor,
 		); err != nil {
 			return fmt.Errorf("write batch progress: %w", err)
@@ -180,23 +181,30 @@ func execute(ctx context.Context, out io.Writer, worker backfiller, cfg config) 
 	if err != nil {
 		return fmt.Errorf("get status after backfill: %w", err)
 	}
-	if _, err := fmt.Fprintf(out, "applied: configs=%d primary_updated=%d\n", configs, primaries); err != nil {
+	if _, err := fmt.Fprintf(out, "applied: configs=%d primary_updated=%d analytics_created=%d\n", configs, primaries, analytics); err != nil {
 		return fmt.Errorf("write backfill summary: %w", err)
 	}
 	if err := printStatus(out, "after", after); err != nil {
 		return err
 	}
-	if after.PrimarySyncsPending != 0 {
+	if after.PrimarySyncsPending != 0 || after.AnalyticsSyncsPending != 0 {
 		return fmt.Errorf(
-			"backfill incomplete: primary_pending=%d; rerun from the zero cursor",
+			"backfill incomplete: primary_pending=%d analytics_pending=%d; rerun from the zero cursor",
 			after.PrimarySyncsPending,
+			after.AnalyticsSyncsPending,
 		)
 	}
 	return nil
 }
 
 func printStatus(out io.Writer, label string, status aiintegrations.SyncScheduleBackfillStatus) error {
-	if _, err := fmt.Fprintf(out, "%s: primary_pending=%d\n", label, status.PrimarySyncsPending); err != nil {
+	if _, err := fmt.Fprintf(
+		out,
+		"%s: primary_pending=%d analytics_pending=%d\n",
+		label,
+		status.PrimarySyncsPending,
+		status.AnalyticsSyncsPending,
+	); err != nil {
 		return fmt.Errorf("write %s backfill status: %w", label, err)
 	}
 	return nil
