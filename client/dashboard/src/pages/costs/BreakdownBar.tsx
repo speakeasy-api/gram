@@ -35,8 +35,11 @@ export type AxisOption = { value: string; label: string };
 // (Division → Department → User → Agent), which is the common path.
 const SEGMENT_LIMIT = 4;
 
+// Two short sentences, and the second is the one that matters: the total is
+// fixed, only the division moves. That's checkable against the numbers on
+// screen, which a longer definition wasn't.
 const BREAKDOWN_EXPLAINER =
-  "A breakdown splits the spend in view into groups. Switching the axis re-cuts the same costs a different way — the spend for one team, grouped by job title, then by model.";
+  "Groups the spend you're looking at. The total stays the same — only how it's divided changes.";
 
 /**
  * Split the options into the segments to render inline and the remainder for the
