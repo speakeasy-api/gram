@@ -2006,7 +2006,11 @@ jobs:
 
   dispatch-release:
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    needs: [docker-build-server, assistant-runtime-image, svix-sync-webhooks]
+    needs:
+      - ci-gate
+      - docker-build-server
+      - assistant-runtime-image
+      - svix-sync-webhooks
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - name: Generate GitHub App Token
