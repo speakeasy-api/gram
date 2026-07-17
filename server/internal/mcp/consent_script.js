@@ -11,6 +11,15 @@
 (function () {
   "use strict";
 
+  // A connected first-party flow has no remaining consent step. Briefly show
+  // confirmation, then close the tab opened by the dashboard. If the browser
+  // declines window.close(), the completion message remains as a fallback.
+  if (document.body.hasAttribute("data-auto-close")) {
+    window.setTimeout(function () {
+      window.close();
+    }, 3000);
+  }
+
   // Replace an element's contents with a spinner + label.
   function showPending(el, label) {
     el.textContent = "";
