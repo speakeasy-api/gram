@@ -7,23 +7,22 @@ description: Create a Pull Request for the current changes and/or branch
 Create a Pull Request for the current changes and/or branch:
 
 1. Ask user what the scope of the changes is for context
-2. **Ensure repository is forked**: Check if the user has forked the repository. If not, create a fork using `gh repo fork` and set up the remote properly
-3. Use the current branch or create a new branch if on main
-4. **Validate conventional commit prefix**: Ensure PR title and any commits use proper conventional commit prefixes:
+2. Use the current branch or create a new branch if on main
+3. **Validate conventional commit prefix**: Ensure PR title and any commits use proper conventional commit prefixes:
    - `chore:` - for maintenance tasks, configuration changes, tooling updates
    - `feat:` - for new features or functionality additions
    - `fix:` - for bug fixes and error corrections
    - `mig:` - for database migrations and schema changes
    - Ask user to clarify the change type if unclear, and enforce one of these four prefixes
-5. If there are uncommitted changes, create a single line conventional commit summarizing the changes eg. `feat: add new feature`
-6. **Scrub the branch**: Before pushing, check the branch name and every commit message on the branch against the rules in [Public metadata hygiene](#public-metadata-hygiene) below. Fix anything that fails before continuing — a push publishes both.
-7. Ensure the branch is up-to-date with remote
-8. Push the branch to the user's fork (origin remote)
-9. Create a short but well-structured PR description in a temporary file (with a unique file name) in the /tmp directory for reviewers
-10. **Scrub the PR metadata**: Check the PR title and the drafted description against the same rules. Fix them in place before opening the PR — once created, they are public.
-11. Create PR with the description file using GitHub CLI, ensuring the title starts with `chore:`, `feat:`, `fix:`, or `mig:` and targets the upstream repository
-12. Add appropriate labels based on change type (enhancement, bug, documentation, etc.). Ensure to query for the available labels beforehand.
-13. Provide a clickable link to the PR in the output
+4. If there are uncommitted changes, create a single line conventional commit summarizing the changes eg. `feat: add new feature`
+5. **Scrub the branch**: Before pushing, check the branch name and every commit message on the branch against the rules in [Public metadata hygiene](#public-metadata-hygiene) below. Fix anything that fails before continuing — a push publishes both.
+6. Ensure the branch is up-to-date with `origin/main`
+7. Push the branch to `origin`
+8. Create a short but well-structured PR description in a temporary file (with a unique file name) in the /tmp directory for reviewers
+9. **Scrub the PR metadata**: Check the PR title and the drafted description against the same rules. Fix them in place before opening the PR — once created, they are public.
+10. Create PR with the description file using GitHub CLI, ensuring the title starts with `chore:`, `feat:`, `fix:`, or `mig:` and targets `main`
+11. Add appropriate labels based on change type (enhancement, bug, documentation, etc.). Ensure to query for the available labels beforehand.
+12. Provide a clickable link to the PR in the output
 
 Follow conventional commit standards and keep PR descriptions concise but informative. **IMPORTANT**: All PR titles MUST start with one of the four prefixes: `chore:`, `feat:`, `fix:`, or `mig:`.
 
@@ -63,24 +62,24 @@ Redact rather than omit when a real value is needed to explain a bug: `org_01H8X
 Run the scan over everything the PR will publish, not just the working tree. At step 6 that is the branch name and the commits; at step 10 it is the title and description you have just drafted, read against the same rules.
 
 ```sh
-# Branch name and every commit message that will land upstream.
+# Branch name and every commit message that will land on main.
 git rev-parse --abbrev-ref HEAD
-git log upstream/main..HEAD --format='%H%n%s%n%b'
+git log origin/main..HEAD --format='%H%n%s%n%b'
 ```
 
 Read the output yourself and judge it against the rules above — a regex cannot recognise a company name. As a supplementary pass, grep the commits and the diff for the mechanical patterns:
 
 ```sh
 # UUIDs, WorkOS ids, and emails in commit messages or the diff.
-git log upstream/main..HEAD --format='%s%n%b' | rg -i '\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b|\b(org|user|client|directory|conn)_[0-9A-HJKMNP-TV-Z]{26}\b|[\w.+-]+@[\w-]+\.[\w.]+'
-git diff upstream/main...HEAD | rg -i '\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b|\b(org|user|client|directory|conn)_[0-9A-HJKMNP-TV-Z]{26}\b'
+git log origin/main..HEAD --format='%s%n%b' | rg -i '\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b|\b(org|user|client|directory|conn)_[0-9A-HJKMNP-TV-Z]{26}\b|[\w.+-]+@[\w-]+\.[\w.]+'
+git diff origin/main...HEAD | rg -i '\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b|\b(org|user|client|directory|conn)_[0-9A-HJKMNP-TV-Z]{26}\b'
 ```
 
 Expect false positives (migration ids, generated fixtures, test constants); use judgement rather than mechanically rewriting every hit.
 
 ### Fixing a violation
 
-**Nothing pushed yet** — amend or rebase the offending commits (`git commit --amend`, `git rebase -i upstream/main`) before pushing. This is the cheap case, and the reason the scans run at steps 6 and 10, before anything is published.
+**Nothing pushed yet** — amend or rebase the offending commits (`git commit --amend`, `git rebase -i origin/main`) before pushing. This is the cheap case, and the reason the scans run at steps 6 and 10, before anything is published.
 
 **Not opened yet** — edit the title or the description file directly. Also cheap.
 
@@ -98,12 +97,3 @@ Steps 1 and 2 run in the same turn: capture the diff, then report and wait. Step
 **A credential was published** — treat it as compromised regardless of any scrub. Tell the user to rotate it first, before any history work.
 
 When unsure whether something counts as sensitive, leave it out and ask the user. Omitting a detail costs a review round-trip; publishing one cannot be undone.
-
-## Fork Requirements
-
-All pull requests must be submitted from a personal fork of the repository. The command should:
-
-- Check if a fork exists using `gh repo view --json parent` to determine if current repo is a fork
-- If not a fork, create one with `gh repo fork --clone=false`
-- Set up remotes properly: `origin` should point to the user's fork, `upstream` to the original repository
-- Push changes to the fork and create the PR targeting the upstream repository

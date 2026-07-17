@@ -615,6 +615,18 @@ func (s *Service) DeletePlugin(ctx context.Context, payload *gen.DeletePluginPay
 
 	txRepo := s.repo.WithTx(tx)
 
+	// Soft-delete the plugin first: its row lock serializes this transaction
+	// against skills.Distribute, which share-locks the plugin row before
+	// inserting a distribution. Revoking distributions after taking the lock
+	// guarantees no active distribution survives on a tombstoned plugin.
+	if err := txRepo.DeletePlugin(ctx, repo.DeletePluginParams{
+		ID:             pluginID,
+		OrganizationID: ac.ActiveOrganizationID,
+		ProjectID:      *ac.ProjectID,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "delete plugin").LogError(ctx, s.logger)
+	}
+
 	if err := txRepo.SoftDeletePluginServers(ctx, pluginID); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "soft-delete plugin servers").LogError(ctx, s.logger)
 	}
@@ -623,12 +635,44 @@ func (s *Service) DeletePlugin(ctx context.Context, payload *gen.DeletePluginPay
 		return oops.E(oops.CodeUnexpected, err, "remove plugin assignments").LogError(ctx, s.logger)
 	}
 
-	if err := txRepo.DeletePlugin(ctx, repo.DeletePluginParams{
-		ID:             pluginID,
-		OrganizationID: ac.ActiveOrganizationID,
-		ProjectID:      *ac.ProjectID,
-	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "delete plugin").LogError(ctx, s.logger)
+	revokedDistributions, err := txRepo.RevokeSkillDistributionsByPlugin(ctx, repo.RevokeSkillDistributionsByPluginParams{
+		ProjectID: *ac.ProjectID,
+		PluginID:  uuid.NullUUID{UUID: pluginID, Valid: true},
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "revoke skill distributions for plugin").LogError(ctx, s.logger)
+	}
+	for _, revoked := range revokedDistributions {
+		afterSnapshot := &audit.SkillDistributionSnapshot{
+			ID:                revoked.ID.String(),
+			ProjectID:         revoked.ProjectID.String(),
+			SkillID:           revoked.SkillID.String(),
+			PluginID:          conv.FromNullableUUID(revoked.PluginID),
+			PinnedVersionID:   conv.FromNullableUUID(revoked.PinnedVersionID),
+			ResolvedVersionID: revoked.ResolvedVersionID.String(),
+			Channel:           revoked.Channel,
+			CreatedByUserID:   revoked.CreatedByUserID,
+			RevokedAt:         conv.PtrEmpty(conv.FromPGTimestamptz(revoked.RevokedAt)),
+			CreatedAt:         conv.FromPGTimestamptz(revoked.CreatedAt),
+			UpdatedAt:         conv.FromPGTimestamptz(revoked.UpdatedAt),
+		}
+		beforeSnapshot := *afterSnapshot
+		beforeSnapshot.RevokedAt = nil
+		beforeSnapshot.UpdatedAt = conv.FromPGTimestamptz(revoked.PreviousUpdatedAt)
+		if auditErr := s.audit.LogSkillUndistribute(ctx, tx, audit.LogSkillUndistributeEvent{
+			OrganizationID:             ac.ActiveOrganizationID,
+			ProjectID:                  *ac.ProjectID,
+			Actor:                      urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+			ActorDisplayName:           ac.Email,
+			ActorSlug:                  nil,
+			SkillURN:                   urn.NewSkill(revoked.SkillID),
+			SkillName:                  revoked.SkillName,
+			SkillDisplayName:           revoked.SkillDisplayName,
+			DistributionSnapshotBefore: &beforeSnapshot,
+			DistributionSnapshotAfter:  afterSnapshot,
+		}); auditErr != nil {
+			return oops.E(oops.CodeUnexpected, auditErr, "audit log skill undistribution for deleted plugin").LogError(ctx, s.logger)
+		}
 	}
 
 	if err := s.audit.LogPluginDelete(ctx, tx, audit.LogPluginDeleteEvent{
@@ -1129,6 +1173,7 @@ func (s *Service) DownloadPluginPackage(ctx context.Context, payload *gen.Downlo
 			Slug:        dbPlugin.Slug,
 			Description: conv.FromPGTextOrEmpty[string](dbPlugin.Description),
 			Servers:     nil,
+			Skills:      nil,
 		}
 	}
 
@@ -2541,6 +2586,11 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 		return nil, oops.E(oops.CodeUnexpected, err, "list plugins with mcp servers").LogError(ctx, s.logger)
 	}
 
+	skillRows, err := s.repo.ListPluginSkillsForProject(ctx, projectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list plugin skills").LogError(ctx, s.logger)
+	}
+
 	// serverBuild carries the row's sort_order so the merged toolset- and
 	// mcp_server-backed servers can be re-sorted per plugin (the per-query SQL
 	// ordering is lost once the two result sets are combined).
@@ -2564,6 +2614,7 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 					Slug:        slug,
 					Description: conv.FromPGTextOrEmpty[string](description),
 					Servers:     nil,
+					Skills:      nil,
 				},
 				servers: nil,
 			}
@@ -2657,6 +2708,17 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 				EnvConfigs:  nil,
 			},
 			sortOrder: m.ServerSortOrder,
+		})
+	}
+
+	// The query returns rows ordered by (plugin slug, skill name), so each
+	// plugin's Skills slice is name-sorted without a second pass. ensurePlugin
+	// (rather than a lookup) keeps a skills-only plugin publishing a package.
+	for _, sk := range skillRows {
+		pb := ensurePlugin(sk.PluginID, sk.PluginName, sk.PluginSlug, sk.PluginDescription)
+		pb.info.Skills = append(pb.info.Skills, PluginSkillInfo{
+			Name:    sk.SkillName,
+			Content: sk.SkillContent,
 		})
 	}
 
