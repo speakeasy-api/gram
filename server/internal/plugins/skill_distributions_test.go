@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
 )
 
@@ -76,4 +77,93 @@ func TestPluginsService_DeletePluginRevokesSkillDistributions(t *testing.T) {
 	auditSnapshot, err := audittest.DecodeAuditData(auditRecord.AfterSnapshot)
 	require.NoError(t, err)
 	require.Equal(t, version.ID.String(), auditSnapshot["ResolvedVersionID"])
+}
+
+func TestListPluginSkillsForProjectResolvesContent(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := *authCtx.ProjectID
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Skill Carrier"})
+	require.NoError(t, err)
+	pluginID := uuid.MustParse(plugin.ID)
+
+	skills := skillsrepo.New(ti.conn)
+	makeSkill := func(name string) skillsrepo.Skill {
+		skill, err := skills.CreateSkill(ctx, skillsrepo.CreateSkillParams{
+			ProjectID:   projectID,
+			Name:        name,
+			DisplayName: name,
+			Summary:     pgtype.Text{},
+		})
+		require.NoError(t, err)
+		return skill
+	}
+	makeVersion := func(skillID uuid.UUID, content string, valid bool) skillsrepo.SkillVersion {
+		version, err := skills.CreateSkillVersion(ctx, skillsrepo.CreateSkillVersionParams{
+			Content:          content,
+			CanonicalSha256:  uuid.NewString(),
+			RawSha256:        uuid.NewString(),
+			Description:      pgtype.Text{},
+			Metadata:         []byte(`{}`),
+			SpecValid:        valid,
+			ValidationErrors: []byte(`[]`),
+			CreatedByUserID:  authCtx.UserID,
+			ProjectID:        projectID,
+			SkillID:          skillID,
+		})
+		require.NoError(t, err)
+		return version
+	}
+	distribute := func(skillID uuid.UUID, pinned uuid.NullUUID) {
+		_, err := skills.CreateSkillDistribution(ctx, skillsrepo.CreateSkillDistributionParams{
+			PluginID:        pluginID,
+			PinnedVersionID: pinned,
+			CreatedByUserID: authCtx.UserID,
+			ProjectID:       projectID,
+			SkillID:         skillID,
+		})
+		require.NoError(t, err)
+	}
+
+	// Latest-tracking distribution resolves to the newest valid version.
+	tracked := makeSkill("tracked")
+	makeVersion(tracked.ID, "tracked-v1", true)
+	makeVersion(tracked.ID, "tracked-v2", true)
+	distribute(tracked.ID, uuid.NullUUID{})
+
+	// Pinned distribution stays on its pinned version despite newer ones.
+	pinned := makeSkill("pinned")
+	pinnedVersion := makeVersion(pinned.ID, "pinned-v1", true)
+	makeVersion(pinned.ID, "pinned-v2", true)
+	distribute(pinned.ID, uuid.NullUUID{UUID: pinnedVersion.ID, Valid: true})
+
+	// A skill with no valid version resolves to nothing and is dropped.
+	invalidOnly := makeSkill("invalid-only")
+	makeVersion(invalidOnly.ID, "broken", false)
+	distribute(invalidOnly.ID, uuid.NullUUID{})
+
+	// Revoked distributions are excluded.
+	revoked := makeSkill("revoked")
+	makeVersion(revoked.ID, "revoked-v1", true)
+	distribute(revoked.ID, uuid.NullUUID{})
+	_, err = skills.RevokeActiveSkillDistribution(ctx, skillsrepo.RevokeActiveSkillDistributionParams{
+		ProjectID: projectID,
+		SkillID:   revoked.ID,
+		PluginID:  uuid.NullUUID{UUID: pluginID, Valid: true},
+	})
+	require.NoError(t, err)
+
+	rows, err := pluginsrepo.New(ti.conn).ListPluginSkillsForProject(ctx, projectID)
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	require.Equal(t, "pinned", rows[0].SkillName)
+	require.Equal(t, "pinned-v1", rows[0].SkillContent)
+	require.Equal(t, "tracked", rows[1].SkillName)
+	require.Equal(t, "tracked-v2", rows[1].SkillContent)
+	require.Equal(t, pluginID, rows[0].PluginID)
+	require.Equal(t, plugin.Slug, rows[0].PluginSlug)
 }

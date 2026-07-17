@@ -1168,6 +1168,7 @@ func (s *Service) DownloadPluginPackage(ctx context.Context, payload *gen.Downlo
 			Slug:        dbPlugin.Slug,
 			Description: conv.FromPGTextOrEmpty[string](dbPlugin.Description),
 			Servers:     nil,
+			Skills:      nil,
 		}
 	}
 
@@ -2476,6 +2477,11 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 		return nil, oops.E(oops.CodeUnexpected, err, "list plugins with mcp servers").LogError(ctx, s.logger)
 	}
 
+	skillRows, err := s.repo.ListPluginSkillsForProject(ctx, projectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list plugin skills").LogError(ctx, s.logger)
+	}
+
 	// serverBuild carries the row's sort_order so the merged toolset- and
 	// mcp_server-backed servers can be re-sorted per plugin (the per-query SQL
 	// ordering is lost once the two result sets are combined).
@@ -2499,6 +2505,7 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 					Slug:        slug,
 					Description: conv.FromPGTextOrEmpty[string](description),
 					Servers:     nil,
+					Skills:      nil,
 				},
 				servers: nil,
 			}
@@ -2592,6 +2599,17 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 				EnvConfigs:  nil,
 			},
 			sortOrder: m.ServerSortOrder,
+		})
+	}
+
+	// The query returns rows ordered by (plugin slug, skill name), so each
+	// plugin's Skills slice is name-sorted without a second pass. ensurePlugin
+	// (rather than a lookup) keeps a skills-only plugin publishing a package.
+	for _, sk := range skillRows {
+		pb := ensurePlugin(sk.PluginID, sk.PluginName, sk.PluginSlug, sk.PluginDescription)
+		pb.info.Skills = append(pb.info.Skills, PluginSkillInfo{
+			Name:    sk.SkillName,
+			Content: sk.SkillContent,
 		})
 	}
 

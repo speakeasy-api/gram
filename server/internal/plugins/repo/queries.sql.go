@@ -812,6 +812,77 @@ func (q *Queries) ListPluginServersByPluginIDs(ctx context.Context, arg ListPlug
 	return items, nil
 }
 
+const listPluginSkillsForProject = `-- name: ListPluginSkillsForProject :many
+SELECT
+  p.id AS plugin_id,
+  p.name AS plugin_name,
+  p.slug AS plugin_slug,
+  p.description AS plugin_description,
+  s.name AS skill_name,
+  resolved.content AS skill_content
+FROM skill_distributions sd
+JOIN plugins p ON p.id = sd.plugin_id AND p.deleted IS FALSE
+JOIN skills s
+  ON s.project_id = sd.project_id
+  AND s.id = sd.skill_id
+  AND s.archived_at IS NULL
+JOIN LATERAL (
+  SELECT sv.content
+  FROM skill_versions sv
+  WHERE sv.skill_id = sd.skill_id
+    AND sv.spec_valid IS TRUE
+    AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
+  ORDER BY sv.created_at DESC, sv.id DESC
+  LIMIT 1
+) resolved ON TRUE
+WHERE sd.project_id = $1
+  AND sd.channel = 'plugin'
+  AND sd.revoked_at IS NULL
+ORDER BY p.slug ASC, s.name ASC
+`
+
+type ListPluginSkillsForProjectRow struct {
+	PluginID          uuid.UUID
+	PluginName        string
+	PluginSlug        string
+	PluginDescription pgtype.Text
+	SkillName         string
+	SkillContent      string
+}
+
+// Plugin-generation companion to ListPluginsWithServersForProject covering
+// skill distributions: each active distribution's plugin identity, skill name,
+// and resolved manifest content (the pinned version when set, otherwise the
+// latest valid version). Distributions with no valid resolvable version are
+// dropped — packages only ever carry valid manifests. Plugin identity is
+// selected here so a skills-only plugin (no servers) still generates a package.
+func (q *Queries) ListPluginSkillsForProject(ctx context.Context, projectID uuid.UUID) ([]ListPluginSkillsForProjectRow, error) {
+	rows, err := q.db.Query(ctx, listPluginSkillsForProject, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPluginSkillsForProjectRow
+	for rows.Next() {
+		var i ListPluginSkillsForProjectRow
+		if err := rows.Scan(
+			&i.PluginID,
+			&i.PluginName,
+			&i.PluginSlug,
+			&i.PluginDescription,
+			&i.SkillName,
+			&i.SkillContent,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPlugins = `-- name: ListPlugins :many
 SELECT
   p.id, p.organization_id, p.project_id, p.name, p.slug, p.description, p.is_default, p.created_at, p.updated_at, p.deleted_at, p.deleted,
